@@ -1,12 +1,10 @@
-using System;
-using System.Linq.Expressions;
-using System.Threading.Tasks;
-using DSystem.Api.Contracts;
 using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
+using DSystem.Manager.Api.Contracts;
 using Microsoft.AspNetCore.Mvc;
+using System.Linq.Expressions;
 
-namespace DSystem.Api.Controllers;
+namespace DSystem.Manager.Api.Controllers;
 
 [ApiController]
 [Route("api/model-providers")]

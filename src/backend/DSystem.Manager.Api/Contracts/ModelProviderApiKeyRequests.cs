@@ -1,6 +1,4 @@
-using System;
-
-namespace DSystem.Api.Contracts;
+namespace DSystem.Manager.Api.Contracts;
 
 public record ApiKeyCreateRequest(Guid ModelId, Guid ProviderId, string ApiKey, bool Enable = true);
 

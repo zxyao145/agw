@@ -1,5 +1,3 @@
-using System;
-
 namespace DSystem.Domain.Models;
 
 /// <summary>

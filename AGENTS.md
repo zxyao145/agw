@@ -1,38 +1,32 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Solution root `D-System.slnx` targets `net10.0`.
-- Backend lives in `src/backend`:
-  - `DSystem.Domain`: entities, enums, repositories, domain services.
-  - `DSystem.Infrastructure`: EF Core `LlmDbContext`, repository/unit-of-work implementations, DB settings for SQLite (default), PostgreSQL, MySQL.
-  - `DSystem.Api`: ASP.NET Core entry point, DI wiring, controllers (`ProvidersController`, `ModelsController`, etc.), request/response contracts. Swagger in Development at `/openapi`.
-- `src/frontend` is empty; add UI work there if introduced.
-- Add automated tests under `tests/` (e.g., `DSystem.Tests`) mirroring Domain/Infrastructure/API namespaces.
+- Backend lives in `src/backend`: `DSystem.Domain` (entities, enums, domain services), `DSystem.Infrastructure` (EF Core DbContext, repositories, database config), `DSystem.Manager.Api` (HTTP controllers and request/response contracts), `DSystem.Api` (shared API scaffolding), and `DSystem.Host` (ASP.NET Core host wiring everything together). `src/frontend` is currently empty and can be populated later.
+- Configuration sits in `src/backend/DSystem.Host/appsettings*.json`; database settings are under the `Database` section.
+- Migrations and runtime data are generated relative to the host project; keep repository code free of environment-specific paths.
 
 ## Build, Test, and Development Commands
-- `dotnet restore D-System.slnx` — restore all projects.
-- `dotnet build D-System.slnx` — compile solution.
-- `dotnet run --project src/backend/DSystem.Api/DSystem.Api.csproj` — run API with SQLite file DB.
-- Database migrations (from `src/backend/DSystem.Api`):
-  - `dotnet ef migrations add <Name> -p ../DSystem.Infrastructure -s .`
-  - `dotnet ef database update -p ../DSystem.Infrastructure -s .`
-- Once tests exist: `dotnet test`.
+- Restore dependencies: `dotnet restore D-System.slnx`.
+- Build all projects: `dotnet build D-System.slnx` (targets `net10.0` with nullable reference types enabled).
+- Run the API locally: `dotnet run --project src/backend/DSystem.Host` (OpenAPI available at `/openapi` in Development).
+- Add/update EF Core migrations: `dotnet ef migrations add <Name> -p src/backend/DSystem.Infrastructure -s src/backend/DSystem.Host`; update database with `dotnet ef database update -p src/backend/DSystem.Infrastructure -s src/backend/DSystem.Host`.
 
 ## Coding Style & Naming Conventions
-- C# 10+/ASP.NET Core defaults; nullable reference types on, implicit usings enabled.
-- PascalCase for classes/methods/properties; camelCase for locals/parameters; interfaces prefixed with `I`; async methods end with `Async`.
-- Keep controllers thin; prefer dependency injection; keep EF Core data access behind repository/unit-of-work abstractions.
+- Use 4-space indentation and follow C# conventions: `PascalCase` for types/fields on DTOs, `camelCase` for locals/parameters, `I` prefix for interfaces, and `*Controller.cs` for MVC controllers. Keep DTOs under `Contracts` and domain types under `Entities`/`Services`.
+- Keep methods async when doing I/O; avoid synchronous EF Core calls. Favor constructor injection for dependencies.
+- Run `dotnet format` before submitting to keep styling consistent.
 
 ## Testing Guidelines
-- Use xUnit under `tests/`; follow Arrange/Act/Assert.
-- Favor deterministic unit tests for domain services and integration tests for repositories/EF behaviors.
-- Target high coverage on business logic and data access boundaries; run `dotnet test` before pushing.
+- Preferred command: `dotnet test D-System.slnx` (no tests yet—add new suites under a `tests` folder mirroring namespaces, e.g., `tests/DSystem.Domain.Tests/AgentRuntimeServiceTests.cs`).
+- Use xUnit with clear Arrange/Act/Assert sections. Name test methods with `Method_Condition_ExpectedResult`.
+- For data access, use SQLite in-memory or a disposable file with migrations applied to keep runs deterministic.
+
+## Database & Configuration Tips
+- Defaults use SQLite (`Database:Provider=sqlite`, file `llmmanager.db`). Switch to PostgreSQL by setting `Database:Provider=postgres` and providing a full `ConnectionString`.
+- Keep sensitive connection strings in environment variables; avoid committing secrets to `appsettings*.json`.
+- When changing the model, regenerate migrations and ensure `LlmDbContext` configuration stays aligned with entity constraints (max lengths, composite keys, cascade rules).
 
 ## Commit & Pull Request Guidelines
-- Commit messages: concise, imperative English (e.g., `Add provider creation endpoint`); group related changes per commit.
-- Pull requests include scope/rationale, linked issue/feature when available, test notes (`dotnet test` or manual steps), and screenshots for API/UX-affecting changes.
-- Keep diffs minimal; avoid unrelated formatting; commit generated assets only when needed.
-
-## Security & Configuration Tips
-- Configuration in `src/backend/DSystem.Api/appsettings*.json`; override via environment variables for deployment.
-- Never commit real API keys or connection strings; use placeholders locally and secrets stores (e.g., environment variables or user secrets) in shared environments.
+- Follow Conventional Commit prefixes (`feat`, `fix`, `chore`, `refactor`, `docs`, `test`), matching existing history like `feat: add Agent entity`.
+- One feature per PR; include a short summary, linked issue, and testing notes (commands run, migration impact). Add screenshots or curl examples for API changes when helpful.
+- Ensure PRs build and `dotnet test` passes before requesting review; highlight breaking changes or migration requirements explicitly.

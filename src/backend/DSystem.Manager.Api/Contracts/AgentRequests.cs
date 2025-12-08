@@ -1,7 +1,6 @@
-using System;
 using DSystem.Domain.Models;
 
-namespace DSystem.Api.Contracts;
+namespace DSystem.Manager.Api.Contracts;
 
 public record AgentCreateRequest(string Name, string Instructions, string SystemPrompt, Guid ModelProviderApiKeyId);
 

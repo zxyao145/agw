@@ -1,7 +1,6 @@
-using System;
 using DSystem.Domain.Enums;
 
-namespace DSystem.Api.Contracts;
+namespace DSystem.Manager.Api.Contracts;
 
 public record ModelCreateRequest(string Name, string? Description, ModelType Type, int MaxTokens);
 

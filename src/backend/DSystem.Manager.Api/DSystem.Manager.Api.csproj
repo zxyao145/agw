@@ -2,14 +2,8 @@
 
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
-
 		<ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
 		<ProjectReference Include="..\DSystem.Infrastructure\DSystem.Infrastructure.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<Folder Include="Contracts\" />
-		<Folder Include="Controllers\" />
 	</ItemGroup>
 
 </Project>

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using DSystem.Domain.Enums;
 
 namespace DSystem.Domain.Entities;

@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq.Expressions;
-using System.Threading.Tasks;
 using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
+using System.Linq.Expressions;
 
 namespace DSystem.Domain.Services;
 

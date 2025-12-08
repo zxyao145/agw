@@ -1,6 +1,4 @@
-using System;
-
-namespace DSystem.Api.Contracts;
+namespace DSystem.Manager.Api.Contracts;
 
 public record ModelProviderCreateRequest(
     Guid ModelId,

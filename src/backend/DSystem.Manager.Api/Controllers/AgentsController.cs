@@ -1,11 +1,9 @@
-using System;
-using System.Threading.Tasks;
-using DSystem.Api.Contracts;
 using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
+using DSystem.Manager.Api.Contracts;
 using Microsoft.AspNetCore.Mvc;
 
-namespace DSystem.Api.Controllers;
+namespace DSystem.Manager.Api.Controllers;
 
 [ApiController]
 [Route("api/agents")]

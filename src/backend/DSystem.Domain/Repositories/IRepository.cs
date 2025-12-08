@@ -1,7 +1,4 @@
-using System;
 using System.Linq.Expressions;
-using System.Threading.Tasks;
-using System.Collections.Generic;
 
 namespace DSystem.Domain.Repositories;
 
