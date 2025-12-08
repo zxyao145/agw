@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/解决方案项/">
+    <File Path="src/backend/Directory.Build.props" />
+    <File Path="src/backend/Directory.Packages.props" />
+  </Folder>
+  <Project Path="src/backend/DSystem.Api/DSystem.Api.csproj" />
+  <Project Path="src/backend/DSystem.Domain/DSystem.Domain.csproj" />
+  <Project Path="src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
+</Solution>
