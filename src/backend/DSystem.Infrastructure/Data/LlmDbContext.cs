@@ -13,6 +13,7 @@ public class LlmDbContext : DbContext
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ModelProvider> ModelProviders => Set<ModelProvider>();
     public DbSet<ModelProviderApiKey> ModelProviderApiKeys => Set<ModelProviderApiKey>();
+    public DbSet<Agent> Agents => Set<Agent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -57,6 +58,19 @@ public class LlmDbContext : DbContext
             entity.HasOne(e => e.ModelProvider)
                 .WithMany(mp => mp.ApiKeys)
                 .HasForeignKey(e => new { e.ModelId, e.ProviderId })
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Agent>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Instructions).HasMaxLength(4000);
+            entity.Property(e => e.SystemPrompt).HasMaxLength(4000);
+
+            entity.HasOne(e => e.ModelProviderApiKey)
+                .WithMany(k => k.Agents)
+                .HasForeignKey(e => e.ModelProviderApiKeyId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
