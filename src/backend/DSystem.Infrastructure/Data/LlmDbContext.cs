@@ -14,6 +14,8 @@ public class LlmDbContext : DbContext
     public DbSet<ModelProvider> ModelProviders => Set<ModelProvider>();
     public DbSet<ModelProviderApiKey> ModelProviderApiKeys => Set<ModelProviderApiKey>();
     public DbSet<Agent> Agents => Set<Agent>();
+    public DbSet<Workflow> Workflows => Set<Workflow>();
+    public DbSet<WorkflowAgent> WorkflowAgents => Set<WorkflowAgent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -71,6 +73,32 @@ public class LlmDbContext : DbContext
             entity.HasOne(e => e.ModelProviderApiKey)
                 .WithMany(k => k.Agents)
                 .HasForeignKey(e => e.ModelProviderApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Workflow>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.ConfigurationJson).HasMaxLength(16000);
+        });
+
+        modelBuilder.Entity<WorkflowAgent>(entity =>
+        {
+            entity.HasKey(e => new { e.WorkflowId, e.AgentId });
+            entity.Property(e => e.Role).HasMaxLength(200);
+
+            entity.HasIndex(e => new { e.WorkflowId, e.Order }).IsUnique();
+
+            entity.HasOne(e => e.Workflow)
+                .WithMany(w => w.Agents)
+                .HasForeignKey(e => e.WorkflowId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Agent)
+                .WithMany(a => a.Workflows)
+                .HasForeignKey(e => e.AgentId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

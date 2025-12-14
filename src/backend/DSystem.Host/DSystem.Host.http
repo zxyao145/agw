@@ -1,6 +1,82 @@
-@LlmManager.Api_HostAddress = http://localhost:5015
+@host = http://localhost:5015
 
-GET {{LlmManager.Api_HostAddress}}/weatherforecast/
+GET {{host}}/weatherforecast/
 Accept: application/json
+
+###
+
+
+### ----------------------------
+### Workflow domain examples
+### ----------------------------
+
+@agentId1 = 00000000-0000-0000-0000-000000000001
+@agentId2 = 00000000-0000-0000-0000-000000000002
+@workflowId = 00000000-0000-0000-0000-000000000010
+
+### List workflows
+GET {{host}}/api/workflows
+Accept: application/json
+
+###
+
+### Create a Concurrent workflow (broadcast to all agents)
+POST {{host}}/api/workflows
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "demo-concurrent",
+  "description": "Broadcast input to all agents and collect outputs.",
+  "pattern": 0,
+  "configurationJson": null,
+  "enable": true,
+  "agents": [
+    { "agentId": "{{agentId1}}", "order": 0, "role": "analyzer" },
+    { "agentId": "{{agentId2}}", "order": 1, "role": "reviewer" }
+  ]
+}
+
+###
+
+### Create a Sequential workflow (pipeline; output of previous becomes input of next)
+POST {{host}}/api/workflows
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "demo-sequential",
+  "description": "Pass output from agent to agent.",
+  "pattern": 1,
+  "configurationJson": null,
+  "enable": true,
+  "agents": [
+    { "agentId": "{{agentId1}}", "order": 0, "role": "stage-1" },
+    { "agentId": "{{agentId2}}", "order": 1, "role": "stage-2" }
+  ]
+}
+
+###
+
+### Get workflow
+GET {{host}}/api/workflows/{{workflowId}}
+Accept: application/json
+
+###
+
+### List workflow agents (bindings)
+GET {{host}}/api/workflows/{{workflowId}}/agents
+Accept: application/json
+
+###
+
+### Execute workflow (Concurrent/Sequential supported; others return NotImplemented=true)
+POST {{host}}/api/workflows/{{workflowId}}/execute
+Content-Type: application/json
+Accept: application/json
+
+{
+  "input": "Hello workflow"
+}
 
 ###

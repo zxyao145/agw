@@ -15,6 +15,10 @@ builder.Services.AddScoped<ModelProviderApiKeyDomainService>();
 builder.Services.AddScoped<AgentDomainService>();
 builder.Services.AddScoped<AgentRuntimeService>();
 
+builder.Services.AddScoped<WorkflowDomainService>();
+builder.Services.AddScoped<WorkflowRuntimeService>();
+builder.Services.AddScoped<IWorkflowAgentExecutor, PlaceholderWorkflowAgentExecutor>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
