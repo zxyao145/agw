@@ -3,6 +3,7 @@ using System;
 using DSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(LlmDbContext))]
-    partial class LlmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251214074702_AddProjectTaskDomain")]
+    partial class AddProjectTaskDomain
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
@@ -212,38 +215,6 @@ namespace DSystem.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Projects");
-                });
-
-            modelBuilder.Entity("DSystem.Domain.Entities.ProjectLease", b =>
-                {
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreateTime")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("LockedBy")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("LockedUntilUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("UpdateTime")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("ProjectId");
-
-                    b.HasIndex("LockedUntilUtc");
-
-                    b.ToTable("ProjectLeases");
                 });
 
             modelBuilder.Entity("DSystem.Domain.Entities.ProjectTask", b =>
@@ -461,17 +432,6 @@ namespace DSystem.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("ModelProvider");
-                });
-
-            modelBuilder.Entity("DSystem.Domain.Entities.ProjectLease", b =>
-                {
-                    b.HasOne("DSystem.Domain.Entities.Project", "Project")
-                        .WithOne()
-                        .HasForeignKey("DSystem.Domain.Entities.ProjectLease", "ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("DSystem.Domain.Entities.ProjectTask", b =>

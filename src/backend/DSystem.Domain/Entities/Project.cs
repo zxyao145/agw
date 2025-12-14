@@ -1,0 +1,11 @@
+namespace DSystem.Domain.Entities;
+
+public class Project : BaseEntity
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public bool Enable { get; set; } = true;
+
+    public ICollection<ProjectTask> Tasks { get; set; } = new List<ProjectTask>();
+}

@@ -85,6 +85,12 @@ dotnet format
 ```
 Run before commits to maintain consistent styling.
 
+### Running a Single Test
+```bash
+# When tests are added, run individual test methods:
+dotnet test --filter "FullyQualifiedName~AgentRuntimeServiceTests.Method_Condition_ExpectedResult"
+```
+
 ## Configuration
 
 ### Database Settings (`src/backend/DSystem.Host/appsettings.json`)
@@ -97,7 +103,7 @@ Run before commits to maintain consistent styling.
 }
 ```
 
-Switch to PostgreSQL by changing `Provider` to `"postgres"` and providing a full connection string.
+Switch to PostgreSQL by changing `Provider` to `"postgres"` and providing a full connection string. Keep sensitive connection strings in environment variables; avoid committing secrets to `appsettings*.json`.
 
 ### Service Registration
 Domain services are manually registered in `Program.cs:11-16`. When adding new domain services, register them as `Scoped` in the same section.
@@ -111,6 +117,24 @@ Key constraints configured in `LlmDbContext.OnModelCreating`:
 - `ModelProvider`: composite key on (ModelId, ProviderId)
 - Cascade deletes: ModelProvider → ModelProviderApiKey → Agent
 
+## Coding Style & Naming Conventions
+
+- Use 4-space indentation and follow C# conventions:
+  - `PascalCase` for types and DTO fields
+  - `camelCase` for locals and parameters
+  - `I` prefix for interfaces
+  - `*Controller.cs` for MVC controllers
+- Keep DTOs under `Contracts` and domain types under `Entities`/`Services`
+- Keep methods async when doing I/O; avoid synchronous EF Core calls
+- Favor constructor injection for dependencies
+
+## Testing Guidelines
+
+When adding tests (under `tests/DSystem.*.Tests/`):
+- Use xUnit with clear Arrange/Act/Assert sections
+- Name test methods: `Method_Condition_ExpectedResult`
+- For data access tests, use SQLite in-memory or a disposable file with migrations applied
+
 ## Commit Conventions
 
 Follow Conventional Commits format matching existing history:
@@ -121,6 +145,14 @@ Follow Conventional Commits format matching existing history:
 - `docs:` for documentation changes
 - `test:` for adding/updating tests
 
+## Pull Request Guidelines
+
+- One feature per PR
+- Include a short summary, linked issue, and testing notes (commands run, migration impact)
+- Add screenshots or curl examples for API changes when helpful
+- Ensure PRs build and `dotnet test` passes before requesting review
+- Highlight breaking changes or migration requirements explicitly
+
 ## Development Notes
 
 - All projects target `.NET 10.0` with nullable reference types enabled
@@ -128,3 +160,5 @@ Follow Conventional Commits format matching existing history:
 - Constructor injection for all dependencies
 - Repository pattern hides EF Core implementation details from domain services
 - When modifying entity relationships, update both `LlmDbContext` configuration and entity navigation properties
+- Migrations and runtime data are generated relative to the host project; keep repository code free of environment-specific paths
+- `src/frontend` is currently empty and can be populated later

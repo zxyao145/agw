@@ -80,3 +80,73 @@ Accept: application/json
 }
 
 ###
+
+
+### ----------------------------
+### Project / Task (DSystem.Api) examples
+### ----------------------------
+
+@projectId = 00000000-0000-0000-0000-000000000100
+@taskId = 00000000-0000-0000-0000-000000000200
+@workflowIdForTask = 00000000-0000-0000-0000-000000000010
+
+### Create project
+POST {{host}}/api/projects
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "demo-project",
+  "description": "A project groups ordered tasks.",
+  "enable": true
+}
+
+###
+
+### List projects
+GET {{host}}/api/projects
+Accept: application/json
+
+###
+
+### Create task (async; scheduler will execute it when it becomes the earliest Pending by UpdateTime)
+POST {{host}}/api/projects/{{projectId}}/tasks
+Content-Type: application/json
+Accept: application/json
+
+{
+  "workflowId": "{{workflowIdForTask}}",
+  "description": "summarize something",
+  "input": "Please summarize: ..."
+}
+
+###
+
+### List tasks in project (creation time desc)
+GET {{host}}/api/projects/{{projectId}}/tasks
+Accept: application/json
+
+###
+
+### Get task (status/result)
+GET {{host}}/api/projects/{{projectId}}/tasks/{{taskId}}
+Accept: application/json
+
+###
+
+### Reorder a pending task by setting UpdateTimeUtc (earlier = executed sooner)
+POST {{host}}/api/projects/{{projectId}}/tasks/{{taskId}}/reorder
+Content-Type: application/json
+Accept: application/json
+
+{
+  "updateTimeUtc": "2025-01-01T00:00:00Z"
+}
+
+###
+
+### Cancel a task (Pending/Running only)
+POST {{host}}/api/projects/{{projectId}}/tasks/{{taskId}}/cancel
+Accept: application/json
+
+###

@@ -16,6 +16,9 @@ public class LlmDbContext : DbContext
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<Workflow> Workflows => Set<Workflow>();
     public DbSet<WorkflowAgent> WorkflowAgents => Set<WorkflowAgent>();
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
+    public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -99,6 +102,46 @@ public class LlmDbContext : DbContext
             entity.HasOne(e => e.Agent)
                 .WithMany(a => a.Workflows)
                 .HasForeignKey(e => e.AgentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Project>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<ProjectTask>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Description).IsRequired().HasMaxLength(4000);
+            entity.Property(e => e.Input).IsRequired().HasMaxLength(4000);
+            entity.Property(e => e.OutputJson).HasMaxLength(16000);
+            entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+
+            entity.HasIndex(e => new { e.ProjectId, e.Status, e.UpdateTime });
+
+            entity.HasOne(e => e.Project)
+                .WithMany(p => p.Tasks)
+                .HasForeignKey(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Workflow)
+                .WithMany()
+                .HasForeignKey(e => e.WorkflowId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ProjectLease>(entity =>
+        {
+            entity.HasKey(e => e.ProjectId);
+            entity.Property(e => e.LockedBy).IsRequired().HasMaxLength(200);
+            entity.HasIndex(e => e.LockedUntilUtc);
+
+            entity.HasOne(e => e.Project)
+                .WithOne()
+                .HasForeignKey<ProjectLease>(e => e.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

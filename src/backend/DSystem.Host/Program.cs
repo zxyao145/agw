@@ -1,9 +1,15 @@
+using DSystem.Api.Controllers;
 using DSystem.Domain.Services;
+using DSystem.Host;
 using DSystem.Infrastructure;
+using DSystem.Manager.Api.Controllers;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services
+    .AddControllers()
+    .AddApplicationPart(typeof(AgentsController).Assembly)
+    .AddApplicationPart(typeof(ProjectsController).Assembly);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
@@ -18,6 +24,10 @@ builder.Services.AddScoped<AgentRuntimeService>();
 builder.Services.AddScoped<WorkflowDomainService>();
 builder.Services.AddScoped<WorkflowRuntimeService>();
 builder.Services.AddScoped<IWorkflowAgentExecutor, PlaceholderWorkflowAgentExecutor>();
+
+builder.Services.AddScoped<ProjectDomainService>();
+builder.Services.AddScoped<ProjectTaskDomainService>();
+builder.Services.AddHostedService<ProjectTaskSchedulerHostedService>();
 
 var app = builder.Build();
 
