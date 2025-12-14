@@ -3,6 +3,7 @@ using DSystem.Domain.Services;
 using DSystem.Host;
 using DSystem.Infrastructure;
 using DSystem.Manager.Api.Controllers;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 app.UseHttpsRedirection();
