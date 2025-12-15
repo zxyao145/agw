@@ -43,6 +43,23 @@ type WorkflowDto = {
   updateTime?: string | null
 }
 
+type AgentDto = {
+  id: string
+  name: string
+  instructions: string
+  systemPrompt: string
+  modelProviderApiKeyId: string
+  createBy?: string | null
+  createTime?: string | null
+  updateBy?: string | null
+  updateTime?: string | null
+}
+
+type SelectedAgent = {
+  agentId: string
+  role: string
+}
+
 function pretty(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2)
@@ -73,12 +90,21 @@ export default function WorkflowsPage() {
     },
   })
 
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    queryFn: async () => {
+      // OpenAPI currently doesn't declare response schemas.
+      return (await apiGet("/api/agents")) as unknown as AgentDto[]
+    },
+  })
+
   const [createOpen, setCreateOpen] = React.useState(false)
   const [name, setName] = React.useState("")
   const [description, setDescription] = React.useState<string>("")
   const [enable, setEnable] = React.useState(true)
   const [pattern, setPattern] = React.useState<number>(0)
   const [configurationJson, setConfigurationJson] = React.useState<string>("")
+  const [selectedAgents, setSelectedAgents] = React.useState<SelectedAgent[]>([])
 
   const createWorkflowMutation = useMutation({
     mutationFn: async (body: WorkflowCreateRequest) => {
@@ -92,6 +118,7 @@ export default function WorkflowsPage() {
       setEnable(true)
       setPattern(0)
       setConfigurationJson("")
+      setSelectedAgents([])
       await queryClient.invalidateQueries({ queryKey: ["workflows"] })
     },
     onError: (error) => {
@@ -123,16 +150,16 @@ export default function WorkflowsPage() {
               <Button>Create workflow</Button>
             </DialogTrigger>
 
-            <DialogContent>
+            <DialogContent className="max-h-[calc(100vh-4rem)] overflow-hidden">
               <DialogHeader>
                 <UiDialogTitle>Create workflow</UiDialogTitle>
                 <UiDialogDescription>
-                  Create a workflow. Agents binding can be configured later (for
-                  now uses an empty list).
+                  Create a workflow. Bind agents now via a multi-select; binding{" "}
+                  <code>order</code> equals the selection/add sequence.
                 </UiDialogDescription>
               </DialogHeader>
 
-              <div className="grid gap-4">
+              <div className="grid max-h-[calc(100vh-16rem)] gap-4 overflow-y-auto pr-2">
                 <div className="grid gap-2">
                   <Label htmlFor="name">Name</Label>
                   <Input
@@ -179,6 +206,127 @@ export default function WorkflowsPage() {
                   />
                 </div>
 
+                <div className="grid gap-2">
+                  <Label htmlFor="agents">Agents (multi-select)</Label>
+
+                  {agentsQuery.isLoading ? (
+                    <div className="text-sm text-muted-foreground">
+                      Loading agents...
+                    </div>
+                  ) : agentsQuery.isError ? (
+                    <div className="text-sm text-destructive">
+                      Failed to load agents: {getApiErrorMessage(agentsQuery.error)}
+                    </div>
+                  ) : (agentsQuery.data?.length ?? 0) === 0 ? (
+                    <div className="text-sm text-muted-foreground">
+                      No agents found. Create an agent first.
+                    </div>
+                  ) : (
+                    <select
+                      id="agents"
+                      multiple
+                      value={selectedAgents.map((x) => x.agentId)}
+                      onChange={(e) => {
+                        const nextIds = Array.from(e.target.selectedOptions).map(
+                          (o) => o.value
+                        )
+
+                        setSelectedAgents((current) => {
+                          const currentIds = current.map((x) => x.agentId)
+                          const removedIds = currentIds.filter(
+                            (id) => !nextIds.includes(id)
+                          )
+                          const addedIds = nextIds.filter(
+                            (id) => !currentIds.includes(id)
+                          )
+
+                          const kept = current.filter(
+                            (x) => !removedIds.includes(x.agentId)
+                          )
+                          const added = addedIds.map((id) => ({
+                            agentId: id,
+                            role: "",
+                          }))
+
+                          return [...kept, ...added]
+                        })
+                      }}
+                      className="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 w-full rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                      size={Math.min(8, Math.max(4, agentsQuery.data?.length ?? 4))}
+                    >
+                      {(agentsQuery.data ?? []).map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  <div className="text-xs text-muted-foreground">
+                    Order is assigned by selection/add sequence (0..n-1). For{" "}
+                    <code>Sequential</code> (1) pattern, at least one agent is
+                    required.
+                  </div>
+
+                  {selectedAgents.length > 0 && (
+                    <div className="space-y-3 rounded-md border p-3">
+                      <div className="text-sm font-medium">Selected agents</div>
+
+                      <div className="space-y-2">
+                        {selectedAgents.map((item, index) => {
+                          const agentName =
+                            agentsQuery.data?.find((a) => a.id === item.agentId)
+                              ?.name ?? item.agentId
+
+                          return (
+                            <div
+                              key={item.agentId}
+                              className="flex flex-col gap-2 sm:flex-row sm:items-center"
+                            >
+                              <div className="min-w-0 text-sm sm:w-64">
+                                <span className="mr-2 font-mono text-xs text-muted-foreground">
+                                  #{index}
+                                </span>
+                                <span className="truncate">{agentName}</span>
+                              </div>
+
+                              <div className="flex flex-1 items-center gap-2">
+                                <Input
+                                  value={item.role}
+                                  onChange={(e) =>
+                                    setSelectedAgents((current) =>
+                                      current.map((x) =>
+                                        x.agentId === item.agentId
+                                          ? { ...x, role: e.target.value }
+                                          : x
+                                      )
+                                    )
+                                  }
+                                  placeholder="Role (optional)"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon-sm"
+                                  onClick={() =>
+                                    setSelectedAgents((current) =>
+                                      current.filter((x) => x.agentId !== item.agentId)
+                                    )
+                                  }
+                                  aria-label={`Remove ${agentName}`}
+                                  title="Remove"
+                                >
+                                  ×
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -206,10 +354,18 @@ export default function WorkflowsPage() {
                         ? configurationJson
                         : null,
                       enable,
-                      agents: [],
+                      agents: selectedAgents.map((x, index) => ({
+                        agentId: x.agentId,
+                        order: index,
+                        role: x.role.trim().length ? x.role.trim() : null,
+                      })),
                     })
                   }
-                  disabled={!name.trim() || createWorkflowMutation.isPending}
+                  disabled={
+                    !name.trim() ||
+                    createWorkflowMutation.isPending ||
+                    (pattern === 1 && selectedAgents.length === 0)
+                  }
                 >
                   {createWorkflowMutation.isPending ? "Creating..." : "Create"}
                 </Button>

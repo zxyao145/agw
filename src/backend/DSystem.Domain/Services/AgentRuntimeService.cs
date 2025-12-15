@@ -1,6 +1,9 @@
 using DSystem.Domain.Entities;
 using DSystem.Domain.Models;
 using DSystem.Domain.Repositories;
+using Microsoft.Agents.AI;
+using OpenAI;
+using System.ClientModel;
 
 namespace DSystem.Domain.Services;
 
@@ -30,7 +33,7 @@ public class AgentRuntimeService
         _providerRepository = providerRepository;
     }
 
-    public async Task<AiAgent?> CreateAiAgentAsync(Guid agentId)
+    public async Task<AIAgent?> CreateAiAgentAsync(Guid agentId)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
         if (agent == null)
@@ -56,17 +59,31 @@ public class AgentRuntimeService
         {
             return null;
         }
+        //return new AiAgent
+        //{
+        //    Id = agent.Id,
+        //    Name = agent.Name,
+        //    Instructions = agent.Instructions,
+        //    SystemPrompt = agent.SystemPrompt,
+        //    ProviderName = provider.Name,
+        //    ModelName = model.Name,
+        //    Endpoint = provider.Endpoint,
+        //    ApiKey = apiKey.ApiKey
+        //};
 
-        return new AiAgent
+
+        ApiKeyCredential credential = new ApiKeyCredential(apiKey.ApiKey);
+        OpenAIClientOptions options = new OpenAIClientOptions
         {
-            Id = agent.Id,
-            Name = agent.Name,
-            Instructions = agent.Instructions,
-            SystemPrompt = agent.SystemPrompt,
-            ProviderName = provider.Name,
-            ModelName = model.Name,
-            Endpoint = provider.Endpoint,
-            ApiKey = apiKey.ApiKey
+            Endpoint = new Uri(provider.Endpoint),
         };
+        OpenAIClient client = new OpenAIClient(credential, options);
+        var chatCompletionClient = client.GetChatClient(model.Name);
+        AIAgent aIAgent = chatCompletionClient.CreateAIAgent(
+            instructions: agent.Instructions,
+            name: agent.Name
+            );
+
+        return aIAgent;
     }
 }

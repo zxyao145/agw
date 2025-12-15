@@ -2,6 +2,12 @@ using DSystem.Domain.Entities;
 using DSystem.Domain.Enums;
 using DSystem.Domain.Models;
 using DSystem.Domain.Repositories;
+using System.ComponentModel.DataAnnotations;
+using System.Runtime.Serialization;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
+using Workflow = DSystem.Domain.Entities.Workflow;
 
 namespace DSystem.Domain.Services;
 
@@ -21,6 +27,7 @@ public class PlaceholderWorkflowAgentExecutor : IWorkflowAgentExecutor
         return Task.FromResult(output);
     }
 }
+public record WaChatMessage(string AuthorName, string Role, string Content);
 
 public record WorkflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
 
@@ -31,7 +38,7 @@ public record WorkflowExecutionResult(
     string? Message,
     string Input,
     string? FinalOutput,
-    IReadOnlyList<WorkflowExecutionAgentResult> Outputs);
+    IReadOnlyList<WaChatMessage> Outputs);
 
 public class WorkflowRuntimeService
 {
@@ -82,7 +89,7 @@ public class WorkflowRuntimeService
                     Message: $"Workflow pattern '{workflow.Pattern}' is not implemented yet.",
                     Input: input,
                     FinalOutput: null,
-                    Outputs: Array.Empty<WorkflowExecutionAgentResult>());
+                    Outputs: Array.Empty<WaChatMessage>());
         }
     }
 
@@ -92,29 +99,47 @@ public class WorkflowRuntimeService
         string input,
         CancellationToken cancellationToken)
     {
-        var tasks = agents.Select(async wa =>
+        var aiAgents = new List<AIAgent>();
+        foreach (var wa in agents)
         {
             var aiAgent = await _agentRuntimeService.CreateAiAgentAsync(wa.AgentId);
             if (aiAgent == null)
             {
                 return null;
             }
-
-            var output = await _executor.ExecuteAsync(aiAgent, input, cancellationToken);
-            return new WorkflowExecutionAgentResult(aiAgent.Id, aiAgent.Name, wa.Order, output);
-        }).ToList();
-
-        var results = await Task.WhenAll(tasks);
-        if (results.Any(x => x == null))
-        {
-            return null;
+            aiAgents.Add(aiAgent);
         }
 
-        var outputs = results!
-            .Where(x => x != null)
-            .OrderBy(x => x!.Order)
-            .Cast<WorkflowExecutionAgentResult>()
-            .ToList();
+        var aiWorkflow = AgentWorkflowBuilder.BuildConcurrent(aiAgents);
+        var messages = new List<ChatMessage> { new(ChatRole.User, input) };
+
+        StreamingRun run = await InProcessExecution.StreamAsync(aiWorkflow, messages);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        List<ChatMessage> result = new();
+        await foreach (WorkflowEvent evt in run.WatchStreamAsync().ConfigureAwait(false))
+        {
+            if (evt is AgentRunUpdateEvent e)
+            {
+                Console.WriteLine($"{e.ExecutorId}: {e.Data}");
+            }
+            else if (evt is WorkflowOutputEvent outputEvt)
+            {
+                result = (List<ChatMessage>)outputEvt.Data!;
+                break;
+            }
+        }
+
+        var outputs = new List<WaChatMessage>();
+
+        // Display aggregated results from all agents
+        Console.WriteLine("===== Final Aggregated Results =====");
+        foreach (var message in result)
+        {
+            var chatMsg = 
+                new WaChatMessage(message.AuthorName ?? "", message.Role.ToString(), message.Text);
+            outputs.Add(chatMsg);
+        }
 
         return new WorkflowExecutionResult(
             workflow.Id,
@@ -127,7 +152,7 @@ public class WorkflowRuntimeService
     }
 
     private async Task<WorkflowExecutionResult?> ExecuteSequentialAsync(
-        Workflow workflow,
+        Entities.Workflow workflow,
         IReadOnlyList<WorkflowAgent> agents,
         string input,
         CancellationToken cancellationToken)
@@ -137,9 +162,9 @@ public class WorkflowRuntimeService
             return null;
         }
 
-        var outputs = new List<WorkflowExecutionAgentResult>(agents.Count);
+        var outputs = new List<WaChatMessage>();
         var current = input;
-
+        List<AIAgent> aiAgents = new ();
         foreach (var wa in agents.OrderBy(x => x.Order))
         {
             var aiAgent = await _agentRuntimeService.CreateAiAgentAsync(wa.AgentId);
@@ -148,10 +173,42 @@ public class WorkflowRuntimeService
                 return null;
             }
 
-            var output = await _executor.ExecuteAsync(aiAgent, current, cancellationToken);
-            outputs.Add(new WorkflowExecutionAgentResult(aiAgent.Id, aiAgent.Name, wa.Order, output));
-            current = output;
+            aiAgents.Add(aiAgent);
+            //var output = await _executor.ExecuteAsync(aiAgent, current, cancellationToken);
+            //outputs.Add(new WorkflowExecutionAgentResult(aiAgent.Id, aiAgent.Name, wa.Order, output));
+            //current = output;
         }
+        // create workflow
+        var agentWorkflow = AgentWorkflowBuilder.BuildSequential(aiAgents);
+
+        // Run the workflow
+        var messages = new List<ChatMessage> { new(ChatRole.User, input) };
+        StreamingRun run = await InProcessExecution.StreamAsync(agentWorkflow, messages);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        List<ChatMessage> result = new();
+        await foreach (WorkflowEvent evt in run.WatchStreamAsync().ConfigureAwait(false))
+        {
+            if (evt is AgentRunUpdateEvent e)
+            {
+                Console.WriteLine($"{e.ExecutorId}: {e.Data}");
+            }
+            else if (evt is WorkflowOutputEvent outputEvt)
+            {
+                result = (List<ChatMessage>)outputEvt.Data!;
+                break;
+            }
+        }
+
+        // Display final result
+        foreach (var message in result)
+        {
+            var chatMsg =
+                new WaChatMessage(message.AuthorName ?? "", message.Role.ToString(), message.Text);
+
+            outputs.Add(chatMsg);
+        }
+
 
         return new WorkflowExecutionResult(
             workflow.Id,

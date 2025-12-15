@@ -36,7 +36,7 @@ public record WorkflowExecuteResponse(
     string? Message,
     string Input,
     string? FinalOutput,
-    IReadOnlyList<WorkflowExecutionAgentResultResponse> Outputs)
+    IReadOnlyList<WaChatMessage> Outputs)
 {
     public static WorkflowExecuteResponse FromDomain(WorkflowExecutionResult result) =>
         new(
@@ -46,5 +46,5 @@ public record WorkflowExecuteResponse(
             result.Message,
             result.Input,
             result.FinalOutput,
-            result.Outputs.Select(WorkflowExecutionAgentResultResponse.FromDomain).ToList());
+            result.Outputs);
 }

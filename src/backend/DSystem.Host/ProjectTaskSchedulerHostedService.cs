@@ -1,4 +1,3 @@
-using System.Text.Json;
 using DSystem.Domain.Entities;
 using DSystem.Domain.Enums;
 using DSystem.Domain.Services;
@@ -6,6 +5,9 @@ using DSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Unicode;
 
 namespace DSystem.Host;
 
@@ -125,8 +127,12 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                         await taskService.MarkFailedAsync(marked.Id, "Workflow execution failed (workflow disabled/missing or agent runtime unavailable).", "scheduler");
                         return;
                     }
-
-                    var json = JsonSerializer.Serialize(execution, new JsonSerializerOptions { WriteIndented = false });
+                    var options1 = new JsonSerializerOptions
+                    {
+                        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+                        WriteIndented = false
+                    };
+                    var json = JsonSerializer.Serialize(execution, options1);
                     await taskService.MarkSucceededAsync(marked.Id, json, "scheduler");
                 }
                 catch (Exception ex)
