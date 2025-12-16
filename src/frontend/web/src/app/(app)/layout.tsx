@@ -32,7 +32,6 @@ const navItems = [
   { href: "/providers", label: "Providers" },
   { href: "/models", label: "Models" },
   { href: "/model-providers", label: "Model Providers" },
-  { href: "/model-provider-keys", label: "Model Provider Keys" },
 ] as const
 
 function getActiveNavLabel(pathname: string): string | undefined {

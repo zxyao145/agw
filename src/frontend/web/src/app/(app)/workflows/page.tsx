@@ -26,6 +26,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 
 type WorkflowCreateRequest = components["schemas"]["WorkflowCreateRequest"]
@@ -222,44 +229,29 @@ export default function WorkflowsPage() {
                       No agents found. Create an agent first.
                     </div>
                   ) : (
-                    <select
-                      id="agents"
-                      multiple
-                      value={selectedAgents.map((x) => x.agentId)}
-                      onChange={(e) => {
-                        const nextIds = Array.from(e.target.selectedOptions).map(
-                          (o) => o.value
-                        )
-
+                    <Select
+                      onValueChange={(agentId) => {
                         setSelectedAgents((current) => {
-                          const currentIds = current.map((x) => x.agentId)
-                          const removedIds = currentIds.filter(
-                            (id) => !nextIds.includes(id)
-                          )
-                          const addedIds = nextIds.filter(
-                            (id) => !currentIds.includes(id)
-                          )
-
-                          const kept = current.filter(
-                            (x) => !removedIds.includes(x.agentId)
-                          )
-                          const added = addedIds.map((id) => ({
-                            agentId: id,
-                            role: "",
-                          }))
-
-                          return [...kept, ...added]
+                          if (current.some((x) => x.agentId === agentId)) return current
+                          return [...current, { agentId, role: "" }]
                         })
                       }}
-                      className="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 w-full rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                      size={Math.min(8, Math.max(4, agentsQuery.data?.length ?? 4))}
                     >
-                      {(agentsQuery.data ?? []).map((agent) => (
-                        <option key={agent.id} value={agent.id}>
-                          {agent.name}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger id="agents">
+                        <SelectValue placeholder="Select an agent to add" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(agentsQuery.data ?? []).map((agent) => (
+                          <SelectItem
+                            key={agent.id}
+                            value={agent.id}
+                            disabled={selectedAgents.some((x) => x.agentId === agent.id)}
+                          >
+                            {agent.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
 
                   <div className="text-xs text-muted-foreground">
