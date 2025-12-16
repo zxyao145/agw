@@ -153,6 +153,118 @@ Follow Conventional Commits format matching existing history:
 - Ensure PRs build and `dotnet test` passes before requesting review
 - Highlight breaking changes or migration requirements explicitly
 
+## Frontend Development
+
+### Tech Stack
+- **Framework**: Next.js 16 with App Router
+- **UI**: React 19.2, Tailwind CSS 4, Radix UI components
+- **State**: TanStack React Query 5.90
+- **API Client**: OpenAPI-generated types with typed fetch wrapper
+
+### Commands
+```bash
+cd src/frontend/web
+
+# Install dependencies
+pnpm install
+
+# Development server
+pnpm dev
+
+# Production build
+pnpm build
+
+# Generate API types from backend OpenAPI spec
+pnpm gen:openapi
+```
+
+### Frontend Architecture
+```
+src/frontend/web/src/
+├── api/
+│   ├── client.ts          # Typed API client (fetch wrapper)
+│   └── openapi.d.ts       # Auto-generated from backend/openapi.json
+├── app/
+│   ├── (app)/             # Main app routes with shared layout
+│   │   ├── agents/        # Agent CRUD
+│   │   ├── models/        # Model management
+│   │   ├── providers/     # Provider management
+│   │   ├── model-providers/  # Model-Provider associations
+│   │   ├── workflows/     # Workflow orchestration
+│   │   └── projects/      # Project & task execution
+│   └── layout.tsx         # Root layout (providers, theme)
+├── components/
+│   ├── query-provider.tsx # React Query setup
+│   └── ui/                # Radix UI wrappers
+└── lib/
+    └── utils.ts           # cn() utility
+```
+
+**API Integration Pattern**:
+- Run `pnpm gen:openapi` after backend schema changes
+- Use `apiGet()`, `apiPost()`, `apiPut()`, `apiDelete()` from `api/client.ts`
+- All endpoints type-safe via OpenAPI types
+- TanStack Query handles caching, refetch, error states
+
+## Extended Domain Model
+
+### Workflow System
+**Entities**: `Workflow`, `WorkflowAgent` (join table with ordering)
+
+**Orchestration Patterns** (`WorkflowOrchestrationPattern` enum):
+- `Concurrent` (0): Broadcast input to all agents in parallel
+- `Sequential` (1): Chain agents A→B→C with output passing
+- `GroupChat` (2): Manager-controlled conversation (not implemented)
+- `Handoff` (3): Dynamic agent switching (not implemented)
+- `Magentic` (4): MagenticOne-inspired pattern (not implemented)
+
+**WorkflowRuntimeService** (`DSystem.Domain/Services/WorkflowRuntimeService.cs`):
+- Hydrates workflow agents via `AgentRuntimeService`
+- Uses `AgentWorkflowBuilder` from Microsoft.Agents.AI.Workflows
+- Executes via `InProcessExecution.StreamAsync()`
+- Returns `WorkflowExecutionResult` with chat messages and status
+
+### Project/Task System
+**Entities**: `Project`, `ProjectTask`, `ProjectLease`
+
+**ProjectTask Statuses**: `Pending` → `Running` → `Succeeded`/`Failed`/`Canceled`
+
+**Background Scheduler** (`ProjectTaskSchedulerHostedService` in `DSystem.Host`):
+- Polls every 2 seconds for pending tasks
+- **Concurrency**: Max 4 projects executing in parallel
+- **Per-project sequential execution**: Only one task runs per project at a time
+- **Distributed locking**: DB-backed `ProjectLease` with 30-second TTL
+- **Lock strategy**: Insert (fast path) or update if expired/owned by same instance
+- **Ordering**: Tasks executed by `UpdateTime` (FIFO, reorderable)
+
+**Execution Flow**:
+1. Acquire project lock via `ProjectLease`
+2. Mark task `Pending` → `Running`
+3. Execute workflow via `WorkflowRuntimeService`
+4. Store result in `OutputJson` or `ErrorMessage`
+5. Mark task `Succeeded`/`Failed`
+6. Release lock
+
+### Complete Entity Graph
+```
+LlmModel ←→ ModelProvider ←→ Provider
+                ↓
+         ModelProviderApiKey
+                ↓
+              Agent ←→ WorkflowAgent ←→ Workflow
+                                          ↓
+                                     ProjectTask ←→ Project
+                                                      ↓
+                                                 ProjectLease (lock)
+```
+
+**Key Constraints**:
+- `Workflow.ConfigurationJson`: max 16000 chars (workflow-specific settings)
+- `ProjectTask.Input`/`Description`: max 4000 chars
+- `ProjectTask.OutputJson`: max 16000 chars (serialized execution result)
+- `WorkflowAgent`: Unique index on (WorkflowId, Order)
+- `ProjectTask`: Composite index on (ProjectId, Status, UpdateTime)
+
 ## Development Notes
 
 - All projects target `.NET 10.0` with nullable reference types enabled
@@ -161,4 +273,40 @@ Follow Conventional Commits format matching existing history:
 - Repository pattern hides EF Core implementation details from domain services
 - When modifying entity relationships, update both `LlmDbContext` configuration and entity navigation properties
 - Migrations and runtime data are generated relative to the host project; keep repository code free of environment-specific paths
-- `src/frontend` is currently empty and can be populated later
+- Frontend uses App Router (not Pages Router); server/client components follow Next.js 16 conventions
+- Background services must handle graceful shutdown via `CancellationToken`
+
+## Checkpoint Record
+
+**Project**: D-System | **Time**: 2025-12-16T00:00:00Z
+**Milestone**: Multi-agent workflow + task scheduling | **Branch**: main
+
+### Technical Status
+- **Code Quality**: Excellent (18,015 files)
+- **Architecture Health**: Rapid development phase
+- **Dependencies**: Latest (Next.js 16, .NET 10, Microsoft.Agents.AI)
+
+### Documentation Maintenance
+- [x] **CLAUDE.md**: Updated with frontend, workflows, and task system
+- [x] **Configuration Sync**: Frontend package.json aligned
+- [x] **API Documentation**: OpenAPI at `/openapi` endpoint
+
+### Recent Activity (First 10 commits)
+- **Commit Count**: 10 commits since project start
+- **Major Changes**:
+  - Frontend implementation (Next.js + React 19)
+  - Workflow orchestration (Concurrent/Sequential patterns)
+  - Project/Task scheduling with distributed locking
+  - Microsoft.Agents.AI integration
+  - OpenAPI code generation pipeline
+- **Activity Intensity**: High (active development)
+- **Development Trend**: Upward trajectory
+
+### Recommended Actions
+1. Add unit/integration tests for `ProjectTaskSchedulerHostedService` (distributed lock edge cases)
+2. Implement remaining workflow patterns (GroupChat, Handoff, Magentic)
+3. Add frontend error boundaries for API failures
+4. Consider rate limiting for workflow execution
+5. Document environment variables in `.env.example`
+
+**Git Commit**: `05ecbdb` | **Health Score**: 8/10
