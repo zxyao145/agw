@@ -1,99 +1,177 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { useParams } from "next/navigation"
-import { useQuery } from "@tanstack/react-query"
+import * as React from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
-import { apiGet } from "@/api/client"
-import { Button } from "@/components/ui/button"
+import { apiGet } from "@/api/client";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { ButtonGroup } from "@/components/ui/button-group"
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { ButtonGroup } from "@/components/ui/button-group";
 
 type ProjectTaskDto = {
-  id: string
-  projectId: string
-  workflowId: string
-  status: number
-  description: string
-  input: string
-  outputJson?: string | null
-  errorMessage?: string | null
-  createTime?: string | null
-  updateTime?: string | null
-  startedTime?: string | null
-  finishedTime?: string | null
-}
+  id: string;
+  projectId: string;
+  workflowId: string;
+  status: number;
+  description: string;
+  input: string;
+  outputJson?: string | null;
+  errorMessage?: string | null;
+  createTime?: string | null;
+  updateTime?: string | null;
+  startedTime?: string | null;
+  finishedTime?: string | null;
+};
 
 function formatDate(value?: string | null): string {
-  if (!value) return "-"
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
-  return d.toLocaleString()
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
 }
 
 function getApiErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return "Unknown error"
+  if (error instanceof Error) return error.message;
+  return "Unknown error";
 }
 
 function statusLabel(status: number): string {
   switch (status) {
     case 0:
-      return "Pending"
+      return "Pending";
     case 1:
-      return "Running"
+      return "Running";
     case 2:
-      return "Succeeded"
+      return "Succeeded";
     case 3:
-      return "Failed"
+      return "Failed";
     case 4:
-      return "Canceled"
+      return "Canceled";
     default:
-      return `#${status}`
+      return `#${status}`;
   }
 }
 
 function statusClassName(status: number): string {
   switch (status) {
     case 2:
-      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
     case 1:
-      return "bg-blue-500/10 text-blue-700 dark:text-blue-300"
+      return "bg-blue-500/10 text-blue-700 dark:text-blue-300";
     case 0:
-      return "bg-muted text-muted-foreground"
+      return "bg-muted text-muted-foreground";
     case 4:
-      return "bg-muted text-muted-foreground"
+      return "bg-muted text-muted-foreground";
     case 3:
-      return "bg-destructive/10 text-destructive"
+      return "bg-destructive/10 text-destructive";
     default:
-      return "bg-muted text-muted-foreground"
+      return "bg-muted text-muted-foreground";
   }
 }
 
+type ChatMessage = {
+  AuthorName: string;
+  Role: string;
+  Content: string;
+};
+
+function ChatMessages({ outputJson }: { outputJson: string }) {
+  const messages = React.useMemo(() => {
+    try {
+      const parsed = JSON.parse(outputJson);
+
+      if (parsed.Outputs && Array.isArray(parsed.Outputs)) {
+        return parsed.Outputs.filter(
+          (msg: ChatMessage) => msg.Role && msg.Content
+        );
+      }
+
+      // If no messages found, return empty array
+      return [];
+    } catch {
+      return [];
+    }
+  }, [outputJson]);
+
+  // If no valid messages, show raw JSON
+  if (messages.length === 0) {
+    return (
+      <Textarea
+        value={outputJson}
+        readOnly
+        rows={12}
+        className="font-mono text-xs"
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {messages.map((message: ChatMessage, index: number) => {
+        const isUser = message.Role.toLowerCase() === "user";
+        const isAssistant = message.Role.toLowerCase() === "assistant";
+
+        return (
+          <div
+            key={index}
+            className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+          >
+            {isUser ? (
+              <div className="flex max-w-[80%] flex-row-reverse">
+                <div className="mx-1 mt-1 text-xs font-medium opacity-70 w-8 text-right">
+                  User
+                </div>
+                <div
+                  className={`rounded-lg px-4 py-3 whitespace-pre-wrap text-sm bg-blue-500 text-white`}
+                >
+                  {message.Content}
+                </div>
+              </div>
+            ) : (
+              <div className="flex max-w-[80%]">
+                <div className="mx-1 mt-1 text-xs font-medium opacity-70 w-20">
+                  {message.AuthorName}
+                  {/* <br />({message.Role}) */}
+                </div>
+                <div
+                  className={`rounded-lg px-4 py-3 whitespace-pre-wrap text-sm bg-muted`}
+                >
+                  {message.Content}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function TaskDetailsPage() {
-  const params = useParams<{ id: string; taskId: string }>()
-  const projectId = params.id
-  const taskId = params.taskId
+  const params = useParams<{ id: string; taskId: string }>();
+  const projectId = params.id;
+  const taskId = params.taskId;
 
   const taskQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", taskId],
     queryFn: async () => {
       return (await apiGet("/api/projects/{projectId}/tasks/{taskId}", {
         params: { path: { projectId, taskId } },
-      })) as unknown as ProjectTaskDto
+      })) as unknown as ProjectTaskDto;
     },
-  })
+  });
 
-  const task = taskQuery.data
+  const task = taskQuery.data;
 
   return (
     <div className="space-y-6">
@@ -182,35 +260,16 @@ export default function TaskDetailsPage() {
             </div>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Input</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                value={task.input}
-                readOnly
-                rows={8}
-                className="font-mono text-xs"
-              />
-            </CardContent>
-          </Card>
-
           {task.outputJson ? (
             <Card>
               <CardHeader>
                 <CardTitle>Output</CardTitle>
                 <CardDescription>
-                  Task execution output (JSON format).
+                  Task execution conversation history.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Textarea
-                  value={task.outputJson}
-                  readOnly
-                  rows={12}
-                  className="font-mono text-xs"
-                />
+                <ChatMessages outputJson={task.outputJson} />
               </CardContent>
             </Card>
           ) : null}
