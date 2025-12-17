@@ -27,6 +27,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 type ModelCreateRequest = components["schemas"]["ModelCreateRequest"]
 
@@ -234,10 +242,41 @@ export default function ModelsPage() {
             <div className="text-sm text-destructive">
               Failed to load models: {getApiErrorMessage(modelsQuery.error)}
             </div>
+          ) : modelsQuery.data && modelsQuery.data.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Max Tokens</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {modelsQuery.data.map((model) => (
+                  <TableRow key={model.id}>
+                    <TableCell className="font-medium">{model.name}</TableCell>
+                    <TableCell className="max-w-xs truncate">
+                      {model.description || "-"}
+                    </TableCell>
+                    <TableCell>{model.type}</TableCell>
+                    <TableCell className="text-right">
+                      {model.maxTokens.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {model.createTime
+                        ? new Date(model.createTime).toLocaleString()
+                        : "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
-            <pre className="max-h-[520px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs">
-              {pretty(modelsQuery.data)}
-            </pre>
+            <div className="text-sm text-muted-foreground">
+              No models found. Create one to get started.
+            </div>
           )}
         </CardContent>
       </Card>

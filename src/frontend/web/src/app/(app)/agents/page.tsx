@@ -27,6 +27,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 type AgentCreateRequest = components["schemas"]["AgentCreateRequest"]
 
@@ -217,10 +225,43 @@ export default function AgentsPage() {
             <div className="text-sm text-destructive">
               Failed to load agents: {getApiErrorMessage(agentsQuery.error)}
             </div>
+          ) : agentsQuery.data && agentsQuery.data.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Instructions</TableHead>
+                  <TableHead>System Prompt</TableHead>
+                  <TableHead>API Key ID</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {agentsQuery.data.map((agent) => (
+                  <TableRow key={agent.id}>
+                    <TableCell className="font-medium">{agent.name}</TableCell>
+                    <TableCell className="max-w-xs truncate">
+                      {agent.instructions || "-"}
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate">
+                      {agent.systemPrompt || "-"}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {agent.modelProviderApiKeyId.substring(0, 8)}...
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {agent.createTime
+                        ? new Date(agent.createTime).toLocaleString()
+                        : "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
-            <pre className="max-h-[520px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs">
-              {pretty(agentsQuery.data)}
-            </pre>
+            <div className="text-sm text-muted-foreground">
+              No agents found. Create one to get started.
+            </div>
           )}
         </CardContent>
       </Card>

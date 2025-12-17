@@ -34,6 +34,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 type WorkflowCreateRequest = components["schemas"]["WorkflowCreateRequest"]
 
@@ -382,10 +390,45 @@ export default function WorkflowsPage() {
               Failed to load workflows:{" "}
               {getApiErrorMessage(workflowsQuery.error)}
             </div>
+          ) : workflowsQuery.data && workflowsQuery.data.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Pattern</TableHead>
+                  <TableHead>Enabled</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {workflowsQuery.data.map((workflow) => (
+                  <TableRow key={workflow.id}>
+                    <TableCell className="font-medium">{workflow.name}</TableCell>
+                    <TableCell className="max-w-xs truncate">
+                      {workflow.description || "-"}
+                    </TableCell>
+                    <TableCell>{workflow.pattern}</TableCell>
+                    <TableCell>
+                      {workflow.enable ? (
+                        <span className="text-green-600">Yes</span>
+                      ) : (
+                        <span className="text-muted-foreground">No</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {workflow.createTime
+                        ? new Date(workflow.createTime).toLocaleString()
+                        : "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
-            <pre className="max-h-[520px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs">
-              {pretty(workflowsQuery.data)}
-            </pre>
+            <div className="text-sm text-muted-foreground">
+              No workflows found. Create one to get started.
+            </div>
           )}
         </CardContent>
       </Card>

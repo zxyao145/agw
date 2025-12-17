@@ -27,6 +27,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 type ProviderCreateRequest = components["schemas"]["ProviderCreateRequest"]
 
@@ -200,10 +208,39 @@ export default function ProvidersPage() {
             <div className="text-sm text-destructive">
               Failed to load providers: {getApiErrorMessage(providersQuery.error)}
             </div>
+          ) : providersQuery.data && providersQuery.data.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Endpoint</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {providersQuery.data.map((provider) => (
+                  <TableRow key={provider.id}>
+                    <TableCell className="font-medium">{provider.name}</TableCell>
+                    <TableCell className="max-w-xs truncate">
+                      {provider.description || "-"}
+                    </TableCell>
+                    <TableCell className="max-w-sm truncate font-mono text-xs">
+                      {provider.endpoint}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {provider.createTime
+                        ? new Date(provider.createTime).toLocaleString()
+                        : "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
-            <pre className="max-h-[520px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs">
-              {pretty(providersQuery.data)}
-            </pre>
+            <div className="text-sm text-muted-foreground">
+              No providers found. Create one to get started.
+            </div>
           )}
         </CardContent>
       </Card>

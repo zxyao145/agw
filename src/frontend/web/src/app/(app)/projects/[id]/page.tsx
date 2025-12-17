@@ -598,7 +598,12 @@ export default function ProjectDetailsPage() {
                           variant="destructive"
                           size="sm"
                           onClick={() => cancelTaskMutation.mutate(t.id)}
-                          disabled={cancelTaskMutation.isPending}
+                          disabled={t.status === 2 || t.status === 3 || t.status === 4 || cancelTaskMutation.isPending}
+                          title={
+                            t.status === 2 || t.status === 3 || t.status === 4
+                              ? "Task already completed"
+                              : "Cancel task"
+                          }
                         >
                           {cancelTaskMutation.isPending ? "Canceling..." : "Cancel"}
                         </Button>
