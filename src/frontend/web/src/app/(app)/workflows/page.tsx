@@ -75,14 +75,6 @@ type SelectedAgent = {
   role: string
 }
 
-function pretty(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
-
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (typeof error.body === "string" && error.body.trim().length) {

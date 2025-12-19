@@ -25,11 +25,11 @@ type JsonRequestBody<P extends keyof paths, M extends keyof paths[P]> =
     : never
 
 type HasRequestBody<P extends keyof paths, M extends keyof paths[P]> =
-  Operation<P, M> extends { requestBody: any } ? true : false
+  Operation<P, M> extends { requestBody: unknown } ? true : false
 
 type ParamsOption<P extends keyof paths, M extends keyof paths[P]> =
   [OperationParams<P, M>] extends [never]
-    ? {}
+    ? Record<string, never>
     : {
         params?: {
           path?: PathParams<P, M>
@@ -38,7 +38,7 @@ type ParamsOption<P extends keyof paths, M extends keyof paths[P]> =
       }
 
 type BodyOption<P extends keyof paths, M extends keyof paths[P]> =
-  HasRequestBody<P, M> extends true ? { body: JsonRequestBody<P, M> } : {}
+  HasRequestBody<P, M> extends true ? { body: JsonRequestBody<P, M> } : Record<string, never>
 
 export type ApiRequestOptions<P extends keyof paths, M extends keyof paths[P]> =
   ParamsOption<P, M> &

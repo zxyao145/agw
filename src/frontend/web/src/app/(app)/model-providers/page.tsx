@@ -270,14 +270,6 @@ function SearchableSelect({
   )
 }
 
-function pretty(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
-
 type SwitchProps = {
   checked: boolean
   onCheckedChange: (checked: boolean) => void
@@ -350,10 +342,11 @@ async function listKeysByPair(args: {
 }): Promise<ModelProviderApiKeyDto[]> {
   // NOTE: openapi-typescript didn't generate query param types for this endpoint
   // so we narrow the typing at the boundary.
-  return (await apiGet(
-    "/api/model-provider-keys" as any,
-    { params: { query: { modelId: args.modelId, providerId: args.providerId } } } as any
-  )) as unknown as ModelProviderApiKeyDto[]
+  return (await apiGet("/api/model-provider-keys", {
+    params: {
+      query: { modelId: args.modelId, providerId: args.providerId },
+    },
+  } as { params: { query: { modelId: string; providerId: string } } })) as unknown as ModelProviderApiKeyDto[];
 }
 
 function ModelProviderActions({

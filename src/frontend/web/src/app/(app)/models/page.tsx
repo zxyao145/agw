@@ -50,13 +50,6 @@ type ModelDto = {
   updateTime?: string | null
 }
 
-function pretty(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {

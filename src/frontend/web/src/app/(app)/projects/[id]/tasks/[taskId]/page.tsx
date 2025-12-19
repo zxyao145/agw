@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Check, ArrowDownFromLine } from "lucide-react";
 
 import { apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ButtonGroup } from "@/components/ui/button-group";
 
@@ -87,15 +87,7 @@ type ChatMessage = {
   Content: string;
 };
 
-function ChatMessages({
-  outputJson,
-  startedTime,
-  finishedTime,
-}: {
-  outputJson: string;
-  startedTime?: string | null;
-  finishedTime?: string | null;
-}) {
+function ChatMessages({ outputJson }: { outputJson: string }) {
   const messages = React.useMemo(() => {
     try {
       const parsed = JSON.parse(outputJson);
@@ -125,60 +117,48 @@ function ChatMessages({
     );
   }
 
+  // Filter out user messages before mapping
+  const assistantMessages = messages.filter(
+    (msg: ChatMessage) => msg.Role.toLowerCase() !== "user"
+  );
+
   return (
-    <div className="space-y-4">
-      {/* Conversation timestamp header */}
-      {(startedTime || finishedTime) && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground border-b pb-2">
-          <span>Conversation</span>
-          {startedTime && (
-            <>
-              <span>•</span>
-              <span>Started: {formatDate(startedTime)}</span>
-            </>
-          )}
-          {finishedTime && (
-            <>
-              <span>•</span>
-              <span>Completed: {formatDate(finishedTime)}</span>
-            </>
-          )}
-        </div>
-      )}
-
+    <div className="space-y-6">
       {messages.map((message: ChatMessage, index: number) => {
-        const isUser = message.Role.toLowerCase() === "user";
-        const isAssistant = message.Role.toLowerCase() === "assistant";
-
+        const showConnector = index !== assistantMessages.length - 1;
+        const isAssistantMessage = message.Role.toLowerCase() !== "user";
         return (
-          <div
-            key={index}
-            className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-          >
-            {isUser ? (
-              <div className="flex max-w-[80%] flex-row-reverse">
-                <div className="mx-1 mt-1 text-xs font-medium opacity-70 w-8 text-right">
-                  User
-                </div>
-                <div className="rounded-lg px-4 py-3 text-sm bg-blue-500 text-white prose prose-sm prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {message.Content}
-                  </ReactMarkdown>
-                </div>
+          <div key={index} className="flex items-start gap-4">
+            <div className="flex flex-col items-center flex-shrink-0">
+              <div
+                className="relative flex items-center justify-center rounded-full ring-8 ring-background shadow-sm h-8 w-8"
+                style={{
+                  backgroundColor: "hsl(142, 76%, 36%)",
+                }}
+              >
+                {isAssistantMessage ? (
+                  <Check size={16} color="#ffffff" />
+                ) : (
+                  <ArrowDownFromLine size={16} color="#ffffff" />
+                )}
               </div>
-            ) : (
-              <div className="flex max-w-[80%]">
-                <div className="mx-1 mt-1 text-xs font-medium opacity-70 w-20">
-                  {message.AuthorName}
-                  {/* <br />({message.Role}) */}
-                </div>
-                <div className="rounded-lg px-4 py-3 text-sm bg-muted prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {message.Content}
-                  </ReactMarkdown>
-                </div>
+              {showConnector && (
+                <div className="w-0.5 flex-1 bg-border mt-2 min-h-16" />
+              )}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 pt-1">
+              <div className="mb-2">
+                <h3 className="font-semibold text-sm">{message.AuthorName}</h3>
+                <p className="text-xs text-muted-foreground">{message.Role}</p>
               </div>
-            )}
+              <div className="rounded-lg rounded-tl-none px-4 py-3 bg-muted prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {message.Content}
+                </ReactMarkdown>
+              </div>
+            </div>
           </div>
         );
       })}
@@ -260,49 +240,49 @@ export default function TaskDetailsPage() {
         </div>
       ) : task ? (
         <div className="space-y-6">
-          <div className="flex gap-3 justify-between">
-            <div>
-              <span className="font-medium text-muted-foreground mr-2 flex-wrap">
-                Created:
-              </span>
-              <span>{formatDate(task.createTime)}</span>
-            </div>
-            {/* <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                <span className="font-medium text-muted-foreground">Updated:</span>
-                <span>{formatDate(task.updateTime)}</span>
-              </div> */}
-            <div>
-              <span className="font-medium text-muted-foreground mr-2">
-                Started:
-              </span>
-              <span>
-                {task.startedTime ? formatDate(task.startedTime) : "-"}
-              </span>
-            </div>
-            <div>
-              <span className="font-medium text-muted-foreground mr-2">
-                Finished:
-              </span>
-              <span>
-                {task.finishedTime ? formatDate(task.finishedTime) : "-"}
-              </span>
-            </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Conversation</span>
+            {task.createTime && (
+              <>
+                <span>•</span>
+                <span>Created: {formatDate(task.createTime)}</span>
+              </>
+            )}
+            {task.startedTime && (
+              <>
+                <span>•</span>
+                <span>Started: {formatDate(task.startedTime)}</span>
+              </>
+            )}
+            {task.finishedTime && (
+              <>
+                <span>•</span>
+                <span>Completed: {formatDate(task.finishedTime)}</span>
+              </>
+            )}
           </div>
+
+          <Card>
+            <CardHeader className="border-b [.border-b]:pb-4">
+              <CardTitle>Input</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {task.input}
+              </ReactMarkdown>
+            </CardContent>
+          </Card>
 
           {task.outputJson ? (
             <Card>
-              <CardHeader>
+              <CardHeader className="border-b [.border-b]:pb-4">
                 <CardTitle>Output</CardTitle>
                 <CardDescription>
                   Task execution conversation history.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ChatMessages
-                  outputJson={task.outputJson}
-                  startedTime={task.startedTime}
-                  finishedTime={task.finishedTime}
-                />
+                <ChatMessages outputJson={task.outputJson} />
               </CardContent>
             </Card>
           ) : null}
