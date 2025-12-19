@@ -24,6 +24,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import { QueryErrorBoundary } from "@/components/query-error-boundary"
 
 const navItems = [
   { href: "/projects", label: "Projects" },
@@ -147,7 +148,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          <main className="min-w-0 p-4 lg:p-6">{children}</main>
+          <main className="min-w-0 p-4 lg:p-6">
+            <QueryErrorBoundary>{children}</QueryErrorBoundary>
+          </main>
         </div>
       </div>
     </div>

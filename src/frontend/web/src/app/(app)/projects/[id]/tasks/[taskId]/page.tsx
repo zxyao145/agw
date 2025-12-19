@@ -4,6 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -85,7 +87,15 @@ type ChatMessage = {
   Content: string;
 };
 
-function ChatMessages({ outputJson }: { outputJson: string }) {
+function ChatMessages({
+  outputJson,
+  startedTime,
+  finishedTime,
+}: {
+  outputJson: string;
+  startedTime?: string | null;
+  finishedTime?: string | null;
+}) {
   const messages = React.useMemo(() => {
     try {
       const parsed = JSON.parse(outputJson);
@@ -117,6 +127,25 @@ function ChatMessages({ outputJson }: { outputJson: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Conversation timestamp header */}
+      {(startedTime || finishedTime) && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground border-b pb-2">
+          <span>Conversation</span>
+          {startedTime && (
+            <>
+              <span>•</span>
+              <span>Started: {formatDate(startedTime)}</span>
+            </>
+          )}
+          {finishedTime && (
+            <>
+              <span>•</span>
+              <span>Completed: {formatDate(finishedTime)}</span>
+            </>
+          )}
+        </div>
+      )}
+
       {messages.map((message: ChatMessage, index: number) => {
         const isUser = message.Role.toLowerCase() === "user";
         const isAssistant = message.Role.toLowerCase() === "assistant";
@@ -131,10 +160,10 @@ function ChatMessages({ outputJson }: { outputJson: string }) {
                 <div className="mx-1 mt-1 text-xs font-medium opacity-70 w-8 text-right">
                   User
                 </div>
-                <div
-                  className={`rounded-lg px-4 py-3 whitespace-pre-wrap text-sm bg-blue-500 text-white`}
-                >
-                  {message.Content}
+                <div className="rounded-lg px-4 py-3 text-sm bg-blue-500 text-white prose prose-sm prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.Content}
+                  </ReactMarkdown>
                 </div>
               </div>
             ) : (
@@ -143,10 +172,10 @@ function ChatMessages({ outputJson }: { outputJson: string }) {
                   {message.AuthorName}
                   {/* <br />({message.Role}) */}
                 </div>
-                <div
-                  className={`rounded-lg px-4 py-3 whitespace-pre-wrap text-sm bg-muted`}
-                >
-                  {message.Content}
+                <div className="rounded-lg px-4 py-3 text-sm bg-muted prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.Content}
+                  </ReactMarkdown>
                 </div>
               </div>
             )}
@@ -269,7 +298,11 @@ export default function TaskDetailsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ChatMessages outputJson={task.outputJson} />
+                <ChatMessages
+                  outputJson={task.outputJson}
+                  startedTime={task.startedTime}
+                  finishedTime={task.finishedTime}
+                />
               </CardContent>
             </Card>
           ) : null}
