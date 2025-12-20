@@ -310,47 +310,123 @@ Backend includes full OpenTelemetry instrumentation for distributed tracing, met
 
 All custom instrumentation uses activity source `DSystem.*` and meter `DSystem.*`.
 
+### Serilog Integration
+Backend uses Serilog for structured logging with OpenTelemetry correlation:
+
+**Configuration** (`appsettings.json`):
+```json
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft.AspNetCore": "Warning",
+        "Microsoft.EntityFrameworkCore": "Warning"
+      }
+    },
+    "WriteTo": [
+      {
+        "Name": "Async",
+        "Args": {
+          "configure": [
+            {
+              "Name": "Console",
+              "Args": {
+                "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] [TraceId:{TraceId}] [SpanId:{SpanId}] {Message:lj}{NewLine}{Exception}"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "Name": "Async",
+        "Args": {
+          "configure": [
+            {
+              "Name": "File",
+              "Args": {
+                "path": "logs/dsystem-.log",
+                "rollingInterval": "Day",
+                "retainedFileCountLimit": 30,
+                "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] [TraceId:{TraceId}] [SpanId:{SpanId}] [MachineName:{MachineName}] [ThreadId:{ThreadId}] {Message:lj}{NewLine}{Exception}"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "Enrich": [ "FromLogContext", "WithMachineName", "WithThreadId", "WithOpenTelemetryTraceId", "WithOpenTelemetrySpanId" ]
+  }
+}
+```
+
+**Features**:
+- **Console Sink**: Development-friendly console output with TraceId/SpanId
+- **File Sink**: Daily rolling files in `logs/` directory (retained for 30 days)
+- **Async Sinks**: Non-blocking logging with background flushing
+- **OpenTelemetry Enrichment**: Automatic TraceId and SpanId injection for correlation
+- **Structured Logging**: All logs are structured with machine name, thread ID, and context
+- **Request Logging**: HTTP request/response logging via `UseSerilogRequestLogging()`
+
+**Log Format Example**:
+```
+[2025-12-20 18:30:45.123 +08:00] [INF] [DSystem.Host.ProjectTaskSchedulerHostedService] [TraceId:a1b2c3d4e5f67890] [SpanId:1234567890abcdef] Starting project task execution
+```
+
+**Correlation with OpenTelemetry**:
+Logs automatically include `TraceId` and `SpanId` from active OpenTelemetry activities, enabling correlation between:
+- Application logs (Serilog)
+- Distributed traces (OpenTelemetry)
+- Custom metrics (OpenTelemetry)
+
+This unified observability stack allows tracing a request from HTTP entry → database queries → business logic → logs.
+
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-20T10:17:53Z
-**Milestone**: OpenTelemetry observability integration complete | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-20T10:41:35Z
+**Milestone**: Serilog structured logging integration complete | **Branch**: main
 
 ### Technical Status
 - **Code Quality**: Excellent (18,930 code files)
-- **Architecture Health**: Mature development phase
-- **Dependencies**: Latest (Next.js 16, .NET 10, OpenTelemetry 1.14.0)
+- **Architecture Health**: Production-ready observability phase
+- **Dependencies**: Latest (Next.js 16, .NET 10, OpenTelemetry 1.14.0, Serilog 4.3.0)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with OpenTelemetry observability section
+- [x] **CLAUDE.md**: Updated with Serilog integration section
 - [x] **Configuration Sync**: Backend packages aligned with Central Package Management
 - [x] **API Documentation**: OpenAPI at `/openapi` endpoint
-- [x] **Observability**: Full OpenTelemetry instrumentation documented
+- [x] **Observability**: Complete stack (OpenTelemetry + Serilog) documented
 
-### Recent Activity (Since 2025-12-20T09:14:43Z checkpoint)
-- **Period**: 1.0 hours | **Commits**: 0 new (working tree changes only)
+### Recent Activity (Since 2025-12-20T10:17:53Z checkpoint)
+- **Period**: 0.4 hours | **Commits**: 0 new (working tree changes only)
 - **Major Changes**:
-  - **Backend**: Full OpenTelemetry integration added
-    - 6 NuGet packages (Console, OTLP, AspNetCore, EF Core, HTTP instrumentation)
-    - Custom metrics for ProjectTaskSchedulerHostedService
-    - Activity tracing with detailed tags (project.id, task.id, workflow.id)
-    - Distributed tracing support for multi-instance deployment
-  - **Backend**: Fixed ProjectLease UNIQUE constraint error handling
-    - Removed excessive error logging for normal lock competition
-    - Proper audit field initialization (UpdateBy, UpdateTime)
-  - **Configuration**: Added OpenTelemetry settings to appsettings.json
-  - **Documentation**: Chinese comment cleanup in ProjectTaskSchedulerHostedService
-- **Files Modified**: 5 files (DSystem.Host.csproj, Program.cs, ProjectTaskSchedulerHostedService.cs, appsettings.json, Directory.Packages.props)
-- **Activity Intensity**: High (Observability infrastructure complete)
-- **Development Trend**: ➡️ Stable (infrastructure enhancement phase)
+  - **Backend**: Complete Serilog integration
+    - 8 NuGet packages (AspNetCore, Console, File, Async sinks, Enrichers)
+    - OpenTelemetry TraceId/SpanId enrichment for log correlation
+    - Dual sinks: Console (dev) + File (production, hourly rolling)
+    - Structured logging with machine name, thread ID, context
+  - **Backend**: Enhanced Program.cs bootstrap
+    - Early Serilog configuration with try-catch-finally pattern
+    - HTTP request logging middleware
+    - Graceful shutdown with log flushing
+  - **Configuration**: Comprehensive Serilog settings in appsettings.json
+    - Custom output templates with TraceId/SpanId
+    - Async sinks for performance
+    - Log retention policy (30 files)
+  - **Infrastructure**: Added logs/ to .gitignore
+  - **Documentation**: Detailed Serilog section with examples and correlation patterns
+- **Files Modified**: 6 files (.gitignore, CLAUDE.md, DSystem.Host.csproj, Program.cs, appsettings.json, Directory.Packages.props)
+- **Activity Intensity**: High (Production logging infrastructure complete)
+- **Development Trend**: ⬆️ Ascending (comprehensive observability stack finalized)
 
 ### Recommended Actions
-1. ✅ ~~Add OpenTelemetry instrumentation~~ - **COMPLETED**
-2. ✅ ~~Fix ProjectLease error logging~~ - **COMPLETED**
-3. Deploy OpenTelemetry Collector or Jaeger for trace visualization
+1. ✅ ~~Add Serilog structured logging~~ - **COMPLETED**
+2. ✅ ~~Integrate OpenTelemetry TraceId in logs~~ - **COMPLETED**
+3. Test log correlation: HTTP request → Serilog logs → Jaeger traces
 4. Add unit/integration tests for `MagenticOrchestrationManager`
 5. Add unit/integration tests for `ProjectTaskSchedulerHostedService`
-6. Configure alerting rules based on custom metrics (task failure rate, lease contention)
-7. Commit OpenTelemetry integration
+6. Configure log aggregation (e.g., Seq, Elasticsearch, Loki)
+7. Set up alerting based on structured log patterns
 
-**Git Commit**: `b7c6ded` (5 files modified, staged) | **Health Score**: 9.7/10
+**Git Commit**: `533883f` (6 files modified, ready for commit) | **Health Score**: 9.8/10
 

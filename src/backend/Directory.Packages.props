@@ -84,9 +84,10 @@
     <PackageVersion Include="Serilog.Sinks.MySQL" Version="5.0.0" />
     <PackageVersion Include="Serilog.Sinks.Postgresql.Alternative" Version="4.2.0" />
     <PackageVersion Include="Serilog.Enrichers.ClientInfo" Version="2.7.0" />
+    <PackageVersion Include="Serilog.Enrichers.Environment" Version="3.0.1" />
+    <PackageVersion Include="Serilog.Enrichers.Thread" Version="4.0.0" />
     <PackageVersion Include="Serilog.Enrichers.Sensitive" Version="2.1.0" />
-    <!--<PackageVersion Include="Serilog.Enrichers.OpenTelemetry"
-                    Version="1.0.1" />-->
+    <PackageVersion Include="Serilog.Enrichers.OpenTelemetry" Version="1.0.1" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Mapster" Version="7.4.0" />

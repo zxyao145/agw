@@ -8,86 +8,129 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
+using Serilog;
+using Serilog.Enrichers.OpenTelemetry;
 
-var builder = WebApplication.CreateBuilder(args);
+// Configure Serilog early in the pipeline
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(new ConfigurationBuilder()
+        .SetBasePath(Directory.GetCurrentDirectory())
+        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+        .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true, reloadOnChange: true)
+        .Build())
+    .Enrich.FromLogContext()
+    .Enrich.WithMachineName()
+    .Enrich.WithThreadId()
+    .Enrich.WithOpenTelemetryTraceId()
+    .Enrich.WithOpenTelemetrySpanId()
+    .CreateLogger();
 
-// Configure OpenTelemetry
-var serviceName = builder.Configuration.GetValue<string>("OpenTelemetry:ServiceName") ?? "DSystem";
-var serviceVersion = builder.Configuration.GetValue<string>("OpenTelemetry:ServiceVersion") ?? "1.0.0";
+try
+{
+    Log.Information("Starting D-System Host");
 
-builder.Services.AddOpenTelemetry()
-    .ConfigureResource(resource => resource
-        .AddService(serviceName: serviceName, serviceVersion: serviceVersion))
-    .WithTracing(tracing => tracing
-        .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation()
-        .AddEntityFrameworkCoreInstrumentation(options =>
-        {
-            options.SetDbStatementForText = true;
-            options.EnrichWithIDbCommand = (activity, command) =>
+    var builder = WebApplication.CreateBuilder(args);
+
+    // Use Serilog for logging
+    builder.Host.UseSerilog();
+
+    // Configure OpenTelemetry
+    var serviceName = builder.Configuration.GetValue<string>("OpenTelemetry:ServiceName") ?? "DSystem";
+    var serviceVersion = builder.Configuration.GetValue<string>("OpenTelemetry:ServiceVersion") ?? "1.0.0";
+
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource
+            .AddService(serviceName: serviceName, serviceVersion: serviceVersion))
+        .WithTracing(tracing => tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation(options =>
             {
-                activity.SetTag("db.command.text", command.CommandText);
-            };
-        })
-        .AddSource("DSystem.*")
-        .AddOtlpExporter(options =>
-        {
-            options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint") ?? "http://localhost:4317");
-        }))
-    .WithMetrics(metrics => metrics
-        .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation()
-        .AddMeter("DSystem.*")
-        .AddOtlpExporter(options =>
-        {
-            options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint") ?? "http://localhost:4317");
-        }));
+                options.SetDbStatementForText = true;
+                options.EnrichWithIDbCommand = (activity, command) =>
+                {
+                    activity.SetTag("db.command.text", command.CommandText);
+                };
+            })
+            .AddSource("DSystem.*")
+            .AddOtlpExporter(options =>
+            {
+                options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint") ?? "http://localhost:4317");
+            }))
+        .WithMetrics(metrics => metrics
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddMeter("DSystem.*")
+            .AddOtlpExporter(options =>
+            {
+                options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint") ?? "http://localhost:4317");
+            }));
 
-builder.Logging.AddOpenTelemetry(logging =>
-{
-    logging.IncludeFormattedMessage = true;
-    logging.IncludeScopes = true;
-    logging.AddOtlpExporter(options =>
+    builder.Logging.AddOpenTelemetry(logging =>
     {
-        options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint") ?? "http://localhost:4317");
+        logging.IncludeFormattedMessage = true;
+        logging.IncludeScopes = true;
+        logging.AddOtlpExporter(options =>
+        {
+            options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint") ?? "http://localhost:4317");
+        });
     });
-});
 
-builder.Services
-    .AddControllers()
-    .AddApplicationPart(typeof(AgentsController).Assembly)
-    .AddApplicationPart(typeof(ProjectsController).Assembly);
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddOpenApi();
+    builder.Services
+        .AddControllers()
+        .AddApplicationPart(typeof(AgentsController).Assembly)
+        .AddApplicationPart(typeof(ProjectsController).Assembly);
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddOpenApi();
 
-builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddScoped<ModelDomainService>();
-builder.Services.AddScoped<ProviderDomainService>();
-builder.Services.AddScoped<ModelProviderDomainService>();
-builder.Services.AddScoped<ModelProviderApiKeyDomainService>();
-builder.Services.AddScoped<AgentDomainService>();
-builder.Services.AddScoped<AgentRuntimeService>();
+    builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddScoped<ModelDomainService>();
+    builder.Services.AddScoped<ProviderDomainService>();
+    builder.Services.AddScoped<ModelProviderDomainService>();
+    builder.Services.AddScoped<ModelProviderApiKeyDomainService>();
+    builder.Services.AddScoped<AgentDomainService>();
+    builder.Services.AddScoped<AgentRuntimeService>();
 
-builder.Services.AddScoped<WorkflowDomainService>();
-builder.Services.AddScoped<WorkflowRuntimeService>();
-builder.Services.AddScoped<IWorkflowAgentExecutor, PlaceholderWorkflowAgentExecutor>();
+    builder.Services.AddScoped<WorkflowDomainService>();
+    builder.Services.AddScoped<WorkflowRuntimeService>();
+    builder.Services.AddScoped<IWorkflowAgentExecutor, PlaceholderWorkflowAgentExecutor>();
 
-builder.Services.AddScoped<ProjectDomainService>();
-builder.Services.AddScoped<ProjectTaskDomainService>();
-builder.Services.AddHostedService<ProjectTaskSchedulerHostedService>();
+    builder.Services.AddScoped<ProjectDomainService>();
+    builder.Services.AddScoped<ProjectTaskDomainService>();
+    builder.Services.AddHostedService<ProjectTaskSchedulerHostedService>();
 
-var app = builder.Build();
+    var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.MapScalarApiReference();
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapOpenApi();
+        app.MapScalarApiReference();
+    }
+    else
+    {
+        app.UseHttpsRedirection();
+    }
+
+    // Add Serilog request logging
+    app.UseSerilogRequestLogging(options =>
+    {
+        options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+        {
+            diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+            diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
+        };
+    });
+
+    app.MapControllers();
+
+    Log.Information("D-System Host configured successfully");
+    app.Run();
 }
-else
+catch (Exception ex)
 {
-    app.UseHttpsRedirection();
+    Log.Fatal(ex, "D-System Host terminated unexpectedly");
 }
-
-app.MapControllers();
-
-app.Run();
+finally
+{
+    Log.CloseAndFlush();
+}
