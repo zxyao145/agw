@@ -1,12 +1,12 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { MenuIcon } from "lucide-react"
+import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { MenuIcon, LayoutDashboard } from "lucide-react";
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -14,8 +14,8 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator"
+} from "@/components/ui/breadcrumb";
+import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -23,136 +23,114 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet"
-import { QueryErrorBoundary } from "@/components/query-error-boundary"
+} from "@/components/ui/sheet";
+import { QueryErrorBoundary } from "@/components/query-error-boundary";
+import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { group } from "console";
 
-const navItems = [
-  { href: "/projects", label: "Projects" },
-  { href: "/workflows", label: "Workflows" },
-  { href: "/agents", label: "Agents" },
-  { href: "/providers", label: "Providers" },
-  { href: "/models", label: "Models" },
-  { href: "/model-providers", label: "Model Providers" },
-] as const
+const navItems: SidebarMenuGroupProps[] = [
+  {
+    groupLable: "Projects",
+    menus: [
+      {
+        url: "/projects",
+        title: "Projects",
+        isActive: true,
+        icon: <LayoutDashboard />,
+      },
+    ],
+  },
+  {
+    groupLable: "Management",
+    menus: [
+      {
+        url: "/workflows",
+        title: "Workflows",
+        isActive: true,
+      },
+      {
+        url: "/agents",
+        title: "Agents",
+        isActive: true,
+      },
+      {
+        url: "/providers",
+        title: "Providers",
+        isActive: true,
+      },
+      {
+        url: "/models",
+        title: "Models",
+        isActive: true,
+      },
+      {
+        url: "/model-providers",
+        title: "Model Providers",
+        isActive: true,
+      },
+    ],
+  },
+];
 
-function getActiveNavLabel(pathname: string): string | undefined {
-  const match = navItems.find((x) => pathname === x.href || pathname.startsWith(`${x.href}/`))
-  return match?.label
+function getActiveNavLabel(pathname: string): MenuItem | undefined {
+  let allNavItems = navItems.flatMap((group) => group.menus);
+  const match = allNavItems.find(
+    (x) => pathname === x.url || pathname.startsWith(`${x.url}/`)
+  );
+  return match;
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
-  const activeLabel = getActiveNavLabel(pathname)
+  const pathname = usePathname();
+  const activeMenu = getActiveNavLabel(pathname);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[260px_1fr]">
-        <aside className="hidden border-r bg-card lg:block">
-          <div className="flex h-16 items-center border-b px-6">
+    <SidebarProvider>
+      <div className="min-h-screen bg-background text-foreground w-full">
+        <header className="flex h-16 border-b ">
+          <div className="flex items-center px-6 w-64">
             <Link href="/projects" className="font-semibold tracking-tight">
               DSystem Admin
             </Link>
+            <SidebarTrigger className="-ml-1 md:hidden" />
           </div>
-          <nav className="p-3">
-            <ul className="space-y-1">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className={cn(
-                        "block rounded-md px-3 py-2 text-sm transition-colors",
-                        isActive
-                          ? "bg-accent text-accent-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                      )}
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                )
-              })}
-            </ul>
-          </nav>
-        </aside>
+        </header>
 
-        <div className="min-w-0">
-          <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:px-6">
-            <div className="flex items-center gap-3">
-              <Sheet>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="icon" className="lg:hidden">
-                    <MenuIcon className="size-4" />
-                    <span className="sr-only">Open navigation</span>
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-[280px] p-0">
-                  <SheetHeader className="border-b p-4">
-                    <SheetTitle>DSystem Admin</SheetTitle>
-                    <SheetDescription className="sr-only">
-                      Application navigation
-                    </SheetDescription>
-                  </SheetHeader>
-                  <nav className="p-3">
-                    <ul className="space-y-1">
-                      {navItems.map((item) => {
-                        const isActive =
-                          pathname === item.href || pathname.startsWith(`${item.href}/`)
-                        return (
-                          <li key={item.href}>
-                            <Link
-                              href={item.href}
-                              className={cn(
-                                "block rounded-md px-3 py-2 text-sm transition-colors",
-                                isActive
-                                  ? "bg-accent text-accent-foreground"
-                                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                              )}
-                            >
-                              {item.label}
-                            </Link>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </nav>
-                </SheetContent>
-              </Sheet>
+        <div className="grid grid-cols-[max-content_1fr] gap-4 min-h-screen w-full">
+          <aside className="flex min-h-[calc(100vh-64px)]">
+            <AppSidebar menus={navItems} />
+          </aside>
 
-              <div className="hidden h-6 items-center gap-3 lg:flex">
-                <div className="text-sm font-medium">DSystem Admin</div>
-                <Separator orientation="vertical" />
-                <div className="text-sm text-muted-foreground">Backend Management Console</div>
+          <div className="p-2 flex-1">
+            <div className="sticky top-0 z-40 flex items-center gap-3 bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60 py-2">
+              <div className="min-w-0 flex-1">
+                <Breadcrumb>
+                  <BreadcrumbList>
+                    <BreadcrumbItem>
+                      <BreadcrumbLink asChild>
+                        <Link href="/projects">Home</Link>
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    {activeMenu ? (
+                      <>
+                        <BreadcrumbSeparator />
+                        <BreadcrumbItem>
+                          <BreadcrumbPage>{activeMenu.title}</BreadcrumbPage>
+                        </BreadcrumbItem>
+                      </>
+                    ) : null}
+                  </BreadcrumbList>
+                </Breadcrumb>
               </div>
             </div>
 
-            <div className="min-w-0 flex-1">
-              <Breadcrumb>
-                <BreadcrumbList>
-                  <BreadcrumbItem>
-                    <BreadcrumbLink asChild>
-                      <Link href="/projects">Home</Link>
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  {activeLabel ? (
-                    <>
-                      <BreadcrumbSeparator />
-                      <BreadcrumbItem>
-                        <BreadcrumbPage>{activeLabel}</BreadcrumbPage>
-                      </BreadcrumbItem>
-                    </>
-                  ) : null}
-                </BreadcrumbList>
-              </Breadcrumb>
-            </div>
-          </header>
-
-          <main className="min-w-0 p-4 lg:p-6">
-            <QueryErrorBoundary>{children}</QueryErrorBoundary>
-          </main>
+            <main className="mt-4 flex justify-center">
+              <QueryErrorBoundary>{children}</QueryErrorBoundary>
+            </main>
+          </div>
         </div>
       </div>
-    </div>
-  )
+    </SidebarProvider>
+  );
 }
