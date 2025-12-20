@@ -75,6 +75,23 @@ type SelectedAgent = {
   role: string
 }
 
+function getPatternName(pattern: number): string {
+  switch (pattern) {
+    case 0:
+      return "Concurrent"
+    case 1:
+      return "Sequential"
+    case 2:
+      return "GroupChat"
+    case 3:
+      return "Handoff"
+    case 4:
+      return "Magentic"
+    default:
+      return `Unknown (${pattern})`
+  }
+}
+
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (typeof error.body === "string" && error.body.trim().length) {
@@ -189,29 +206,131 @@ export default function WorkflowsPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="pattern">Pattern (number)</Label>
-                  <Input
-                    id="pattern"
-                    inputMode="numeric"
+                  <Label htmlFor="pattern">Orchestration Pattern</Label>
+                  <Select
                     value={String(pattern)}
-                    onChange={(e) => setPattern(Number(e.target.value || "0"))}
-                  />
+                    onValueChange={(value) => {
+                      setPattern(Number(value))
+                      // Reset configuration when pattern changes
+                      setConfigurationJson("")
+                    }}
+                  >
+                    <SelectTrigger id="pattern">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Concurrent (0)</SelectItem>
+                      <SelectItem value="1">Sequential (1)</SelectItem>
+                      <SelectItem value="2">GroupChat (2)</SelectItem>
+                      <SelectItem value="3">Handoff (3)</SelectItem>
+                      <SelectItem value="4">Magentic (4)</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <div className="text-xs text-muted-foreground">
-                    Maps to backend enum
-                    <code className="mx-1">WorkflowOrchestrationPattern</code>.
+                    Choose the workflow orchestration pattern
                   </div>
                 </div>
 
-                <div className="grid gap-2">
-                  <Label htmlFor="configurationJson">Configuration JSON</Label>
-                  <Textarea
-                    id="configurationJson"
-                    value={configurationJson}
-                    onChange={(e) => setConfigurationJson(e.target.value)}
-                    placeholder='{"key":"value"}'
-                    rows={4}
-                  />
-                </div>
+                {/* Pattern-specific configuration */}
+                {pattern === 2 && (
+                  <div className="grid gap-2 rounded-md border p-3">
+                    <div className="text-sm font-medium">GroupChat Configuration</div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="maxIterations">Max Iterations</Label>
+                      <Input
+                        id="maxIterations"
+                        type="number"
+                        min="1"
+                        defaultValue="10"
+                        onChange={(e) => {
+                          const maxIterations = parseInt(e.target.value) || 10
+                          setConfigurationJson(
+                            JSON.stringify({ maxIterations }, null, 2)
+                          )
+                        }}
+                      />
+                      <div className="text-xs text-muted-foreground">
+                        Maximum number of conversation rounds (default: 10)
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pattern === 3 && (
+                  <div className="grid gap-2 rounded-md border p-3">
+                    <div className="text-sm font-medium">Handoff Configuration</div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="maxHandoffs">Max Handoffs</Label>
+                      <Input
+                        id="maxHandoffs"
+                        type="number"
+                        min="1"
+                        defaultValue="5"
+                        onChange={(e) => {
+                          const maxHandoffs = parseInt(e.target.value) || 5
+                          setConfigurationJson(
+                            JSON.stringify({ maxHandoffs }, null, 2)
+                          )
+                        }}
+                      />
+                      <div className="text-xs text-muted-foreground">
+                        Maximum number of agent handoffs (default: 5)
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pattern === 4 && (
+                  <div className="grid gap-2 rounded-md border p-3">
+                    <div className="text-sm font-medium">Magentic Configuration</div>
+                    <div className="grid gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="maxRounds">Max Rounds</Label>
+                        <Input
+                          id="maxRounds"
+                          type="number"
+                          min="1"
+                          defaultValue="10"
+                          onChange={(e) => {
+                            const maxRounds = parseInt(e.target.value) || 10
+                            const config = configurationJson
+                              ? JSON.parse(configurationJson)
+                              : {}
+                            setConfigurationJson(
+                              JSON.stringify({ ...config, maxRounds }, null, 2)
+                            )
+                          }}
+                        />
+                        <div className="text-xs text-muted-foreground">
+                          Maximum collaboration rounds (default: 10)
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2">
+                        <Label htmlFor="maxStallCount">Max Stall Count</Label>
+                        <Input
+                          id="maxStallCount"
+                          type="number"
+                          min="1"
+                          defaultValue="3"
+                          onChange={(e) => {
+                            const maxStallCount = parseInt(e.target.value) || 3
+                            const config = configurationJson
+                              ? JSON.parse(configurationJson)
+                              : {}
+                            setConfigurationJson(
+                              JSON.stringify({ ...config, maxStallCount }, null, 2)
+                            )
+                          }}
+                        />
+                        <div className="text-xs text-muted-foreground">
+                          Rounds without progress before orchestrator intervention
+                          (default: 3)
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid gap-2">
                   <Label htmlFor="agents">Agents (multi-select)</Label>
@@ -400,7 +519,7 @@ export default function WorkflowsPage() {
                     <TableCell className="max-w-xs truncate">
                       {workflow.description || "-"}
                     </TableCell>
-                    <TableCell>{workflow.pattern}</TableCell>
+                    <TableCell>{getPatternName(workflow.pattern)}</TableCell>
                     <TableCell>
                       {workflow.enable ? (
                         <span className="text-green-600">Yes</span>

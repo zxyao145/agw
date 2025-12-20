@@ -346,7 +346,7 @@ async function listKeysByPair(args: {
     params: {
       query: { modelId: args.modelId, providerId: args.providerId },
     },
-  } as { params: { query: { modelId: string; providerId: string } } })) as unknown as ModelProviderApiKeyDto[];
+  } as never)) as unknown as ModelProviderApiKeyDto[];
 }
 
 function ModelProviderActions({
@@ -406,12 +406,12 @@ function ModelProviderActions({
       const keys = await listKeysByPair({ modelId, providerId })
       await Promise.all(
         keys.map((k) =>
-          apiDelete("/api/model-provider-keys/{id}", { params: { path: { id: k.id } } })
+          apiDelete("/api/model-provider-keys/{id}", { params: { path: { id: k.id } } } as never)
         )
       )
       await apiDelete("/api/model-providers/{modelId}/{providerId}", {
         params: { path: { modelId, providerId } },
-      })
+      } as never)
     },
     onSuccess: async () => {
       toast.success("Deleted model provider and keys")

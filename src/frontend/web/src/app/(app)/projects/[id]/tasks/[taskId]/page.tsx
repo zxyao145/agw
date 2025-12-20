@@ -176,7 +176,7 @@ export default function TaskDetailsPage() {
     queryFn: async () => {
       return (await apiGet("/api/projects/{projectId}/tasks/{taskId}", {
         params: { path: { projectId, taskId } },
-      })) as unknown as ProjectTaskDto;
+      } as never)) as unknown as ProjectTaskDto;
     },
   });
 

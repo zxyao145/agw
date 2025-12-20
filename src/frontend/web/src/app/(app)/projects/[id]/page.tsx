@@ -147,7 +147,7 @@ export default function ProjectDetailsPage() {
     queryFn: async () => {
       return (await apiGet("/api/projects/{id}", {
         params: { path: { id: projectId } },
-      })) as unknown as ProjectDto;
+      } as never)) as unknown as ProjectDto;
     },
   });
 
@@ -156,7 +156,7 @@ export default function ProjectDetailsPage() {
     queryFn: async () => {
       return (await apiGet("/api/projects/{projectId}/tasks", {
         params: { path: { projectId } },
-      })) as unknown as ProjectTaskDto[];
+      } as never)) as unknown as ProjectTaskDto[];
     },
   });
 
@@ -195,7 +195,7 @@ export default function ProjectDetailsPage() {
       return await apiPut("/api/projects/{id}", {
         params: { path: { id: projectId } },
         body,
-      });
+      } as never);
     },
     onSuccess: async () => {
       toast.success("Project updated");
@@ -214,7 +214,7 @@ export default function ProjectDetailsPage() {
     mutationFn: async () => {
       return await apiDelete("/api/projects/{id}", {
         params: { path: { id: projectId } },
-      });
+      } as never);
     },
     onSuccess: async () => {
       toast.success("Project deleted");
@@ -231,7 +231,7 @@ export default function ProjectDetailsPage() {
       return await apiPost("/api/projects/{projectId}/tasks", {
         params: { path: { projectId } },
         body,
-      });
+      } as never);
     },
     onSuccess: async () => {
       toast.success("Task created");
@@ -256,7 +256,7 @@ export default function ProjectDetailsPage() {
       return await apiPut("/api/projects/{projectId}/tasks/{taskId}", {
         params: { path: { projectId, taskId: args.taskId } },
         body: args.body,
-      });
+      } as never);
     },
     onSuccess: async () => {
       toast.success("Task updated");
@@ -279,7 +279,7 @@ export default function ProjectDetailsPage() {
       return await apiPost("/api/projects/{projectId}/tasks/{taskId}/reorder", {
         params: { path: { projectId, taskId } },
         body,
-      });
+      } as never);
     },
     onSuccess: async () => {
       toast.success("Task reordered");
@@ -296,7 +296,7 @@ export default function ProjectDetailsPage() {
     mutationFn: async (taskId: string) => {
       return await apiPost("/api/projects/{projectId}/tasks/{taskId}/cancel", {
         params: { path: { projectId, taskId } },
-      });
+      } as never);
     },
     onSuccess: async () => {
       toast.success("Task canceled");

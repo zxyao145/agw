@@ -480,17 +480,15 @@ public class WorkflowRuntimeService
         var orchestrator = aiAgents[0];
         var workers = aiAgents.Skip(1).ToList();
 
-        // Create a group chat with the orchestrator managing worker agents
+        // Create a group chat with custom MagenticOrchestrationManager
+        // The orchestrator (first agent) coordinates task distribution among workers
         var agentWorkflow = AgentWorkflowBuilder.CreateGroupChatBuilderWith(
-            allAgents =>
-            {
-                // Use RoundRobinGroupChatManager with the orchestrator pattern
-                // The orchestrator will coordinate task distribution
-                return new RoundRobinGroupChatManager(allAgents)
-                {
-                    MaximumIterationCount = maxRounds
-                };
-            })
+            allAgents => new MagenticOrchestrationManager(
+                allAgents,
+                maxRounds: maxRounds,
+                maxStallCount: maxStallCount,
+                maxResetCount: 2
+            ))
             .AddParticipants([orchestrator, .. workers])
             .Build();
 

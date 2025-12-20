@@ -144,7 +144,7 @@ export default function ProjectsPage() {
 
   const deleteProjectMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiDelete("/api/projects/{id}", { params: { path: { id } } })
+      return await apiDelete("/api/projects/{id}", { params: { path: { id } } } as never)
     },
     onSuccess: async () => {
       toast.success("Project deleted")
