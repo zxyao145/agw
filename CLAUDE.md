@@ -276,44 +276,81 @@ LlmModel ←→ ModelProvider ←→ Provider
 - Frontend uses App Router (not Pages Router); server/client components follow Next.js 16 conventions
 - Background services must handle graceful shutdown via `CancellationToken`
 
+## Observability
+
+### OpenTelemetry Integration
+Backend includes full OpenTelemetry instrumentation for distributed tracing, metrics, and logging:
+
+**Configuration** (`appsettings.json`):
+```json
+{
+  "OpenTelemetry": {
+    "ServiceName": "DSystem",
+    "ServiceVersion": "1.0.0",
+    "OtlpEndpoint": "http://localhost:4317"
+  }
+}
+```
+
+**Instrumentation**:
+- **Tracing**: ASP.NET Core requests, HTTP clients, EF Core (with SQL statements)
+- **Metrics**: Request rates, HTTP client metrics, custom business metrics
+- **Logging**: Structured logs exported via OTLP
+
+**Custom Metrics** (`ProjectTaskSchedulerHostedService`):
+- `dsystem.tasks.executed` - Successfully executed tasks count
+- `dsystem.tasks.failed` - Failed tasks count
+- `dsystem.leases.acquired` - Project lease acquisitions
+- `dsystem.leases.failed` - Failed lease attempts
+- `dsystem.tasks.duration` - Task execution duration histogram (ms)
+
+**Exporters**:
+- Console (development debugging)
+- OTLP (production, compatible with Jaeger/Prometheus/Grafana)
+
+All custom instrumentation uses activity source `DSystem.*` and meter `DSystem.*`.
+
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-20T09:14:43Z
-**Milestone**: Magentic orchestration complete + sidebar UI enhancements | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-20T10:17:53Z
+**Milestone**: OpenTelemetry observability integration complete | **Branch**: main
 
 ### Technical Status
 - **Code Quality**: Excellent (18,930 code files)
-- **Architecture Health**: Rapid development phase
-- **Dependencies**: Latest (Next.js 16, .NET 10, Microsoft.Agents.AI)
+- **Architecture Health**: Mature development phase
+- **Dependencies**: Latest (Next.js 16, .NET 10, OpenTelemetry 1.14.0)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Up to date with latest features
-- [x] **Configuration Sync**: Frontend package.json aligned
+- [x] **CLAUDE.md**: Updated with OpenTelemetry observability section
+- [x] **Configuration Sync**: Backend packages aligned with Central Package Management
 - [x] **API Documentation**: OpenAPI at `/openapi` endpoint
-- [x] **Type Safety**: All TypeScript errors resolved
+- [x] **Observability**: Full OpenTelemetry instrumentation documented
 
-### Recent Activity (Since 2025-12-20T04:33:00Z checkpoint)
-- **Period**: 4.7 hours | **Commits**: 1 committed + staging area active
-- **Commit**: `53594ce` - feat(backend+ui): implement Magentic orchestration + workflow config UI
+### Recent Activity (Since 2025-12-20T09:14:43Z checkpoint)
+- **Period**: 1.0 hours | **Commits**: 0 new (working tree changes only)
 - **Major Changes**:
-  - **Backend**: `MagenticOrchestrationManager.cs` (196 lines) - complete implementation
-  - **Backend**: Stall detection with max rounds tracking
-  - **Backend**: Orchestrator intervention and task summarization
-  - **Frontend**: Advanced workflow pattern configuration UI (157+ line enhancement)
-  - **Frontend**: Pattern-specific config panels with JSON schema validation
-  - **Frontend**: Human-readable pattern names throughout UI
-  - **Current WIP**: Sidebar component + UI skeleton/tooltip components (15 files staged)
-- **Activity Intensity**: Very High (Backend completion + Frontend polish)
-- **Development Trend**: Sustained upward trajectory
+  - **Backend**: Full OpenTelemetry integration added
+    - 6 NuGet packages (Console, OTLP, AspNetCore, EF Core, HTTP instrumentation)
+    - Custom metrics for ProjectTaskSchedulerHostedService
+    - Activity tracing with detailed tags (project.id, task.id, workflow.id)
+    - Distributed tracing support for multi-instance deployment
+  - **Backend**: Fixed ProjectLease UNIQUE constraint error handling
+    - Removed excessive error logging for normal lock competition
+    - Proper audit field initialization (UpdateBy, UpdateTime)
+  - **Configuration**: Added OpenTelemetry settings to appsettings.json
+  - **Documentation**: Chinese comment cleanup in ProjectTaskSchedulerHostedService
+- **Files Modified**: 5 files (DSystem.Host.csproj, Program.cs, ProjectTaskSchedulerHostedService.cs, appsettings.json, Directory.Packages.props)
+- **Activity Intensity**: High (Observability infrastructure complete)
+- **Development Trend**: ➡️ Stable (infrastructure enhancement phase)
 
 ### Recommended Actions
-1. ✅ ~~Implement custom manager for Magentic pattern~~ - **COMPLETED**
-2. ✅ ~~Implement workflow pattern configuration UI~~ - **COMPLETED**
-3. ✅ ~~Add sidebar navigation component~~ - **IN PROGRESS** (staged)
+1. ✅ ~~Add OpenTelemetry instrumentation~~ - **COMPLETED**
+2. ✅ ~~Fix ProjectLease error logging~~ - **COMPLETED**
+3. Deploy OpenTelemetry Collector or Jaeger for trace visualization
 4. Add unit/integration tests for `MagenticOrchestrationManager`
 5. Add unit/integration tests for `ProjectTaskSchedulerHostedService`
-6. Test Magentic pattern behavior with real workflows
-7. Commit staged UI improvements
+6. Configure alerting rules based on custom metrics (task failure rate, lease contention)
+7. Commit OpenTelemetry integration
 
-**Git Commit**: `53594ce` (15 files staged) | **Health Score**: 9.5/10
+**Git Commit**: `b7c6ded` (5 files modified, staged) | **Health Score**: 9.7/10
 

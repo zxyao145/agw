@@ -5,6 +5,8 @@ using DSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
@@ -25,6 +27,15 @@ namespace DSystem.Host;
 /// </summary>
 public class ProjectTaskSchedulerHostedService : BackgroundService
 {
+    private static readonly ActivitySource ActivitySource = new("DSystem.ProjectTaskScheduler");
+    private static readonly Meter Meter = new("DSystem.ProjectTaskScheduler");
+
+    private readonly Counter<long> _tasksExecutedCounter;
+    private readonly Counter<long> _tasksFailedCounter;
+    private readonly Counter<long> _leaseAcquiredCounter;
+    private readonly Counter<long> _leaseFailedCounter;
+    private readonly Histogram<double> _taskExecutionDuration;
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ProjectTaskSchedulerHostedService> _logger;
 
@@ -40,12 +51,31 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+
+        // Initialize metrics
+        _tasksExecutedCounter = Meter.CreateCounter<long>(
+            "dsystem.tasks.executed",
+            description: "Number of tasks successfully executed");
+        _tasksFailedCounter = Meter.CreateCounter<long>(
+            "dsystem.tasks.failed",
+            description: "Number of tasks that failed");
+        _leaseAcquiredCounter = Meter.CreateCounter<long>(
+            "dsystem.leases.acquired",
+            description: "Number of project leases successfully acquired");
+        _leaseFailedCounter = Meter.CreateCounter<long>(
+            "dsystem.leases.failed",
+            description: "Number of project lease acquisition failures");
+        _taskExecutionDuration = Meter.CreateHistogram<double>(
+            "dsystem.tasks.duration",
+            unit: "ms",
+            description: "Task execution duration in milliseconds");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("ProjectTaskSchedulerHostedService started.");
 
+        // 控制单个实例 project 的并发数量
         var semaphore = new SemaphoreSlim(_maxProjectConcurrency, _maxProjectConcurrency);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -80,6 +110,10 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
     private async Task RunProjectOnceAsync(Guid projectId, SemaphoreSlim semaphore, CancellationToken stoppingToken)
     {
+        using var activity = ActivitySource.StartActivity("RunProjectOnce", ActivityKind.Internal);
+        activity?.SetTag("project.id", projectId);
+        activity?.SetTag("instance.id", _instanceId);
+
         await semaphore.WaitAsync(stoppingToken);
         try
         {
@@ -89,11 +123,17 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
             var taskService = scope.ServiceProvider.GetRequiredService<ProjectTaskDomainService>();
             var workflowRuntime = scope.ServiceProvider.GetRequiredService<WorkflowRuntimeService>();
 
+            // 锁定项目 projectId
             var leaseAcquired = await TryAcquireProjectLeaseAsync(dbContext, projectId, stoppingToken);
             if (!leaseAcquired)
             {
+                _leaseFailedCounter.Add(1, new KeyValuePair<string, object?>("project.id", projectId));
+                activity?.SetTag("lease.acquired", false);
                 return;
             }
+
+            _leaseAcquiredCounter.Add(1, new KeyValuePair<string, object?>("project.id", projectId));
+            activity?.SetTag("lease.acquired", true);
 
             try
             {
@@ -101,32 +141,51 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                 var running = await taskService.ListAsync(t => t.ProjectId == projectId && t.Status == ProjectTaskStatus.Running);
                 if (running.Count > 0)
                 {
+                    activity?.SetTag("skip.reason", "task_already_running");
                     return;
                 }
 
                 var next = await taskService.GetNextPendingAsync(projectId);
                 if (next == null)
                 {
+                    activity?.SetTag("skip.reason", "no_pending_tasks");
                     return;
                 }
+
+                activity?.SetTag("task.id", next.Id);
+                activity?.SetTag("workflow.id", next.WorkflowId);
 
                 var marked = await taskService.TryMarkRunningAsync(next.Id, user: "scheduler");
                 if (marked == null)
                 {
+                    activity?.SetTag("skip.reason", "mark_running_failed");
                     return;
                 }
 
                 // Extend lease while executing.
                 await RenewProjectLeaseAsync(dbContext, projectId, stoppingToken);
 
+                var stopwatch = Stopwatch.StartNew();
                 try
                 {
+                    using var taskActivity = ActivitySource.StartActivity("ExecuteWorkflow", ActivityKind.Internal);
+                    taskActivity?.SetTag("task.id", marked.Id);
+                    taskActivity?.SetTag("workflow.id", marked.WorkflowId);
+
                     var execution = await workflowRuntime.ExecuteAsync(marked.WorkflowId, marked.Input, stoppingToken);
+                    stopwatch.Stop();
+
                     if (execution == null)
                     {
                         await taskService.MarkFailedAsync(marked.Id, "Workflow execution failed (workflow disabled/missing or agent runtime unavailable).", "scheduler");
+                        _tasksFailedCounter.Add(1,
+                            new KeyValuePair<string, object?>("task.id", marked.Id),
+                            new KeyValuePair<string, object?>("workflow.id", marked.WorkflowId),
+                            new KeyValuePair<string, object?>("reason", "workflow_unavailable"));
+                        taskActivity?.SetStatus(ActivityStatusCode.Error, "Workflow unavailable");
                         return;
                     }
+
                     var options1 = new JsonSerializerOptions
                     {
                         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
@@ -134,10 +193,29 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                     };
                     var json = JsonSerializer.Serialize(execution, options1);
                     await taskService.MarkSucceededAsync(marked.Id, json, "scheduler");
+
+                    _tasksExecutedCounter.Add(1,
+                        new KeyValuePair<string, object?>("task.id", marked.Id),
+                        new KeyValuePair<string, object?>("workflow.id", marked.WorkflowId));
+                    _taskExecutionDuration.Record(stopwatch.ElapsedMilliseconds,
+                        new KeyValuePair<string, object?>("task.id", marked.Id),
+                        new KeyValuePair<string, object?>("workflow.id", marked.WorkflowId),
+                        new KeyValuePair<string, object?>("status", "success"));
+                    taskActivity?.SetStatus(ActivityStatusCode.Ok);
                 }
                 catch (Exception ex)
                 {
+                    stopwatch.Stop();
                     await taskService.MarkFailedAsync(marked.Id, ex.Message, "scheduler");
+                    _tasksFailedCounter.Add(1,
+                        new KeyValuePair<string, object?>("task.id", marked.Id),
+                        new KeyValuePair<string, object?>("workflow.id", marked.WorkflowId),
+                        new KeyValuePair<string, object?>("reason", "execution_exception"));
+                    _taskExecutionDuration.Record(stopwatch.ElapsedMilliseconds,
+                        new KeyValuePair<string, object?>("task.id", marked.Id),
+                        new KeyValuePair<string, object?>("workflow.id", marked.WorkflowId),
+                        new KeyValuePair<string, object?>("status", "failed"));
+                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 }
             }
             finally
@@ -165,7 +243,9 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                 LockedBy = _instanceId,
                 LockedUntilUtc = until,
                 CreateBy = _instanceId,
-                CreateTime = now
+                CreateTime = now,
+                UpdateBy = _instanceId,
+                UpdateTime = now
             }, cancellationToken);
 
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -173,7 +253,8 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
         }
         catch (DbUpdateException)
         {
-            // Another instance already created the lease row. We'll try to claim it if expired.
+            // Lease already exists - try to claim it if expired or renew if we own it.
+            // This is expected in multi-instance environments and not an error.
             dbContext.ChangeTracker.Clear();
         }
 
