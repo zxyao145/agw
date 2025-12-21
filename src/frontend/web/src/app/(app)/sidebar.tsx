@@ -104,16 +104,15 @@ export function AppSidebar( props: AppSidebarProps) {
                   >
                     <SidebarMenuItem>
                       {item.subMenuItems == null || item.subMenuItems.length === 0 ? (
-                        <SidebarMenuSubButton
-                          asChild
-                          className={`${
-                            isActive(pathname, item.url) ? "font-bold" : ""
-                          }`}
+                        <SidebarMenuButton
+                          tooltip={item.title}
+                          className={`${isActive(pathname, item.url) ? "font-bold" : ""}`}
                         >
-                          <Link href={item.url}>
-                            <span>{item.title}</span>
-                          </Link>
-                        </SidebarMenuSubButton>
+                        {item.icon}
+                        <Link href={item.url}>
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
                       ) : (
                         <>
                           <CollapsibleTrigger asChild>

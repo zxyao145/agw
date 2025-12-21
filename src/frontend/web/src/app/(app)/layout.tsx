@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MenuIcon, LayoutDashboard } from "lucide-react";
+import { MenuIcon, LayoutDashboard, Workflow, Bot, Cog, Package, Blocks } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,26 +48,31 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/workflows",
         title: "Workflows",
         isActive: true,
+        icon: <Workflow />
       },
       {
         url: "/agents",
         title: "Agents",
         isActive: true,
+        icon: <Bot />
       },
       {
         url: "/providers",
         title: "Providers",
         isActive: true,
+        icon: <Cog />
       },
       {
         url: "/models",
         title: "Models",
         isActive: true,
+        icon: <Blocks />
       },
       {
         url: "/model-providers",
         title: "Model Providers",
         isActive: true,
+        icon: <Package />
       },
     ],
   },

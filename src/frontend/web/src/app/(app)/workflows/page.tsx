@@ -42,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { VisualWorkflowDialog } from "./components/visual-workflow-dialog"
 
 type WorkflowCreateRequest = components["schemas"]["WorkflowCreateRequest"]
 
@@ -123,6 +124,7 @@ export default function WorkflowsPage() {
   })
 
   const [createOpen, setCreateOpen] = React.useState(false)
+  const [visualOpen, setVisualOpen] = React.useState(false)
   const [name, setName] = React.useState("")
   const [description, setDescription] = React.useState<string>("")
   const [enable, setEnable] = React.useState(true)
@@ -137,6 +139,7 @@ export default function WorkflowsPage() {
     onSuccess: async () => {
       toast.success("Workflow created")
       setCreateOpen(false)
+      setVisualOpen(false)
       setName("")
       setDescription("")
       setEnable(true)
@@ -149,6 +152,24 @@ export default function WorkflowsPage() {
       toast.error(`Create failed: ${getApiErrorMessage(error)}`)
     },
   })
+
+  const handleVisualBuild = React.useCallback(
+    (visualData: {
+      agents: { agentId: string; order: number; role: string | null }[]
+      pattern: number
+    }) => {
+      setPattern(visualData.pattern)
+      setSelectedAgents(
+        visualData.agents.map((a) => ({
+          agentId: a.agentId,
+          role: a.role || "",
+        }))
+      )
+      setVisualOpen(false)
+      setCreateOpen(true)
+    },
+    []
+  )
 
   return (
     <div className="space-y-6 w-full">
@@ -168,6 +189,13 @@ export default function WorkflowsPage() {
           >
             Refresh
           </Button>
+
+          <VisualWorkflowDialog
+            open={visualOpen}
+            onOpenChange={setVisualOpen}
+            agents={agentsQuery.data || []}
+            onBuild={handleVisualBuild}
+          />
 
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
