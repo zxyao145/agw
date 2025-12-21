@@ -391,62 +391,63 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-21T12:51:23Z
-**Milestone**: Fixed start node + Group Chat configuration | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-21T14:08:27Z
+**Milestone**: Workflow composition + JSON visualization | **Branch**: main
 
 ### Technical Status
-- **Code Quality**: Excellent (19,218 code files)
+- **Code Quality**: Excellent (19,239 code files)
 - **Architecture Health**: Production-ready with enhanced workflow features
 - **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, OpenTelemetry 1.14.0, Serilog 4.3.0)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with start node and Group Chat configuration
+- [x] **CLAUDE.md**: Updated with workflow composition features
 - [x] **Configuration Sync**: All dependencies synchronized
 - [x] **API Documentation**: OpenAPI at `/openapi` endpoint
-- [x] **UI Components**: Complete visual workflow builder with start node
+- [x] **UI Components**: Complete visual workflow builder with composition support
 
-### Recent Activity (Since 2025-12-21T10:42:21Z checkpoint)
-- **Period**: 2 hours | **Commits**: Working session on workflow builder enhancements
+### Recent Activity (Since 2025-12-21T12:51:23Z checkpoint)
+- **Period**: 1.3 hours | **Commits**: Working session on workflow composition
 - **Major Changes**:
-  - ✅ **Frontend**: Fixed start node implementation
-    - Non-deletable start node representing workflow input
-    - Start node positioned at left center (x: 50)
-    - Green-themed circular design with Play icon
-    - All patterns auto-connect from start node
-  - ✅ **Frontend**: Group Chat configuration UI
-    - MaximumIterationCount parameter (default: 5, range: 1-100)
-    - Conditional UI display when Group Chat pattern selected
-    - Configuration passed to onBuild callback
-  - ✅ **Frontend**: Pattern-aware auto-connect enhancement
-    - All patterns now consider start node in topology
-    - Concurrent: Start → All agents (parallel)
-    - Sequential: Start → A → B → C (chain)
-    - Group Chat: Start → All + circular agent connections
-    - Handoff: Start → A → B (linear)
-    - Magentic: Start → Orchestrator ↔ Workers (star)
-  - ✅ **Frontend**: Auto-layout improvements
-    - Start node fixed at left center
-    - Agent nodes layout from x: 200
-    - Pattern-specific layouts account for start node
-  - ✅ **Frontend**: UI polish
-    - Start node uses rounded-full design
-    - Simplified card layout for start node
-- **Activity Intensity**: Medium (Refinement and configuration)
-- **Development Trend**: ⬆️ Steady Progress (feature completion and polish)
+  - ✅ **Frontend**: Workflow composition support
+    - WorkflowNode component for nested workflows
+    - Purple-themed workflow nodes (distinguishable from blue agent nodes)
+    - Workflow icon for visual identification
+    - AgentDto and WorkflowDto type definitions in `/types/workflow.ts`
+  - ✅ **Frontend**: Unified node type system
+    - Node Type selector (Agent/Workflow)
+    - Dynamic item selector based on type
+    - Supports adding both agents and workflows to canvas
+    - Duplicate node support via unique IDs
+  - ✅ **Frontend**: Mixed topology handling
+    - All 5 patterns support mixed agent/workflow nodes
+    - Separate ordering for agents and workflows
+    - Topological sort works with mixed types
+    - Auto-connect and auto-layout handle both types
+  - ✅ **Frontend**: JSON viewer dialog
+    - "View JSON" button with Code icon
+    - Displays complete workflow configuration
+    - Shows pattern, nodes, edges, and configuration
+    - Scrollable dialog with formatted JSON
+  - ✅ **Frontend**: Enhanced onBuild output
+    - Returns separate agents[] and workflows[] arrays
+    - Each maintains independent ordering
+    - Optional workflows field if no workflows present
+- **Activity Intensity**: Medium (Feature expansion)
+- **Development Trend**: ⬆️ Steady Progress (composition capabilities added)
 
 ### Recommended Actions
-1. ✅ ~~Fixed start node~~ - **COMPLETED**
-2. ✅ ~~Group Chat configuration~~ - **COMPLETED**
-3. Test workflow execution with start node
-4. Add workflow execution preview/simulation
-5. Add workflow templates for common patterns
-6. Add unit/integration tests for `MagenticOrchestrationManager`
-7. Add unit/integration tests for `ProjectTaskSchedulerHostedService`
-8. Test end-to-end: HTTP request → Serilog logs → Jaeger traces
-9. Configure production log aggregation (Seq, Elasticsearch, Loki)
-10. Performance testing for concurrent workflow execution
+1. ✅ ~~Workflow composition support~~ - **COMPLETED**
+2. ✅ ~~JSON viewer for workflow inspection~~ - **COMPLETED**
+3. Test nested workflow execution
+4. Add workflow validation logic (circular dependency detection)
+5. Implement workflow templates library
+6. Add workflow import/export from JSON
+7. Add unit/integration tests for visual builder
+8. Add unit/integration tests for `MagenticOrchestrationManager`
+9. Add unit/integration tests for `ProjectTaskSchedulerHostedService`
+10. Test end-to-end: HTTP request → Serilog logs → Jaeger traces
 
-**Git Commit**: `302d0d9` (main) | **Health Score**: 9.7/10
+**Git Commit**: `97cece4` (main) | **Health Score**: 9.8/10
 
 ---
 

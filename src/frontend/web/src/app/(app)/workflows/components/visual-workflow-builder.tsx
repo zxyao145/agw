@@ -28,23 +28,34 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Info, Play } from "lucide-react"
+import { Info, Play, Workflow, Bot, Code } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { AgentDto, WorkflowDto } from "@/types/workflow";
 
 const START_NODE_ID = "__start_node__"
 
-type AgentDto = {
-  id: string
-  name: string
-  instructions: string
-  systemPrompt: string
-  modelProviderApiKeyId: string
-}
 
 type AgentNodeData = {
   nodeId: string
   agentId: string
   agentName: string
+  role: string
+  onDelete: (id: string) => void
+  onRoleChange: (id: string, role: string) => void
+}
+
+type WorkflowNodeData = {
+  nodeId: string
+  workflowId: string
+  workflowName: string
   role: string
   onDelete: (id: string) => void
   onRoleChange: (id: string, role: string) => void
@@ -76,6 +87,55 @@ function StartNode({ data }: { data: StartNodeData }) {
   );
 }
 
+// Custom Workflow Node Component
+function WorkflowNode({ data }: { data: WorkflowNodeData }) {
+  return (
+    <Card className="min-w-50 shadow-lg p-0 gap-2 border-purple-200 bg-purple-50">
+      {/* Input Handle (Target) */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="input"
+        className="w-3 h-3 !bg-blue-500 border-2 border-white"
+      />
+
+      <CardHeader className="p-3 pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Workflow className="w-4 h-4 text-purple-600" />
+            <CardTitle className="text-sm font-semibold text-purple-700">
+              {data.workflowName}
+            </CardTitle>
+          </div>
+          <button
+            onClick={() => data.onDelete(data.nodeId)}
+            className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
+            title="Remove workflow"
+          >
+            ✕
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-3 pt-1">
+        <Input
+          value={data.role}
+          onChange={(e) => data.onRoleChange(data.nodeId, e.target.value)}
+          placeholder="Role (optional)"
+          className="h-7 text-xs"
+        />
+      </CardContent>
+
+      {/* Output Handle (Source) */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="output"
+        className="w-3 h-3 !bg-green-500 border-2 border-white"
+      />
+    </Card>
+  )
+}
+
 // Custom Agent Node Component
 function AgentNode({ data }: { data: AgentNodeData }) {
   return (
@@ -90,6 +150,7 @@ function AgentNode({ data }: { data: AgentNodeData }) {
 
       <CardHeader className="p-3 pb-2">
         <div className="flex items-center justify-between">
+          <Bot className="w-4 h-4 text-gray-900" />
           <CardTitle className="text-sm font-semibold">
             {data.agentName}
           </CardTitle>
@@ -125,12 +186,15 @@ function AgentNode({ data }: { data: AgentNodeData }) {
 const nodeTypes: NodeTypes = {
   startNode: StartNode,
   agentNode: AgentNode,
+  workflowNode: WorkflowNode,
 }
 
 type VisualWorkflowBuilderProps = {
   agents: AgentDto[]
+  workflows?: WorkflowDto[]
   onBuild: (workflow: {
     agents: { agentId: string; order: number; role: string | null }[]
+    workflows?: { workflowId: string; order: number; role: string | null }[]
     pattern: number
     configuration?: {
       maximumIterationCount?: number
@@ -140,6 +204,7 @@ type VisualWorkflowBuilderProps = {
 
 export function VisualWorkflowBuilder({
   agents,
+  workflows = [],
   onBuild,
 }: VisualWorkflowBuilderProps) {
   // Initialize with start node
@@ -156,9 +221,11 @@ export function VisualWorkflowBuilder({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const [selectedAgentId, setSelectedAgentId] = React.useState<string>("")
+  const [selectedNodeType, setSelectedNodeType] = React.useState<"agent" | "workflow">("agent")
+  const [selectedItemId, setSelectedItemId] = React.useState<string>("")
   const [pattern, setPattern] = React.useState<number>(-1) // Default to manual mode
   const [maximumIterationCount, setMaximumIterationCount] = React.useState<number>(5) // Group Chat parameter
+  const [showJsonDialog, setShowJsonDialog] = React.useState(false)
 
   const onConnect = React.useCallback(
     (params: Connection) => {
@@ -237,38 +304,63 @@ export function VisualWorkflowBuilder({
     [setNodes]
   )
 
-  const addAgentNode = React.useCallback((agentId: string) => {
-    if (!agentId) return
+  const addNode = React.useCallback((type: "agent" | "workflow", itemId: string) => {
+    if (!itemId) return
 
-    const agent = agents.find((a) => a.id === agentId)
-    if (!agent) return
+    // Generate unique node ID to support duplicates
+    const nodeId = `${type}-${itemId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-    // Generate unique node ID to support duplicate agents
-    const nodeId = `${agent.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    let newNode: Node
 
-    const newNode: Node = {
-      id: nodeId,
-      type: "agentNode",
-      position: {
-        x: Math.random() * 400 + 100,
-        y: Math.random() * 300 + 100,
-      },
-      data: {
-        nodeId: nodeId,
-        agentId: agent.id,
-        agentName: agent.name,
-        role: "",
-        onDelete: handleDeleteNode,
-        onRoleChange: handleRoleChange,
-      },
+    if (type === "agent") {
+      const agent = agents.find((a) => a.id === itemId)
+      if (!agent) return
+
+      newNode = {
+        id: nodeId,
+        type: "agentNode",
+        position: {
+          x: Math.random() * 400 + 200,
+          y: Math.random() * 300 + 100,
+        },
+        data: {
+          nodeId: nodeId,
+          agentId: agent.id,
+          agentName: agent.name,
+          role: "",
+          onDelete: handleDeleteNode,
+          onRoleChange: handleRoleChange,
+        },
+      }
+    } else {
+      // type === "workflow"
+      const workflow = workflows.find((w) => w.id === itemId)
+      if (!workflow) return
+
+      newNode = {
+        id: nodeId,
+        type: "workflowNode",
+        position: {
+          x: Math.random() * 400 + 200,
+          y: Math.random() * 300 + 100,
+        },
+        data: {
+          nodeId: nodeId,
+          workflowId: workflow.id,
+          workflowName: workflow.name,
+          role: "",
+          onDelete: handleDeleteNode,
+          onRoleChange: handleRoleChange,
+        },
+      }
     }
 
     setNodes((nds) => [...nds, newNode])
-  }, [agents, setNodes, handleDeleteNode, handleRoleChange])
+  }, [agents, workflows, setNodes, handleDeleteNode, handleRoleChange])
 
   // Auto-connect nodes based on selected pattern
   const handleAutoConnect = React.useCallback((selectedPattern: number) => {
-    // Filter out start node to get only agent nodes
+    // Filter out start node to get only agent/workflow nodes
     const agentNodes = nodes.filter(node => node.id !== START_NODE_ID)
 
     if (agentNodes.length === 0) return
@@ -284,7 +376,7 @@ export function VisualWorkflowBuilder({
     const newEdges: Edge[] = []
 
     switch (selectedPattern) {
-      case 0: // Concurrent - start connects to all agents
+      case 0: // Concurrent - start connects to all nodes
         agentNodes.forEach(node => {
           newEdges.push({
             id: `e${START_NODE_ID}-${node.id}`,
@@ -297,7 +389,7 @@ export function VisualWorkflowBuilder({
         break
 
       case 1: // Sequential - create linear chain Start→A→B→C
-        // Connect start to first agent
+        // Connect start to first node
         if (agentNodes.length > 0) {
           newEdges.push({
             id: `e${START_NODE_ID}-${agentNodes[0].id}`,
@@ -307,7 +399,7 @@ export function VisualWorkflowBuilder({
             markerEnd: { type: MarkerType.ArrowClosed },
           })
         }
-        // Connect agents in sequence
+        // Connect nodes in sequence
         for (let i = 0; i < agentNodes.length - 1; i++) {
           newEdges.push({
             id: `e${agentNodes[i].id}-${agentNodes[i + 1].id}`,
@@ -319,8 +411,8 @@ export function VisualWorkflowBuilder({
         }
         break
 
-      case 2: // GroupChat - start connects to all, agents connect in a circle
-        // Connect start to all agents
+      case 2: // GroupChat - start connects to all, nodes connect in a circle
+        // Connect start to all nodes
         agentNodes.forEach(node => {
           newEdges.push({
             id: `e${START_NODE_ID}-${node.id}`,
@@ -330,7 +422,7 @@ export function VisualWorkflowBuilder({
             markerEnd: { type: MarkerType.ArrowClosed },
           })
         })
-        // Connect agents in a circle
+        // Connect nodes in a circle
         for (let i = 0; i < agentNodes.length; i++) {
           const nextIndex = (i + 1) % agentNodes.length
           newEdges.push({
@@ -344,7 +436,7 @@ export function VisualWorkflowBuilder({
         break
 
       case 3: // Handoff - same as sequential (linear chain)
-        // Connect start to first agent
+        // Connect start to first node
         if (agentNodes.length > 0) {
           newEdges.push({
             id: `e${START_NODE_ID}-${agentNodes[0].id}`,
@@ -354,7 +446,7 @@ export function VisualWorkflowBuilder({
             markerEnd: { type: MarkerType.ArrowClosed },
           })
         }
-        // Connect agents in sequence
+        // Connect nodes in sequence
         for (let i = 0; i < agentNodes.length - 1; i++) {
           newEdges.push({
             id: `e${agentNodes[i].id}-${agentNodes[i + 1].id}`,
@@ -427,9 +519,9 @@ export function VisualWorkflowBuilder({
     const canvasHeight = 600
     const padding = 100
     const startX = 50
-    const agentStartX = 200 // Agent nodes start from this X position
+    const agentStartX = 200 // Agent/workflow nodes start from this X position
 
-    // Filter agent nodes for layout calculation
+    // Filter agent/workflow nodes for layout calculation
     const agentNodes = layoutNodes.filter(n => n.id !== START_NODE_ID)
     const startNode = layoutNodes.find(n => n.id === START_NODE_ID)
 
@@ -439,7 +531,7 @@ export function VisualWorkflowBuilder({
     }
 
     switch (selectedPattern) {
-      case 0: // Concurrent - grid layout for agents
+      case 0: // Concurrent - grid layout for nodes
         const cols = Math.ceil(Math.sqrt(agentNodes.length))
         const rows = Math.ceil(agentNodes.length / cols)
         const spacingX = (canvasWidth - agentStartX - padding) / Math.max(1, cols - 1)
@@ -466,7 +558,7 @@ export function VisualWorkflowBuilder({
         })
         break
 
-      case 2: // GroupChat - circular layout for agents
+      case 2: // GroupChat - circular layout for nodes
         const radius = Math.min(canvasWidth - agentStartX, canvasHeight) / 3
         const centerX = (canvasWidth + agentStartX) / 2
         const centerY = canvasHeight / 2
@@ -516,7 +608,7 @@ export function VisualWorkflowBuilder({
 
     if (agentNodes.length === 0) return 0
 
-    // Filter edges to only include those between agent nodes
+    // Filter edges to only include those between agent/workflow nodes
     const agentEdges = edges.filter(
       edge => edge.source !== START_NODE_ID && edge.target !== START_NODE_ID
     )
@@ -574,78 +666,200 @@ export function VisualWorkflowBuilder({
     return 2
   }, [nodes, edges])
 
+  // Generate JSON representation of the workflow
+  const getFlowJson = React.useCallback(() => {
+    const effectivePattern = pattern === -1 ? detectPatternFromStructure() : pattern
+    const allNodes = nodes.filter(node => node.id !== START_NODE_ID)
+
+    const flowData = {
+      pattern: {
+        id: effectivePattern,
+        name: effectivePattern === 0 ? "Concurrent" :
+              effectivePattern === 1 ? "Sequential" :
+              effectivePattern === 2 ? "Group Chat" :
+              effectivePattern === 3 ? "Handoff" :
+              effectivePattern === 4 ? "Magentic" : "Unknown"
+      },
+      configuration: effectivePattern === 2 ? {
+        maximumIterationCount
+      } : undefined,
+      nodes: allNodes.map(node => ({
+        id: node.id,
+        type: node.type,
+        position: node.position,
+        data: {
+          ...(node.type === "agentNode" ? {
+            agentId: node.data.agentId,
+            agentName: node.data.agentName,
+            role: node.data.role || null
+          } : {}),
+          ...(node.type === "workflowNode" ? {
+            workflowId: node.data.workflowId,
+            workflowName: node.data.workflowName,
+            role: node.data.role || null
+          } : {})
+        }
+      })),
+      edges: edges.map(edge => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        animated: edge.animated
+      }))
+    }
+
+    return JSON.stringify(flowData, null, 2)
+  }, [nodes, edges, pattern, maximumIterationCount, detectPatternFromStructure])
+
   const handleBuild = React.useCallback(() => {
     // Determine order based on detected pattern
     let orderedAgents: { agentId: string; order: number; role: string | null }[]
+    let orderedWorkflows: { workflowId: string; order: number; role: string | null }[]
 
     // If pattern is -1 (Manual), auto-detect the actual pattern from structure
     const effectivePattern = pattern === -1 ? detectPatternFromStructure() : pattern
 
-    // Filter out start node and get only agent nodes
-    const agentNodes = nodes.filter(node => node.id !== START_NODE_ID)
+    // Filter out start node and separate agent/workflow nodes
+    const allNodes = nodes.filter(node => node.id !== START_NODE_ID)
+    const agentOnlyNodes = allNodes.filter(node => node.type === "agentNode")
+    const workflowOnlyNodes = allNodes.filter(node => node.type === "workflowNode")
 
+    // Process nodes based on pattern
     switch (effectivePattern) {
       case 0: // Concurrent - no specific order, just use node list
-        orderedAgents = agentNodes.map((node, index) => ({
+        orderedAgents = agentOnlyNodes.map((node, index) => ({
           agentId: node.data.agentId,
           order: index,
+          role: node.data.role?.trim() || null,
+        }))
+        orderedWorkflows = workflowOnlyNodes.map((node, index) => ({
+          workflowId: node.data.workflowId,
+          order: index + agentOnlyNodes.length,
           role: node.data.role?.trim() || null,
         }))
         break
 
       case 1: // Sequential - follow edge connections
       case 3: // Handoff - similar to sequential
-        orderedAgents = topologicalSort(agentNodes, edges).map((node, index) => ({
+        const sortedNodes = topologicalSort(allNodes, edges)
+        let agentIndex = 0
+        let workflowIndex = 0
+        orderedAgents = []
+        orderedWorkflows = []
+
+        sortedNodes.forEach((node) => {
+          if (node.type === "agentNode") {
+            orderedAgents.push({
+              agentId: node.data.agentId,
+              order: agentIndex++,
+              role: node.data.role?.trim() || null,
+            })
+          } else if (node.type === "workflowNode") {
+            orderedWorkflows.push({
+              workflowId: node.data.workflowId,
+              order: workflowIndex++,
+              role: node.data.role?.trim() || null,
+            })
+          }
+        })
+        break
+
+      case 2: // GroupChat - no specific order
+        orderedAgents = agentOnlyNodes.map((node, index) => ({
           agentId: node.data.agentId,
           order: index,
           role: node.data.role?.trim() || null,
         }))
-        break
-
-      case 2: // GroupChat - no specific order
-        orderedAgents = agentNodes.map((node, index) => ({
-          agentId: node.data.agentId,
-          order: index,
+        orderedWorkflows = workflowOnlyNodes.map((node, index) => ({
+          workflowId: node.data.workflowId,
+          order: index + agentOnlyNodes.length,
           role: node.data.role?.trim() || null,
         }))
         break
 
       case 4: // Magentic - first node is orchestrator, rest are workers
         // Find root node (node with no incoming edges, excluding start node) as orchestrator
-        const rootNode = agentNodes.find(
+        const rootNode = allNodes.find(
           (node) => !edges.some((edge) => edge.target === node.id && edge.source !== START_NODE_ID)
         )
-        if (!rootNode && agentNodes.length > 0) {
-          // If no clear root, use first node
-          orderedAgents = agentNodes.map((node, index) => ({
+
+        if (!rootNode && allNodes.length > 0) {
+          // If no clear root, use nodes in order
+          orderedAgents = agentOnlyNodes.map((node, index) => ({
             agentId: node.data.agentId,
             order: index,
             role: node.data.role?.trim() || null,
           }))
+          orderedWorkflows = workflowOnlyNodes.map((node, index) => ({
+            workflowId: node.data.workflowId,
+            order: index + agentOnlyNodes.length,
+            role: node.data.role?.trim() || null,
+          }))
         } else if (rootNode) {
-          orderedAgents = [
-            {
-              agentId: rootNode.data.agentId,
-              order: 0,
-              role: rootNode.data.role?.trim() || null,
-            },
-            ...agentNodes
-              .filter((n) => n.id !== rootNode.id)
+          // Root is orchestrator
+          const remainingNodes = allNodes.filter((n) => n.id !== rootNode.id)
+
+          if (rootNode.type === "agentNode") {
+            orderedAgents = [
+              {
+                agentId: rootNode.data.agentId,
+                order: 0,
+                role: rootNode.data.role?.trim() || null,
+              },
+              ...remainingNodes
+                .filter((n) => n.type === "agentNode")
+                .map((node, index) => ({
+                  agentId: node.data.agentId,
+                  order: index + 1,
+                  role: node.data.role?.trim() || null,
+                })),
+            ]
+            orderedWorkflows = remainingNodes
+              .filter((n) => n.type === "workflowNode")
+              .map((node, index) => ({
+                workflowId: node.data.workflowId,
+                order: index,
+                role: node.data.role?.trim() || null,
+              }))
+          } else {
+            // Root is a workflow
+            orderedWorkflows = [
+              {
+                workflowId: rootNode.data.workflowId,
+                order: 0,
+                role: rootNode.data.role?.trim() || null,
+              },
+              ...remainingNodes
+                .filter((n) => n.type === "workflowNode")
+                .map((node, index) => ({
+                  workflowId: node.data.workflowId,
+                  order: index + 1,
+                  role: node.data.role?.trim() || null,
+                })),
+            ]
+            orderedAgents = remainingNodes
+              .filter((n) => n.type === "agentNode")
               .map((node, index) => ({
                 agentId: node.data.agentId,
-                order: index + 1,
+                order: index,
                 role: node.data.role?.trim() || null,
-              })),
-          ]
+              }))
+          }
         } else {
           orderedAgents = []
+          orderedWorkflows = []
         }
         break
 
       default:
-        orderedAgents = agentNodes.map((node, index) => ({
+        orderedAgents = agentOnlyNodes.map((node, index) => ({
           agentId: node.data.agentId,
           order: index,
+          role: node.data.role?.trim() || null,
+        }))
+        orderedWorkflows = workflowOnlyNodes.map((node, index) => ({
+          workflowId: node.data.workflowId,
+          order: index + agentOnlyNodes.length,
           role: node.data.role?.trim() || null,
         }))
     }
@@ -659,6 +873,7 @@ export function VisualWorkflowBuilder({
 
     onBuild({
       agents: orderedAgents,
+      workflows: orderedWorkflows.length > 0 ? orderedWorkflows : undefined,
       pattern: effectivePattern,
       configuration: Object.keys(configuration).length > 0 ? configuration : undefined
     })
@@ -672,24 +887,59 @@ export function VisualWorkflowBuilder({
     >
       {/* Controls */}
       <div className="flex flex-wrap items-end gap-4">
+        {/* Node Type Selector */}
         <div className="space-y-2">
-          <Label>Select Agent to Add</Label>
+          <Label>Node Type</Label>
           <Select
-            value={selectedAgentId}
-            onValueChange={(agentId) => {
-              addAgentNode(agentId);
-              setSelectedAgentId("");
+            value={selectedNodeType}
+            onValueChange={(value) => {
+              setSelectedNodeType(value as "agent" | "workflow")
+              setSelectedItemId("") // Reset selection when switching type
             }}
           >
-            <SelectTrigger className="flex-1">
-              <SelectValue placeholder="Choose an agent..." />
+            <SelectTrigger className="w-[120px]">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {agents.map((agent) => (
-                <SelectItem key={agent.id} value={agent.id}>
-                  {agent.name}
-                </SelectItem>
-              ))}
+              <SelectItem value="agent">Agent</SelectItem>
+              <SelectItem value="workflow">Workflow</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Item Selector (Agent or Workflow) */}
+        <div className="space-y-2">
+          <Label>
+            {selectedNodeType === "agent" ? "Select Agent" : "Select Workflow"}
+          </Label>
+          <Select
+            value={selectedItemId}
+            onValueChange={(itemId) => {
+              addNode(selectedNodeType, itemId)
+              setSelectedItemId("")
+            }}
+          >
+            <SelectTrigger className="w-50">
+              <SelectValue
+                placeholder={
+                  selectedNodeType === "agent"
+                    ? "Choose an agent..."
+                    : "Choose a workflow..."
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {selectedNodeType === "agent"
+                ? agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </SelectItem>
+                  ))
+                : workflows.map((workflow) => (
+                    <SelectItem key={workflow.id} value={workflow.id}>
+                      {workflow.name}
+                    </SelectItem>
+                  ))}
             </SelectContent>
           </Select>
         </div>
@@ -722,10 +972,10 @@ export function VisualWorkflowBuilder({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="-1">None (Manual)</SelectItem>
-              <SelectItem value="0">Concurrent</SelectItem>
               <SelectItem value="1">Sequential</SelectItem>
-              <SelectItem value="2">Group Chat</SelectItem>
               <SelectItem value="3">Handoff</SelectItem>
+              <SelectItem value="2">Group Chat</SelectItem>
+              <SelectItem value="0">Concurrent</SelectItem>
               <SelectItem value="4">Magentic</SelectItem>
             </SelectContent>
           </Select>
@@ -765,6 +1015,29 @@ export function VisualWorkflowBuilder({
         >
           Build Workflow
         </Button>
+
+        <Dialog open={showJsonDialog} onOpenChange={setShowJsonDialog}>
+          <DialogTrigger asChild>
+            <Button
+              disabled={nodes.length === 0}
+              variant="outline"
+            >
+              <Code className="w-4 h-4 mr-2" />
+              View JSON
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Workflow JSON</DialogTitle>
+              <DialogDescription>
+                Current workflow configuration in JSON format
+              </DialogDescription>
+            </DialogHeader>
+            <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-xs">
+              <code>{getFlowJson()}</code>
+            </pre>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Canvas */}
@@ -787,14 +1060,14 @@ export function VisualWorkflowBuilder({
             {/* Helper Text */}
       <div className="text-xs text-muted-foreground flex-shrink-0">
         <p>
-          <strong>Tip:</strong> Select agents to add them to the canvas. Choose
+          <strong>Tip:</strong> Select agents or workflows to add them to the canvas. Choose
           a workflow pattern from the dropdown to automatically create
           connections and layout. You can also manually connect nodes by
           dragging from the{" "}
           <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>{" "}
           green output handle to the{" "}
           <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>{" "}
-          blue input handle of another agent. Press{" "}
+          blue input handle of another node. Press{" "}
           <kbd className="px-1 py-0.5 text-xs bg-muted border rounded">
             Delete
           </kbd>{" "}
@@ -806,33 +1079,33 @@ export function VisualWorkflowBuilder({
         </p>
         {pattern === -1 && (
           <p className="mt-1">
-            <strong>None (Manual):</strong> Manually connect agents by dragging
+            <strong>None (Manual):</strong> Manually connect nodes by dragging
             edges. The workflow pattern will be determined based on your
             connections.
           </p>
         )}
         {pattern === 0 && (
           <p className="mt-1">
-            <strong>Concurrent:</strong> All agents will run in parallel
+            <strong>Concurrent:</strong> All nodes will run in parallel
             independently.
           </p>
         )}
         {pattern === 1 && (
           <p className="mt-1">
-            <strong>Sequential:</strong> Agents will execute in order following
+            <strong>Sequential:</strong> Nodes will execute in order following
             the edges.
           </p>
         )}
         {pattern === 2 && (
           <p className="mt-1">
-            <strong>Group Chat:</strong> Agents will collaborate in a managed
+            <strong>Group Chat:</strong> Nodes will collaborate in a managed
             conversation.
           </p>
         )}
         {pattern === 3 && (
           <p className="mt-1">
             <strong>Handoff:</strong> Control will be dynamically passed between
-            agents.
+            nodes.
           </p>
         )}
         {pattern === 4 && (

@@ -13,23 +13,13 @@ import {
 } from "@/components/ui/dialog"
 import { VisualWorkflowBuilder } from "./visual-workflow-builder"
 import { X } from "lucide-react"
-
-type AgentDto = {
-  id: string
-  name: string
-  instructions: string
-  systemPrompt: string
-  modelProviderApiKeyId: string
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
-}
+import { AgentDto, WorkflowDto } from "@/types/workflow";
 
 type VisualWorkflowDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   agents: AgentDto[]
+  workflows: WorkflowDto[],
   onBuild: (visualData: {
     agents: { agentId: string; order: number; role: string | null }[]
     pattern: number
@@ -40,6 +30,7 @@ export function VisualWorkflowDialog({
   open,
   onOpenChange,
   agents,
+  workflows,
   onBuild,
 }: VisualWorkflowDialogProps) {
   return (
@@ -69,7 +60,7 @@ export function VisualWorkflowDialog({
           </div>
         </DialogHeader>
         <div className="flex-1 min-h-0 mt-4">
-          <VisualWorkflowBuilder agents={agents} onBuild={onBuild} />
+          <VisualWorkflowBuilder agents={agents} workflows={workflows} onBuild={onBuild} />
         </div>
       </DialogContent>
     </Dialog>

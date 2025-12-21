@@ -43,33 +43,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { VisualWorkflowDialog } from "./components/visual-workflow-dialog"
+import { AgentDto, WorkflowDto } from "@/types/workflow";
 
 type WorkflowCreateRequest = components["schemas"]["WorkflowCreateRequest"]
-
-type WorkflowDto = {
-  id: string
-  name: string
-  description: string | null
-  pattern: number
-  configurationJson: string | null
-  enable: boolean
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
-}
-
-type AgentDto = {
-  id: string
-  name: string
-  instructions: string
-  systemPrompt: string
-  modelProviderApiKeyId: string
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
-}
 
 type SelectedAgent = {
   agentId: string
@@ -194,6 +170,7 @@ export default function WorkflowsPage() {
             open={visualOpen}
             onOpenChange={setVisualOpen}
             agents={agentsQuery.data || []}
+            workflows={workflowsQuery.data || []}
             onBuild={handleVisualBuild}
           />
 
