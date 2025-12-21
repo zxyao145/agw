@@ -28,8 +28,10 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Info } from "lucide-react"
+import { Info, Play } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+
+const START_NODE_ID = "__start_node__"
 
 type AgentDto = {
   id: string
@@ -46,6 +48,32 @@ type AgentNodeData = {
   role: string
   onDelete: (id: string) => void
   onRoleChange: (id: string, role: string) => void
+}
+
+type StartNodeData = {
+  // Start node has no editable data
+}
+
+// Start Node Component (fixed, non-deletable)
+function StartNode({ data }: { data: StartNodeData }) {
+  return (
+    <Card className="min-w-20 shadow-lg p-0 gap-0  bg-green-50 border-green-300 rounded-full">
+      <div className="p-2 flex items-center gap-2">
+        <Play className="w-4 h-4 text-green-600" />
+        <CardTitle className="text-sm font-semibold text-green-700">
+          Start
+        </CardTitle>
+      </div>
+
+      {/* Output Handle (Source) */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="output"
+        className="w-3 h-3 bg-green-600! border-2 border-white"
+      />
+    </Card>
+  );
 }
 
 // Custom Agent Node Component
@@ -95,6 +123,7 @@ function AgentNode({ data }: { data: AgentNodeData }) {
 }
 
 const nodeTypes: NodeTypes = {
+  startNode: StartNode,
   agentNode: AgentNode,
 }
 
@@ -103,6 +132,9 @@ type VisualWorkflowBuilderProps = {
   onBuild: (workflow: {
     agents: { agentId: string; order: number; role: string | null }[]
     pattern: number
+    configuration?: {
+      maximumIterationCount?: number
+    }
   }) => void
 }
 
@@ -110,10 +142,23 @@ export function VisualWorkflowBuilder({
   agents,
   onBuild,
 }: VisualWorkflowBuilderProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  // Initialize with start node
+  const initialNodes: Node[] = [
+    {
+      id: START_NODE_ID,
+      type: "startNode",
+      position: { x: 50, y: 250 },
+      data: {},
+      draggable: true,
+      selectable: false, // Cannot be selected for deletion
+    }
+  ]
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [selectedAgentId, setSelectedAgentId] = React.useState<string>("")
   const [pattern, setPattern] = React.useState<number>(-1) // Default to manual mode
+  const [maximumIterationCount, setMaximumIterationCount] = React.useState<number>(5) // Group Chat parameter
 
   const onConnect = React.useCallback(
     (params: Connection) => {
@@ -146,15 +191,20 @@ export function VisualWorkflowBuilder({
           )
         }
 
-        // Delete selected nodes and their connected edges
+        // Delete selected nodes (except start node) and their connected edges
         if (selectedNodes.length > 0) {
-          const nodeIds = selectedNodes.map((node) => node.id)
-          setNodes((nds) => nds.filter((node) => !nodeIds.includes(node.id)))
-          setEdges((eds) =>
-            eds.filter(
-              (edge) => !nodeIds.includes(edge.source) && !nodeIds.includes(edge.target)
+          const nodeIds = selectedNodes
+            .filter((node) => node.id !== START_NODE_ID) // Don't delete start node
+            .map((node) => node.id)
+
+          if (nodeIds.length > 0) {
+            setNodes((nds) => nds.filter((node) => !nodeIds.includes(node.id)))
+            setEdges((eds) =>
+              eds.filter(
+                (edge) => !nodeIds.includes(edge.source) && !nodeIds.includes(edge.target)
+              )
             )
-          )
+          }
         }
       }
     },
@@ -163,6 +213,9 @@ export function VisualWorkflowBuilder({
 
   const handleDeleteNode = React.useCallback(
     (nodeId: string) => {
+      // Prevent deleting start node
+      if (nodeId === START_NODE_ID) return
+
       setNodes((nds) => nds.filter((node) => node.id !== nodeId))
       setEdges((eds) =>
         eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
@@ -215,7 +268,10 @@ export function VisualWorkflowBuilder({
 
   // Auto-connect nodes based on selected pattern
   const handleAutoConnect = React.useCallback((selectedPattern: number) => {
-    if (nodes.length === 0) return
+    // Filter out start node to get only agent nodes
+    const agentNodes = nodes.filter(node => node.id !== START_NODE_ID)
+
+    if (agentNodes.length === 0) return
 
     // Clear existing edges first
     setEdges([])
@@ -228,28 +284,59 @@ export function VisualWorkflowBuilder({
     const newEdges: Edge[] = []
 
     switch (selectedPattern) {
-      case 0: // Concurrent - no edges needed
+      case 0: // Concurrent - start connects to all agents
+        agentNodes.forEach(node => {
+          newEdges.push({
+            id: `e${START_NODE_ID}-${node.id}`,
+            source: START_NODE_ID,
+            target: node.id,
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed },
+          })
+        })
         break
 
-      case 1: // Sequential - create linear chain A→B→C
-        for (let i = 0; i < nodes.length - 1; i++) {
+      case 1: // Sequential - create linear chain Start→A→B→C
+        // Connect start to first agent
+        if (agentNodes.length > 0) {
           newEdges.push({
-            id: `e${nodes[i].id}-${nodes[i + 1].id}`,
-            source: nodes[i].id,
-            target: nodes[i + 1].id,
+            id: `e${START_NODE_ID}-${agentNodes[0].id}`,
+            source: START_NODE_ID,
+            target: agentNodes[0].id,
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed },
+          })
+        }
+        // Connect agents in sequence
+        for (let i = 0; i < agentNodes.length - 1; i++) {
+          newEdges.push({
+            id: `e${agentNodes[i].id}-${agentNodes[i + 1].id}`,
+            source: agentNodes[i].id,
+            target: agentNodes[i + 1].id,
             animated: true,
             markerEnd: { type: MarkerType.ArrowClosed },
           })
         }
         break
 
-      case 2: // GroupChat - connect all nodes in a circle
-        for (let i = 0; i < nodes.length; i++) {
-          const nextIndex = (i + 1) % nodes.length
+      case 2: // GroupChat - start connects to all, agents connect in a circle
+        // Connect start to all agents
+        agentNodes.forEach(node => {
           newEdges.push({
-            id: `e${nodes[i].id}-${nodes[nextIndex].id}`,
-            source: nodes[i].id,
-            target: nodes[nextIndex].id,
+            id: `e${START_NODE_ID}-${node.id}`,
+            source: START_NODE_ID,
+            target: node.id,
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed },
+          })
+        })
+        // Connect agents in a circle
+        for (let i = 0; i < agentNodes.length; i++) {
+          const nextIndex = (i + 1) % agentNodes.length
+          newEdges.push({
+            id: `e${agentNodes[i].id}-${agentNodes[nextIndex].id}`,
+            source: agentNodes[i].id,
+            target: agentNodes[nextIndex].id,
             animated: true,
             markerEnd: { type: MarkerType.ArrowClosed },
           })
@@ -257,38 +344,70 @@ export function VisualWorkflowBuilder({
         break
 
       case 3: // Handoff - same as sequential (linear chain)
-        for (let i = 0; i < nodes.length - 1; i++) {
+        // Connect start to first agent
+        if (agentNodes.length > 0) {
           newEdges.push({
-            id: `e${nodes[i].id}-${nodes[i + 1].id}`,
-            source: nodes[i].id,
-            target: nodes[i + 1].id,
+            id: `e${START_NODE_ID}-${agentNodes[0].id}`,
+            source: START_NODE_ID,
+            target: agentNodes[0].id,
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed },
+          })
+        }
+        // Connect agents in sequence
+        for (let i = 0; i < agentNodes.length - 1; i++) {
+          newEdges.push({
+            id: `e${agentNodes[i].id}-${agentNodes[i + 1].id}`,
+            source: agentNodes[i].id,
+            target: agentNodes[i + 1].id,
             animated: true,
             markerEnd: { type: MarkerType.ArrowClosed },
           })
         }
         break
 
-      case 4: // Magentic - first node (orchestrator) connects to all others (star topology)
-        if (nodes.length > 1) {
-          const orchestrator = nodes[0]
-          for (let i = 1; i < nodes.length; i++) {
+      case 4: // Magentic - start to orchestrator, orchestrator connects to workers (star topology)
+        if (agentNodes.length > 1) {
+          const orchestrator = agentNodes[0]
+          const workers = agentNodes.slice(1)
+
+          // Start → Orchestrator
+          newEdges.push({
+            id: `e${START_NODE_ID}-${orchestrator.id}`,
+            source: START_NODE_ID,
+            target: orchestrator.id,
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed },
+          })
+
+          // Orchestrator ↔ Workers
+          workers.forEach(worker => {
             // Orchestrator → Worker
             newEdges.push({
-              id: `e${orchestrator.id}-${nodes[i].id}`,
+              id: `e${orchestrator.id}-${worker.id}`,
               source: orchestrator.id,
-              target: nodes[i].id,
+              target: worker.id,
               animated: true,
               markerEnd: { type: MarkerType.ArrowClosed },
             })
             // Worker → Orchestrator (feedback loop)
             newEdges.push({
-              id: `e${nodes[i].id}-${orchestrator.id}`,
-              source: nodes[i].id,
+              id: `e${worker.id}-${orchestrator.id}`,
+              source: worker.id,
               target: orchestrator.id,
               animated: true,
               markerEnd: { type: MarkerType.ArrowClosed },
             })
-          }
+          })
+        } else if (agentNodes.length === 1) {
+          // Only one agent, just connect start to it
+          newEdges.push({
+            id: `e${START_NODE_ID}-${agentNodes[0].id}`,
+            source: START_NODE_ID,
+            target: agentNodes[0].id,
+            animated: true,
+            markerEnd: { type: MarkerType.ArrowClosed },
+          })
         }
         break
     }
@@ -307,19 +426,30 @@ export function VisualWorkflowBuilder({
     const canvasWidth = 800
     const canvasHeight = 600
     const padding = 100
+    const startX = 50
+    const agentStartX = 200 // Agent nodes start from this X position
+
+    // Filter agent nodes for layout calculation
+    const agentNodes = layoutNodes.filter(n => n.id !== START_NODE_ID)
+    const startNode = layoutNodes.find(n => n.id === START_NODE_ID)
+
+    // Position start node on the left center
+    if (startNode) {
+      startNode.position = { x: startX, y: canvasHeight / 2 }
+    }
 
     switch (selectedPattern) {
-      case 0: // Concurrent - grid layout
-        const cols = Math.ceil(Math.sqrt(nodes.length))
-        const rows = Math.ceil(nodes.length / cols)
-        const spacingX = (canvasWidth - 2 * padding) / Math.max(1, cols - 1)
+      case 0: // Concurrent - grid layout for agents
+        const cols = Math.ceil(Math.sqrt(agentNodes.length))
+        const rows = Math.ceil(agentNodes.length / cols)
+        const spacingX = (canvasWidth - agentStartX - padding) / Math.max(1, cols - 1)
         const spacingY = (canvasHeight - 2 * padding) / Math.max(1, rows - 1)
 
-        layoutNodes.forEach((node, i) => {
+        agentNodes.forEach((node, i) => {
           const col = i % cols
           const row = Math.floor(i / cols)
           node.position = {
-            x: padding + col * (cols === 1 ? 0 : spacingX),
+            x: agentStartX + col * (cols === 1 ? 0 : spacingX),
             y: padding + row * (rows === 1 ? 0 : spacingY),
           }
         })
@@ -327,22 +457,22 @@ export function VisualWorkflowBuilder({
 
       case 1: // Sequential - horizontal line
       case 3: // Handoff - horizontal line
-        const seqSpacing = (canvasWidth - 2 * padding) / Math.max(1, nodes.length - 1)
-        layoutNodes.forEach((node, i) => {
+        const seqSpacing = (canvasWidth - agentStartX - padding) / Math.max(1, agentNodes.length - 1)
+        agentNodes.forEach((node, i) => {
           node.position = {
-            x: padding + i * (nodes.length === 1 ? 0 : seqSpacing),
+            x: agentStartX + i * (agentNodes.length === 1 ? 0 : seqSpacing),
             y: canvasHeight / 2,
           }
         })
         break
 
-      case 2: // GroupChat - circular layout
-        const radius = Math.min(canvasWidth, canvasHeight) / 3
-        const centerX = canvasWidth / 2
+      case 2: // GroupChat - circular layout for agents
+        const radius = Math.min(canvasWidth - agentStartX, canvasHeight) / 3
+        const centerX = (canvasWidth + agentStartX) / 2
         const centerY = canvasHeight / 2
-        const angleStep = (2 * Math.PI) / nodes.length
+        const angleStep = (2 * Math.PI) / agentNodes.length
 
-        layoutNodes.forEach((node, i) => {
+        agentNodes.forEach((node, i) => {
           const angle = i * angleStep - Math.PI / 2 // Start from top
           node.position = {
             x: centerX + radius * Math.cos(angle),
@@ -352,21 +482,24 @@ export function VisualWorkflowBuilder({
         break
 
       case 4: // Magentic - star topology (orchestrator in center)
-        if (nodes.length === 1) {
-          layoutNodes[0].position = { x: canvasWidth / 2, y: canvasHeight / 2 }
-        } else {
+        if (agentNodes.length === 1) {
+          agentNodes[0].position = { x: (canvasWidth + agentStartX) / 2, y: canvasHeight / 2 }
+        } else if (agentNodes.length > 1) {
+          const centerX = (canvasWidth + agentStartX) / 2
+          const centerY = canvasHeight / 2
+
           // Orchestrator in center
-          layoutNodes[0].position = { x: canvasWidth / 2, y: canvasHeight / 2 }
+          agentNodes[0].position = { x: centerX, y: centerY }
 
           // Workers in circle around orchestrator
-          const workerRadius = Math.min(canvasWidth, canvasHeight) / 3
-          const workerAngleStep = (2 * Math.PI) / (nodes.length - 1)
+          const workerRadius = Math.min(canvasWidth - agentStartX, canvasHeight) / 3
+          const workerAngleStep = (2 * Math.PI) / (agentNodes.length - 1)
 
-          for (let i = 1; i < layoutNodes.length; i++) {
+          for (let i = 1; i < agentNodes.length; i++) {
             const angle = (i - 1) * workerAngleStep - Math.PI / 2
-            layoutNodes[i].position = {
-              x: canvasWidth / 2 + workerRadius * Math.cos(angle),
-              y: canvasHeight / 2 + workerRadius * Math.sin(angle),
+            agentNodes[i].position = {
+              x: centerX + workerRadius * Math.cos(angle),
+              y: centerY + workerRadius * Math.sin(angle),
             }
           }
         }
@@ -378,33 +511,41 @@ export function VisualWorkflowBuilder({
 
   // Auto-detect pattern based on graph structure
   const detectPatternFromStructure = React.useCallback((): number => {
-    if (nodes.length === 0) return 0
+    // Filter out start node for pattern detection
+    const agentNodes = nodes.filter(node => node.id !== START_NODE_ID)
+
+    if (agentNodes.length === 0) return 0
+
+    // Filter edges to only include those between agent nodes
+    const agentEdges = edges.filter(
+      edge => edge.source !== START_NODE_ID && edge.target !== START_NODE_ID
+    )
 
     // No edges → Concurrent
-    if (edges.length === 0) return 0
+    if (agentEdges.length === 0) return 0
 
     // Build in/out degree maps
     const inDegree = new Map<string, number>()
     const outDegree = new Map<string, number>()
 
-    nodes.forEach(node => {
+    agentNodes.forEach(node => {
       inDegree.set(node.id, 0)
       outDegree.set(node.id, 0)
     })
 
-    edges.forEach(edge => {
+    agentEdges.forEach(edge => {
       inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1)
       outDegree.set(edge.source, (outDegree.get(edge.source) || 0) + 1)
     })
 
     // Check for star topology (Magentic pattern)
-    const potentialOrchestrators = nodes.filter(node =>
+    const potentialOrchestrators = agentNodes.filter(node =>
       (outDegree.get(node.id) || 0) >= 2 && (inDegree.get(node.id) || 0) === 0
     )
 
     if (potentialOrchestrators.length === 1) {
       const orchestrator = potentialOrchestrators[0]
-      const workers = nodes.filter(n => n.id !== orchestrator.id)
+      const workers = agentNodes.filter(n => n.id !== orchestrator.id)
 
       const isStarTopology = workers.every(worker => {
         const workerInDegree = inDegree.get(worker.id) || 0
@@ -416,13 +557,13 @@ export function VisualWorkflowBuilder({
     }
 
     // Check for linear chain (Sequential pattern)
-    const isLinear = nodes.every(node =>
+    const isLinear = agentNodes.every(node =>
       (inDegree.get(node.id) || 0) <= 1 && (outDegree.get(node.id) || 0) <= 1
     )
 
     if (isLinear) {
-      const startNodes = nodes.filter(n => (inDegree.get(n.id) || 0) === 0)
-      const endNodes = nodes.filter(n => (outDegree.get(n.id) || 0) === 0)
+      const startNodes = agentNodes.filter(n => (inDegree.get(n.id) || 0) === 0)
+      const endNodes = agentNodes.filter(n => (outDegree.get(n.id) || 0) === 0)
 
       if (startNodes.length === 1 && endNodes.length === 1) {
         return 1 // Sequential
@@ -440,9 +581,12 @@ export function VisualWorkflowBuilder({
     // If pattern is -1 (Manual), auto-detect the actual pattern from structure
     const effectivePattern = pattern === -1 ? detectPatternFromStructure() : pattern
 
+    // Filter out start node and get only agent nodes
+    const agentNodes = nodes.filter(node => node.id !== START_NODE_ID)
+
     switch (effectivePattern) {
       case 0: // Concurrent - no specific order, just use node list
-        orderedAgents = nodes.map((node, index) => ({
+        orderedAgents = agentNodes.map((node, index) => ({
           agentId: node.data.agentId,
           order: index,
           role: node.data.role?.trim() || null,
@@ -451,7 +595,7 @@ export function VisualWorkflowBuilder({
 
       case 1: // Sequential - follow edge connections
       case 3: // Handoff - similar to sequential
-        orderedAgents = topologicalSort(nodes, edges).map((node, index) => ({
+        orderedAgents = topologicalSort(agentNodes, edges).map((node, index) => ({
           agentId: node.data.agentId,
           order: index,
           role: node.data.role?.trim() || null,
@@ -459,7 +603,7 @@ export function VisualWorkflowBuilder({
         break
 
       case 2: // GroupChat - no specific order
-        orderedAgents = nodes.map((node, index) => ({
+        orderedAgents = agentNodes.map((node, index) => ({
           agentId: node.data.agentId,
           order: index,
           role: node.data.role?.trim() || null,
@@ -467,13 +611,13 @@ export function VisualWorkflowBuilder({
         break
 
       case 4: // Magentic - first node is orchestrator, rest are workers
-        // Find root node (node with no incoming edges) as orchestrator
-        const rootNode = nodes.find(
-          (node) => !edges.some((edge) => edge.target === node.id)
+        // Find root node (node with no incoming edges, excluding start node) as orchestrator
+        const rootNode = agentNodes.find(
+          (node) => !edges.some((edge) => edge.target === node.id && edge.source !== START_NODE_ID)
         )
-        if (!rootNode && nodes.length > 0) {
+        if (!rootNode && agentNodes.length > 0) {
           // If no clear root, use first node
-          orderedAgents = nodes.map((node, index) => ({
+          orderedAgents = agentNodes.map((node, index) => ({
             agentId: node.data.agentId,
             order: index,
             role: node.data.role?.trim() || null,
@@ -485,7 +629,7 @@ export function VisualWorkflowBuilder({
               order: 0,
               role: rootNode.data.role?.trim() || null,
             },
-            ...nodes
+            ...agentNodes
               .filter((n) => n.id !== rootNode.id)
               .map((node, index) => ({
                 agentId: node.data.agentId,
@@ -499,15 +643,26 @@ export function VisualWorkflowBuilder({
         break
 
       default:
-        orderedAgents = nodes.map((node, index) => ({
+        orderedAgents = agentNodes.map((node, index) => ({
           agentId: node.data.agentId,
           order: index,
           role: node.data.role?.trim() || null,
         }))
     }
 
-    onBuild({ agents: orderedAgents, pattern: effectivePattern })
-  }, [nodes, edges, pattern, onBuild, detectPatternFromStructure])
+    // Build configuration based on pattern
+    const configuration: { maximumIterationCount?: number } = {}
+    if (effectivePattern === 2) {
+      // Group Chat pattern
+      configuration.maximumIterationCount = maximumIterationCount
+    }
+
+    onBuild({
+      agents: orderedAgents,
+      pattern: effectivePattern,
+      configuration: Object.keys(configuration).length > 0 ? configuration : undefined
+    })
+  }, [nodes, edges, pattern, maximumIterationCount, onBuild, detectPatternFromStructure])
 
   return (
     <div
@@ -575,6 +730,33 @@ export function VisualWorkflowBuilder({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Group Chat Configuration */}
+        {pattern === 2 && (
+          <div className="space-y-2">
+            <Label>
+              Max Iterations
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info size={16} className="text-muted-foreground ml-1 inline" />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p>
+                    Maximum number of iterations for Group Chat pattern
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </Label>
+            <Input
+              type="number"
+              min="1"
+              max="100"
+              value={maximumIterationCount}
+              onChange={(e) => setMaximumIterationCount(Number(e.target.value))}
+              className="w-[120px]"
+            />
+          </div>
+        )}
 
         <Button
           onClick={handleBuild}

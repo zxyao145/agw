@@ -391,48 +391,53 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-21T10:42:21Z
-**Milestone**: Visual workflow builder with auto-connect patterns | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-21T12:51:23Z
+**Milestone**: Fixed start node + Group Chat configuration | **Branch**: main
 
 ### Technical Status
 - **Code Quality**: Excellent (19,218 code files)
-- **Architecture Health**: Production-ready with enhanced UI capabilities
+- **Architecture Health**: Production-ready with enhanced workflow features
 - **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, OpenTelemetry 1.14.0, Serilog 4.3.0)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with visual workflow builder documentation
-- [x] **Configuration Sync**: Frontend packages synchronized (React Flow, Lucide icons, Tooltip)
+- [x] **CLAUDE.md**: Updated with start node and Group Chat configuration
+- [x] **Configuration Sync**: All dependencies synchronized
 - [x] **API Documentation**: OpenAPI at `/openapi` endpoint
-- [x] **UI Components**: Complete visual workflow builder documented
+- [x] **UI Components**: Complete visual workflow builder with start node
 
-### Recent Activity (Since 2025-12-21T00:39:00Z checkpoint)
-- **Period**: 10 hours | **Commits**: Working on visual workflow enhancements
+### Recent Activity (Since 2025-12-21T10:42:21Z checkpoint)
+- **Period**: 2 hours | **Commits**: Working session on workflow builder enhancements
 - **Major Changes**:
-  - ✅ **Frontend**: Visual workflow builder implementation
-    - `visual-workflow-builder.tsx` with React Flow integration
-    - Node-based agent configuration with drag-and-drop
-    - Custom agent nodes with role assignment
-  - ✅ **Frontend**: Auto-connect pattern system
-    - 5 workflow patterns: Concurrent, Sequential, Group Chat, Handoff, Magentic
-    - Pattern-based auto-layout (grid, linear, circular, star)
-    - Manual mode with pattern auto-detection
-    - "None (Manual)" option to clear connections
-  - ✅ **Frontend**: Enhanced UX features
-    - Support for duplicate agents in workflow
-    - Unique node IDs while preserving agent references
-    - Keyboard shortcuts (Delete/Backspace) for node/edge removal
-    - Tooltip integration for better guidance
-  - ✅ **Frontend**: Workflow dialog integration
-    - `visual-workflow-dialog.tsx` for workflow creation
-    - Sidebar navigation updates
-    - Tabs UI component added
-- **Activity Intensity**: High (UI enhancement and workflow visualization)
-- **Development Trend**: ⬆️ Steady Progress (feature refinement and UX polish)
+  - ✅ **Frontend**: Fixed start node implementation
+    - Non-deletable start node representing workflow input
+    - Start node positioned at left center (x: 50)
+    - Green-themed circular design with Play icon
+    - All patterns auto-connect from start node
+  - ✅ **Frontend**: Group Chat configuration UI
+    - MaximumIterationCount parameter (default: 5, range: 1-100)
+    - Conditional UI display when Group Chat pattern selected
+    - Configuration passed to onBuild callback
+  - ✅ **Frontend**: Pattern-aware auto-connect enhancement
+    - All patterns now consider start node in topology
+    - Concurrent: Start → All agents (parallel)
+    - Sequential: Start → A → B → C (chain)
+    - Group Chat: Start → All + circular agent connections
+    - Handoff: Start → A → B (linear)
+    - Magentic: Start → Orchestrator ↔ Workers (star)
+  - ✅ **Frontend**: Auto-layout improvements
+    - Start node fixed at left center
+    - Agent nodes layout from x: 200
+    - Pattern-specific layouts account for start node
+  - ✅ **Frontend**: UI polish
+    - Start node uses rounded-full design
+    - Simplified card layout for start node
+- **Activity Intensity**: Medium (Refinement and configuration)
+- **Development Trend**: ⬆️ Steady Progress (feature completion and polish)
 
 ### Recommended Actions
-1. ✅ ~~Visual workflow builder~~ - **COMPLETED**
-2. ✅ ~~Auto-connect patterns~~ - **COMPLETED**
-3. ✅ ~~Support duplicate agents~~ - **COMPLETED**
+1. ✅ ~~Fixed start node~~ - **COMPLETED**
+2. ✅ ~~Group Chat configuration~~ - **COMPLETED**
+3. Test workflow execution with start node
 4. Add workflow execution preview/simulation
 5. Add workflow templates for common patterns
 6. Add unit/integration tests for `MagenticOrchestrationManager`
@@ -441,30 +446,22 @@ This unified observability stack allows tracing a request from HTTP entry → da
 9. Configure production log aggregation (Seq, Elasticsearch, Loki)
 10. Performance testing for concurrent workflow execution
 
-**Git Commit**: `08f62da` (main) | **Health Score**: 9.6/10
+**Git Commit**: `302d0d9` (main) | **Health Score**: 9.7/10
 
 ---
 
 ### Previous Checkpoint
 
-**Project**: D-System | **Time**: 2025-12-21T00:39:00Z
-**Milestone**: Full observability stack + Magentic orchestration complete | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-21T10:42:21Z
+**Milestone**: Visual workflow builder with auto-connect patterns | **Branch**: main
 
-### Technical Status
-- **Code Quality**: Excellent (18,930+ code files)
-- **Architecture Health**: Production-ready with complete observability
-- **Dependencies**: Latest (Next.js 16, .NET 10, OpenTelemetry 1.14.0, Serilog 4.3.0, Microsoft.Agents.AI)
-
-### Recent Activity (Since 2025-12-17T12:00:00Z checkpoint)
-- **Period**: 3.5 days | **Commits**: 5 major commits
+### Recent Activity (Since 2025-12-21T00:39:00Z checkpoint)
+- **Period**: 10 hours | **Commits**: Working on visual workflow enhancements
 - **Major Changes**:
-  - ✅ **Backend**: Complete Magentic orchestration implementation
-  - ✅ **Backend**: GroupChat and Handoff patterns implemented
-  - ✅ **Backend**: OpenTelemetry integration
-  - ✅ **Backend**: Serilog structured logging
-  - ✅ **Frontend**: Workflow configuration UI with pattern selection
-- **Activity Intensity**: Very High (Major feature completion sprint)
-- **Development Trend**: ⬆️⬆️ Rapid Ascent
+  - ✅ **Frontend**: Visual workflow builder implementation
+  - ✅ **Frontend**: Auto-connect pattern system (5 patterns)
+  - ✅ **Frontend**: Enhanced UX features (duplicate agents, keyboard shortcuts)
+- **Activity Intensity**: High (UI enhancement and workflow visualization)
 
-**Git Commit**: `08f62da` (main) | **Health Score**: 9.5/10
+**Git Commit**: `302d0d9` (main) | **Health Score**: 9.6/10
 
