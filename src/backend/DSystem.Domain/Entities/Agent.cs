@@ -10,5 +10,5 @@ public class Agent : BaseEntity
 
     public ModelProviderApiKey? ModelProviderApiKey { get; set; }
 
-    public ICollection<WorkflowAgent> Workflows { get; set; } = new List<WorkflowAgent>();
+    public ICollection<WorkflowNode> Workflows { get; set; } = new List<WorkflowNode>();
 }

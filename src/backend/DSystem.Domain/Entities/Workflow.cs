@@ -11,5 +11,6 @@ public class Workflow : BaseEntity
     public string? ConfigurationJson { get; set; }
     public bool Enable { get; set; } = true;
 
-    public ICollection<WorkflowAgent> Agents { get; set; } = new List<WorkflowAgent>();
+    public ICollection<WorkflowNode> Nodes { get; set; } = new List<WorkflowNode>();
+    public ICollection<WorkflowEdge> Edges { get; set; } = new List<WorkflowEdge>();
 }

@@ -208,8 +208,28 @@ src/frontend/web/src/
 
 ## Extended Domain Model
 
-### Workflow System
-**Entities**: `Workflow`, `WorkflowAgent` (join table with ordering)
+### Workflow System (Graph Structure - Updated 2025-12-21)
+
+**Entities**: `Workflow`, `WorkflowNode`, `WorkflowEdge`
+
+**Graph-Based Architecture**:
+The workflow system uses an explicit graph structure matching the React Flow visual representation:
+- `WorkflowNode`: Represents agents or nested workflows in the graph
+  - `NodeId`: Unique identifier within the workflow (e.g., "agent-uuid-timestamp-random")
+  - `Type`: Enum (AgentNode=0, WorkflowNode=1)
+  - `RelateId`: Foreign key to Agent.Id (if AgentNode) or Workflow.Id (if WorkflowNode)
+  - Navigation: `SourceEdges`, `TargetEdges`
+
+- `WorkflowEdge`: Explicit connections between nodes
+  - `EdgeId`: Unique identifier (e.g., "e{sourceId}-{targetId}")
+  - `SourceNodeId`, `TargetNodeId`: References to WorkflowNode.NodeId
+  - `Animated`: Boolean for visual representation
+  - Navigation: `SourceNode`, `TargetNode`
+
+**Migration from WorkflowAgent** (2025-12-21):
+- **Previous**: Simple join table with Order field (linear sequences only)
+- **Current**: Full graph structure supporting arbitrary topologies
+- **Breaking Change**: `Workflow.Agents` navigation removed, replaced with `Workflow.Nodes` and `Workflow.Edges`
 
 **Orchestration Patterns** (`WorkflowOrchestrationPattern` enum):
 - `Concurrent` (0): Broadcast input to all agents in parallel
@@ -219,7 +239,8 @@ src/frontend/web/src/
 - `Magentic` (4): MagenticOne-inspired pattern with orchestrator + workers
 
 **WorkflowRuntimeService** (`DSystem.Domain/Services/WorkflowRuntimeService.cs`):
-- Hydrates workflow agents via `AgentRuntimeService`
+- Hydrates workflow nodes via `AgentRuntimeService`
+- Resolves node types (AgentNode → Agent, WorkflowNode → Workflow)
 - Uses `AgentWorkflowBuilder` from Microsoft.Agents.AI.Workflows
 - Executes via `InProcessExecution.StreamAsync()`
 - Returns `WorkflowExecutionResult` with chat messages and status
@@ -253,24 +274,29 @@ src/frontend/web/src/
 5. Mark task `Succeeded`/`Failed`
 6. Release lock
 
-### Complete Entity Graph
+### Complete Entity Graph (Updated 2025-12-21)
 ```
 LlmModel ←→ ModelProvider ←→ Provider
                 ↓
          ModelProviderApiKey
                 ↓
-              Agent ←→ WorkflowAgent ←→ Workflow
-                                          ↓
-                                     ProjectTask ←→ Project
-                                                      ↓
-                                                 ProjectLease (lock)
+              Agent ←→ WorkflowNode (Type=AgentNode) ←→ Workflow
+                          ↓                              ↓
+                    WorkflowEdge                   WorkflowNode (Type=WorkflowNode)
+                     (Source/Target)                    ↓
+                                                    (Self-reference)
+
+Workflow → ProjectTask ←→ Project
+                           ↓
+                      ProjectLease (lock)
 ```
 
 **Key Constraints**:
 - `Workflow.ConfigurationJson`: max 16000 chars (workflow-specific settings)
 - `ProjectTask.Input`/`Description`: max 4000 chars
 - `ProjectTask.OutputJson`: max 16000 chars (serialized execution result)
-- `WorkflowAgent`: Unique index on (WorkflowId, Order)
+- `WorkflowNode`: Unique index on (WorkflowId, NodeId), Foreign key on RelateId (polymorphic)
+- `WorkflowEdge`: Unique index on (WorkflowId, EdgeId), Foreign keys on SourceNodeId, TargetNodeId
 - `ProjectTask`: Composite index on (ProjectId, Status, UpdateTime)
 
 ## Development Notes
@@ -391,63 +417,83 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-21T14:08:27Z
-**Milestone**: Workflow composition + JSON visualization | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-21T15:18:56Z
+**Milestone**: Workflow graph structure implementation | **Branch**: main
 
 ### Technical Status
-- **Code Quality**: Excellent (19,239 code files)
-- **Architecture Health**: Production-ready with enhanced workflow features
+- **Code Quality**: Excellent (19,242 code files)
+- **Architecture Health**: Active refactoring - graph structure migration
 - **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, OpenTelemetry 1.14.0, Serilog 4.3.0)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with workflow composition features
+- [x] **CLAUDE.md**: Updated with graph structure migration
 - [x] **Configuration Sync**: All dependencies synchronized
-- [x] **API Documentation**: OpenAPI at `/openapi` endpoint
-- [x] **UI Components**: Complete visual workflow builder with composition support
+- [x] **API Documentation**: OpenAPI at `/openapi` endpoint (needs refresh after migration)
+- [x] **Database**: EF Core migration AddFlowEdge applied
 
-### Recent Activity (Since 2025-12-21T12:51:23Z checkpoint)
-- **Period**: 1.3 hours | **Commits**: Working session on workflow composition
+### Recent Activity (Since 2025-12-21T14:08:27Z checkpoint)
+- **Period**: 1.2 hours | **Commits**: Working session on backend architecture
 - **Major Changes**:
-  - ✅ **Frontend**: Workflow composition support
-    - WorkflowNode component for nested workflows
-    - Purple-themed workflow nodes (distinguishable from blue agent nodes)
-    - Workflow icon for visual identification
-    - AgentDto and WorkflowDto type definitions in `/types/workflow.ts`
-  - ✅ **Frontend**: Unified node type system
-    - Node Type selector (Agent/Workflow)
-    - Dynamic item selector based on type
-    - Supports adding both agents and workflows to canvas
-    - Duplicate node support via unique IDs
-  - ✅ **Frontend**: Mixed topology handling
-    - All 5 patterns support mixed agent/workflow nodes
-    - Separate ordering for agents and workflows
-    - Topological sort works with mixed types
-    - Auto-connect and auto-layout handle both types
-  - ✅ **Frontend**: JSON viewer dialog
-    - "View JSON" button with Code icon
-    - Displays complete workflow configuration
-    - Shows pattern, nodes, edges, and configuration
-    - Scrollable dialog with formatted JSON
-  - ✅ **Frontend**: Enhanced onBuild output
-    - Returns separate agents[] and workflows[] arrays
-    - Each maintains independent ordering
-    - Optional workflows field if no workflows present
-- **Activity Intensity**: Medium (Feature expansion)
-- **Development Trend**: ⬆️ Steady Progress (composition capabilities added)
+  - ✅ **Backend**: Workflow graph structure migration
+    - NEW: `WorkflowNode` entity replaces `WorkflowAgent`
+    - NEW: `WorkflowEdge` entity for explicit edge storage
+    - NEW: `WorkflowNodeType` enum (AgentNode=0, WorkflowNode=1)
+    - Graph-based structure: nodes (agents/workflows) + edges (connections)
+    - Properties: NodeId, Type, RelateId, SourceEdges, TargetEdges
+  - ✅ **Backend**: Database schema evolution
+    - EF Core migration: `20251221151718_AddFlowEdge` (157 lines)
+    - WorkflowNodes table with Type discriminator
+    - WorkflowEdges table with source/target references
+    - Removed WorkflowAgent join table
+    - Updated navigation properties in Workflow entity
+  - ✅ **Backend**: Service layer refactoring
+    - `WorkflowDomainService` updated for graph operations
+    - `WorkflowRuntimeService` adapted to node/edge model
+    - `WorkflowsController` endpoints modified
+    - `LlmDbContext` configuration for node/edge relationships
+  - ⚠️ **Breaking Changes**:
+    - Removed `WorkflowAgent` entity
+    - `Workflow.Agents` navigation removed
+    - Database migration required before deployment
+    - API contracts need client-side updates
+- **Activity Intensity**: High (Major architectural refactoring)
+- **Development Trend**: 🔄 Architectural Evolution (graph structure adoption)
+
+### Architecture Notes
+**Previous Structure** (WorkflowAgent):
+```
+Workflow 1--* WorkflowAgent *--1 Agent
+         (Order, Role)
+```
+
+**New Structure** (WorkflowNode + WorkflowEdge):
+```
+Workflow 1--* WorkflowNode (Type: AgentNode|WorkflowNode)
+              |             RelateId → Agent.Id or Workflow.Id
+              |
+              *--* WorkflowEdge (Source, Target, Animated)
+```
+
+**Benefits**:
+- Explicit edge modeling (React Flow parity)
+- Supports arbitrary graph topologies
+- Enables workflow composition (WorkflowNode references)
+- Facilitates circular dependency detection
+- Direct mapping to frontend visual representation
 
 ### Recommended Actions
-1. ✅ ~~Workflow composition support~~ - **COMPLETED**
-2. ✅ ~~JSON viewer for workflow inspection~~ - **COMPLETED**
-3. Test nested workflow execution
-4. Add workflow validation logic (circular dependency detection)
-5. Implement workflow templates library
-6. Add workflow import/export from JSON
-7. Add unit/integration tests for visual builder
-8. Add unit/integration tests for `MagenticOrchestrationManager`
-9. Add unit/integration tests for `ProjectTaskSchedulerHostedService`
-10. Test end-to-end: HTTP request → Serilog logs → Jaeger traces
+1. ✅ ~~Graph structure entities~~ - **COMPLETED**
+2. ✅ ~~EF Core migration~~ - **COMPLETED**
+3. ⚠️ Test migration on development database
+4. Update API response DTOs to include edges
+5. Update frontend to save/load graph structure
+6. Implement circular dependency validation
+7. Add graph traversal utilities
+8. Update seed data for testing
+9. Add unit tests for graph operations
+10. Update API documentation
 
-**Git Commit**: `97cece4` (main) | **Health Score**: 9.8/10
+**Git Commit**: `541a1c6` (main) | **Health Score**: 9.7/10
 
 ---
 

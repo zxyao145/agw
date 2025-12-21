@@ -8,13 +8,13 @@ namespace DSystem.Domain.Services;
 public class WorkflowDomainService
 {
     private readonly IRepository<Workflow> _workflowRepository;
-    private readonly IRepository<WorkflowAgent> _workflowAgentRepository;
+    private readonly IRepository<WorkflowNode> _workflowAgentRepository;
     private readonly IRepository<Agent> _agentRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public WorkflowDomainService(
         IRepository<Workflow> workflowRepository,
-        IRepository<WorkflowAgent> workflowAgentRepository,
+        IRepository<WorkflowNode> workflowAgentRepository,
         IRepository<Agent> agentRepository,
         IUnitOfWork unitOfWork)
     {
@@ -29,10 +29,10 @@ public class WorkflowDomainService
 
     public Task<Workflow?> GetAsync(Guid id) => _workflowRepository.GetByIdAsync(id);
 
-    public Task<IReadOnlyList<WorkflowAgent>> ListAgentsAsync(Guid workflowId) =>
+    public Task<IReadOnlyList<WorkflowNode>> ListAgentsAsync(Guid workflowId) =>
         _workflowAgentRepository.ListAsync(x => x.WorkflowId == workflowId);
 
-    public async Task<Workflow?> CreateAsync(Workflow workflow, IReadOnlyList<WorkflowAgent> agents, string user)
+    public async Task<Workflow?> CreateAsync(Workflow workflow, IReadOnlyList<WorkflowNode> agents, string user)
     {
         if (string.IsNullOrWhiteSpace(workflow.Name))
         {
@@ -64,7 +64,7 @@ public class WorkflowDomainService
     public async Task<Workflow?> UpdateAsync(
         Guid id,
         Action<Workflow> updateAction,
-        IReadOnlyList<WorkflowAgent>? agents,
+        IReadOnlyList<WorkflowNode>? agents,
         string user)
     {
         var existing = await _workflowRepository.GetByIdAsync(id);
@@ -126,14 +126,14 @@ public class WorkflowDomainService
         return true;
     }
 
-    private async Task<IReadOnlyList<WorkflowAgent>?> ValidateAndNormalizeAgentsAsync(
+    private async Task<IReadOnlyList<WorkflowNode>?> ValidateAndNormalizeAgentsAsync(
         WorkflowOrchestrationPattern pattern,
-        IReadOnlyList<WorkflowAgent> agents,
+        IReadOnlyList<WorkflowNode> agents,
         Guid workflowId)
     {
         if (agents == null)
         {
-            return Array.Empty<WorkflowAgent>();
+            return Array.Empty<WorkflowNode>();
         }
 
         if (pattern == WorkflowOrchestrationPattern.Sequential && agents.Count == 0)
@@ -141,10 +141,10 @@ public class WorkflowDomainService
             return null;
         }
 
-        var agentIds = agents.Select(x => x.AgentId).ToList();
+        var agentIds = agents.Select(x => x.RelateId).ToList();
         if (agentIds.Count == 0)
         {
-            return Array.Empty<WorkflowAgent>();
+            return Array.Empty<WorkflowNode>();
         }
 
         if (agentIds.Any(x => x == Guid.Empty))
@@ -153,17 +153,6 @@ public class WorkflowDomainService
         }
 
         if (agentIds.Distinct().Count() != agentIds.Count)
-        {
-            return null;
-        }
-
-        if (agents.Any(x => x.Order < 0))
-        {
-            return null;
-        }
-
-        var orders = agents.Select(x => x.Order).ToList();
-        if (orders.Distinct().Count() != orders.Count)
         {
             return null;
         }
@@ -177,12 +166,10 @@ public class WorkflowDomainService
 
         // Normalize FK.
         var normalized = agents
-            .Select(x => new WorkflowAgent
+            .Select(x => new WorkflowNode
             {
                 WorkflowId = workflowId,
-                AgentId = x.AgentId,
-                Order = x.Order,
-                Role = x.Role
+                RelateId = x.RelateId,
             })
             .ToList();
 

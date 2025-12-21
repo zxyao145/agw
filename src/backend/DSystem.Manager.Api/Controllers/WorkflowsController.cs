@@ -64,11 +64,9 @@ public class WorkflowsController : ControllerBase
         };
 
         var agents = request.Agents
-            .Select(x => new WorkflowAgent
+            .Select(x => new WorkflowNode
             {
-                AgentId = x.AgentId,
-                Order = x.Order,
-                Role = x.Role
+                RelateId = x.AgentId,
             })
             .ToList();
 
@@ -87,11 +85,9 @@ public class WorkflowsController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
 
         var agents = request.Agents
-            .Select(x => new WorkflowAgent
+            .Select(x => new WorkflowNode
             {
-                AgentId = x.AgentId,
-                Order = x.Order,
-                Role = x.Role
+                RelateId = x.AgentId,
             })
             .ToList();
 

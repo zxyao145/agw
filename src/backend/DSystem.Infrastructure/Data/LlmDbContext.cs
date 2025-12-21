@@ -14,8 +14,11 @@ public class LlmDbContext : DbContext
     public DbSet<ModelProvider> ModelProviders => Set<ModelProvider>();
     public DbSet<ModelProviderApiKey> ModelProviderApiKeys => Set<ModelProviderApiKey>();
     public DbSet<Agent> Agents => Set<Agent>();
+
     public DbSet<Workflow> Workflows => Set<Workflow>();
-    public DbSet<WorkflowAgent> WorkflowAgents => Set<WorkflowAgent>();
+    public DbSet<WorkflowNode> WorkflowNodes => Set<WorkflowNode>();
+    public DbSet<WorkflowEdge> WorkflowEdges => Set<WorkflowEdge>();
+
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
     public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
@@ -87,21 +90,25 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.ConfigurationJson).HasMaxLength(16000);
         });
 
-        modelBuilder.Entity<WorkflowAgent>(entity =>
+        modelBuilder.Entity<WorkflowNode>(entity =>
         {
-            entity.HasKey(e => new { e.WorkflowId, e.AgentId });
-            entity.Property(e => e.Role).HasMaxLength(200);
+            entity.HasKey(e => new { e.WorkflowId, e.NodeId });
+            entity.HasIndex(e => new { e.WorkflowId, e.Type, e.RelateId })
+                .IsUnique(true);
+        });
 
-            entity.HasIndex(e => new { e.WorkflowId, e.Order }).IsUnique();
+        modelBuilder.Entity<WorkflowEdge>(entity =>
+        {
+            entity.HasKey(e => new { e.WorkflowId, e.EdgeId });
 
-            entity.HasOne(e => e.Workflow)
-                .WithMany(w => w.Agents)
-                .HasForeignKey(e => e.WorkflowId)
+            entity.HasOne(e => e.SourceNode)
+                .WithMany(n => n.SourceEdges)
+                .HasForeignKey(e => new { e.WorkflowId, e.SourceNodeId })
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(e => e.Agent)
-                .WithMany(a => a.Workflows)
-                .HasForeignKey(e => e.AgentId)
+            entity.HasOne(e => e.TargetNode)
+                .WithMany(n => n.TargetEdges)
+                .HasForeignKey(e => new { e.WorkflowId, e.TargetNodeId })
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
