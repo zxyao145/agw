@@ -134,10 +134,6 @@ public class LlmDbContext : DbContext
                 .HasForeignKey(e => e.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(e => e.Workflow)
-                .WithMany()
-                .HasForeignKey(e => e.WorkflowId)
-                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ProjectLease>(entity =>

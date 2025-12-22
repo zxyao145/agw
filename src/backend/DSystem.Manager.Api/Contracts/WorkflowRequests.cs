@@ -3,7 +3,16 @@ using DSystem.Domain.Services;
 
 namespace DSystem.Manager.Api.Contracts;
 
-public record WorkflowAgentBindingRequest(Guid AgentId, int Order, string? Role);
+public record WorkflowNodeRequest(
+    string NodeId,
+    WorkflowNodeType Type,
+    Guid RelateId);
+
+public record WorkflowEdgeRequest(
+    string EdgeId,
+    string SourceNodeId,
+    string TargetNodeId,
+    bool Animated);
 
 public record WorkflowCreateRequest(
     string Name,
@@ -11,7 +20,8 @@ public record WorkflowCreateRequest(
     WorkflowOrchestrationPattern Pattern,
     string? ConfigurationJson,
     bool Enable,
-    IReadOnlyList<WorkflowAgentBindingRequest> Agents);
+    IReadOnlyList<WorkflowNodeRequest> Nodes,
+    IReadOnlyList<WorkflowEdgeRequest> Edges);
 
 public record WorkflowUpdateRequest(
     string Name,
@@ -19,7 +29,8 @@ public record WorkflowUpdateRequest(
     WorkflowOrchestrationPattern Pattern,
     string? ConfigurationJson,
     bool Enable,
-    IReadOnlyList<WorkflowAgentBindingRequest> Agents);
+    IReadOnlyList<WorkflowNodeRequest> Nodes,
+    IReadOnlyList<WorkflowEdgeRequest> Edges);
 
 public record WorkflowExecuteRequest(string Input);
 

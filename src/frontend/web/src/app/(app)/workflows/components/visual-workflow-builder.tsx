@@ -5,6 +5,7 @@ import ReactFlow, {
   Node,
   Edge,
   Controls,
+  ControlButton,
   Background,
   useNodesState,
   useEdgesState,
@@ -28,17 +29,11 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Info, Play, Workflow, Bot, Code } from "lucide-react"
+import { Info, Play, Workflow, Bot, Grid } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { AgentDto, WorkflowDto } from "@/types/workflow";
+import { AgentDto, WorkflowDto, WorkflowNodeType } from "@/types/workflow"
+import { toast } from "sonner"
+import { apiPost, apiPut } from "@/api/client"
 
 const START_NODE_ID = "__start_node__"
 
@@ -192,20 +187,24 @@ const nodeTypes: NodeTypes = {
 type VisualWorkflowBuilderProps = {
   agents: AgentDto[]
   workflows?: WorkflowDto[]
-  onBuild: (workflow: {
-    agents: { agentId: string; order: number; role: string | null }[]
-    workflows?: { workflowId: string; order: number; role: string | null }[]
+  editingWorkflow?: {
+    id: string
+    name: string
+    description: string | null
     pattern: number
-    configuration?: {
-      maximumIterationCount?: number
-    }
-  }) => void
+    configurationJson: string | null
+    enable: boolean
+    nodes: any[]
+    edges: any[]
+  } | null
+  onWorkflowCreated?: () => void
 }
 
 export function VisualWorkflowBuilder({
   agents,
   workflows = [],
-  onBuild,
+  editingWorkflow,
+  onWorkflowCreated,
 }: VisualWorkflowBuilderProps) {
   // Initialize with start node
   const initialNodes: Node[] = [
@@ -225,7 +224,119 @@ export function VisualWorkflowBuilder({
   const [selectedItemId, setSelectedItemId] = React.useState<string>("")
   const [pattern, setPattern] = React.useState<number>(-1) // Default to manual mode
   const [maximumIterationCount, setMaximumIterationCount] = React.useState<number>(5) // Group Chat parameter
-  const [showJsonDialog, setShowJsonDialog] = React.useState(false)
+
+  // Workflow creation states
+  const [workflowName, setWorkflowName] = React.useState("")
+  const [workflowDescription, setWorkflowDescription] = React.useState("")
+  const [workflowEnabled, setWorkflowEnabled] = React.useState(true)
+  const [isCreating, setIsCreating] = React.useState(false)
+
+  
+  const handleDeleteNode = React.useCallback(
+    (nodeId: string) => {
+      // Prevent deleting start node
+      if (nodeId === START_NODE_ID) return
+
+      setNodes((nds) => nds.filter((node) => node.id !== nodeId))
+      setEdges((eds) =>
+        eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+      )
+    },
+    [setNodes, setEdges]
+  )
+
+  const handleRoleChange = React.useCallback(
+    (nodeId: string, role: string) => {
+      setNodes((nds) =>
+        nds.map((node) =>
+          node.id === nodeId
+            ? { ...node, data: { ...node.data, role } }
+            : node
+        )
+      )
+    },
+    [setNodes]
+  )
+  
+  // Load editing workflow data when present
+  React.useEffect(() => {
+    if (editingWorkflow) {
+      // Set form fields
+      setWorkflowName(editingWorkflow.name)
+      setWorkflowDescription(editingWorkflow.description || "")
+      setWorkflowEnabled(editingWorkflow.enable)
+      setPattern(editingWorkflow.pattern)
+
+      // Parse configuration for Group Chat pattern
+      if (editingWorkflow.pattern === 2 && editingWorkflow.configurationJson) {
+        try {
+          const config = JSON.parse(editingWorkflow.configurationJson)
+          setMaximumIterationCount(config.maximumIterationCount || 5)
+        } catch {
+          setMaximumIterationCount(5)
+        }
+      }
+
+      // Convert nodes to React Flow format
+      const loadedNodes: Node[] = [
+        // Always include start node
+        {
+          id: START_NODE_ID,
+          type: "startNode",
+          position: { x: 50, y: 250 },
+          data: {},
+          draggable: true,
+          selectable: false,
+        },
+        // Add workflow nodes
+        ...editingWorkflow.nodes.map((node: any) => {
+          if (node.type === WorkflowNodeType.AgentNode) {
+            const agent = agents.find(a => a.id === node.relateId)
+            return {
+              id: node.nodeId,
+              type: "agentNode",
+              position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
+              data: {
+                nodeId: node.nodeId,
+                agentId: node.relateId,
+                agentName: agent?.name || "Unknown Agent",
+                role: "",
+                onDelete: handleDeleteNode,
+                onRoleChange: handleRoleChange,
+              },
+            }
+          } else {
+            const workflow = workflows.find(w => w.id === node.relateId)
+            return {
+              id: node.nodeId,
+              type: "workflowNode",
+              position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
+              data: {
+                nodeId: node.nodeId,
+                workflowId: node.relateId,
+                workflowName: workflow?.name || "Unknown Workflow",
+                role: "",
+                onDelete: handleDeleteNode,
+                onRoleChange: handleRoleChange,
+              },
+            }
+          }
+        })
+      ]
+
+      // Convert edges to React Flow format
+      const loadedEdges: Edge[] = editingWorkflow.edges.map((edge: any) => ({
+        id: edge.edgeId,
+        source: edge.sourceNodeId,
+        target: edge.targetNodeId,
+        animated: edge.animated ?? true,
+        markerEnd: { type: MarkerType.ArrowClosed },
+      }))
+
+      setNodes(loadedNodes)
+      setEdges(loadedEdges)
+    }
+  }, [editingWorkflow, agents, workflows, handleDeleteNode, handleRoleChange])
 
   const onConnect = React.useCallback(
     (params: Connection) => {
@@ -278,31 +389,6 @@ export function VisualWorkflowBuilder({
     [nodes, edges, setNodes, setEdges]
   )
 
-  const handleDeleteNode = React.useCallback(
-    (nodeId: string) => {
-      // Prevent deleting start node
-      if (nodeId === START_NODE_ID) return
-
-      setNodes((nds) => nds.filter((node) => node.id !== nodeId))
-      setEdges((eds) =>
-        eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
-      )
-    },
-    [setNodes, setEdges]
-  )
-
-  const handleRoleChange = React.useCallback(
-    (nodeId: string, role: string) => {
-      setNodes((nds) =>
-        nds.map((node) =>
-          node.id === nodeId
-            ? { ...node, data: { ...node.data, role } }
-            : node
-        )
-      )
-    },
-    [setNodes]
-  )
 
   const addNode = React.useCallback((type: "agent" | "workflow", itemId: string) => {
     if (!itemId) return
@@ -666,218 +752,101 @@ export function VisualWorkflowBuilder({
     return 2
   }, [nodes, edges])
 
-  // Generate JSON representation of the workflow
-  const getFlowJson = React.useCallback(() => {
-    const effectivePattern = pattern === -1 ? detectPatternFromStructure() : pattern
-    const allNodes = nodes.filter(node => node.id !== START_NODE_ID)
-
-    const flowData = {
-      pattern: {
-        id: effectivePattern,
-        name: effectivePattern === 0 ? "Concurrent" :
-              effectivePattern === 1 ? "Sequential" :
-              effectivePattern === 2 ? "Group Chat" :
-              effectivePattern === 3 ? "Handoff" :
-              effectivePattern === 4 ? "Magentic" : "Unknown"
-      },
-      configuration: effectivePattern === 2 ? {
-        maximumIterationCount
-      } : undefined,
-      nodes: allNodes.map(node => ({
-        id: node.id,
-        type: node.type,
-        position: node.position,
-        data: {
-          ...(node.type === "agentNode" ? {
-            agentId: node.data.agentId,
-            agentName: node.data.agentName,
-            role: node.data.role || null
-          } : {}),
-          ...(node.type === "workflowNode" ? {
-            workflowId: node.data.workflowId,
-            workflowName: node.data.workflowName,
-            role: node.data.role || null
-          } : {})
-        }
-      })),
-      edges: edges.map(edge => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        animated: edge.animated
-      }))
+  const handleBuild = React.useCallback(async () => {
+    // Validation
+    if (!workflowName.trim()) {
+      toast.error("Please enter a workflow name")
+      return
     }
 
-    return JSON.stringify(flowData, null, 2)
-  }, [nodes, edges, pattern, maximumIterationCount, detectPatternFromStructure])
-
-  const handleBuild = React.useCallback(() => {
-    // Determine order based on detected pattern
-    let orderedAgents: { agentId: string; order: number; role: string | null }[]
-    let orderedWorkflows: { workflowId: string; order: number; role: string | null }[]
+    const allNodes = nodes.filter(node => node.id !== START_NODE_ID)
+    if (allNodes.length === 0) {
+      toast.error("Please add at least one node to the workflow")
+      return
+    }
 
     // If pattern is -1 (Manual), auto-detect the actual pattern from structure
     const effectivePattern = pattern === -1 ? detectPatternFromStructure() : pattern
 
-    // Filter out start node and separate agent/workflow nodes
-    const allNodes = nodes.filter(node => node.id !== START_NODE_ID)
-    const agentOnlyNodes = allNodes.filter(node => node.type === "agentNode")
-    const workflowOnlyNodes = allNodes.filter(node => node.type === "workflowNode")
+    // Convert ReactFlow nodes to WorkflowNode format
+    const workflowNodes = allNodes.map(node => ({
+      nodeId: node.id,
+      type: node.type === "agentNode" ? WorkflowNodeType.AgentNode : WorkflowNodeType.WorkflowNode,
+      relateId: node.type === "agentNode" ? node.data.agentId : node.data.workflowId,
+    }))
 
-    // Process nodes based on pattern
-    switch (effectivePattern) {
-      case 0: // Concurrent - no specific order, just use node list
-        orderedAgents = agentOnlyNodes.map((node, index) => ({
-          agentId: node.data.agentId,
-          order: index,
-          role: node.data.role?.trim() || null,
-        }))
-        orderedWorkflows = workflowOnlyNodes.map((node, index) => ({
-          workflowId: node.data.workflowId,
-          order: index + agentOnlyNodes.length,
-          role: node.data.role?.trim() || null,
-        }))
-        break
+    // Convert ReactFlow edges to WorkflowEdge format (exclude edges from/to start node)
+    const workflowEdges = edges
+      .filter(edge => edge.source !== START_NODE_ID && edge.target !== START_NODE_ID)
+      .map(edge => ({
+        edgeId: edge.id,
+        sourceNodeId: edge.source,
+        targetNodeId: edge.target,
+        animated: edge.animated ?? true,
+      }))
 
-      case 1: // Sequential - follow edge connections
-      case 3: // Handoff - similar to sequential
-        const sortedNodes = topologicalSort(allNodes, edges)
-        let agentIndex = 0
-        let workflowIndex = 0
-        orderedAgents = []
-        orderedWorkflows = []
-
-        sortedNodes.forEach((node) => {
-          if (node.type === "agentNode") {
-            orderedAgents.push({
-              agentId: node.data.agentId,
-              order: agentIndex++,
-              role: node.data.role?.trim() || null,
-            })
-          } else if (node.type === "workflowNode") {
-            orderedWorkflows.push({
-              workflowId: node.data.workflowId,
-              order: workflowIndex++,
-              role: node.data.role?.trim() || null,
-            })
-          }
-        })
-        break
-
-      case 2: // GroupChat - no specific order
-        orderedAgents = agentOnlyNodes.map((node, index) => ({
-          agentId: node.data.agentId,
-          order: index,
-          role: node.data.role?.trim() || null,
-        }))
-        orderedWorkflows = workflowOnlyNodes.map((node, index) => ({
-          workflowId: node.data.workflowId,
-          order: index + agentOnlyNodes.length,
-          role: node.data.role?.trim() || null,
-        }))
-        break
-
-      case 4: // Magentic - first node is orchestrator, rest are workers
-        // Find root node (node with no incoming edges, excluding start node) as orchestrator
-        const rootNode = allNodes.find(
-          (node) => !edges.some((edge) => edge.target === node.id && edge.source !== START_NODE_ID)
-        )
-
-        if (!rootNode && allNodes.length > 0) {
-          // If no clear root, use nodes in order
-          orderedAgents = agentOnlyNodes.map((node, index) => ({
-            agentId: node.data.agentId,
-            order: index,
-            role: node.data.role?.trim() || null,
-          }))
-          orderedWorkflows = workflowOnlyNodes.map((node, index) => ({
-            workflowId: node.data.workflowId,
-            order: index + agentOnlyNodes.length,
-            role: node.data.role?.trim() || null,
-          }))
-        } else if (rootNode) {
-          // Root is orchestrator
-          const remainingNodes = allNodes.filter((n) => n.id !== rootNode.id)
-
-          if (rootNode.type === "agentNode") {
-            orderedAgents = [
-              {
-                agentId: rootNode.data.agentId,
-                order: 0,
-                role: rootNode.data.role?.trim() || null,
-              },
-              ...remainingNodes
-                .filter((n) => n.type === "agentNode")
-                .map((node, index) => ({
-                  agentId: node.data.agentId,
-                  order: index + 1,
-                  role: node.data.role?.trim() || null,
-                })),
-            ]
-            orderedWorkflows = remainingNodes
-              .filter((n) => n.type === "workflowNode")
-              .map((node, index) => ({
-                workflowId: node.data.workflowId,
-                order: index,
-                role: node.data.role?.trim() || null,
-              }))
-          } else {
-            // Root is a workflow
-            orderedWorkflows = [
-              {
-                workflowId: rootNode.data.workflowId,
-                order: 0,
-                role: rootNode.data.role?.trim() || null,
-              },
-              ...remainingNodes
-                .filter((n) => n.type === "workflowNode")
-                .map((node, index) => ({
-                  workflowId: node.data.workflowId,
-                  order: index + 1,
-                  role: node.data.role?.trim() || null,
-                })),
-            ]
-            orderedAgents = remainingNodes
-              .filter((n) => n.type === "agentNode")
-              .map((node, index) => ({
-                agentId: node.data.agentId,
-                order: index,
-                role: node.data.role?.trim() || null,
-              }))
-          }
-        } else {
-          orderedAgents = []
-          orderedWorkflows = []
-        }
-        break
-
-      default:
-        orderedAgents = agentOnlyNodes.map((node, index) => ({
-          agentId: node.data.agentId,
-          order: index,
-          role: node.data.role?.trim() || null,
-        }))
-        orderedWorkflows = workflowOnlyNodes.map((node, index) => ({
-          workflowId: node.data.workflowId,
-          order: index + agentOnlyNodes.length,
-          role: node.data.role?.trim() || null,
-        }))
-    }
-
-    // Build configuration based on pattern
-    const configuration: { maximumIterationCount?: number } = {}
+    // Build configuration JSON based on pattern
+    let configurationJson: string | null = null
     if (effectivePattern === 2) {
       // Group Chat pattern
-      configuration.maximumIterationCount = maximumIterationCount
+      configurationJson = JSON.stringify({ maximumIterationCount })
     }
 
-    onBuild({
-      agents: orderedAgents,
-      workflows: orderedWorkflows.length > 0 ? orderedWorkflows : undefined,
+    const requestBody = {
+      name: workflowName,
+      description: workflowDescription || null,
       pattern: effectivePattern,
-      configuration: Object.keys(configuration).length > 0 ? configuration : undefined
-    })
-  }, [nodes, edges, pattern, maximumIterationCount, onBuild, detectPatternFromStructure])
+      configurationJson,
+      enable: workflowEnabled,
+      nodes: workflowNodes,
+      edges: workflowEdges,
+    }
+
+    setIsCreating(true)
+    try {
+      if (editingWorkflow) {
+        // Update existing workflow
+        await apiPut(`/api/workflows/${editingWorkflow.id}`, { body: requestBody })
+        toast.success(`Workflow "${workflowName}" updated successfully!`)
+      } else {
+        // Create new workflow
+        await apiPost("/api/workflows", { body: requestBody })
+        toast.success(`Workflow "${workflowName}" created successfully!`)
+      }
+
+      // Reset form
+      setWorkflowName("")
+      setWorkflowDescription("")
+      setWorkflowEnabled(true)
+      setPattern(-1)
+      setMaximumIterationCount(5)
+
+      // Clear canvas
+      setNodes(initialNodes)
+      setEdges([])
+
+      // Notify parent
+      onWorkflowCreated?.()
+    } catch (error) {
+      console.error("Failed to save workflow:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to save workflow")
+    } finally {
+      setIsCreating(false)
+    }
+  }, [
+    nodes,
+    edges,
+    pattern,
+    workflowName,
+    workflowDescription,
+    workflowEnabled,
+    maximumIterationCount,
+    editingWorkflow,
+    detectPatternFromStructure,
+    setNodes,
+    setEdges,
+    onWorkflowCreated,
+  ])
 
   return (
     <div
@@ -1008,36 +977,51 @@ export function VisualWorkflowBuilder({
           </div>
         )}
 
+        {/* Workflow Details */}
+        <div className="space-y-2">
+          <Label htmlFor="workflowName">Workflow Name *</Label>
+          <Input
+            id="workflowName"
+            value={workflowName}
+            onChange={(e) => setWorkflowName(e.target.value)}
+            placeholder="My Workflow"
+            className="w-[200px]"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="workflowDescription">Description</Label>
+          <Input
+            id="workflowDescription"
+            value={workflowDescription}
+            onChange={(e) => setWorkflowDescription(e.target.value)}
+            placeholder="Optional description"
+            className="w-[250px]"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 pt-6">
+          <input
+            id="workflowEnabled"
+            type="checkbox"
+            checked={workflowEnabled}
+            onChange={(e) => setWorkflowEnabled(e.target.checked)}
+            className="cursor-pointer"
+          />
+          <Label htmlFor="workflowEnabled" className="cursor-pointer">
+            Enabled
+          </Label>
+        </div>
+
         <Button
           onClick={handleBuild}
-          disabled={nodes.length === 0}
+          disabled={isCreating || !workflowName.trim() || nodes.filter(n => n.id !== START_NODE_ID).length === 0}
           variant="default"
         >
-          Build Workflow
+          {isCreating
+            ? (editingWorkflow ? "Updating..." : "Creating...")
+            : (editingWorkflow ? "Update Workflow" : "Build Workflow")}
         </Button>
-
-        <Dialog open={showJsonDialog} onOpenChange={setShowJsonDialog}>
-          <DialogTrigger asChild>
-            <Button
-              disabled={nodes.length === 0}
-              variant="outline"
-            >
-              <Code className="w-4 h-4 mr-2" />
-              View JSON
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Workflow JSON</DialogTitle>
-              <DialogDescription>
-                Current workflow configuration in JSON format
-              </DialogDescription>
-            </DialogHeader>
-            <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-xs">
-              <code>{getFlowJson()}</code>
-            </pre>
-          </DialogContent>
-        </Dialog>
       </div>
 
       {/* Canvas */}
@@ -1053,7 +1037,14 @@ export function VisualWorkflowBuilder({
           elementsSelectable={true}
           selectNodesOnDrag={false}
         >
-          <Controls />
+          <Controls>
+            <ControlButton
+              onClick={() => handleAutoLayout(pattern)}
+              title="Auto Layout - Arrange nodes based on current pattern"
+            >
+              <Grid size={16} />
+            </ControlButton>
+          </Controls>
           <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
         </ReactFlow>
       </div>

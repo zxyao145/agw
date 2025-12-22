@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "https://localhost:7026/"
+      "url": "http://localhost:5015/"
     }
   ],
   "paths": {
@@ -1199,7 +1199,30 @@
         }
       }
     },
-    "/api/workflows/{id}/agents": {
+    "/api/workflows/{id}/nodes": {
+      "get": {
+        "tags": [
+          "Workflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/workflows/{id}/edges": {
       "get": {
         "tags": [
           "Workflows"
@@ -1670,34 +1693,6 @@
           }
         }
       },
-      "WorkflowAgentBindingRequest": {
-        "required": [
-          "agentId",
-          "order",
-          "role"
-        ],
-        "type": "object",
-        "properties": {
-          "agentId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "order": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "role": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
       "WorkflowCreateRequest": {
         "required": [
           "name",
@@ -1705,7 +1700,8 @@
           "pattern",
           "configurationJson",
           "enable",
-          "agents"
+          "nodes",
+          "edges"
         ],
         "type": "object",
         "properties": {
@@ -1730,11 +1726,40 @@
           "enable": {
             "type": "boolean"
           },
-          "agents": {
+          "nodes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/WorkflowAgentBindingRequest"
+              "$ref": "#/components/schemas/WorkflowNodeRequest"
             }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowEdgeRequest"
+            }
+          }
+        }
+      },
+      "WorkflowEdgeRequest": {
+        "required": [
+          "edgeId",
+          "sourceNodeId",
+          "targetNodeId",
+          "animated"
+        ],
+        "type": "object",
+        "properties": {
+          "edgeId": {
+            "type": "string"
+          },
+          "sourceNodeId": {
+            "type": "string"
+          },
+          "targetNodeId": {
+            "type": "string"
+          },
+          "animated": {
+            "type": "boolean"
           }
         }
       },
@@ -1749,6 +1774,29 @@
           }
         }
       },
+      "WorkflowNodeRequest": {
+        "required": [
+          "nodeId",
+          "type",
+          "relateId"
+        ],
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/WorkflowNodeType"
+          },
+          "relateId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "WorkflowNodeType": {
+        "type": "integer"
+      },
       "WorkflowOrchestrationPattern": {
         "type": "integer"
       },
@@ -1759,7 +1807,8 @@
           "pattern",
           "configurationJson",
           "enable",
-          "agents"
+          "nodes",
+          "edges"
         ],
         "type": "object",
         "properties": {
@@ -1784,10 +1833,16 @@
           "enable": {
             "type": "boolean"
           },
-          "agents": {
+          "nodes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/WorkflowAgentBindingRequest"
+              "$ref": "#/components/schemas/WorkflowNodeRequest"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowEdgeRequest"
             }
           }
         }

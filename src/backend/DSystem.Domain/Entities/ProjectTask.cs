@@ -31,5 +31,4 @@ public class ProjectTask : BaseEntity
     public DateTime? FinishedTime { get; set; }
 
     public Project? Project { get; set; }
-    public Workflow? Workflow { get; set; }
 }

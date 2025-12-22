@@ -417,47 +417,41 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-21T15:18:56Z
-**Milestone**: Workflow graph structure implementation | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-22T15:48:20Z
+**Milestone**: Foreign key optimization + Frontend integration | **Branch**: main
 
 ### Technical Status
-- **Code Quality**: Excellent (19,242 code files)
-- **Architecture Health**: Active refactoring - graph structure migration
+- **Code Quality**: Excellent (19,256 code files)
+- **Architecture Health**: Stabilizing post-migration
 - **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, OpenTelemetry 1.14.0, Serilog 4.3.0)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with graph structure migration
+- [x] **CLAUDE.md**: Updated with FK removal and frontend progress
 - [x] **Configuration Sync**: All dependencies synchronized
-- [x] **API Documentation**: OpenAPI at `/openapi` endpoint (needs refresh after migration)
-- [x] **Database**: EF Core migration AddFlowEdge applied
+- [x] **API Documentation**: OpenAPI moved to frontend (src/frontend/web/openapi.json)
+- [x] **Database**: EF Core migration RemoveFK applied
 
-### Recent Activity (Since 2025-12-21T14:08:27Z checkpoint)
-- **Period**: 1.2 hours | **Commits**: Working session on backend architecture
+### Recent Activity (Since 2025-12-21T15:18:56Z checkpoint)
+- **Period**: 24.5 hours | **Commits**: 1 checkpoint commit
 - **Major Changes**:
-  - ✅ **Backend**: Workflow graph structure migration
-    - NEW: `WorkflowNode` entity replaces `WorkflowAgent`
-    - NEW: `WorkflowEdge` entity for explicit edge storage
-    - NEW: `WorkflowNodeType` enum (AgentNode=0, WorkflowNode=1)
-    - Graph-based structure: nodes (agents/workflows) + edges (connections)
-    - Properties: NodeId, Type, RelateId, SourceEdges, TargetEdges
-  - ✅ **Backend**: Database schema evolution
-    - EF Core migration: `20251221151718_AddFlowEdge` (157 lines)
-    - WorkflowNodes table with Type discriminator
-    - WorkflowEdges table with source/target references
-    - Removed WorkflowAgent join table
-    - Updated navigation properties in Workflow entity
-  - ✅ **Backend**: Service layer refactoring
-    - `WorkflowDomainService` updated for graph operations
-    - `WorkflowRuntimeService` adapted to node/edge model
-    - `WorkflowsController` endpoints modified
-    - `LlmDbContext` configuration for node/edge relationships
-  - ⚠️ **Breaking Changes**:
-    - Removed `WorkflowAgent` entity
-    - `Workflow.Agents` navigation removed
-    - Database migration required before deployment
-    - API contracts need client-side updates
-- **Activity Intensity**: High (Major architectural refactoring)
-- **Development Trend**: 🔄 Architectural Evolution (graph structure adoption)
+  - ✅ **Backend**: Database FK optimization
+    - NEW: `RemoveFK` migration (removes ProjectTasks→Workflows foreign key)
+    - Simplified ProjectTask entity (removed navigation constraint)
+    - WorkflowId now stored as simple reference without EF Core enforcement
+  - ✅ **Backend**: Workflow domain service refinements
+    - `WorkflowDomainService` updated for node/edge operations
+    - Enhanced support for graph-based workflow manipulation
+  - ✅ **Frontend**: Visual workflow builder integration
+    - React Flow components adapted to new graph API
+    - Workflow type definitions aligned with backend schema
+    - Visual workflow dialog handling node/edge state
+    - OpenAPI spec relocated to frontend project for better integration
+  - 🔄 **In Progress**: Full stack integration
+    - Backend graph structure complete
+    - Frontend visualization updated
+    - API contracts in transition
+- **Activity Intensity**: Medium (Stabilization + integration work)
+- **Development Trend**: ➡️ Consolidation (post-refactoring stabilization)
 
 ### Architecture Notes
 **Previous Structure** (WorkflowAgent):
@@ -484,16 +478,16 @@ Workflow 1--* WorkflowNode (Type: AgentNode|WorkflowNode)
 ### Recommended Actions
 1. ✅ ~~Graph structure entities~~ - **COMPLETED**
 2. ✅ ~~EF Core migration~~ - **COMPLETED**
-3. ⚠️ Test migration on development database
-4. Update API response DTOs to include edges
-5. Update frontend to save/load graph structure
-6. Implement circular dependency validation
-7. Add graph traversal utilities
-8. Update seed data for testing
-9. Add unit tests for graph operations
-10. Update API documentation
+3. ✅ ~~Remove redundant foreign keys~~ - **COMPLETED** (RemoveFK migration)
+4. ⚠️ Test complete workflow execution with new schema
+5. 🔄 **In Progress**: Frontend graph persistence (save/load node/edge state)
+6. Implement circular dependency validation in backend
+7. Add comprehensive unit tests for graph operations
+8. Update API documentation with graph endpoints
+9. Performance testing for complex workflow graphs
+10. Add workflow import/export functionality
 
-**Git Commit**: `541a1c6` (main) | **Health Score**: 9.7/10
+**Git Commit**: `d702fb8` (main) | **Health Score**: 9.5/10
 
 ---
 

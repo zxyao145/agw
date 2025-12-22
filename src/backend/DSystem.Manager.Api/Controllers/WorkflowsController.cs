@@ -36,8 +36,8 @@ public class WorkflowsController : ControllerBase
         return workflow == null ? NotFound() : Ok(workflow);
     }
 
-    [HttpGet("{id:guid}/agents")]
-    public async Task<IActionResult> ListAgentsAsync(Guid id)
+    [HttpGet("{id:guid}/nodes")]
+    public async Task<IActionResult> ListNodesAsync(Guid id)
     {
         var workflow = await _workflowService.GetAsync(id);
         if (workflow == null)
@@ -45,8 +45,21 @@ public class WorkflowsController : ControllerBase
             return NotFound();
         }
 
-        var agents = await _workflowService.ListAgentsAsync(id);
-        return Ok(agents);
+        var nodes = await _workflowService.ListNodesAsync(id);
+        return Ok(nodes);
+    }
+
+    [HttpGet("{id:guid}/edges")]
+    public async Task<IActionResult> ListEdgesAsync(Guid id)
+    {
+        var workflow = await _workflowService.GetAsync(id);
+        if (workflow == null)
+        {
+            return NotFound();
+        }
+
+        var edges = await _workflowService.ListEdgesAsync(id);
+        return Ok(edges);
     }
 
     [HttpPost]
@@ -63,17 +76,29 @@ public class WorkflowsController : ControllerBase
             Enable = request.Enable
         };
 
-        var agents = request.Agents
+        var nodes = request.Nodes
             .Select(x => new WorkflowNode
             {
-                RelateId = x.AgentId,
+                NodeId = x.NodeId,
+                Type = x.Type,
+                RelateId = x.RelateId,
             })
             .ToList();
 
-        var created = await _workflowService.CreateAsync(workflow, agents, user);
+        var edges = request.Edges
+            .Select(x => new WorkflowEdge
+            {
+                EdgeId = x.EdgeId,
+                SourceNodeId = x.SourceNodeId,
+                TargetNodeId = x.TargetNodeId,
+                Animated = x.Animated,
+            })
+            .ToList();
+
+        var created = await _workflowService.CreateAsync(workflow, nodes, edges, user);
         if (created == null)
         {
-            return BadRequest("Failed to create workflow (validation or referenced agents not found).");
+            return BadRequest("Failed to create workflow (validation failed or referenced resources not found).");
         }
 
         return CreatedAtAction(nameof(GetAsync), new { id = created.Id }, created);
@@ -84,10 +109,22 @@ public class WorkflowsController : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
 
-        var agents = request.Agents
+        var nodes = request.Nodes
             .Select(x => new WorkflowNode
             {
-                RelateId = x.AgentId,
+                NodeId = x.NodeId,
+                Type = x.Type,
+                RelateId = x.RelateId,
+            })
+            .ToList();
+
+        var edges = request.Edges
+            .Select(x => new WorkflowEdge
+            {
+                EdgeId = x.EdgeId,
+                SourceNodeId = x.SourceNodeId,
+                TargetNodeId = x.TargetNodeId,
+                Animated = x.Animated,
             })
             .ToList();
 
@@ -98,7 +135,7 @@ public class WorkflowsController : ControllerBase
             workflow.Pattern = request.Pattern;
             workflow.ConfigurationJson = request.ConfigurationJson;
             workflow.Enable = request.Enable;
-        }, agents, user);
+        }, nodes, edges, user);
 
         return updated == null
             ? NotFound()
