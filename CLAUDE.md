@@ -417,41 +417,41 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-22T15:48:20Z
-**Milestone**: Foreign key optimization + Frontend integration | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-22T16:00:49Z
+**Milestone**: Visual workflow builder refinement (start node removal) | **Branch**: main
 
 ### Technical Status
-- **Code Quality**: Excellent (19,256 code files)
-- **Architecture Health**: Stabilizing post-migration
+- **Code Quality**: Excellent (19,258 code files)
+- **Architecture Health**: Active refinement - UI simplification
 - **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, OpenTelemetry 1.14.0, Serilog 4.3.0)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with FK removal and frontend progress
+- [x] **CLAUDE.md**: Updated with visual workflow builder changes
 - [x] **Configuration Sync**: All dependencies synchronized
-- [x] **API Documentation**: OpenAPI moved to frontend (src/frontend/web/openapi.json)
-- [x] **Database**: EF Core migration RemoveFK applied
+- [x] **API Documentation**: OpenAPI at src/frontend/web/openapi.json
+- [x] **Database**: EF Core migrations current (AddFlowEdge, RemoveFK)
 
-### Recent Activity (Since 2025-12-21T15:18:56Z checkpoint)
-- **Period**: 24.5 hours | **Commits**: 1 checkpoint commit
+### Recent Activity (Since 2025-12-22T15:48:20Z checkpoint)
+- **Period**: 0.2 hours | **Commits**: Working session on frontend refinement
 - **Major Changes**:
-  - ✅ **Backend**: Database FK optimization
-    - NEW: `RemoveFK` migration (removes ProjectTasks→Workflows foreign key)
-    - Simplified ProjectTask entity (removed navigation constraint)
-    - WorkflowId now stored as simple reference without EF Core enforcement
-  - ✅ **Backend**: Workflow domain service refinements
-    - `WorkflowDomainService` updated for node/edge operations
-    - Enhanced support for graph-based workflow manipulation
-  - ✅ **Frontend**: Visual workflow builder integration
-    - React Flow components adapted to new graph API
-    - Workflow type definitions aligned with backend schema
-    - Visual workflow dialog handling node/edge state
-    - OpenAPI spec relocated to frontend project for better integration
-  - 🔄 **In Progress**: Full stack integration
-    - Backend graph structure complete
-    - Frontend visualization updated
-    - API contracts in transition
-- **Activity Intensity**: Medium (Stabilization + integration work)
-- **Development Trend**: ➡️ Consolidation (post-refactoring stabilization)
+  - ✅ **Frontend**: Visual workflow builder simplification
+    - REMOVED: Start node component and logic (230 lines deleted, 92 added)
+    - Simplified workflow graph model (no fixed start node)
+    - Updated auto-connect patterns for node-to-node connections
+    - Refactored auto-layout algorithm (full canvas utilization)
+    - Cleaned up node filtering logic throughout component
+    - Pattern behaviors updated:
+      - Concurrent (0): No edges, independent execution
+      - Sequential (1): A→B→C linear chain
+      - GroupChat (2): Circular node connections
+      - Handoff (3): Linear chain (same as Sequential)
+      - Magentic (4): Orchestrator↔Workers star topology
+  - ✅ **Code Quality**: Significant reduction in complexity
+    - Component size reduced by ~13% (1,163 lines → 1,025 lines)
+    - Removed unused imports (Play icon)
+    - Eliminated start node special cases
+- **Activity Intensity**: Medium (Focused refactoring)
+- **Development Trend**: ➡️ Simplification (removing unnecessary abstractions)
 
 ### Architecture Notes
 **Previous Structure** (WorkflowAgent):
@@ -479,15 +479,15 @@ Workflow 1--* WorkflowNode (Type: AgentNode|WorkflowNode)
 1. ✅ ~~Graph structure entities~~ - **COMPLETED**
 2. ✅ ~~EF Core migration~~ - **COMPLETED**
 3. ✅ ~~Remove redundant foreign keys~~ - **COMPLETED** (RemoveFK migration)
-4. ⚠️ Test complete workflow execution with new schema
-5. 🔄 **In Progress**: Frontend graph persistence (save/load node/edge state)
-6. Implement circular dependency validation in backend
-7. Add comprehensive unit tests for graph operations
-8. Update API documentation with graph endpoints
-9. Performance testing for complex workflow graphs
-10. Add workflow import/export functionality
+4. ✅ ~~Remove start node from visual workflow builder~~ - **COMPLETED**
+5. ⚠️ Test complete workflow execution with new schema
+6. 🔄 **In Progress**: Frontend graph persistence (save/load node/edge state)
+7. Implement circular dependency validation in backend
+8. Add comprehensive unit tests for graph operations
+9. Update API documentation with graph endpoints
+10. Performance testing for complex workflow graphs
 
-**Git Commit**: `d702fb8` (main) | **Health Score**: 9.5/10
+**Git Commit**: `889cfaa` (main) | **Health Score**: 9.6/10
 
 ---
 

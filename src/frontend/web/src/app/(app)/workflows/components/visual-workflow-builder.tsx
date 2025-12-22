@@ -29,14 +29,11 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Info, Play, Workflow, Bot, Grid } from "lucide-react"
+import { Info, Workflow, Bot, Grid } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AgentDto, WorkflowDto, WorkflowNodeType } from "@/types/workflow"
 import { toast } from "sonner"
 import { apiPost, apiPut } from "@/api/client"
-
-const START_NODE_ID = "__start_node__"
-
 
 type AgentNodeData = {
   nodeId: string
@@ -54,32 +51,6 @@ type WorkflowNodeData = {
   role: string
   onDelete: (id: string) => void
   onRoleChange: (id: string, role: string) => void
-}
-
-type StartNodeData = {
-  // Start node has no editable data
-}
-
-// Start Node Component (fixed, non-deletable)
-function StartNode({ data }: { data: StartNodeData }) {
-  return (
-    <Card className="min-w-20 shadow-lg p-0 gap-0  bg-green-50 border-green-300 rounded-full">
-      <div className="p-2 flex items-center gap-2">
-        <Play className="w-4 h-4 text-green-600" />
-        <CardTitle className="text-sm font-semibold text-green-700">
-          Start
-        </CardTitle>
-      </div>
-
-      {/* Output Handle (Source) */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="output"
-        className="w-3 h-3 bg-green-600! border-2 border-white"
-      />
-    </Card>
-  );
 }
 
 // Custom Workflow Node Component
@@ -179,7 +150,6 @@ function AgentNode({ data }: { data: AgentNodeData }) {
 }
 
 const nodeTypes: NodeTypes = {
-  startNode: StartNode,
   agentNode: AgentNode,
   workflowNode: WorkflowNode,
 }
@@ -206,19 +176,7 @@ export function VisualWorkflowBuilder({
   editingWorkflow,
   onWorkflowCreated,
 }: VisualWorkflowBuilderProps) {
-  // Initialize with start node
-  const initialNodes: Node[] = [
-    {
-      id: START_NODE_ID,
-      type: "startNode",
-      position: { x: 50, y: 250 },
-      data: {},
-      draggable: true,
-      selectable: false, // Cannot be selected for deletion
-    }
-  ]
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [selectedNodeType, setSelectedNodeType] = React.useState<"agent" | "workflow">("agent")
   const [selectedItemId, setSelectedItemId] = React.useState<string>("")
@@ -231,12 +189,9 @@ export function VisualWorkflowBuilder({
   const [workflowEnabled, setWorkflowEnabled] = React.useState(true)
   const [isCreating, setIsCreating] = React.useState(false)
 
-  
+
   const handleDeleteNode = React.useCallback(
     (nodeId: string) => {
-      // Prevent deleting start node
-      if (nodeId === START_NODE_ID) return
-
       setNodes((nds) => nds.filter((node) => node.id !== nodeId))
       setEdges((eds) =>
         eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
@@ -278,51 +233,39 @@ export function VisualWorkflowBuilder({
       }
 
       // Convert nodes to React Flow format
-      const loadedNodes: Node[] = [
-        // Always include start node
-        {
-          id: START_NODE_ID,
-          type: "startNode",
-          position: { x: 50, y: 250 },
-          data: {},
-          draggable: true,
-          selectable: false,
-        },
-        // Add workflow nodes
-        ...editingWorkflow.nodes.map((node: any) => {
-          if (node.type === WorkflowNodeType.AgentNode) {
-            const agent = agents.find(a => a.id === node.relateId)
-            return {
-              id: node.nodeId,
-              type: "agentNode",
-              position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-              data: {
-                nodeId: node.nodeId,
-                agentId: node.relateId,
-                agentName: agent?.name || "Unknown Agent",
-                role: "",
-                onDelete: handleDeleteNode,
-                onRoleChange: handleRoleChange,
-              },
-            }
-          } else {
-            const workflow = workflows.find(w => w.id === node.relateId)
-            return {
-              id: node.nodeId,
-              type: "workflowNode",
-              position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
-              data: {
-                nodeId: node.nodeId,
-                workflowId: node.relateId,
-                workflowName: workflow?.name || "Unknown Workflow",
-                role: "",
-                onDelete: handleDeleteNode,
-                onRoleChange: handleRoleChange,
-              },
-            }
+      const loadedNodes: Node[] = editingWorkflow.nodes.map((node: any) => {
+        if (node.type === WorkflowNodeType.AgentNode) {
+          const agent = agents.find(a => a.id === node.relateId)
+          return {
+            id: node.nodeId,
+            type: "agentNode",
+            position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
+            data: {
+              nodeId: node.nodeId,
+              agentId: node.relateId,
+              agentName: agent?.name || "Unknown Agent",
+              role: "",
+              onDelete: handleDeleteNode,
+              onRoleChange: handleRoleChange,
+            },
           }
-        })
-      ]
+        } else {
+          const workflow = workflows.find(w => w.id === node.relateId)
+          return {
+            id: node.nodeId,
+            type: "workflowNode",
+            position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
+            data: {
+              nodeId: node.nodeId,
+              workflowId: node.relateId,
+              workflowName: workflow?.name || "Unknown Workflow",
+              role: "",
+              onDelete: handleDeleteNode,
+              onRoleChange: handleRoleChange,
+            },
+          }
+        }
+      })
 
       // Convert edges to React Flow format
       const loadedEdges: Edge[] = editingWorkflow.edges.map((edge: any) => ({
@@ -369,20 +312,16 @@ export function VisualWorkflowBuilder({
           )
         }
 
-        // Delete selected nodes (except start node) and their connected edges
+        // Delete selected nodes and their connected edges
         if (selectedNodes.length > 0) {
-          const nodeIds = selectedNodes
-            .filter((node) => node.id !== START_NODE_ID) // Don't delete start node
-            .map((node) => node.id)
+          const nodeIds = selectedNodes.map((node) => node.id)
 
-          if (nodeIds.length > 0) {
-            setNodes((nds) => nds.filter((node) => !nodeIds.includes(node.id)))
-            setEdges((eds) =>
-              eds.filter(
-                (edge) => !nodeIds.includes(edge.source) && !nodeIds.includes(edge.target)
-              )
+          setNodes((nds) => nds.filter((node) => !nodeIds.includes(node.id)))
+          setEdges((eds) =>
+            eds.filter(
+              (edge) => !nodeIds.includes(edge.source) && !nodeIds.includes(edge.target)
             )
-          }
+          )
         }
       }
     },
@@ -446,8 +385,8 @@ export function VisualWorkflowBuilder({
 
   // Auto-connect nodes based on selected pattern
   const handleAutoConnect = React.useCallback((selectedPattern: number) => {
-    // Filter out start node to get only agent/workflow nodes
-    const agentNodes = nodes.filter(node => node.id !== START_NODE_ID)
+    // Get all nodes (no need to filter start node anymore)
+    const agentNodes = nodes
 
     if (agentNodes.length === 0) return
 
@@ -462,29 +401,11 @@ export function VisualWorkflowBuilder({
     const newEdges: Edge[] = []
 
     switch (selectedPattern) {
-      case 0: // Concurrent - start connects to all nodes
-        agentNodes.forEach(node => {
-          newEdges.push({
-            id: `e${START_NODE_ID}-${node.id}`,
-            source: START_NODE_ID,
-            target: node.id,
-            animated: true,
-            markerEnd: { type: MarkerType.ArrowClosed },
-          })
-        })
+      case 0: // Concurrent - no connections, all nodes run independently
+        // No edges needed for concurrent execution
         break
 
-      case 1: // Sequential - create linear chain Start→A→B→C
-        // Connect start to first node
-        if (agentNodes.length > 0) {
-          newEdges.push({
-            id: `e${START_NODE_ID}-${agentNodes[0].id}`,
-            source: START_NODE_ID,
-            target: agentNodes[0].id,
-            animated: true,
-            markerEnd: { type: MarkerType.ArrowClosed },
-          })
-        }
+      case 1: // Sequential - create linear chain A→B→C
         // Connect nodes in sequence
         for (let i = 0; i < agentNodes.length - 1; i++) {
           newEdges.push({
@@ -497,17 +418,7 @@ export function VisualWorkflowBuilder({
         }
         break
 
-      case 2: // GroupChat - start connects to all, nodes connect in a circle
-        // Connect start to all nodes
-        agentNodes.forEach(node => {
-          newEdges.push({
-            id: `e${START_NODE_ID}-${node.id}`,
-            source: START_NODE_ID,
-            target: node.id,
-            animated: true,
-            markerEnd: { type: MarkerType.ArrowClosed },
-          })
-        })
+      case 2: // GroupChat - nodes connect in a circle
         // Connect nodes in a circle
         for (let i = 0; i < agentNodes.length; i++) {
           const nextIndex = (i + 1) % agentNodes.length
@@ -522,16 +433,6 @@ export function VisualWorkflowBuilder({
         break
 
       case 3: // Handoff - same as sequential (linear chain)
-        // Connect start to first node
-        if (agentNodes.length > 0) {
-          newEdges.push({
-            id: `e${START_NODE_ID}-${agentNodes[0].id}`,
-            source: START_NODE_ID,
-            target: agentNodes[0].id,
-            animated: true,
-            markerEnd: { type: MarkerType.ArrowClosed },
-          })
-        }
         // Connect nodes in sequence
         for (let i = 0; i < agentNodes.length - 1; i++) {
           newEdges.push({
@@ -544,19 +445,10 @@ export function VisualWorkflowBuilder({
         }
         break
 
-      case 4: // Magentic - start to orchestrator, orchestrator connects to workers (star topology)
+      case 4: // Magentic - orchestrator connects to workers (star topology)
         if (agentNodes.length > 1) {
           const orchestrator = agentNodes[0]
           const workers = agentNodes.slice(1)
-
-          // Start → Orchestrator
-          newEdges.push({
-            id: `e${START_NODE_ID}-${orchestrator.id}`,
-            source: START_NODE_ID,
-            target: orchestrator.id,
-            animated: true,
-            markerEnd: { type: MarkerType.ArrowClosed },
-          })
 
           // Orchestrator ↔ Workers
           workers.forEach(worker => {
@@ -577,16 +469,8 @@ export function VisualWorkflowBuilder({
               markerEnd: { type: MarkerType.ArrowClosed },
             })
           })
-        } else if (agentNodes.length === 1) {
-          // Only one agent, just connect start to it
-          newEdges.push({
-            id: `e${START_NODE_ID}-${agentNodes[0].id}`,
-            source: START_NODE_ID,
-            target: agentNodes[0].id,
-            animated: true,
-            markerEnd: { type: MarkerType.ArrowClosed },
-          })
         }
+        // If only one agent, no edges needed
         break
     }
 
@@ -604,30 +488,19 @@ export function VisualWorkflowBuilder({
     const canvasWidth = 800
     const canvasHeight = 600
     const padding = 100
-    const startX = 50
-    const agentStartX = 200 // Agent/workflow nodes start from this X position
-
-    // Filter agent/workflow nodes for layout calculation
-    const agentNodes = layoutNodes.filter(n => n.id !== START_NODE_ID)
-    const startNode = layoutNodes.find(n => n.id === START_NODE_ID)
-
-    // Position start node on the left center
-    if (startNode) {
-      startNode.position = { x: startX, y: canvasHeight / 2 }
-    }
 
     switch (selectedPattern) {
       case 0: // Concurrent - grid layout for nodes
-        const cols = Math.ceil(Math.sqrt(agentNodes.length))
-        const rows = Math.ceil(agentNodes.length / cols)
-        const spacingX = (canvasWidth - agentStartX - padding) / Math.max(1, cols - 1)
+        const cols = Math.ceil(Math.sqrt(nodes.length))
+        const rows = Math.ceil(nodes.length / cols)
+        const spacingX = (canvasWidth - 2 * padding) / Math.max(1, cols - 1)
         const spacingY = (canvasHeight - 2 * padding) / Math.max(1, rows - 1)
 
-        agentNodes.forEach((node, i) => {
+        layoutNodes.forEach((node, i) => {
           const col = i % cols
           const row = Math.floor(i / cols)
           node.position = {
-            x: agentStartX + col * (cols === 1 ? 0 : spacingX),
+            x: padding + col * (cols === 1 ? 0 : spacingX),
             y: padding + row * (rows === 1 ? 0 : spacingY),
           }
         })
@@ -635,22 +508,22 @@ export function VisualWorkflowBuilder({
 
       case 1: // Sequential - horizontal line
       case 3: // Handoff - horizontal line
-        const seqSpacing = (canvasWidth - agentStartX - padding) / Math.max(1, agentNodes.length - 1)
-        agentNodes.forEach((node, i) => {
+        const seqSpacing = (canvasWidth - 2 * padding) / Math.max(1, nodes.length - 1)
+        layoutNodes.forEach((node, i) => {
           node.position = {
-            x: agentStartX + i * (agentNodes.length === 1 ? 0 : seqSpacing),
+            x: padding + i * (nodes.length === 1 ? 0 : seqSpacing),
             y: canvasHeight / 2,
           }
         })
         break
 
       case 2: // GroupChat - circular layout for nodes
-        const radius = Math.min(canvasWidth - agentStartX, canvasHeight) / 3
-        const centerX = (canvasWidth + agentStartX) / 2
+        const radius = Math.min(canvasWidth, canvasHeight) / 3
+        const centerX = canvasWidth / 2
         const centerY = canvasHeight / 2
-        const angleStep = (2 * Math.PI) / agentNodes.length
+        const angleStep = (2 * Math.PI) / nodes.length
 
-        agentNodes.forEach((node, i) => {
+        layoutNodes.forEach((node, i) => {
           const angle = i * angleStep - Math.PI / 2 // Start from top
           node.position = {
             x: centerX + radius * Math.cos(angle),
@@ -660,22 +533,22 @@ export function VisualWorkflowBuilder({
         break
 
       case 4: // Magentic - star topology (orchestrator in center)
-        if (agentNodes.length === 1) {
-          agentNodes[0].position = { x: (canvasWidth + agentStartX) / 2, y: canvasHeight / 2 }
-        } else if (agentNodes.length > 1) {
-          const centerX = (canvasWidth + agentStartX) / 2
+        if (nodes.length === 1) {
+          layoutNodes[0].position = { x: canvasWidth / 2, y: canvasHeight / 2 }
+        } else if (nodes.length > 1) {
+          const centerX = canvasWidth / 2
           const centerY = canvasHeight / 2
 
           // Orchestrator in center
-          agentNodes[0].position = { x: centerX, y: centerY }
+          layoutNodes[0].position = { x: centerX, y: centerY }
 
           // Workers in circle around orchestrator
-          const workerRadius = Math.min(canvasWidth - agentStartX, canvasHeight) / 3
-          const workerAngleStep = (2 * Math.PI) / (agentNodes.length - 1)
+          const workerRadius = Math.min(canvasWidth, canvasHeight) / 3
+          const workerAngleStep = (2 * Math.PI) / (nodes.length - 1)
 
-          for (let i = 1; i < agentNodes.length; i++) {
+          for (let i = 1; i < nodes.length; i++) {
             const angle = (i - 1) * workerAngleStep - Math.PI / 2
-            agentNodes[i].position = {
+            layoutNodes[i].position = {
               x: centerX + workerRadius * Math.cos(angle),
               y: centerY + workerRadius * Math.sin(angle),
             }
@@ -689,41 +562,33 @@ export function VisualWorkflowBuilder({
 
   // Auto-detect pattern based on graph structure
   const detectPatternFromStructure = React.useCallback((): number => {
-    // Filter out start node for pattern detection
-    const agentNodes = nodes.filter(node => node.id !== START_NODE_ID)
-
-    if (agentNodes.length === 0) return 0
-
-    // Filter edges to only include those between agent/workflow nodes
-    const agentEdges = edges.filter(
-      edge => edge.source !== START_NODE_ID && edge.target !== START_NODE_ID
-    )
+    if (nodes.length === 0) return 0
 
     // No edges → Concurrent
-    if (agentEdges.length === 0) return 0
+    if (edges.length === 0) return 0
 
     // Build in/out degree maps
     const inDegree = new Map<string, number>()
     const outDegree = new Map<string, number>()
 
-    agentNodes.forEach(node => {
+    nodes.forEach(node => {
       inDegree.set(node.id, 0)
       outDegree.set(node.id, 0)
     })
 
-    agentEdges.forEach(edge => {
+    edges.forEach(edge => {
       inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1)
       outDegree.set(edge.source, (outDegree.get(edge.source) || 0) + 1)
     })
 
     // Check for star topology (Magentic pattern)
-    const potentialOrchestrators = agentNodes.filter(node =>
+    const potentialOrchestrators = nodes.filter(node =>
       (outDegree.get(node.id) || 0) >= 2 && (inDegree.get(node.id) || 0) === 0
     )
 
     if (potentialOrchestrators.length === 1) {
       const orchestrator = potentialOrchestrators[0]
-      const workers = agentNodes.filter(n => n.id !== orchestrator.id)
+      const workers = nodes.filter(n => n.id !== orchestrator.id)
 
       const isStarTopology = workers.every(worker => {
         const workerInDegree = inDegree.get(worker.id) || 0
@@ -735,13 +600,13 @@ export function VisualWorkflowBuilder({
     }
 
     // Check for linear chain (Sequential pattern)
-    const isLinear = agentNodes.every(node =>
+    const isLinear = nodes.every(node =>
       (inDegree.get(node.id) || 0) <= 1 && (outDegree.get(node.id) || 0) <= 1
     )
 
     if (isLinear) {
-      const startNodes = agentNodes.filter(n => (inDegree.get(n.id) || 0) === 0)
-      const endNodes = agentNodes.filter(n => (outDegree.get(n.id) || 0) === 0)
+      const startNodes = nodes.filter(n => (inDegree.get(n.id) || 0) === 0)
+      const endNodes = nodes.filter(n => (outDegree.get(n.id) || 0) === 0)
 
       if (startNodes.length === 1 && endNodes.length === 1) {
         return 1 // Sequential
@@ -759,8 +624,7 @@ export function VisualWorkflowBuilder({
       return
     }
 
-    const allNodes = nodes.filter(node => node.id !== START_NODE_ID)
-    if (allNodes.length === 0) {
+    if (nodes.length === 0) {
       toast.error("Please add at least one node to the workflow")
       return
     }
@@ -769,21 +633,19 @@ export function VisualWorkflowBuilder({
     const effectivePattern = pattern === -1 ? detectPatternFromStructure() : pattern
 
     // Convert ReactFlow nodes to WorkflowNode format
-    const workflowNodes = allNodes.map(node => ({
+    const workflowNodes = nodes.map(node => ({
       nodeId: node.id,
       type: node.type === "agentNode" ? WorkflowNodeType.AgentNode : WorkflowNodeType.WorkflowNode,
       relateId: node.type === "agentNode" ? node.data.agentId : node.data.workflowId,
     }))
 
-    // Convert ReactFlow edges to WorkflowEdge format (exclude edges from/to start node)
-    const workflowEdges = edges
-      .filter(edge => edge.source !== START_NODE_ID && edge.target !== START_NODE_ID)
-      .map(edge => ({
-        edgeId: edge.id,
-        sourceNodeId: edge.source,
-        targetNodeId: edge.target,
-        animated: edge.animated ?? true,
-      }))
+    // Convert ReactFlow edges to WorkflowEdge format
+    const workflowEdges = edges.map(edge => ({
+      edgeId: edge.id,
+      sourceNodeId: edge.source,
+      targetNodeId: edge.target,
+      animated: edge.animated ?? true,
+    }))
 
     // Build configuration JSON based on pattern
     let configurationJson: string | null = null
@@ -822,7 +684,7 @@ export function VisualWorkflowBuilder({
       setMaximumIterationCount(5)
 
       // Clear canvas
-      setNodes(initialNodes)
+      setNodes([])
       setEdges([])
 
       // Notify parent
@@ -1015,7 +877,7 @@ export function VisualWorkflowBuilder({
 
         <Button
           onClick={handleBuild}
-          disabled={isCreating || !workflowName.trim() || nodes.filter(n => n.id !== START_NODE_ID).length === 0}
+          disabled={isCreating || !workflowName.trim() || nodes.length === 0}
           variant="default"
         >
           {isCreating
