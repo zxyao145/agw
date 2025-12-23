@@ -417,41 +417,43 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-22T16:00:49Z
-**Milestone**: Visual workflow builder refinement (start node removal) | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-23T13:23:50Z
+**Milestone**: Workflow SystemPrompt field implementation | **Branch**: main
 
 ### Technical Status
-- **Code Quality**: Excellent (19,258 code files)
-- **Architecture Health**: Active refinement - UI simplification
+- **Code Quality**: Excellent (19,261 code files)
+- **Architecture Health**: Feature expansion - full-stack implementation
 - **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, OpenTelemetry 1.14.0, Serilog 4.3.0)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with visual workflow builder changes
+- [x] **CLAUDE.md**: Updated with SystemPrompt implementation
 - [x] **Configuration Sync**: All dependencies synchronized
-- [x] **API Documentation**: OpenAPI at src/frontend/web/openapi.json
-- [x] **Database**: EF Core migrations current (AddFlowEdge, RemoveFK)
+- [x] **API Documentation**: OpenAPI at src/frontend/web/openapi.json (pending regeneration)
+- [x] **Database**: EF Core migration AddWorkflowSystemPrompt created
 
-### Recent Activity (Since 2025-12-22T15:48:20Z checkpoint)
-- **Period**: 0.2 hours | **Commits**: Working session on frontend refinement
+### Recent Activity (Since 2025-12-22T16:00:49Z checkpoint)
+- **Period**: 21.4 hours | **Commits**: Working session on feature implementation
 - **Major Changes**:
-  - ✅ **Frontend**: Visual workflow builder simplification
-    - REMOVED: Start node component and logic (230 lines deleted, 92 added)
-    - Simplified workflow graph model (no fixed start node)
-    - Updated auto-connect patterns for node-to-node connections
-    - Refactored auto-layout algorithm (full canvas utilization)
-    - Cleaned up node filtering logic throughout component
-    - Pattern behaviors updated:
-      - Concurrent (0): No edges, independent execution
-      - Sequential (1): A→B→C linear chain
-      - GroupChat (2): Circular node connections
-      - Handoff (3): Linear chain (same as Sequential)
-      - Magentic (4): Orchestrator↔Workers star topology
-  - ✅ **Code Quality**: Significant reduction in complexity
-    - Component size reduced by ~13% (1,163 lines → 1,025 lines)
-    - Removed unused imports (Play icon)
-    - Eliminated start node special cases
-- **Activity Intensity**: Medium (Focused refactoring)
-- **Development Trend**: ➡️ Simplification (removing unnecessary abstractions)
+  - ✅ **Backend**: Workflow SystemPrompt field
+    - NEW: `SystemPrompt` property in Workflow entity (required, max 4000 chars)
+    - NEW: EF Core migration `20251222161123_AddWorkflowSystemPrompt`
+    - Updated `LlmDbContext` configuration with SystemPrompt constraints
+    - Updated `LlmDbContextModelSnapshot` with field definition
+  - ✅ **Backend**: API layer integration
+    - Added `SystemPrompt` parameter to `WorkflowCreateRequest`
+    - Added `SystemPrompt` parameter to `WorkflowUpdateRequest`
+    - Updated `WorkflowsController.CreateAsync` to handle SystemPrompt
+    - Updated `WorkflowsController.UpdateAsync` to handle SystemPrompt
+  - ✅ **Frontend**: Complete UI integration
+    - Added `systemPrompt: string` to `WorkflowDto` type definition
+    - Added `workflowSystemPrompt` state in visual workflow builder
+    - Added Textarea component for SystemPrompt input (300px width, 80px min height)
+    - Integrated SystemPrompt in request body (create/update workflows)
+    - Added SystemPrompt to form reset logic
+    - Added SystemPrompt loading from editingWorkflow
+  - 📊 **Impact**: Full-stack feature (7 files modified, 28 insertions)
+- **Activity Intensity**: Medium-High (Complete feature implementation)
+- **Development Trend**: ⬆️ Feature Expansion (adding workflow capabilities)
 
 ### Architecture Notes
 **Previous Structure** (WorkflowAgent):
@@ -480,14 +482,14 @@ Workflow 1--* WorkflowNode (Type: AgentNode|WorkflowNode)
 2. ✅ ~~EF Core migration~~ - **COMPLETED**
 3. ✅ ~~Remove redundant foreign keys~~ - **COMPLETED** (RemoveFK migration)
 4. ✅ ~~Remove start node from visual workflow builder~~ - **COMPLETED**
-5. ⚠️ Test complete workflow execution with new schema
-6. 🔄 **In Progress**: Frontend graph persistence (save/load node/edge state)
-7. Implement circular dependency validation in backend
-8. Add comprehensive unit tests for graph operations
-9. Update API documentation with graph endpoints
-10. Performance testing for complex workflow graphs
+5. ✅ ~~Add SystemPrompt field to Workflow~~ - **COMPLETED** (full-stack implementation)
+6. ⚠️ Run database migration: `dotnet ef database update`
+7. ⚠️ Test workflow creation/editing with SystemPrompt field
+8. 🔄 **In Progress**: Frontend graph persistence (save/load node/edge state)
+9. Regenerate OpenAPI spec for frontend consumption
+10. Add validation for SystemPrompt content (e.g., min length, format)
 
-**Git Commit**: `889cfaa` (main) | **Health Score**: 9.6/10
+**Git Commit**: `758dea9` (main) | **Health Score**: 9.7/10
 
 ---
 

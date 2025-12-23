@@ -71,6 +71,7 @@ public class WorkflowsController : ControllerBase
         {
             Name = request.Name,
             Description = request.Description,
+            SystemPrompt = request.SystemPrompt,
             Pattern = request.Pattern,
             ConfigurationJson = request.ConfigurationJson,
             Enable = request.Enable
@@ -132,6 +133,7 @@ public class WorkflowsController : ControllerBase
         {
             workflow.Name = request.Name;
             workflow.Description = request.Description;
+            workflow.SystemPrompt = request.SystemPrompt;
             workflow.Pattern = request.Pattern;
             workflow.ConfigurationJson = request.ConfigurationJson;
             workflow.Enable = request.Enable;

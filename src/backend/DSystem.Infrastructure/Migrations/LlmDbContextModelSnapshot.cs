@@ -372,6 +372,11 @@ namespace DSystem.Infrastructure.Migrations
                     b.Property<int>("Pattern")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SystemPrompt")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT");
 

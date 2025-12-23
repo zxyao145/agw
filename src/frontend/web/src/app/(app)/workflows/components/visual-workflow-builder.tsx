@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Info, Workflow, Bot, Grid } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -186,6 +187,7 @@ export function VisualWorkflowBuilder({
   // Workflow creation states
   const [workflowName, setWorkflowName] = React.useState("")
   const [workflowDescription, setWorkflowDescription] = React.useState("")
+  const [workflowSystemPrompt, setWorkflowSystemPrompt] = React.useState("")
   const [workflowEnabled, setWorkflowEnabled] = React.useState(true)
   const [isCreating, setIsCreating] = React.useState(false)
 
@@ -219,6 +221,7 @@ export function VisualWorkflowBuilder({
       // Set form fields
       setWorkflowName(editingWorkflow.name)
       setWorkflowDescription(editingWorkflow.description || "")
+      setWorkflowSystemPrompt(editingWorkflow.systemPrompt || "")
       setWorkflowEnabled(editingWorkflow.enable)
       setPattern(editingWorkflow.pattern)
 
@@ -657,6 +660,7 @@ export function VisualWorkflowBuilder({
     const requestBody = {
       name: workflowName,
       description: workflowDescription || null,
+      systemPrompt: workflowSystemPrompt,
       pattern: effectivePattern,
       configurationJson,
       enable: workflowEnabled,
@@ -679,6 +683,7 @@ export function VisualWorkflowBuilder({
       // Reset form
       setWorkflowName("")
       setWorkflowDescription("")
+      setWorkflowSystemPrompt("")
       setWorkflowEnabled(true)
       setPattern(-1)
       setMaximumIterationCount(5)
@@ -859,6 +864,17 @@ export function VisualWorkflowBuilder({
             onChange={(e) => setWorkflowDescription(e.target.value)}
             placeholder="Optional description"
             className="w-[250px]"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="workflowSystemPrompt">System Prompt *</Label>
+          <Textarea
+            id="workflowSystemPrompt"
+            value={workflowSystemPrompt}
+            onChange={(e) => setWorkflowSystemPrompt(e.target.value)}
+            placeholder="Enter system prompt for the workflow..."
+            className="w-[300px] min-h-[80px]"
           />
         </div>
 

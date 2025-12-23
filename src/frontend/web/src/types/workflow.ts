@@ -43,6 +43,7 @@ export type WorkflowDto = {
   id: string
   name: string
   description: string | null
+  systemPrompt: string
   pattern: number
   configurationJson: string | null
   enable: boolean

@@ -17,6 +17,7 @@ public record WorkflowEdgeRequest(
 public record WorkflowCreateRequest(
     string Name,
     string? Description,
+    string SystemPrompt,
     WorkflowOrchestrationPattern Pattern,
     string? ConfigurationJson,
     bool Enable,
@@ -26,6 +27,7 @@ public record WorkflowCreateRequest(
 public record WorkflowUpdateRequest(
     string Name,
     string? Description,
+    string SystemPrompt,
     WorkflowOrchestrationPattern Pattern,
     string? ConfigurationJson,
     bool Enable,

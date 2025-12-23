@@ -87,6 +87,7 @@ public class LlmDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.SystemPrompt).IsRequired().HasMaxLength(4000);
             entity.Property(e => e.ConfigurationJson).HasMaxLength(16000);
         });
 
