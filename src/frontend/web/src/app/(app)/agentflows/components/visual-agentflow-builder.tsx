@@ -16,6 +16,7 @@ import ReactFlow, {
   BackgroundVariant,
   Handle,
   Position,
+  useReactFlow,
 } from "reactflow"
 import "reactflow/dist/style.css"
 import { Button } from "@/components/ui/button"
@@ -30,7 +31,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Info, Workflow, Bot, Grid } from "lucide-react"
+import { Info, Workflow, Bot, Grid, Maximize2 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AgentDto, AgentflowDto, AgentflowNodeType } from "@/types/agentflow"
 import { toast } from "sonner"
@@ -153,6 +154,28 @@ function AgentNode({ data }: { data: AgentNodeData }) {
 const nodeTypes: NodeTypes = {
   agentNode: AgentNode,
   agentflowNode: AgentflowNode,
+}
+
+// Custom Controls component that uses useReactFlow hook
+function FlowControls({ pattern, onAutoLayout }: { pattern: number; onAutoLayout: (pattern: number) => void }) {
+  const { fitView } = useReactFlow()
+
+  return (
+    <Controls>
+      <ControlButton
+        onClick={() => fitView({ padding: 0.2, duration: 200 })}
+        title="Fit View - Center and zoom to fit all nodes"
+      >
+        <Maximize2 size={16} />
+      </ControlButton>
+      <ControlButton
+        onClick={() => onAutoLayout(pattern)}
+        title="Auto Layout - Arrange nodes based on current pattern"
+      >
+        <Grid size={16} />
+      </ControlButton>
+    </Controls>
+  )
 }
 
 type VisualAgentflowBuilderProps = {
@@ -915,14 +938,7 @@ export function VisualAgentflowBuilder({
           elementsSelectable={true}
           selectNodesOnDrag={false}
         >
-          <Controls>
-            <ControlButton
-              onClick={() => handleAutoLayout(pattern)}
-              title="Auto Layout - Arrange nodes based on current pattern"
-            >
-              <Grid size={16} />
-            </ControlButton>
-          </Controls>
+          <FlowControls pattern={pattern} onAutoLayout={handleAutoLayout} />
           <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
         </ReactFlow>
       </div>

@@ -9,7 +9,6 @@ import {
   DialogDescription as UiDialogDescription,
   DialogHeader,
   DialogTitle as UiDialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { VisualAgentflowBuilder } from "./visual-agentflow-builder"
 import { X } from "lucide-react"
@@ -48,9 +47,6 @@ export function VisualAgentflowDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button className="cursor-pointer">Visual Builder</Button>
-      </DialogTrigger>
       <DialogContent
         className="fixed inset-0 w-screen h-screen max-w-none sm:max-w-none max-h-none m-0 p-6 flex flex-col translate-x-0 translate-y-0 rounded-none border-0"
         onInteractOutside={(e) => e.preventDefault()}

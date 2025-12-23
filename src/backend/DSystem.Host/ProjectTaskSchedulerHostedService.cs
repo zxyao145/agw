@@ -260,13 +260,13 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
         // 2) Try claim if expired OR renew if we already own it.
         var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($@"
-UPDATE ProjectLeases
-SET LockedBy = {_instanceId},
-    LockedUntilUtc = {until},
-    UpdateBy = {_instanceId},
-    UpdateTime = {now}
-WHERE ProjectId = {projectId}
-  AND (LockedUntilUtc <= {now} OR LockedBy = {_instanceId})
+UPDATE project_leases
+SET locked_by = {_instanceId},
+    locked_until_utc = {until},
+    update_by = {_instanceId},
+    update_time = {now}
+WHERE project_id = {projectId}
+  AND (locked_until_utc <= {now} OR locked_by = {_instanceId})
 ", cancellationToken);
 
         return affected == 1;
@@ -278,12 +278,12 @@ WHERE ProjectId = {projectId}
         var until = now.Add(_projectLeaseDuration);
 
         return dbContext.Database.ExecuteSqlInterpolatedAsync($@"
-UPDATE ProjectLeases
-SET LockedUntilUtc = {until},
-    UpdateBy = {_instanceId},
-    UpdateTime = {now}
+UPDATE project_leases
+SET locked_until_utc = {until},
+    update_by = {_instanceId},
+    update_time = {now}
 WHERE ProjectId = {projectId}
-  AND LockedBy = {_instanceId}
+  AND locked_by = {_instanceId}
 ", cancellationToken);
     }
 
@@ -292,12 +292,12 @@ WHERE ProjectId = {projectId}
         var now = DateTime.UtcNow;
 
         return dbContext.Database.ExecuteSqlInterpolatedAsync($@"
-UPDATE ProjectLeases
-SET LockedUntilUtc = {now},
-    UpdateBy = {_instanceId},
-    UpdateTime = {now}
-WHERE ProjectId = {projectId}
-  AND LockedBy = {_instanceId}
+UPDATE project_leases
+SET locked_until_utc = {now},
+    update_by = {_instanceId},
+    update_time = {now}
+WHERE project_id = {projectId}
+  AND locked_by = {_instanceId}
 ", cancellationToken);
     }
 }

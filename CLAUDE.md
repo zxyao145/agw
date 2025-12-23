@@ -417,70 +417,39 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-23T15:09:12Z
-**Milestone**: Comprehensive Workflow → Agentflow rename | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-23T15:53:43Z
+**Milestone**: Visual agentflow builder UX improvements | **Branch**: main
 
 ### Technical Status
-- **Code Quality**: Excellent (19,455 code files)
-- **Architecture Health**: Major refactoring - comprehensive terminology rename
+- **Code Quality**: Excellent (19,481 code files)
+- **Architecture Health**: Stable - UI refinement and bug fixes
 - **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, OpenTelemetry 1.14.0, Serilog 4.3.0)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with comprehensive rename details
+- [x] **CLAUDE.md**: Updated with latest development activity
 - [x] **Configuration Sync**: All dependencies synchronized
-- [x] **API Documentation**: Route changed to /api/agentflows (needs OpenAPI regeneration)
-- [x] **Database**: EF Core migration RenameWorkflowToAgentflow created
+- [x] **API Documentation**: OpenAPI regenerated (openapi.json updated)
+- [x] **Database**: All migrations applied
 
-### Recent Activity (Since 2025-12-23T13:23:50Z checkpoint)
-- **Period**: 1.75 hours | **Work Session**: Comprehensive codebase rename
+### Recent Activity (Since 2025-12-23T15:09:12Z checkpoint)
+- **Period**: 44 minutes | **Work Session**: Frontend UX improvements
 - **Major Changes**:
-  - ✅ **Backend Entities**: Complete rename (12 files)
-    - `Workflow.cs` → `Agentflow.cs`
-    - `WorkflowNode.cs` → `AgentflowNode.cs`
-    - `WorkflowEdge.cs` → `AgentflowEdge.cs`
-    - Updated all class names, properties, and navigation references
-  - ✅ **Backend Enums**: Complete rename
-    - `WorkflowNodeType` → `AgentflowNodeType`
-      - Enum value: `WorkflowNode` → `AgentflowNode`
-    - `WorkflowOrchestrationPattern` → `AgentflowOrchestrationPattern`
-  - ✅ **Backend Services**: Complete rename
-    - `WorkflowDomainService` → `AgentflowDomainService`
-    - `WorkflowRuntimeService` → `AgentflowRuntimeService`
-    - All method signatures and variable names updated
-    - Fixed interface: `IWorkflowAgentExecutor` → `IAgentflowAgentExecutor`
-  - ✅ **Backend API**: Complete rename
-    - Controller: `WorkflowsController` → `AgentflowsController`
-    - Route: `/api/workflows` → `/api/agentflows`
-    - Contracts: `WorkflowRequests.cs` → `AgentflowRequests.cs`
-    - All request/response types: `WorkflowCreateRequest` → `AgentflowCreateRequest`, etc.
-  - ✅ **Database Migration**: Table and column renames
-    - Migration: `20251223134655_RenameWorkflowToAgentflow.cs`
-    - Table: `Workflows` → `Agentflows`
-    - Columns: `WorkflowId` → `AgentflowId` (in AgentflowNodes, AgentflowEdges)
-    - All foreign keys and indexes updated
-    - Added explicit table mapping in DbContext
-  - ✅ **Database Context**: Configuration updated
-    - `LlmDbContext`: Added `ToTable("Agentflows")` mapping
-    - Updated composite keys: `AgentflowId, NodeId` and `AgentflowId, EdgeId`
-    - Updated foreign key relationships
-    - DbSet properties renamed: `Agentflows`, `AgentflowNodes`, `AgentflowEdges`
-  - ✅ **Frontend Types**: Complete rename
-    - File: `workflow.ts` → `agentflow.ts`
-    - Types: `WorkflowDto` → `AgentflowDto`
-    - Types: `WorkflowNodeDto` → `AgentflowNodeDto`
-    - Types: `WorkflowEdgeDto` → `AgentflowEdgeDto`
-    - Enum: `WorkflowNodeType` → `AgentflowNodeType`
-    - Properties: `workflowId` → `agentflowId`
-  - ✅ **Frontend Components**: Import and type updates (38 files)
-    - Updated all imports: `@/types/workflow` → `@/types/agentflow`
-    - Updated all type references in components
-    - Updated API endpoint calls: `/api/workflows` → `/api/agentflows`
-  - ⚠️ **Frontend Routes**: Pending rename (permission denied)
-    - Needs: `/workflows` → `/agentflows` folder rename
-    - Requires: Manual rename due to file lock
-- **Files Changed**: 50 (12 renamed, 15 modified, 1 added, 2 deleted)
-- **Activity Intensity**: Very High (Systematic refactoring across entire stack)
-- **Development Trend**: 🔄 Major Refactoring (terminology standardization)
+  - ✅ **Frontend UX Fixes** (3 files modified)
+    - Fixed visual agentflow dialog trigger issue (removed non-functional DialogTrigger)
+    - Added "Create Agentflow" button in page header
+    - Fixed systemPrompt field not loading when editing agentflows
+    - Added systemPrompt to editingAgentflow state type and population
+  - ✅ **React Flow Integration** (visual-agentflow-builder.tsx)
+    - Added working Fit View button using useReactFlow hook
+    - Created FlowControls component with proper ReactFlow context
+    - Added Maximize2 icon for fit view, Grid icon for auto-layout
+    - Improved control button tooltips and UX
+  - ✅ **OpenAPI Regeneration**
+    - Updated frontend OpenAPI types after backend route changes
+    - Synchronized API client with /api/agentflows endpoints
+- **Files Changed**: 6 (3 frontend components, 3 OpenAPI/config files)
+- **Activity Intensity**: Medium (Bug fixes and UX polish)
+- **Development Trend**: ➡️ Stable (Post-refactoring refinement)
 
 ### Rename Scope Summary
 **Backend (25 files)**:
@@ -503,28 +472,27 @@ This unified observability stack allows tracing a request from HTTP entry → da
 - Migration reversible via Down() method
 
 ### Recommended Actions
-1. ⚠️ **CRITICAL**: Complete frontend route folder rename
-   - Close any open files in `/src/frontend/web/src/app/(app)/workflows`
-   - Manually rename: `/workflows` → `/agentflows`
-   - Update sidebar navigation references
-2. ⚠️ Run database migration: `dotnet ef database update` (in DSystem.Host)
-3. ⚠️ Test renamed API endpoints: `GET /api/agentflows`, `POST /api/agentflows`
-4. ⚠️ Regenerate OpenAPI spec: Copy to frontend after route changes
-5. 🔍 Verify build: `dotnet build D-System.slnx` (currently passing)
-6. 🔍 Test frontend: `pnpm dev` and verify agentflows page loads
-7. 🔍 Search for remaining "Workflow" references: `grep -r "Workflow" src/`
-8. 📝 Update any documentation referencing "Workflow" terminology
-9. 🧪 Add integration tests for renamed endpoints
-10. 📋 Create git commit for this checkpoint
+1. ✅ ~~Graph structure entities~~ - **COMPLETED**
+2. ✅ ~~EF Core migration~~ - **COMPLETED**
+3. ✅ ~~Remove redundant foreign keys~~ - **COMPLETED** (RemoveFK migration)
+4. ✅ ~~Remove start node from visual workflow builder~~ - **COMPLETED**
+5. ✅ ~~Add SystemPrompt field to Workflow~~ - **COMPLETED** (full-stack implementation)
+6. ✅ ~~Fix visual dialog trigger issue~~ - **COMPLETED**
+7. ✅ ~~Fix systemPrompt loading in edit mode~~ - **COMPLETED**
+8. ✅ ~~Add Fit View button~~ - **COMPLETED**
+9. 🔄 Test all agentflow CRUD operations end-to-end
+10. 🔍 Verify React Flow controls work correctly (zoom, pan, fit view)
+11. 🧪 Add integration tests for agentflow visual builder
+12. 📝 Consider adding user documentation for visual builder features
 
-**Git Commit**: `9ae3e2b` (main) | **Health Score**: 9.5/10
+**Git Commit**: `6bdc8d5` (main) | **Health Score**: 9.5/10
 
 ---
 
 ### Previous Checkpoint
 
-**Project**: D-System | **Time**: 2025-12-23T13:23:50Z
-**Milestone**: Workflow SystemPrompt field implementation | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-23T15:09:12Z
+**Milestone**: Comprehensive Workflow → Agentflow rename | **Branch**: main
 
 ### Technical Status
 - **Code Quality**: Excellent (19,261 code files)
