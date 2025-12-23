@@ -367,6 +367,222 @@
         }
       }
     },
+    "/api/agentflows": {
+      "get": {
+        "tags": [
+          "Agentflows"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Agentflows"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowCreateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowCreateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agentflows/{id}": {
+      "get": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowUpdateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowUpdateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agentflows/{id}/nodes": {
+      "get": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agentflows/{id}/edges": {
+      "get": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agentflows/{id}/execute": {
+      "post": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowExecuteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowExecuteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/agents": {
       "get": {
         "tags": [
@@ -1071,222 +1287,6 @@
           }
         }
       }
-    },
-    "/api/workflows": {
-      "get": {
-        "tags": [
-          "Workflows"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Workflows"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkflowCreateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkflowCreateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkflowCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/workflows/{id}": {
-      "get": {
-        "tags": [
-          "Workflows"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Workflows"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkflowUpdateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkflowUpdateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkflowUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Workflows"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/workflows/{id}/nodes": {
-      "get": {
-        "tags": [
-          "Workflows"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/workflows/{id}/edges": {
-      "get": {
-        "tags": [
-          "Workflows"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/workflows/{id}/execute": {
-      "post": {
-        "tags": [
-          "Workflows"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkflowExecuteRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkflowExecuteRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkflowExecuteRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
     }
   },
   "components": {
@@ -1312,6 +1312,168 @@
           "modelProviderApiKeyId": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "AgentflowCreateRequest": {
+        "required": [
+          "name",
+          "description",
+          "systemPrompt",
+          "pattern",
+          "configurationJson",
+          "enable",
+          "nodes",
+          "edges"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "systemPrompt": {
+            "type": "string"
+          },
+          "pattern": {
+            "$ref": "#/components/schemas/AgentflowOrchestrationPattern"
+          },
+          "configurationJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enable": {
+            "type": "boolean"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowNodeRequest"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowEdgeRequest"
+            }
+          }
+        }
+      },
+      "AgentflowEdgeRequest": {
+        "required": [
+          "edgeId",
+          "sourceNodeId",
+          "targetNodeId",
+          "animated"
+        ],
+        "type": "object",
+        "properties": {
+          "edgeId": {
+            "type": "string"
+          },
+          "sourceNodeId": {
+            "type": "string"
+          },
+          "targetNodeId": {
+            "type": "string"
+          },
+          "animated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AgentflowExecuteRequest": {
+        "required": [
+          "input"
+        ],
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentflowNodeRequest": {
+        "required": [
+          "nodeId",
+          "type",
+          "relateId"
+        ],
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AgentflowNodeType"
+          },
+          "relateId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "AgentflowNodeType": {
+        "type": "integer"
+      },
+      "AgentflowOrchestrationPattern": {
+        "type": "integer"
+      },
+      "AgentflowUpdateRequest": {
+        "required": [
+          "name",
+          "description",
+          "systemPrompt",
+          "pattern",
+          "configurationJson",
+          "enable",
+          "nodes",
+          "edges"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "systemPrompt": {
+            "type": "string"
+          },
+          "pattern": {
+            "$ref": "#/components/schemas/AgentflowOrchestrationPattern"
+          },
+          "configurationJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enable": {
+            "type": "boolean"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowNodeRequest"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowEdgeRequest"
+            }
           }
         }
       },
@@ -1582,13 +1744,13 @@
       },
       "ProjectTaskCreateRequest": {
         "required": [
-          "workflowId",
+          "agentflowId",
           "description",
           "input"
         ],
         "type": "object",
         "properties": {
-          "workflowId": {
+          "agentflowId": {
             "type": "string",
             "format": "uuid"
           },
@@ -1692,160 +1854,6 @@
             "type": "string"
           }
         }
-      },
-      "WorkflowCreateRequest": {
-        "required": [
-          "name",
-          "description",
-          "pattern",
-          "configurationJson",
-          "enable",
-          "nodes",
-          "edges"
-        ],
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "pattern": {
-            "$ref": "#/components/schemas/WorkflowOrchestrationPattern"
-          },
-          "configurationJson": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "enable": {
-            "type": "boolean"
-          },
-          "nodes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WorkflowNodeRequest"
-            }
-          },
-          "edges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WorkflowEdgeRequest"
-            }
-          }
-        }
-      },
-      "WorkflowEdgeRequest": {
-        "required": [
-          "edgeId",
-          "sourceNodeId",
-          "targetNodeId",
-          "animated"
-        ],
-        "type": "object",
-        "properties": {
-          "edgeId": {
-            "type": "string"
-          },
-          "sourceNodeId": {
-            "type": "string"
-          },
-          "targetNodeId": {
-            "type": "string"
-          },
-          "animated": {
-            "type": "boolean"
-          }
-        }
-      },
-      "WorkflowExecuteRequest": {
-        "required": [
-          "input"
-        ],
-        "type": "object",
-        "properties": {
-          "input": {
-            "type": "string"
-          }
-        }
-      },
-      "WorkflowNodeRequest": {
-        "required": [
-          "nodeId",
-          "type",
-          "relateId"
-        ],
-        "type": "object",
-        "properties": {
-          "nodeId": {
-            "type": "string"
-          },
-          "type": {
-            "$ref": "#/components/schemas/WorkflowNodeType"
-          },
-          "relateId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
-      "WorkflowNodeType": {
-        "type": "integer"
-      },
-      "WorkflowOrchestrationPattern": {
-        "type": "integer"
-      },
-      "WorkflowUpdateRequest": {
-        "required": [
-          "name",
-          "description",
-          "pattern",
-          "configurationJson",
-          "enable",
-          "nodes",
-          "edges"
-        ],
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "pattern": {
-            "$ref": "#/components/schemas/WorkflowOrchestrationPattern"
-          },
-          "configurationJson": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "enable": {
-            "type": "boolean"
-          },
-          "nodes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WorkflowNodeRequest"
-            }
-          },
-          "edges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WorkflowEdgeRequest"
-            }
-          }
-        }
       }
     }
   },
@@ -1855,6 +1863,9 @@
     },
     {
       "name": "ProjectTasks"
+    },
+    {
+      "name": "Agentflows"
     },
     {
       "name": "Agents"
@@ -1870,9 +1881,6 @@
     },
     {
       "name": "Providers"
-    },
-    {
-      "name": "Workflows"
     }
   ]
 }

@@ -9,7 +9,7 @@
     "lint": "eslint ./src",
     "lint:fix": "eslint ./src --fix",
     "format": "prettier ./src",
-    "gen:openapi": "openapi-typescript ../../backend/openapi.json -o src/api/openapi.d.ts"
+    "gen:openapi": "openapi-typescript ./openapi.json -o src/api/openapi.d.ts"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.12",
