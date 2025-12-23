@@ -91,9 +91,9 @@ try
     builder.Services.AddScoped<AgentDomainService>();
     builder.Services.AddScoped<AgentRuntimeService>();
 
-    builder.Services.AddScoped<WorkflowDomainService>();
-    builder.Services.AddScoped<WorkflowRuntimeService>();
-    builder.Services.AddScoped<IWorkflowAgentExecutor, PlaceholderWorkflowAgentExecutor>();
+    builder.Services.AddScoped<AgentflowDomainService>();
+    builder.Services.AddScoped<AgentflowRuntimeService>();
+    builder.Services.AddScoped<IAgentflowAgentExecutor, PlaceholderAgentflowAgentExecutor>();
 
     builder.Services.AddScoped<ProjectDomainService>();
     builder.Services.AddScoped<ProjectTaskDomainService>();

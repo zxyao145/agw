@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import { ApiError, apiGet, apiPost, apiPut, apiDelete } from "@/api/client"
-import type { components } from "@/api/openapi"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -42,8 +41,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { VisualWorkflowDialog } from "./components/visual-workflow-dialog"
-import { AgentDto, WorkflowDto } from "@/types/workflow";
+import { VisualAgentflowDialog } from "../agentflows/components/visual-agentflow-dialog"
+import { AgentDto, AgentflowDto } from "@/types/agentflow";
 import { Pencil, Trash2 } from "lucide-react"
 
 function getPatternName(pattern: number): string {
@@ -74,14 +73,14 @@ function getApiErrorMessage(error: unknown): string {
   return "Unknown error"
 }
 
-export default function WorkflowsPage() {
+export default function AgentflowsPage() {
   const queryClient = useQueryClient()
 
-  const workflowsQuery = useQuery({
-    queryKey: ["workflows"],
+  const agentflowsQuery = useQuery({
+    queryKey: ["agentflows"],
     queryFn: async () => {
       // OpenAPI currently doesn't declare response schemas.
-      return (await apiGet("/api/workflows")) as unknown as WorkflowDto[]
+      return (await apiGet("/api/agentflows")) as unknown as AgentflowDto[]
     },
   })
 
@@ -94,7 +93,7 @@ export default function WorkflowsPage() {
   })
 
   const [visualOpen, setVisualOpen] = React.useState(false)
-  const [editingWorkflow, setEditingWorkflow] = React.useState<{
+  const [editingAgentflow, setEditingAgentflow] = React.useState<{
     id: string
     name: string
     description: string | null
@@ -105,26 +104,26 @@ export default function WorkflowsPage() {
     edges: any[]
   } | null>(null)
 
-  const updateWorkflowMutation = useMutation({
+  const updateAgentflowMutation = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: any }) => {
-      return await apiPut(`/api/workflows/${id}`, { body })
+      return await apiPut(`/api/agentflows/${id}`, { body })
     },
     onSuccess: async () => {
-      toast.success("Workflow updated")
-      await queryClient.invalidateQueries({ queryKey: ["workflows"] })
+      toast.success("Agentflow updated")
+      await queryClient.invalidateQueries({ queryKey: ["agentflows"] })
     },
     onError: (error) => {
       toast.error(`Update failed: ${getApiErrorMessage(error)}`)
     },
   })
 
-  const deleteWorkflowMutation = useMutation({
+  const deleteAgentflowMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiDelete(`/api/workflows/${id}`)
+      return await apiDelete(`/api/agentflows/${id}`)
     },
     onSuccess: async () => {
-      toast.success("Workflow deleted")
-      await queryClient.invalidateQueries({ queryKey: ["workflows"] })
+      toast.success("Agentflow deleted")
+      await queryClient.invalidateQueries({ queryKey: ["agentflows"] })
     },
     onError: (error) => {
       toast.error(`Delete failed: ${getApiErrorMessage(error)}`)
@@ -132,55 +131,55 @@ export default function WorkflowsPage() {
   })
 
   const handleToggleEnabled = React.useCallback(
-    async (workflow: WorkflowDto) => {
+    async (agentflow: AgentflowDto) => {
       try {
-        // We need to get full workflow data including nodes and edges
-        const nodes = (await apiGet(`/api/workflows/${workflow.id}/nodes`)) as any[]
-        const edges = (await apiGet(`/api/workflows/${workflow.id}/edges`)) as any[]
+        // We need to get full agentflow data including nodes and edges
+        const nodes = (await apiGet(`/api/agentflows/${agentflow.id}/nodes`)) as any[]
+        const edges = (await apiGet(`/api/agentflows/${agentflow.id}/edges`)) as any[]
 
-        updateWorkflowMutation.mutate({
-          id: workflow.id,
+        updateAgentflowMutation.mutate({
+          id: agentflow.id,
           body: {
-            name: workflow.name,
-            description: workflow.description,
-            pattern: workflow.pattern,
-            configurationJson: workflow.configurationJson,
-            enable: !workflow.enable,
+            name: agentflow.name,
+            description: agentflow.description,
+            pattern: agentflow.pattern,
+            configurationJson: agentflow.configurationJson,
+            enable: !agentflow.enable,
             nodes: nodes || [],
             edges: edges || [],
           },
         })
       } catch (error) {
-        toast.error("Failed to fetch workflow details")
+        toast.error("Failed to fetch agentflow details")
       }
     },
-    [updateWorkflowMutation]
+    [updateAgentflowMutation]
   )
 
   const handleDelete = React.useCallback(
-    (workflow: WorkflowDto) => {
-      if (window.confirm(`Are you sure you want to delete "${workflow.name}"?`)) {
-        deleteWorkflowMutation.mutate(workflow.id)
+    (agentflow: AgentflowDto) => {
+      if (window.confirm(`Are you sure you want to delete "${agentflow.name}"?`)) {
+        deleteAgentflowMutation.mutate(agentflow.id)
       }
     },
-    [deleteWorkflowMutation]
+    [deleteAgentflowMutation]
   )
 
   const handleEdit = React.useCallback(
-    async (workflow: WorkflowDto) => {
+    async (agentflow: AgentflowDto) => {
       try {
-        // Fetch workflow nodes and edges
-        const nodes = (await apiGet(`/api/workflows/${workflow.id}/nodes`)) as any[]
-        const edges = (await apiGet(`/api/workflows/${workflow.id}/edges`)) as any[]
+        // Fetch agentflow nodes and edges
+        const nodes = (await apiGet(`/api/agentflows/${agentflow.id}/nodes`)) as any[]
+        const edges = (await apiGet(`/api/agentflows/${agentflow.id}/edges`)) as any[]
 
-        // Set editing workflow data
-        setEditingWorkflow({
-          id: workflow.id,
-          name: workflow.name,
-          description: workflow.description,
-          pattern: workflow.pattern,
-          configurationJson: workflow.configurationJson,
-          enable: workflow.enable,
+        // Set editing agentflow data
+        setEditingAgentflow({
+          id: agentflow.id,
+          name: agentflow.name,
+          description: agentflow.description,
+          pattern: agentflow.pattern,
+          configurationJson: agentflow.configurationJson,
+          enable: agentflow.enable,
           nodes: nodes || [],
           edges: edges || [],
         })
@@ -188,22 +187,22 @@ export default function WorkflowsPage() {
         // Open visual builder
         setVisualOpen(true)
       } catch (error) {
-        toast.error("Failed to load workflow details")
-        console.error("Failed to load workflow:", error)
+        toast.error("Failed to load agentflow details")
+        console.error("Failed to load agentflow:", error)
       }
     },
     []
   )
 
-  const handleWorkflowCreated = React.useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ["workflows"] })
+  const handleAgentflowCreated = React.useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["agentflows"] })
     setVisualOpen(false)
-    setEditingWorkflow(null)
+    setEditingAgentflow(null)
   }, [queryClient])
 
   const handleVisualDialogClose = React.useCallback(() => {
     setVisualOpen(false)
-    setEditingWorkflow(null)
+    setEditingAgentflow(null)
   }, [])
 
 
@@ -211,9 +210,9 @@ export default function WorkflowsPage() {
     <div className="space-y-6 w-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold">Workflows</h1>
+          <h1 className="truncate text-xl font-semibold">Agentflows</h1>
           <p className="text-sm text-muted-foreground">
-            Manage workflows and execute them.
+            Manage agentflows and execute them.
           </p>
         </div>
 
@@ -221,19 +220,19 @@ export default function WorkflowsPage() {
           <Button
             variant="outline"
             className="cursor-pointer"
-            onClick={() => workflowsQuery.refetch()}
-            disabled={workflowsQuery.isFetching}
+            onClick={() => agentflowsQuery.refetch()}
+            disabled={agentflowsQuery.isFetching}
           >
             Refresh
           </Button>
 
-          <VisualWorkflowDialog
+          <VisualAgentflowDialog
             open={visualOpen}
             onOpenChange={handleVisualDialogClose}
             agents={agentsQuery.data || []}
-            workflows={workflowsQuery.data || []}
-            editingWorkflow={editingWorkflow}
-            onWorkflowCreated={handleWorkflowCreated}
+            agentflows={agentflowsQuery.data || []}
+            editingAgentflow={editingAgentflow}
+            onAgentflowCreated={handleAgentflowCreated}
           />
 
         </div>
@@ -241,20 +240,20 @@ export default function WorkflowsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Workflows</CardTitle>
+          <CardTitle>Agentflows</CardTitle>
           <CardDescription>
-            Fetched from <code>/api/workflows</code>.
+            Fetched from <code>/api/agentflows</code>.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {workflowsQuery.isLoading ? (
+          {agentflowsQuery.isLoading ? (
             <div className="text-sm text-muted-foreground">Loading...</div>
-          ) : workflowsQuery.isError ? (
+          ) : agentflowsQuery.isError ? (
             <div className="text-sm text-destructive">
-              Failed to load workflows:{" "}
-              {getApiErrorMessage(workflowsQuery.error)}
+              Failed to load agentflows:{" "}
+              {getApiErrorMessage(agentflowsQuery.error)}
             </div>
-          ) : workflowsQuery.data && workflowsQuery.data.length > 0 ? (
+          ) : agentflowsQuery.data && agentflowsQuery.data.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -267,25 +266,25 @@ export default function WorkflowsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {workflowsQuery.data.map((workflow) => (
-                  <TableRow key={workflow.id}>
-                    <TableCell className="font-medium">{workflow.name}</TableCell>
+                {agentflowsQuery.data.map((agentflow) => (
+                  <TableRow key={agentflow.id}>
+                    <TableCell className="font-medium">{agentflow.name}</TableCell>
                     <TableCell className="max-w-xs truncate">
-                      {workflow.description || "-"}
+                      {agentflow.description || "-"}
                     </TableCell>
-                    <TableCell>{getPatternName(workflow.pattern)}</TableCell>
+                    <TableCell>{getPatternName(agentflow.pattern)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {workflow.createTime
-                        ? new Date(workflow.createTime).toLocaleString()
+                      {agentflow.createTime
+                        ? new Date(agentflow.createTime).toLocaleString()
                         : "-"}
                     </TableCell>
                     <TableCell className="text-center">
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={workflow.enable}
-                          onChange={() => handleToggleEnabled(workflow)}
-                          disabled={updateWorkflowMutation.isPending}
+                          checked={agentflow.enable}
+                          onChange={() => handleToggleEnabled(agentflow)}
+                          disabled={updateAgentflowMutation.isPending}
                           className="sr-only peer"
                         />
                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
@@ -296,17 +295,17 @@ export default function WorkflowsPage() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          onClick={() => handleEdit(workflow)}
-                          title="Edit workflow"
+                          onClick={() => handleEdit(agentflow)}
+                          title="Edit agentflow"
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          onClick={() => handleDelete(workflow)}
-                          disabled={deleteWorkflowMutation.isPending}
-                          title="Delete workflow"
+                          onClick={() => handleDelete(agentflow)}
+                          disabled={deleteAgentflowMutation.isPending}
+                          title="Delete agentflow"
                           className="text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -319,7 +318,7 @@ export default function WorkflowsPage() {
             </Table>
           ) : (
             <div className="text-sm text-muted-foreground">
-              No workflows found. Create one to get started.
+              No agentflows found. Create one to get started.
             </div>
           )}
         </CardContent>

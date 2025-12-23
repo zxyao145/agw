@@ -44,7 +44,7 @@ public class ProjectTasksController : ControllerBase
         var task = new ProjectTask
         {
             ProjectId = projectId,
-            WorkflowId = request.WorkflowId,
+            AgentflowId = request.AgentflowId,
             Description = request.Description,
             Input = request.Input,
             Status = ProjectTaskStatus.Pending
@@ -53,7 +53,7 @@ public class ProjectTasksController : ControllerBase
         var created = await _taskService.CreateAsync(task, user);
         if (created == null)
         {
-            return BadRequest("Failed to create task (project/workflow invalid or input missing).");
+            return BadRequest("Failed to create task (project/agentflow invalid or input missing).");
         }
 
         // Asynchronous execution: scheduler will pick it up.
@@ -119,7 +119,7 @@ public class ProjectTasksController : ControllerBase
         new(
             task.Id,
             task.ProjectId,
-            task.WorkflowId,
+            task.AgentflowId,
             task.Status,
             task.Description,
             task.Input,

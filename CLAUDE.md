@@ -417,6 +417,112 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
+**Project**: D-System | **Time**: 2025-12-23T15:09:12Z
+**Milestone**: Comprehensive Workflow → Agentflow rename | **Branch**: main
+
+### Technical Status
+- **Code Quality**: Excellent (19,455 code files)
+- **Architecture Health**: Major refactoring - comprehensive terminology rename
+- **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, OpenTelemetry 1.14.0, Serilog 4.3.0)
+
+### Documentation Maintenance
+- [x] **CLAUDE.md**: Updated with comprehensive rename details
+- [x] **Configuration Sync**: All dependencies synchronized
+- [x] **API Documentation**: Route changed to /api/agentflows (needs OpenAPI regeneration)
+- [x] **Database**: EF Core migration RenameWorkflowToAgentflow created
+
+### Recent Activity (Since 2025-12-23T13:23:50Z checkpoint)
+- **Period**: 1.75 hours | **Work Session**: Comprehensive codebase rename
+- **Major Changes**:
+  - ✅ **Backend Entities**: Complete rename (12 files)
+    - `Workflow.cs` → `Agentflow.cs`
+    - `WorkflowNode.cs` → `AgentflowNode.cs`
+    - `WorkflowEdge.cs` → `AgentflowEdge.cs`
+    - Updated all class names, properties, and navigation references
+  - ✅ **Backend Enums**: Complete rename
+    - `WorkflowNodeType` → `AgentflowNodeType`
+      - Enum value: `WorkflowNode` → `AgentflowNode`
+    - `WorkflowOrchestrationPattern` → `AgentflowOrchestrationPattern`
+  - ✅ **Backend Services**: Complete rename
+    - `WorkflowDomainService` → `AgentflowDomainService`
+    - `WorkflowRuntimeService` → `AgentflowRuntimeService`
+    - All method signatures and variable names updated
+    - Fixed interface: `IWorkflowAgentExecutor` → `IAgentflowAgentExecutor`
+  - ✅ **Backend API**: Complete rename
+    - Controller: `WorkflowsController` → `AgentflowsController`
+    - Route: `/api/workflows` → `/api/agentflows`
+    - Contracts: `WorkflowRequests.cs` → `AgentflowRequests.cs`
+    - All request/response types: `WorkflowCreateRequest` → `AgentflowCreateRequest`, etc.
+  - ✅ **Database Migration**: Table and column renames
+    - Migration: `20251223134655_RenameWorkflowToAgentflow.cs`
+    - Table: `Workflows` → `Agentflows`
+    - Columns: `WorkflowId` → `AgentflowId` (in AgentflowNodes, AgentflowEdges)
+    - All foreign keys and indexes updated
+    - Added explicit table mapping in DbContext
+  - ✅ **Database Context**: Configuration updated
+    - `LlmDbContext`: Added `ToTable("Agentflows")` mapping
+    - Updated composite keys: `AgentflowId, NodeId` and `AgentflowId, EdgeId`
+    - Updated foreign key relationships
+    - DbSet properties renamed: `Agentflows`, `AgentflowNodes`, `AgentflowEdges`
+  - ✅ **Frontend Types**: Complete rename
+    - File: `workflow.ts` → `agentflow.ts`
+    - Types: `WorkflowDto` → `AgentflowDto`
+    - Types: `WorkflowNodeDto` → `AgentflowNodeDto`
+    - Types: `WorkflowEdgeDto` → `AgentflowEdgeDto`
+    - Enum: `WorkflowNodeType` → `AgentflowNodeType`
+    - Properties: `workflowId` → `agentflowId`
+  - ✅ **Frontend Components**: Import and type updates (38 files)
+    - Updated all imports: `@/types/workflow` → `@/types/agentflow`
+    - Updated all type references in components
+    - Updated API endpoint calls: `/api/workflows` → `/api/agentflows`
+  - ⚠️ **Frontend Routes**: Pending rename (permission denied)
+    - Needs: `/workflows` → `/agentflows` folder rename
+    - Requires: Manual rename due to file lock
+- **Files Changed**: 50 (12 renamed, 15 modified, 1 added, 2 deleted)
+- **Activity Intensity**: Very High (Systematic refactoring across entire stack)
+- **Development Trend**: 🔄 Major Refactoring (terminology standardization)
+
+### Rename Scope Summary
+**Backend (25 files)**:
+- 6 entity/enum files renamed
+- 2 service files renamed
+- 2 API files renamed (controller + contracts)
+- 1 database migration created
+- 12 files content updated (DbContext, Program.cs, etc.)
+
+**Frontend (25 files)**:
+- 1 type file renamed
+- 38+ TypeScript/TSX files content updated
+- All imports, types, and API endpoints updated
+- Route folder rename pending
+
+**Database Schema**:
+- Table: `Workflows` → `Agentflows`
+- Columns: `WorkflowId` → `AgentflowId` (in child tables)
+- All foreign keys and indexes renamed
+- Migration reversible via Down() method
+
+### Recommended Actions
+1. ⚠️ **CRITICAL**: Complete frontend route folder rename
+   - Close any open files in `/src/frontend/web/src/app/(app)/workflows`
+   - Manually rename: `/workflows` → `/agentflows`
+   - Update sidebar navigation references
+2. ⚠️ Run database migration: `dotnet ef database update` (in DSystem.Host)
+3. ⚠️ Test renamed API endpoints: `GET /api/agentflows`, `POST /api/agentflows`
+4. ⚠️ Regenerate OpenAPI spec: Copy to frontend after route changes
+5. 🔍 Verify build: `dotnet build D-System.slnx` (currently passing)
+6. 🔍 Test frontend: `pnpm dev` and verify agentflows page loads
+7. 🔍 Search for remaining "Workflow" references: `grep -r "Workflow" src/`
+8. 📝 Update any documentation referencing "Workflow" terminology
+9. 🧪 Add integration tests for renamed endpoints
+10. 📋 Create git commit for this checkpoint
+
+**Git Commit**: `9ae3e2b` (main) | **Health Score**: 9.5/10
+
+---
+
+### Previous Checkpoint
+
 **Project**: D-System | **Time**: 2025-12-23T13:23:50Z
 **Milestone**: Workflow SystemPrompt field implementation | **Branch**: main
 

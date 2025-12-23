@@ -22,12 +22,14 @@ public static class DependencyInjection
             {
                 case "postgres":
                 case "postgresql":
-                    options.UseNpgsql(settings.ConnectionString);
+                    options.UseNpgsql(settings.ConnectionString)
+                        .UseSnakeCaseNamingConvention();
                     break;
                 default:
                     options.UseSqlite(string.IsNullOrWhiteSpace(settings.ConnectionString)
-                        ? "Data Source=llmmanager.db"
-                        : settings.ConnectionString);
+                        ? "Data Source=d_system.db"
+                        : settings.ConnectionString)
+                        .UseSnakeCaseNamingConvention();
                     break;
             }
         });

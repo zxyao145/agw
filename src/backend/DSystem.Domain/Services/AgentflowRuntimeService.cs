@@ -5,14 +5,10 @@ using DSystem.Domain.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
-using System.ComponentModel.DataAnnotations;
-using System.Runtime.Serialization;
-using System.Threading;
-using Workflow = DSystem.Domain.Entities.Workflow;
 
 namespace DSystem.Domain.Services;
 
-public interface IWorkflowAgentExecutor
+public interface IAgentflowAgentExecutor
 {
     Task<string> ExecuteAsync(AiAgent agent, string input, CancellationToken cancellationToken = default);
 }
@@ -20,7 +16,7 @@ public interface IWorkflowAgentExecutor
 /// <summary>
 /// Placeholder executor so workflow orchestration can run end-to-end without a real LLM/Agent Framework integration yet.
 /// </summary>
-public class PlaceholderWorkflowAgentExecutor : IWorkflowAgentExecutor
+public class PlaceholderAgentflowAgentExecutor : IAgentflowAgentExecutor
 {
     public Task<string> ExecuteAsync(AiAgent agent, string input, CancellationToken cancellationToken = default)
     {
@@ -30,59 +26,59 @@ public class PlaceholderWorkflowAgentExecutor : IWorkflowAgentExecutor
 }
 public record WaChatMessage(string AuthorName, string Role, string Content);
 
-public record WorkflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
+public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
 
-public record WorkflowExecutionResult(
-    Guid WorkflowId,
-    WorkflowOrchestrationPattern Pattern,
+public record AgentflowExecutionResult(
+    Guid AgentflowId,
+    AgentflowOrchestrationPattern Pattern,
     bool NotImplemented,
     string? Message,
     string Input,
     string? FinalOutput,
     IReadOnlyList<WaChatMessage> Outputs);
 
-public class WorkflowRuntimeService
+public class AgentflowRuntimeService
 {
-    private readonly IRepository<Workflow> _workflowRepository;
-    private readonly IRepository<WorkflowNode> _workflowNodeRepository;
-    private readonly IRepository<WorkflowEdge> _workflowEdgeRepository;
+    private readonly IRepository<Agentflow> _agentflowRepository;
+    private readonly IRepository<AgentflowNode> _agentflowNodeRepository;
+    private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
     private readonly AgentRuntimeService _agentRuntimeService;
-    private readonly IWorkflowAgentExecutor _executor;
+    private readonly IAgentflowAgentExecutor _executor;
 
-    public WorkflowRuntimeService(
-        IRepository<Workflow> workflowRepository,
-        IRepository<WorkflowNode> workflowAgentRepository,
-        IRepository<WorkflowEdge> workflowEdgeRepository,
+    public AgentflowRuntimeService(
+        IRepository<Agentflow> agentflowRepository,
+        IRepository<AgentflowNode> agentflowAgentRepository,
+        IRepository<AgentflowEdge> agentflowEdgeRepository,
         AgentRuntimeService agentRuntimeService,
-        IWorkflowAgentExecutor executor)
+        IAgentflowAgentExecutor executor)
     {
-        _workflowRepository = workflowRepository;
-        _workflowNodeRepository = workflowAgentRepository;
+        _agentflowRepository = agentflowRepository;
+        _agentflowNodeRepository = agentflowAgentRepository;
         _agentRuntimeService = agentRuntimeService;
         _executor = executor;
-        _workflowEdgeRepository = workflowEdgeRepository;
+        _agentflowEdgeRepository = agentflowEdgeRepository;
     }
 
-    public async Task<WorkflowExecutionResult?> ExecuteAsync(
-        Guid workflowId,
+    public async Task<AgentflowExecutionResult?> ExecuteAsync(
+        Guid agentflowId,
         string input,
         CancellationToken cancellationToken = default)
     {
-        var workflow = await _workflowRepository.GetByIdAsync(workflowId);
-        if (workflow == null || !workflow.Enable)
+        var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
+        if (agentflow == null || !agentflow.Enable)
         {
             return null;
         }
 
-        var aiWorkflow = await CreateAiFlow(workflow, cancellationToken);
-        if (aiWorkflow == null)
+        var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
+        if (workflow == null)
         {
             return null;
         }
 
         var messages = new List<ChatMessage> { new(ChatRole.User, input) };
 
-        StreamingRun run = await InProcessExecution.StreamAsync(aiWorkflow, messages);
+        StreamingRun run = await InProcessExecution.StreamAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         List<ChatMessage> result = new();
@@ -110,9 +106,9 @@ public class WorkflowRuntimeService
             outputs.Add(chatMsg);
         }
 
-        return new WorkflowExecutionResult(
-            workflow.Id,
-            workflow.Pattern,
+        return new AgentflowExecutionResult(
+            agentflow.Id,
+            agentflow.Pattern,
             NotImplemented: false,
             Message: null,
             Input: input,
@@ -121,40 +117,40 @@ public class WorkflowRuntimeService
     }
 
 
-    public async Task<Microsoft.Agents.AI.Workflows.Workflow?>
-        CreateAiFlow(Guid workflowId, CancellationToken cancellationToken)
+    public async Task<Workflow?>
+        CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken)
     {
-        var workflow = await _workflowRepository.GetByIdAsync(workflowId);
-        if (workflow == null || !workflow.Enable)
+        var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
+        if (agentflow == null || !agentflow.Enable)
         {
             return null;
         }
-        return await CreateAiFlow(workflow, cancellationToken);
+        return await CreateAiWorkflow(agentflow, cancellationToken);
     }
 
-    private async Task<Microsoft.Agents.AI.Workflows.Workflow?>
-        CreateAiFlow(Workflow workflow, CancellationToken cancellationToken)
+    private async Task<Workflow?>
+        CreateAiWorkflow(Agentflow agentflow, CancellationToken cancellationToken)
     {
-        Guid workflowId = workflow.Id;
+        Guid agentflowId = agentflow.Id;
 
-        var workflowNodes = await _workflowNodeRepository
-            .ListAsync(x => x.WorkflowId == workflowId);
+        var agentflowNodes = await _agentflowNodeRepository
+            .ListAsync(x => x.AgentflowId == agentflowId);
 
-        var workflowEdges = await _workflowNodeRepository
-            .ListAsync(x => x.WorkflowId == workflowId);
+        var agentflowEdges = await _agentflowNodeRepository
+            .ListAsync(x => x.AgentflowId == agentflowId);
 
         List<AIAgent> aiAgents = new();
-        foreach (var node in workflowNodes)
+        foreach (var node in agentflowNodes)
         {
             AIAgent? aiAgent;
-            if (node.Type == WorkflowNodeType.AgentNode)
+            if (node.Type == AgentflowNodeType.AgentNode)
             {
                 aiAgent = await _agentRuntimeService.CreateAiAgentAsync(node.RelateId);
 
             }
             else
             {
-                var flowNode = await this.CreateAiFlow(node.RelateId, cancellationToken);
+                var flowNode = await this.CreateAiWorkflow(node.RelateId, cancellationToken);
                 aiAgent = flowNode?.AsAgent() ?? null;
             }
             if (aiAgent == null)
@@ -164,18 +160,16 @@ public class WorkflowRuntimeService
             aiAgents.Add(aiAgent);
         }
 
-        // 根据 workflowEdges 构建 aiAgents 之间的连接关系
-
-        Microsoft.Agents.AI.Workflows.Workflow? aiFlow;
-        switch (workflow.Pattern)
+        Workflow? aiFlow;
+        switch (agentflow.Pattern)
         {
-            case WorkflowOrchestrationPattern.Concurrent:
+            case AgentflowOrchestrationPattern.Concurrent:
                 aiFlow = AgentWorkflowBuilder.BuildConcurrent(aiAgents);
                 break;
-            case WorkflowOrchestrationPattern.Sequential:
+            case AgentflowOrchestrationPattern.Sequential:
                 aiFlow = AgentWorkflowBuilder.BuildSequential(aiAgents);
                 break;
-            case WorkflowOrchestrationPattern.GroupChat:
+            case AgentflowOrchestrationPattern.GroupChat:
                 aiFlow = AgentWorkflowBuilder.CreateGroupChatBuilderWith(
                      agents => new RoundRobinGroupChatManager(agents)
                      {
@@ -184,7 +178,7 @@ public class WorkflowRuntimeService
                      .AddParticipants(aiAgents.ToArray())
                      .Build();
                 break;
-            case WorkflowOrchestrationPattern.Handoff:
+            case AgentflowOrchestrationPattern.Handoff:
                 aiFlow = null;
                 //aiFlow = AgentWorkflowBuilder.StartHandoffWith(triageAgent)
                 //    .WithHandoffs(triageAgent, [mathTutor, historyTutor]) // Triage can route to either specialist
@@ -192,7 +186,7 @@ public class WorkflowRuntimeService
                 //    .WithHandoff(historyTutor, triageAgent)               // History tutor can return to triage
                 //    .Build();
                 break;
-            case WorkflowOrchestrationPattern.Magentic:
+            case AgentflowOrchestrationPattern.Magentic:
                 aiFlow = null;
                 //int maxRounds = 10;
                 //int maxStallCount = 3;

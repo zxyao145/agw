@@ -2,7 +2,7 @@ using DSystem.Domain.Enums;
 
 namespace DSystem.Api.Contracts;
 
-public record ProjectTaskCreateRequest(Guid WorkflowId, string Description, string Input);
+public record ProjectTaskCreateRequest(Guid AgentflowId, string Description, string Input);
 
 public record ProjectTaskUpdateRequest(string Description, string Input);
 
@@ -11,7 +11,7 @@ public record ProjectTaskReorderRequest(DateTime UpdateTimeUtc);
 public record ProjectTaskResponse(
     Guid Id,
     Guid ProjectId,
-    Guid WorkflowId,
+    Guid AgentflowId,
     ProjectTaskStatus Status,
     string Description,
     string Input,

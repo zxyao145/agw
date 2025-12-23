@@ -1024,7 +1024,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workflows": {
+    "/api/agentflows": {
         parameters: {
             query?: never;
             header?: never;
@@ -1059,9 +1059,9 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["WorkflowCreateRequest"];
-                    "text/json": components["schemas"]["WorkflowCreateRequest"];
-                    "application/*+json": components["schemas"]["WorkflowCreateRequest"];
+                    "application/json": components["schemas"]["AgentflowCreateRequest"];
+                    "text/json": components["schemas"]["AgentflowCreateRequest"];
+                    "application/*+json": components["schemas"]["AgentflowCreateRequest"];
                 };
             };
             responses: {
@@ -1080,7 +1080,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workflows/{id}": {
+    "/api/agentflows/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1118,9 +1118,9 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["WorkflowUpdateRequest"];
-                    "text/json": components["schemas"]["WorkflowUpdateRequest"];
-                    "application/*+json": components["schemas"]["WorkflowUpdateRequest"];
+                    "application/json": components["schemas"]["AgentflowUpdateRequest"];
+                    "text/json": components["schemas"]["AgentflowUpdateRequest"];
+                    "application/*+json": components["schemas"]["AgentflowUpdateRequest"];
                 };
             };
             responses: {
@@ -1159,7 +1159,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workflows/{id}/agents": {
+    "/api/agentflows/{id}/agents": {
         parameters: {
             query?: never;
             header?: never;
@@ -1194,7 +1194,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workflows/{id}/execute": {
+    "/api/agentflows/{id}/execute": {
         parameters: {
             query?: never;
             header?: never;
@@ -1214,9 +1214,9 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["WorkflowExecuteRequest"];
-                    "text/json": components["schemas"]["WorkflowExecuteRequest"];
-                    "application/*+json": components["schemas"]["WorkflowExecuteRequest"];
+                    "application/json": components["schemas"]["AgentflowExecuteRequest"];
+                    "text/json": components["schemas"]["AgentflowExecuteRequest"];
+                    "application/*+json": components["schemas"]["AgentflowExecuteRequest"];
                 };
             };
             responses: {
@@ -1316,7 +1316,7 @@ export interface components {
         };
         ProjectTaskCreateRequest: {
             /** Format: uuid */
-            workflowId: string;
+            agentflowId: string;
             description: string;
             input: string;
         };
@@ -1343,32 +1343,32 @@ export interface components {
             description: null | string;
             endpoint: string;
         };
-        WorkflowAgentBindingRequest: {
+        AgentflowAgentBindingRequest: {
             /** Format: uuid */
             agentId: string;
             /** Format: int32 */
             order: number | string;
             role: null | string;
         };
-        WorkflowCreateRequest: {
+        AgentflowCreateRequest: {
             name: string;
             description: null | string;
-            pattern: components["schemas"]["WorkflowOrchestrationPattern"];
+            pattern: components["schemas"]["AgentflowOrchestrationPattern"];
             configurationJson: null | string;
             enable: boolean;
-            agents: components["schemas"]["WorkflowAgentBindingRequest"][];
+            agents: components["schemas"]["AgentflowAgentBindingRequest"][];
         };
-        WorkflowExecuteRequest: {
+        AgentflowExecuteRequest: {
             input: string;
         };
-        WorkflowOrchestrationPattern: number;
-        WorkflowUpdateRequest: {
+        AgentflowOrchestrationPattern: number;
+        AgentflowUpdateRequest: {
             name: string;
             description: null | string;
-            pattern: components["schemas"]["WorkflowOrchestrationPattern"];
+            pattern: components["schemas"]["AgentflowOrchestrationPattern"];
             configurationJson: null | string;
             enable: boolean;
-            agents: components["schemas"]["WorkflowAgentBindingRequest"][];
+            agents: components["schemas"]["AgentflowAgentBindingRequest"][];
         };
     };
     responses: never;

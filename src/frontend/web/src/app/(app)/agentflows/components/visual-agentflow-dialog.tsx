@@ -11,16 +11,16 @@ import {
   DialogTitle as UiDialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { VisualWorkflowBuilder } from "./visual-workflow-builder"
+import { VisualAgentflowBuilder } from "./visual-agentflow-builder"
 import { X } from "lucide-react"
-import { AgentDto, WorkflowDto } from "@/types/workflow";
+import { AgentDto, AgentflowDto } from "@/types/agentflow";
 
-type VisualWorkflowDialogProps = {
+type VisualAgentflowDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   agents: AgentDto[]
-  workflows: WorkflowDto[]
-  editingWorkflow?: {
+  agentflows: AgentflowDto[]
+  editingAgentflow?: {
     id: string
     name: string
     description: string | null
@@ -30,21 +30,21 @@ type VisualWorkflowDialogProps = {
     nodes: any[]
     edges: any[]
   } | null
-  onWorkflowCreated?: () => void
+  onAgentflowCreated?: () => void
 }
 
-export function VisualWorkflowDialog({
+export function VisualAgentflowDialog({
   open,
   onOpenChange,
   agents,
-  workflows,
-  editingWorkflow,
-  onWorkflowCreated,
-}: VisualWorkflowDialogProps) {
-  const handleWorkflowCreated = React.useCallback(() => {
-    onWorkflowCreated?.()
+  agentflows,
+  editingAgentflow: editingAgentflow,
+  onAgentflowCreated,
+}: VisualAgentflowDialogProps) {
+  const handleAgentflowCreated = React.useCallback(() => {
+    onAgentflowCreated?.()
     onOpenChange(false)
-  }, [onWorkflowCreated, onOpenChange])
+  }, [onAgentflowCreated, onOpenChange])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -61,12 +61,12 @@ export function VisualWorkflowDialog({
           <div className="flex items-center justify-between">
             <div>
               <UiDialogTitle>
-                {editingWorkflow ? "Edit Workflow" : "Visual Workflow Builder"}
+                {editingAgentflow ? "Edit Agentflow" : "Visual Agentflow Builder"}
               </UiDialogTitle>
               <UiDialogDescription>
-                {editingWorkflow
-                  ? `Editing workflow: ${editingWorkflow.name}`
-                  : "Design your workflow by adding agents/workflows as nodes and connecting them. The system will auto-detect the orchestration pattern based on your graph structure."}
+                {editingAgentflow
+                  ? `Editing agentflow: ${editingAgentflow.name}`
+                  : "Design your agentflow by adding agents/agentflows as nodes and connecting them. The system will auto-detect the orchestration pattern based on your graph structure."}
               </UiDialogDescription>
             </div>
             <DialogClose asChild>
@@ -77,11 +77,11 @@ export function VisualWorkflowDialog({
           </div>
         </DialogHeader>
         <div className="flex-1 min-h-0 mt-4">
-          <VisualWorkflowBuilder
+          <VisualAgentflowBuilder
             agents={agents}
-            workflows={workflows}
-            editingWorkflow={editingWorkflow}
-            onWorkflowCreated={handleWorkflowCreated}
+            agentflows={agentflows}
+            editingAgentflow={editingAgentflow}
+            onAgentflowCreated={handleAgentflowCreated}
           />
         </div>
       </DialogContent>

@@ -6,7 +6,7 @@ public class ProjectTask : BaseEntity
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
-    public Guid WorkflowId { get; set; }
+    public Guid AgentflowId { get; set; }
 
     public string Description { get; set; } = string.Empty;
 
@@ -16,7 +16,7 @@ public class ProjectTask : BaseEntity
     public ProjectTaskStatus Status { get; set; } = ProjectTaskStatus.Pending;
 
     /// <summary>
-    /// User input to be executed by the associated workflow.
+    /// User input to be executed by the associated agentflow.
     /// </summary>
     public string Input { get; set; } = string.Empty;
 

@@ -32,7 +32,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Info, Workflow, Bot, Grid } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { AgentDto, WorkflowDto, WorkflowNodeType } from "@/types/workflow"
+import { AgentDto, AgentflowDto, AgentflowNodeType } from "@/types/agentflow"
 import { toast } from "sonner"
 import { apiPost, apiPut } from "@/api/client"
 
@@ -45,17 +45,17 @@ type AgentNodeData = {
   onRoleChange: (id: string, role: string) => void
 }
 
-type WorkflowNodeData = {
+type AgentflowNodeData = {
   nodeId: string
-  workflowId: string
-  workflowName: string
+  agentflowId: string
+  agentflowName: string
   role: string
   onDelete: (id: string) => void
   onRoleChange: (id: string, role: string) => void
 }
 
-// Custom Workflow Node Component
-function WorkflowNode({ data }: { data: WorkflowNodeData }) {
+// Custom Agentflow Node Component
+function AgentflowNode({ data }: { data: AgentflowNodeData }) {
   return (
     <Card className="min-w-50 shadow-lg p-0 gap-2 border-purple-200 bg-purple-50">
       {/* Input Handle (Target) */}
@@ -71,13 +71,13 @@ function WorkflowNode({ data }: { data: WorkflowNodeData }) {
           <div className="flex items-center gap-2">
             <Workflow className="w-4 h-4 text-purple-600" />
             <CardTitle className="text-sm font-semibold text-purple-700">
-              {data.workflowName}
+              {data.agentflowName}
             </CardTitle>
           </div>
           <button
             onClick={() => data.onDelete(data.nodeId)}
             className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"
-            title="Remove workflow"
+            title="Remove agentflow"
           >
             ✕
           </button>
@@ -152,13 +152,13 @@ function AgentNode({ data }: { data: AgentNodeData }) {
 
 const nodeTypes: NodeTypes = {
   agentNode: AgentNode,
-  workflowNode: WorkflowNode,
+  agentflowNode: AgentflowNode,
 }
 
-type VisualWorkflowBuilderProps = {
+type VisualAgentflowBuilderProps = {
   agents: AgentDto[]
-  workflows?: WorkflowDto[]
-  editingWorkflow?: {
+  agentflows?: AgentflowDto[]
+  editingAgentflow?: {
     id: string
     name: string
     description: string | null
@@ -168,27 +168,27 @@ type VisualWorkflowBuilderProps = {
     nodes: any[]
     edges: any[]
   } | null
-  onWorkflowCreated?: () => void
+  onAgentflowCreated?: () => void
 }
 
-export function VisualWorkflowBuilder({
+export function VisualAgentflowBuilder({
   agents,
-  workflows = [],
-  editingWorkflow,
-  onWorkflowCreated,
-}: VisualWorkflowBuilderProps) {
+  agentflows: agentflows = [],
+  editingAgentflow: editingAgentflow,
+  onAgentflowCreated: onAgentflowCreated,
+}: VisualAgentflowBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const [selectedNodeType, setSelectedNodeType] = React.useState<"agent" | "workflow">("agent")
+  const [selectedNodeType, setSelectedNodeType] = React.useState<"agent" | "agentflow">("agent")
   const [selectedItemId, setSelectedItemId] = React.useState<string>("")
   const [pattern, setPattern] = React.useState<number>(-1) // Default to manual mode
   const [maximumIterationCount, setMaximumIterationCount] = React.useState<number>(5) // Group Chat parameter
 
-  // Workflow creation states
-  const [workflowName, setWorkflowName] = React.useState("")
-  const [workflowDescription, setWorkflowDescription] = React.useState("")
-  const [workflowSystemPrompt, setWorkflowSystemPrompt] = React.useState("")
-  const [workflowEnabled, setWorkflowEnabled] = React.useState(true)
+  // agentflow creation states
+  const [agentflowName, setAgentflowName] = React.useState("")
+  const [agentflowDescription, setAgentflowDescription] = React.useState("")
+  const [agentflowSystemPrompt, setAgentflowSystemPrompt] = React.useState("")
+  const [agentflowEnabled, setAgentflowEnabled] = React.useState(true)
   const [isCreating, setIsCreating] = React.useState(false)
 
 
@@ -215,20 +215,20 @@ export function VisualWorkflowBuilder({
     [setNodes]
   )
   
-  // Load editing workflow data when present
+  // Load editing Agentflow data when present
   React.useEffect(() => {
-    if (editingWorkflow) {
+    if (editingAgentflow) {
       // Set form fields
-      setWorkflowName(editingWorkflow.name)
-      setWorkflowDescription(editingWorkflow.description || "")
-      setWorkflowSystemPrompt(editingWorkflow.systemPrompt || "")
-      setWorkflowEnabled(editingWorkflow.enable)
-      setPattern(editingWorkflow.pattern)
+      setAgentflowName(editingAgentflow.name)
+      setAgentflowDescription(editingAgentflow.description || "")
+      setAgentflowSystemPrompt(editingAgentflow.systemPrompt || "")
+      setAgentflowEnabled(editingAgentflow.enable)
+      setPattern(editingAgentflow.pattern)
 
       // Parse configuration for Group Chat pattern
-      if (editingWorkflow.pattern === 2 && editingWorkflow.configurationJson) {
+      if (editingAgentflow.pattern === 2 && editingAgentflow.configurationJson) {
         try {
-          const config = JSON.parse(editingWorkflow.configurationJson)
+          const config = JSON.parse(editingAgentflow.configurationJson)
           setMaximumIterationCount(config.maximumIterationCount || 5)
         } catch {
           setMaximumIterationCount(5)
@@ -236,8 +236,8 @@ export function VisualWorkflowBuilder({
       }
 
       // Convert nodes to React Flow format
-      const loadedNodes: Node[] = editingWorkflow.nodes.map((node: any) => {
-        if (node.type === WorkflowNodeType.AgentNode) {
+      const loadedNodes: Node[] = editingAgentflow.nodes.map((node: any) => {
+        if (node.type === AgentflowNodeType.AgentNode) {
           const agent = agents.find(a => a.id === node.relateId)
           return {
             id: node.nodeId,
@@ -253,15 +253,15 @@ export function VisualWorkflowBuilder({
             },
           }
         } else {
-          const workflow = workflows.find(w => w.id === node.relateId)
+          const agentflow = agentflows.find(w => w.id === node.relateId)
           return {
             id: node.nodeId,
-            type: "workflowNode",
+            type: "agentflowNode",
             position: { x: Math.random() * 400 + 200, y: Math.random() * 300 + 100 },
             data: {
               nodeId: node.nodeId,
-              workflowId: node.relateId,
-              workflowName: workflow?.name || "Unknown Workflow",
+              agentflowId: node.relateId,
+              agentflowName: agentflow?.name || "Unknown Agentflow",
               role: "",
               onDelete: handleDeleteNode,
               onRoleChange: handleRoleChange,
@@ -271,7 +271,7 @@ export function VisualWorkflowBuilder({
       })
 
       // Convert edges to React Flow format
-      const loadedEdges: Edge[] = editingWorkflow.edges.map((edge: any) => ({
+      const loadedEdges: Edge[] = editingAgentflow.edges.map((edge: any) => ({
         id: edge.edgeId,
         source: edge.sourceNodeId,
         target: edge.targetNodeId,
@@ -282,7 +282,7 @@ export function VisualWorkflowBuilder({
       setNodes(loadedNodes)
       setEdges(loadedEdges)
     }
-  }, [editingWorkflow, agents, workflows, handleDeleteNode, handleRoleChange])
+  }, [editingAgentflow, agents, agentflows, handleDeleteNode, handleRoleChange])
 
   const onConnect = React.useCallback(
     (params: Connection) => {
@@ -332,7 +332,7 @@ export function VisualWorkflowBuilder({
   )
 
 
-  const addNode = React.useCallback((type: "agent" | "workflow", itemId: string) => {
+  const addNode = React.useCallback((type: "agent" | "agentflow", itemId: string) => {
     if (!itemId) return
 
     // Generate unique node ID to support duplicates
@@ -361,21 +361,21 @@ export function VisualWorkflowBuilder({
         },
       }
     } else {
-      // type === "workflow"
-      const workflow = workflows.find((w) => w.id === itemId)
-      if (!workflow) return
+      // type === "agentflow"
+      const agentflow = agentflows.find((w) => w.id === itemId)
+      if (!agentflow) return
 
       newNode = {
         id: nodeId,
-        type: "workflowNode",
+        type: "agentflowNode",
         position: {
           x: Math.random() * 400 + 200,
           y: Math.random() * 300 + 100,
         },
         data: {
           nodeId: nodeId,
-          workflowId: workflow.id,
-          workflowName: workflow.name,
+          agentflowId: agentflow.id,
+          agentflowName: agentflow.name,
           role: "",
           onDelete: handleDeleteNode,
           onRoleChange: handleRoleChange,
@@ -384,7 +384,7 @@ export function VisualWorkflowBuilder({
     }
 
     setNodes((nds) => [...nds, newNode])
-  }, [agents, workflows, setNodes, handleDeleteNode, handleRoleChange])
+  }, [agents, agentflows, setNodes, handleDeleteNode, handleRoleChange])
 
   // Auto-connect nodes based on selected pattern
   const handleAutoConnect = React.useCallback((selectedPattern: number) => {
@@ -622,28 +622,28 @@ export function VisualWorkflowBuilder({
 
   const handleBuild = React.useCallback(async () => {
     // Validation
-    if (!workflowName.trim()) {
-      toast.error("Please enter a workflow name")
+    if (!agentflowName.trim()) {
+      toast.error("Please enter a agentflow name")
       return
     }
 
     if (nodes.length === 0) {
-      toast.error("Please add at least one node to the workflow")
+      toast.error("Please add at least one node to the agentflow")
       return
     }
 
     // If pattern is -1 (Manual), auto-detect the actual pattern from structure
     const effectivePattern = pattern === -1 ? detectPatternFromStructure() : pattern
 
-    // Convert ReactFlow nodes to WorkflowNode format
-    const workflowNodes = nodes.map(node => ({
+    // Convert ReactFlow nodes to AgentflowNode format
+    const agentflowNodes = nodes.map(node => ({
       nodeId: node.id,
-      type: node.type === "agentNode" ? WorkflowNodeType.AgentNode : WorkflowNodeType.WorkflowNode,
-      relateId: node.type === "agentNode" ? node.data.agentId : node.data.workflowId,
+      type: node.type === "agentNode" ? AgentflowNodeType.AgentNode : AgentflowNodeType.AgentflowNode,
+      relateId: node.type === "agentNode" ? node.data.agentId : node.data.agentflowId,
     }))
 
-    // Convert ReactFlow edges to WorkflowEdge format
-    const workflowEdges = edges.map(edge => ({
+    // Convert ReactFlow edges to AgentflowEdge format
+    const agentflowEdges = edges.map(edge => ({
       edgeId: edge.id,
       sourceNodeId: edge.source,
       targetNodeId: edge.target,
@@ -658,33 +658,33 @@ export function VisualWorkflowBuilder({
     }
 
     const requestBody = {
-      name: workflowName,
-      description: workflowDescription || null,
-      systemPrompt: workflowSystemPrompt,
+      name: agentflowName,
+      description: agentflowDescription || null,
+      systemPrompt: agentflowSystemPrompt,
       pattern: effectivePattern,
       configurationJson,
-      enable: workflowEnabled,
-      nodes: workflowNodes,
-      edges: workflowEdges,
+      enable: agentflowEnabled,
+      nodes: agentflowNodes,
+      edges: agentflowEdges,
     }
 
     setIsCreating(true)
     try {
-      if (editingWorkflow) {
-        // Update existing workflow
-        await apiPut(`/api/workflows/${editingWorkflow.id}`, { body: requestBody })
-        toast.success(`Workflow "${workflowName}" updated successfully!`)
+      if (editingAgentflow) {
+        // Update existing agentflow
+        await apiPut(`/api/agentflows/${editingAgentflow.id}`, { body: requestBody })
+        toast.success(`Agentflow "${agentflowName}" updated successfully!`)
       } else {
-        // Create new workflow
-        await apiPost("/api/workflows", { body: requestBody })
-        toast.success(`Workflow "${workflowName}" created successfully!`)
+        // Create new agentflow
+        await apiPost("/api/agentflows", { body: requestBody })
+        toast.success(`Agentflow "${agentflowName}" created successfully!`)
       }
 
       // Reset form
-      setWorkflowName("")
-      setWorkflowDescription("")
-      setWorkflowSystemPrompt("")
-      setWorkflowEnabled(true)
+      setAgentflowName("")
+      setAgentflowDescription("")
+      setAgentflowSystemPrompt("")
+      setAgentflowEnabled(true)
       setPattern(-1)
       setMaximumIterationCount(5)
 
@@ -693,10 +693,10 @@ export function VisualWorkflowBuilder({
       setEdges([])
 
       // Notify parent
-      onWorkflowCreated?.()
+      onAgentflowCreated?.()
     } catch (error) {
-      console.error("Failed to save workflow:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to save workflow")
+      console.error("Failed to save agentflow:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to save agentflow")
     } finally {
       setIsCreating(false)
     }
@@ -704,15 +704,15 @@ export function VisualWorkflowBuilder({
     nodes,
     edges,
     pattern,
-    workflowName,
-    workflowDescription,
-    workflowEnabled,
+    agentflowName,
+    agentflowDescription,
+    agentflowEnabled,
     maximumIterationCount,
-    editingWorkflow,
+    editingAgentflow,
     detectPatternFromStructure,
     setNodes,
     setEdges,
-    onWorkflowCreated,
+    onAgentflowCreated,
   ])
 
   return (
@@ -729,24 +729,24 @@ export function VisualWorkflowBuilder({
           <Select
             value={selectedNodeType}
             onValueChange={(value) => {
-              setSelectedNodeType(value as "agent" | "workflow")
+              setSelectedNodeType(value as "agent" | "agentflow")
               setSelectedItemId("") // Reset selection when switching type
             }}
           >
-            <SelectTrigger className="w-[120px]">
+            <SelectTrigger className="w-30">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="workflow">Workflow</SelectItem>
+              <SelectItem value="agentflow">Agentflow</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {/* Item Selector (Agent or Workflow) */}
+        {/* Item Selector (Agent or Agentflow) */}
         <div className="space-y-2">
           <Label>
-            {selectedNodeType === "agent" ? "Select Agent" : "Select Workflow"}
+            {selectedNodeType === "agent" ? "Select Agent" : "Select Agentflow"}
           </Label>
           <Select
             value={selectedItemId}
@@ -760,7 +760,7 @@ export function VisualWorkflowBuilder({
                 placeholder={
                   selectedNodeType === "agent"
                     ? "Choose an agent..."
-                    : "Choose a workflow..."
+                    : "Choose a agentflow..."
                 }
               />
             </SelectTrigger>
@@ -771,9 +771,9 @@ export function VisualWorkflowBuilder({
                       {agent.name}
                     </SelectItem>
                   ))
-                : workflows.map((workflow) => (
-                    <SelectItem key={workflow.id} value={workflow.id}>
-                      {workflow.name}
+                : agentflows.map((agentflow) => (
+                    <SelectItem key={agentflow.id} value={agentflow.id}>
+                      {agentflow.name}
                     </SelectItem>
                   ))}
             </SelectContent>
@@ -844,61 +844,61 @@ export function VisualWorkflowBuilder({
           </div>
         )}
 
-        {/* Workflow Details */}
+        {/* Agentflow Details */}
         <div className="space-y-2">
-          <Label htmlFor="workflowName">Workflow Name *</Label>
+          <Label htmlFor="agentflowName">Agentflow Name *</Label>
           <Input
-            id="workflowName"
-            value={workflowName}
-            onChange={(e) => setWorkflowName(e.target.value)}
-            placeholder="My Workflow"
-            className="w-[200px]"
+            id="agentflowName"
+            value={agentflowName}
+            onChange={(e) => setAgentflowName(e.target.value)}
+            placeholder="My Agentflow"
+            className="w-50"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="workflowDescription">Description</Label>
+          <Label htmlFor="agentflowDescription">Description</Label>
           <Input
-            id="workflowDescription"
-            value={workflowDescription}
-            onChange={(e) => setWorkflowDescription(e.target.value)}
+            id="agentflowDescription"
+            value={agentflowDescription}
+            onChange={(e) => setAgentflowDescription(e.target.value)}
             placeholder="Optional description"
-            className="w-[250px]"
+            className="w-62.5"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="workflowSystemPrompt">System Prompt *</Label>
+          <Label htmlFor="agentflowSystemPrompt">System Prompt *</Label>
           <Textarea
-            id="workflowSystemPrompt"
-            value={workflowSystemPrompt}
-            onChange={(e) => setWorkflowSystemPrompt(e.target.value)}
-            placeholder="Enter system prompt for the workflow..."
-            className="w-[300px] min-h-[80px]"
+            id="agentflowSystemPrompt"
+            value={agentflowSystemPrompt}
+            onChange={(e) => setAgentflowSystemPrompt(e.target.value)}
+            placeholder="Enter system prompt for the agentflow..."
+            className="w-75 min-h-20"
           />
         </div>
 
         <div className="flex items-center gap-2 pt-6">
           <input
-            id="workflowEnabled"
+            id="agentflowEnabled"
             type="checkbox"
-            checked={workflowEnabled}
-            onChange={(e) => setWorkflowEnabled(e.target.checked)}
+            checked={agentflowEnabled}
+            onChange={(e) => setAgentflowEnabled(e.target.checked)}
             className="cursor-pointer"
           />
-          <Label htmlFor="workflowEnabled" className="cursor-pointer">
+          <Label htmlFor="agentflowEnabled" className="cursor-pointer">
             Enabled
           </Label>
         </div>
 
         <Button
           onClick={handleBuild}
-          disabled={isCreating || !workflowName.trim() || nodes.length === 0}
+          disabled={isCreating || !agentflowName.trim() || nodes.length === 0}
           variant="default"
         >
           {isCreating
-            ? (editingWorkflow ? "Updating..." : "Creating...")
-            : (editingWorkflow ? "Update Workflow" : "Build Workflow")}
+            ? (editingAgentflow ? "Updating..." : "Creating...")
+            : (editingAgentflow ? "Update Agentflow" : "Build Agentflow")}
         </Button>
       </div>
 
@@ -927,10 +927,10 @@ export function VisualWorkflowBuilder({
         </ReactFlow>
       </div>
             {/* Helper Text */}
-      <div className="text-xs text-muted-foreground flex-shrink-0">
+      <div className="text-xs text-muted-foreground shrink-0">
         <p>
-          <strong>Tip:</strong> Select agents or workflows to add them to the canvas. Choose
-          a workflow pattern from the dropdown to automatically create
+          <strong>Tip:</strong> Select agents or agentflows to add them to the canvas. Choose
+          a agentflow pattern from the dropdown to automatically create
           connections and layout. You can also manually connect nodes by
           dragging from the{" "}
           <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>{" "}
@@ -949,7 +949,7 @@ export function VisualWorkflowBuilder({
         {pattern === -1 && (
           <p className="mt-1">
             <strong>None (Manual):</strong> Manually connect nodes by dragging
-            edges. The workflow pattern will be determined based on your
+            edges. The agentflow pattern will be determined based on your
             connections.
           </p>
         )}
@@ -988,7 +988,7 @@ export function VisualWorkflowBuilder({
   );
 }
 
-// Topological sort helper for sequential workflows
+// Topological sort helper for sequential agentflows
 function topologicalSort(nodes: Node[], edges: Edge[]): Node[] {
   const adjList = new Map<string, string[]>()
   const inDegree = new Map<string, number>()

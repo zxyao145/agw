@@ -5,89 +5,89 @@ using System.Linq.Expressions;
 
 namespace DSystem.Domain.Services;
 
-public class WorkflowDomainService
+public class AgentflowDomainService
 {
-    private readonly IRepository<Workflow> _workflowRepository;
-    private readonly IRepository<WorkflowNode> _workflowNodeRepository;
-    private readonly IRepository<WorkflowEdge> _workflowEdgeRepository;
+    private readonly IRepository<Agentflow> _agentflowRepository;
+    private readonly IRepository<AgentflowNode> _agentflowNodeRepository;
+    private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
     private readonly IRepository<Agent> _agentRepository;
     private readonly IUnitOfWork _unitOfWork;
 
-    public WorkflowDomainService(
-        IRepository<Workflow> workflowRepository,
-        IRepository<WorkflowNode> workflowNodeRepository,
-        IRepository<WorkflowEdge> workflowEdgeRepository,
+    public AgentflowDomainService(
+        IRepository<Agentflow> agentflowRepository,
+        IRepository<AgentflowNode> agentflowNodeRepository,
+        IRepository<AgentflowEdge> agentflowEdgeRepository,
         IRepository<Agent> agentRepository,
         IUnitOfWork unitOfWork)
     {
-        _workflowRepository = workflowRepository;
-        _workflowNodeRepository = workflowNodeRepository;
-        _workflowEdgeRepository = workflowEdgeRepository;
+        _agentflowRepository = agentflowRepository;
+        _agentflowNodeRepository = agentflowNodeRepository;
+        _agentflowEdgeRepository = agentflowEdgeRepository;
         _agentRepository = agentRepository;
         _unitOfWork = unitOfWork;
     }
 
-    public Task<IReadOnlyList<Workflow>> ListAsync(Expression<Func<Workflow, bool>>? predicate = null) =>
-        _workflowRepository.ListAsync(predicate);
+    public Task<IReadOnlyList<Agentflow>> ListAsync(Expression<Func<Agentflow, bool>>? predicate = null) =>
+        _agentflowRepository.ListAsync(predicate);
 
-    public Task<Workflow?> GetAsync(Guid id) => _workflowRepository.GetByIdAsync(id);
+    public Task<Agentflow?> GetAsync(Guid id) => _agentflowRepository.GetByIdAsync(id);
 
-    public Task<IReadOnlyList<WorkflowNode>> ListNodesAsync(Guid workflowId) =>
-        _workflowNodeRepository.ListAsync(x => x.WorkflowId == workflowId);
+    public Task<IReadOnlyList<AgentflowNode>> ListNodesAsync(Guid agentflowId) =>
+        _agentflowNodeRepository.ListAsync(x => x.AgentflowId == agentflowId);
 
-    public Task<IReadOnlyList<WorkflowEdge>> ListEdgesAsync(Guid workflowId) =>
-        _workflowEdgeRepository.ListAsync(x => x.WorkflowId == workflowId);
+    public Task<IReadOnlyList<AgentflowEdge>> ListEdgesAsync(Guid agentflowId) =>
+        _agentflowEdgeRepository.ListAsync(x => x.AgentflowId == agentflowId);
 
-    public async Task<Workflow?> CreateAsync(
-        Workflow workflow,
-        IReadOnlyList<WorkflowNode> nodes,
-        IReadOnlyList<WorkflowEdge> edges,
+    public async Task<Agentflow?> CreateAsync(
+        Agentflow agentflow,
+        IReadOnlyList<AgentflowNode> nodes,
+        IReadOnlyList<AgentflowEdge> edges,
         string user)
     {
-        if (string.IsNullOrWhiteSpace(workflow.Name))
+        if (string.IsNullOrWhiteSpace(agentflow.Name))
         {
             return null;
         }
 
-        workflow.Id = workflow.Id == Guid.Empty ? Guid.NewGuid() : workflow.Id;
-        workflow.CreateBy = user;
-        workflow.CreateTime = DateTime.UtcNow;
+        agentflow.Id = agentflow.Id == Guid.Empty ? Guid.NewGuid() : agentflow.Id;
+        agentflow.CreateBy = user;
+        agentflow.CreateTime = DateTime.UtcNow;
 
         var (normalizedNodes, normalizedEdges) = await ValidateAndNormalizeGraphAsync(
-            workflow.Pattern, nodes, edges, workflow.Id);
+            agentflow.Pattern, nodes, edges, agentflow.Id);
         if (normalizedNodes == null || normalizedEdges == null)
         {
             return null;
         }
 
-        await _workflowRepository.AddAsync(workflow);
+        await _agentflowRepository.AddAsync(agentflow);
 
         foreach (var node in normalizedNodes)
         {
             node.CreateBy = user;
-            node.CreateTime = workflow.CreateTime;
-            await _workflowNodeRepository.AddAsync(node);
+            node.CreateTime = agentflow.CreateTime;
+            await _agentflowNodeRepository.AddAsync(node);
         }
 
         foreach (var edge in normalizedEdges)
         {
             edge.CreateBy = user;
-            edge.CreateTime = workflow.CreateTime;
-            await _workflowEdgeRepository.AddAsync(edge);
+            edge.CreateTime = agentflow.CreateTime;
+            await _agentflowEdgeRepository.AddAsync(edge);
         }
 
         await _unitOfWork.SaveChangesAsync();
-        return workflow;
+        return agentflow;
     }
 
-    public async Task<Workflow?> UpdateAsync(
+    public async Task<Agentflow?> UpdateAsync(
         Guid id,
-        Action<Workflow> updateAction,
-        IReadOnlyList<WorkflowNode>? nodes,
-        IReadOnlyList<WorkflowEdge>? edges,
+        Action<Agentflow> updateAction,
+        IReadOnlyList<AgentflowNode>? nodes,
+        IReadOnlyList<AgentflowEdge>? edges,
         string user)
     {
-        var existing = await _workflowRepository.GetByIdAsync(id);
+        var existing = await _agentflowRepository.GetByIdAsync(id);
         if (existing == null)
         {
             return null;
@@ -103,7 +103,7 @@ public class WorkflowDomainService
         existing.UpdateBy = user;
         existing.UpdateTime = DateTime.UtcNow;
 
-        _workflowRepository.Update(existing);
+        _agentflowRepository.Update(existing);
 
         if (nodes != null && edges != null)
         {
@@ -115,16 +115,16 @@ public class WorkflowDomainService
             }
 
             // Remove existing nodes and edges
-            var currentNodes = await _workflowNodeRepository.ListAsync(x => x.WorkflowId == existing.Id);
+            var currentNodes = await _agentflowNodeRepository.ListAsync(x => x.AgentflowId == existing.Id);
             foreach (var item in currentNodes)
             {
-                _workflowNodeRepository.Remove(item);
+                _agentflowNodeRepository.Remove(item);
             }
 
-            var currentEdges = await _workflowEdgeRepository.ListAsync(x => x.WorkflowId == existing.Id);
+            var currentEdges = await _agentflowEdgeRepository.ListAsync(x => x.AgentflowId == existing.Id);
             foreach (var item in currentEdges)
             {
-                _workflowEdgeRepository.Remove(item);
+                _agentflowEdgeRepository.Remove(item);
             }
 
             // Add new nodes and edges
@@ -134,7 +134,7 @@ public class WorkflowDomainService
                 node.CreateTime = existing.CreateTime == default ? DateTime.UtcNow : existing.CreateTime;
                 node.UpdateBy = user;
                 node.UpdateTime = DateTime.UtcNow;
-                await _workflowNodeRepository.AddAsync(node);
+                await _agentflowNodeRepository.AddAsync(node);
             }
 
             foreach (var edge in normalizedEdges)
@@ -143,7 +143,7 @@ public class WorkflowDomainService
                 edge.CreateTime = existing.CreateTime == default ? DateTime.UtcNow : existing.CreateTime;
                 edge.UpdateBy = user;
                 edge.UpdateTime = DateTime.UtcNow;
-                await _workflowEdgeRepository.AddAsync(edge);
+                await _agentflowEdgeRepository.AddAsync(edge);
             }
         }
 
@@ -153,29 +153,29 @@ public class WorkflowDomainService
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var existing = await _workflowRepository.GetByIdAsync(id);
+        var existing = await _agentflowRepository.GetByIdAsync(id);
         if (existing == null)
         {
             return false;
         }
 
-        _workflowRepository.Remove(existing);
+        _agentflowRepository.Remove(existing);
         await _unitOfWork.SaveChangesAsync();
         return true;
     }
 
-    private async Task<(IReadOnlyList<WorkflowNode>?, IReadOnlyList<WorkflowEdge>?)> ValidateAndNormalizeGraphAsync(
-        WorkflowOrchestrationPattern pattern,
-        IReadOnlyList<WorkflowNode> nodes,
-        IReadOnlyList<WorkflowEdge> edges,
-        Guid workflowId)
+    private async Task<(IReadOnlyList<AgentflowNode>?, IReadOnlyList<AgentflowEdge>?)> ValidateAndNormalizeGraphAsync(
+        AgentflowOrchestrationPattern pattern,
+        IReadOnlyList<AgentflowNode> nodes,
+        IReadOnlyList<AgentflowEdge> edges,
+        Guid agentflowId)
     {
         if (nodes == null || edges == null)
         {
-            return (Array.Empty<WorkflowNode>(), Array.Empty<WorkflowEdge>());
+            return (Array.Empty<AgentflowNode>(), Array.Empty<AgentflowEdge>());
         }
 
-        if (pattern == WorkflowOrchestrationPattern.Sequential && nodes.Count == 0)
+        if (pattern == AgentflowOrchestrationPattern.Sequential && nodes.Count == 0)
         {
             return (null, null);
         }
@@ -184,7 +184,7 @@ public class WorkflowDomainService
         var nodeIds = nodes.Select(x => x.NodeId).ToList();
         if (nodeIds.Count == 0)
         {
-            return (Array.Empty<WorkflowNode>(), Array.Empty<WorkflowEdge>());
+            return (Array.Empty<AgentflowNode>(), Array.Empty<AgentflowEdge>());
         }
 
         // Ensure unique node IDs
@@ -195,7 +195,7 @@ public class WorkflowDomainService
 
         // Validate that all AgentNode references exist
         var agentNodeIds = nodes
-            .Where(x => x.Type == WorkflowNodeType.AgentNode)
+            .Where(x => x.Type == AgentflowNodeType.AgentNode)
             .Select(x => x.RelateId)
             .Where(x => x != Guid.Empty)
             .ToList();
@@ -228,9 +228,9 @@ public class WorkflowDomainService
 
         // Normalize nodes and edges
         var normalizedNodes = nodes
-            .Select(x => new WorkflowNode
+            .Select(x => new AgentflowNode
             {
-                WorkflowId = workflowId,
+                AgentflowId = agentflowId,
                 NodeId = x.NodeId,
                 Type = x.Type,
                 RelateId = x.RelateId,
@@ -238,9 +238,9 @@ public class WorkflowDomainService
             .ToList();
 
         var normalizedEdges = edges
-            .Select(x => new WorkflowEdge
+            .Select(x => new AgentflowEdge
             {
-                WorkflowId = workflowId,
+                AgentflowId = agentflowId,
                 EdgeId = x.EdgeId,
                 SourceNodeId = x.SourceNodeId,
                 TargetNodeId = x.TargetNodeId,

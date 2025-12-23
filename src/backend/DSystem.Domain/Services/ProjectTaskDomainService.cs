@@ -9,18 +9,18 @@ public class ProjectTaskDomainService
 {
     private readonly IRepository<ProjectTask> _taskRepository;
     private readonly IRepository<Project> _projectRepository;
-    private readonly IRepository<Workflow> _workflowRepository;
+    private readonly IRepository<Agentflow> _agentflowRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public ProjectTaskDomainService(
         IRepository<ProjectTask> taskRepository,
         IRepository<Project> projectRepository,
-        IRepository<Workflow> workflowRepository,
+        IRepository<Agentflow> agentflowRepository,
         IUnitOfWork unitOfWork)
     {
         _taskRepository = taskRepository;
         _projectRepository = projectRepository;
-        _workflowRepository = workflowRepository;
+        _agentflowRepository = agentflowRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -42,8 +42,8 @@ public class ProjectTaskDomainService
             return null;
         }
 
-        var workflow = await _workflowRepository.GetByIdAsync(task.WorkflowId);
-        if (workflow == null || !workflow.Enable)
+        var agentflow = await _agentflowRepository.GetByIdAsync(task.AgentflowId);
+        if (agentflow == null || !agentflow.Enable)
         {
             return null;
         }

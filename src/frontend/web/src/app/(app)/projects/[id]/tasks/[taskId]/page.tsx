@@ -23,7 +23,7 @@ import { ButtonGroup } from "@/components/ui/button-group";
 type ProjectTaskDto = {
   id: string;
   projectId: string;
-  workflowId: string;
+  agentflowId: string;
   status: number;
   description: string;
   input: string;
@@ -223,7 +223,7 @@ export default function TaskDetailsPage() {
             </Button>
             {task && (
               <Button asChild variant="outline" size="sm">
-                <Link href={`/workflows/${task?.workflowId}`}>Workflow</Link>
+                <Link href={`/agentflows/${task?.agentflowId}`}>Agentflow</Link>
               </Button>
             )}
           </ButtonGroup>

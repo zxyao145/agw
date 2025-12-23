@@ -1,7 +1,7 @@
 ﻿namespace DSystem.Domain.Enums;
 
-public enum WorkflowNodeType
+public enum AgentflowNodeType
 {
     AgentNode = 0,
-    WorkflowNode = 1,
+    AgentflowNode = 1,
 }

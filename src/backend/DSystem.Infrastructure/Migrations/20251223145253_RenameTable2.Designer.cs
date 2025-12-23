@@ -3,6 +3,7 @@ using System;
 using DSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(LlmDbContext))]
-    partial class LlmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251223145253_RenameTable2")]
+    partial class RenameTable2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.0");
@@ -125,9 +128,9 @@ namespace DSystem.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_agentflow");
+                        .HasName("pk_agentflows");
 
-                    b.ToTable("agentflow", (string)null);
+                    b.ToTable("Agentflows", (string)null);
                 });
 
             modelBuilder.Entity("DSystem.Domain.Entities.AgentflowEdge", b =>
@@ -610,7 +613,7 @@ namespace DSystem.Infrastructure.Migrations
                         .HasForeignKey("AgentflowId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_edges_agentflow_agentflow_id");
+                        .HasConstraintName("fk_agentflow_edges_agent_flow_agentflow_id");
 
                     b.HasOne("DSystem.Domain.Entities.AgentflowNode", "SourceNode")
                         .WithMany("SourceEdges")
@@ -643,7 +646,7 @@ namespace DSystem.Infrastructure.Migrations
                         .HasForeignKey("AgentflowId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_nodes_agentflow_agentflow_id");
+                        .HasConstraintName("fk_agentflow_nodes_agent_flow_agentflow_id");
                 });
 
             modelBuilder.Entity("DSystem.Domain.Entities.ModelProvider", b =>

@@ -11,15 +11,15 @@ export type AgentDto = {
   updateTime?: string | null
 }
 
-export enum WorkflowNodeType {
+export enum AgentflowNodeType {
   AgentNode = 0,
-  WorkflowNode = 1,
+  AgentflowNode = 1,
 }
 
-export type WorkflowNodeDto = {
-  workflowId: string
+export type AgentflowNodeDto = {
+  agentflowId: string
   nodeId: string
-  type: WorkflowNodeType
+  type: AgentflowNodeType
   relateId: string
   createBy?: string | null
   createTime?: string | null
@@ -27,8 +27,8 @@ export type WorkflowNodeDto = {
   updateTime?: string | null
 }
 
-export type WorkflowEdgeDto = {
-  workflowId: string
+export type AgentflowEdgeDto = {
+  agentflowId: string
   edgeId: string
   sourceNodeId: string
   targetNodeId: string
@@ -39,7 +39,7 @@ export type WorkflowEdgeDto = {
   updateTime?: string | null
 }
 
-export type WorkflowDto = {
+export type AgentflowDto = {
   id: string
   name: string
   description: string | null

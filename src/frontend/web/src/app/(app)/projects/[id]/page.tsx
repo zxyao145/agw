@@ -50,7 +50,7 @@ type ProjectDto = {
   updateTime?: string | null;
 };
 
-type WorkflowDto = {
+type AgentflowDto = {
   id: string;
   name: string;
   description: string | null;
@@ -64,7 +64,7 @@ type WorkflowDto = {
 type ProjectTaskDto = {
   id: string;
   projectId: string;
-  workflowId: string;
+  agentflowId: string;
   status: number;
   description: string;
   input: string;
@@ -160,10 +160,10 @@ export default function ProjectDetailsPage() {
     },
   });
 
-  const workflowsQuery = useQuery({
-    queryKey: ["workflows"],
+  const agentflowsQuery = useQuery({
+    queryKey: ["agentflows"],
     queryFn: async () => {
-      return (await apiGet("/api/workflows")) as unknown as WorkflowDto[];
+      return (await apiGet("/api/agentflows")) as unknown as AgentflowDto[];
     },
   });
 
@@ -173,7 +173,7 @@ export default function ProjectDetailsPage() {
   const [editEnable, setEditEnable] = React.useState(true);
 
   const [createTaskOpen, setCreateTaskOpen] = React.useState(false);
-  const [createTaskWorkflowId, setCreateTaskWorkflowId] = React.useState("");
+  const [createTaskAgentflowId, setCreateTaskAgentflowId] = React.useState("");
   const [createTaskDescription, setCreateTaskDescription] = React.useState("");
   const [createTaskInput, setCreateTaskInput] = React.useState("");
 
@@ -236,7 +236,7 @@ export default function ProjectDetailsPage() {
     onSuccess: async () => {
       toast.success("Task created");
       setCreateTaskOpen(false);
-      setCreateTaskWorkflowId("");
+      setCreateTaskAgentflowId("");
       setCreateTaskDescription("");
       setCreateTaskInput("");
       await queryClient.invalidateQueries({
@@ -476,31 +476,31 @@ export default function ProjectDetailsPage() {
                   </UiDialogDescription>
                 </DialogHeader>
 
-                {workflowsQuery.isLoading ? (
+                {agentflowsQuery.isLoading ? (
                   <div className="text-sm text-muted-foreground">
-                    Loading workflows...
+                    Loading agentflows...
                   </div>
-                ) : workflowsQuery.isError ? (
+                ) : agentflowsQuery.isError ? (
                   <div className="text-sm text-destructive">
-                    Failed to load workflows:{" "}
-                    {getApiErrorMessage(workflowsQuery.error)}
+                    Failed to load agentflows:{" "}
+                    {getApiErrorMessage(agentflowsQuery.error)}
                   </div>
                 ) : (
                   <div className="grid gap-4">
                     <div className="grid gap-2">
-                      <Label htmlFor="task-workflow">Workflow</Label>
+                      <Label htmlFor="task-agentflow">Agentflow</Label>
                       <select
-                        id="task-workflow"
-                        value={createTaskWorkflowId}
+                        id="task-agentflow"
+                        value={createTaskAgentflowId}
                         onChange={(e) =>
-                          setCreateTaskWorkflowId(e.target.value)
+                          setCreateTaskAgentflowId(e.target.value)
                         }
                         className="h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-sm"
                       >
                         <option value="" disabled>
-                          Select a workflow...
+                          Select an agentflow...
                         </option>
-                        {(workflowsQuery.data ?? [])
+                        {(agentflowsQuery.data ?? [])
                           .filter((w) => w.enable)
                           .map((w) => (
                             <option key={w.id} value={w.id}>
@@ -509,7 +509,7 @@ export default function ProjectDetailsPage() {
                           ))}
                       </select>
                       <div className="text-xs text-muted-foreground">
-                        Only enabled workflows are shown.
+                        Only enabled agentflows are shown.
                       </div>
                     </div>
 
@@ -548,15 +548,15 @@ export default function ProjectDetailsPage() {
                     type="button"
                     onClick={() =>
                       createTaskMutation.mutate({
-                        workflowId: createTaskWorkflowId,
+                        agentflowId: createTaskAgentflowId,
                         description: createTaskDescription,
                         input: createTaskInput,
                       })
                     }
                     disabled={
-                      workflowsQuery.isLoading ||
-                      workflowsQuery.isError ||
-                      !createTaskWorkflowId ||
+                      agentflowsQuery.isLoading ||
+                      agentflowsQuery.isError ||
+                      !createTaskAgentflowId ||
                       !createTaskDescription.trim() ||
                       !createTaskInput.trim() ||
                       createTaskMutation.isPending
@@ -603,8 +603,8 @@ export default function ProjectDetailsPage() {
                         <div className="text-xs text-muted-foreground">
                           <span className="font-mono">{t.id}</span>
                           <span className="mx-2">·</span>
-                          Workflow:{" "}
-                          <span className="font-mono">{t.workflowId}</span>
+                          Agentflow:{" "}
+                          <span className="font-mono">{t.agentflowId}</span>
                         </div>
 
                         <div className="text-xs text-muted-foreground">

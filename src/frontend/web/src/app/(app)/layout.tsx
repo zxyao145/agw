@@ -45,8 +45,8 @@ const navItems: SidebarMenuGroupProps[] = [
     groupLable: "Management",
     menus: [
       {
-        url: "/workflows",
-        title: "Workflows",
+        url: "/agentflows",
+        title: "Agentflows",
         isActive: true,
         icon: <Workflow />
       },

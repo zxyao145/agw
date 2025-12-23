@@ -1,9 +1,9 @@
 namespace DSystem.Domain.Enums;
 
 /// <summary>
-/// Workflow orchestration patterns.
+/// Agentflow orchestration patterns.
 /// </summary>
-public enum WorkflowOrchestrationPattern
+public enum AgentflowOrchestrationPattern
 {
     /// <summary>
     /// Broadcasts a task to all agents and collects results independently.

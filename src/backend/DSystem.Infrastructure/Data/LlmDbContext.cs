@@ -15,9 +15,9 @@ public class LlmDbContext : DbContext
     public DbSet<ModelProviderApiKey> ModelProviderApiKeys => Set<ModelProviderApiKey>();
     public DbSet<Agent> Agents => Set<Agent>();
 
-    public DbSet<Workflow> Workflows => Set<Workflow>();
-    public DbSet<WorkflowNode> WorkflowNodes => Set<WorkflowNode>();
-    public DbSet<WorkflowEdge> WorkflowEdges => Set<WorkflowEdge>();
+    public DbSet<Agentflow> Agentflows => Set<Agentflow>();
+    public DbSet<AgentflowNode> AgentflowNodes => Set<AgentflowNode>();
+    public DbSet<AgentflowEdge> AgentflowEdges => Set<AgentflowEdge>();
 
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
@@ -82,7 +82,7 @@ public class LlmDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<Workflow>(entity =>
+        modelBuilder.Entity<Agentflow>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
@@ -91,25 +91,25 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.ConfigurationJson).HasMaxLength(16000);
         });
 
-        modelBuilder.Entity<WorkflowNode>(entity =>
+        modelBuilder.Entity<AgentflowNode>(entity =>
         {
-            entity.HasKey(e => new { e.WorkflowId, e.NodeId });
-            entity.HasIndex(e => new { e.WorkflowId, e.Type, e.RelateId })
+            entity.HasKey(e => new { e.AgentflowId, e.NodeId });
+            entity.HasIndex(e => new { e.AgentflowId, e.Type, e.RelateId })
                 .IsUnique(true);
         });
 
-        modelBuilder.Entity<WorkflowEdge>(entity =>
+        modelBuilder.Entity<AgentflowEdge>(entity =>
         {
-            entity.HasKey(e => new { e.WorkflowId, e.EdgeId });
+            entity.HasKey(e => new { e.AgentflowId, e.EdgeId });
 
             entity.HasOne(e => e.SourceNode)
                 .WithMany(n => n.SourceEdges)
-                .HasForeignKey(e => new { e.WorkflowId, e.SourceNodeId })
+                .HasForeignKey(e => new { e.AgentflowId, e.SourceNodeId })
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(e => e.TargetNode)
                 .WithMany(n => n.TargetEdges)
-                .HasForeignKey(e => new { e.WorkflowId, e.TargetNodeId })
+                .HasForeignKey(e => new { e.AgentflowId, e.TargetNodeId })
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

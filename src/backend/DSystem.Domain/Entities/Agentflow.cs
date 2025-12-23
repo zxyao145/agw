@@ -1,17 +1,19 @@
 using DSystem.Domain.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DSystem.Domain.Entities;
 
-public class Workflow : BaseEntity
+[Table("agentflow")]
+public class Agentflow : BaseEntity
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string SystemPrompt { get; set; } = string.Empty;
-    public WorkflowOrchestrationPattern Pattern { get; set; }
+    public AgentflowOrchestrationPattern Pattern { get; set; }
     public string? ConfigurationJson { get; set; }
     public bool Enable { get; set; } = true;
 
-    public ICollection<WorkflowNode> Nodes { get; set; } = new List<WorkflowNode>();
-    public ICollection<WorkflowEdge> Edges { get; set; } = new List<WorkflowEdge>();
+    public ICollection<AgentflowNode> Nodes { get; set; } = new List<AgentflowNode>();
+    public ICollection<AgentflowEdge> Edges { get; set; } = new List<AgentflowEdge>();
 }

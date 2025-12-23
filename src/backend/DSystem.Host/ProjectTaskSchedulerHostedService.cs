@@ -121,7 +121,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
             var dbContext = scope.ServiceProvider.GetRequiredService<LlmDbContext>();
             var taskService = scope.ServiceProvider.GetRequiredService<ProjectTaskDomainService>();
-            var workflowRuntime = scope.ServiceProvider.GetRequiredService<WorkflowRuntimeService>();
+            var agentflowRuntime = scope.ServiceProvider.GetRequiredService<AgentflowRuntimeService>();
 
             // 锁定项目 projectId
             var leaseAcquired = await TryAcquireProjectLeaseAsync(dbContext, projectId, stoppingToken);
@@ -153,7 +153,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                 }
 
                 activity?.SetTag("task.id", next.Id);
-                activity?.SetTag("workflow.id", next.WorkflowId);
+                activity?.SetTag("agentflow.id", next.AgentflowId);
 
                 var marked = await taskService.TryMarkRunningAsync(next.Id, user: "scheduler");
                 if (marked == null)
@@ -168,21 +168,21 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                 var stopwatch = Stopwatch.StartNew();
                 try
                 {
-                    using var taskActivity = ActivitySource.StartActivity("ExecuteWorkflow", ActivityKind.Internal);
+                    using var taskActivity = ActivitySource.StartActivity("ExecuteAgentflow", ActivityKind.Internal);
                     taskActivity?.SetTag("task.id", marked.Id);
-                    taskActivity?.SetTag("workflow.id", marked.WorkflowId);
+                    taskActivity?.SetTag("agentflow.id", marked.AgentflowId);
 
-                    var execution = await workflowRuntime.ExecuteAsync(marked.WorkflowId, marked.Input, stoppingToken);
+                    var execution = await agentflowRuntime.ExecuteAsync(marked.AgentflowId, marked.Input, stoppingToken);
                     stopwatch.Stop();
 
                     if (execution == null)
                     {
-                        await taskService.MarkFailedAsync(marked.Id, "Workflow execution failed (workflow disabled/missing or agent runtime unavailable).", "scheduler");
+                        await taskService.MarkFailedAsync(marked.Id, "Agentflow execution failed (agentflow disabled/missing or agent runtime unavailable).", "scheduler");
                         _tasksFailedCounter.Add(1,
                             new KeyValuePair<string, object?>("task.id", marked.Id),
-                            new KeyValuePair<string, object?>("workflow.id", marked.WorkflowId),
-                            new KeyValuePair<string, object?>("reason", "workflow_unavailable"));
-                        taskActivity?.SetStatus(ActivityStatusCode.Error, "Workflow unavailable");
+                            new KeyValuePair<string, object?>("agentflow.id", marked.AgentflowId),
+                            new KeyValuePair<string, object?>("reason", "agentflow_unavailable"));
+                        taskActivity?.SetStatus(ActivityStatusCode.Error, "Agentflow unavailable");
                         return;
                     }
 
@@ -196,10 +196,10 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
                     _tasksExecutedCounter.Add(1,
                         new KeyValuePair<string, object?>("task.id", marked.Id),
-                        new KeyValuePair<string, object?>("workflow.id", marked.WorkflowId));
+                        new KeyValuePair<string, object?>("agentflow.id", marked.AgentflowId));
                     _taskExecutionDuration.Record(stopwatch.ElapsedMilliseconds,
                         new KeyValuePair<string, object?>("task.id", marked.Id),
-                        new KeyValuePair<string, object?>("workflow.id", marked.WorkflowId),
+                        new KeyValuePair<string, object?>("agentflow.id", marked.AgentflowId),
                         new KeyValuePair<string, object?>("status", "success"));
                     taskActivity?.SetStatus(ActivityStatusCode.Ok);
                 }
@@ -209,11 +209,11 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                     await taskService.MarkFailedAsync(marked.Id, ex.Message, "scheduler");
                     _tasksFailedCounter.Add(1,
                         new KeyValuePair<string, object?>("task.id", marked.Id),
-                        new KeyValuePair<string, object?>("workflow.id", marked.WorkflowId),
+                        new KeyValuePair<string, object?>("agentflow.id", marked.AgentflowId),
                         new KeyValuePair<string, object?>("reason", "execution_exception"));
                     _taskExecutionDuration.Record(stopwatch.ElapsedMilliseconds,
                         new KeyValuePair<string, object?>("task.id", marked.Id),
-                        new KeyValuePair<string, object?>("workflow.id", marked.WorkflowId),
+                        new KeyValuePair<string, object?>("agentflow.id", marked.AgentflowId),
                         new KeyValuePair<string, object?>("status", "failed"));
                     activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 }
