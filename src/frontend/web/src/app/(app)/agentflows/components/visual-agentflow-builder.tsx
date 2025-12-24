@@ -24,7 +24,9 @@ import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -202,7 +204,6 @@ export function VisualAgentflowBuilder({
 }: VisualAgentflowBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const [selectedNodeType, setSelectedNodeType] = React.useState<"agent" | "agentflow">("agent")
   const [selectedItemId, setSelectedItemId] = React.useState<string>("")
   const [pattern, setPattern] = React.useState<number>(-1) // Default to manual mode
   const [maximumIterationCount, setMaximumIterationCount] = React.useState<number>(5) // Group Chat parameter
@@ -213,6 +214,12 @@ export function VisualAgentflowBuilder({
   const [agentflowSystemPrompt, setAgentflowSystemPrompt] = React.useState("")
   const [agentflowEnabled, setAgentflowEnabled] = React.useState(true)
   const [isCreating, setIsCreating] = React.useState(false)
+
+  // Filter out current editing agentflow to prevent circular references
+  const availableAgentflows = React.useMemo(() => {
+    if (!editingAgentflow) return agentflows
+    return agentflows.filter(w => w.id !== editingAgentflow.id)
+  }, [agentflows, editingAgentflow])
 
 
   const handleDeleteNode = React.useCallback(
@@ -355,8 +362,12 @@ export function VisualAgentflowBuilder({
   )
 
 
-  const addNode = React.useCallback((type: "agent" | "agentflow", itemId: string) => {
-    if (!itemId) return
+  const addNode = React.useCallback((combinedId: string) => {
+    if (!combinedId) return
+
+    // Parse combined ID format: "agent:id" or "agentflow:id"
+    const [type, itemId] = combinedId.split(':') as ["agent" | "agentflow", string]
+    if (!type || !itemId) return
 
     // Generate unique node ID to support duplicates
     const nodeId = `${type}-${itemId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -385,7 +396,7 @@ export function VisualAgentflowBuilder({
       }
     } else {
       // type === "agentflow"
-      const agentflow = agentflows.find((w) => w.id === itemId)
+      const agentflow = availableAgentflows.find((w) => w.id === itemId)
       if (!agentflow) return
 
       newNode = {
@@ -407,7 +418,7 @@ export function VisualAgentflowBuilder({
     }
 
     setNodes((nds) => [...nds, newNode])
-  }, [agents, agentflows, setNodes, handleDeleteNode, handleRoleChange])
+  }, [agents, availableAgentflows, setNodes, handleDeleteNode, handleRoleChange])
 
   // Auto-connect nodes based on selected pattern
   const handleAutoConnect = React.useCallback((selectedPattern: number) => {
@@ -744,129 +755,8 @@ export function VisualAgentflowBuilder({
       onKeyDown={onKeyDown}
       tabIndex={0}
     >
-      {/* Controls */}
-      <div className="flex flex-wrap items-end gap-4">
-        {/* Node Type Selector */}
-        <div className="space-y-2">
-          <Label>Node Type</Label>
-          <Select
-            value={selectedNodeType}
-            onValueChange={(value) => {
-              setSelectedNodeType(value as "agent" | "agentflow")
-              setSelectedItemId("") // Reset selection when switching type
-            }}
-          >
-            <SelectTrigger className="w-30">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="agentflow">Agentflow</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Item Selector (Agent or Agentflow) */}
-        <div className="space-y-2">
-          <Label>
-            {selectedNodeType === "agent" ? "Select Agent" : "Select Agentflow"}
-          </Label>
-          <Select
-            value={selectedItemId}
-            onValueChange={(itemId) => {
-              addNode(selectedNodeType, itemId)
-              setSelectedItemId("")
-            }}
-          >
-            <SelectTrigger className="w-50">
-              <SelectValue
-                placeholder={
-                  selectedNodeType === "agent"
-                    ? "Choose an agent..."
-                    : "Choose a agentflow..."
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {selectedNodeType === "agent"
-                ? agents.map((agent) => (
-                    <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name}
-                    </SelectItem>
-                  ))
-                : agentflows.map((agentflow) => (
-                    <SelectItem key={agentflow.id} value={agentflow.id}>
-                      {agentflow.name}
-                    </SelectItem>
-                  ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>
-            Auto-Connect
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Info size={16} className="text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p>
-                  Select a pattern to auto-connect and layout nodes.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </Label>
-          <Select
-            value={String(pattern)}
-            onValueChange={(v) => {
-              const newPattern = Number(v);
-              setPattern(newPattern);
-              handleAutoConnect(newPattern);
-            }}
-            disabled={nodes.length === 0}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select pattern" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="-1">None (Manual)</SelectItem>
-              <SelectItem value="1">Sequential</SelectItem>
-              <SelectItem value="3">Handoff</SelectItem>
-              <SelectItem value="2">Group Chat</SelectItem>
-              <SelectItem value="0">Concurrent</SelectItem>
-              <SelectItem value="4">Magentic</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Group Chat Configuration */}
-        {pattern === 2 && (
-          <div className="space-y-2">
-            <Label>
-              Max Iterations
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info size={16} className="text-muted-foreground ml-1 inline" />
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>
-                    Maximum number of iterations for Group Chat pattern
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </Label>
-            <Input
-              type="number"
-              min="1"
-              max="100"
-              value={maximumIterationCount}
-              onChange={(e) => setMaximumIterationCount(Number(e.target.value))}
-              className="w-[120px]"
-            />
-          </div>
-        )}
-
+      <div className="flex flex-wrap gap-4">
+        
         {/* Agentflow Details */}
         <div className="space-y-2">
           <Label htmlFor="agentflowName">Agentflow Name *</Label>
@@ -914,15 +804,130 @@ export function VisualAgentflowBuilder({
           </Label>
         </div>
 
+        
         <Button
           onClick={handleBuild}
           disabled={isCreating || !agentflowName.trim() || nodes.length === 0}
           variant="default"
         >
           {isCreating
-            ? (editingAgentflow ? "Updating..." : "Creating...")
-            : (editingAgentflow ? "Update Agentflow" : "Build Agentflow")}
+            ? editingAgentflow
+              ? "Updating..."
+              : "Creating..."
+            : editingAgentflow
+              ? "Update Agentflow"
+              : "Build Agentflow"}
         </Button>
+      </div>
+      {/* Controls */}
+      <div className="flex flex-wrap items-end gap-4">
+        {/* Add Node Selector */}
+        <div className="space-y-2">
+          <Label>Add Node</Label>
+          <Select
+            value={selectedItemId}
+            onValueChange={(combinedId) => {
+              addNode(combinedId);
+              setSelectedItemId("");
+            }}
+          >
+            <SelectTrigger className="w-68">
+              <SelectValue placeholder="Choose an agent or agentflow..." />
+            </SelectTrigger>
+            <SelectContent position="popper" sideOffset={4}>
+              <SelectGroup>
+                <SelectLabel>Agents</SelectLabel>
+                {agents.map((agent) => (
+                  <SelectItem key={agent.id} value={`agent:${agent.id}`}>
+                    {agent.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Agentflows</SelectLabel>
+                {availableAgentflows.length > 0 ? (
+                  availableAgentflows.map((agentflow) => (
+                    <SelectItem
+                      key={agentflow.id}
+                      value={`agentflow:${agentflow.id}`}
+                    >
+                      {agentflow.name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="no-agentflows" disabled>
+                    {editingAgentflow
+                      ? "No other agentflows available"
+                      : "No agentflows available"}
+                  </SelectItem>
+                )}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>
+            Auto-Connect
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info size={16} className="text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>Select a pattern to auto-connect and layout nodes.</p>
+              </TooltipContent>
+            </Tooltip>
+          </Label>
+          <Select
+            value={String(pattern)}
+            onValueChange={(v) => {
+              const newPattern = Number(v);
+              setPattern(newPattern);
+              handleAutoConnect(newPattern);
+            }}
+            disabled={nodes.length === 0}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select pattern" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="-1">None (Manual)</SelectItem>
+              <SelectItem value="1">Sequential</SelectItem>
+              <SelectItem value="3">Handoff</SelectItem>
+              <SelectItem value="2">Group Chat</SelectItem>
+              <SelectItem value="0">Concurrent</SelectItem>
+              <SelectItem value="4">Magentic</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Group Chat Configuration */}
+        {pattern === 2 && (
+          <div className="space-y-2">
+            <Label>
+              Max Iterations
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info
+                    size={16}
+                    className="text-muted-foreground ml-1 inline"
+                  />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p>Maximum number of iterations for Group Chat pattern</p>
+                </TooltipContent>
+              </Tooltip>
+            </Label>
+            <Input
+              type="number"
+              min="1"
+              max="100"
+              value={maximumIterationCount}
+              onChange={(e) => setMaximumIterationCount(Number(e.target.value))}
+              className="w-[120px]"
+            />
+          </div>
+        )}
       </div>
 
       {/* Canvas */}
@@ -942,12 +947,12 @@ export function VisualAgentflowBuilder({
           <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
         </ReactFlow>
       </div>
-            {/* Helper Text */}
+      {/* Helper Text */}
       <div className="text-xs text-muted-foreground shrink-0">
         <p>
-          <strong>Tip:</strong> Select agents or agentflows to add them to the canvas. Choose
-          a agentflow pattern from the dropdown to automatically create
-          connections and layout. You can also manually connect nodes by
+          <strong>Tip:</strong> Select agents or agentflows to add them to the
+          canvas. Choose a agentflow pattern from the dropdown to automatically
+          create connections and layout. You can also manually connect nodes by
           dragging from the{" "}
           <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>{" "}
           green output handle to the{" "}

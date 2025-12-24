@@ -234,7 +234,24 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
         var now = DateTime.UtcNow;
         var until = now.Add(_projectLeaseDuration);
 
-        // 1) Try insert (fast path for first time).
+        // 1) Try update first (common case: lease already exists).
+        // Claim if expired OR renew if we already own it.
+        var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($@"
+UPDATE project_leases
+SET locked_by = {_instanceId},
+    locked_until_utc = {until},
+    update_by = {_instanceId},
+    update_time = {now}
+WHERE project_id = {projectId}
+  AND (locked_until_utc <= {now} OR locked_by = {_instanceId})
+", cancellationToken);
+
+        if (affected == 1)
+        {
+            return true;
+        }
+
+        // 2) If update failed (lease doesn't exist or held by another instance), try insert.
         try
         {
             await dbContext.ProjectLeases.AddAsync(new ProjectLease
@@ -253,23 +270,11 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
         }
         catch (DbUpdateException)
         {
-            // Lease already exists - try to claim it if expired or renew if we own it.
-            // This is expected in multi-instance environments and not an error.
+            // Insert failed - another instance created the lease between step 1 and 2.
+            // This is rare but possible in multi-instance environments.
             dbContext.ChangeTracker.Clear();
+            return false;
         }
-
-        // 2) Try claim if expired OR renew if we already own it.
-        var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($@"
-UPDATE project_leases
-SET locked_by = {_instanceId},
-    locked_until_utc = {until},
-    update_by = {_instanceId},
-    update_time = {now}
-WHERE project_id = {projectId}
-  AND (locked_until_utc <= {now} OR locked_by = {_instanceId})
-", cancellationToken);
-
-        return affected == 1;
     }
 
     private Task RenewProjectLeaseAsync(LlmDbContext dbContext, Guid projectId, CancellationToken cancellationToken)

@@ -362,4 +362,7 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 llmmanager.db
+d_system.db
+d_system.db-wal
 logs/
+
