@@ -42,7 +42,7 @@ public class LlmDbContext : DbContext
 
         modelBuilder.Entity<ModelProvider>(entity =>
         {
-            entity.HasKey(e => new { e.ModelId, e.ProviderId });
+            entity.HasKey(e => e.Id);
             entity.Property(e => e.InputPrice).HasColumnType("decimal(18,4)");
             entity.Property(e => e.OutputPrice).HasColumnType("decimal(18,4)");
             entity.Property(e => e.CacheRead).HasColumnType("decimal(18,4)");
@@ -63,9 +63,10 @@ public class LlmDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ApiKey).IsRequired().HasMaxLength(2000);
+
             entity.HasOne(e => e.ModelProvider)
                 .WithMany(mp => mp.ApiKeys)
-                .HasForeignKey(e => new { e.ModelId, e.ProviderId })
+                .HasForeignKey(e => e.ModelProviderId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

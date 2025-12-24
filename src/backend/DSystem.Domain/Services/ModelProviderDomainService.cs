@@ -15,18 +15,19 @@ public class ModelProviderDomainService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<ModelProvider> CreateAsync(ModelProvider link, string user)
+    public async Task<ModelProvider> CreateAsync(ModelProvider entity, string user)
     {
-        link.CreateBy = user;
-        link.CreateTime = DateTime.UtcNow;
-        await _repository.AddAsync(link);
+        entity.Id = Guid.NewGuid();
+        entity.CreateBy = user;
+        entity.CreateTime = DateTime.UtcNow;
+        await _repository.AddAsync(entity);
         await _unitOfWork.SaveChangesAsync();
-        return link;
+        return entity;
     }
 
-    public async Task<ModelProvider?> UpdateAsync(Guid modelId, Guid providerId, Action<ModelProvider> updateAction, string user)
+    public async Task<ModelProvider?> UpdateAsync(Guid id, Action<ModelProvider> updateAction, string user)
     {
-        var existing = await GetAsync(modelId, providerId);
+        var existing = await GetAsync(id);
         if (existing == null)
         {
             return null;
@@ -40,9 +41,9 @@ public class ModelProviderDomainService
         return existing;
     }
 
-    public async Task<bool> DeleteAsync(Guid modelId, Guid providerId)
+    public async Task<bool> DeleteAsync(Guid id)
     {
-        var existing = await GetAsync(modelId, providerId);
+        var existing = await GetAsync(id);
         if (existing == null)
         {
             return false;
@@ -56,9 +57,12 @@ public class ModelProviderDomainService
     public Task<IReadOnlyList<ModelProvider>> ListAsync(Expression<Func<ModelProvider, bool>>? predicate = null) =>
         _repository.ListAsync(predicate);
 
-    public async Task<ModelProvider?> GetAsync(Guid modelId, Guid providerId)
+    public Task<IReadOnlyList<ModelProvider>> ListWithDetailsAsync(Expression<Func<ModelProvider, bool>>? predicate = null) =>
+        _repository.ListAsync(predicate, mp => mp.Model!, mp => mp.Provider!);
+
+    public async Task<ModelProvider?> GetAsync(Guid id)
     {
-        var results = await _repository.ListAsync(x => x.ModelId == modelId && x.ProviderId == providerId);
+        var results = await _repository.ListAsync(x => x.Id == id);
         return results.Count > 0 ? results[0] : null;
     }
 }

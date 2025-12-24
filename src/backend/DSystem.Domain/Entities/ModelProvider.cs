@@ -2,6 +2,7 @@ namespace DSystem.Domain.Entities;
 
 public class ModelProvider : BaseEntity
 {
+    public Guid Id { get; set; }
     public Guid ModelId { get; set; }
     public Guid ProviderId { get; set; }
 

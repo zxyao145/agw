@@ -47,30 +47,18 @@ public class AgentRuntimeService
             return null;
         }
 
-        var modelProvider = await _modelProviderRepository.GetByIdAsync(new object[] { apiKey.ModelId, apiKey.ProviderId });
+        var modelProvider = await _modelProviderRepository.GetByIdAsync(apiKey.ModelProviderId);
         if (modelProvider == null)
         {
             return null;
         }
 
-        var model = await _modelRepository.GetByIdAsync(apiKey.ModelId);
-        var provider = await _providerRepository.GetByIdAsync(apiKey.ProviderId);
+        var model = await _modelRepository.GetByIdAsync(modelProvider.ModelId);
+        var provider = await _providerRepository.GetByIdAsync(modelProvider.ProviderId);
         if (model == null || provider == null)
         {
             return null;
         }
-        //return new AiAgent
-        //{
-        //    Id = agent.Id,
-        //    Name = agent.Name,
-        //    Instructions = agent.Instructions,
-        //    SystemPrompt = agent.SystemPrompt,
-        //    ProviderName = provider.Name,
-        //    ModelName = model.Name,
-        //    Endpoint = provider.Endpoint,
-        //    ApiKey = apiKey.ApiKey
-        //};
-
 
         ApiKeyCredential credential = new ApiKeyCredential(apiKey.ApiKey);
         OpenAIClientOptions options = new OpenAIClientOptions

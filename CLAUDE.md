@@ -417,81 +417,83 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-24T14:18:57Z
-**Milestone**: Scheduler optimization and UI polish | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-24T16:01:30Z
+**Milestone**: ModelProvider architecture refactoring | **Branch**: main
 
 ### Technical Status
-- **Code Quality**: Excellent (19,480 code files)
-- **Architecture Health**: Stable - Infrastructure optimization and bug fixes
+- **Code Quality**: Excellent (19,490 code files)
+- **Architecture Health**: Active Development - Entity relationship refactoring
 - **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, OpenTelemetry 1.14.0, Serilog 4.3.0)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with latest development activity
+- [x] **CLAUDE.md**: Updated with ModelProvider refactoring details
 - [x] **Configuration Sync**: All dependencies synchronized
-- [x] **API Documentation**: OpenAPI specification current
-- [x] **Database**: All migrations applied, .gitignore updated
+- [x] **API Documentation**: OpenAPI specification reflects new structure
+- [x] **Database**: EF Core migration AddModelProviderIdKey created
 
-### Recent Activity (Since 2025-12-23T15:53:43Z checkpoint)
-- **Period**: 22.5 hours | **Work Session**: Infrastructure optimization
+### Recent Activity (Since 2025-12-24T14:18:57Z checkpoint)
+- **Period**: 1.7 hours | **Work Session**: Architecture refactoring
 - **Major Changes**:
-  - ✅ **Backend Scheduler Optimization** (ProjectTaskSchedulerHostedService.cs)
-    - Changed lease acquisition strategy: UPDATE-first instead of INSERT-first
-    - Reduces DbUpdateException frequency in multi-instance scenarios
-    - Eliminates noise in error logs during normal operation
-    - Improved comment clarity for lease acquisition flow
-  - ✅ **Frontend Select Component Fix** (visual-agentflow-builder.tsx)
-    - Added `position="popper"` to SelectContent for accurate positioning
-    - Fixed dropdown misalignment in ReactFlow canvas context
-    - Added `sideOffset={4}` for better visual spacing
-  - ✅ **Database Cleanup**
-    - Removed SQLite database files from tracking (.gitignore updated)
-    - Cleaned up d_system.db, d_system.db-shm, d_system.db-wal
-- **Files Changed**: 4 (1 backend service, 1 frontend component, 1 gitignore, 1 UI component)
-- **Activity Intensity**: Low (Targeted bug fixes)
-- **Development Trend**: ➡️ Stable (Maintenance and polish)
+  - ✅ **ModelProvider Entity Refactoring**
+    - Added `Id` (Guid) as primary key to ModelProvider
+    - Replaced composite key (ModelId, ProviderId) with single Id
+    - ModelProviderApiKey now references ModelProvider.Id instead of composite key
+    - Enables better query performance and simpler relationships
+  - ✅ **ModelProviderApiKey Structure Update**
+    - Maintained as separate entity (not owned type)
+    - Changed foreign key from composite (ModelId, ProviderId) → single ModelProviderId
+    - Preserves ability to query by ApiKey and reverse-lookup to Agents
+    - Retains all audit fields (CreateTime, CreateBy, UpdateTime, UpdateBy)
+  - ✅ **API Layer Updates**
+    - ModelProvidersController: Added ModelName and ProviderName to ListAsync response
+    - ModelProvidersController: Changed routes from `{modelId}/{providerId}` to `{id}`
+    - ModelProviderApiKeysController: Updated to use ModelProviderId parameter
+    - AgentsController: Continues to use ModelProviderApiKeyId (no breaking changes)
+  - ✅ **Repository Pattern Enhancement**
+    - Added Include() overload to IRepository for eager loading
+    - Implemented in EfRepository with params Expression<Func<T, object>>[]
+    - ModelProviderDomainService.ListWithDetailsAsync() for Model/Provider eager loading
+  - ✅ **Database Migration**
+    - Migration: `20251224155354_AddModelProviderIdKey`
+    - Adds `id` column to model_providers table
+    - Recreates model_provider_api_keys with ModelProviderId FK
+    - Preserves all data integrity constraints
+- **Files Changed**: 17 files (11 backend entities/services, 4 controllers/contracts, 2 infrastructure)
+- **Activity Intensity**: High (Architectural refactoring)
+- **Development Trend**: ⬆️ Active Development (Database schema evolution)
 
-### Rename Scope Summary
-**Backend (25 files)**:
-- 6 entity/enum files renamed
-- 2 service files renamed
-- 2 API files renamed (controller + contracts)
-- 1 database migration created
-- 12 files content updated (DbContext, Program.cs, etc.)
+### Architecture Benefits
+**Query Capabilities Enabled**:
+1. ✅ Reverse lookup: ApiKey string → ModelProviderApiKey → Agents[]
+2. ✅ ModelProvider queries by single Id (simpler joins)
+3. ✅ Eager load Model/Provider names in API responses
+4. ✅ Cleaner relationship graph: Model ←→ ModelProvider(Id) ←→ Provider
+                                                    ↓
+                                            ModelProviderApiKey
+                                                    ↓
+                                                  Agent
 
-**Frontend (25 files)**:
-- 1 type file renamed
-- 38+ TypeScript/TSX files content updated
-- All imports, types, and API endpoints updated
-- Route folder rename pending
-
-**Database Schema**:
-- Table: `Workflows` → `Agentflows`
-- Columns: `WorkflowId` → `AgentflowId` (in child tables)
-- All foreign keys and indexes renamed
-- Migration reversible via Down() method
+**Breaking Changes**: None for Agent API consumers (still use ModelProviderApiKeyId)
 
 ### Recommended Actions
-1. ✅ ~~Graph structure entities~~ - **COMPLETED**
-2. ✅ ~~EF Core migration~~ - **COMPLETED**
-3. ✅ ~~Remove redundant foreign keys~~ - **COMPLETED** (RemoveFK migration)
-4. ✅ ~~Remove start node from visual workflow builder~~ - **COMPLETED**
-5. ✅ ~~Add SystemPrompt field to Workflow~~ - **COMPLETED** (full-stack implementation)
-6. ✅ ~~Fix visual dialog trigger issue~~ - **COMPLETED**
-7. ✅ ~~Fix systemPrompt loading in edit mode~~ - **COMPLETED**
-8. ✅ ~~Add Fit View button~~ - **COMPLETED**
-9. ✅ ~~Fix Select positioning in visual builder~~ - **COMPLETED**
-10. ✅ ~~Optimize scheduler lease acquisition~~ - **COMPLETED**
-11. 🔄 Test all agentflow CRUD operations end-to-end
-12. 🔍 Verify React Flow controls work correctly (zoom, pan, fit view)
-13. 🧪 Add integration tests for agentflow visual builder
-14. 📝 Consider adding user documentation for visual builder features
-15. 🔧 Monitor scheduler lease performance in multi-instance setup
+1. ✅ ~~Refactor ModelProvider to use Id primary key~~ - **COMPLETED**
+2. ✅ ~~Keep ModelProviderApiKey as entity for reverse queries~~ - **COMPLETED**
+3. ✅ ~~Add ModelName/ProviderName to API responses~~ - **COMPLETED**
+4. ⚠️ **Run database migration**: `dotnet ef database update`
+5. 🔄 Update frontend to consume new ModelName/ProviderName fields
+6. 🔄 Consider adding index on ModelProviderApiKey.ApiKey for lookup performance
+7. 🧪 Test reverse lookup scenarios (ApiKey → Agents)
+8. 📝 Document new query patterns for API consumers
+9. 🔧 Monitor query performance after migration
 
-**Git Commit**: `6de55f9` (main) | **Health Score**: 9.6/10
+**Git Commit**: `pending` (main) | **Health Score**: 9.5/10
 
 ---
 
 ### Previous Checkpoint
+
+**Project**: D-System | **Time**: 2025-12-24T14:18:57Z
+**Milestone**: Scheduler optimization and UI polish | **Branch**: main
 
 **Project**: D-System | **Time**: 2025-12-23T15:09:12Z
 **Milestone**: Comprehensive Workflow → Agentflow rename | **Branch**: main

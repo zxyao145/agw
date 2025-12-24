@@ -18,14 +18,13 @@ public class ModelProviderApiKeysController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> ListAsync([FromQuery] Guid? modelId = null, [FromQuery] Guid? providerId = null, [FromQuery] bool? enable = null)
+    public async Task<IActionResult> ListAsync([FromQuery] Guid? modelProviderId = null, [FromQuery] bool? enable = null)
     {
         Expression<Func<ModelProviderApiKey, bool>>? predicate = null;
-        if (modelId.HasValue || providerId.HasValue || enable.HasValue)
+        if (modelProviderId.HasValue || enable.HasValue)
         {
             predicate = apiKey =>
-                (!modelId.HasValue || apiKey.ModelId == modelId.Value) &&
-                (!providerId.HasValue || apiKey.ProviderId == providerId.Value) &&
+                (!modelProviderId.HasValue || apiKey.ModelProviderId == modelProviderId.Value) &&
                 (!enable.HasValue || apiKey.Enable == enable.Value);
         }
 
@@ -46,8 +45,7 @@ public class ModelProviderApiKeysController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
         var apiKey = new ModelProviderApiKey
         {
-            ModelId = request.ModelId,
-            ProviderId = request.ProviderId,
+            ModelProviderId = request.ModelProviderId,
             ApiKey = request.ApiKey,
             Enable = request.Enable
         };

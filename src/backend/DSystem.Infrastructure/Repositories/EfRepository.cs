@@ -36,6 +36,23 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
         return await query.AsNoTracking().ToListAsync();
     }
 
+    public async Task<IReadOnlyList<TEntity>> ListAsync(Expression<Func<TEntity, bool>>? predicate = null, params Expression<Func<TEntity, object>>[] includes)
+    {
+        IQueryable<TEntity> query = _dbSet;
+
+        foreach (var include in includes)
+        {
+            query = query.Include(include);
+        }
+
+        if (predicate != null)
+        {
+            query = query.Where(predicate);
+        }
+
+        return await query.AsNoTracking().ToListAsync();
+    }
+
     public async Task AddAsync(TEntity entity)
     {
         await _dbSet.AddAsync(entity);

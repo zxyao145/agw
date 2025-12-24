@@ -28,22 +28,39 @@ public class ModelProvidersController : ControllerBase
                 (!providerId.HasValue || mp.ProviderId == providerId.Value);
         }
 
-        var links = await _service.ListAsync(predicate);
-        return Ok(links);
+        var entities = await _service.ListWithDetailsAsync(predicate);
+        var result = entities.Select(mp => new
+        {
+            mp.Id,
+            mp.ModelId,
+            mp.ProviderId,
+            ModelName = mp.Model?.Name ?? string.Empty,
+            ProviderName = mp.Provider?.Name ?? string.Empty,
+            mp.InputPrice,
+            mp.OutputPrice,
+            mp.CacheRead,
+            mp.CacheWrite,
+            mp.RpsLimit,
+            mp.CreateTime,
+            mp.CreateBy,
+            mp.UpdateTime,
+            mp.UpdateBy
+        }).ToList();
+        return Ok(result);
     }
 
-    [HttpGet("{modelId:guid}/{providerId:guid}")]
-    public async Task<IActionResult> GetAsync(Guid modelId, Guid providerId)
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetAsync(Guid id)
     {
-        var link = await _service.GetAsync(modelId, providerId);
-        return link == null ? NotFound() : Ok(link);
+        var entity = await _service.GetAsync(id);
+        return entity == null ? NotFound() : Ok(entity);
     }
 
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] ModelProviderCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var link = new ModelProvider
+        var entity = new ModelProvider
         {
             ModelId = request.ModelId,
             ProviderId = request.ProviderId,
@@ -54,15 +71,15 @@ public class ModelProvidersController : ControllerBase
             RpsLimit = request.RpsLimit
         };
 
-        var created = await _service.CreateAsync(link, user);
-        return CreatedAtAction(nameof(GetAsync), new { modelId = created.ModelId, providerId = created.ProviderId }, created);
+        var created = await _service.CreateAsync(entity, user);
+        return CreatedAtAction(nameof(GetAsync), new { id = created.Id }, created);
     }
 
-    [HttpPut("{modelId:guid}/{providerId:guid}")]
-    public async Task<IActionResult> UpdateAsync(Guid modelId, Guid providerId, [FromBody] ModelProviderUpdateRequest request)
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ModelProviderUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var updated = await _service.UpdateAsync(modelId, providerId, mp =>
+        var updated = await _service.UpdateAsync(id, mp =>
         {
             mp.InputPrice = request.InputPrice;
             mp.OutputPrice = request.OutputPrice;
@@ -74,10 +91,10 @@ public class ModelProvidersController : ControllerBase
         return updated == null ? NotFound() : Ok(updated);
     }
 
-    [HttpDelete("{modelId:guid}/{providerId:guid}")]
-    public async Task<IActionResult> DeleteAsync(Guid modelId, Guid providerId)
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteAsync(Guid id)
     {
-        var deleted = await _service.DeleteAsync(modelId, providerId);
+        var deleted = await _service.DeleteAsync(id);
         return deleted ? NoContent() : NotFound();
     }
 }

@@ -35,6 +35,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 type AgentCreateRequest = components["schemas"]["AgentCreateRequest"]
 
@@ -48,6 +57,16 @@ type AgentDto = {
   createTime?: string | null
   updateBy?: string | null
   updateTime?: string | null
+}
+
+type ModelProviderApiKeyDto = {
+  id: string
+  apiKeyName: string
+  modelProviderId: string
+  modelId: string
+  providerId: string
+  providerName: string
+  modelName: string
 }
 
 function getApiErrorMessage(error: unknown): string {
@@ -69,6 +88,13 @@ export default function AgentsPage() {
     queryFn: async () => {
       // OpenAPI currently doesn't declare response schemas.
       return (await apiGet("/api/agents")) as unknown as AgentDto[]
+    },
+  })
+
+  const modelProviderApiKeysQuery = useQuery({
+    queryKey: ["modelProviderApiKeys"],
+    queryFn: async () => {
+      return (await apiGet("/api/model-provider-keys")) as unknown as ModelProviderApiKeyDto[]
     },
   })
 
@@ -142,14 +168,36 @@ export default function AgentsPage() {
 
                 <div className="grid gap-2">
                   <Label htmlFor="modelProviderApiKeyId">
-                    Model Provider API Key Id (uuid)
+                    Model Provider API Key
                   </Label>
-                  <Input
-                    id="modelProviderApiKeyId"
+                  <Select
                     value={modelProviderApiKeyId}
-                    onChange={(e) => setModelProviderApiKeyId(e.target.value)}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  />
+                    onValueChange={setModelProviderApiKeyId}
+                  >
+                    <SelectTrigger id="modelProviderApiKeyId">
+                      <SelectValue placeholder="Select an API key..." />
+                    </SelectTrigger>
+                    <SelectContent position="popper" sideOffset={4}>
+                      <SelectGroup>
+                        <SelectLabel>Available API Keys</SelectLabel>
+                        {modelProviderApiKeysQuery.isLoading ? (
+                          <SelectItem value="loading" disabled>
+                            Loading...
+                          </SelectItem>
+                        ) : modelProviderApiKeysQuery.data && modelProviderApiKeysQuery.data.length > 0 ? (
+                          modelProviderApiKeysQuery.data.map((key) => (
+                            <SelectItem key={key.id} value={key.id}>
+                              {key.apiKeyName} (Model: {key.modelName}, Provider: {key.providerName})
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-keys" disabled>
+                            No API keys available
+                          </SelectItem>
+                        )}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid gap-2">
