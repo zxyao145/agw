@@ -6,13 +6,13 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace DSystem.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class RenameTable : Migration
+    public partial class Init : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "Agentflows",
+                name: "agentflow",
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "TEXT", nullable: false),
@@ -29,7 +29,7 @@ namespace DSystem.Infrastructure.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_agentflows", x => x.id);
+                    table.PrimaryKey("pk_agentflow", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
@@ -102,12 +102,6 @@ namespace DSystem.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_project_leases", x => x.project_id);
-                    table.ForeignKey(
-                        name: "fk_project_leases_projects_project_id",
-                        column: x => x.project_id,
-                        principalTable: "projects",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -132,18 +126,13 @@ namespace DSystem.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_project_tasks", x => x.id);
-                    table.ForeignKey(
-                        name: "fk_project_tasks_projects_project_id",
-                        column: x => x.project_id,
-                        principalTable: "projects",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
                 name: "model_providers",
                 columns: table => new
                 {
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
                     model_id = table.Column<Guid>(type: "TEXT", nullable: false),
                     provider_id = table.Column<Guid>(type: "TEXT", nullable: false),
                     input_price = table.Column<decimal>(type: "decimal(18,4)", nullable: false),
@@ -158,19 +147,7 @@ namespace DSystem.Infrastructure.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_model_providers", x => new { x.model_id, x.provider_id });
-                    table.ForeignKey(
-                        name: "fk_model_providers_models_model_id",
-                        column: x => x.model_id,
-                        principalTable: "models",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "fk_model_providers_providers_provider_id",
-                        column: x => x.provider_id,
-                        principalTable: "providers",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                    table.PrimaryKey("pk_model_providers", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
@@ -178,8 +155,7 @@ namespace DSystem.Infrastructure.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    model_id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    provider_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    model_provider_id = table.Column<Guid>(type: "TEXT", nullable: false),
                     api_key = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: false),
                     enable = table.Column<bool>(type: "INTEGER", nullable: false),
                     create_time = table.Column<DateTime>(type: "TEXT", nullable: false),
@@ -190,12 +166,6 @@ namespace DSystem.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_model_provider_api_keys", x => x.id);
-                    table.ForeignKey(
-                        name: "fk_model_provider_api_keys_model_providers_model_id_provider_id",
-                        columns: x => new { x.model_id, x.provider_id },
-                        principalTable: "model_providers",
-                        principalColumns: new[] { "model_id", "provider_id" },
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -215,12 +185,6 @@ namespace DSystem.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agents", x => x.id);
-                    table.ForeignKey(
-                        name: "fk_agents_model_provider_api_keys_model_provider_api_key_id",
-                        column: x => x.model_provider_api_key_id,
-                        principalTable: "model_provider_api_keys",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -240,17 +204,6 @@ namespace DSystem.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agentflow_nodes", x => new { x.agentflow_id, x.node_id });
-                    table.ForeignKey(
-                        name: "fk_agentflow_nodes_agentflows_agentflow_id",
-                        column: x => x.agentflow_id,
-                        principalTable: "Agentflows",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "fk_agentflow_nodes_agents_agent_id",
-                        column: x => x.agent_id,
-                        principalTable: "agents",
-                        principalColumn: "id");
                 });
 
             migrationBuilder.CreateTable(
@@ -270,24 +223,6 @@ namespace DSystem.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agentflow_edges", x => new { x.agentflow_id, x.edge_id });
-                    table.ForeignKey(
-                        name: "fk_agentflow_edges_agentflow_nodes_agentflow_id_source_node_id",
-                        columns: x => new { x.agentflow_id, x.source_node_id },
-                        principalTable: "agentflow_nodes",
-                        principalColumns: new[] { "agentflow_id", "node_id" },
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "fk_agentflow_edges_agentflow_nodes_agentflow_id_target_node_id",
-                        columns: x => new { x.agentflow_id, x.target_node_id },
-                        principalTable: "agentflow_nodes",
-                        principalColumns: new[] { "agentflow_id", "node_id" },
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "fk_agentflow_edges_agentflows_agentflow_id",
-                        column: x => x.agentflow_id,
-                        principalTable: "Agentflows",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
@@ -317,9 +252,14 @@ namespace DSystem.Infrastructure.Migrations
                 column: "model_provider_api_key_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_model_provider_api_keys_model_id_provider_id",
+                name: "ix_model_provider_api_keys_model_provider_id",
                 table: "model_provider_api_keys",
-                columns: new[] { "model_id", "provider_id" });
+                column: "model_provider_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_model_providers_model_id",
+                table: "model_providers",
+                column: "model_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_model_providers_provider_id",
@@ -356,7 +296,7 @@ namespace DSystem.Infrastructure.Migrations
                 name: "projects");
 
             migrationBuilder.DropTable(
-                name: "Agentflows");
+                name: "agentflow");
 
             migrationBuilder.DropTable(
                 name: "agents");

@@ -44,6 +44,7 @@ type ApiKeyCreateRequest = components["schemas"]["ApiKeyCreateRequest"]
 type ApiKeyUpdateRequest = components["schemas"]["ApiKeyUpdateRequest"]
 
 type ModelProviderDto = {
+  id: string
   modelId: string
   providerId: string
   inputPrice: number
@@ -337,24 +338,21 @@ function parseFloatOrNull(value: string): number | null {
 }
 
 async function listKeysByPair(args: {
-  modelId: string
-  providerId: string
+  modelProviderId: string
 }): Promise<ModelProviderApiKeyDto[]> {
   // NOTE: openapi-typescript didn't generate query param types for this endpoint
   // so we narrow the typing at the boundary.
   return (await apiGet("/api/model-provider-keys", {
     params: {
-      query: { modelId: args.modelId, providerId: args.providerId },
+      query: { modelProviderId: args.modelProviderId },
     },
   } as never)) as unknown as ModelProviderApiKeyDto[];
 }
 
 function ModelProviderActions({
-  modelId,
-  providerId,
+  modelProviderId,
 }: {
-  modelId: string
-  providerId: string
+  modelProviderId: string
 }) {
   const queryClient = useQueryClient()
   const [viewKeysOpen, setViewKeysOpen] = React.useState(false)
@@ -363,9 +361,9 @@ function ModelProviderActions({
   const [enable, setEnable] = React.useState(true)
 
   const pairKeysQuery = useQuery({
-    queryKey: ["model-provider-keys", modelId, providerId],
+    queryKey: ["model-provider-keys", modelProviderId],
     enabled: viewKeysOpen,
-    queryFn: async () => await listKeysByPair({ modelId, providerId }),
+    queryFn: async () => await listKeysByPair({ modelProviderId }),
   })
 
   const createKeyMutation = useMutation({
@@ -566,8 +564,7 @@ function ModelProviderActions({
                 disabled={createKeyDisabled}
                 onClick={() =>
                   createKeyMutation.mutate({
-                    modelId,
-                    providerId,
+                    modelProviderId: modelProviderId,
                     apiKey,
                     enable,
                   })
@@ -926,7 +923,7 @@ export default function ModelProvidersPage() {
                           {String(item.rpsLimit)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right">
-                          <ModelProviderActions modelId={item.modelId} providerId={item.providerId} />
+                          <ModelProviderActions modelProviderId={item.id}/>
                         </TableCell>
                       </TableRow>
                     )

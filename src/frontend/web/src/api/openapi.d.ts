@@ -730,8 +730,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    modelId?: string;
-                    providerId?: string;
+                    modelProviderId?: string;
                     enable?: boolean;
                 };
                 header?: never;
@@ -918,7 +917,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/model-providers/{modelId}/{providerId}": {
+    "/api/model-providers/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -930,8 +929,7 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    modelId: string;
-                    providerId: string;
+                    id: string;
                 };
                 cookie?: never;
             };
@@ -951,8 +949,7 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    modelId: string;
-                    providerId: string;
+                    id: string;
                 };
                 cookie?: never;
             };
@@ -979,8 +976,7 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    modelId: string;
-                    providerId: string;
+                    id: string;
                 };
                 cookie?: never;
             };
@@ -1327,9 +1323,7 @@ export interface components {
         };
         ApiKeyCreateRequest: {
             /** Format: uuid */
-            modelId: string;
-            /** Format: uuid */
-            providerId: string;
+            modelProviderId: string;
             apiKey: string;
             /** @default true */
             enable: boolean;

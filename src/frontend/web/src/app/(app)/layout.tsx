@@ -79,7 +79,7 @@ const navItems: SidebarMenuGroupProps[] = [
 ];
 
 function getActiveNavLabel(pathname: string): MenuItem | undefined {
-  let allNavItems = navItems.flatMap((group) => group.menus);
+  const allNavItems = navItems.flatMap((group) => group.menus);
   const match = allNavItems.find(
     (x) => pathname === x.url || pathname.startsWith(`${x.url}/`)
   );

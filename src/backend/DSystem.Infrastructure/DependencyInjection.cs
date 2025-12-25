@@ -3,6 +3,7 @@ using DSystem.Infrastructure.Configuration;
 using DSystem.Infrastructure.Data;
 using DSystem.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -32,6 +33,7 @@ public static class DependencyInjection
                         .UseSnakeCaseNamingConvention();
                     break;
             }
+            options.ReplaceService<IMigrationsModelDiffer, NoForeignKeyModelDiffer>();
         });
 
         services.AddScoped<DbContext, LlmDbContext>();

@@ -717,15 +717,7 @@
         ],
         "parameters": [
           {
-            "name": "modelId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "providerId",
+            "name": "modelProviderId",
             "in": "query",
             "schema": {
               "type": "string",
@@ -922,23 +914,14 @@
         }
       }
     },
-    "/api/model-providers/{modelId}/{providerId}": {
+    "/api/model-providers/{id}": {
       "get": {
         "tags": [
           "ModelProviders"
         ],
         "parameters": [
           {
-            "name": "modelId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "providerId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -959,16 +942,7 @@
         ],
         "parameters": [
           {
-            "name": "modelId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "providerId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -1009,16 +983,7 @@
         ],
         "parameters": [
           {
-            "name": "modelId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "providerId",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -1503,17 +1468,12 @@
       },
       "ApiKeyCreateRequest": {
         "required": [
-          "modelId",
-          "providerId",
+          "modelProviderId",
           "apiKey"
         ],
         "type": "object",
         "properties": {
-          "modelId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "providerId": {
+          "modelProviderId": {
             "type": "string",
             "format": "uuid"
           },

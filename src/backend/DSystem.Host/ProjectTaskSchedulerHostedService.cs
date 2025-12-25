@@ -287,7 +287,7 @@ UPDATE project_leases
 SET locked_until_utc = {until},
     update_by = {_instanceId},
     update_time = {now}
-WHERE ProjectId = {projectId}
+WHERE project_id = {projectId}
   AND locked_by = {_instanceId}
 ", cancellationToken);
     }
