@@ -12,5 +12,5 @@ public class ModelProviderApiKeyDto
     public bool Enable { get; set; } = true;
 
     public string ModelName { get; set; } = string.Empty;
-    public string ProviderIdName { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
 }

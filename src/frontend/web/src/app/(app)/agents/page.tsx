@@ -275,16 +275,15 @@ export default function AgentsPage() {
               <Button>Create agent</Button>
             </DialogTrigger>
 
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
               <DialogHeader>
                 <UiDialogTitle>Create agent</UiDialogTitle>
                 <UiDialogDescription>
-                  Uses <code>/api/agents</code>. Provide{" "}
-                  <code>modelProviderApiKeyId</code> as UUID for now.
+                  Uses <code>/api/tools</code> for available tools.
                 </UiDialogDescription>
               </DialogHeader>
 
-              <div className="grid gap-4">
+              <div className="grid gap-4 overflow-y-auto pr-2 -mr-2">
                 <div className="grid gap-2">
                   <Label htmlFor="name">Name</Label>
                   <Input
@@ -517,7 +516,7 @@ export default function AgentsPage() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <UiDialogTitle>Edit agent</UiDialogTitle>
             <UiDialogDescription>
@@ -525,7 +524,7 @@ export default function AgentsPage() {
             </UiDialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4">
+          <div className="grid gap-4 overflow-y-auto pr-2 -mr-2">
             <div className="grid gap-2">
               <Label htmlFor="edit-name">Name</Label>
               <Input

@@ -92,7 +92,7 @@ public class ModelProviderApiKeyDomainService
                 ApiKey = apiKey.ApiKey,
                 Enable = apiKey.Enable,
                 ModelName = model?.Name ?? string.Empty,
-                ProviderIdName = provider?.Name ?? string.Empty
+                ProviderName = provider?.Name ?? string.Empty
             });
         }
 

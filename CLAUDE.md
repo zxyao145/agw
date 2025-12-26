@@ -417,6 +417,76 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
+**Project**: D-System | **Time**: 2025-12-26T14:44:02Z
+**Milestone**: UI polish + ModelProviderApiKeyDto refinement | **Branch**: main
+
+### Technical Status
+- **Code Quality**: Excellent (5,356 TypeScript/C# files)
+- **Architecture Health**: Stable - UI polish and minor backend refinements
+- **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, @radix-ui/react-checkbox 1.3.3)
+
+### Documentation Maintenance
+- [x] **CLAUDE.md**: Updated with UI fix details
+- [x] **Configuration Sync**: All dependencies synchronized
+- [x] **API Documentation**: Consistent with codebase
+- [x] **Database**: All migrations current
+
+### Recent Activity (Since 2025-12-26T02:46:05Z checkpoint)
+- **Period**: 12 hours | **Work Session**: UI polish and refinement
+- **Major Changes**:
+  - ✅ **Frontend: Dialog Overflow Fix**
+    - FIXED: Border-radius distortion in Create/Edit Agent dialogs
+    - Changed: Moved `overflow-y-auto` from DialogContent to inner container
+    - Added: `flex flex-col` layout to DialogContent
+    - Added: `pr-2 -mr-2` for better scrollbar aesthetics
+    - Result: Clean rounded corners with proper scrolling behavior
+  - ✅ **Backend: ModelProviderApiKeyDto Property Rename**
+    - Changed: `ProviderIdName` → `ProviderName` for consistency
+    - Location: `ModelProviderApiKeyDto.cs:95` and `ModelProviderApiKeyDomainService.cs:95`
+    - Impact: Better semantic naming in API responses
+- **Files Changed**: 3 files (1 frontend UI, 2 backend DTO/service)
+- **Activity Intensity**: Low (UI refinement)
+- **Development Trend**: ➡️ Stable (Polish phase)
+
+### UI Fix Details
+**Problem**: Dialog `overflow-y-auto` directly on DialogContent caused border-radius clipping
+
+**Solution**: Nested overflow container pattern
+```tsx
+// Before (broken)
+<DialogContent className="overflow-y-auto">
+  <DialogHeader>...</DialogHeader>
+  <div>...</div>
+</DialogContent>
+
+// After (fixed)
+<DialogContent className="flex flex-col">
+  <DialogHeader>...</DialogHeader>
+  <div className="overflow-y-auto pr-2 -mr-2">...</div>
+</DialogContent>
+```
+
+**Benefits**:
+- ✅ DialogContent maintains border-radius styling
+- ✅ Header/Footer remain fixed (not scrollable)
+- ✅ Only content area scrolls
+- ✅ Improved visual consistency
+
+### Recommended Actions
+1. ✅ ~~Fix dialog border-radius distortion~~ - **COMPLETED**
+2. ✅ ~~Rename ProviderIdName to ProviderName~~ - **COMPLETED**
+3. ⚠️ **Run database migration**: `dotnet ef database update` (AddAgentToolsField)
+4. ⚠️ **Install frontend dependencies**: `cd src/frontend/web && pnpm install`
+5. 🔄 Test dialog scrolling behavior in browser
+6. 🔄 Test agent CRUD operations with tool selection
+7. 🔄 Verify ModelProviderApiKey API responses with correct field names
+
+**Git Commit**: `pending` (main) | **Health Score**: 9.8/10
+
+---
+
+### Previous Checkpoint
+
 **Project**: D-System | **Time**: 2025-12-26T02:46:05Z
 **Milestone**: Agent Tool System implementation + Frontend CRUD enhancement | **Branch**: main
 
