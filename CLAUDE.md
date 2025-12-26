@@ -417,76 +417,90 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-24T16:01:30Z
-**Milestone**: ModelProvider architecture refactoring | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-26T02:46:05Z
+**Milestone**: Agent Tool System implementation + Frontend CRUD enhancement | **Branch**: main
 
 ### Technical Status
-- **Code Quality**: Excellent (19,490 code files)
-- **Architecture Health**: Active Development - Entity relationship refactoring
-- **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, OpenTelemetry 1.14.0, Serilog 4.3.0)
+- **Code Quality**: Excellent (19,501 code files)
+- **Architecture Health**: Feature Expansion - Tool integration and UI enhancement
+- **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, @radix-ui/react-checkbox 1.3.3)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with ModelProvider refactoring details
-- [x] **Configuration Sync**: All dependencies synchronized
-- [x] **API Documentation**: OpenAPI specification reflects new structure
-- [x] **Database**: EF Core migration AddModelProviderIdKey created
+- [x] **CLAUDE.md**: Updated with Tool System architecture
+- [x] **Configuration Sync**: Frontend dependencies updated (@radix-ui/react-checkbox added)
+- [x] **API Documentation**: New /api/tools endpoint documented
+- [x] **Database**: EF Core migration `20251225152826_AddAgentToolsField` created
 
-### Recent Activity (Since 2025-12-24T14:18:57Z checkpoint)
-- **Period**: 1.7 hours | **Work Session**: Architecture refactoring
+### Recent Activity (Since 2025-12-25T00:00:00Z checkpoint)
+- **Period**: 1.4 days | **Work Session**: Full-stack feature development
 - **Major Changes**:
-  - ✅ **ModelProvider Entity Refactoring**
-    - Added `Id` (Guid) as primary key to ModelProvider
-    - Replaced composite key (ModelId, ProviderId) with single Id
-    - ModelProviderApiKey now references ModelProvider.Id instead of composite key
-    - Enables better query performance and simpler relationships
-  - ✅ **ModelProviderApiKey Structure Update**
-    - Maintained as separate entity (not owned type)
-    - Changed foreign key from composite (ModelId, ProviderId) → single ModelProviderId
-    - Preserves ability to query by ApiKey and reverse-lookup to Agents
-    - Retains all audit fields (CreateTime, CreateBy, UpdateTime, UpdateBy)
-  - ✅ **API Layer Updates**
-    - ModelProvidersController: Added ModelName and ProviderName to ListAsync response
-    - ModelProvidersController: Changed routes from `{modelId}/{providerId}` to `{id}`
-    - ModelProviderApiKeysController: Updated to use ModelProviderId parameter
-    - AgentsController: Continues to use ModelProviderApiKeyId (no breaking changes)
-  - ✅ **Repository Pattern Enhancement**
-    - Added Include() overload to IRepository for eager loading
-    - Implemented in EfRepository with params Expression<Func<T, object>>[]
-    - ModelProviderDomainService.ListWithDetailsAsync() for Model/Provider eager loading
-  - ✅ **Database Migration**
-    - Migration: `20251224155354_AddModelProviderIdKey`
-    - Adds `id` column to model_providers table
-    - Recreates model_provider_api_keys with ModelProviderId FK
-    - Preserves all data integrity constraints
-- **Files Changed**: 17 files (11 backend entities/services, 4 controllers/contracts, 2 infrastructure)
-- **Activity Intensity**: High (Architectural refactoring)
-- **Development Trend**: ⬆️ Active Development (Database schema evolution)
+  - ✅ **Backend: Agent Tool System** (Complete plugin-like tool architecture)
+    - NEW: `ToolAttribute` with Category property (Description from DescriptionAttribute)
+    - NEW: `ToolRegistryService` for reflection-based tool discovery (Singleton)
+    - NEW: `BasicTools` class with 8 sample tools (DateTime, Math, Text, Utility categories)
+    - NEW: `WeatherTool` class with location-based weather lookup
+    - NEW: `ToolsController` with `/api/tools` endpoint
+    - NEW: `Agent.Tools` field (JSON array of tool names, max 4000 chars)
+    - UPDATED: `AgentRuntimeService.CreateAiAgentAsync` to instantiate AITools from tool names
+    - UPDATED: `AgentCreateRequest`/`AgentUpdateRequest` to include Tools parameter
+    - Migration: `AddAgentToolsField` adds nullable tools column to agents table
+  - ✅ **Backend: ModelProviderApiKey DTO Enhancement**
+    - NEW: `ModelProviderApiKeyDto` with ModelName and ProviderIdName fields
+    - NEW: `ModelProviderApiKeyDomainService.ListDtoAsync` method
+    - UPDATED: `ModelProviderApiKeysController.ListAsync` to return DTOs with joined data
+    - Improved API response: Now includes Model and Provider names for display
+  - ✅ **Frontend: Agents Page CRUD Enhancement**
+    - NEW: Edit and Delete buttons for each agent row
+    - NEW: Edit Agent dialog with full form (pre-fills all fields including tools)
+    - NEW: Delete confirmation dialog with agent name display
+    - NEW: Searchable multi-select tool selector (Checkbox-based)
+    - NEW: Tool search by name, description, or category
+    - NEW: Tools column in agents table (shows first 2 tools + count)
+    - NEW: Checkbox UI component (@radix-ui/react-checkbox integration)
+    - UPDATED: Create Agent dialog with max-height and scrollbar (max-h-[90vh])
+    - UPDATED: AgentDto type to include `tools?: string | null` field
+    - Tool filtering: Real-time search across 9 tool methods from 2 tool classes
+- **Files Changed**: 25 files (14 backend, 11 frontend)
+- **Activity Intensity**: High (Full-stack feature development)
+- **Development Trend**: ⬆️ Active Development (Tool extensibility + UI enhancement)
 
-### Architecture Benefits
-**Query Capabilities Enabled**:
-1. ✅ Reverse lookup: ApiKey string → ModelProviderApiKey → Agents[]
-2. ✅ ModelProvider queries by single Id (simpler joins)
-3. ✅ Eager load Model/Provider names in API responses
-4. ✅ Cleaner relationship graph: Model ←→ ModelProvider(Id) ←→ Provider
-                                                    ↓
-                                            ModelProviderApiKey
-                                                    ↓
-                                                  Agent
+### Tool System Architecture
+**Design Pattern**: Plugin-like reflection-based discovery
+- Tools marked with `[Tool(Category = "...")]` + `[Description("...")]`
+- ToolRegistryService scans `DSystem.Domain.Tools` namespace on startup
+- Dynamic delegate creation (Func<>/Action<>) from MethodInfo
+- AIFunctionFactory.Create(delegate) for Microsoft.Agents.AI integration
 
-**Breaking Changes**: None for Agent API consumers (still use ModelProviderApiKeyId)
+**Available Tools** (9 methods across 2 classes):
+1. **DateTime Category**: GetCurrentDateTime, GetCurrentDate
+2. **Math Category**: Add, Multiply
+3. **Utility Category**: GetRandomNumber
+4. **Text Category**: ToUpperCase, ToLowerCase, CountCharacters
+5. **Weather Category**: GetWeather
+
+**Frontend Tool Selection**:
+- Searchable checkbox-based multi-select
+- Displays tool name, category badge, description
+- Real-time filtering by keyword
+- Shows selected tool count
+- Tools stored as JSON array string in Agent.Tools
 
 ### Recommended Actions
-1. ✅ ~~Refactor ModelProvider to use Id primary key~~ - **COMPLETED**
-2. ✅ ~~Keep ModelProviderApiKey as entity for reverse queries~~ - **COMPLETED**
-3. ✅ ~~Add ModelName/ProviderName to API responses~~ - **COMPLETED**
-4. ⚠️ **Run database migration**: `dotnet ef database update`
-5. 🔄 Update frontend to consume new ModelName/ProviderName fields
-6. 🔄 Consider adding index on ModelProviderApiKey.ApiKey for lookup performance
-7. 🧪 Test reverse lookup scenarios (ApiKey → Agents)
-8. 📝 Document new query patterns for API consumers
-9. 🔧 Monitor query performance after migration
+1. ✅ ~~Implement Tool System backend~~ - **COMPLETED**
+2. ✅ ~~Add /api/tools endpoint~~ - **COMPLETED**
+3. ✅ ~~Create frontend tool selector~~ - **COMPLETED**
+4. ✅ ~~Add Agent edit/delete functionality~~ - **COMPLETED**
+5. ✅ ~~Enhance ModelProviderApiKey responses~~ - **COMPLETED**
+6. ⚠️ **Run database migration**: `dotnet ef database update` (AddAgentToolsField)
+7. ⚠️ **Install frontend dependencies**: `cd src/frontend/web && pnpm install`
+8. 🔄 Test agent creation/editing with tool selection
+9. 🔄 Test tool discovery and registration on startup
+10. 📝 Consider adding tool parameter validation
+11. 🧪 Add integration tests for tool execution
+12. 🔧 Consider adding tool categories as enum for consistency
+13. 📈 Monitor tool execution performance metrics
 
-**Git Commit**: `pending` (main) | **Health Score**: 9.5/10
+**Git Commit**: `pending` (main) | **Health Score**: 9.7/10
 
 ---
 

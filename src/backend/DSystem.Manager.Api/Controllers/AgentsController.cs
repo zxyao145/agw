@@ -52,7 +52,8 @@ public class AgentsController : ControllerBase
             Name = request.Name,
             Instructions = request.Instructions,
             SystemPrompt = request.SystemPrompt,
-            ModelProviderApiKeyId = request.ModelProviderApiKeyId
+            ModelProviderApiKeyId = request.ModelProviderApiKeyId,
+            Tools = request.Tools
         };
 
         var created = await _agentService.CreateAsync(agent, user);
@@ -80,6 +81,7 @@ public class AgentsController : ControllerBase
             agent.Instructions = request.Instructions;
             agent.SystemPrompt = request.SystemPrompt;
             agent.ModelProviderApiKeyId = request.ModelProviderApiKeyId;
+            agent.Tools = request.Tools;
         }, user);
 
         return updated == null ? NotFound() : Ok(updated);

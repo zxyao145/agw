@@ -7,6 +7,7 @@ public class Agent : BaseEntity
     public string Instructions { get; set; } = string.Empty;
     public string SystemPrompt { get; set; } = string.Empty;
     public Guid ModelProviderApiKeyId { get; set; }
+    public string? Tools { get; set; }  // JSON array of tool method names
 
     public ModelProviderApiKey? ModelProviderApiKey { get; set; }
 

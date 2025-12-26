@@ -28,7 +28,7 @@ public class ModelProviderApiKeysController : ControllerBase
                 (!enable.HasValue || apiKey.Enable == enable.Value);
         }
 
-        var keys = await _service.ListAsync(predicate);
+        var keys = await _service.ListDtoAsync(predicate);
         return Ok(keys);
     }
 

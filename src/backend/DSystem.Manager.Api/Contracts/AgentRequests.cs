@@ -2,9 +2,19 @@ using DSystem.Domain.Models;
 
 namespace DSystem.Manager.Api.Contracts;
 
-public record AgentCreateRequest(string Name, string Instructions, string SystemPrompt, Guid ModelProviderApiKeyId);
+public record AgentCreateRequest(
+    string Name,
+    string Instructions,
+    string SystemPrompt,
+    Guid ModelProviderApiKeyId,
+    string? Tools = null);  // JSON array of tool names
 
-public record AgentUpdateRequest(string Name, string Instructions, string SystemPrompt, Guid ModelProviderApiKeyId);
+public record AgentUpdateRequest(
+    string Name,
+    string Instructions,
+    string SystemPrompt,
+    Guid ModelProviderApiKeyId,
+    string? Tools = null);  // JSON array of tool names
 
 public record AiAgentResponse(Guid Id, string Name, string Instructions, string SystemPrompt, string ProviderName, string ModelName, string Endpoint, string ApiKey)
 {

@@ -10,3 +10,4 @@ public class ModelProviderApiKey : BaseEntity
     public ModelProvider? ModelProvider { get; set; }
     public ICollection<Agent> Agents { get; set; } = new List<Agent>();
 }
+

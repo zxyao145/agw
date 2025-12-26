@@ -84,6 +84,7 @@ try
     builder.Services.AddOpenApi();
 
     builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddSingleton<ToolRegistryService>();  // Singleton to cache tool discovery
     builder.Services.AddScoped<ModelDomainService>();
     builder.Services.AddScoped<ProviderDomainService>();
     builder.Services.AddScoped<ModelProviderDomainService>();

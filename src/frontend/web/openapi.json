@@ -1252,6 +1252,52 @@
           }
         }
       }
+    },
+    "/api/tools": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tools/by-category": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tools/{name}": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1277,6 +1323,12 @@
           "modelProviderApiKeyId": {
             "type": "string",
             "format": "uuid"
+          },
+          "tools": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -1463,6 +1515,12 @@
           "modelProviderApiKeyId": {
             "type": "string",
             "format": "uuid"
+          },
+          "tools": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -1841,6 +1899,9 @@
     },
     {
       "name": "Providers"
+    },
+    {
+      "name": "Tools"
     }
   ]
 }
