@@ -24,18 +24,10 @@ public class PlaceholderAgentflowAgentExecutor : IAgentflowAgentExecutor
         return Task.FromResult(output);
     }
 }
-public record WaChatMessage(string AuthorName, string Role, string Content);
 
 public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
 
-public record AgentflowExecutionResult(
-    Guid AgentflowId,
-    AgentflowOrchestrationPattern Pattern,
-    bool NotImplemented,
-    string? Message,
-    string Input,
-    string? FinalOutput,
-    IReadOnlyList<WaChatMessage> Outputs);
+public record AgentflowExecutionResult(string ThreadId, IReadOnlyList<AiMessage> Outputs);
 
 public class AgentflowRuntimeService
 {
@@ -76,8 +68,15 @@ public class AgentflowRuntimeService
             return null;
         }
 
-        var messages = new List<ChatMessage> { new(ChatRole.User, input) };
 
+        var messages = new List<ChatMessage>();
+        if (!string.IsNullOrWhiteSpace(agentflow.SystemPrompt))
+        {
+            messages.Add(new(ChatRole.System, agentflow.SystemPrompt));
+        }
+
+        messages.Add(new(ChatRole.User, input));
+        
         StreamingRun run = await InProcessExecution.StreamAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
@@ -95,25 +94,19 @@ public class AgentflowRuntimeService
             }
         }
 
-        var outputs = new List<WaChatMessage>();
+        var outputs = new List<AiMessage>();
 
         // Display aggregated results from all agents
         Console.WriteLine("===== Final Aggregated Results =====");
         foreach (var message in result)
         {
             var chatMsg =
-                new WaChatMessage(message.AuthorName ?? "", message.Role.ToString(), message.Text);
+                new AiMessage(message.MessageId, message.AuthorName, message.Role.Value, message.Text);
             outputs.Add(chatMsg);
         }
 
-        return new AgentflowExecutionResult(
-            agentflow.Id,
-            agentflow.Pattern,
-            NotImplemented: false,
-            Message: null,
-            Input: input,
-            FinalOutput: null,
-            Outputs: outputs);
+
+        return new AgentflowExecutionResult("", Outputs: outputs);
     }
 
 

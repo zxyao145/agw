@@ -3,11 +3,24 @@ using DSystem.Domain.Models;
 using DSystem.Domain.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Caching.Hybrid;
 using OpenAI;
+ using OpenAI.Chat;
 using System.ClientModel;
+using System.Reflection;
 using System.Text.Json;
+using AIMessage = Microsoft.Extensions.AI.ChatMessage;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using OpenAIMessage = OpenAI.Chat.ChatMessage;
 
 namespace DSystem.Domain.Services;
+
+/// <summary>
+/// Result of a single agent execution.
+/// </summary>
+public record AgentExecutionResult(
+    string ThreadId,
+    IReadOnlyList<AiMessage> Messages);
 
 /// <summary>
 /// Shapes persisted Agent data plus its Model/Provider/API key into a runtime payload
@@ -21,6 +34,8 @@ public class AgentRuntimeService
     private readonly IRepository<LlmModel> _modelRepository;
     private readonly IRepository<Provider> _providerRepository;
     private readonly ToolRegistryService _toolRegistry;
+    private readonly HybridCache _cache;
+
 
     public AgentRuntimeService(
         IRepository<Agent> agentRepository,
@@ -28,7 +43,8 @@ public class AgentRuntimeService
         IRepository<ModelProvider> modelProviderRepository,
         IRepository<LlmModel> modelRepository,
         IRepository<Provider> providerRepository,
-        ToolRegistryService toolRegistry)
+        ToolRegistryService toolRegistry,
+        HybridCache cache)
     {
         _agentRepository = agentRepository;
         _apiKeyRepository = apiKeyRepository;
@@ -36,16 +52,21 @@ public class AgentRuntimeService
         _modelRepository = modelRepository;
         _providerRepository = providerRepository;
         _toolRegistry = toolRegistry;
+        _cache = cache;
     }
 
-    public async Task<AIAgent?> CreateAiAgentAsync(Guid agentId)
+    public async Task<AIAgent?> CreateAiAgentAsync(Guid agentId, string? systemPrompt = null)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
         if (agent == null)
         {
             return null;
         }
+        return await CreateAiAgentAsync(agent);
+    }
 
+    public async Task<AIAgent?> CreateAiAgentAsync(Agent agent)
+    {
         var apiKey = await _apiKeyRepository.GetByIdAsync(agent.ModelProviderApiKeyId);
         if (apiKey == null || !apiKey.Enable)
         {
@@ -147,5 +168,80 @@ public class AgentRuntimeService
                 _ => throw new NotSupportedException($"Func with {allTypes.Length - 1} parameters is not supported")
             };
         }
+    }
+
+    /// <summary>
+    /// Executes an agent with the given input and returns the result.
+    /// </summary>
+    public async Task<AgentExecutionResult?> ExecuteAsync(
+        Guid agentId,
+        string threadId,
+        string input,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = await _agentRepository.GetByIdAsync(agentId);
+        if (agent == null)
+        {
+            return null;
+        }
+
+        var aiAgent = await CreateAiAgentAsync(agent);
+        if(aiAgent == null)
+        {
+            throw new Exception("aiAgent not found"); 
+        }
+
+        AgentThread thread;
+        if (string.IsNullOrWhiteSpace(threadId))
+        {
+            threadId = Guid.NewGuid().ToString();
+            thread = aiAgent.GetNewThread();
+        }
+        else
+        {
+            var value = await _cache.GetOrCreateAsync<string>(threadId, (c) =>
+            {
+                return ValueTask.FromResult("");
+            });
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                thread = aiAgent.GetNewThread();
+            }
+            else
+            {
+                var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
+                thread = aiAgent.DeserializeThread(serializedThread);
+            }
+        }
+
+        ChatMessage? system = null;
+        if (!string.IsNullOrWhiteSpace(agent.SystemPrompt))
+        {
+            system = new ChatMessage(ChatRole.System, agent.SystemPrompt);
+        }
+        var chatMsg = new ChatMessage(ChatRole.User, input);
+        IEnumerable<ChatMessage> msgs = system == null
+            ? [chatMsg]
+            : [system, chatMsg];
+        var stream = aiAgent.RunStreamingAsync(msgs, thread);
+
+        var resultMessages = new List<AiMessage>();
+        await foreach (var update in stream)
+        {
+            foreach(var content in update.Contents)
+            {
+                if(content is TextContent text)
+                {
+                    var contentText = text.Text;
+                    var msg = new AiMessage(update.MessageId, update.AuthorName, update.Role?.Value, contentText);
+                    resultMessages.Add(msg);
+                }
+            }
+
+        }
+
+        return new AgentExecutionResult(
+            threadId,
+            resultMessages);
     }
 }

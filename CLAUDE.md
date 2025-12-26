@@ -421,9 +421,9 @@ This unified observability stack allows tracing a request from HTTP entry → da
 **Milestone**: UI polish + ModelProviderApiKeyDto refinement | **Branch**: main
 
 ### Technical Status
-- **Code Quality**: Excellent (5,356 TypeScript/C# files)
-- **Architecture Health**: Stable - UI polish and minor backend refinements
-- **Dependencies**: Latest (Next.js 16, .NET 10, React Flow 11, @radix-ui/react-checkbox 1.3.3)
+- **Code Quality**: Excellent (19,516 TypeScript/C# files)
+- **Architecture Health**: Stable - UI/UX optimization phase
+- **Dependencies**: Latest (Next.js 16, .NET 10, vaul 1.1.1 drawer, sonner toast)
 
 ### Documentation Maintenance
 - [x] **CLAUDE.md**: Updated with UI fix details
@@ -431,22 +431,33 @@ This unified observability stack allows tracing a request from HTTP entry → da
 - [x] **API Documentation**: Consistent with codebase
 - [x] **Database**: All migrations current
 
-### Recent Activity (Since 2025-12-26T02:46:05Z checkpoint)
-- **Period**: 12 hours | **Work Session**: UI polish and refinement
+### Recent Activity (Since 2025-12-26T12:45:33Z checkpoint)
+- **Period**: 3.15 hours | **Work Session**: Frontend UX optimization
 - **Major Changes**:
-  - ✅ **Frontend: Dialog Overflow Fix**
-    - FIXED: Border-radius distortion in Create/Edit Agent dialogs
-    - Changed: Moved `overflow-y-auto` from DialogContent to inner container
-    - Added: `flex flex-col` layout to DialogContent
-    - Added: `pr-2 -mr-2` for better scrollbar aesthetics
-    - Result: Clean rounded corners with proper scrolling behavior
-  - ✅ **Backend: ModelProviderApiKeyDto Property Rename**
-    - Changed: `ProviderIdName` → `ProviderName` for consistency
-    - Location: `ModelProviderApiKeyDto.cs:95` and `ModelProviderApiKeyDomainService.cs:95`
-    - Impact: Better semantic naming in API responses
-- **Files Changed**: 3 files (1 frontend UI, 2 backend DTO/service)
-- **Activity Intensity**: Low (UI refinement)
-- **Development Trend**: ➡️ Stable (Polish phase)
+  - ✅ **Frontend: Toast/Drawer Interaction Fix**
+    - PROBLEM: Toast close button unresponsive when Drawer open
+    - ANALYSIS: Not z-index issue, but Radix Dialog modal behavior
+    - SOLUTION: Changed Sheet → Drawer (vaul library) with `modal={false}`
+    - Added: `onPointerDownOutside` preventDefault to keep drawer open on outside clicks
+    - Result: Toast clickable while drawer open, stable UX
+  - ✅ **Frontend: Agent Execute UI Improvements**
+    - MIGRATION: Sheet → Drawer for better mobile/desktop experience
+    - LAYOUT: Moved input to DrawerFooter with horizontal layout
+    - UI: Textarea + Button side-by-side layout (flex gap-2)
+    - THREADING: Thread ID display in DrawerTitle for visibility
+    - NEW: Lucide-react X icon for close button
+    - Dependencies: Added vaul ^1.1.1 (drawer component)
+  - ✅ **Frontend: Message Merging Logic**
+    - FEATURE: Merge AI messages with same messageId
+    - IMPLEMENTATION: Map-based content concatenation (page.tsx:824-869)
+    - USE CASE: Stream responses chunked into multiple messages
+    - Result: Single coherent message display per messageId
+  - ✅ **Frontend: Toast Configuration**
+    - REMOVED: Success toast on execution (commented out duration: 600000)
+    - REASON: Avoid clutter with long-running agent executions
+- **Files Changed**: 5 files (agents page, drawer component, package.json)
+- **Activity Intensity**: Medium (Focused UX refinement)
+- **Development Trend**: ➡️ Stable (Iteration on user feedback)
 
 ### UI Fix Details
 **Problem**: Dialog `overflow-y-auto` directly on DialogContent caused border-radius clipping
@@ -473,13 +484,16 @@ This unified observability stack allows tracing a request from HTTP entry → da
 - ✅ Improved visual consistency
 
 ### Recommended Actions
-1. ✅ ~~Fix dialog border-radius distortion~~ - **COMPLETED**
-2. ✅ ~~Rename ProviderIdName to ProviderName~~ - **COMPLETED**
-3. ⚠️ **Run database migration**: `dotnet ef database update` (AddAgentToolsField)
-4. ⚠️ **Install frontend dependencies**: `cd src/frontend/web && pnpm install`
-5. 🔄 Test dialog scrolling behavior in browser
-6. 🔄 Test agent CRUD operations with tool selection
-7. 🔄 Verify ModelProviderApiKey API responses with correct field names
+1. ✅ ~~Fix Toast/Drawer interaction conflict~~ - **COMPLETED** (Sheet→Drawer migration)
+2. ✅ ~~Merge messages with same messageId~~ - **COMPLETED** (Map-based implementation)
+3. ✅ ~~Improve agent execution UI layout~~ - **COMPLETED** (Footer horizontal layout)
+4. 🔄 Test Drawer interaction on mobile devices
+5. 🔄 Verify message merging with streaming responses
+6. 📝 Consider adding execution history persistence
+7. 📝 Add loading states for agent execution
+8. 🧪 Test Toast notifications with multiple concurrent executions
+9. 🔧 Consider adding drawer resize functionality
+10. 📈 Monitor drawer performance on low-end devices
 
 **Git Commit**: `pending` (main) | **Health Score**: 9.8/10
 

@@ -1,20 +1,20 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import * as React from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client"
-import type { components } from "@/api/openapi"
-import { Button } from "@/components/ui/button"
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
+import type { components } from "@/api/openapi";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogClose,
@@ -24,10 +24,31 @@ import {
   DialogHeader,
   DialogTitle as UiDialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
+
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -35,7 +56,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -44,176 +65,260 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
+import { X } from "lucide-react";
 
-type AgentCreateRequest = components["schemas"]["AgentCreateRequest"]
+type AgentCreateRequest = components["schemas"]["AgentCreateRequest"];
 
 type AgentDto = {
-  id: string
-  name: string
-  instructions: string
-  systemPrompt: string
-  modelProviderApiKeyId: string
-  tools?: string | null
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
-}
+  id: string;
+  name: string;
+  instructions: string;
+  systemPrompt: string;
+  modelProviderApiKeyId: string;
+  tools?: string | null;
+  createBy?: string | null;
+  createTime?: string | null;
+  updateBy?: string | null;
+  updateTime?: string | null;
+};
 
 type ToolInfo = {
-  name: string
-  description: string
-  category: string
-  typeName: string
+  name: string;
+  description: string;
+  category: string;
+  typeName: string;
   parameters: Array<{
-    name: string
-    type: string
-    description?: string
-    isOptional: boolean
-  }>
-}
+    name: string;
+    type: string;
+    description?: string;
+    isOptional: boolean;
+  }>;
+};
 
 type ModelProviderApiKeyDto = {
-  id: string
-  apiKeyName: string
-  modelProviderId: string
-  modelId: string
-  providerId: string
-  providerName: string
-  modelName: string
-}
+  id: string;
+  apiKeyName: string;
+  modelProviderId: string;
+  modelId: string;
+  providerId: string;
+  providerName: string;
+  modelName: string;
+};
+
+type AiMessage = {
+  messageId: string;
+  author: string;
+  role: string;
+  content: string;
+};
+
+type AgentExecuteRequest = {
+  threadId: string | null;
+  input: string;
+};
+
+type AgentExecuteResponse = {
+  threadId: string;
+  messages: AiMessage[];
+};
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (typeof error.body === "string" && error.body.trim().length) {
-      return error.body
+      return error.body;
     }
-    return `${error.status} ${error.statusText}`
+    return `${error.status} ${error.statusText}`;
   }
-  if (error instanceof Error) return error.message
-  return "Unknown error"
+  if (error instanceof Error) return error.message;
+  return "Unknown error";
 }
 
 export default function AgentsPage() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   const agentsQuery = useQuery({
     queryKey: ["agents"],
     queryFn: async () => {
       // OpenAPI currently doesn't declare response schemas.
-      return (await apiGet("/api/agents")) as unknown as AgentDto[]
+      return (await apiGet("/api/agents")) as unknown as AgentDto[];
     },
-  })
+  });
 
   const modelProviderApiKeysQuery = useQuery({
     queryKey: ["modelProviderApiKeys"],
     queryFn: async () => {
-      return (await apiGet("/api/model-provider-keys")) as unknown as ModelProviderApiKeyDto[]
+      return (await apiGet(
+        "/api/model-provider-keys"
+      )) as unknown as ModelProviderApiKeyDto[];
     },
-  })
+  });
 
   const toolsQuery = useQuery({
     queryKey: ["tools"],
     queryFn: async () => {
-      return (await apiGet("/api/tools")) as unknown as ToolInfo[]
+      return (await apiGet("/api/tools")) as unknown as ToolInfo[];
     },
-  })
+  });
 
   // Create dialog state
-  const [createOpen, setCreateOpen] = React.useState(false)
-  const [name, setName] = React.useState("")
-  const [instructions, setInstructions] = React.useState("")
-  const [systemPrompt, setSystemPrompt] = React.useState("")
-  const [modelProviderApiKeyId, setModelProviderApiKeyId] = React.useState("")
-  const [selectedTools, setSelectedTools] = React.useState<string[]>([])
-  const [toolSearchTerm, setToolSearchTerm] = React.useState("")
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [instructions, setInstructions] = React.useState("");
+  const [systemPrompt, setSystemPrompt] = React.useState("");
+  const [modelProviderApiKeyId, setModelProviderApiKeyId] = React.useState("");
+  const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
+  const [toolSearchTerm, setToolSearchTerm] = React.useState("");
 
   // Edit dialog state
-  const [editOpen, setEditOpen] = React.useState(false)
-  const [editingAgent, setEditingAgent] = React.useState<AgentDto | null>(null)
-  const [editName, setEditName] = React.useState("")
-  const [editInstructions, setEditInstructions] = React.useState("")
-  const [editSystemPrompt, setEditSystemPrompt] = React.useState("")
-  const [editModelProviderApiKeyId, setEditModelProviderApiKeyId] = React.useState("")
-  const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>([])
-  const [editToolSearchTerm, setEditToolSearchTerm] = React.useState("")
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [editingAgent, setEditingAgent] = React.useState<AgentDto | null>(null);
+  const [editName, setEditName] = React.useState("");
+  const [editInstructions, setEditInstructions] = React.useState("");
+  const [editSystemPrompt, setEditSystemPrompt] = React.useState("");
+  const [editModelProviderApiKeyId, setEditModelProviderApiKeyId] =
+    React.useState("");
+  const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>(
+    []
+  );
+  const [editToolSearchTerm, setEditToolSearchTerm] = React.useState("");
 
   // Delete dialog state
-  const [deleteOpen, setDeleteOpen] = React.useState(false)
-  const [deletingAgent, setDeletingAgent] = React.useState<AgentDto | null>(null)
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deletingAgent, setDeletingAgent] = React.useState<AgentDto | null>(
+    null
+  );
+
+  // Execute sheet state
+  const [executeOpen, setExecuteOpen] = React.useState(false);
+  const [executingAgent, setExecutingAgent] = React.useState<AgentDto | null>(
+    null
+  );
+  const [executeInput, setExecuteInput] = React.useState("");
+  const [executeThreadId, setExecuteThreadId] = React.useState<string | null>(
+    null
+  );
+  const [executeResult, setExecuteResult] =
+    React.useState<AgentExecuteResponse | null>(null);
 
   const createAgentMutation = useMutation({
     mutationFn: async (body: AgentCreateRequest) => {
-      return await apiPost("/api/agents", { body })
+      return await apiPost("/api/agents", { body });
     },
     onSuccess: async () => {
-      toast.success("Agent created")
-      setCreateOpen(false)
-      setName("")
-      setInstructions("")
-      setSystemPrompt("")
-      setModelProviderApiKeyId("")
-      setSelectedTools([])
-      setToolSearchTerm("")
-      await queryClient.invalidateQueries({ queryKey: ["agents"] })
+      toast.success("Agent created");
+      setCreateOpen(false);
+      setName("");
+      setInstructions("");
+      setSystemPrompt("");
+      setModelProviderApiKeyId("");
+      setSelectedTools([]);
+      setToolSearchTerm("");
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
     onError: (error) => {
-      toast.error(`Create failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Create failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
 
   const updateAgentMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: string; body: AgentCreateRequest }) => {
-      return await apiPut(`/api/agents/${id}`, { body })
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: AgentCreateRequest;
+    }) => {
+      return await apiPut(`/api/agents/${id}`, { body });
     },
     onSuccess: async () => {
-      toast.success("Agent updated")
-      setEditOpen(false)
-      setEditingAgent(null)
-      await queryClient.invalidateQueries({ queryKey: ["agents"] })
+      toast.success("Agent updated");
+      setEditOpen(false);
+      setEditingAgent(null);
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
     onError: (error) => {
-      toast.error(`Update failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Update failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
 
   const deleteAgentMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiDelete(`/api/agents/${id}`)
+      return await apiDelete(`/api/agents/${id}`);
     },
     onSuccess: async () => {
-      toast.success("Agent deleted")
-      setDeleteOpen(false)
-      setDeletingAgent(null)
-      await queryClient.invalidateQueries({ queryKey: ["agents"] })
+      toast.success("Agent deleted");
+      setDeleteOpen(false);
+      setDeletingAgent(null);
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
     onError: (error) => {
-      toast.error(`Delete failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Delete failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
+
+  const executeAgentMutation = useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: AgentExecuteRequest;
+    }) => {
+      return (await apiPost(`/api/agents/${id}/execute`, {
+        body,
+      })) as unknown as AgentExecuteResponse;
+    },
+    onSuccess: async (result) => {
+      setExecuteResult(result);
+      setExecuteThreadId(result.threadId);
+      // toast.success("Execution completed", { duration: 600000 });
+    },
+    onError: (error) => {
+      toast.error(`Execute failed: ${getApiErrorMessage(error)}`);
+    },
+  });
 
   const handleEdit = (agent: AgentDto) => {
-    setEditingAgent(agent)
-    setEditName(agent.name)
-    setEditInstructions(agent.instructions)
-    setEditSystemPrompt(agent.systemPrompt)
-    setEditModelProviderApiKeyId(agent.modelProviderApiKeyId)
+    setEditingAgent(agent);
+    setEditName(agent.name);
+    setEditInstructions(agent.instructions);
+    setEditSystemPrompt(agent.systemPrompt);
+    setEditModelProviderApiKeyId(agent.modelProviderApiKeyId);
     // Parse tools from JSON string
     try {
-      const tools = agent.tools ? JSON.parse(agent.tools) : []
-      setEditSelectedTools(Array.isArray(tools) ? tools : [])
+      const tools = agent.tools ? JSON.parse(agent.tools) : [];
+      setEditSelectedTools(Array.isArray(tools) ? tools : []);
     } catch {
-      setEditSelectedTools([])
+      setEditSelectedTools([]);
     }
-    setEditToolSearchTerm("")
-    setEditOpen(true)
-  }
+    setEditToolSearchTerm("");
+    setEditOpen(true);
+  };
 
   const handleDelete = (agent: AgentDto) => {
-    setDeletingAgent(agent)
-    setDeleteOpen(true)
-  }
+    setDeletingAgent(agent);
+    setDeleteOpen(true);
+  };
+
+  const handleExecute = (agent: AgentDto) => {
+    setExecutingAgent(agent);
+    setExecuteInput("");
+    setExecuteResult(null);
+    setExecuteOpen(true);
+  };
+
+  const handleSendExecute = () => {
+    if (!executingAgent || !executeInput.trim()) return;
+
+    executeAgentMutation.mutate({
+      id: executingAgent.id,
+      body: {
+        threadId: executeThreadId,
+        input: executeInput,
+      },
+    });
+  };
 
   const toggleTool = (toolName: string, isEdit: boolean = false) => {
     if (isEdit) {
@@ -221,35 +326,37 @@ export default function AgentsPage() {
         prev.includes(toolName)
           ? prev.filter((t) => t !== toolName)
           : [...prev, toolName]
-      )
+      );
     } else {
       setSelectedTools((prev) =>
         prev.includes(toolName)
           ? prev.filter((t) => t !== toolName)
           : [...prev, toolName]
-      )
+      );
     }
-  }
+  };
 
   const filteredTools = React.useMemo(() => {
-    if (!toolsQuery.data) return []
+    if (!toolsQuery.data) return [];
     return toolsQuery.data.filter(
       (tool) =>
         tool.name.toLowerCase().includes(toolSearchTerm.toLowerCase()) ||
         tool.description.toLowerCase().includes(toolSearchTerm.toLowerCase()) ||
         tool.category.toLowerCase().includes(toolSearchTerm.toLowerCase())
-    )
-  }, [toolsQuery.data, toolSearchTerm])
+    );
+  }, [toolsQuery.data, toolSearchTerm]);
 
   const filteredEditTools = React.useMemo(() => {
-    if (!toolsQuery.data) return []
+    if (!toolsQuery.data) return [];
     return toolsQuery.data.filter(
       (tool) =>
         tool.name.toLowerCase().includes(editToolSearchTerm.toLowerCase()) ||
-        tool.description.toLowerCase().includes(editToolSearchTerm.toLowerCase()) ||
+        tool.description
+          .toLowerCase()
+          .includes(editToolSearchTerm.toLowerCase()) ||
         tool.category.toLowerCase().includes(editToolSearchTerm.toLowerCase())
-    )
-  }, [toolsQuery.data, editToolSearchTerm])
+    );
+  }, [toolsQuery.data, editToolSearchTerm]);
 
   return (
     <div className="space-y-6 w-full">
@@ -312,10 +419,12 @@ export default function AgentsPage() {
                           <SelectItem value="loading" disabled>
                             Loading...
                           </SelectItem>
-                        ) : modelProviderApiKeysQuery.data && modelProviderApiKeysQuery.data.length > 0 ? (
+                        ) : modelProviderApiKeysQuery.data &&
+                          modelProviderApiKeysQuery.data.length > 0 ? (
                           modelProviderApiKeysQuery.data.map((key) => (
                             <SelectItem key={key.id} value={key.id}>
-                              {key.apiKeyName} (Model: {key.modelName}, Provider: {key.providerName})
+                              {key.apiKeyName} (Model: {key.modelName},
+                              Provider: {key.providerName})
                             </SelectItem>
                           ))
                         ) : (
@@ -358,12 +467,19 @@ export default function AgentsPage() {
                   />
                   <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
                     {toolsQuery.isLoading ? (
-                      <div className="text-sm text-muted-foreground">Loading tools...</div>
+                      <div className="text-sm text-muted-foreground">
+                        Loading tools...
+                      </div>
                     ) : filteredTools.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">No tools found</div>
+                      <div className="text-sm text-muted-foreground">
+                        No tools found
+                      </div>
                     ) : (
                       filteredTools.map((tool) => (
-                        <div key={tool.name} className="flex items-start space-x-2">
+                        <div
+                          key={tool.name}
+                          className="flex items-start space-x-2"
+                        >
                           <Checkbox
                             id={`tool-${tool.name}`}
                             checked={selectedTools.includes(tool.name)}
@@ -375,9 +491,13 @@ export default function AgentsPage() {
                               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                             >
                               {tool.name}
-                              <span className="ml-2 text-xs text-muted-foreground">({tool.category})</span>
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                ({tool.category})
+                              </span>
                             </label>
-                            <p className="text-xs text-muted-foreground">{tool.description}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {tool.description}
+                            </p>
                           </div>
                         </div>
                       ))
@@ -403,7 +523,10 @@ export default function AgentsPage() {
                       instructions,
                       systemPrompt,
                       modelProviderApiKeyId,
-                      tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
+                      tools:
+                        selectedTools.length > 0
+                          ? JSON.stringify(selectedTools)
+                          : null,
                     })
                   }
                   disabled={
@@ -449,16 +572,18 @@ export default function AgentsPage() {
               </TableHeader>
               <TableBody>
                 {agentsQuery.data.map((agent) => {
-                  let toolNames: string[] = []
+                  let toolNames: string[] = [];
                   try {
-                    toolNames = agent.tools ? JSON.parse(agent.tools) : []
+                    toolNames = agent.tools ? JSON.parse(agent.tools) : [];
                   } catch {
-                    toolNames = []
+                    toolNames = [];
                   }
 
                   return (
                     <TableRow key={agent.id}>
-                      <TableCell className="font-medium">{agent.name}</TableCell>
+                      <TableCell className="font-medium">
+                        {agent.name}
+                      </TableCell>
                       <TableCell className="max-w-xs truncate">
                         {agent.instructions || "-"}
                       </TableCell>
@@ -469,7 +594,8 @@ export default function AgentsPage() {
                         {toolNames.length > 0 ? (
                           <span className="text-xs">
                             {toolNames.slice(0, 2).join(", ")}
-                            {toolNames.length > 2 && ` +${toolNames.length - 2} more`}
+                            {toolNames.length > 2 &&
+                              ` +${toolNames.length - 2} more`}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">-</span>
@@ -488,6 +614,13 @@ export default function AgentsPage() {
                           <Button
                             variant="outline"
                             size="sm"
+                            onClick={() => handleExecute(agent)}
+                          >
+                            Run
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => handleEdit(agent)}
                           >
                             Edit
@@ -502,7 +635,7 @@ export default function AgentsPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  )
+                  );
                 })}
               </TableBody>
             </Table>
@@ -553,10 +686,12 @@ export default function AgentsPage() {
                       <SelectItem value="loading" disabled>
                         Loading...
                       </SelectItem>
-                    ) : modelProviderApiKeysQuery.data && modelProviderApiKeysQuery.data.length > 0 ? (
+                    ) : modelProviderApiKeysQuery.data &&
+                      modelProviderApiKeysQuery.data.length > 0 ? (
                       modelProviderApiKeysQuery.data.map((key) => (
                         <SelectItem key={key.id} value={key.id}>
-                          {key.apiKeyName} (Model: {key.modelName}, Provider: {key.providerName})
+                          {key.apiKeyName} (Model: {key.modelName}, Provider:{" "}
+                          {key.providerName})
                         </SelectItem>
                       ))
                     ) : (
@@ -599,9 +734,13 @@ export default function AgentsPage() {
               />
               <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
                 {toolsQuery.isLoading ? (
-                  <div className="text-sm text-muted-foreground">Loading tools...</div>
+                  <div className="text-sm text-muted-foreground">
+                    Loading tools...
+                  </div>
                 ) : filteredEditTools.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No tools found</div>
+                  <div className="text-sm text-muted-foreground">
+                    No tools found
+                  </div>
                 ) : (
                   filteredEditTools.map((tool) => (
                     <div key={tool.name} className="flex items-start space-x-2">
@@ -616,9 +755,13 @@ export default function AgentsPage() {
                           className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                         >
                           {tool.name}
-                          <span className="ml-2 text-xs text-muted-foreground">({tool.category})</span>
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            ({tool.category})
+                          </span>
                         </label>
-                        <p className="text-xs text-muted-foreground">{tool.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {tool.description}
+                        </p>
                       </div>
                     </div>
                   ))
@@ -647,9 +790,12 @@ export default function AgentsPage() {
                       instructions: editInstructions,
                       systemPrompt: editSystemPrompt,
                       modelProviderApiKeyId: editModelProviderApiKeyId,
-                      tools: editSelectedTools.length > 0 ? JSON.stringify(editSelectedTools) : null,
+                      tools:
+                        editSelectedTools.length > 0
+                          ? JSON.stringify(editSelectedTools)
+                          : null,
                     },
-                  })
+                  });
                 }
               }}
               disabled={
@@ -670,7 +816,8 @@ export default function AgentsPage() {
           <DialogHeader>
             <UiDialogTitle>Delete agent</UiDialogTitle>
             <UiDialogDescription>
-              Are you sure you want to delete agent &quot;{deletingAgent?.name}&quot;? This action cannot be undone.
+              Are you sure you want to delete agent &quot;{deletingAgent?.name}
+              &quot;? This action cannot be undone.
             </UiDialogDescription>
           </DialogHeader>
 
@@ -685,7 +832,7 @@ export default function AgentsPage() {
               variant="destructive"
               onClick={() => {
                 if (deletingAgent) {
-                  deleteAgentMutation.mutate(deletingAgent.id)
+                  deleteAgentMutation.mutate(deletingAgent.id);
                 }
               }}
               disabled={deleteAgentMutation.isPending}
@@ -695,6 +842,142 @@ export default function AgentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Execute Agent Sheet */}
+      <Drawer
+        direction="right"
+        open={executeOpen}
+        onOpenChange={setExecuteOpen}
+        modal={true}
+      >
+        <DrawerContent
+          className="data-[vaul-drawer-direction=right]:sm:max-w-xl"
+          onPointerDownOutside={(e) => {
+            e.preventDefault();
+          }}
+        >
+          <DrawerHeader>
+            <div className="flex item-center justify-between">
+              <DrawerTitle>Agent: {executingAgent?.name}({executeThreadId})</DrawerTitle>
+              <DrawerClose>
+                <X size={20} className="cursor-pointer" />
+              </DrawerClose>
+            </div>
+            <DrawerDescription>
+              {/* 输入内容并发送给 agent 执行 */}
+            </DrawerDescription>
+          </DrawerHeader>
+
+          <div className="grid gap-4 py-4">
+            {/* Thread ID display */}
+            {executeThreadId && (
+              <div className="text-xs text-muted-foreground">
+                Thread ID: {executeThreadId}
+              </div>
+            )}
+
+            {/* Execution results */}
+            {executeResult &&
+              executeResult.messages.length > 0 &&
+              (() => {
+                // Merge messages with the same messageId
+                const messageMap = new Map<string, AiMessage>();
+
+                executeResult.messages.forEach((msg) => {
+                  if (messageMap.has(msg.messageId)) {
+                    // Merge content for same messageId
+                    const existing = messageMap.get(msg.messageId)!;
+                    existing.content += msg.content;
+                  } else {
+                    // New message, create a copy
+                    messageMap.set(msg.messageId, { ...msg });
+                  }
+                });
+
+                const mergedMessages = Array.from(messageMap.values());
+
+                return (
+                  <div className="space-y-2">
+                    <Label>Result</Label>
+                    <div className="border rounded-md p-3 max-h-96 overflow-y-auto space-y-3 bg-muted/20">
+                      {mergedMessages.map((msg) => (
+                        <div
+                          key={msg.messageId}
+                          className={`p-3 rounded-md ${
+                            msg.role === "user"
+                              ? "bg-primary/10 ml-8"
+                              : msg.role === "assistant"
+                                ? "bg-secondary/50 mr-8"
+                                : "bg-muted"
+                          }`}
+                        >
+                          <div className="text-xs font-medium text-muted-foreground mb-1">
+                            {msg.author}({msg.role ?? ""})
+                          </div>
+                          <div className="text-sm whitespace-pre-wrap">
+                            {msg.content}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+            {/* Input area */}
+          </div>
+
+          <DrawerFooter>
+            <div className="flex  gap-2 items-end">
+              <Textarea
+                id="execute-input"
+                className="flex-1"
+                value={executeInput}
+                onChange={(e) => setExecuteInput(e.target.value)}
+                placeholder="请输入要发送给 agent 的内容..."
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendExecute();
+                  }
+                }}
+              />
+
+              <div>
+                <Button
+                  onClick={handleSendExecute}
+                  disabled={
+                    !executeInput.trim() || executeAgentMutation.isPending
+                  }
+                  className="w-full"
+                >
+                  {executeAgentMutation.isPending ? "执行中..." : "发送"}
+                </Button>
+
+                {executeResult && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setExecuteInput("");
+                      setExecuteResult(null);
+                      setExecuteThreadId(null);
+                    }}
+                    className="w-full"
+                  >
+                    清空会话
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <p className="text-xs text-muted-foreground">
+                按 Enter 发送，Shift+Enter 换行
+              </p>
+            </div>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
-  )
+  );
 }

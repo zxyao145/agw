@@ -1,4 +1,5 @@
 using DSystem.Domain.Enums;
+using DSystem.Domain.Models;
 using DSystem.Domain.Services;
 
 namespace DSystem.Manager.Api.Contracts;
@@ -43,21 +44,11 @@ public record AgentflowExecutionAgentResultResponse(Guid AgentId, string AgentNa
 }
 
 public record AgentflowExecuteResponse(
-    Guid AgentflowId,
-    AgentflowOrchestrationPattern Pattern,
-    bool NotImplemented,
-    string? Message,
-    string Input,
-    string? FinalOutput,
-    IReadOnlyList<WaChatMessage> Outputs)
+    string? ThreadId,
+    IReadOnlyList<AiMessage> Outputs)
 {
     public static AgentflowExecuteResponse FromDomain(AgentflowExecutionResult result) =>
         new(
-            result.AgentflowId,
-            result.Pattern,
-            result.NotImplemented,
-            result.Message,
-            result.Input,
-            result.FinalOutput,
+            result.ThreadId,
             result.Outputs);
 }

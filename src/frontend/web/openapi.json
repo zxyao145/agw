@@ -710,6 +710,49 @@
         }
       }
     },
+    "/api/agents/{id}/execute": {
+      "post": {
+        "tags": [
+          "Agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentExecuteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentExecuteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/model-provider-keys": {
       "get": {
         "tags": [
@@ -1329,6 +1372,17 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "AgentExecuteRequest": {
+        "required": [
+          "input"
+        ],
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
           }
         }
       },

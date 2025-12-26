@@ -720,6 +720,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents/{id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AgentExecuteRequest"];
+                    "text/json": components["schemas"]["AgentExecuteRequest"];
+                    "application/*+json": components["schemas"]["AgentExecuteRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/model-provider-keys": {
         parameters: {
             query?: never;
@@ -1378,6 +1419,9 @@ export interface components {
             /** Format: uuid */
             modelProviderApiKeyId: string;
             tools?: null | string;
+        };
+        AgentExecuteRequest: {
+            input: string;
         };
         AgentflowCreateRequest: {
             name: string;

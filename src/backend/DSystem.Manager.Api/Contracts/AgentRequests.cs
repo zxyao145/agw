@@ -1,4 +1,6 @@
 using DSystem.Domain.Models;
+using DSystem.Domain.Services;
+using Microsoft.Extensions.AI;
 
 namespace DSystem.Manager.Api.Contracts;
 
@@ -20,4 +22,16 @@ public record AiAgentResponse(Guid Id, string Name, string Instructions, string 
 {
     public static AiAgentResponse FromDomain(AiAgent agent) =>
         new(agent.Id, agent.Name, agent.Instructions, agent.SystemPrompt, agent.ProviderName, agent.ModelName, agent.Endpoint, agent.ApiKey);
+}
+
+public record AgentExecuteRequest(string Input);
+
+public record ChatMessageResponse(string Role, string Content);
+
+public record AgentExecuteResponse(
+    string ThreadId,
+    IReadOnlyList<AiMessage> Messages)
+{
+    public static AgentExecuteResponse FromDomain(AgentExecutionResult result) =>
+        new(result.ThreadId, result.Messages);
 }

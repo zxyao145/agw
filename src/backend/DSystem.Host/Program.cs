@@ -99,6 +99,7 @@ try
     builder.Services.AddScoped<ProjectDomainService>();
     builder.Services.AddScoped<ProjectTaskDomainService>();
     builder.Services.AddHostedService<ProjectTaskSchedulerHostedService>();
+    builder.Services.AddHybridCache();
 
     var app = builder.Build();
 

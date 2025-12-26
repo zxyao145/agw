@@ -93,4 +93,16 @@ public class AgentsController : ControllerBase
         var deleted = await _agentService.DeleteAsync(id);
         return deleted ? NoContent() : NotFound();
     }
+
+    [HttpPost("{id:guid}/execute")]
+    public async Task<IActionResult> ExecuteAsync(Guid id, [FromBody] AgentExecuteRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _agentRuntimeService.ExecuteAsync(id, "", request.Input, cancellationToken);
+        if (result == null)
+        {
+            return NotFound();
+        }
+
+        return Ok(AgentExecuteResponse.FromDomain(result));
+    }
 }
