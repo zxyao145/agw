@@ -224,7 +224,13 @@ public class AgentRuntimeService
                 if (content is TextContent text)
                 {
                     var contentText = text.Text;
-                    var msg = new AiMessage(update.MessageId, update.AuthorName, update.Role?.Value, contentText);
+                    var msg = new AiMessage(
+                        update.MessageId,
+                        update.AuthorName, 
+                        update.Role?.Value,
+                        AiMessageType.Text,
+                        contentText
+                        );
                     yield return msg;
                 }
             }
@@ -298,7 +304,7 @@ public class AgentRuntimeService
                 if(content is TextContent text)
                 {
                     var contentText = text.Text;
-                    var msg = new AiMessage(update.MessageId, update.AuthorName, update.Role?.Value, contentText);
+                    var msg = new AiMessage(update.MessageId, update.AuthorName, update.Role?.Value, AiMessageType.Text, contentText);
                     resultMessages.Add(msg);
                 }
             }

@@ -101,6 +101,7 @@ public class AgentflowRuntimeService
                         msg.MessageId,
                         msg.AuthorName,
                         msg.Role.Value,
+                        AiMessageType.Text,
                         msg.Text
                     );
                     yield return chatMsg;
@@ -157,7 +158,7 @@ public class AgentflowRuntimeService
         foreach (var message in result)
         {
             var chatMsg =
-                new AiMessage(message.MessageId, message.AuthorName, message.Role.Value, message.Text);
+                new AiMessage(message.MessageId, message.AuthorName, message.Role.Value, AiMessageType.Text, message.Text);
             outputs.Add(chatMsg);
         }
 

@@ -7,9 +7,4 @@
 		<ProjectReference Include="..\DSystem.Infrastructure\DSystem.Infrastructure.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<Folder Include="Contracts\" />
-		<Folder Include="Controllers\" />
-	</ItemGroup>
-
 </Project>
