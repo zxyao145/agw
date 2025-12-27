@@ -211,7 +211,6 @@ export function VisualAgentflowBuilder({
   // agentflow creation states
   const [agentflowName, setAgentflowName] = React.useState("")
   const [agentflowDescription, setAgentflowDescription] = React.useState("")
-  const [agentflowSystemPrompt, setAgentflowSystemPrompt] = React.useState("")
   const [agentflowEnabled, setAgentflowEnabled] = React.useState(true)
   const [isCreating, setIsCreating] = React.useState(false)
 
@@ -251,7 +250,6 @@ export function VisualAgentflowBuilder({
       // Set form fields
       setAgentflowName(editingAgentflow.name)
       setAgentflowDescription(editingAgentflow.description || "")
-      setAgentflowSystemPrompt(editingAgentflow.systemPrompt || "")
       setAgentflowEnabled(editingAgentflow.enable)
       setPattern(editingAgentflow.pattern)
 
@@ -694,7 +692,6 @@ export function VisualAgentflowBuilder({
     const requestBody = {
       name: agentflowName,
       description: agentflowDescription || null,
-      systemPrompt: agentflowSystemPrompt,
       pattern: effectivePattern,
       configurationJson,
       enable: agentflowEnabled,
@@ -717,7 +714,6 @@ export function VisualAgentflowBuilder({
       // Reset form
       setAgentflowName("")
       setAgentflowDescription("")
-      setAgentflowSystemPrompt("")
       setAgentflowEnabled(true)
       setPattern(-1)
       setMaximumIterationCount(5)
@@ -777,17 +773,6 @@ export function VisualAgentflowBuilder({
             onChange={(e) => setAgentflowDescription(e.target.value)}
             placeholder="Optional description"
             className="w-62.5"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="agentflowSystemPrompt">System Prompt *</Label>
-          <Textarea
-            id="agentflowSystemPrompt"
-            value={agentflowSystemPrompt}
-            onChange={(e) => setAgentflowSystemPrompt(e.target.value)}
-            placeholder="Enter system prompt for the agentflow..."
-            className="w-75 min-h-20"
           />
         </div>
 

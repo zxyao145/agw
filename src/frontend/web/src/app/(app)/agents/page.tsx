@@ -66,14 +66,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { X } from "lucide-react";
+
+import { Pencil, Trash2, X, Play } from "lucide-react";
 
 type AgentCreateRequest = components["schemas"]["AgentCreateRequest"];
 
 type AgentDto = {
   id: string;
   name: string;
-  instructions: string;
   systemPrompt: string;
   modelProviderApiKeyId: string;
   tools?: string | null;
@@ -164,7 +164,6 @@ export default function AgentsPage() {
   // Create dialog state
   const [createOpen, setCreateOpen] = React.useState(false);
   const [name, setName] = React.useState("");
-  const [instructions, setInstructions] = React.useState("");
   const [systemPrompt, setSystemPrompt] = React.useState("");
   const [modelProviderApiKeyId, setModelProviderApiKeyId] = React.useState("");
   const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
@@ -174,7 +173,6 @@ export default function AgentsPage() {
   const [editOpen, setEditOpen] = React.useState(false);
   const [editingAgent, setEditingAgent] = React.useState<AgentDto | null>(null);
   const [editName, setEditName] = React.useState("");
-  const [editInstructions, setEditInstructions] = React.useState("");
   const [editSystemPrompt, setEditSystemPrompt] = React.useState("");
   const [editModelProviderApiKeyId, setEditModelProviderApiKeyId] =
     React.useState("");
@@ -209,7 +207,6 @@ export default function AgentsPage() {
       toast.success("Agent created");
       setCreateOpen(false);
       setName("");
-      setInstructions("");
       setSystemPrompt("");
       setModelProviderApiKeyId("");
       setSelectedTools([]);
@@ -282,7 +279,6 @@ export default function AgentsPage() {
   const handleEdit = (agent: AgentDto) => {
     setEditingAgent(agent);
     setEditName(agent.name);
-    setEditInstructions(agent.instructions);
     setEditSystemPrompt(agent.systemPrompt);
     setEditModelProviderApiKeyId(agent.modelProviderApiKeyId);
     // Parse tools from JSON string
@@ -438,16 +434,6 @@ export default function AgentsPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="instructions">Instructions</Label>
-                  <Textarea
-                    id="instructions"
-                    value={instructions}
-                    onChange={(e) => setInstructions(e.target.value)}
-                    rows={4}
-                  />
-                </div>
-
-                <div className="grid gap-2">
                   <Label htmlFor="systemPrompt">System prompt</Label>
                   <Textarea
                     id="systemPrompt"
@@ -520,7 +506,6 @@ export default function AgentsPage() {
                   onClick={() =>
                     createAgentMutation.mutate({
                       name,
-                      instructions,
                       systemPrompt,
                       modelProviderApiKeyId,
                       tools:
@@ -562,7 +547,6 @@ export default function AgentsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Instructions</TableHead>
                   <TableHead>System Prompt</TableHead>
                   <TableHead>Tools</TableHead>
                   <TableHead>API Key ID</TableHead>
@@ -583,9 +567,6 @@ export default function AgentsPage() {
                     <TableRow key={agent.id}>
                       <TableCell className="font-medium">
                         {agent.name}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {agent.instructions || "-"}
                       </TableCell>
                       <TableCell className="max-w-xs truncate">
                         {agent.systemPrompt || "-"}
@@ -616,21 +597,21 @@ export default function AgentsPage() {
                             size="sm"
                             onClick={() => handleExecute(agent)}
                           >
-                            Run
+                            <Play className="w-4 h-4" />
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleEdit(agent)}
                           >
-                            Edit
+                            <Pencil className="w-4 h-4" />
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleDelete(agent)}
                           >
-                            Delete
+                            <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -702,16 +683,6 @@ export default function AgentsPage() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="edit-instructions">Instructions</Label>
-              <Textarea
-                id="edit-instructions"
-                value={editInstructions}
-                onChange={(e) => setEditInstructions(e.target.value)}
-                rows={4}
-              />
             </div>
 
             <div className="grid gap-2">
@@ -787,7 +758,6 @@ export default function AgentsPage() {
                     id: editingAgent.id,
                     body: {
                       name: editName,
-                      instructions: editInstructions,
                       systemPrompt: editSystemPrompt,
                       modelProviderApiKeyId: editModelProviderApiKeyId,
                       tools:

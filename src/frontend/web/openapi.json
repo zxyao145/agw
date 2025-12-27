@@ -1348,16 +1348,12 @@
       "AgentCreateRequest": {
         "required": [
           "name",
-          "instructions",
           "systemPrompt",
           "modelProviderApiKeyId"
         ],
         "type": "object",
         "properties": {
           "name": {
-            "type": "string"
-          },
-          "instructions": {
             "type": "string"
           },
           "systemPrompt": {
@@ -1390,7 +1386,6 @@
         "required": [
           "name",
           "description",
-          "systemPrompt",
           "pattern",
           "configurationJson",
           "enable",
@@ -1407,9 +1402,6 @@
               "null",
               "string"
             ]
-          },
-          "systemPrompt": {
-            "type": "string"
           },
           "pattern": {
             "$ref": "#/components/schemas/AgentflowOrchestrationPattern"
@@ -1501,7 +1493,6 @@
         "required": [
           "name",
           "description",
-          "systemPrompt",
           "pattern",
           "configurationJson",
           "enable",
@@ -1518,9 +1509,6 @@
               "null",
               "string"
             ]
-          },
-          "systemPrompt": {
-            "type": "string"
           },
           "pattern": {
             "$ref": "#/components/schemas/AgentflowOrchestrationPattern"
@@ -1551,16 +1539,12 @@
       "AgentUpdateRequest": {
         "required": [
           "name",
-          "instructions",
           "systemPrompt",
           "modelProviderApiKeyId"
         ],
         "type": "object",
         "properties": {
           "name": {
-            "type": "string"
-          },
-          "instructions": {
             "type": "string"
           },
           "systemPrompt": {

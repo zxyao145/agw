@@ -123,7 +123,6 @@ export default function AgentflowsPage() {
     id: string;
     name: string;
     description: string | null;
-    systemPrompt: string | null;
     pattern: number;
     configurationJson: string | null;
     enable: boolean;
@@ -201,7 +200,6 @@ export default function AgentflowsPage() {
           body: {
             name: agentflow.name,
             description: agentflow.description,
-            systemPrompt: agentflow.systemPrompt,
             pattern: agentflow.pattern,
             configurationJson: agentflow.configurationJson,
             enable: !agentflow.enable,
@@ -237,7 +235,6 @@ export default function AgentflowsPage() {
           id: agentflow.id,
           name: agentflow.name,
           description: agentflow.description,
-          systemPrompt: agentflow.systemPrompt,
           pattern: agentflow.pattern,
           configurationJson: agentflow.configurationJson,
           enable: agentflow.enable,

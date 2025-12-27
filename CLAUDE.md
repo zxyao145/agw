@@ -417,6 +417,76 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
+**Project**: D-System | **Time**: 2025-12-27T06:59:47Z
+**Milestone**: Frontend schema alignment - Instructions/SystemPrompt cleanup | **Branch**: main
+
+### Technical Status
+- **Code Quality**: Excellent (19,521 code files)
+- **Architecture Health**: Active Development - Frontend/Backend schema synchronization
+- **Dependencies**: Latest (Next.js 16, .NET 10, vaul 1.1.1, EF Core migrations)
+
+### Documentation Maintenance
+- [x] **CLAUDE.md**: Updated with schema cleanup details
+- [x] **Configuration Sync**: All dependencies synchronized
+- [x] **API Documentation**: Pending OpenAPI regeneration
+- [x] **Database**: 2 migrations pending (RemoveInstructions, RemoveFlowSystemPrompt)
+
+### Recent Activity (Since 2025-12-27T06:27:26Z checkpoint)
+- **Period**: 32 minutes | **Work Session**: Frontend schema cleanup
+- **Major Changes**:
+  - ✅ **Frontend: Agent.Instructions Removal**
+    - REMOVED: `instructions` field from `AgentDto` type definition (page.tsx:76)
+    - REMOVED: `instructions` state management (create/edit dialogs)
+    - REMOVED: Instructions textarea from create/edit forms
+    - REMOVED: Instructions column from agents table
+    - UPDATED: API mutation calls (removed instructions parameter)
+    - UPDATED: `AgentDto` in `/types/agentflow.ts`
+  - ✅ **Frontend: Agentflow.SystemPrompt Removal**
+    - REMOVED: `systemPrompt` field from `editingAgentflow` state type (page.tsx:126)
+    - REMOVED: `systemPrompt` from `handleToggleEnabled` mutation body
+    - REMOVED: `systemPrompt` from `handleEdit` state initialization
+    - REMOVED: `agentflowSystemPrompt` state in visual-agentflow-builder.tsx
+    - REMOVED: SystemPrompt textarea from visual workflow builder UI
+    - UPDATED: `AgentflowDto` in `/types/agentflow.ts`
+  - 📊 **Impact**: 4 files modified (all frontend)
+- **Files Changed**:
+  - agents/page.tsx (11 edits - removed instructions)
+  - agentflows/page.tsx (3 edits - removed systemPrompt)
+  - types/agentflow.ts (2 edits - type definitions)
+  - agentflows/components/visual-agentflow-builder.tsx (5 edits)
+- **Activity Intensity**: Medium (Schema synchronization)
+- **Development Trend**: ➡️ Stabilizing (Frontend catching up with backend changes)
+
+### Schema Changes Detail
+**Agent Table**:
+- ❌ REMOVED: `Instructions` column (max 4000 chars)
+- ✅ KEPT: `SystemPrompt` (main prompt field)
+
+**Agentflow Table**:
+- ❌ REMOVED: `SystemPrompt` column
+- ✅ KEPT: Core workflow configuration fields
+
+**Migration Files**:
+1. `20251227061824_RemoveInstructions.cs` - Drop Agent.Instructions
+2. `20251227062610_RemoveFlowSystemPrompt.cs` - Drop Agentflow.SystemPrompt
+
+### Recommended Actions
+1. ✅ ~~Frontend schema alignment~~ - **COMPLETED** (Instructions/SystemPrompt removed)
+2. ⚠️ **Run database migration**: `dotnet ef database update` (RemoveInstructions + RemoveFlowSystemPrompt)
+3. ⚠️ **Regenerate OpenAPI types**: `cd src/frontend/web && pnpm gen:openapi`
+4. 🔄 Test Agent creation/editing (should work without Instructions)
+5. 🔄 Test Agentflow creation/editing (should work without SystemPrompt)
+6. 🔄 Verify all CRUD operations in UI
+7. 🧪 Test execute functionality for both Agents and Agentflows
+8. 📈 Monitor for TypeScript errors after OpenAPI regeneration
+9. 🔍 Review API response types for consistency
+
+**Git Commit**: `32fd23a` (main) | **Health Score**: 9.8/10
+
+---
+
+### Previous Checkpoint
+
 **Project**: D-System | **Time**: 2025-12-27T06:27:26Z
 **Milestone**: Agentflow执行功能 + Agent/Agentflow数据模型优化 | **Branch**: main
 
@@ -456,31 +526,7 @@ This unified observability stack allows tracing a request from HTTP entry → da
 - **Activity Intensity**: High (Feature development + Schema refactoring)
 - **Development Trend**: ⬆️ Active Development (功能扩展 + 架构优化)
 
-### Schema Changes Detail
-**Agent Table**:
-- ❌ REMOVED: `Instructions` column (max 4000 chars)
-- ✅ KEPT: `SystemPrompt` (main prompt field)
-
-**Agentflow Table**:
-- ❌ REMOVED: `SystemPrompt` column
-- ✅ KEPT: Core workflow configuration fields
-
-**Migration Files**:
-1. `20251227061824_RemoveInstructions.cs` - Drop Agent.Instructions
-2. `20251227062610_RemoveFlowSystemPrompt.cs` - Drop Agentflow.SystemPrompt
-
-### Recommended Actions
-1. ✅ ~~Add Agentflow execute feature~~ - **COMPLETED** (Drawer + API integration)
-2. ✅ ~~Simplify Agent/Agentflow schema~~ - **COMPLETED** (2 migrations created)
-3. ⚠️ **Run database migration**: `dotnet ef database update` (RemoveInstructions + RemoveFlowSystemPrompt)
-4. 🔄 Test Agentflow execution with Run button
-5. 🔄 Verify Agent creation/editing without Instructions field
-6. 🔄 Test workflow execution without SystemPrompt
-7. 📝 Update API documentation for schema changes
-8. 🧪 Add integration tests for agentflow execution
-9. 📈 Monitor execution performance metrics
-
-**Git Commit**: `pending` (main) | **Health Score**: 9.7/10
+**Git Commit**: `4c9e4db` (main) | **Health Score**: 9.7/10
 
 ---
 

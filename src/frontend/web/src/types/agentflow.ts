@@ -2,7 +2,6 @@
 export type AgentDto = {
   id: string
   name: string
-  instructions: string
   systemPrompt: string
   modelProviderApiKeyId: string
   createBy?: string | null
@@ -43,7 +42,6 @@ export type AgentflowDto = {
   id: string
   name: string
   description: string | null
-  systemPrompt: string
   pattern: number
   configurationJson: string | null
   enable: boolean

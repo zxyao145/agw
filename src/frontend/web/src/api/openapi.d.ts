@@ -1414,7 +1414,6 @@ export interface components {
     schemas: {
         AgentCreateRequest: {
             name: string;
-            instructions: string;
             systemPrompt: string;
             /** Format: uuid */
             modelProviderApiKeyId: string;
@@ -1426,7 +1425,6 @@ export interface components {
         AgentflowCreateRequest: {
             name: string;
             description: null | string;
-            systemPrompt: string;
             pattern: components["schemas"]["AgentflowOrchestrationPattern"];
             configurationJson: null | string;
             enable: boolean;
@@ -1453,7 +1451,6 @@ export interface components {
         AgentflowUpdateRequest: {
             name: string;
             description: null | string;
-            systemPrompt: string;
             pattern: components["schemas"]["AgentflowOrchestrationPattern"];
             configurationJson: null | string;
             enable: boolean;
@@ -1462,7 +1459,6 @@ export interface components {
         };
         AgentUpdateRequest: {
             name: string;
-            instructions: string;
             systemPrompt: string;
             /** Format: uuid */
             modelProviderApiKeyId: string;
