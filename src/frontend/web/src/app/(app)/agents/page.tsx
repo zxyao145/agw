@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/select";
 
 import { Pencil, Trash2, X, Play } from "lucide-react";
+import { ButtonGroup } from "@/components/ui/button-group";
 
 type AgentCreateRequest = components["schemas"]["AgentCreateRequest"];
 
@@ -592,27 +593,32 @@ export default function AgentsPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleExecute(agent)}
-                          >
-                            <Play className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(agent)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDelete(agent)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <ButtonGroup>
+                            <Button
+                              variant="ghost"
+                              className="cursor-pointer"
+                              size="sm"
+                              onClick={() => handleExecute(agent)}
+                            >
+                              <Play className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="cursor-pointer"
+                              size="sm"
+                              onClick={() => handleEdit(agent)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(agent)}
+                              className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </ButtonGroup>
                         </div>
                       </TableCell>
                     </TableRow>

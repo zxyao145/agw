@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronDownIcon } from "lucide-react"
+import { BookKey, ChevronDownIcon, KeyRound, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client"
@@ -428,8 +428,8 @@ function ModelProviderActions({
       <ButtonGroup>
         <Dialog open={viewKeysOpen} onOpenChange={setViewKeysOpen}>
           <DialogTrigger asChild>
-            <Button type="button" variant="outline" size="sm">
-              查看Keys
+            <Button type="button" variant="outline" size="sm" className="cursor-pointer">
+              <BookKey className="h-4 w-4" />
             </Button>
           </DialogTrigger>
 
@@ -517,8 +517,8 @@ function ModelProviderActions({
           }}
         >
           <DialogTrigger asChild>
-            <Button type="button" variant="outline" size="sm">
-              增加 key
+            <Button type="button" variant="outline" size="sm" className="cursor-pointer">
+                <KeyRound className="h-4 w-4" />
             </Button>
           </DialogTrigger>
 
@@ -578,6 +578,7 @@ function ModelProviderActions({
 
         <Button
           type="button"
+          className="cursor-pointer"
           variant="destructive"
           size="sm"
           disabled={deleteModelProviderMutation.isPending}
@@ -589,7 +590,7 @@ function ModelProviderActions({
             deleteModelProviderMutation.mutate();
           }}
         >
-          删除
+          <Trash2 className="w-4 h-4" />
         </Button>
       </ButtonGroup>
     </div>

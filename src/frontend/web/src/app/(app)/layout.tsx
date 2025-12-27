@@ -42,7 +42,7 @@ const navItems: SidebarMenuGroupProps[] = [
     ],
   },
   {
-    groupLable: "Management",
+    groupLable: "Agent & Flow",
     menus: [
       {
         url: "/agentflows",
@@ -56,6 +56,12 @@ const navItems: SidebarMenuGroupProps[] = [
         isActive: true,
         icon: <Bot />
       },
+    ],
+  },
+
+  {
+    groupLable: "Model & Provider",
+    menus: [
       {
         url: "/providers",
         title: "Providers",

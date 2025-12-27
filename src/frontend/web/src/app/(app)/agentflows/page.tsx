@@ -53,6 +53,7 @@ import {
 import { VisualAgentflowDialog } from "../agentflows/components/visual-agentflow-dialog";
 import { AgentDto, AgentflowDto } from "@/types/agentflow";
 import { Pencil, Trash2, X, Play } from "lucide-react";
+import { ButtonGroup } from "@/components/ui/button-group";
 
 type AiMessage = {
   messageId: string;
@@ -319,7 +320,6 @@ export default function AgentflowsPage() {
             editingAgentflow={editingAgentflow}
             onAgentflowCreated={handleAgentflowCreated}
           />
-
         </div>
       </div>
 
@@ -347,13 +347,15 @@ export default function AgentflowsPage() {
                   <TableHead>Pattern</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-center">Enabled</TableHead>
-                  <TableHead className="text-center">Actions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {agentflowsQuery.data.map((agentflow) => (
                   <TableRow key={agentflow.id}>
-                    <TableCell className="font-medium">{agentflow.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {agentflow.name}
+                    </TableCell>
                     <TableCell className="max-w-xs truncate">
                       {agentflow.description || "-"}
                     </TableCell>
@@ -376,33 +378,37 @@ export default function AgentflowsPage() {
                       </label>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleExecute(agentflow)}
-                          title="Run agentflow"
-                        >
-                          <Play className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleEdit(agentflow)}
-                          title="Edit agentflow"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleDelete(agentflow)}
-                          disabled={deleteAgentflowMutation.isPending}
-                          title="Delete agentflow"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                      <div className="flex justify-end">
+                        <ButtonGroup>
+                          <Button
+                            variant="ghost"
+                            className="cursor-pointer"
+                            size="icon-sm"
+                            onClick={() => handleExecute(agentflow)}
+                            title="Run agentflow"
+                          >
+                            <Play className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="cursor-pointer"
+                            size="icon-sm"
+                            onClick={() => handleEdit(agentflow)}
+                            title="Edit agentflow"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => handleDelete(agentflow)}
+                            disabled={deleteAgentflowMutation.isPending}
+                            title="Delete agentflow"
+                            className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </ButtonGroup>
                       </div>
                     </TableCell>
                   </TableRow>
