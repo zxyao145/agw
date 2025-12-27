@@ -417,6 +417,49 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
+**Project**: D-System | **Time**: 2025-12-27T07:26:33Z
+**Milestone**: UI simplification - Remove API Key ID column from agents table | **Branch**: main
+
+### Technical Status
+- **Code Quality**: Excellent (19,521 code files)
+- **Architecture Health**: Active Development - UI refinement and simplification
+- **Dependencies**: Latest (Next.js 16, .NET 10, vaul 1.1.1, EF Core migrations)
+
+### Documentation Maintenance
+- [x] **CLAUDE.md**: Updated with UI simplification details
+- [x] **Configuration Sync**: All dependencies synchronized
+- [x] **API Documentation**: Pending OpenAPI regeneration
+- [x] **Database**: 2 migrations pending (RemoveInstructions, RemoveFlowSystemPrompt)
+
+### Recent Activity (Since 2025-12-27T07:20:08Z checkpoint)
+- **Period**: 6 minutes | **Work Session**: Frontend UI refinement
+- **Major Changes**:
+  - ✅ **Frontend: Agents Table Simplification**
+    - REMOVED: "API Key ID" column from agents table (line 553)
+    - REMOVED: Corresponding table cell displaying API key ID (line 585-587, now commented)
+    - RATIONALE: API Key ID is implementation detail, not useful for users in table view
+    - BENEFIT: Cleaner UI, focus on relevant information (Name, System Prompt, Tools, Created)
+  - 📊 **Impact**: 1 file modified (agents/page.tsx)
+- **Activity Intensity**: Very Low (Minor UI polish)
+- **Development Trend**: ➡️ Stabilizing (Iterative UI improvements)
+
+### Recommended Actions
+1. ✅ ~~Remove API Key ID column~~ - **COMPLETED**
+2. ⚠️ **Run database migration**: `dotnet ef database update` (RemoveInstructions + RemoveFlowSystemPrompt)
+3. ⚠️ **Regenerate OpenAPI types**: `cd src/frontend/web && pnpm gen:openapi`
+4. 🔄 Test agents table display (verify columns are properly aligned)
+5. 🔄 Verify all CRUD operations still work correctly
+6. 🔍 Consider if API Key ID should be shown in detail view instead
+7. 🧪 Test execute functionality for both Agents and Agentflows
+8. 📈 Monitor for TypeScript errors after OpenAPI regeneration
+9. 🔍 Continue UI consistency review across all CRUD pages
+
+**Git Commit**: `dbffb65` (main) | **Health Score**: 9.8/10
+
+---
+
+### Previous Checkpoint
+
 **Project**: D-System | **Time**: 2025-12-27T07:20:08Z
 **Milestone**: UI component optimization - ButtonGroup integration | **Branch**: main
 

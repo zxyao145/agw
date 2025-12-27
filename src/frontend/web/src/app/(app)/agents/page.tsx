@@ -550,7 +550,6 @@ export default function AgentsPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>System Prompt</TableHead>
                   <TableHead>Tools</TableHead>
-                  <TableHead>API Key ID</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -583,9 +582,9 @@ export default function AgentsPage() {
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
-                      <TableCell className="font-mono text-xs">
+                      {/* <TableCell className="font-mono text-xs">
                         {agent.modelProviderApiKeyId.substring(0, 8)}...
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell className="text-xs text-muted-foreground">
                         {agent.createTime
                           ? new Date(agent.createTime).toLocaleString()
