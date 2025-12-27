@@ -1,7 +1,9 @@
 using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
+using DSystem.Infrastructure;
 using DSystem.Manager.Api.Contracts;
 using Microsoft.AspNetCore.Mvc;
+using System.Text;
 
 namespace DSystem.Manager.Api.Controllers;
 
@@ -102,5 +104,22 @@ public class AgentsController : ControllerBase
         }
 
         return Ok(AgentExecuteResponse.FromDomain(result));
+    }
+
+
+    [HttpPost("{id:guid}/execute-sse")]
+    public async Task ExecuteSseAsync(Guid id, [FromBody] AgentExecuteRequest request, CancellationToken cancellationToken)
+    {
+        Response.Headers["Content-Type"] = "text/event-stream";
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["Connection"] = "keep-alive";
+
+        await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(id, request.ThreadId ?? "", request.Input, cancellationToken))
+        {
+            var json = JsonUtil.Serialize(message);
+            var data = Encoding.UTF8.GetBytes($"data: {json}\n\n");
+            await Response.Body.WriteAsync(data, cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
+        }
     }
 }

@@ -583,6 +583,49 @@
         }
       }
     },
+    "/api/agentflows/{id}/execute-sse": {
+      "post": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowExecuteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowExecuteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentflowExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/agents": {
       "get": {
         "tags": [
@@ -711,6 +754,49 @@
       }
     },
     "/api/agents/{id}/execute": {
+      "post": {
+        "tags": [
+          "Agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentExecuteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentExecuteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/execute-sse": {
       "post": {
         "tags": [
           "Agents"
@@ -1379,6 +1465,12 @@
         "properties": {
           "input": {
             "type": "string"
+          },
+          "threadId": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

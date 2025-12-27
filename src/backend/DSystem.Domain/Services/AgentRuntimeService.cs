@@ -8,6 +8,7 @@ using OpenAI;
  using OpenAI.Chat;
 using System.ClientModel;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AIMessage = Microsoft.Extensions.AI.ChatMessage;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -171,6 +172,70 @@ public class AgentRuntimeService
     }
 
     /// <summary>
+    /// Executes an agent with streaming response.
+    /// </summary>
+    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+        Guid agentId,
+        string threadId,
+        string input,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var aiAgent = await CreateAiAgentAsync(agentId);
+        if (aiAgent == null)
+        {
+            yield break;
+        }
+
+        AgentThread thread;
+        if (string.IsNullOrWhiteSpace(threadId))
+        {
+            threadId = Guid.NewGuid().ToString();
+            thread = aiAgent.GetNewThread();
+        }
+        else
+        {
+            var value = await _cache.GetOrCreateAsync<string>(threadId, (c) =>
+            {
+                return ValueTask.FromResult("");
+            });
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                thread = aiAgent.GetNewThread();
+            }
+            else
+            {
+                var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
+                thread = aiAgent.DeserializeThread(serializedThread);
+            }
+        }
+
+        ChatMessage? system = null;
+        var chatMsg = new ChatMessage(ChatRole.User, input);
+        IEnumerable<ChatMessage> msgs = system == null
+            ? [chatMsg]
+            : [system, chatMsg];
+
+        var stream = aiAgent.RunStreamingAsync(msgs, thread);
+
+        await foreach (var update in stream.ConfigureAwait(false))
+        {
+            foreach (var content in update.Contents)
+            {
+                if (content is TextContent text)
+                {
+                    var contentText = text.Text;
+                    var msg = new AiMessage(update.MessageId, update.AuthorName, update.Role?.Value, contentText);
+                    yield return msg;
+                }
+            }
+        }
+
+        // Save thread state to cache after execution
+        var serialized = JsonSerializer.Serialize(thread.Serialize());
+        await _cache.SetAsync(threadId, serialized, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
     /// Executes an agent with the given input and returns the result.
     /// </summary>
     public async Task<AgentExecutionResult?> ExecuteAsync(
@@ -188,7 +253,7 @@ public class AgentRuntimeService
         var aiAgent = await CreateAiAgentAsync(agent);
         if(aiAgent == null)
         {
-            throw new Exception("aiAgent not found"); 
+            throw new Exception("aiAgent not found");
         }
 
         AgentThread thread;

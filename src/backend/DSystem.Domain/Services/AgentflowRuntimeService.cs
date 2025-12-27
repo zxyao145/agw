@@ -5,6 +5,7 @@ using DSystem.Domain.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using System.Runtime.CompilerServices;
 
 namespace DSystem.Domain.Services;
 
@@ -51,6 +52,64 @@ public class AgentflowRuntimeService
         _agentflowEdgeRepository = agentflowEdgeRepository;
     }
 
+    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+        Guid agentflowId,
+        string input,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
+        if (agentflow == null || !agentflow.Enable)
+        {
+            yield break;
+        }
+
+        var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
+        if (workflow == null)
+        {
+            yield break;
+        }
+
+        var messages = new List<ChatMessage>
+        {
+            new(ChatRole.User, input)
+        };
+
+        StreamingRun run = await InProcessExecution.StreamAsync(workflow, messages);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        await foreach (WorkflowEvent evt in run.WatchStreamAsync().ConfigureAwait(false))
+        {
+            //if (evt is AgentRunUpdateEvent e)
+            //{
+            //    // Stream intermediate updates
+            //    var message = new AiMessage(
+            //        Guid.NewGuid().ToString(),
+            //        e.ExecutorId,
+            //        "assistant",
+            //        e.Data?.ToString() ?? ""
+            //    );
+            //    yield return message;
+            //}
+            //else 
+            if (evt is WorkflowOutputEvent outputEvt)
+            {
+                // Stream final results
+                var result = (List<ChatMessage>)outputEvt.Data!;
+                foreach (var msg in result)
+                {
+                    var chatMsg = new AiMessage(
+                        msg.MessageId,
+                        msg.AuthorName,
+                        msg.Role.Value,
+                        msg.Text
+                    );
+                    yield return chatMsg;
+                }
+                yield break;
+            }
+        }
+    }
+
     public async Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
         string input,
@@ -73,7 +132,7 @@ public class AgentflowRuntimeService
         {
             new(ChatRole.User, input)
         };
-        
+
         StreamingRun run = await InProcessExecution.StreamAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 

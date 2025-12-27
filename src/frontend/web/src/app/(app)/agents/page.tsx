@@ -25,15 +25,8 @@ import {
   DialogTitle as UiDialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+
+import {Ulid} from 'id128';
 
 import {
   Drawer,
@@ -195,8 +188,10 @@ export default function AgentsPage() {
   );
   const [executeInput, setExecuteInput] = React.useState("");
   const [executeThreadId, setExecuteThreadId] = React.useState<string | null>(
-    null
+        Ulid.generate().toRaw()
   );
+
+  // console.log('New executeThreadId:', Ulid.generate().toRaw(), Ulid.generate().toCanonical());
   const [executeResult, setExecuteResult] =
     React.useState<AgentExecuteResponse | null>(null);
 
@@ -255,27 +250,97 @@ export default function AgentsPage() {
     },
   });
 
-  const executeAgentMutation = useMutation({
-    mutationFn: async ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: AgentExecuteRequest;
-    }) => {
-      return (await apiPost(`/api/agents/${id}/execute`, {
-        body,
-      })) as unknown as AgentExecuteResponse;
-    },
-    onSuccess: async (result) => {
-      setExecuteResult(result);
-      setExecuteThreadId(result.threadId);
-      // toast.success("Execution completed", { duration: 600000 });
-    },
-    onError: (error) => {
-      toast.error(`Execute failed: ${getApiErrorMessage(error)}`);
-    },
-  });
+  // State for tracking execution status
+  const [isExecuting, setIsExecuting] = React.useState(false);
+
+  // SSE-based execution function
+  const executeAgentSSE = async (
+    id: string,
+    body: AgentExecuteRequest
+  ): Promise<void> => {
+    setIsExecuting(true);
+
+    try {
+      const response = await fetch(`/api/agents/${id}/execute-sse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Execute failed: ${response.status} ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        console.log('Received lines:', lines);
+        // Keep the last incomplete line in buffer
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const json = line.substring(6);
+            try {
+              // {MessageId: 'c2c49f1a-fd9f-4690-957e-bddfbd890337', Author: 'Hello ', Role: 'assistant', Content: ''}
+              const message: AiMessage = JSON.parse(json);
+
+              // Update executeResult with streaming messages
+              setExecuteResult((prev) => {
+                const messages = prev?.messages || [];
+                const existingIndex = messages.findIndex(
+                  (m) => m.messageId === message.messageId
+                );
+
+                if (existingIndex >= 0) {
+                  // Merge content for same messageId
+                  const updated = [...messages];
+                  updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    content: updated[existingIndex].content + message.content,
+                  };
+                  console.log('Updated message:', prev?.threadId , updated[existingIndex]);
+                  return { threadId: prev?.threadId || '', messages: updated };
+                } else {
+                  // New message
+                  return {
+                    threadId: prev?.threadId || '',
+                    messages: [...messages, message],
+                  };
+                }
+              });
+
+              // Set threadId if not set (use the first message's thread context)
+              if (!executeThreadId) {
+                // We need to track threadId separately or extract from first message
+                // For now, we'll keep it null and let backend manage it
+              }
+            } catch (e) {
+              console.error('Parse error:', e);
+            }
+          }
+        }
+      }
+
+      // toast.success("Execution completed");
+    } catch (error) {
+      toast.error(`Execute failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    } finally {
+      setIsExecuting(false);
+    }
+  };
 
   const handleEdit = (agent: AgentDto) => {
     setEditingAgent(agent);
@@ -305,16 +370,15 @@ export default function AgentsPage() {
     setExecuteOpen(true);
   };
 
-  const handleSendExecute = () => {
+  const handleSendExecute = async () => {
     if (!executingAgent || !executeInput.trim()) return;
 
-    executeAgentMutation.mutate({
-      id: executingAgent.id,
-      body: {
-        threadId: executeThreadId,
-        input: executeInput,
-      },
+    await executeAgentSSE(executingAgent.id, {
+      threadId: executeThreadId,
+      input: executeInput,
     });
+
+    setExecuteInput("");
   };
 
   const toggleTool = (toolName: string, isEdit: boolean = false) => {
@@ -923,11 +987,11 @@ export default function AgentsPage() {
                 <Button
                   onClick={handleSendExecute}
                   disabled={
-                    !executeInput.trim() || executeAgentMutation.isPending
+                    !executeInput.trim() || isExecuting
                   }
                   className="w-full"
                 >
-                  {executeAgentMutation.isPending ? "执行中..." : "发送"}
+                  {isExecuting ? "执行中..." : "发送"}
                 </Button>
 
                 {executeResult && (

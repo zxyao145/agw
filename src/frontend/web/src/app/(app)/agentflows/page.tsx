@@ -4,7 +4,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { ApiError, apiGet, apiPost, apiPut, apiDelete } from "@/api/client";
+import { ApiError, apiGet, apiPut, apiDelete } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,15 +32,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
@@ -54,6 +46,7 @@ import { VisualAgentflowDialog } from "../agentflows/components/visual-agentflow
 import { AgentDto, AgentflowDto } from "@/types/agentflow";
 import { Pencil, Trash2, X, Play } from "lucide-react";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { Ulid } from "id128";
 
 type AiMessage = {
   messageId: string;
@@ -75,49 +68,49 @@ type AgentflowExecuteResponse = {
 function getPatternName(pattern: number): string {
   switch (pattern) {
     case 0:
-      return "Concurrent"
+      return "Concurrent";
     case 1:
-      return "Sequential"
+      return "Sequential";
     case 2:
-      return "GroupChat"
+      return "GroupChat";
     case 3:
-      return "Handoff"
+      return "Handoff";
     case 4:
-      return "Magentic"
+      return "Magentic";
     default:
-      return `Unknown (${pattern})`
+      return `Unknown (${pattern})`;
   }
 }
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (typeof error.body === "string" && error.body.trim().length) {
-      return error.body
+      return error.body;
     }
-    return `${error.status} ${error.statusText}`
+    return `${error.status} ${error.statusText}`;
   }
-  if (error instanceof Error) return error.message
-  return "Unknown error"
+  if (error instanceof Error) return error.message;
+  return "Unknown error";
 }
 
 export default function AgentflowsPage() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   const agentflowsQuery = useQuery({
     queryKey: ["agentflows"],
     queryFn: async () => {
       // OpenAPI currently doesn't declare response schemas.
-      return (await apiGet("/api/agentflows")) as unknown as AgentflowDto[]
+      return (await apiGet("/api/agentflows")) as unknown as AgentflowDto[];
     },
-  })
+  });
 
   const agentsQuery = useQuery({
     queryKey: ["agents"],
     queryFn: async () => {
       // OpenAPI currently doesn't declare response schemas.
-      return (await apiGet("/api/agents")) as unknown as AgentDto[]
+      return (await apiGet("/api/agents")) as unknown as AgentDto[];
     },
-  })
+  });
 
   const [visualOpen, setVisualOpen] = React.useState(false);
   const [editingAgentflow, setEditingAgentflow] = React.useState<{
@@ -137,23 +130,23 @@ export default function AgentflowsPage() {
     React.useState<AgentflowDto | null>(null);
   const [executeInput, setExecuteInput] = React.useState("");
   const [executeThreadId, setExecuteThreadId] = React.useState<string | null>(
-    null
+    Ulid.generate().toRaw()
   );
   const [executeResult, setExecuteResult] =
     React.useState<AgentflowExecuteResponse | null>(null);
 
   const updateAgentflowMutation = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: any }) => {
-      return await apiPut(`/api/agentflows/${id}`, { body })
+      return await apiPut(`/api/agentflows/${id}`, { body });
     },
     onSuccess: async () => {
-      toast.success("Agentflow updated")
-      await queryClient.invalidateQueries({ queryKey: ["agentflows"] })
+      toast.success("Agentflow updated");
+      await queryClient.invalidateQueries({ queryKey: ["agentflows"] });
     },
     onError: (error) => {
-      toast.error(`Update failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Update failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
 
   const deleteAgentflowMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -168,33 +161,116 @@ export default function AgentflowsPage() {
     },
   });
 
-  const executeAgentflowMutation = useMutation({
-    mutationFn: async ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: AgentflowExecuteRequest;
-    }) => {
-      return (await apiPost(`/api/agentflows/${id}/execute`, {
-        body,
-      })) as unknown as AgentflowExecuteResponse;
-    },
-    onSuccess: async (result) => {
-      setExecuteResult(result);
-      setExecuteThreadId(result.threadId);
-    },
-    onError: (error) => {
-      toast.error(`Execute failed: ${getApiErrorMessage(error)}`);
-    },
-  });
+  // State for tracking execution status
+  const [isExecuting, setIsExecuting] = React.useState(false);
+
+  // SSE-based execution function
+  const executeAgentflowSSE = async (
+    id: string,
+    body: AgentflowExecuteRequest
+  ): Promise<void> => {
+    setIsExecuting(true);
+
+    try {
+      const response = await fetch(`/api/agentflows/${id}/execute-sse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Execute failed: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+
+        // Keep the last incomplete line in buffer
+        buffer = lines.pop() || "";
+
+        const newMsg: AiMessage = {
+          messageId: "",
+          author: executingAgentflow!.name,
+          role: "",
+          content: "",
+        };
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const json = line.substring(6);
+            try {
+              const message: AiMessage = JSON.parse(json);
+              // Update executeResult with streaming messages
+              setExecuteResult((prev) => {
+                if (message.role === "user") {
+                  return prev;
+                }
+                const messages = prev?.messages || [];
+                const existingIndex = messages.findIndex(
+                  (m) => m.messageId === message.messageId
+                );
+
+                if (existingIndex >= 0) {
+                  // Merge content for same messageId
+                  const updated = [...messages];
+                  updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    content: updated[existingIndex].content + message.content,
+                  };
+                  console.log('Updated message:', prev?.threadId , updated[existingIndex]);
+                  return { threadId: prev?.threadId || '', messages: updated };
+                } else {
+                  // New message
+                  return {
+                    threadId: prev?.threadId || '',
+                    messages: [...messages, message],
+                  };
+                }
+              });
+            } catch (e) {
+              console.error("Parse error:", e);
+            }
+          }
+        }
+      }
+
+      // toast.success("Execution completed");
+    } catch (error) {
+      toast.error(
+        `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`
+      );
+      throw error;
+    } finally {
+      setIsExecuting(false);
+    }
+  };
 
   const handleToggleEnabled = React.useCallback(
     async (agentflow: AgentflowDto) => {
       try {
         // We need to get full agentflow data including nodes and edges
-        const nodes = (await apiGet(`/api/agentflows/${agentflow.id}/nodes`)) as any[]
-        const edges = (await apiGet(`/api/agentflows/${agentflow.id}/edges`)) as any[]
+        const nodes = (await apiGet(
+          `/api/agentflows/${agentflow.id}/nodes`
+        )) as any[];
+        const edges = (await apiGet(
+          `/api/agentflows/${agentflow.id}/edges`
+        )) as any[];
 
         updateAgentflowMutation.mutate({
           id: agentflow.id,
@@ -207,57 +283,60 @@ export default function AgentflowsPage() {
             nodes: nodes || [],
             edges: edges || [],
           },
-        })
+        });
       } catch (error) {
-        toast.error("Failed to fetch agentflow details")
+        toast.error("Failed to fetch agentflow details");
       }
     },
     [updateAgentflowMutation]
-  )
+  );
 
   const handleDelete = React.useCallback(
     (agentflow: AgentflowDto) => {
-      if (window.confirm(`Are you sure you want to delete "${agentflow.name}"?`)) {
-        deleteAgentflowMutation.mutate(agentflow.id)
+      if (
+        window.confirm(`Are you sure you want to delete "${agentflow.name}"?`)
+      ) {
+        deleteAgentflowMutation.mutate(agentflow.id);
       }
     },
     [deleteAgentflowMutation]
-  )
+  );
 
-  const handleEdit = React.useCallback(
-    async (agentflow: AgentflowDto) => {
-      try {
-        // Fetch agentflow nodes and edges
-        const nodes = (await apiGet(`/api/agentflows/${agentflow.id}/nodes`)) as any[]
-        const edges = (await apiGet(`/api/agentflows/${agentflow.id}/edges`)) as any[]
+  const handleEdit = React.useCallback(async (agentflow: AgentflowDto) => {
+    try {
+      // Fetch agentflow nodes and edges
+      const nodes = (await apiGet(
+        `/api/agentflows/${agentflow.id}/nodes`
+      )) as any[];
+      const edges = (await apiGet(
+        `/api/agentflows/${agentflow.id}/edges`
+      )) as any[];
 
-        // Set editing agentflow data
-        setEditingAgentflow({
-          id: agentflow.id,
-          name: agentflow.name,
-          description: agentflow.description,
-          pattern: agentflow.pattern,
-          configurationJson: agentflow.configurationJson,
-          enable: agentflow.enable,
-          nodes: nodes || [],
-          edges: edges || [],
-        })
+      // Set editing agentflow data
+      setEditingAgentflow({
+        id: agentflow.id,
+        name: agentflow.name,
+        description: agentflow.description,
+        pattern: agentflow.pattern,
+        configurationJson: agentflow.configurationJson,
+        enable: agentflow.enable,
+        nodes: nodes || [],
+        edges: edges || [],
+      });
 
-        // Open visual builder
-        setVisualOpen(true)
-      } catch (error) {
-        toast.error("Failed to load agentflow details")
-        console.error("Failed to load agentflow:", error)
-      }
-    },
-    []
-  )
+      // Open visual builder
+      setVisualOpen(true);
+    } catch (error) {
+      toast.error("Failed to load agentflow details");
+      console.error("Failed to load agentflow:", error);
+    }
+  }, []);
 
   const handleAgentflowCreated = React.useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ["agentflows"] })
-    setVisualOpen(false)
-    setEditingAgentflow(null)
-  }, [queryClient])
+    await queryClient.invalidateQueries({ queryKey: ["agentflows"] });
+    setVisualOpen(false);
+    setEditingAgentflow(null);
+  }, [queryClient]);
 
   const handleVisualDialogClose = React.useCallback(() => {
     setVisualOpen(false);
@@ -272,18 +351,35 @@ export default function AgentflowsPage() {
     setExecuteOpen(true);
   }, []);
 
-  const handleSendExecute = React.useCallback(() => {
+  const handleSendExecute = React.useCallback(async () => {
     if (!executingAgentflow || !executeInput.trim()) return;
 
-    executeAgentflowMutation.mutate({
-      id: executingAgentflow.id,
-      body: {
-        threadId: executeThreadId,
-        input: executeInput,
-      },
+    setExecuteResult((prev) => {
+      const userMg = {
+        messageId: Ulid.generate().toRaw(),
+        author: "user",
+        role: "user",
+        content: executeInput,
+      };
+      if (prev) {
+        return {
+          threadId: prev.threadId,
+          messages: [...prev.messages, userMg],
+        };
+      }
+      return {
+        threadId: executeThreadId || Ulid.generate().toRaw(),
+        messages: [userMg],
+      };
     });
-  }, [executingAgentflow, executeInput, executeThreadId, executeAgentflowMutation]);
 
+    await executeAgentflowSSE(executingAgentflow.id, {
+      threadId: executeThreadId,
+      input: executeInput,
+    });
+
+    setExecuteInput("");
+  }, [executingAgentflow, executeInput, executeThreadId]);
 
   return (
     <div className="space-y-6 w-full">
@@ -529,12 +625,10 @@ export default function AgentflowsPage() {
               <div>
                 <Button
                   onClick={handleSendExecute}
-                  disabled={
-                    !executeInput.trim() || executeAgentflowMutation.isPending
-                  }
+                  disabled={!executeInput.trim() || isExecuting}
                   className="w-full"
                 >
-                  {executeAgentflowMutation.isPending ? "执行中..." : "发送"}
+                  {isExecuting ? "执行中..." : "发送"}
                 </Button>
 
                 {executeResult && (
