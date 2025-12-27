@@ -125,11 +125,11 @@ public class AgentRuntimeService
         OpenAIClient client = new OpenAIClient(credential, options);
         var chatCompletionClient = client.GetChatClient(model.Name);
         AIAgent aIAgent = chatCompletionClient.CreateAIAgent(
-            instructions: agent.Instructions,
+            instructions: agent.SystemPrompt,
             name: agent.Name,
             tools: tools
             );
-
+        
         return aIAgent;
     }
 
@@ -215,10 +215,10 @@ public class AgentRuntimeService
         }
 
         ChatMessage? system = null;
-        if (!string.IsNullOrWhiteSpace(agent.SystemPrompt))
-        {
-            system = new ChatMessage(ChatRole.System, agent.SystemPrompt);
-        }
+        //if (!string.IsNullOrWhiteSpace(agent.SystemPrompt))
+        //{
+        //    system = new ChatMessage(ChatRole.System, agent.SystemPrompt);
+        //}
         var chatMsg = new ChatMessage(ChatRole.User, input);
         IEnumerable<ChatMessage> msgs = system == null
             ? [chatMsg]

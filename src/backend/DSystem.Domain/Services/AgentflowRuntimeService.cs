@@ -27,7 +27,7 @@ public class PlaceholderAgentflowAgentExecutor : IAgentflowAgentExecutor
 
 public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
 
-public record AgentflowExecutionResult(string ThreadId, IReadOnlyList<AiMessage> Outputs);
+public record AgentflowExecutionResult(string ThreadId, IReadOnlyList<AiMessage> Messages);
 
 public class AgentflowRuntimeService
 {
@@ -69,13 +69,10 @@ public class AgentflowRuntimeService
         }
 
 
-        var messages = new List<ChatMessage>();
-        if (!string.IsNullOrWhiteSpace(agentflow.SystemPrompt))
+        var messages = new List<ChatMessage>
         {
-            messages.Add(new(ChatRole.System, agentflow.SystemPrompt));
-        }
-
-        messages.Add(new(ChatRole.User, input));
+            new(ChatRole.User, input)
+        };
         
         StreamingRun run = await InProcessExecution.StreamAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
@@ -106,7 +103,7 @@ public class AgentflowRuntimeService
         }
 
 
-        return new AgentflowExecutionResult("", Outputs: outputs);
+        return new AgentflowExecutionResult("", Messages: outputs);
     }
 
 

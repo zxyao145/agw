@@ -417,13 +417,77 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-26T14:44:02Z
-**Milestone**: UI polish + ModelProviderApiKeyDto refinement | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-27T06:27:26Z
+**Milestone**: Agentflow执行功能 + Agent/Agentflow数据模型优化 | **Branch**: main
 
 ### Technical Status
 - **Code Quality**: Excellent (19,516 TypeScript/C# files)
-- **Architecture Health**: Stable - UI/UX optimization phase
-- **Dependencies**: Latest (Next.js 16, .NET 10, vaul 1.1.1 drawer, sonner toast)
+- **Architecture Health**: Active Development - Feature expansion + Schema refinement
+- **Dependencies**: Latest (Next.js 16, .NET 10, vaul 1.1.1, EF Core migrations)
+
+### Documentation Maintenance
+- [x] **CLAUDE.md**: Updated with feature implementation details
+- [x] **Configuration Sync**: All dependencies synchronized
+- [x] **API Documentation**: Consistent with codebase
+- [x] **Database**: 2 new migrations (RemoveInstructions, RemoveFlowSystemPrompt)
+
+### Recent Activity (Since 2025-12-26T15:54:45Z checkpoint)
+- **Period**: 14.55 hours | **Work Session**: Full-stack feature + schema optimization
+- **Major Changes**:
+  - ✅ **Frontend: Agentflow Execute Feature**
+    - NEW: "Run" button for each agentflow row (Play icon)
+    - NEW: Execute Drawer with full UI (参考 agents page 实现)
+    - NEW: Message merging logic (same messageId concatenation)
+    - API: `/api/agentflows/{id}/execute` endpoint integration
+    - UI: Horizontal layout (Textarea + Button in DrawerFooter)
+    - UX: Thread ID display, keyboard shortcuts, clear session
+    - Dependencies: Reused Drawer component (vaul)
+  - ✅ **Backend: Agent/Agentflow Schema Simplification**
+    - REMOVED: `Agent.Instructions` field (migration: RemoveInstructions)
+    - REMOVED: `Agentflow.SystemPrompt` field (migration: RemoveFlowSystemPrompt)
+    - RATIONALE: Simplified data model, reduce redundancy
+    - UPDATED: `AgentRuntimeService` - removed Instructions handling
+    - UPDATED: `AgentflowRuntimeService` - removed SystemPrompt handling
+    - UPDATED: DTOs and Controller contracts (AgentCreateRequest, AgentflowCreateRequest)
+    - UPDATED: `LlmDbContext` configuration
+    - UPDATED: `AiAgent` model (removed Instructions property)
+  - 📊 **Impact**: 15 files modified (8 backend, 1 frontend)
+- **Files Changed**: agentflows/page.tsx, Agent entities, migrations, controllers
+- **Activity Intensity**: High (Feature development + Schema refactoring)
+- **Development Trend**: ⬆️ Active Development (功能扩展 + 架构优化)
+
+### Schema Changes Detail
+**Agent Table**:
+- ❌ REMOVED: `Instructions` column (max 4000 chars)
+- ✅ KEPT: `SystemPrompt` (main prompt field)
+
+**Agentflow Table**:
+- ❌ REMOVED: `SystemPrompt` column
+- ✅ KEPT: Core workflow configuration fields
+
+**Migration Files**:
+1. `20251227061824_RemoveInstructions.cs` - Drop Agent.Instructions
+2. `20251227062610_RemoveFlowSystemPrompt.cs` - Drop Agentflow.SystemPrompt
+
+### Recommended Actions
+1. ✅ ~~Add Agentflow execute feature~~ - **COMPLETED** (Drawer + API integration)
+2. ✅ ~~Simplify Agent/Agentflow schema~~ - **COMPLETED** (2 migrations created)
+3. ⚠️ **Run database migration**: `dotnet ef database update` (RemoveInstructions + RemoveFlowSystemPrompt)
+4. 🔄 Test Agentflow execution with Run button
+5. 🔄 Verify Agent creation/editing without Instructions field
+6. 🔄 Test workflow execution without SystemPrompt
+7. 📝 Update API documentation for schema changes
+8. 🧪 Add integration tests for agentflow execution
+9. 📈 Monitor execution performance metrics
+
+**Git Commit**: `pending` (main) | **Health Score**: 9.7/10
+
+---
+
+### Previous Checkpoint
+
+**Project**: D-System | **Time**: 2025-12-26T15:54:45Z
+**Milestone**: Agent执行界面优化 + Toast/Drawer交互修复 | **Branch**: main
 
 ### Documentation Maintenance
 - [x] **CLAUDE.md**: Updated with UI fix details

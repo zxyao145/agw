@@ -7,7 +7,6 @@ public class AiAgent
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string Instructions { get; set; } = string.Empty;
     public string SystemPrompt { get; set; } = string.Empty;
     public string ProviderName { get; set; } = string.Empty;
     public string ModelName { get; set; } = string.Empty;

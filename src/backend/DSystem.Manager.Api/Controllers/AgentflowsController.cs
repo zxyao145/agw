@@ -71,7 +71,6 @@ public class AgentflowsController : ControllerBase
         {
             Name = request.Name,
             Description = request.Description,
-            SystemPrompt = request.SystemPrompt,
             Pattern = request.Pattern,
             ConfigurationJson = request.ConfigurationJson,
             Enable = request.Enable
@@ -133,7 +132,6 @@ public class AgentflowsController : ControllerBase
         {
             agentflow.Name = request.Name;
             agentflow.Description = request.Description;
-            agentflow.SystemPrompt = request.SystemPrompt;
             agentflow.Pattern = request.Pattern;
             agentflow.ConfigurationJson = request.ConfigurationJson;
             agentflow.Enable = request.Enable;

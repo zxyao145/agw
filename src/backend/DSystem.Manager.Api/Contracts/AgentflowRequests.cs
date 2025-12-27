@@ -18,7 +18,6 @@ public record AgentflowEdgeRequest(
 public record AgentflowCreateRequest(
     string Name,
     string? Description,
-    string SystemPrompt,
     AgentflowOrchestrationPattern Pattern,
     string? ConfigurationJson,
     bool Enable,
@@ -28,7 +27,6 @@ public record AgentflowCreateRequest(
 public record AgentflowUpdateRequest(
     string Name,
     string? Description,
-    string SystemPrompt,
     AgentflowOrchestrationPattern Pattern,
     string? ConfigurationJson,
     bool Enable,
@@ -45,10 +43,10 @@ public record AgentflowExecutionAgentResultResponse(Guid AgentId, string AgentNa
 
 public record AgentflowExecuteResponse(
     string? ThreadId,
-    IReadOnlyList<AiMessage> Outputs)
+    IReadOnlyList<AiMessage> Messages)
 {
     public static AgentflowExecuteResponse FromDomain(AgentflowExecutionResult result) =>
         new(
             result.ThreadId,
-            result.Outputs);
+            result.Messages);
 }

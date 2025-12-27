@@ -1,18 +1,18 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import * as React from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-import { ApiError, apiGet, apiPost, apiPut, apiDelete } from "@/api/client"
-import { Button } from "@/components/ui/button"
+import { ApiError, apiGet, apiPost, apiPut, apiDelete } from "@/api/client";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -22,17 +22,26 @@ import {
   DialogHeader,
   DialogTitle as UiDialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/dialog";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -40,10 +49,27 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { VisualAgentflowDialog } from "../agentflows/components/visual-agentflow-dialog"
+} from "@/components/ui/table";
+import { VisualAgentflowDialog } from "../agentflows/components/visual-agentflow-dialog";
 import { AgentDto, AgentflowDto } from "@/types/agentflow";
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2, X, Play } from "lucide-react";
+
+type AiMessage = {
+  messageId: string;
+  author: string;
+  role: string;
+  content: string;
+};
+
+type AgentflowExecuteRequest = {
+  threadId: string | null;
+  input: string;
+};
+
+type AgentflowExecuteResponse = {
+  threadId: string;
+  messages: AiMessage[];
+};
 
 function getPatternName(pattern: number): string {
   switch (pattern) {
@@ -92,18 +118,29 @@ export default function AgentflowsPage() {
     },
   })
 
-  const [visualOpen, setVisualOpen] = React.useState(false)
+  const [visualOpen, setVisualOpen] = React.useState(false);
   const [editingAgentflow, setEditingAgentflow] = React.useState<{
-    id: string
-    name: string
-    description: string | null
-    systemPrompt: string | null
-    pattern: number
-    configurationJson: string | null
-    enable: boolean
-    nodes: any[]
-    edges: any[]
-  } | null>(null)
+    id: string;
+    name: string;
+    description: string | null;
+    systemPrompt: string | null;
+    pattern: number;
+    configurationJson: string | null;
+    enable: boolean;
+    nodes: any[];
+    edges: any[];
+  } | null>(null);
+
+  // Execute drawer state
+  const [executeOpen, setExecuteOpen] = React.useState(false);
+  const [executingAgentflow, setExecutingAgentflow] =
+    React.useState<AgentflowDto | null>(null);
+  const [executeInput, setExecuteInput] = React.useState("");
+  const [executeThreadId, setExecuteThreadId] = React.useState<string | null>(
+    null
+  );
+  const [executeResult, setExecuteResult] =
+    React.useState<AgentflowExecuteResponse | null>(null);
 
   const updateAgentflowMutation = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: any }) => {
@@ -120,16 +157,37 @@ export default function AgentflowsPage() {
 
   const deleteAgentflowMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiDelete(`/api/agentflows/${id}`)
+      return await apiDelete(`/api/agentflows/${id}`);
     },
     onSuccess: async () => {
-      toast.success("Agentflow deleted")
-      await queryClient.invalidateQueries({ queryKey: ["agentflows"] })
+      toast.success("Agentflow deleted");
+      await queryClient.invalidateQueries({ queryKey: ["agentflows"] });
     },
     onError: (error) => {
-      toast.error(`Delete failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Delete failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
+
+  const executeAgentflowMutation = useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: AgentflowExecuteRequest;
+    }) => {
+      return (await apiPost(`/api/agentflows/${id}/execute`, {
+        body,
+      })) as unknown as AgentflowExecuteResponse;
+    },
+    onSuccess: async (result) => {
+      setExecuteResult(result);
+      setExecuteThreadId(result.threadId);
+    },
+    onError: (error) => {
+      toast.error(`Execute failed: ${getApiErrorMessage(error)}`);
+    },
+  });
 
   const handleToggleEnabled = React.useCallback(
     async (agentflow: AgentflowDto) => {
@@ -204,9 +262,29 @@ export default function AgentflowsPage() {
   }, [queryClient])
 
   const handleVisualDialogClose = React.useCallback(() => {
-    setVisualOpen(false)
-    setEditingAgentflow(null)
-  }, [])
+    setVisualOpen(false);
+    setEditingAgentflow(null);
+  }, []);
+
+  const handleExecute = React.useCallback((agentflow: AgentflowDto) => {
+    setExecutingAgentflow(agentflow);
+    setExecuteInput("");
+    setExecuteResult(null);
+    setExecuteThreadId(null);
+    setExecuteOpen(true);
+  }, []);
+
+  const handleSendExecute = React.useCallback(() => {
+    if (!executingAgentflow || !executeInput.trim()) return;
+
+    executeAgentflowMutation.mutate({
+      id: executingAgentflow.id,
+      body: {
+        threadId: executeThreadId,
+        input: executeInput,
+      },
+    });
+  }, [executingAgentflow, executeInput, executeThreadId, executeAgentflowMutation]);
 
 
   return (
@@ -305,6 +383,14 @@ export default function AgentflowsPage() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          onClick={() => handleExecute(agentflow)}
+                          title="Run agentflow"
+                        >
+                          <Play className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
                           onClick={() => handleEdit(agentflow)}
                           title="Edit agentflow"
                         >
@@ -333,6 +419,144 @@ export default function AgentflowsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Execute Agentflow Drawer */}
+      <Drawer
+        direction="right"
+        open={executeOpen}
+        onOpenChange={setExecuteOpen}
+        modal={false}
+      >
+        <DrawerContent
+          className="data-[vaul-drawer-direction=right]:sm:max-w-xl"
+          onPointerDownOutside={(e) => {
+            e.preventDefault();
+          }}
+        >
+          <DrawerHeader>
+            <div className="flex item-center justify-between">
+              <DrawerTitle>
+                Agentflow: {executingAgentflow?.name} ({executeThreadId})
+              </DrawerTitle>
+              <DrawerClose>
+                <X size={20} className="cursor-pointer" />
+              </DrawerClose>
+            </div>
+            <DrawerDescription>
+              {/* 输入内容并执行 agentflow */}
+            </DrawerDescription>
+          </DrawerHeader>
+
+          <div className="grid gap-4 py-4">
+            {/* Thread ID display */}
+            {executeThreadId && (
+              <div className="text-xs text-muted-foreground">
+                Thread ID: {executeThreadId}
+              </div>
+            )}
+
+            {/* Execution results */}
+            {executeResult &&
+              executeResult.messages.length > 0 &&
+              (() => {
+                // Merge messages with the same messageId
+                const messageMap = new Map<string, AiMessage>();
+
+                executeResult.messages.forEach((msg) => {
+                  if (messageMap.has(msg.messageId)) {
+                    // Merge content for same messageId
+                    const existing = messageMap.get(msg.messageId)!;
+                    existing.content += msg.content;
+                  } else {
+                    // New message, create a copy
+                    messageMap.set(msg.messageId, { ...msg });
+                  }
+                });
+
+                const mergedMessages = Array.from(messageMap.values());
+
+                return (
+                  <div className="space-y-2">
+                    <Label>Result</Label>
+                    <div className="border rounded-md p-3 max-h-96 overflow-y-auto space-y-3 bg-muted/20">
+                      {mergedMessages.map((msg) => (
+                        <div
+                          key={msg.messageId}
+                          className={`p-3 rounded-md ${
+                            msg.role === "user"
+                              ? "bg-primary/10 ml-8"
+                              : msg.role === "assistant"
+                                ? "bg-secondary/50 mr-8"
+                                : "bg-muted"
+                          }`}
+                        >
+                          <div className="text-xs font-medium text-muted-foreground mb-1">
+                            {msg.author}({msg.role ?? ""})
+                          </div>
+                          <div className="text-sm whitespace-pre-wrap">
+                            {msg.content}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+            {/* Input area */}
+          </div>
+
+          <DrawerFooter>
+            <div className="flex gap-2 items-end">
+              <Textarea
+                id="execute-input"
+                className="flex-1"
+                value={executeInput}
+                onChange={(e) => setExecuteInput(e.target.value)}
+                placeholder="请输入要发送给 agentflow 的内容..."
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendExecute();
+                  }
+                }}
+              />
+
+              <div>
+                <Button
+                  onClick={handleSendExecute}
+                  disabled={
+                    !executeInput.trim() || executeAgentflowMutation.isPending
+                  }
+                  className="w-full"
+                >
+                  {executeAgentflowMutation.isPending ? "执行中..." : "发送"}
+                </Button>
+
+                {executeResult && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setExecuteInput("");
+                      setExecuteResult(null);
+                      setExecuteThreadId(null);
+                    }}
+                    className="w-full"
+                  >
+                    清空会话
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <p className="text-xs text-muted-foreground">
+                按 Enter 发送，Shift+Enter 换行
+              </p>
+            </div>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
-  )
+  );
 }
