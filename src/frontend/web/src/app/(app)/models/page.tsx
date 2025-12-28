@@ -35,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
 
 type ModelCreateRequest = components["schemas"]["ModelCreateRequest"]
 
@@ -48,6 +49,30 @@ type ModelDto = {
   createTime?: string | null
   updateBy?: string | null
   updateTime?: string | null
+}
+
+// [Flags] enum ModelType
+enum ModelType {
+  Chat = 1,
+  Image = 2,
+  Audio = 4,
+  Embedding = 8,
+}
+
+const MODEL_TYPE_OPTIONS = [
+  { value: ModelType.Chat, label: "Chat" },
+  { value: ModelType.Image, label: "Image" },
+  { value: ModelType.Audio, label: "Audio" },
+  { value: ModelType.Embedding, label: "Embedding" },
+]
+
+function getModelTypeLabel(type: number): string {
+  const types: string[] = []
+  if (type & ModelType.Chat) types.push("Chat")
+  if (type & ModelType.Image) types.push("Image")
+  if (type & ModelType.Audio) types.push("Audio")
+  if (type & ModelType.Embedding) types.push("Embedding")
+  return types.length > 0 ? types.join(" | ") : "None"
 }
 
 
@@ -84,8 +109,16 @@ export default function ModelsPage() {
   const [createOpen, setCreateOpen] = React.useState(false)
   const [name, setName] = React.useState("")
   const [description, setDescription] = React.useState("")
-  const [type, setType] = React.useState("0")
+  const [selectedTypes, setSelectedTypes] = React.useState<number>(0)
   const [maxTokens, setMaxTokens] = React.useState("4096")
+
+  const toggleType = (typeValue: number) => {
+    setSelectedTypes((prev) => prev ^ typeValue) // XOR to toggle bit
+  }
+
+  const isTypeSelected = (typeValue: number) => {
+    return (selectedTypes & typeValue) === typeValue
+  }
 
   const createModelMutation = useMutation({
     mutationFn: async (body: ModelCreateRequest) => {
@@ -96,7 +129,7 @@ export default function ModelsPage() {
       setCreateOpen(false)
       setName("")
       setDescription("")
-      setType("0")
+      setSelectedTypes(0)
       setMaxTokens("4096")
       await queryClient.invalidateQueries({ queryKey: ["models"] })
     },
@@ -105,12 +138,11 @@ export default function ModelsPage() {
     },
   })
 
-  const parsedType = parseIntOrNull(type)
   const parsedMaxTokens = parseIntOrNull(maxTokens)
 
   const createDisabled =
     !name.trim() ||
-    parsedType === null ||
+    selectedTypes === 0 ||
     parsedMaxTokens === null ||
     createModelMutation.isPending
 
@@ -159,16 +191,26 @@ export default function ModelsPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="type">Type (int)</Label>
-                  <Input
-                    id="type"
-                    inputMode="numeric"
-                    value={type}
-                    onChange={(e) => setType(e.target.value)}
-                    placeholder="0"
-                  />
+                  <Label>Type (Flags enum - select one or more)</Label>
+                  <div className="space-y-2 rounded-md border p-3">
+                    {MODEL_TYPE_OPTIONS.map((option) => (
+                      <div key={option.value} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`type-${option.value}`}
+                          checked={isTypeSelected(option.value)}
+                          onCheckedChange={() => toggleType(option.value)}
+                        />
+                        <label
+                          htmlFor={`type-${option.value}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                        >
+                          {option.label} ({option.value})
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Backend schema <code>ModelType</code> is an integer enum.
+                    Selected value: {selectedTypes} ({getModelTypeLabel(selectedTypes)})
                   </p>
                 </div>
 
@@ -208,7 +250,7 @@ export default function ModelsPage() {
                     createModelMutation.mutate({
                       name,
                       description: description.length ? description : null,
-                      type: parsedType ?? 0,
+                      type: selectedTypes,
                       maxTokens: parsedMaxTokens ?? 0,
                     })
                   }
@@ -253,7 +295,12 @@ export default function ModelsPage() {
                     <TableCell className="max-w-xs truncate">
                       {model.description || "-"}
                     </TableCell>
-                    <TableCell>{model.type}</TableCell>
+                    <TableCell>
+                      <div className="text-sm">{getModelTypeLabel(model.type)}</div>
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {model.type}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right">
                       {model.maxTokens.toLocaleString()}
                     </TableCell>
