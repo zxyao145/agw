@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
-import { ApiError, apiGet, apiPost } from "@/api/client"
+import { ApiError, apiDelete, apiGet, apiPost } from "@/api/client"
 import type { components } from "@/api/openapi"
 import { Button } from "@/components/ui/button"
 import {
@@ -90,6 +91,21 @@ export default function ProvidersPage() {
     },
     onError: (error) => {
       toast.error(`Create failed: ${getApiErrorMessage(error)}`)
+    },
+  })
+
+  const deleteProviderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiDelete("/api/providers/{id}", {
+        params: { path: { id } },
+      })
+    },
+    onSuccess: async () => {
+      toast.success("Provider deleted")
+      await queryClient.invalidateQueries({ queryKey: ["providers"] })
+    },
+    onError: (error) => {
+      toast.error(`Delete failed: ${getApiErrorMessage(error)}`)
     },
   })
 
@@ -208,6 +224,7 @@ export default function ProvidersPage() {
                   <TableHead>Description</TableHead>
                   <TableHead>Endpoint</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead className="w-24 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -224,6 +241,23 @@ export default function ProvidersPage() {
                       {provider.createTime
                         ? new Date(provider.createTime).toLocaleString()
                         : "-"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={deleteProviderMutation.isPending}
+                        onClick={() => {
+                          const ok = window.confirm(
+                            `Delete provider "${provider.name}"?\n\nThis action cannot be undone.`
+                          )
+                          if (!ok) return
+                          deleteProviderMutation.mutate(provider.id)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
