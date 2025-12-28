@@ -485,7 +485,7 @@ export default function AgentsPage() {
                     value={modelProviderApiKeyId}
                     onValueChange={setModelProviderApiKeyId}
                   >
-                    <SelectTrigger id="modelProviderApiKeyId">
+                    <SelectTrigger id="modelProviderApiKeyId" className="w-full">
                       <SelectValue placeholder="Select an API key..." />
                     </SelectTrigger>
                     <SelectContent position="popper" sideOffset={4}>
@@ -756,7 +756,7 @@ export default function AgentsPage() {
                 value={editModelProviderApiKeyId}
                 onValueChange={setEditModelProviderApiKeyId}
               >
-                <SelectTrigger id="edit-modelProviderApiKeyId">
+                <SelectTrigger id="edit-modelProviderApiKeyId" className="w-full">
                   <SelectValue placeholder="Select an API key..." />
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={4}>
