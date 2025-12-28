@@ -351,8 +351,12 @@ async function listKeysByPair(args: {
 
 function ModelProviderActions({
   modelProviderId,
+  modelId,
+  providerId,
 }: {
   modelProviderId: string
+  modelId: string
+  providerId: string
 }) {
   const queryClient = useQueryClient()
   const [viewKeysOpen, setViewKeysOpen] = React.useState(false)
@@ -396,6 +400,22 @@ function ModelProviderActions({
     },
     onError: (error) => {
       toast.error(`Update failed: ${getApiErrorMessage(error)}`)
+    },
+  })
+
+  const deleteKeyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiDelete("/api/model-provider-keys/{id}", {
+        params: { path: { id } },
+      } as never)
+    },
+    onSuccess: async () => {
+      toast.success("API key deleted")
+      await pairKeysQuery.refetch()
+      await queryClient.invalidateQueries({ queryKey: ["model-provider-keys"] })
+    },
+    onError: (error) => {
+      toast.error(`Delete failed: ${getApiErrorMessage(error)}`)
     },
   })
 
@@ -460,6 +480,7 @@ function ModelProviderActions({
                     <TableRow>
                       <TableHead>Api Key</TableHead>
                       <TableHead className="w-32">Enable</TableHead>
+                      <TableHead className="w-24 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -488,6 +509,23 @@ function ModelProviderActions({
                               })
                             }
                           />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            disabled={deleteKeyMutation.isPending}
+                            onClick={() => {
+                              const ok = window.confirm(
+                                `Delete this API key?\n\n${k.apiKey ?? k.id}`
+                              )
+                              if (!ok) return
+                              deleteKeyMutation.mutate(k.id)
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -924,7 +962,11 @@ export default function ModelProvidersPage() {
                           {String(item.rpsLimit)}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right">
-                          <ModelProviderActions modelProviderId={item.id}/>
+                          <ModelProviderActions
+                            modelProviderId={item.id}
+                            modelId={item.modelId}
+                            providerId={item.providerId}
+                          />
                         </TableCell>
                       </TableRow>
                     )
