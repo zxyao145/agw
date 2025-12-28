@@ -1,3 +1,5 @@
+using A2A;
+using DSystem.A2A;
 using DSystem.Api.Controllers;
 using DSystem.Domain.Services;
 using DSystem.Host;
@@ -10,6 +12,8 @@ using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Enrichers.OpenTelemetry;
+using System.Configuration;
+using System.Runtime;
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()
@@ -91,6 +95,7 @@ try
     builder.Services.AddScoped<ModelProviderApiKeyDomainService>();
     builder.Services.AddScoped<AgentDomainService>();
     builder.Services.AddScoped<AgentRuntimeService>();
+    builder.Services.AddScoped<A2AAgentService>();
 
     builder.Services.AddScoped<AgentflowDomainService>();
     builder.Services.AddScoped<AgentflowRuntimeService>();
@@ -100,6 +105,16 @@ try
     builder.Services.AddScoped<ProjectTaskDomainService>();
     builder.Services.AddHostedService<ProjectTaskSchedulerHostedService>();
     builder.Services.AddHybridCache();
+
+    builder.Services.Configure<A2AServerOptions>(o=>
+    {
+
+    });
+
+    builder.Services.AddSingleton<TaskManagerFactory>(sp =>
+    {
+        return new TaskManagerFactory(sp);
+    });
 
     var app = builder.Build();
 
@@ -122,7 +137,10 @@ try
             diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
         };
     });
-
+    var a2AServerOptions = app.Services
+        .GetRequiredService<Microsoft.Extensions.Options.IOptions<A2AServerOptions>>()
+        .Value;
+    app.MapDSystemA2A(a2AServerOptions.Prefix);
     app.MapControllers();
 
     Log.Information("D-System Host configured successfully");

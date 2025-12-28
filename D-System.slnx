@@ -10,6 +10,7 @@
     <File Path="src/backend/Directory.Build.props" />
     <File Path="src/backend/Directory.Packages.props" />
   </Folder>
+  <Project Path="src/backend/DSystem.A2A/DSystem.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
   <Project Path="src/backend/DSystem.Domain/DSystem.Domain.csproj" />
   <Project Path="src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
 </Solution>
