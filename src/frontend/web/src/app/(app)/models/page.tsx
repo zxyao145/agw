@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
-import { ApiError, apiGet, apiPost } from "@/api/client"
+import { ApiError, apiDelete, apiGet, apiPost } from "@/api/client"
 import type { components } from "@/api/openapi"
 import { Button } from "@/components/ui/button"
 import {
@@ -135,6 +136,21 @@ export default function ModelsPage() {
     },
     onError: (error) => {
       toast.error(`Create failed: ${getApiErrorMessage(error)}`)
+    },
+  })
+
+  const deleteModelMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiDelete("/api/models/{id}", {
+        params: { path: { id } },
+      })
+    },
+    onSuccess: async () => {
+      toast.success("Model deleted")
+      await queryClient.invalidateQueries({ queryKey: ["models"] })
+    },
+    onError: (error) => {
+      toast.error(`Delete failed: ${getApiErrorMessage(error)}`)
     },
   })
 
@@ -286,6 +302,7 @@ export default function ModelsPage() {
                   <TableHead>Type</TableHead>
                   <TableHead>Max Tokens</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead className="w-24 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -308,6 +325,23 @@ export default function ModelsPage() {
                       {model.createTime
                         ? new Date(model.createTime).toLocaleString()
                         : "-"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={deleteModelMutation.isPending}
+                        onClick={() => {
+                          const ok = window.confirm(
+                            `Delete model "${model.name}"?\n\nThis action cannot be undone.`
+                          )
+                          if (!ok) return
+                          deleteModelMutation.mutate(model.id)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
