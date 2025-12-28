@@ -130,7 +130,7 @@ export default function AgentflowsPage() {
     React.useState<AgentflowDto | null>(null);
   const [executeInput, setExecuteInput] = React.useState("");
   const [executeThreadId, setExecuteThreadId] = React.useState<string | null>(
-    Ulid.generate().toRaw()
+    Ulid.generate().toCanonical()
   );
   const [executeResult, setExecuteResult] =
     React.useState<AgentflowExecuteResponse | null>(null);
@@ -356,7 +356,7 @@ export default function AgentflowsPage() {
 
     setExecuteResult((prev) => {
       const userMg = {
-        messageId: Ulid.generate().toRaw(),
+        messageId: Ulid.generate().toCanonical(),
         author: "user",
         role: "user",
         content: executeInput,
@@ -368,7 +368,7 @@ export default function AgentflowsPage() {
         };
       }
       return {
-        threadId: executeThreadId || Ulid.generate().toRaw(),
+        threadId: executeThreadId || Ulid.generate().toCanonical(),
         messages: [userMg],
       };
     });
@@ -524,7 +524,7 @@ export default function AgentflowsPage() {
         direction="right"
         open={executeOpen}
         onOpenChange={setExecuteOpen}
-        modal={false}
+        modal={true}
       >
         <DrawerContent
           className="data-[vaul-drawer-direction=right]:sm:max-w-xl"

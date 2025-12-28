@@ -427,8 +427,8 @@ function ModelProviderActions({
           apiDelete("/api/model-provider-keys/{id}", { params: { path: { id: k.id } } } as never)
         )
       )
-      await apiDelete("/api/model-providers/{modelId}/{providerId}", {
-        params: { path: { modelId, providerId } },
+      await apiDelete("/api/model-providers/{modelProviderId}", {
+        params: { path: { modelProviderId } },
       } as never)
     },
     onSuccess: async () => {

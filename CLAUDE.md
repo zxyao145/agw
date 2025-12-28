@@ -627,79 +627,89 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-28T09:46:19Z
-**Milestone**: REST API Simplification - Remove CreatedAtAction | **Branch**: main
+**Project**: D-System | **Time**: 2025-12-28T10:58:09Z
+**Milestone**: Frontend CRUD Enhancement - Delete & UI Polish | **Branch**: main
 
 ### Technical Status
 - **Code Quality**: Excellent (6,708 code files)
-- **Architecture Health**: Active Development - API response standardization
-- **Dependencies**: Latest (Next.js 16, .NET 10, EF Core migrations)
+- **Architecture Health**: Active Development - Frontend feature completion
+- **Dependencies**: Latest (Next.js 16, .NET 10, EF Core migrations, Radix UI)
 
 ### Documentation Maintenance
 - [x] **CLAUDE.md**: Updated with checkpoint record
-- [x] **API Controllers**: Standardized all Create responses to Ok(entity)
-- [x] **Response Format**: Simplified from 201 Created to 200 OK
+- [x] **Frontend Features**: Complete CRUD operations for all entity pages
+- [x] **UI Consistency**: Standardized delete buttons and form layouts
 - [x] **Configuration Sync**: All dependencies documented
 
-### Recent Activity (Since 2025-12-28T09:39:34Z checkpoint)
-- **Period**: 6.75 minutes | **Work Session**: API response simplification
+### Recent Activity (Since 2025-12-28T09:46:19Z checkpoint)
+- **Period**: 1.2 hours | **Work Session**: Frontend CRUD enhancement + bug fixes
 - **Major Changes**:
-  - ✅ **API Layer: CreatedAtAction Removal**
-    - UPDATED: `ProjectsController.cs` - Changed `CreatedAtAction` to `Ok(created)`
-    - UPDATED: `ProvidersController.cs` - Standardized create response
-    - UPDATED: `ModelProviderApiKeysController.cs` - Simplified return
-    - UPDATED: `ModelsController.cs` - Direct Ok() return
-    - UPDATED: `ModelProvidersController.cs` - Removed route generation
-    - UPDATED: `AgentsController.cs` - Simplified create endpoint
-    - UPDATED: `AgentflowsController.cs` - Standardized response
-  - 📊 **Impact**: 7 controller files modified (7 changes total)
-  - 📄 **Status**: All changes ready for commit
-- **Activity Intensity**: Low (Focused refactoring session)
-- **Development Trend**: ➡️ Stabilizing (API standardization)
+  - ✅ **Backend: JSON Serialization Fix**
+    - FIXED: Added `ReferenceHandler.IgnoreCycles` in Program.cs
+    - PROBLEM: Circular reference error (Agent ↔ ModelProviderApiKey)
+    - SOLUTION: Configure JSON serializer to ignore cycles instead of throwing
+  - ✅ **Frontend: Model-Providers Page Enhancement**
+    - NEW: Delete button for API keys table (with confirmation)
+    - UPDATED: Actions column added to keys dialog table
+    - UI: Trash2 icon with destructive variant
+  - ✅ **Frontend: Models Page Enhancements**
+    - NEW: ModelType Flags enum multi-select UI (Chat|Image|Audio|Embedding)
+    - REPLACED: Numeric input → Checkbox-based multi-select
+    - NEW: Delete button for models table
+    - FEATURE: Bit manipulation for Flags enum (XOR toggle, AND check)
+    - UI: Real-time display of selected types and numeric value
+  - ✅ **Frontend: Providers Page Enhancement**
+    - NEW: Delete button for providers table
+    - UI: Consistent with other pages (Trash2 icon, confirmation dialog)
+  - ✅ **Frontend: Agents Page Polish**
+    - FIXED: Model Provider API Key Select now full width
+    - UI: Consistent form field layout in Create/Edit dialogs
+  - 📊 **Impact**: 6 commits, 5 files modified (1 backend, 4 frontend)
+  - 📄 **Status**: 3 uncommitted changes in agentflows, agents, model-providers pages
+- **Activity Intensity**: Medium-High (Feature development + bug fixing)
+- **Development Trend**: ⬆️ Active Development (Frontend CRUD completion)
 
-### Implementation Details - CreatedAtAction Removal
+### Implementation Highlights
 
-**Change Rationale**:
-- **Simplification**: Remove unnecessary route name resolution
-- **Performance**: Eliminate overhead of Location header generation
-- **Consistency**: Standardize all Create endpoints to return 200 OK
-- **Client Impact**: Frontend clients already handle responses by body content
+**1. JSON Serialization Fix** (`34e9b8e`)
+```csharp
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler =
+            System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    })
+```
+- Prevents infinite loop when serializing navigation properties
+- Allows direct entity returns without manual DTO mapping
 
-**Modified Controllers** (7 files):
-1. **DSystem.Api/Controllers/ProjectsController.cs:50**
-   - Before: `return CreatedAtAction(nameof(GetAsync), new { id = created.Id }, created);`
-   - After: `return Ok(created);`
+**2. ModelType Flags Enum** (`6ddfa9c`)
+```typescript
+enum ModelType {
+  Chat = 1,
+  Image = 2,
+  Audio = 4,
+  Embedding = 8,
+}
+// Bit operations: toggleType(value) → XOR, isTypeSelected(value) → AND
+// Display: Chat + Image = 3 → "Chat | Image"
+```
 
-2. **DSystem.Manager.Api/Controllers/ProvidersController.cs:45**
-   - Removed route generation, direct Ok() return
-
-3. **DSystem.Manager.Api/Controllers/ModelProviderApiKeysController.cs:54**
-   - Simplified response handling
-
-4. **DSystem.Manager.Api/Controllers/ModelsController.cs:46**
-   - Standardized create response
-
-5. **DSystem.Manager.Api/Controllers/ModelProvidersController.cs:75**
-   - Removed Location header generation
-
-6. **DSystem.Manager.Api/Controllers/AgentsController.cs:67**
-   - Direct entity return
-
-7. **DSystem.Manager.Api/Controllers/AgentflowsController.cs:106**
-   - Simplified create flow
-
-**Response Changes**:
-- HTTP Status: `201 Created` → `200 OK`
-- Headers: Removed `Location: /api/{resource}/{id}`
-- Body: Unchanged (still returns created entity)
+**3. Delete Button Pattern** (3 pages)
+- Consistent UI: Trash2 icon, destructive variant, confirmation dialog
+- Toast notifications for success/error
+- Auto-refresh lists after deletion
+- Button disabled during mutation
 
 ### Recommended Actions
-1. 🔄 **Test All Create Endpoints**: Verify frontend still handles responses correctly
-2. 🧪 **Regression Testing**: Ensure no client-side breaks from status code change
-3. 📝 **Update API Documentation**: Regenerate OpenAPI spec with new response codes
-4. 📊 **Monitor Client Logs**: Check for any status code validation issues
+1. ✅ **Commit Pending Changes**: 3 files modified (agentflows, agents, model-providers)
+2. 🧪 **Test JSON Serialization**: Verify circular references no longer cause errors
+3. 🔄 **Test CRUD Operations**: All pages (models, providers, model-providers, agents)
+4. 🧪 **Test ModelType Multi-Select**: Verify bit operations work correctly
+5. 📝 **Update OpenAPI Spec**: Regenerate types if needed
 
-**Git Commit**: `879633c` (last checkpoint) | **Health Score**: 9.8/10
+**Git Commit**: `76675c0` (last checkpoint) | **Health Score**: 9.7/10
 
 ---
 

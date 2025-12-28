@@ -191,10 +191,10 @@ export default function AgentsPage() {
   );
   const [executeInput, setExecuteInput] = React.useState("");
   const [executeThreadId, setExecuteThreadId] = React.useState<string | null>(
-        Ulid.generate().toRaw()
+        Ulid.generate().toCanonical()
   );
 
-  // console.log('New executeThreadId:', Ulid.generate().toRaw(), Ulid.generate().toCanonical());
+  // console.log('New executeThreadId:', Ulid.generate().toCanonical(), Ulid.generate().toCanonical());
   const [executeResult, setExecuteResult] =
     React.useState<AgentExecuteResponse | null>(null);
 
@@ -373,6 +373,7 @@ export default function AgentsPage() {
     setExecuteInput("");
     setExecuteResult(null);
     setExecuteOpen(true);
+    setExecuteThreadId(Ulid.generate().toCanonical());
   };
 
   const handleSendExecute = async () => {
