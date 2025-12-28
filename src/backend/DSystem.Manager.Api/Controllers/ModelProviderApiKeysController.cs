@@ -51,7 +51,7 @@ public class ModelProviderApiKeysController : ControllerBase
         };
 
         var created = await _service.CreateAsync(apiKey, user);
-        return CreatedAtAction(nameof(GetAsync), new { id = created.Id }, created);
+        return Ok(created);
     }
 
     [HttpPut("{id:guid}")]

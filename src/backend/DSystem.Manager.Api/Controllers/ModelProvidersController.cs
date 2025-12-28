@@ -72,7 +72,7 @@ public class ModelProvidersController : ControllerBase
         };
 
         var created = await _service.CreateAsync(entity, user);
-        return CreatedAtAction(nameof(GetAsync), new { id = created.Id }, created);
+        return Ok(created);
     }
 
     [HttpPut("{id:guid}")]

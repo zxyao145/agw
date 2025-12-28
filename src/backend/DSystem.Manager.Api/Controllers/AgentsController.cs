@@ -64,7 +64,7 @@ public class AgentsController : ControllerBase
             return BadRequest("Failed to create agent.");
         }
 
-        return CreatedAtAction(nameof(GetAsync), new { id = created.Id }, created);
+        return Ok(created);
     }
 
     [HttpPut("{id:guid}")]

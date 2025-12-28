@@ -103,7 +103,7 @@ public class AgentflowsController : ControllerBase
             return BadRequest("Failed to create agentflow (validation failed or referenced resources not found).");
         }
 
-        return CreatedAtAction(nameof(GetAsync), new { id = created.Id }, created);
+        return Ok(created);
     }
 
     [HttpPut("{id:guid}")]

@@ -42,7 +42,7 @@ public class ProvidersController : ControllerBase
         };
 
         var created = await _service.CreateAsync(provider, user);
-        return CreatedAtAction(nameof(GetAsync), new { id = created.Id }, created);
+        return Ok(created);
     }
 
     [HttpPut("{id:guid}")]

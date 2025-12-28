@@ -47,7 +47,7 @@ public class ProjectsController : ControllerBase
             return BadRequest("Failed to create project.");
         }
 
-        return CreatedAtAction(nameof(GetAsync), new { id = created.Id }, created);
+        return Ok(created);
     }
 
     [HttpPut("{id:guid}")]
