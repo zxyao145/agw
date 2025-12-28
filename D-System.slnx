@@ -3,6 +3,15 @@
     <Project Path="src/backend/DSystem.Api/DSystem.Api.csproj" />
     <Project Path="src/backend/DSystem.Manager.Api/DSystem.Manager.Api.csproj" />
   </Folder>
+  <Folder Name="/Core/">
+    <Project Path="src/backend/DSystem.A2A/DSystem.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
+    <Project Path="src/backend/DSystem.Domain/DSystem.Domain.csproj" />
+    <Project Path="src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/External/">
+    <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk/ClaudeCodeSdk.csproj" />
+    <Project Path="src/backend/DSystem.ExternalAgents/DSystem.ExternalAgents.csproj" />
+  </Folder>
   <Folder Name="/Host/">
     <Project Path="src/backend/DSystem.Host/DSystem.Host.csproj" />
   </Folder>
@@ -10,7 +19,4 @@
     <File Path="src/backend/Directory.Build.props" />
     <File Path="src/backend/Directory.Packages.props" />
   </Folder>
-  <Project Path="src/backend/DSystem.A2A/DSystem.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
-  <Project Path="src/backend/DSystem.Domain/DSystem.Domain.csproj" />
-  <Project Path="src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
 </Solution>

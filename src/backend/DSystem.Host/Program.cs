@@ -2,6 +2,7 @@ using A2A;
 using DSystem.A2A;
 using DSystem.Api.Controllers;
 using DSystem.Domain.Services;
+using DSystem.ExternalAgents;
 using DSystem.Host;
 using DSystem.Infrastructure;
 using DSystem.Manager.Api.Controllers;
@@ -101,6 +102,9 @@ try
     builder.Services.AddScoped<AgentRuntimeService>();
     builder.Services.AddScoped<A2AAgentService>();
 
+    // External Agents
+    builder.Services.AddScoped<ClaudeCodeService>();
+
     builder.Services.AddScoped<AgentflowDomainService>();
     builder.Services.AddScoped<AgentflowRuntimeService>();
     builder.Services.AddScoped<IAgentflowAgentExecutor, PlaceholderAgentflowAgentExecutor>();
@@ -141,6 +145,10 @@ try
             diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
         };
     });
+
+    // Enable WebSocket support
+    app.UseWebSockets();
+
     var a2AServerOptions = app.Services
         .GetRequiredService<Microsoft.Extensions.Options.IOptions<A2AServerOptions>>()
         .Value;

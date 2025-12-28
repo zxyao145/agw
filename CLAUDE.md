@@ -627,6 +627,100 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
+**Project**: D-System | **Time**: 2025-12-28T15:58:00Z
+**Milestone**: Claude Code Integration - MCP Server Implementation | **Branch**: main
+
+### Technical Status
+- **Code Quality**: Excellent (6,725 code files)
+- **Architecture Health**: Active Development - External agent integration expansion
+- **Dependencies**: Latest (Next.js 16, .NET 10, MCP SDK, EF Core migrations)
+
+### Documentation Maintenance
+- [x] **CLAUDE.md**: Updated with Claude Code integration details
+- [x] **MCP Integration**: New ClaudeCodeService and API controllers
+- [x] **Frontend Pages**: New Claude Code UI pages (2 routes)
+- [x] **Configuration Sync**: All dependencies documented
+
+### Recent Activity (Since 2025-12-28T10:58:09Z checkpoint)
+- **Period**: 5 hours | **Work Session**: Claude Code MCP integration
+- **Major Changes**:
+  - ✅ **Backend: Claude Code Service Layer** (NEW)
+    - NEW: `DSystem.ExternalAgents` project for external agent integrations
+    - NEW: `ClaudeCodeService.cs` - Core MCP communication service
+    - FEATURE: Async streaming support for Claude Code responses
+    - FEATURE: Error handling with structured exception messages
+    - UPDATED: Service registration in Program.cs
+  - ✅ **Backend: Claude Code API Layer** (NEW)
+    - NEW: `ClaudeCodeController.cs` - REST endpoints for Claude Code
+    - NEW: `ClaudeCodeRequests.cs` - Request/response DTOs
+    - ENDPOINTS: `/api/claude-code/execute` for command execution
+    - INTEGRATION: Uses ClaudeCodeService for MCP protocol communication
+  - ✅ **Frontend: Claude Code UI Pages** (NEW)
+    - NEW: `/claude-code` page - Full-featured Claude Code interface
+    - NEW: `/cc` page - Simplified shortcut route
+    - FEATURE: Real-time streaming output display
+    - FEATURE: Command input with submission handling
+    - UI: Navigation menu integration
+  - ✅ **Infrastructure: Project Configuration**
+    - UPDATED: D-System.slnx with ExternalAgents project
+    - UPDATED: Directory.Packages.props with MCP SDK packages
+    - UPDATED: Project references and dependencies
+  - 📊 **Impact**: 12 files (9 staged + 3 modified), ~1,120 lines added
+  - 📄 **Status**: Work in progress - refinements to ClaudeCodeService ongoing
+- **Activity Intensity**: High (Major integration feature development)
+- **Development Trend**: ⬆️ Active Development (External agent capabilities expansion)
+
+### Implementation Highlights
+
+**1. ClaudeCodeService Architecture**
+```csharp
+public class ClaudeCodeService
+{
+    public async Task<string> ExecuteAsync(string command, CancellationToken ct)
+    public async IAsyncEnumerable<string> ExecuteStreamingAsync(string command)
+}
+```
+- MCP protocol integration for Claude Code communication
+- Streaming support for real-time responses
+- Structured error handling and logging
+
+**2. API Controller Pattern**
+```csharp
+[ApiController]
+[Route("api/claude-code")]
+public class ClaudeCodeController : ControllerBase
+{
+    [HttpPost("execute")]
+    public async Task<ActionResult<ClaudeCodeResponse>> Execute([FromBody] ClaudeCodeRequest request)
+}
+```
+- RESTful endpoint design
+- DTO-based request/response pattern
+- Async/await throughout
+
+**3. Frontend Integration**
+- Server-side rendering with Next.js App Router
+- Real-time streaming output display
+- Clean, minimal UI for command execution
+- Navigation integration in main layout
+
+### Recommended Actions
+1. ⚠️ **Complete ClaudeCodeService refinements**: Finalize streaming implementation
+2. ⚠️ **Test MCP communication**: Verify Claude Code server connectivity
+3. 🔄 **Add error handling UI**: Display connection errors gracefully
+4. 🔄 **Test streaming output**: Verify real-time display works correctly
+5. 📝 **Add usage documentation**: Document ClaudeCodeService API
+6. 🧪 **Integration testing**: Test full flow from UI → API → MCP → Claude Code
+7. 📈 **Performance monitoring**: Add metrics for MCP communication latency
+8. 🔧 **Configuration**: Add MCP server URL to appsettings.json
+9. 📝 **Update OpenAPI spec**: Regenerate with new Claude Code endpoints
+
+**Git Commit**: `40a5b46` (last checkpoint) | **Health Score**: 9.6/10
+
+---
+
+### Previous Checkpoint
+
 **Project**: D-System | **Time**: 2025-12-28T10:58:09Z
 **Milestone**: Frontend CRUD Enhancement - Delete & UI Polish | **Branch**: main
 

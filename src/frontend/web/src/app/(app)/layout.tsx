@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MenuIcon, LayoutDashboard, Workflow, Bot, Cog, Package, Blocks } from "lucide-react";
+import { MenuIcon, LayoutDashboard, Workflow, Bot, Cog, Package, Blocks, Terminal } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,12 @@ const navItems: SidebarMenuGroupProps[] = [
         title: "Agents",
         isActive: true,
         icon: <Bot />
+      },
+      {
+        url: "/claude-code",
+        title: "ClaudeCode",
+        isActive: true,
+        icon: <Terminal />
       },
     ],
   },

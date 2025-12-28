@@ -26,6 +26,7 @@
     <ProjectReference Include="..\DSystem.A2A\DSystem.A2A.csproj" />
     <ProjectReference Include="..\DSystem.Api\DSystem.Api.csproj" />
     <ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
+    <ProjectReference Include="..\DSystem.ExternalAgents\DSystem.ExternalAgents.csproj" />
     <ProjectReference Include="..\DSystem.Infrastructure\DSystem.Infrastructure.csproj" />
 	  <ProjectReference Include="..\DSystem.Manager.Api\DSystem.Manager.Api.csproj" />
   </ItemGroup>
