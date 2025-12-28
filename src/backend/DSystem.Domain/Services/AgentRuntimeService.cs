@@ -296,7 +296,7 @@ public class AgentRuntimeService
             : [system, chatMsg];
         var stream = aiAgent.RunStreamingAsync(msgs, thread);
 
-        var resultMessages = new List<AiMessage>();
+        Dictionary<string, AiMessage> messageDict = new ();
         await foreach (var update in stream)
         {
             foreach(var content in update.Contents)
@@ -304,8 +304,16 @@ public class AgentRuntimeService
                 if(content is TextContent text)
                 {
                     var contentText = text.Text;
-                    var msg = new AiMessage(update.MessageId, update.AuthorName, update.Role?.Value, AiMessageType.Text, contentText);
-                    resultMessages.Add(msg);
+                    if (messageDict.ContainsKey(update.MessageId ?? string.Empty))
+                    {
+                        var existing = messageDict[update.MessageId ?? string.Empty];
+                        messageDict[update.MessageId ?? string.Empty] = existing with { Content = existing.Content + contentText };
+                    }
+                    else
+                    {
+                        var msg = new AiMessage(update.MessageId ?? string.Empty, update.AuthorName, update.Role?.Value, AiMessageType.Text, contentText);
+                        messageDict[update.MessageId ?? string.Empty] = msg;
+                    }
                 }
             }
 
@@ -313,6 +321,6 @@ public class AgentRuntimeService
 
         return new AgentExecutionResult(
             threadId,
-            resultMessages);
+            new List<AiMessage>(messageDict.Values));
     }
 }

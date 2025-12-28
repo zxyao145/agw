@@ -52,6 +52,7 @@ public class AgentsController : ControllerBase
         var agent = new Agent
         {
             Name = request.Name,
+            Description = request.Description,
             SystemPrompt = request.SystemPrompt,
             ModelProviderApiKeyId = request.ModelProviderApiKeyId,
             Tools = request.Tools
@@ -79,6 +80,7 @@ public class AgentsController : ControllerBase
         var updated = await _agentService.UpdateAsync(id, agent =>
         {
             agent.Name = request.Name;
+            agent.Description = request.Description;
             agent.SystemPrompt = request.SystemPrompt;
             agent.ModelProviderApiKeyId = request.ModelProviderApiKeyId;
             agent.Tools = request.Tools;

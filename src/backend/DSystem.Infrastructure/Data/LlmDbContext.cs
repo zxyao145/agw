@@ -81,6 +81,7 @@ public class LlmDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(200);
             entity.Property(e => e.SystemPrompt).HasMaxLength(4000);
             entity.Property(e => e.Tools).HasMaxLength(4000);  // JSON array of tool names
 

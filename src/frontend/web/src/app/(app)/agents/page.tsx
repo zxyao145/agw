@@ -68,6 +68,7 @@ type AgentCreateRequest = components["schemas"]["AgentCreateRequest"];
 type AgentDto = {
   id: string;
   name: string;
+  description: string;
   systemPrompt: string;
   modelProviderApiKeyId: string;
   tools?: string | null;
@@ -158,6 +159,7 @@ export default function AgentsPage() {
   // Create dialog state
   const [createOpen, setCreateOpen] = React.useState(false);
   const [name, setName] = React.useState("");
+  const [description, setDescription] = React.useState("");
   const [systemPrompt, setSystemPrompt] = React.useState("");
   const [modelProviderApiKeyId, setModelProviderApiKeyId] = React.useState("");
   const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
@@ -167,6 +169,7 @@ export default function AgentsPage() {
   const [editOpen, setEditOpen] = React.useState(false);
   const [editingAgent, setEditingAgent] = React.useState<AgentDto | null>(null);
   const [editName, setEditName] = React.useState("");
+  const [editDescription, setEditDescription] = React.useState("");
   const [editSystemPrompt, setEditSystemPrompt] = React.useState("");
   const [editModelProviderApiKeyId, setEditModelProviderApiKeyId] =
     React.useState("");
@@ -203,6 +206,7 @@ export default function AgentsPage() {
       toast.success("Agent created");
       setCreateOpen(false);
       setName("");
+      setDescription("");
       setSystemPrompt("");
       setModelProviderApiKeyId("");
       setSelectedTools([]);
@@ -345,6 +349,7 @@ export default function AgentsPage() {
   const handleEdit = (agent: AgentDto) => {
     setEditingAgent(agent);
     setEditName(agent.name);
+    setEditDescription(agent.description);
     setEditSystemPrompt(agent.systemPrompt);
     setEditModelProviderApiKeyId(agent.modelProviderApiKeyId);
     // Parse tools from JSON string
@@ -463,6 +468,16 @@ export default function AgentsPage() {
                 </div>
 
                 <div className="grid gap-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Input
+                    id="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Agent description..."
+                  />
+                </div>
+
+                <div className="grid gap-2">
                   <Label htmlFor="modelProviderApiKeyId">
                     Model Provider API Key
                   </Label>
@@ -571,6 +586,7 @@ export default function AgentsPage() {
                   onClick={() =>
                     createAgentMutation.mutate({
                       name,
+                      description,
                       systemPrompt,
                       modelProviderApiKeyId,
                       tools:
@@ -612,6 +628,7 @@ export default function AgentsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
                   <TableHead>System Prompt</TableHead>
                   <TableHead>Tools</TableHead>
                   <TableHead>Created</TableHead>
@@ -631,6 +648,9 @@ export default function AgentsPage() {
                     <TableRow key={agent.id}>
                       <TableCell className="font-medium">
                         {agent.name}
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate">
+                        {agent.description || "-"}
                       </TableCell>
                       <TableCell className="max-w-xs truncate">
                         {agent.systemPrompt || "-"}
@@ -715,6 +735,16 @@ export default function AgentsPage() {
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 placeholder="demo-agent"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input
+                id="edit-description"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Agent description..."
               />
             </div>
 
@@ -827,6 +857,7 @@ export default function AgentsPage() {
                     id: editingAgent.id,
                     body: {
                       name: editName,
+                      description: editDescription,
                       systemPrompt: editSystemPrompt,
                       modelProviderApiKeyId: editModelProviderApiKeyId,
                       tools:
