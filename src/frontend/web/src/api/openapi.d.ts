@@ -4,6 +4,218 @@
  */
 
 export interface paths {
+    "/.well-known/agents.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/{agentId}/.well-known/agent-card.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    agentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/a2a/{agentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/external-agents/claude-code/ws": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/completions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["OpenAIChatCompletionRequest"];
+                    "text/json": components["schemas"]["OpenAIChatCompletionRequest"];
+                    "application/*+json": components["schemas"]["OpenAIChatCompletionRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/responses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["OpenAiMessageInput"];
+                    "text/json": components["schemas"]["OpenAiMessageInput"];
+                    "application/*+json": components["schemas"]["OpenAiMessageInput"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects": {
         parameters: {
             query?: never;
@@ -585,6 +797,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agentflows/{id}/execute-sse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AgentflowExecuteRequest"];
+                    "text/json": components["schemas"]["AgentflowExecuteRequest"];
+                    "application/*+json": components["schemas"]["AgentflowExecuteRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents": {
         parameters: {
             query?: never;
@@ -721,6 +974,47 @@ export interface paths {
         trace?: never;
     };
     "/api/agents/{id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AgentExecuteRequest"];
+                    "text/json": components["schemas"]["AgentExecuteRequest"];
+                    "application/*+json": components["schemas"]["AgentExecuteRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{id}/execute-sse": {
         parameters: {
             query?: never;
             header?: never;
@@ -1414,6 +1708,7 @@ export interface components {
     schemas: {
         AgentCreateRequest: {
             name: string;
+            description: string;
             systemPrompt: string;
             /** Format: uuid */
             modelProviderApiKeyId: string;
@@ -1421,6 +1716,7 @@ export interface components {
         };
         AgentExecuteRequest: {
             input: string;
+            threadId?: null | string;
         };
         AgentflowCreateRequest: {
             name: string;
@@ -1459,6 +1755,7 @@ export interface components {
         };
         AgentUpdateRequest: {
             name: string;
+            description: string;
             systemPrompt: string;
             /** Format: uuid */
             modelProviderApiKeyId: string;
@@ -1518,6 +1815,43 @@ export interface components {
             /** Format: int32 */
             maxTokens: number | string;
         };
+        OpenAIChatCompletionRequest: {
+            model: string;
+            messages: components["schemas"]["OpenAIChatMessage"][];
+            stream?: boolean;
+            /** Format: double */
+            temperature?: null | number | string;
+            /** Format: int32 */
+            max_tokens?: null | number | string;
+            previous_response_id?: null | string;
+        };
+        OpenAIChatMessage: {
+            role: string;
+            content?: null | string;
+            name?: null | string;
+        };
+        OpenAiMessageInput: {
+            stream?: null | boolean;
+            instructions?: null | string;
+            input?: unknown;
+            stream_options?: null | components["schemas"]["ThorStreamOptions"];
+            reasoning?: null | components["schemas"]["ReasoningResponsesInput"];
+            tools?: null | components["schemas"]["ResponsesToolsInput"][];
+            /** Format: int32 */
+            max_output_tokens?: null | number | string;
+            /** Format: double */
+            temperature?: null | number | string;
+            tool_choice?: unknown;
+            /** Format: double */
+            top_p?: null | number | string;
+            truncation?: null | string;
+            store?: null | boolean;
+            parallel_tool_calls?: null | boolean;
+            previous_response_id?: null | string;
+            service_tier?: null | string;
+            model?: null | string;
+            user?: null | string;
+        };
         ProjectCreateRequest: {
             name: string;
             description: null | string;
@@ -1551,6 +1885,24 @@ export interface components {
             name: string;
             description: null | string;
             endpoint: string;
+        };
+        ReasoningResponsesInput: {
+            effort?: null | string;
+            /** Format: int32 */
+            max_reasoning_tokens?: null | number | string;
+        };
+        ResponsesToolFunction: {
+            name: string;
+            description?: null | string;
+            parameters?: unknown;
+            strict?: null | boolean;
+        };
+        ResponsesToolsInput: {
+            type: string;
+            function?: null | components["schemas"]["ResponsesToolFunction"];
+        };
+        ThorStreamOptions: {
+            include_usage?: null | boolean;
         };
     };
     responses: never;

@@ -10,6 +10,128 @@
     }
   ],
   "paths": {
+    "/.well-known/agents.json": {
+      "get": {
+        "tags": [
+          "DSystem.Host"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/a2a/{agentId}/.well-known/agent-card.json": {
+      "get": {
+        "tags": [
+          "DSystem.Host"
+        ],
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/a2a/{agentId}": {
+      "post": {
+        "tags": [
+          "DSystem.Host"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/external-agents/claude-code/ws": {
+      "get": {
+        "tags": [
+          "ClaudeCode"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/chat/completions": {
+      "post": {
+        "tags": [
+          "OpenAI"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenAIChatCompletionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenAIChatCompletionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenAIChatCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/responses": {
+      "post": {
+        "tags": [
+          "OpenAI"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenAiMessageInput"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenAiMessageInput"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenAiMessageInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/projects": {
       "get": {
         "tags": [
@@ -1434,12 +1556,16 @@
       "AgentCreateRequest": {
         "required": [
           "name",
+          "description",
           "systemPrompt",
           "modelProviderApiKeyId"
         ],
         "type": "object",
         "properties": {
           "name": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           },
           "systemPrompt": {
@@ -1631,12 +1757,16 @@
       "AgentUpdateRequest": {
         "required": [
           "name",
+          "description",
           "systemPrompt",
           "modelProviderApiKeyId"
         ],
         "type": "object",
         "properties": {
           "name": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           },
           "systemPrompt": {
@@ -1868,6 +1998,191 @@
           }
         }
       },
+      "OpenAIChatCompletionRequest": {
+        "required": [
+          "model",
+          "messages"
+        ],
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenAIChatMessage"
+            }
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "temperature": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "max_tokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "previous_response_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "OpenAIChatMessage": {
+        "required": [
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "content": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "OpenAiMessageInput": {
+        "type": "object",
+        "properties": {
+          "stream": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "input": { },
+          "stream_options": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ThorStreamOptions"
+              }
+            ]
+          },
+          "reasoning": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ReasoningResponsesInput"
+              }
+            ]
+          },
+          "tools": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ResponsesToolsInput"
+            }
+          },
+          "max_output_tokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "temperature": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "tool_choice": { },
+          "top_p": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "truncation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "store": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "parallel_tool_calls": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "previous_response_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "service_tier": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "user": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ProjectCreateRequest": {
         "required": [
           "name",
@@ -2002,10 +2317,95 @@
             "type": "string"
           }
         }
+      },
+      "ReasoningResponsesInput": {
+        "type": "object",
+        "properties": {
+          "effort": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "max_reasoning_tokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ResponsesToolFunction": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parameters": { },
+          "strict": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "ResponsesToolsInput": {
+        "required": [
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "function": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ResponsesToolFunction"
+              }
+            ]
+          }
+        }
+      },
+      "ThorStreamOptions": {
+        "type": "object",
+        "properties": {
+          "include_usage": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
       }
     }
   },
   "tags": [
+    {
+      "name": "DSystem.Host"
+    },
+    {
+      "name": "ClaudeCode"
+    },
+    {
+      "name": "OpenAI"
+    },
     {
       "name": "Projects"
     },

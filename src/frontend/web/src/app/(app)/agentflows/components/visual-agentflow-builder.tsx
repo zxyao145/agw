@@ -35,6 +35,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Info, Workflow, Bot, Grid, Maximize2 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
 import { AgentDto, AgentflowDto, AgentflowNodeType } from "@/types/agentflow"
 import { toast } from "sonner"
 import { apiPost, apiPut } from "@/api/client"
@@ -746,54 +748,18 @@ export function VisualAgentflowBuilder({
   ])
 
   return (
-    <div
-      className="flex h-full w-full flex-col gap-4"
-      onKeyDown={onKeyDown}
-      tabIndex={0}
-    >
-      <div className="flex flex-wrap gap-4">
-        
-        {/* Agentflow Details */}
-        <div className="space-y-2">
-          <Label htmlFor="agentflowName">Agentflow Name *</Label>
-          <Input
-            id="agentflowName"
-            value={agentflowName}
-            onChange={(e) => setAgentflowName(e.target.value)}
-            placeholder="My Agentflow"
-            className="w-50"
-          />
-        </div>
+    <Tabs defaultValue="basic" className="flex h-full w-full flex-col">
+      <div className="flex items-center gap-4">
+        <TabsList className="w-fit">
+          <TabsTrigger value="basic">Basic</TabsTrigger>
+          <TabsTrigger value="visual">Flow Editor</TabsTrigger>
+        </TabsList>
 
-        <div className="space-y-2">
-          <Label htmlFor="agentflowDescription">Description</Label>
-          <Input
-            id="agentflowDescription"
-            value={agentflowDescription}
-            onChange={(e) => setAgentflowDescription(e.target.value)}
-            placeholder="Optional description"
-            className="w-62.5"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 pt-6">
-          <input
-            id="agentflowEnabled"
-            type="checkbox"
-            checked={agentflowEnabled}
-            onChange={(e) => setAgentflowEnabled(e.target.checked)}
-            className="cursor-pointer"
-          />
-          <Label htmlFor="agentflowEnabled" className="cursor-pointer">
-            Enabled
-          </Label>
-        </div>
-
-        
         <Button
           onClick={handleBuild}
           disabled={isCreating || !agentflowName.trim() || nodes.length === 0}
           variant="default"
+          className="ml-auto"
         >
           {isCreating
             ? editingAgentflow
@@ -804,6 +770,53 @@ export function VisualAgentflowBuilder({
               : "Build Agentflow"}
         </Button>
       </div>
+
+      {/* Tab 1: basic */}
+      <TabsContent value="basic" className="flex-1 space-y-4 mt-4">
+        {/* Agentflow Details */}
+        <div className="space-y-2">
+          <Label htmlFor="agentflowName">Agentflow Name *</Label>
+          <Input
+            id="agentflowName"
+            value={agentflowName}
+            onChange={(e) => setAgentflowName(e.target.value)}
+            placeholder="My Agentflow"
+            className="max-w-md"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="agentflowDescription">Description</Label>
+          <Input
+            id="agentflowDescription"
+            value={agentflowDescription}
+            onChange={(e) => setAgentflowDescription(e.target.value)}
+            placeholder="Optional description"
+            className="max-w-md"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Label htmlFor="agentflowEnabled" className="cursor-pointer">
+            Enabled
+          </Label>
+          
+          <Switch
+            id="agentflowEnabled"
+            checked={agentflowEnabled}
+            onCheckedChange={setAgentflowEnabled}
+          />
+          
+        </div>
+      </TabsContent>
+
+      {/* Tab 2: Visual Editor */}
+      <TabsContent
+        value="visual"
+        className="flex-1 flex flex-col gap-4 min-h-0 mt-4"
+        onKeyDown={onKeyDown}
+        tabIndex={0}
+      >
       {/* Controls */}
       <div className="flex flex-wrap items-end gap-4">
         {/* Add Node Selector */}
@@ -990,7 +1003,8 @@ export function VisualAgentflowBuilder({
           </p>
         )}
       </div>
-    </div>
+      </TabsContent>
+    </Tabs>
   );
 }
 
