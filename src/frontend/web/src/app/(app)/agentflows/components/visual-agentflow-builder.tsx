@@ -40,6 +40,7 @@ import { Switch } from "@/components/ui/switch"
 import { AgentDto, AgentflowDto, AgentflowNodeType } from "@/types/agentflow"
 import { toast } from "sonner"
 import { apiPost, apiPut } from "@/api/client"
+import { createGraphLayout } from "./autoLayout"
 
 type AgentNodeData = {
   nodeId: string
@@ -518,10 +519,14 @@ export function VisualAgentflowBuilder({
   }, [nodes, setEdges])
 
   // Auto-layout nodes based on pattern
-  const handleAutoLayout = React.useCallback((selectedPattern: number) => {
+  const handleAutoLayout = React.useCallback(async (selectedPattern: number) => {
     if (nodes.length === 0) return
 
-    const layoutNodes = [...nodes]
+    const result = await createGraphLayout(nodes, edges);
+    setNodes(result.nodes);
+    setEdges(result.edges);
+
+    return;
     const canvasWidth = 800
     const canvasHeight = 600
     const padding = 100
