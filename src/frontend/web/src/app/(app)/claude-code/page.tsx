@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Settings, Send } from "lucide-react";
+import { Settings, Send, ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { ClaudeCodeMessage } from "./types";
 import { cwd } from "process";
 
@@ -37,6 +42,7 @@ export default function ClaudeCodePage() {
   const [settingsOpen, setSettingsOpen] = React.useState(false);
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const wsRef = React.useRef<WebSocket | null>(null);
 
   // Auto-scroll to bottom when new messages arrive
   React.useEffect(() => {
@@ -51,11 +57,95 @@ export default function ClaudeCodePage() {
     if (savedApiKey) setApiKey(savedApiKey);
   }, []);
 
+  // Cleanup WebSocket on unmount
+  React.useEffect(() => {
+    return () => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close(1000, "Component unmounted");
+      }
+    };
+  }, []);
+
   const saveSettings = () => {
     localStorage.setItem("claudecode_workingDir", workingDirectory);
     localStorage.setItem("claudecode_apiKey", apiKey);
     setSettingsOpen(false);
     toast.success("Settings saved");
+  };
+
+  const setupWebSocket = () => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/api/external-agents/claude-code/ws`;
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log("WebSocket connected");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message: ClaudeCodeMessage = JSON.parse(event.data);
+        if (message.type === "system") {
+          // [init]\ntype: system\nsubtype: init\ncwd: D:\source\repos\claude-code-sdk-csharp\nsession_id: 28f9ee8a-6e9a-4ce6-8573-20f611c1d909\ntools: .....
+          const msgInfoArray = message.content.split("\n");
+          msgInfoArray.forEach((x) => {
+            if (x.startsWith("session_id:")) {
+              const sessionId = x.split(":")[1].trim();
+              setSessionId(sessionId);
+              return;
+            }
+          });
+        }
+        if (message.type === "assistant"
+           || message.type === "user"
+           || message.type === "system") {
+          setMessages((prev) => [...prev, message]);
+        } else if (message.type === "result") {
+          setSessionInfo({
+            numTurns: message.numTurns,
+            totalCostUsd: message.totalCostUsd,
+          });
+
+          if (message.isError) {
+            toast.error(`Execution failed: ${message.errorMessage || "Unknown error"}`);
+          } else {
+            toast.success("Execution completed");
+          }
+          setIsExecuting(false);
+        } else if (message.type === "error") {
+          setMessages((prev) => [...prev, message]);
+          toast.error(`Error: ${message.errorMessage || message.content}`);
+          setIsExecuting(false);
+        }
+      } catch (e) {
+        console.error("Parse error:", e);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      toast.error("WebSocket connection error");
+      setIsExecuting(false);
+    };
+
+    ws.onclose = (event) => {
+      console.log("WebSocket closed:", event.code, event.reason);
+      wsRef.current = null;
+      setIsExecuting(false);
+
+      if (event.code !== 1000) {
+        console.error("WebSocket closed unexpectedly:", event.code, event.reason);
+        if (event.code === 1003) {
+          toast.error("Invalid request data");
+        } else if (event.code === 1011) {
+          toast.error("Server error during execution");
+        }
+      }
+    };
+
+    return ws;
   };
 
   const executeClaudeCode = async () => {
@@ -67,12 +157,48 @@ export default function ClaudeCodePage() {
     setIsExecuting(true);
 
     try {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}/api/external-agents/claude-code/ws`;
+      // Check if WebSocket exists and is open
+      let ws = wsRef.current;
 
-      const ws = new WebSocket(wsUrl);
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        // Create new connection
+        ws = setupWebSocket();
 
-      ws.onopen = () => {
+        // Wait for connection to open
+        await new Promise<void>((resolve, reject) => {
+          const onOpen = () => {
+            ws!.removeEventListener('open', onOpen);
+            ws!.removeEventListener('error', onError);
+            resolve();
+          };
+          const onError = () => {
+            ws!.removeEventListener('open', onOpen);
+            ws!.removeEventListener('error', onError);
+            reject(new Error("Failed to connect"));
+          };
+          ws!.addEventListener('open', onOpen);
+          ws!.addEventListener('error', onError);
+        });
+      } else if (ws.readyState === WebSocket.CONNECTING) {
+        // Wait for existing connection to open
+        await new Promise<void>((resolve, reject) => {
+          const onOpen = () => {
+            ws!.removeEventListener('open', onOpen);
+            ws!.removeEventListener('error', onError);
+            resolve();
+          };
+          const onError = () => {
+            ws!.removeEventListener('open', onOpen);
+            ws!.removeEventListener('error', onError);
+            reject(new Error("Failed to connect"));
+          };
+          ws!.addEventListener('open', onOpen);
+          ws!.addEventListener('error', onError);
+        });
+      }
+
+      // Send message
+      if (ws.readyState === WebSocket.OPEN) {
         // Add user message to chat immediately
         setMessages((prev) => [
           ...prev,
@@ -94,64 +220,7 @@ export default function ClaudeCodePage() {
 
         ws.send(JSON.stringify(request));
         setInput(""); // Clear input after sending
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message: ClaudeCodeMessage = JSON.parse(event.data);
-          if (message.type === "system") {
-            // [init]\ntype: system\nsubtype: init\ncwd: D:\source\repos\claude-code-sdk-csharp\nsession_id: 28f9ee8a-6e9a-4ce6-8573-20f611c1d909\ntools: .....
-            const msgInfoArray = message.content.split("\n");
-            msgInfoArray.forEach((x) => {
-              if (x.startsWith("session_id:")) {
-                const sessionId = x.split(":")[1].trim();
-                setSessionId(sessionId);
-                return;
-              }
-            });
-          }
-          if (message.type === "assistant"
-             || message.type === "user" 
-             || message.type === "system") {
-            setMessages((prev) => [...prev, message]);
-          } else if (message.type === "result") {
-            setSessionInfo({
-              numTurns: message.numTurns,
-              totalCostUsd: message.totalCostUsd,
-            });
-
-            if (message.isError) {
-              toast.error(`Execution failed: ${message.errorMessage || "Unknown error"}`);
-            } else {
-              toast.success("Execution completed");
-            }
-          } else if (message.type === "error") {
-            setMessages((prev) => [...prev, message]);
-            toast.error(`Error: ${message.errorMessage || message.content}`);
-          }
-        } catch (e) {
-          console.error("Parse error:", e);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        toast.error("WebSocket connection error");
-        setIsExecuting(false);
-      };
-
-      ws.onclose = (event) => {
-        setIsExecuting(false);
-
-        if (event.code !== 1000) {
-          console.error("WebSocket closed unexpectedly:", event.code, event.reason);
-          if (event.code === 1003) {
-            toast.error("Invalid request data");
-          } else if (event.code === 1011) {
-            toast.error("Server error during execution");
-          }
-        }
-      };
+      }
     } catch (error) {
       toast.error(`Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`);
       setIsExecuting(false);
@@ -161,6 +230,12 @@ export default function ClaudeCodePage() {
   const handleClearSession = () => {
     setMessages([]);
     setSessionInfo(null);
+    setSessionId(null);
+    // Close WebSocket to start fresh session on next message
+    if (wsRef.current) {
+      wsRef.current.close(1000, "Session cleared");
+      wsRef.current = null;
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -182,17 +257,6 @@ export default function ClaudeCodePage() {
         </div>
 
         <div className="flex gap-2">
-          {messages.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleClearSession}
-              disabled={isExecuting}
-            >
-              Clear Chat
-            </Button>
-          )}
-
           <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">
@@ -273,6 +337,37 @@ export default function ClaudeCodePage() {
           const isSystem = msg.type === "system";
           const isError = msg.type === "error" || msg.isError;
 
+          if (isSystem) {
+            return (
+              <div key={index} className="flex justify-start">
+                <Collapsible
+                  defaultOpen={false}
+                  className="max-w-[80%] rounded-lg px-4 py-3 bg-yellow-100/50 border border-yellow-200 mr-12"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-semibold opacity-70">
+                      {msg.model || msg.type}
+                    </span>
+                    <CollapsibleTrigger asChild>
+                      <button className="ml-auto p-1 hover:bg-yellow-200/50 rounded transition-colors">
+                        <ChevronDown className="w-4 h-4" />
+                        <span className="sr-only">Toggle</span>
+                      </button>
+                    </CollapsibleTrigger>
+                  </div>
+                  <div className="text-xs text-muted-foreground italic mb-2">
+                    Click to expand system message
+                  </div>
+                  <CollapsibleContent>
+                    <div className="text-sm whitespace-pre-wrap break-words">
+                      {msg.content || msg.errorMessage}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            );
+          }
+
           return (
             <div
               key={index}
@@ -284,9 +379,7 @@ export default function ClaudeCodePage() {
                     ? "bg-primary text-primary-foreground ml-12"
                     : isError
                       ? "bg-destructive/10 border border-destructive/20 mr-12"
-                      : isSystem
-                        ? "bg-yellow-100/50 border border-yellow-200 mr-12"
-                        : "bg-secondary mr-12"
+                      : "bg-secondary mr-12"
                 }`}
               >
                 <div className="flex items-center gap-2 mb-1">
@@ -336,10 +429,19 @@ export default function ClaudeCodePage() {
             onClick={executeClaudeCode}
             disabled={!input.trim() || isExecuting}
             size="lg"
-            className="h-[76px]"
           >
             <Send className="w-5 h-5" />
           </Button>
+          {messages.length > 0 && (
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={handleClearSession}
+              disabled={isExecuting}
+            >
+              Clear Chat
+            </Button>
+          )}
         </div>
         <p className="text-xs text-muted-foreground mt-2">
           Press Enter to send • Shift+Enter for new line
