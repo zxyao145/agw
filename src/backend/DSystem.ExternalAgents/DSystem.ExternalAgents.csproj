@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="ClaudeCodeWrapper" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\..\..\claude-code-sdk-csharp\src\ClaudeCodeSdk\ClaudeCodeSdk.csproj" />
   </ItemGroup>
 

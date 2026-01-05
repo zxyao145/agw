@@ -18,16 +18,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ClaudeCodeMessage } from "./types";
+import { cwd } from "process";
 
-type ClaudeCodeMessage = {
-  type: string;
-  content: string;
-  model?: string;
-  numTurns?: number;
-  totalCostUsd?: number;
-  isError: boolean;
-  errorMessage?: string;
-};
+
 
 export default function ClaudeCodePage() {
   const [input, setInput] = React.useState("");
@@ -35,6 +29,7 @@ export default function ClaudeCodePage() {
   const [apiKey, setApiKey] = React.useState("");
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<ClaudeCodeMessage[]>([]);
+  const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = React.useState<{
     numTurns?: number;
     totalCostUsd?: number;
@@ -94,6 +89,7 @@ export default function ClaudeCodePage() {
           apiKey: apiKey.trim() || null,
           systemPrompt: null,
           maxTurns: null,
+          sessionId: sessionId,
         };
 
         ws.send(JSON.stringify(request));
@@ -103,8 +99,20 @@ export default function ClaudeCodePage() {
       ws.onmessage = (event) => {
         try {
           const message: ClaudeCodeMessage = JSON.parse(event.data);
-
-          if (message.type === "assistant" || message.type === "user" || message.type === "system") {
+          if (message.type === "system") {
+            // [init]\ntype: system\nsubtype: init\ncwd: D:\source\repos\claude-code-sdk-csharp\nsession_id: 28f9ee8a-6e9a-4ce6-8573-20f611c1d909\ntools: .....
+            const msgInfoArray = message.content.split("\n");
+            msgInfoArray.forEach((x) => {
+              if (x.startsWith("session_id:")) {
+                const sessionId = x.split(":")[1].trim();
+                setSessionId(sessionId);
+                return;
+              }
+            });
+          }
+          if (message.type === "assistant"
+             || message.type === "user" 
+             || message.type === "system") {
             setMessages((prev) => [...prev, message]);
           } else if (message.type === "result") {
             setSessionInfo({

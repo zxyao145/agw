@@ -37,4 +37,9 @@ public record ClaudeCodeExecuteRequest
     /// Maximum number of turns (optional).
     /// </summary>
     public int? MaxTurns { get; init; }
+
+    /// <summary>
+    /// SessionId
+    /// </summary>
+    public string? SessionId { get; init; }
 }

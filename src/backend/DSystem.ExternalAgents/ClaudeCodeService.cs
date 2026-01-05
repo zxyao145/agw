@@ -49,20 +49,21 @@ public class ClaudeCodeService
         string? baseUrl = null,
         string? systemPrompt = null,
         int? maxTurns = null,
+        string? sessionId = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var options = new ClaudeCodeOptions
         {
             WorkingDirectory = workingDirectory,
             SystemPrompt = systemPrompt,
-            MaxTurns = maxTurns
+            MaxTurns = maxTurns,
+            Resume = sessionId
         };
         options.EnvironmentVariables = new Dictionary<string, string?>()
         {
             //{"ANTHROPIC_AUTH_TOKEN", apiKey },
             {"ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic" },
         };
-
         // Set API key and base URL if provided
         if (!string.IsNullOrEmpty(apiKey))
         {

@@ -1,3 +1,4 @@
+using ClaudeCodeWrapper.Models;
 using DSystem.Api.Contracts;
 using DSystem.ExternalAgents;
 using DSystem.Infrastructure;
@@ -85,7 +86,9 @@ public class ClaudeCodeController : ControllerBase
                 baseUrl: request.BaseUrl,
                 systemPrompt: request.SystemPrompt,
                 maxTurns: request.MaxTurns,
-                cancellationToken: HttpContext.RequestAborted))
+                sessionId: request.SessionId,
+                cancellationToken: HttpContext.RequestAborted
+                ))
             {
                 if (webSocket.State != WebSocketState.Open)
                 {
