@@ -1,4 +1,3 @@
-using ClaudeCodeWrapper.Models;
 using DSystem.Api.Contracts;
 using DSystem.ExternalAgents;
 using DSystem.Infrastructure;
