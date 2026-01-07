@@ -1,7 +1,14 @@
 using ClaudeCodeSdk;
+using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
+using DSystem.Domain.Models;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using System.Net.Mail;
 using System.Runtime.CompilerServices;
+using System.Xml.Linq;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace DSystem.ExternalAgents;
 
@@ -42,7 +49,7 @@ public class ClaudeCodeService
     /// <param name="maxTurns">Maximum number of turns (optional)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Async enumerable of ClaudeCodeMessage</returns>
-    public async IAsyncEnumerable<ClaudeCodeMessage> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<AiMessage2> ExecuteStreamingAsync(
         string prompt,
         string? workingDirectory = null,
         string? apiKey = null,
@@ -74,8 +81,21 @@ public class ClaudeCodeService
         {
             options.BaseUrl = baseUrl;
         }
-        await using var client = new ClaudeSdkClient(options, _logger);
 
+
+        //var aiAgent = new ClaudeCodeAIAgent(options, _logger);
+        //var agentRunResponseUpdate = aiAgent.RunStreamingAsync(prompt, cancellationToken: cancellationToken);
+        //await foreach (var message in agentRunResponseUpdate)
+        //{
+        //    // Convert SDK message to our DTO
+        //    var claudeMessage = ConvertMessage(message);
+        //    if (claudeMessage != null)
+        //    {
+        //        yield return claudeMessage;
+        //    }
+        //}
+
+        await using var client = new ClaudeSdkClient(options, _logger);
         await client.ConnectAsync();
         await client.QueryAsync(prompt, cancellationToken: cancellationToken);
         // Execute streaming query
@@ -90,10 +110,7 @@ public class ClaudeCodeService
         }
     }
 
-    /// <summary>
-    /// Convert SDK IMessage to ClaudeCodeMessage DTO.
-    /// </summary>
-    private ClaudeCodeMessage? ConvertMessage(IMessage message)
+    private AiMessage2? ConvertMessage(IMessage message)
     {
         return message switch
         {
@@ -106,104 +123,168 @@ public class ClaudeCodeService
     }
 
     /// <summary>
-    /// Convert AssistantMessage to ClaudeCodeMessage.
+    /// Convert AgentRunResponseUpdate to ClaudeCodeMessage DTO.
     /// </summary>
-    private ClaudeCodeMessage ConvertAssistantMessage(AssistantMessage message)
+    private AiMessage2 ConvertMessage(AgentRunResponseUpdate msg)
     {
-        var ccMsg = new ClaudeCodeMessage
+        var role = msg.Role;
+        var roleStr = role.HasValue ? role.Value.Value : "";
+        var contents = msg.Contents;
+        var aiMsgContents = contents.Select(content =>
         {
-            Type = "assistant",
-            Content = "",
-            Model = message.Model
-        };
+            AiMessageContent? ac = null;
+            if (content is TextContent textContent)
+            {
+                ac = new AiMessageContent(content.GetType().Name, textContent.Text);
+            }
+            else if (content is FunctionCallContent call)
+            {
+                //var t = (call.Arguments != null)
+                //    ? (call.Name + "(" + string.Join(", ", call.Arguments) + ")")
+                //    : (call.Name + "()");
 
-        ConvertContent(message.Content, ccMsg);
-        return ccMsg;
+                var t = $"[Tool: {call.Name}]";
+                ac = new AiMessageContent(content.GetType().Name, t);
+            }
+            else if (content is FunctionResultContent callResult)
+            {
+                //var t = callResult.Exception != null
+                //    ? (callResult.Exception.GetType().Name
+                //        + "(\"" + callResult.Exception.Message + "\")")
+                //    : ((callResult.Result?.ToString() ?? "(null)") ?? "");
+
+                var t = $"[Tool Result: {callResult.Result}]";
+                ac = new AiMessageContent(content.GetType().Name, t);
+            }
+
+            return ac;
+        })
+            .Where(x => x != null)
+            .Select(x => x!)
+            .ToList();
+        var aiMessage = new AiMessage2
+            (
+                msg.MessageId ?? "",
+                msg.AuthorName,
+                roleStr,
+                aiMsgContents
+            );
+
+        return aiMessage;
     }
 
-    private static void ConvertContent(IEnumerable<IContentBlock> contents, ClaudeCodeMessage ccMsg)
+    /// <summary>
+    /// Convert AssistantMessage to ClaudeCodeMessage.
+    /// </summary>
+    private AiMessage2 ConvertAssistantMessage(AssistantMessage message)
     {
+
+        var c = ConvertContent(message.Content);
+        return new AiMessage2(
+            "",
+            message.Model,
+            ChatRole.Assistant.Value,
+            [
+                new AiMessageContent("TextContent", c)
+                ]
+
+            );
+    }
+
+    private static string ConvertContent(IEnumerable<IContentBlock> contents)
+    {
+        string content = "";
         foreach (var item in contents)
         {
             if (item is TextBlock textBlock)
             {
-                ccMsg.Content += textBlock.Text;
+                content += textBlock.Text;
             }
 
             if (item is ThinkingBlock thinkingBlock)
             {
-                ccMsg.Content += "Thinking: " + thinkingBlock.Thinking;
+                content += "Thinking: " + thinkingBlock.Thinking;
             }
 
             if (item is ToolUseBlock toolUseBlock)
             {
-                ccMsg.Content += "Using Tool:" + toolUseBlock.Name;
+                content += "Using Tool:" + toolUseBlock.Name;
             }
 
             if (item is ToolResultBlock toolResultBlock)
             {
-                ccMsg.Content += $"Using Result:" + toolResultBlock.Content;
+                content += $"Using Result:" + toolResultBlock.Content;
             }
         }
+        return content;
     }
 
     /// <summary>
     /// Convert ResultMessage to ClaudeCodeMessage.
     /// </summary>
-    private ClaudeCodeMessage ConvertResultMessage(ResultMessage message)
+    private AiMessage2 ConvertResultMessage(ResultMessage message)
     {
-        return new ClaudeCodeMessage
-        {
-            Type = "result",
-            Content = message.Result ?? string.Empty,
-            NumTurns = message.NumTurns,
-            TotalCostUsd = message.TotalCostUsd,
-            IsError = message.IsError,
-            ErrorMessage = message.IsError ? message.Result : null
-        };
+        //return new ClaudeCodeMessage
+        //{
+        //    Type = "result",
+        //    Content = message.Result ?? string.Empty,
+        //    NumTurns = message.NumTurns,
+        //    TotalCostUsd = message.TotalCostUsd,
+        //    IsError = message.IsError,
+        //    ErrorMessage = message.IsError ? message.Result : null
+        //};
+
+        return new AiMessage2
+        ("", "result", ChatRole.System.Value,
+        [new AiMessageContent("TextContent", message.Result ?? string.Empty)]
+        );
+
     }
 
     /// <summary>
     /// Convert SystemMessage to ClaudeCodeMessage.
     /// </summary>
-    private ClaudeCodeMessage ConvertSystemMessage(SystemMessage message)
+    private AiMessage2 ConvertSystemMessage(SystemMessage message)
     {
         // Convert Data dictionary to readable string
         var dataContent = string.Join("\n",
             message.Data.Select(kvp => $"{kvp.Key}: {kvp.Value}"));
 
-        return new ClaudeCodeMessage
-        {
-            Type = "system",
-            Content = $"[{message.Subtype}]\n{dataContent}"
-        };
+        return new AiMessage2
+        ("", message.Subtype, ChatRole.System.Value,
+        [ new AiMessageContent("TextContent", dataContent) ]
+        );
     }
 
     /// <summary>
     /// Convert UserMessage to ClaudeCodeMessage.
     /// </summary>
-    private ClaudeCodeMessage ConvertUserMessage(UserMessage message)
+    private AiMessage2 ConvertUserMessage(UserMessage message)
     {
-        var ccMsg = new ClaudeCodeMessage
-        {
-            Type = "user",
-            Content = ""
-        };
+        string c = "";
+
 
         // Handle Content which can be string or List<IContentBlock>
         if (message.Content is string str)
         {
-            ccMsg.Content = str;
+            c = str;
         }
         else if (message.Content is IEnumerable<IContentBlock> blocks)
         {
-            ConvertContent(blocks, ccMsg);
+            c = ConvertContent(blocks);
         }
         else
         {
-            ccMsg.Content = message.Content?.ToString() ?? string.Empty;
+            c = message.Content?.ToString() ?? string.Empty;
         }
-
+        var ccMsg = new AiMessage2(
+                 "",
+                 "user",
+                 ChatRole.Assistant.Value,
+                 [
+                     new AiMessageContent("TextContent", c)
+                 ]
+            );
         return ccMsg;
     }
 }

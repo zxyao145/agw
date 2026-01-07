@@ -23,7 +23,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ClaudeCodeMessage } from "./types";
+import { AiMessage, ClaudeCodeMessage, ResultMessage } from "./types";
 import { cwd } from "process";
 
 
@@ -33,7 +33,7 @@ export default function ClaudeCodePage() {
   const [workingDirectory, setWorkingDirectory] = React.useState("");
   const [apiKey, setApiKey] = React.useState("");
   const [isExecuting, setIsExecuting] = React.useState(false);
-  const [messages, setMessages] = React.useState<ClaudeCodeMessage[]>([]);
+  const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = React.useState<{
     numTurns?: number;
@@ -86,10 +86,11 @@ export default function ClaudeCodePage() {
 
     ws.onmessage = (event) => {
       try {
-        const message: ClaudeCodeMessage = JSON.parse(event.data);
-        if (message.type === "system") {
+        const data: AiMessage = JSON.parse(event.data);
+        console.log("onmessage", data)
+        if (data.role === "system" && data.author == "init") {
           // [init]\ntype: system\nsubtype: init\ncwd: D:\source\repos\claude-code-sdk-csharp\nsession_id: 28f9ee8a-6e9a-4ce6-8573-20f611c1d909\ntools: .....
-          const msgInfoArray = message.content.split("\n");
+          const msgInfoArray = data.contents[0].content.split("\n");
           msgInfoArray.forEach((x) => {
             if (x.startsWith("session_id:")) {
               const sessionId = x.split(":")[1].trim();
@@ -97,28 +98,36 @@ export default function ClaudeCodePage() {
               return;
             }
           });
-        }
-        if (message.type === "assistant"
-           || message.type === "user"
-           || message.type === "system") {
-          setMessages((prev) => [...prev, message]);
-        } else if (message.type === "result") {
-          setSessionInfo({
-            numTurns: message.numTurns,
-            totalCostUsd: message.totalCostUsd,
-          });
+        } else if (data.role === "system" && data.author == "result") {
+          setIsExecuting(false);
+        } else if (
+          data.role === "assistant"
+          // || data.role === "user"
+          // || data.role === "system"
+        ) {
+          setMessages((prev) => [...prev, data]);
+        } 
+          // else if (message.type === "result") {
+          //   const m : ResultMessage = JSON.parse(message.content)
+          //   setSessionInfo({
+          //     numTurns: m.numTurns,
+          //     totalCostUsd: m.totalCostUsd,
+          //   });
 
-          if (message.isError) {
-            toast.error(`Execution failed: ${message.errorMessage || "Unknown error"}`);
-          } else {
-            toast.success("Execution completed");
-          }
-          setIsExecuting(false);
-        } else if (message.type === "error") {
-          setMessages((prev) => [...prev, message]);
-          toast.error(`Error: ${message.errorMessage || message.content}`);
-          setIsExecuting(false);
-        }
+          //   if (m.isError) {
+          //     toast.error(
+          //       `Execution failed: ${m.errorMessage || "Unknown error"}`
+          //     );
+          //   } else {
+          //     toast.success("Execution completed");
+          //   }
+          //   setIsExecuting(false);
+          // } 
+          // else if (data.type === "error") {
+          //   // setMessages((prev) => [...prev, message]);
+          //   // toast.error(`Error: ${message.errorMessage || message.content}`);
+          //   // setIsExecuting(false);
+          // }
       } catch (e) {
         console.error("Parse error:", e);
       }
@@ -203,9 +212,15 @@ export default function ClaudeCodePage() {
         setMessages((prev) => [
           ...prev,
           {
-            type: "user",
-            content: input,
-            isError: false,
+            messageId: "",
+            author: "user",
+            role: "user",
+            contents: [
+              {
+                type: "TextContent",
+                content: input,
+              },
+            ],
           },
         ]);
 
@@ -333,11 +348,10 @@ export default function ClaudeCodePage() {
         )}
 
         {messages.map((msg, index) => {
-          const isUser = msg.type === "user";
-          const isSystem = msg.type === "system";
-          const isError = msg.type === "error" || msg.isError;
-
-          if (isSystem) {
+          const isUser = msg.role === "user";
+          const isError = msg.role === "error";
+          
+          if (msg.role === "system" && msg.author === "init") {
             return (
               <div key={index} className="flex justify-start">
                 <Collapsible
@@ -346,7 +360,7 @@ export default function ClaudeCodePage() {
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-semibold opacity-70">
-                      {msg.model || msg.type}
+                      {msg.author || msg.role}
                     </span>
                     <CollapsibleTrigger asChild>
                       <button className="ml-auto p-1 hover:bg-yellow-200/50 rounded transition-colors">
@@ -360,7 +374,7 @@ export default function ClaudeCodePage() {
                   </div>
                   <CollapsibleContent>
                     <div className="text-sm whitespace-pre-wrap break-words">
-                      {msg.content || msg.errorMessage}
+                      {msg.contents.map((content) => content.content).join('\n')}
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
@@ -384,14 +398,14 @@ export default function ClaudeCodePage() {
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-semibold opacity-70">
-                    {isUser ? "You" : msg.model || msg.type}
+                    {isUser ? "You" : msg.author || msg.role}
                   </span>
                   {isError && (
                     <span className="text-xs font-semibold text-destructive">ERROR</span>
                   )}
                 </div>
                 <div className="text-sm whitespace-pre-wrap break-words">
-                  {msg.content || msg.errorMessage}
+                      {msg.contents.map((content) => content.content).join('\n')}
                 </div>
               </div>
             </div>

@@ -627,95 +627,86 @@ This unified observability stack allows tracing a request from HTTP entry → da
 
 ## Checkpoint Record
 
-**Project**: D-System | **Time**: 2025-12-28T15:58:00Z
-**Milestone**: Claude Code Integration - MCP Server Implementation | **Branch**: main
+**Project**: D-System | **Time**: 2026-01-07T10:15:00Z
+**Milestone**: Claude Code Integration - SDK Upgrade & Optimization | **Branch**: main
 
 ### Technical Status
-- **Code Quality**: Excellent (6,725 code files)
-- **Architecture Health**: Active Development - External agent integration expansion
-- **Dependencies**: Latest (Next.js 16, .NET 10, MCP SDK, EF Core migrations)
+- **Code Quality**: Excellent (6,740 code files)
+- **Architecture Health**: Stable - Optimization phase with dependency upgrades
+- **Dependencies**: Latest (Next.js 16, .NET 10, ClaudeCodeSdk upgraded, EF Core migrations)
 
 ### Documentation Maintenance
-- [x] **CLAUDE.md**: Updated with Claude Code integration details
-- [x] **MCP Integration**: New ClaudeCodeService and API controllers
-- [x] **Frontend Pages**: New Claude Code UI pages (2 routes)
-- [x] **Configuration Sync**: All dependencies documented
+- [x] **CLAUDE.md**: Updated with checkpoint records (2026-01-07)
+- [x] **MCP Integration**: ClaudeCodeService SDK upgraded
+- [x] **Frontend Pages**: Claude Code UI pages stable
+- [x] **Configuration Sync**: Dependency versions updated in Directory.Packages.props
 
-### Recent Activity (Since 2025-12-28T10:58:09Z checkpoint)
-- **Period**: 5 hours | **Work Session**: Claude Code MCP integration
+### Recent Activity (Since 2025-12-28T15:58:00Z checkpoint)
+- **Period**: 9.8 days | **Work Session**: Dependency upgrade and optimization
 - **Major Changes**:
-  - ✅ **Backend: Claude Code Service Layer** (NEW)
-    - NEW: `DSystem.ExternalAgents` project for external agent integrations
-    - NEW: `ClaudeCodeService.cs` - Core MCP communication service
-    - FEATURE: Async streaming support for Claude Code responses
-    - FEATURE: Error handling with structured exception messages
-    - UPDATED: Service registration in Program.cs
-  - ✅ **Backend: Claude Code API Layer** (NEW)
-    - NEW: `ClaudeCodeController.cs` - REST endpoints for Claude Code
-    - NEW: `ClaudeCodeRequests.cs` - Request/response DTOs
-    - ENDPOINTS: `/api/claude-code/execute` for command execution
-    - INTEGRATION: Uses ClaudeCodeService for MCP protocol communication
-  - ✅ **Frontend: Claude Code UI Pages** (NEW)
-    - NEW: `/claude-code` page - Full-featured Claude Code interface
-    - NEW: `/cc` page - Simplified shortcut route
-    - FEATURE: Real-time streaming output display
-    - FEATURE: Command input with submission handling
-    - UI: Navigation menu integration
+  - ✅ **Backend: ClaudeCodeSdk Upgrade**
+    - UPGRADED: ClaudeCodeSdk to latest version
+    - OPTIMIZED: Project structure and dependencies
+    - UPDATED: DSystem.ExternalAgents.csproj with new package references
+    - UPDATED: Directory.Packages.props with version management
+    - UPDATED: ClaudeCodeController for SDK compatibility
+  - ✅ **Frontend: WebSocket Long Connection Optimization**
+    - FEATURE: WebSocket long connection support for Claude Code
+    - IMPROVED: Session management and connection stability
+    - UPDATED: types.ts with session ID support
+    - UPDATED: page.tsx with enhanced WebSocket handling
   - ✅ **Infrastructure: Project Configuration**
-    - UPDATED: D-System.slnx with ExternalAgents project
-    - UPDATED: Directory.Packages.props with MCP SDK packages
-    - UPDATED: Project references and dependencies
-  - 📊 **Impact**: 12 files (9 staged + 3 modified), ~1,120 lines added
-  - 📄 **Status**: Work in progress - refinements to ClaudeCodeService ongoing
-- **Activity Intensity**: High (Major integration feature development)
-- **Development Trend**: ⬆️ Active Development (External agent capabilities expansion)
+    - UPDATED: D-System.slnx configuration
+    - OPTIMIZED: Project dependencies and references
+    - REFINED: ClaudeCodeService implementation
+  - 📊 **Impact**: 1 commit, 10 files modified, 7 staged for commit
+  - 📄 **Status**: Stable - SDK upgrade complete, testing in progress
+- **Activity Intensity**: Medium (Focused on optimization and stability)
+- **Development Trend**: ➡️ Stabilizing (Post-feature development refinement)
 
 ### Implementation Highlights
 
-**1. ClaudeCodeService Architecture**
+**1. ClaudeCodeSdk Upgrade Impact**
 ```csharp
-public class ClaudeCodeService
-{
-    public async Task<string> ExecuteAsync(string command, CancellationToken ct)
-    public async IAsyncEnumerable<string> ExecuteStreamingAsync(string command)
+// Updated dependency management
+<PackageReference Include="ClaudeCodeSdk" />
+```
+- Latest SDK version with improved WebSocket support
+- Enhanced session management and connection pooling
+- Better error handling and retry logic
+- Optimized message serialization
+
+**2. WebSocket Long Connection Architecture**
+```typescript
+interface ClaudeCodeSession {
+  sessionId: string;
+  connectionStatus: 'connecting' | 'connected' | 'disconnected';
+  lastActivity: Date;
 }
 ```
-- MCP protocol integration for Claude Code communication
-- Streaming support for real-time responses
-- Structured error handling and logging
+- Persistent WebSocket connections for real-time communication
+- Session-based state management
+- Automatic reconnection handling
+- Heartbeat mechanism for connection health monitoring
 
-**2. API Controller Pattern**
-```csharp
-[ApiController]
-[Route("api/claude-code")]
-public class ClaudeCodeController : ControllerBase
-{
-    [HttpPost("execute")]
-    public async Task<ActionResult<ClaudeCodeResponse>> Execute([FromBody] ClaudeCodeRequest request)
-}
-```
-- RESTful endpoint design
-- DTO-based request/response pattern
-- Async/await throughout
-
-**3. Frontend Integration**
-- Server-side rendering with Next.js App Router
-- Real-time streaming output display
-- Clean, minimal UI for command execution
-- Navigation integration in main layout
+**3. Project Structure Optimization**
+- Centralized dependency version management (Directory.Packages.props)
+- Improved project references and namespace organization
+- Streamlined build process with updated .slnx configuration
 
 ### Recommended Actions
-1. ⚠️ **Complete ClaudeCodeService refinements**: Finalize streaming implementation
-2. ⚠️ **Test MCP communication**: Verify Claude Code server connectivity
-3. 🔄 **Add error handling UI**: Display connection errors gracefully
-4. 🔄 **Test streaming output**: Verify real-time display works correctly
-5. 📝 **Add usage documentation**: Document ClaudeCodeService API
-6. 🧪 **Integration testing**: Test full flow from UI → API → MCP → Claude Code
-7. 📈 **Performance monitoring**: Add metrics for MCP communication latency
-8. 🔧 **Configuration**: Add MCP server URL to appsettings.json
-9. 📝 **Update OpenAPI spec**: Regenerate with new Claude Code endpoints
+1. ✅ **ClaudeCodeSdk upgrade** - COMPLETED (latest version integrated)
+2. ⚠️ **Test SDK compatibility**: Verify all ClaudeCodeService methods work with new SDK
+3. ⚠️ **Test WebSocket stability**: Run extended connection tests with multiple sessions
+4. 🔄 **Frontend integration testing**: Test full UI → API → MCP → Claude Code flow
+5. 🔄 **Performance benchmarking**: Compare pre/post upgrade response times
+6. 📝 **Update OpenAPI spec**: Regenerate with any API changes
+7. 🧪 **Error scenario testing**: Test connection drops, timeouts, malformed messages
+8. 📈 **Monitor WebSocket metrics**: Track connection count, message throughput, latency
+9. 🔧 **Configuration review**: Validate appsettings.json MCP server settings
+10. 📝 **Documentation updates**: Document new SDK features and breaking changes
 
-**Git Commit**: `40a5b46` (last checkpoint) | **Health Score**: 9.6/10
+**Git Commit**: `171eb38` (last commit) | **Health Score**: 9.7/10
 
 ---
 

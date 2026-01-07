@@ -6,13 +6,14 @@
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 
-	<ItemGroup>
-	  <PackageReference Include="ClaudeCodeSdk.MAF" />
-	</ItemGroup>
-
-
 	<!--<ItemGroup>
-    <ProjectReference Include="..\..\..\..\claude-code-sdk-csharp\src\ClaudeCodeSdk\ClaudeCodeSdk.csproj" />
-  </ItemGroup>-->
+	  <PackageReference Include="ClaudeCodeSdk.MAF" />
+	</ItemGroup>-->
+
+
+	<ItemGroup>
+    <ProjectReference Include="..\..\..\..\claude-code-sdk-csharp\src\ClaudeCodeSdk.MAF\ClaudeCodeSdk.MAF.csproj" />
+    <ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
+  </ItemGroup>
 
 </Project>

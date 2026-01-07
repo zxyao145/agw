@@ -98,7 +98,7 @@ public class AgentflowRuntimeService
                 foreach (var msg in result)
                 {
                     var chatMsg = new AiMessage(
-                        msg.MessageId,
+                        msg.MessageId ?? "",
                         msg.AuthorName,
                         msg.Role.Value,
                         AiMessageType.Text,
