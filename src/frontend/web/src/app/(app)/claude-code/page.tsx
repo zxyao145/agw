@@ -100,10 +100,11 @@ export default function ClaudeCodePage() {
           });
         } else if (data.role === "system" && data.author == "result") {
           setIsExecuting(false);
-        } else if (
+        } 
+        if (
           data.role === "assistant"
           // || data.role === "user"
-          // || data.role === "system"
+          || data.role === "system"
         ) {
           setMessages((prev) => [...prev, data]);
         } 

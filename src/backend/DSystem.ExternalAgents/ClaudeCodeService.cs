@@ -83,23 +83,9 @@ public class ClaudeCodeService
         }
 
 
-        //var aiAgent = new ClaudeCodeAIAgent(options, _logger);
-        //var agentRunResponseUpdate = aiAgent.RunStreamingAsync(prompt, cancellationToken: cancellationToken);
-        //await foreach (var message in agentRunResponseUpdate)
-        //{
-        //    // Convert SDK message to our DTO
-        //    var claudeMessage = ConvertMessage(message);
-        //    if (claudeMessage != null)
-        //    {
-        //        yield return claudeMessage;
-        //    }
-        //}
-
-        await using var client = new ClaudeSdkClient(options, _logger);
-        await client.ConnectAsync();
-        await client.QueryAsync(prompt, cancellationToken: cancellationToken);
-        // Execute streaming query
-        await foreach (var message in client.ReceiveResponseAsync())
+        var aiAgent = new ClaudeCodeAIAgent(options, _logger);
+        var agentRunResponseUpdate = aiAgent.RunStreamingAsync(prompt, cancellationToken: cancellationToken);
+        await foreach (var message in agentRunResponseUpdate)
         {
             // Convert SDK message to our DTO
             var claudeMessage = ConvertMessage(message);
@@ -108,6 +94,20 @@ public class ClaudeCodeService
                 yield return claudeMessage;
             }
         }
+
+        //await using var client = new ClaudeSdkClient(options, _logger);
+        //await client.ConnectAsync();
+        //await client.QueryAsync(prompt, cancellationToken: cancellationToken);
+        //// Execute streaming query
+        //await foreach (var message in client.ReceiveResponseAsync())
+        //{
+        //    // Convert SDK message to our DTO
+        //    var claudeMessage = ConvertMessage(message);
+        //    if (claudeMessage != null)
+        //    {
+        //        yield return claudeMessage;
+        //    }
+        //}
     }
 
     private AiMessage2? ConvertMessage(IMessage message)
