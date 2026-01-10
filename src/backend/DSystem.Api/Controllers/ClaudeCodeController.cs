@@ -81,13 +81,13 @@ public class ClaudeCodeController : ControllerBase
                 try
                 {
                     await foreach (var message in _claudeCodeService.ExecuteStreamingAsync(
+                        threadId: request.ThreadId,
                         prompt: request.Input,
                         workingDirectory: request.WorkingDirectory,
                         apiKey: request.ApiKey,
                         baseUrl: request.BaseUrl,
                         systemPrompt: request.SystemPrompt,
                         maxTurns: request.MaxTurns,
-                        sessionId: request.SessionId,
                         cancellationToken: HttpContext.RequestAborted
                         ))
                     {

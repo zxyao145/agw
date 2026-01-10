@@ -1,26 +1,8 @@
-export interface ClaudeCodeMessage {
-  type: string;
-  content: string;
-  model?: string;
-  numTurns?: number;
-  totalCostUsd?: number;
-  isError: boolean;
-  errorMessage?: string;
-}
-
-export interface ResultMessage {
-  type: string;
-  content: string;
-  model?: string;
-  numTurns?: number;
-  totalCostUsd?: number;
-  isError: boolean;
-  errorMessage?: string;
-}
-
+export type AdditionalProperties = Record<string, any>;
 export interface AiMessageContent {
   type: string;
   content: string;
+  additionalProperties?: AdditionalProperties;
 }
 
 export interface AiMessage {
@@ -28,11 +10,7 @@ export interface AiMessage {
   author?: string;
   role?: string;
   contents: AiMessageContent[];
-}
-
-export interface SystemMessage {
-  // system
-  session_id?: string;
+  additionalProperties?: AdditionalProperties;
 }
 
 export enum ClaudeCodeMessageType {
@@ -41,8 +19,29 @@ export enum ClaudeCodeMessageType {
   result = "result",
 }
 
-export enum MessageContentType {
-  TextContent = "TextContent",
-  FunctionCallContent = "FunctionCallContent",
-  FunctionResultContent = "FunctionResultContent",
+export const MessageContentType = {
+  DataContent: "DataContent",
+  ErrorContent: "ErrorContent",
+  FunctionCallContent: "FunctionCallContent",
+  FunctionResultContent: "FunctionResultContent",
+  HostedFileContent: "HostedFileContent",
+  HostedVectorStoreContent: "HostedVectorStoreContent",
+  TextContent: "TextContent",
+  TextReasoningContent: "TextReasoningContent",
+  UriContent: "UriContent",
+  UsageContent: "UsageContent",
+} as const;
+
+export type MessageContentTypes =
+  (typeof MessageContentType)[keyof typeof MessageContentType];
+
+export interface InitMessageContent {
+  claudeCodeVersion: string;
+  permissionMode: string;
+  tools: string[];
+  slashCommands: string[];
+  agents: string[];
+  skills: string[];
+  plugins: string[];
+  mcpServers: string[];
 }

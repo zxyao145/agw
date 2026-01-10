@@ -1,4 +1,6 @@
-﻿namespace DSystem.Domain.Models;
+﻿using Microsoft.Extensions.AI;
+
+namespace DSystem.Domain.Models;
 
 public enum AiMessageType
 {
@@ -10,6 +12,12 @@ public enum AiMessageType
 public record AiMessage(string MessageId, string? Author, string? Role, AiMessageType Type, string Content);
 
 
-public record AiMessageContent(string Type, string Content);
+public record AiMessageContent(string Type, object? Content, AdditionalPropertiesDictionary? AdditionalProperties = null);
 
-public record AiMessage2(string MessageId, string? Author, string? Role, List<AiMessageContent> Contents);
+public record AiMessage2(
+    string MessageId,
+    string? Author, 
+    string? Role, 
+    List<AiMessageContent> Contents,
+    AdditionalPropertiesDictionary? AdditionalProperties = null
+    );

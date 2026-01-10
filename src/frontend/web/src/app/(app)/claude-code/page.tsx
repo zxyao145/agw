@@ -2,7 +2,13 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Settings, Send, ChevronDown } from "lucide-react";
+import { Settings, Send, ChevronDown, Columns3Cog } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Badge } from "@/components/ui/badge"
 
 import { Button } from "@/components/ui/button";
 import {
@@ -23,10 +29,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { AiMessage, ClaudeCodeMessage, ResultMessage } from "./types";
-import { cwd } from "process";
-
-
+import { AiMessage, InitMessageContent, MessageContentType } from "./types";
+import { Ulid } from "id128";
+import { AiMessageComponment } from "./message";
 
 export default function ClaudeCodePage() {
   const [input, setInput] = React.useState("");
@@ -34,11 +39,14 @@ export default function ClaudeCodePage() {
   const [apiKey, setApiKey] = React.useState("");
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
-  const [sessionId, setSessionId] = React.useState<string | null>(null);
+  const [threadId, setThreadId] = React.useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = React.useState<{
     numTurns?: number;
     totalCostUsd?: number;
   } | null>(null);
+  const [initContent, setInitContent] =
+    React.useState<InitMessageContent | null>(null);
+
   const [settingsOpen, setSettingsOpen] = React.useState(false);
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -87,48 +95,33 @@ export default function ClaudeCodePage() {
     ws.onmessage = (event) => {
       try {
         const data: AiMessage = JSON.parse(event.data);
-        console.log("onmessage", data)
-        if (data.role === "system" && data.author == "init") {
-          // [init]\ntype: system\nsubtype: init\ncwd: D:\source\repos\claude-code-sdk-csharp\nsession_id: 28f9ee8a-6e9a-4ce6-8573-20f611c1d909\ntools: .....
-          const msgInfoArray = data.contents[0].content.split("\n");
-          msgInfoArray.forEach((x) => {
-            if (x.startsWith("session_id:")) {
-              const sessionId = x.split(":")[1].trim();
-              setSessionId(sessionId);
-              return;
-            }
-          });
-        } else if (data.role === "system" && data.author == "result") {
-          setIsExecuting(false);
-        } 
-        if (
-          data.role === "assistant"
-          // || data.role === "user"
-          || data.role === "system"
-        ) {
-          setMessages((prev) => [...prev, data]);
-        } 
-          // else if (message.type === "result") {
-          //   const m : ResultMessage = JSON.parse(message.content)
-          //   setSessionInfo({
-          //     numTurns: m.numTurns,
-          //     totalCostUsd: m.totalCostUsd,
-          //   });
+        console.log("onmessage", data);
+        if (data.role === "system") {
+          if (
+            data.additionalProperties!.type === "system" &&
+            data.additionalProperties!.subtype === "init"
+          ) {
+            const content = JSON.parse(data.contents[0].content);
+            const initContent: InitMessageContent = {
+              tools: content.tools,
+              slashCommands: content.slash_commands,
+              agents: content.agents,
+              skills: content.skills,
+              plugins: content.plugins,
+              mcpServers: content.mcp_servers,
+              claudeCodeVersion: content.claude_code_version,
+              permissionMode: content.permissionMode,
+            };
 
-          //   if (m.isError) {
-          //     toast.error(
-          //       `Execution failed: ${m.errorMessage || "Unknown error"}`
-          //     );
-          //   } else {
-          //     toast.success("Execution completed");
-          //   }
-          //   setIsExecuting(false);
-          // } 
-          // else if (data.type === "error") {
-          //   // setMessages((prev) => [...prev, message]);
-          //   // toast.error(`Error: ${message.errorMessage || message.content}`);
-          //   // setIsExecuting(false);
-          // }
+            setInitContent(initContent);
+          } else if (data.additionalProperties!.type === "result") {
+            setIsExecuting(false);
+          } else {
+            setMessages((prev) => [...prev, data]);
+          }
+        } else if (data.role === "assistant") {
+          setMessages((prev) => [...prev, data]);
+        }
       } catch (e) {
         console.error("Parse error:", e);
       }
@@ -146,7 +139,11 @@ export default function ClaudeCodePage() {
       setIsExecuting(false);
 
       if (event.code !== 1000) {
-        console.error("WebSocket closed unexpectedly:", event.code, event.reason);
+        console.error(
+          "WebSocket closed unexpectedly:",
+          event.code,
+          event.reason
+        );
         if (event.code === 1003) {
           toast.error("Invalid request data");
         } else if (event.code === 1011) {
@@ -170,60 +167,70 @@ export default function ClaudeCodePage() {
       // Check if WebSocket exists and is open
       let ws = wsRef.current;
 
-      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      if (
+        !ws ||
+        ws.readyState === WebSocket.CLOSED ||
+        ws.readyState === WebSocket.CLOSING
+      ) {
         // Create new connection
         ws = setupWebSocket();
 
         // Wait for connection to open
         await new Promise<void>((resolve, reject) => {
           const onOpen = () => {
-            ws!.removeEventListener('open', onOpen);
-            ws!.removeEventListener('error', onError);
+            ws!.removeEventListener("open", onOpen);
+            ws!.removeEventListener("error", onError);
             resolve();
           };
           const onError = () => {
-            ws!.removeEventListener('open', onOpen);
-            ws!.removeEventListener('error', onError);
+            ws!.removeEventListener("open", onOpen);
+            ws!.removeEventListener("error", onError);
             reject(new Error("Failed to connect"));
           };
-          ws!.addEventListener('open', onOpen);
-          ws!.addEventListener('error', onError);
+          ws!.addEventListener("open", onOpen);
+          ws!.addEventListener("error", onError);
         });
       } else if (ws.readyState === WebSocket.CONNECTING) {
         // Wait for existing connection to open
         await new Promise<void>((resolve, reject) => {
           const onOpen = () => {
-            ws!.removeEventListener('open', onOpen);
-            ws!.removeEventListener('error', onError);
+            ws!.removeEventListener("open", onOpen);
+            ws!.removeEventListener("error", onError);
             resolve();
           };
           const onError = () => {
-            ws!.removeEventListener('open', onOpen);
-            ws!.removeEventListener('error', onError);
+            ws!.removeEventListener("open", onOpen);
+            ws!.removeEventListener("error", onError);
             reject(new Error("Failed to connect"));
           };
-          ws!.addEventListener('open', onOpen);
-          ws!.addEventListener('error', onError);
+          ws!.addEventListener("open", onOpen);
+          ws!.addEventListener("error", onError);
         });
       }
 
       // Send message
       if (ws.readyState === WebSocket.OPEN) {
+        const userMsg: AiMessage = {
+          messageId: "",
+          author: "user",
+          role: "user",
+          contents: [
+            {
+              type: "TextContent",
+              content: input,
+            },
+          ],
+        };
         // Add user message to chat immediately
-        setMessages((prev) => [
-          ...prev,
-          {
-            messageId: "",
-            author: "user",
-            role: "user",
-            contents: [
-              {
-                type: "TextContent",
-                content: input,
-              },
-            ],
-          },
-        ]);
+        setMessages((prev) => [...prev, userMsg]);
+
+        let tid;
+        if (threadId) {
+          tid = threadId;
+        } else {
+          tid = Ulid.generate().toCanonical();
+          setThreadId(tid);
+        }
 
         const request = {
           input: input,
@@ -231,14 +238,16 @@ export default function ClaudeCodePage() {
           apiKey: apiKey.trim() || null,
           systemPrompt: null,
           maxTurns: null,
-          sessionId: sessionId,
+          threadId: tid,
         };
 
         ws.send(JSON.stringify(request));
         setInput(""); // Clear input after sending
       }
     } catch (error) {
-      toast.error(`Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      toast.error(
+        `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`
+      );
       setIsExecuting(false);
     }
   };
@@ -246,7 +255,7 @@ export default function ClaudeCodePage() {
   const handleClearSession = () => {
     setMessages([]);
     setSessionInfo(null);
-    setSessionId(null);
+    setThreadId(null);
     // Close WebSocket to start fresh session on next message
     if (wsRef.current) {
       wsRef.current.close(1000, "Session cleared");
@@ -259,6 +268,20 @@ export default function ClaudeCodePage() {
       e.preventDefault();
       executeClaudeCode();
     }
+  };
+
+  const createArr = (key: string, value: string[]) => {
+    console.info(key, value);
+    return (
+      <div className="grid grid-cols-3 items-center py-2 border-b">
+        <Label>{key}</Label>
+        <div className="col-span-2">
+          {!value
+            ? "-"
+            : value.map((item) => <Badge variant="outline">{item}</Badge>)}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -301,7 +324,8 @@ export default function ClaudeCodePage() {
                     placeholder="e.g., /path/to/project"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Directory where ClaudeCode will execute. Leave empty for current directory.
+                    Directory where ClaudeCode will execute. Leave empty for
+                    current directory.
                   </p>
                 </div>
 
@@ -317,7 +341,8 @@ export default function ClaudeCodePage() {
                     placeholder="sk-ant-..."
                   />
                   <p className="text-xs text-muted-foreground">
-                    Leave empty to use ANTHROPIC_AUTH_TOKEN environment variable.
+                    Leave empty to use ANTHROPIC_AUTH_TOKEN environment
+                    variable.
                   </p>
                 </div>
               </div>
@@ -343,74 +368,15 @@ export default function ClaudeCodePage() {
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-muted-foreground">
               <p className="text-lg mb-2">No messages yet</p>
-              <p className="text-sm">Start a conversation by typing a message below</p>
+              <p className="text-sm">
+                Start a conversation by typing a message below
+              </p>
             </div>
           </div>
         )}
 
         {messages.map((msg, index) => {
-          const isUser = msg.role === "user";
-          const isError = msg.role === "error";
-          
-          if (msg.role === "system" && msg.author === "init") {
-            return (
-              <div key={index} className="flex justify-start">
-                <Collapsible
-                  defaultOpen={false}
-                  className="max-w-[80%] rounded-lg px-4 py-3 bg-yellow-100/50 border border-yellow-200 mr-12"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-semibold opacity-70">
-                      {msg.author || msg.role}
-                    </span>
-                    <CollapsibleTrigger asChild>
-                      <button className="ml-auto p-1 hover:bg-yellow-200/50 rounded transition-colors">
-                        <ChevronDown className="w-4 h-4" />
-                        <span className="sr-only">Toggle</span>
-                      </button>
-                    </CollapsibleTrigger>
-                  </div>
-                  <div className="text-xs text-muted-foreground italic mb-2">
-                    Click to expand system message
-                  </div>
-                  <CollapsibleContent>
-                    <div className="text-sm whitespace-pre-wrap break-words">
-                      {msg.contents.map((content) => content.content).join('\n')}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
-            );
-          }
-
-          return (
-            <div
-              key={index}
-              className={`flex ${isUser ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-lg px-4 py-3 ${
-                  isUser
-                    ? "bg-primary text-primary-foreground ml-12"
-                    : isError
-                      ? "bg-destructive/10 border border-destructive/20 mr-12"
-                      : "bg-secondary mr-12"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-semibold opacity-70">
-                    {isUser ? "You" : msg.author || msg.role}
-                  </span>
-                  {isError && (
-                    <span className="text-xs font-semibold text-destructive">ERROR</span>
-                  )}
-                </div>
-                <div className="text-sm whitespace-pre-wrap break-words">
-                      {msg.contents.map((content) => content.content).join('\n')}
-                </div>
-              </div>
-            </div>
-          );
+          return <AiMessageComponment key={index} message={msg} />;
         })}
 
         {/* Session Info */}
@@ -418,9 +384,10 @@ export default function ClaudeCodePage() {
           <div className="flex justify-center">
             <div className="px-4 py-2 rounded-full bg-muted text-xs text-muted-foreground">
               Session completed • {sessionInfo.numTurns} turns
-              {sessionInfo.totalCostUsd !== undefined && sessionInfo.totalCostUsd !== null && (
-                <> • ${sessionInfo.totalCostUsd.toFixed(4)} USD</>
-              )}
+              {sessionInfo.totalCostUsd !== undefined &&
+                sessionInfo.totalCostUsd !== null && (
+                  <> • ${sessionInfo.totalCostUsd.toFixed(4)} USD</>
+                )}
             </div>
           </div>
         )}
@@ -431,6 +398,49 @@ export default function ClaudeCodePage() {
       {/* Input Area - Fixed at Bottom */}
       <div className="border-t bg-background p-4">
         <div className="flex gap-2 items-end">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button disabled={!initContent} variant="outline">
+                <Columns3Cog />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-120">
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <h4 className="leading-none font-medium">Claude Code Info</h4>
+                  <p className="text-muted-foreground text-sm">
+                    Claude Code meta info
+                  </p>
+                </div>
+                {!initContent ? (
+                  <p className="text-muted-foreground text-sm">
+                    not interactive
+                  </p>
+                ) : (
+                  <div className="grid max-h-80 overflow-auto">
+                    <div className="grid grid-cols-3 items-center py-2 border-b">
+                      <Label>claudeCodeVersion</Label>
+                      <div className="col-span-2">
+                        {initContent?.claudeCodeVersion ?? "-"}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 items-center py-2 border-b">
+                      <Label>permissionMode</Label>
+                      <div className="col-span-2">
+                        {initContent?.permissionMode ?? "-"}
+                      </div>
+                    </div>
+                    {createArr("tools", initContent?.tools)}
+                    {createArr("slashCommands", initContent?.slashCommands)}
+                    {createArr("agents", initContent?.agents)}
+                    {createArr("plugins", initContent?.plugins)}
+                    {createArr("mcpServers", initContent?.mcpServers)}
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

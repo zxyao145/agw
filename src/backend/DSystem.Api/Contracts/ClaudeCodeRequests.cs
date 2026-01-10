@@ -41,5 +41,5 @@ public record ClaudeCodeExecuteRequest
     /// <summary>
     /// SessionId
     /// </summary>
-    public string? SessionId { get; init; }
+    public string ThreadId { get; init; } = "";
 }

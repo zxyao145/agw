@@ -1,30 +1,14 @@
-using ClaudeCodeSdk;
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
 using DSystem.Domain.Models;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
-using System.Net.Mail;
 using System.Runtime.CompilerServices;
-using System.Xml.Linq;
-using static System.Net.Mime.MediaTypeNames;
+using System.Text.Json;
 
 namespace DSystem.ExternalAgents;
-
-/// <summary>
-/// Message from ClaudeCode execution for SSE streaming.
-/// </summary>
-public record ClaudeCodeMessage
-{
-    public string Type { get; init; } = string.Empty;
-    public string Content { get; set; } = string.Empty;
-    public string? Model { get; init; }
-    public int? NumTurns { get; init; }
-    public double? TotalCostUsd { get; init; }
-    public bool IsError { get; init; }
-    public string? ErrorMessage { get; init; }
-}
 
 /// <summary>
 /// Service for executing ClaudeCode queries with streaming support.
@@ -32,10 +16,12 @@ public record ClaudeCodeMessage
 public class ClaudeCodeService
 {
     private readonly ILogger<ClaudeCodeService> _logger;
+    private readonly HybridCache _cache;
 
-    public ClaudeCodeService(ILogger<ClaudeCodeService> logger)
+    public ClaudeCodeService(ILogger<ClaudeCodeService> logger, HybridCache cache)
     {
         _logger = logger;
+        _cache = cache;
     }
 
     /// <summary>
@@ -50,21 +36,22 @@ public class ClaudeCodeService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Async enumerable of ClaudeCodeMessage</returns>
     public async IAsyncEnumerable<AiMessage2> ExecuteStreamingAsync(
+        string threadId,
         string prompt,
         string? workingDirectory = null,
         string? apiKey = null,
         string? baseUrl = null,
         string? systemPrompt = null,
         int? maxTurns = null,
-        string? sessionId = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var options = new ClaudeCodeOptions
+        ArgumentException.ThrowIfNullOrWhiteSpace(threadId, nameof(threadId));
+
+        var options = new ClaudeCodeAIAgentOptions
         {
             WorkingDirectory = workingDirectory,
             SystemPrompt = systemPrompt,
             MaxTurns = maxTurns,
-            Resume = sessionId
         };
         options.EnvironmentVariables = new Dictionary<string, string?>()
         {
@@ -84,16 +71,39 @@ public class ClaudeCodeService
 
 
         var aiAgent = new ClaudeCodeAIAgent(options, _logger);
-        var agentRunResponseUpdate = aiAgent.RunStreamingAsync(prompt, cancellationToken: cancellationToken);
+
+        AgentThread agentThread;
+        var value = await _cache.GetOrCreateAsync<string>(threadId, (c) =>
+        {
+            return ValueTask.FromResult("");
+        });
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            agentThread = aiAgent.GetNewThread();
+        }
+        else
+        {
+            var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
+            agentThread = aiAgent.DeserializeThread(serializedThread);
+        }
+
+
+        var agentRunResponseUpdate = aiAgent
+            .RunStreamingAsync(prompt, agentThread, cancellationToken: cancellationToken);
+
         await foreach (var message in agentRunResponseUpdate)
         {
             // Convert SDK message to our DTO
-            var claudeMessage = ConvertMessage(message);
-            if (claudeMessage != null)
+            var aiMessage = ConvertClaudeMessage(message);
+            if (aiMessage != null)
             {
-                yield return claudeMessage;
+                yield return aiMessage;
             }
         }
+
+        // Save thread state to cache after execution
+        var serialized = JsonSerializer.Serialize(agentThread.Serialize());
+        await _cache.SetAsync(threadId, serialized, cancellationToken: cancellationToken);
 
         //await using var client = new ClaudeSdkClient(options, _logger);
         //await client.ConnectAsync();
@@ -125,17 +135,19 @@ public class ClaudeCodeService
     /// <summary>
     /// Convert AgentRunResponseUpdate to ClaudeCodeMessage DTO.
     /// </summary>
-    private AiMessage2 ConvertMessage(AgentRunResponseUpdate msg)
+    private AiMessage2 ConvertClaudeMessage(AgentRunResponseUpdate update)
     {
-        var role = msg.Role;
+        var role = update.Role;
         var roleStr = role.HasValue ? role.Value.Value : "";
-        var contents = msg.Contents;
+        var contents = update.Contents;
+        var additionalProperties = update.AdditionalProperties;
+
         var aiMsgContents = contents.Select(content =>
         {
-            AiMessageContent? ac = null;
+            AiMessageContent? aiMsgContent = null;
             if (content is TextContent textContent)
             {
-                ac = new AiMessageContent(content.GetType().Name, textContent.Text);
+                aiMsgContent = new AiMessageContent(content.GetType().Name, textContent.Text, content.AdditionalProperties);
             }
             else if (content is FunctionCallContent call)
             {
@@ -143,8 +155,8 @@ public class ClaudeCodeService
                 //    ? (call.Name + "(" + string.Join(", ", call.Arguments) + ")")
                 //    : (call.Name + "()");
 
-                var t = $"[Tool: {call.Name}]";
-                ac = new AiMessageContent(content.GetType().Name, t);
+                var t = call.Name;
+                aiMsgContent = new AiMessageContent(content.GetType().Name, t, content.AdditionalProperties);
             }
             else if (content is FunctionResultContent callResult)
             {
@@ -153,21 +165,35 @@ public class ClaudeCodeService
                 //        + "(\"" + callResult.Exception.Message + "\")")
                 //    : ((callResult.Result?.ToString() ?? "(null)") ?? "");
 
-                var t = $"[Tool Result: {callResult.Result}]";
-                ac = new AiMessageContent(content.GetType().Name, t);
+                var t = $"{callResult.Result}";
+                aiMsgContent = new AiMessageContent(content.GetType().Name, t, content.AdditionalProperties);
             }
-
-            return ac;
+            else if (content is TextReasoningContent thinkingContent)
+            {
+                var t = thinkingContent.Text;
+                aiMsgContent = new AiMessageContent(content.GetType().Name, t, content.AdditionalProperties);
+            }
+            else if(content is ErrorContent error)
+            {
+                aiMsgContent = new AiMessageContent(content.GetType().Name, error.Message, content.AdditionalProperties);
+            }
+            else if (content is UsageContent usageContent)
+            {
+                aiMsgContent = new AiMessageContent(content.GetType().Name, usageContent.Details, content.AdditionalProperties);
+            }
+            return aiMsgContent;
         })
             .Where(x => x != null)
             .Select(x => x!)
             .ToList();
+
         var aiMessage = new AiMessage2
             (
-                msg.MessageId ?? "",
-                msg.AuthorName,
+                update.MessageId ?? "",
+                update.AuthorName,
                 roleStr,
-                aiMsgContents
+                aiMsgContents,
+                additionalProperties
             );
 
         return aiMessage;
