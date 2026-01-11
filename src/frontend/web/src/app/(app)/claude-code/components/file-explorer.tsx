@@ -14,14 +14,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface FileItem {
-  name: string;
-  path: string;
-  type: "file" | "directory";
-  size?: number;
-  modifiedTime?: string;
-}
+import { listFiles, readFile, type FileItem } from "@/api/files";
 
 interface FileExplorerProps {
   rootDirectory: string;
@@ -88,15 +81,7 @@ function FileTreeNode({ item, onFileSelect, level }: FileTreeNodeProps) {
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/files/list?path=${encodeURIComponent(item.path)}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to load directory: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const data = await listFiles(item.path);
       setChildren(data.items || []);
     } catch (err) {
       console.error("Error loading directory:", err);
@@ -196,6 +181,10 @@ export function FileExplorer({
   const [rootItems, setRootItems] = React.useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
+  const [fileContent, setFileContent] = React.useState<string>("");
+  const [isLoadingContent, setIsLoadingContent] = React.useState(false);
+  const [contentError, setContentError] = React.useState<string | null>(null);
 
   const loadRootDirectory = React.useCallback(async () => {
     if (!rootDirectory || !rootDirectory.trim()) {
@@ -208,18 +197,7 @@ export function FileExplorer({
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/files/list?path=${encodeURIComponent(rootDirectory)}`
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `Failed to load directory: ${response.statusText}`
-        );
-      }
-
-      const data = await response.json();
+      const data = await listFiles(rootDirectory);
       setRootItems(data.items || []);
     } catch (err) {
       console.error("Error loading root directory:", err);
@@ -233,6 +211,31 @@ export function FileExplorer({
   React.useEffect(() => {
     loadRootDirectory();
   }, [loadRootDirectory]);
+
+  const loadFileContent = React.useCallback(async (filePath: string) => {
+    setIsLoadingContent(true);
+    setContentError(null);
+
+    try {
+      const content = await readFile(filePath);
+      setFileContent(content);
+      setSelectedFile(filePath);
+    } catch (err) {
+      console.error("Error reading file:", err);
+      setContentError((err as Error).message);
+      setFileContent("");
+    } finally {
+      setIsLoadingContent(false);
+    }
+  }, []);
+
+  const handleFileSelect = React.useCallback(
+    (path: string) => {
+      loadFileContent(path);
+      onFileSelect?.(path);
+    },
+    [loadFileContent, onFileSelect]
+  );
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -274,7 +277,7 @@ export function FileExplorer({
                     <FileTreeNode
                       key={item.path}
                       item={item}
-                      onFileSelect={onFileSelect}
+                      onFileSelect={handleFileSelect}
                       level={0}
                     />
                   ))}
@@ -284,7 +287,48 @@ export function FileExplorer({
           </div>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">// files</div>
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {!selectedFile ? (
+          <div className="flex items-center justify-center h-full text-muted-foreground">
+            <div className="text-center">
+              <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p className="text-sm">Select a file to view its contents</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col h-full">
+            <div className="border-b px-4 py-2 bg-muted/30">
+              <div className="flex items-center gap-2">
+                <File className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium truncate">
+                  {selectedFile.split("/").pop()}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                {selectedFile}
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-auto">
+              {isLoadingContent ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : contentError ? (
+                <div className="p-4">
+                  <div className="text-sm text-destructive p-3 bg-destructive/10 rounded">
+                    Error loading file: {contentError}
+                  </div>
+                </div>
+              ) : (
+                <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words">
+                  <code>{fileContent}</code>
+                </pre>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
