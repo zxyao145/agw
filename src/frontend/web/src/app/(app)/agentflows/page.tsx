@@ -233,7 +233,7 @@ export default function AgentflowsPage() {
                     ...updated[existingIndex],
                     content: updated[existingIndex].content + message.content,
                   };
-                  console.log('Updated message:', prev?.threadId , updated[existingIndex]);
+                  console.debug('Updated message:', prev?.threadId , updated[existingIndex]);
                   return { threadId: prev?.threadId || '', messages: updated };
                 } else {
                   // New message

@@ -194,7 +194,6 @@ export default function AgentsPage() {
         Ulid.generate().toCanonical()
   );
 
-  // console.log('New executeThreadId:', Ulid.generate().toCanonical(), Ulid.generate().toCanonical());
   const [executeResult, setExecuteResult] =
     React.useState<AgentExecuteResponse | null>(null);
 
@@ -289,7 +288,7 @@ export default function AgentsPage() {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n\n');
-        console.log('Received lines:', lines);
+        console.debug('Received lines:', lines);
         // Keep the last incomplete line in buffer
         buffer = lines.pop() || '';
 
@@ -314,7 +313,7 @@ export default function AgentsPage() {
                     ...updated[existingIndex],
                     content: updated[existingIndex].content + message.content,
                   };
-                  console.log('Updated message:', prev?.threadId , updated[existingIndex]);
+                  console.debug('Updated message:', prev?.threadId , updated[existingIndex]);
                   return { threadId: prev?.threadId || '', messages: updated };
                 } else {
                   // New message

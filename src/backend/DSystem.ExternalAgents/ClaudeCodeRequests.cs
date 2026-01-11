@@ -1,4 +1,6 @@
-namespace DSystem.Api.Contracts;
+using ClaudeCodeSdk.Types;
+
+namespace DSystem.ExternalAgents;
 
 /// <summary>
 /// Request for executing ClaudeCode query.
@@ -26,7 +28,7 @@ public record ClaudeCodeExecuteRequest
     /// Anthropic base URL (optional).
     /// If not specified, uses default API URL.
     /// </summary>
-    public string? BaseUrl { get; init; }
+    public string? ApiBaseUrl { get; init; }
 
     /// <summary>
     /// System prompt for ClaudeCode (optional).
@@ -42,4 +44,6 @@ public record ClaudeCodeExecuteRequest
     /// SessionId
     /// </summary>
     public string ThreadId { get; init; } = "";
+
+    public string? PermissionMode { get; init; }
 }

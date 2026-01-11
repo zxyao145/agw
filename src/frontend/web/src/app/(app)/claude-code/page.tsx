@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Settings, Send, ChevronDown, Columns3Cog } from "lucide-react";
+import { Send, Columns3Cog } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -11,43 +11,29 @@ import {
 import { Badge } from "@/components/ui/badge"
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { AiMessage, InitMessageContent, MessageContentType } from "./types";
+import { AiMessage, ClaudeCodeMessageType, InitMessageContent, MessageContentType, PermissionMode } from "./types";
 import { Ulid } from "id128";
-import { AiMessageComponment } from "./message";
+import { AiMessageComponment } from "./components/message";
+import { SettingsDialog } from "./components/settings-dialog";
 
 export default function ClaudeCodePage() {
   const [input, setInput] = React.useState("");
   const [workingDirectory, setWorkingDirectory] = React.useState("");
   const [apiKey, setApiKey] = React.useState("");
+  const [apiBaseUrl, setApiBaseUrl] = React.useState("");
+  const [permissionMode, setPermissionMode] = React.useState<string>(PermissionMode.default);
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [threadId, setThreadId] = React.useState<string | null>(null);
+
   const [sessionInfo, setSessionInfo] = React.useState<{
     numTurns?: number;
     totalCostUsd?: number;
   } | null>(null);
   const [initContent, setInitContent] =
     React.useState<InitMessageContent | null>(null);
-
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const wsRef = React.useRef<WebSocket | null>(null);
@@ -61,8 +47,12 @@ export default function ClaudeCodePage() {
   React.useEffect(() => {
     const savedWorkingDir = localStorage.getItem("claudecode_workingDir");
     const savedApiKey = localStorage.getItem("claudecode_apiKey");
+    const savedApiBaseUrl = localStorage.getItem("claudecode_apiBaseUrl");
+    const savedPermissionMode = localStorage.getItem("claudecode_permissionMode");
     if (savedWorkingDir) setWorkingDirectory(savedWorkingDir);
     if (savedApiKey) setApiKey(savedApiKey);
+    if (savedApiBaseUrl) setApiBaseUrl(savedApiBaseUrl);
+    if (savedPermissionMode) setPermissionMode(savedPermissionMode);
   }, []);
 
   // Cleanup WebSocket on unmount
@@ -74,13 +64,6 @@ export default function ClaudeCodePage() {
     };
   }, []);
 
-  const saveSettings = () => {
-    localStorage.setItem("claudecode_workingDir", workingDirectory);
-    localStorage.setItem("claudecode_apiKey", apiKey);
-    setSettingsOpen(false);
-    toast.success("Settings saved");
-  };
-
   const setupWebSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/api/external-agents/claude-code/ws`;
@@ -89,13 +72,13 @@ export default function ClaudeCodePage() {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log("WebSocket connected");
+      console.debug("WebSocket connected");
     };
 
     ws.onmessage = (event) => {
       try {
         const data: AiMessage = JSON.parse(event.data);
-        console.log("onmessage", data);
+        console.debug("onmessage", data);
         if (data.role === "system") {
           if (
             data.additionalProperties!.type === "system" &&
@@ -103,23 +86,28 @@ export default function ClaudeCodePage() {
           ) {
             const content = JSON.parse(data.contents[0].content);
             const initContent: InitMessageContent = {
+              claudeCodeVersion: content.claude_code_version,
+              permissionMode: content.permissionMode,
+              model: content.model,
+
               tools: content.tools,
               slashCommands: content.slash_commands,
               agents: content.agents,
               skills: content.skills,
               plugins: content.plugins,
               mcpServers: content.mcp_servers,
-              claudeCodeVersion: content.claude_code_version,
-              permissionMode: content.permissionMode,
             };
 
             setInitContent(initContent);
           } else if (data.additionalProperties!.type === "result") {
             setIsExecuting(false);
+            setMessages((prev) => [...prev, data]);
           } else {
             setMessages((prev) => [...prev, data]);
           }
         } else if (data.role === "assistant") {
+          setMessages((prev) => [...prev, data]);
+        } else if (data.role === "user") {
           setMessages((prev) => [...prev, data]);
         }
       } catch (e) {
@@ -134,7 +122,7 @@ export default function ClaudeCodePage() {
     };
 
     ws.onclose = (event) => {
-      console.log("WebSocket closed:", event.code, event.reason);
+      console.debug("WebSocket closed:", event.code, event.reason);
       wsRef.current = null;
       setIsExecuting(false);
 
@@ -216,7 +204,7 @@ export default function ClaudeCodePage() {
           role: "user",
           contents: [
             {
-              type: "TextContent",
+              type: MessageContentType.TextContent,
               content: input,
             },
           ],
@@ -236,9 +224,11 @@ export default function ClaudeCodePage() {
           input: input,
           workingDirectory: workingDirectory.trim() || null,
           apiKey: apiKey.trim() || null,
+          apiBaseUrl: apiBaseUrl.trim() || null,
           systemPrompt: null,
           maxTurns: null,
           threadId: tid,
+          permissionMode: permissionMode,
         };
 
         ws.send(JSON.stringify(request));
@@ -271,7 +261,6 @@ export default function ClaudeCodePage() {
   };
 
   const createArr = (key: string, value: string[]) => {
-    console.info(key, value);
     return (
       <div className="grid grid-cols-3 items-center py-2 border-b">
         <Label>{key}</Label>
@@ -296,69 +285,16 @@ export default function ClaudeCodePage() {
         </div>
 
         <div className="flex gap-2">
-          <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Settings className="w-4 h-4 mr-2" />
-                Settings
-              </Button>
-            </DialogTrigger>
-
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>ClaudeCode Settings</DialogTitle>
-                <DialogDescription>
-                  Configure working directory and API key
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="settings-workingDir">
-                    Working Directory (Optional)
-                  </Label>
-                  <Input
-                    id="settings-workingDir"
-                    value={workingDirectory}
-                    onChange={(e) => setWorkingDirectory(e.target.value)}
-                    placeholder="e.g., /path/to/project"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Directory where ClaudeCode will execute. Leave empty for
-                    current directory.
-                  </p>
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="settings-apiKey">
-                    Anthropic API Key (Optional)
-                  </Label>
-                  <Input
-                    id="settings-apiKey"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-ant-..."
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Leave empty to use ANTHROPIC_AUTH_TOKEN environment
-                    variable.
-                  </p>
-                </div>
-              </div>
-
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="outline">
-                    Cancel
-                  </Button>
-                </DialogClose>
-                <Button type="button" onClick={saveSettings}>
-                  Save Settings
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <SettingsDialog
+            workingDirectory={workingDirectory}
+            setWorkingDirectory={setWorkingDirectory}
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            apiBaseUrl={apiBaseUrl}
+            setApiBaseUrl={setApiBaseUrl}
+            permissionMode={permissionMode}
+            setPermissionMode={setPermissionMode}
+          />
         </div>
       </div>
 
@@ -428,6 +364,12 @@ export default function ClaudeCodePage() {
                       <Label>permissionMode</Label>
                       <div className="col-span-2">
                         {initContent?.permissionMode ?? "-"}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 items-center py-2 border-b">
+                      <Label>model</Label>
+                      <div className="col-span-2">
+                        {initContent?.model ?? "-"}
                       </div>
                     </div>
                     {createArr("tools", initContent?.tools)}

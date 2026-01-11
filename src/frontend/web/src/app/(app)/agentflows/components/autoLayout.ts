@@ -30,7 +30,7 @@ export const createGraphLayout = async (
 
   orginNodes.forEach((el) => {
     if (isNode(el)) {
-      console.log("isNode", el);
+      console.debug("isNode", el);
       nodes.push({
         id: el.id,
         width: el.width ?? DEFAULT_WIDTH,

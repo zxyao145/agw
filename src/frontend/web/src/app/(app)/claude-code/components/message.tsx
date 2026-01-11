@@ -5,10 +5,19 @@ import {
   AiMessageContent,
   MessageContentType,
   MessageContentTypes,
-} from "./types";
+} from "../types";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
-  const isUser = message.role === "user";
+  const isUser = message.role === "user"
+    &&  message.author === "user"
+    && !message.additionalProperties;
+  const isResult = message.role === "system"
+    && message.additionalProperties!.type === "result";
+
   const errStyle = "bg-destructive/10 border border-destructive/20 mr-12";
 
   const pasrseContents = (contents: AiMessageContent[]) => {
@@ -27,7 +36,9 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
         case MessageContentType.TextReasoningContent:
           node = (
             <div className="text-sm whitespace-pre-wrap wrap-break-word">
-              {curNode as string}
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {curNode as string}
+              </ReactMarkdown>
             </div>
           );
           break;
@@ -40,8 +51,11 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
           break;
         case MessageContentType.UsageContent:
           node = (
-            <div className="text-sm whitespace-pre-wrap wrap-break-word">
-              {curNode as string}
+            <div className="text-sm whitespace-pre-wrap wrap-break-word w-full relative">
+              <div className="w-full flex justify-center relative z-1">
+                <Badge>{curNode as string}</Badge>
+              </div>
+              <Separator className="w-full relative top-[-50%] z-0" />
             </div>
           );
           break;
@@ -85,19 +99,22 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
         case MessageContentType.DataContent:
         case MessageContentType.ErrorContent:
         case MessageContentType.FunctionCallContent:
-          break;
         case MessageContentType.FunctionResultContent:
-          break;
         case MessageContentType.TextContent:
-          break;
         case MessageContentType.TextReasoningContent:
-          curNode += content;
+          if(content.startsWith("<local-command-stdout>")){
+            curNode += content.replace("<local-command-stdout>", "")
+            .replace("</local-command-stdout>", "");
+          }else{
+            curNode += content;
+          }
           break;
         case MessageContentType.UriContent:
-          curNode += content;
+          curNode = content;
           break;
         case MessageContentType.UsageContent:
-          curNode = "";
+          const contentAny = content as any;
+          curNode = `inputToken: ${contentAny.inputTokenCount}, outputToken: ${contentAny.outputTokenCount}`;
           break;
       }
     };
@@ -113,20 +130,26 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
       buildCurNode(content);
       lastType = type;
     }
-    return (
-      <div className="text-sm whitespace-pre-wrap wrap-break-word">
-        not support content type
-      </div>
-    );
+    appendNodes();
+    return nodes;
   };
 
+
+  if (isResult) {
+    return (
+      <div className={`flex justify-center`}>
+         {...pasrseContents(message.contents)}
+      </div>
+    );
+  }
+ 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
         className={`max-w-[80%] rounded-lg px-4 py-3 ${
           isUser
             ? "bg-primary text-primary-foreground ml-12"
-            : "bg-secondary mr-12"
+            :  "bg-secondary mr-12"
         }`}
       >
         <div className="flex items-center gap-2 mb-1">
@@ -135,7 +158,7 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
           </span>
         </div>
         <div className="text-sm whitespace-pre-wrap wrap-break-word">
-          {message.contents.map((content) => content.content).join("\n")}
+          {...pasrseContents(message.contents)}
         </div>
       </div>
     </div>

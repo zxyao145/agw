@@ -42,7 +42,7 @@ export default function ClaudeCodeWebSocketPage() {
     ws.onopen = () => {
       setIsConnected(true);
       setConnectionStatus("Connected");
-      console.log("WebSocket connected");
+      console.debug("WebSocket connected");
     };
 
     ws.onmessage = (event) => {
@@ -76,7 +76,7 @@ export default function ClaudeCodeWebSocketPage() {
       setIsConnected(false);
       setIsExecuting(false);
       setConnectionStatus(`Disconnected (${event.code})`);
-      console.log("WebSocket closed:", event.code, event.reason);
+      console.debug("WebSocket closed:", event.code, event.reason);
     };
 
     wsRef.current = ws;

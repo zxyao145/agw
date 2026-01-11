@@ -1,4 +1,3 @@
-using DSystem.Api.Contracts;
 using DSystem.ExternalAgents;
 using DSystem.Infrastructure;
 using Microsoft.AspNetCore.Http;
@@ -81,13 +80,7 @@ public class ClaudeCodeController : ControllerBase
                 try
                 {
                     await foreach (var message in _claudeCodeService.ExecuteStreamingAsync(
-                        threadId: request.ThreadId,
-                        prompt: request.Input,
-                        workingDirectory: request.WorkingDirectory,
-                        apiKey: request.ApiKey,
-                        baseUrl: request.BaseUrl,
-                        systemPrompt: request.SystemPrompt,
-                        maxTurns: request.MaxTurns,
+                        request,
                         cancellationToken: HttpContext.RequestAborted
                         ))
                     {
