@@ -145,7 +145,9 @@ function FileTreeNode({ item, onFileSelect, level }: FileTreeNodeProps) {
         {item.type === "directory" ? (
           <FolderIcon className="h-4 w-4 flex-shrink-0 text-blue-500" />
         ) : (
-          FileIcon && <FileIcon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+          FileIcon && (
+            <FileIcon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+          )
         )}
 
         <span className="text-sm truncate flex-1">{item.name}</span>
@@ -156,7 +158,9 @@ function FileTreeNode({ item, onFileSelect, level }: FileTreeNodeProps) {
           </span>
         )}
 
-        {isLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+        {isLoading && (
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+        )}
       </div>
 
       {error && (
@@ -210,7 +214,9 @@ export function FileExplorer({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to load directory: ${response.statusText}`);
+        throw new Error(
+          errorData.error || `Failed to load directory: ${response.statusText}`
+        );
       }
 
       const data = await response.json();
@@ -229,49 +235,56 @@ export function FileExplorer({
   }, [loadRootDirectory]);
 
   return (
-    <div className={cn("border rounded-lg flex flex-col", className)}>
-      <div className="border-b px-3 py-2 bg-muted/50">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">File Explorer</h3>
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+    <div className="flex-1 flex overflow-hidden">
+      <div className="w-80 border-r shrink-0">
+        <div className={cn("border rounded-lg flex flex-col", className)}>
+          <div className="border-b px-3 py-2 bg-muted/50">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium">File Explorer</h3>
+              {isLoading && (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            {rootDirectory && (
+              <p className="text-xs text-muted-foreground truncate mt-1">
+                {rootDirectory}
+              </p>
+            )}
+          </div>
+
+          <div className="flex-1 h-100 overflow-auto">
+            <div className="p-2">
+              {error && (
+                <div className="text-sm text-destructive p-2 bg-destructive/10 rounded">
+                  {error}
+                </div>
+              )}
+
+              {!error && !isLoading && rootItems.length === 0 && (
+                <div className="text-sm text-muted-foreground p-2 text-center">
+                  {rootDirectory
+                    ? "Directory is empty or cannot be accessed"
+                    : "Set a working directory in settings to browse files"}
+                </div>
+              )}
+
+              {!error && rootItems.length > 0 && (
+                <div>
+                  {rootItems.map((item) => (
+                    <FileTreeNode
+                      key={item.path}
+                      item={item}
+                      onFileSelect={onFileSelect}
+                      level={0}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        {rootDirectory && (
-          <p className="text-xs text-muted-foreground truncate mt-1">
-            {rootDirectory}
-          </p>
-        )}
       </div>
-
-      <div className="flex-1 h-[400px] overflow-auto">
-        <div className="p-2">
-          {error && (
-            <div className="text-sm text-destructive p-2 bg-destructive/10 rounded">
-              {error}
-            </div>
-          )}
-
-          {!error && !isLoading && rootItems.length === 0 && (
-            <div className="text-sm text-muted-foreground p-2 text-center">
-              {rootDirectory
-                ? "Directory is empty or cannot be accessed"
-                : "Set a working directory in settings to browse files"}
-            </div>
-          )}
-
-          {!error && rootItems.length > 0 && (
-            <div>
-              {rootItems.map((item) => (
-                <FileTreeNode
-                  key={item.path}
-                  item={item}
-                  onFileSelect={onFileSelect}
-                  level={0}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">// files</div>
     </div>
   );
 }

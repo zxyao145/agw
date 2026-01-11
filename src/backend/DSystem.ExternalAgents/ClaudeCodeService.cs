@@ -151,7 +151,7 @@ public class ClaudeCodeService
         var role = update.Role;
         var roleStr = role.HasValue ? role.Value.Value : "";
         var contents = update.Contents;
-        var additionalProperties = update.AdditionalProperties;
+
 
         var aiMsgContents = contents.Select(content =>
         {
@@ -173,7 +173,7 @@ public class ClaudeCodeService
                     ? ""
                     : JsonUtil.Serialize(callResult.Result);
                 contentAadditionalProperties.Add("callId", callResult.CallId); 
-                aiMsgContent = new AiMessageContent(content.GetType().Name, callResultContent, additionalProperties);
+                aiMsgContent = new AiMessageContent(content.GetType().Name, callResultContent, contentAadditionalProperties);
             }
             else if (content is TextReasoningContent thinkingContent)
             {
@@ -200,7 +200,7 @@ public class ClaudeCodeService
                 update.AuthorName,
                 roleStr,
                 aiMsgContents,
-                additionalProperties
+                update.AdditionalProperties
             );
 
         return aiMessage;
