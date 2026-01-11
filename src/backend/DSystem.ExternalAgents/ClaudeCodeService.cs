@@ -1,6 +1,7 @@
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
 using DSystem.Domain.Models;
+using DSystem.Infrastructure;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -154,6 +155,8 @@ public class ClaudeCodeService
 
         var aiMsgContents = contents.Select(content =>
         {
+            var contentAadditionalProperties = content.AdditionalProperties ?? new AdditionalPropertiesDictionary();
+
             AiMessageContent? aiMsgContent = null;
             if (content is TextContent textContent)
             {
@@ -161,22 +164,16 @@ public class ClaudeCodeService
             }
             else if (content is FunctionCallContent call)
             {
-                //var t = (call.Arguments != null)
-                //    ? (call.Name + "(" + string.Join(", ", call.Arguments) + ")")
-                //    : (call.Name + "()");
-
-                var t = call.Name;
-                aiMsgContent = new AiMessageContent(content.GetType().Name, t, content.AdditionalProperties);
+                contentAadditionalProperties.Add("callId", call.CallId);
+                aiMsgContent = new AiMessageContent(content.GetType().Name, call.Name, contentAadditionalProperties);
             }
             else if (content is FunctionResultContent callResult)
             {
-                //var t = callResult.Exception != null
-                //    ? (callResult.Exception.GetType().Name
-                //        + "(\"" + callResult.Exception.Message + "\")")
-                //    : ((callResult.Result?.ToString() ?? "(null)") ?? "");
-
-                var t = $"{callResult.Result}";
-                aiMsgContent = new AiMessageContent(content.GetType().Name, t, content.AdditionalProperties);
+                var callResultContent = callResult.Result == null
+                    ? ""
+                    : JsonUtil.Serialize(callResult.Result);
+                contentAadditionalProperties.Add("callId", callResult.CallId); 
+                aiMsgContent = new AiMessageContent(content.GetType().Name, callResultContent, additionalProperties);
             }
             else if (content is TextReasoningContent thinkingContent)
             {

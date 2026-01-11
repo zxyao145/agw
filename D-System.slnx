@@ -17,6 +17,7 @@
     <Project Path="src/backend/DSystem.Host/DSystem.Host.csproj" />
   </Folder>
   <Folder Name="/解决方案项/">
+    <File Path="CLAUDE.md" />
     <File Path="src/backend/Directory.Build.props" />
     <File Path="src/backend/Directory.Packages.props" />
   </Folder>

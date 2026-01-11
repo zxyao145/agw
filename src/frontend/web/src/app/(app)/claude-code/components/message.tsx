@@ -20,7 +20,8 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
 
   const errStyle = "bg-destructive/10 border border-destructive/20 mr-12";
 
-  const pasrseContents = (contents: AiMessageContent[]) => {
+  const pasrseContents = (massage : AiMessage) => {
+    const { contents } = massage
     const nodes: React.ReactNode[] = [];
     let curNode: unknown;
     let lastType: string = "";
@@ -53,7 +54,12 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
           node = (
             <div className="text-sm whitespace-pre-wrap wrap-break-word w-full relative">
               <div className="w-full flex justify-center relative z-1">
-                <Badge>{curNode as string}</Badge>
+                <Badge
+                  variant="secondary"
+                  className="bg-blue-500 text-white dark:bg-blue-600"
+                >
+                  {curNode as string}
+                </Badge>
               </div>
               <Separator className="w-full relative top-[-50%] z-0" />
             </div>
@@ -114,7 +120,11 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
           break;
         case MessageContentType.UsageContent:
           const contentAny = content as any;
-          curNode = `inputToken: ${contentAny.inputTokenCount}, outputToken: ${contentAny.outputTokenCount}`;
+          curNode = `inputToken: ${contentAny.inputTokenCount} • outputToken: ${contentAny.outputTokenCount}`;
+          const usd = message?.additionalProperties?.totalCostUsd;
+          if(usd !== undefined){
+            curNode += ` • totalCost: ${usd} (USD)`;
+          }
           break;
       }
     };
@@ -138,7 +148,7 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
   if (isResult) {
     return (
       <div className={`flex justify-center`}>
-         {...pasrseContents(message.contents)}
+         {...pasrseContents(message)} 
       </div>
     );
   }
@@ -154,11 +164,11 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
       >
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-semibold opacity-70">
-            {isUser ? "You" : message.author || message.role}
+            {isUser ? "You" : message.role || message.author }
           </span>
         </div>
         <div className="text-sm whitespace-pre-wrap wrap-break-word">
-          {...pasrseContents(message.contents)}
+          {...pasrseContents(message)}
         </div>
       </div>
     </div>

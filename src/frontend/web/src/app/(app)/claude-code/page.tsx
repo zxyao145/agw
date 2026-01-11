@@ -13,6 +13,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { AiMessage, ClaudeCodeMessageType, InitMessageContent, MessageContentType, PermissionMode } from "./types";
 import { Ulid } from "id128";
 import { AiMessageComponment } from "./components/message";
@@ -28,10 +34,6 @@ export default function ClaudeCodePage() {
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [threadId, setThreadId] = React.useState<string | null>(null);
 
-  const [sessionInfo, setSessionInfo] = React.useState<{
-    numTurns?: number;
-    totalCostUsd?: number;
-  } | null>(null);
   const [initContent, setInitContent] =
     React.useState<InitMessageContent | null>(null);
 
@@ -244,7 +246,6 @@ export default function ClaudeCodePage() {
 
   const handleClearSession = () => {
     setMessages([]);
-    setSessionInfo(null);
     setThreadId(null);
     // Close WebSocket to start fresh session on next message
     if (wsRef.current) {
@@ -271,6 +272,60 @@ export default function ClaudeCodePage() {
         </div>
       </div>
     );
+  };
+
+  // Process messages to identify FunctionCall + FunctionResult pairs
+  const processMessages = (msgs: AiMessage[]) => {
+    const items: Array<
+      | { type: "accordion"; messages: AiMessage[]; toolName: string }
+      | { type: "normal"; message: AiMessage }
+    > = [];
+    let i = 0;
+
+    while (i < msgs.length) {
+      const currentMsg = msgs[i];
+      const nextMsg = msgs[i + 1];
+
+      let shouldMerge = false;
+      if (currentMsg &&  currentMsg.contents && nextMsg && nextMsg.contents) {
+        const currentMsgCallId = currentMsg.contents[0].additionalProperties
+          ?.callId as string;
+        const nextMsgCallId = nextMsg.contents[0].additionalProperties
+          ?.callId as string;
+
+        shouldMerge =
+          currentMsg.contents.length === 1 &&
+          nextMsg.contents.length === 1 &&
+          !! currentMsgCallId &&
+          !! nextMsgCallId &&
+          currentMsgCallId === nextMsgCallId;
+        // currentMsg.contents[0].type === MessageContentType.FunctionCallContent &&
+        // nextMsg.contents[0].type === MessageContentType.FunctionResultContent;
+      }
+
+      
+      if (shouldMerge) {
+        // Extract tool name from "Tool use: toolName(...)"
+        const callContent = currentMsg.contents[0].content;
+        // const match = callContent.match(/Tool use:\s*(\w+)/);
+        const toolName =  callContent;
+
+        items.push({
+          type: "accordion",
+          messages: [currentMsg, nextMsg],
+          toolName,
+        });
+        i += 2; // Skip both messages
+      } else {
+        items.push({
+          type: "normal",
+          message: currentMsg,
+        });
+        i += 1;
+      }
+    }
+
+    return items;
   };
 
   return (
@@ -311,23 +366,33 @@ export default function ClaudeCodePage() {
           </div>
         )}
 
-        {messages.map((msg, index) => {
-          return <AiMessageComponment key={index} message={msg} />;
+        {processMessages(messages).map((item, index) => {
+          if (item.type === "accordion") {
+            return (
+              <Accordion key={index} type="single" collapsible className="w-full">
+                <AccordionItem value="item-1" className="border rounded-lg px-2 last:border-b">
+                  <AccordionTrigger>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {item.toolName}
+                      </Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-4">
+                      {item.messages.map((msg, msgIndex) => (
+                        <AiMessageComponment key={msgIndex} message={msg} />
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            );
+          } else {
+            return <AiMessageComponment key={index} message={item.message} />;
+          }
         })}
-
-        {/* Session Info */}
-        {sessionInfo && (
-          <div className="flex justify-center">
-            <div className="px-4 py-2 rounded-full bg-muted text-xs text-muted-foreground">
-              Session completed • {sessionInfo.numTurns} turns
-              {sessionInfo.totalCostUsd !== undefined &&
-                sessionInfo.totalCostUsd !== null && (
-                  <> • ${sessionInfo.totalCostUsd.toFixed(4)} USD</>
-                )}
-            </div>
-          </div>
-        )}
-
+        
         <div ref={messagesEndRef} />
       </div>
 
