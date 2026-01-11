@@ -84,9 +84,15 @@ export function AppSidebar( props: AppSidebarProps) {
     <>
       <Sidebar collapsible="icon" className="relative w-64 h-full">
         <SidebarHeader className="border-b border-slate-200">
-          <div className="flex justify-end">
-            <SidebarTrigger className="-ml-1" />
-          </div>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton className="flex-row-reverse justify-between">
+                <SidebarTrigger className="-ml-1" />
+                <span>DSystem Admin</span>
+              </SidebarMenuButton>
+             
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
           {props.menus.map((grpItem, index) => (
@@ -103,16 +109,17 @@ export function AppSidebar( props: AppSidebarProps) {
                     className="group/collapsible"
                   >
                     <SidebarMenuItem>
-                      {item.subMenuItems == null || item.subMenuItems.length === 0 ? (
+                      {item.subMenuItems == null ||
+                      item.subMenuItems.length === 0 ? (
                         <SidebarMenuButton
                           tooltip={item.title}
                           className={`${isActive(pathname, item.url) ? "font-bold" : ""}`}
                         >
-                        {item.icon}
-                        <Link href={item.url}>
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
+                          {item.icon}
+                          <Link href={item.url}>
+                            <span>{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
                       ) : (
                         <>
                           <CollapsibleTrigger asChild>

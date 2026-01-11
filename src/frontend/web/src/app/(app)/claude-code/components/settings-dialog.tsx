@@ -61,9 +61,8 @@ export function SettingsDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Settings className="w-4 h-4 mr-2" />
-          Settings
+        <Button variant="ghost" size="sm" className="cursor-pointer">
+          <Settings className="w-4 h-4" />
         </Button>
       </DialogTrigger>
 
@@ -95,7 +94,10 @@ export function SettingsDialog({
           <div className="grid gap-2">
             <Label htmlFor="settings-permissionMode">Permission Mode</Label>
             <Select value={permissionMode} onValueChange={setPermissionMode}>
-              <SelectTrigger id="settings-permissionMode" className="w-full py-6">
+              <SelectTrigger
+                id="settings-permissionMode"
+                className="w-full py-6"
+              >
                 <SelectValue placeholder="Select permission mode" />
               </SelectTrigger>
               <SelectContent>
@@ -127,7 +129,8 @@ export function SettingsDialog({
                   <div className="flex flex-col items-start">
                     <span className="font-medium">Bypass Permissions</span>
                     <span className="text-xs text-muted-foreground">
-                      Execute all actions without any confirmation (use with caution)
+                      Execute all actions without any confirmation (use with
+                      caution)
                     </span>
                   </div>
                 </SelectItem>

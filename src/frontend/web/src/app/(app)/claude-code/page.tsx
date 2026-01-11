@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Send, Columns3Cog } from "lucide-react";
+import { Send, Columns3Cog, PanelLeftClose, PanelLeft, Folder } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -23,6 +23,7 @@ import { AiMessage, ClaudeCodeMessageType, InitMessageContent, MessageContentTyp
 import { Ulid } from "id128";
 import { AiMessageComponment } from "./components/message";
 import { SettingsDialog } from "./components/settings-dialog";
+import { FileExplorer } from "./components/file-explorer";
 
 export default function ClaudeCodePage() {
   const [input, setInput] = React.useState("");
@@ -33,6 +34,7 @@ export default function ClaudeCodePage() {
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [threadId, setThreadId] = React.useState<string | null>(null);
+  const [showFileExplorer, setShowFileExplorer] = React.useState(true);
 
   const [initContent, setInitContent] =
     React.useState<InitMessageContent | null>(null);
@@ -329,17 +331,27 @@ export default function ClaudeCodePage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] w-full max-w-5xl mx-auto">
+    <div className="flex flex-col h-[calc(100vh-68px)] w-full max-w-8xl mx-auto mr-2">
       {/* Header with Settings Button */}
-      <div className="flex items-center justify-between p-4 border-b">
-        <div>
-          <h1 className="text-xl font-semibold">ClaudeCode Chat</h1>
-          <p className="text-sm text-muted-foreground">
-            Powered by WebSocket streaming
-          </p>
-        </div>
+      <div className="flex items-center justify-between border-b mb-2">
+        <div className="flex items-center">
+          <Button
+            variant="ghost"
+            className="cursor-pointer"
+            size="sm"
+            onClick={() => setShowFileExplorer(!showFileExplorer)}
+            title={
+              showFileExplorer ? "Hide file explorer" : "Show file explorer"
+            }
+          >
+            <Folder className="h-4 w-4" />
+            {/* {showFileExplorer ? (
+              <PanelLeftClose className="h-4 w-4" />
+            ) : (
+              <PanelLeft className="h-4 w-4" />
+            )} */}
+          </Button>
 
-        <div className="flex gap-2">
           <SettingsDialog
             workingDirectory={workingDirectory}
             setWorkingDirectory={setWorkingDirectory}
@@ -350,59 +362,15 @@ export default function ClaudeCodePage() {
             permissionMode={permissionMode}
             setPermissionMode={setPermissionMode}
           />
-        </div>
-      </div>
 
-      {/* Messages Area - Scrollable */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center text-muted-foreground">
-              <p className="text-lg mb-2">No messages yet</p>
-              <p className="text-sm">
-                Start a conversation by typing a message below
-              </p>
-            </div>
-          </div>
-        )}
-
-        {processMessages(messages).map((item, index) => {
-          if (item.type === "accordion") {
-            return (
-              <Accordion key={index} type="single" collapsible className="w-full">
-                <AccordionItem value="item-1" className="border rounded-lg px-2 last:border-b">
-                  <AccordionTrigger>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {item.toolName}
-                      </Badge>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-4">
-                      {item.messages.map((msg, msgIndex) => (
-                        <AiMessageComponment key={msgIndex} message={msg} />
-                      ))}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            );
-          } else {
-            return <AiMessageComponment key={index} message={item.message} />;
-          }
-        })}
-        
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input Area - Fixed at Bottom */}
-      <div className="border-t bg-background p-4">
-        <div className="flex gap-2 items-end">
           <Popover>
             <PopoverTrigger asChild>
-              <Button disabled={!initContent} variant="outline">
-                <Columns3Cog />
+              <Button
+                disabled={!initContent}
+                variant="ghost"
+                className="cursor-pointer"
+              >
+                <Columns3Cog className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-120">
@@ -447,7 +415,80 @@ export default function ClaudeCodePage() {
               </div>
             </PopoverContent>
           </Popover>
+        </div>
+      </div>
 
+      {/* Main Content Area with File Explorer and Messages */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* File Explorer Sidebar */}
+        {showFileExplorer && (
+          <div className="w-80 border-r flex-shrink-0">
+            <FileExplorer
+              rootDirectory={workingDirectory}
+              className="h-full border-0 rounded-none"
+              onFileSelect={(path) => {
+                console.log("Selected file:", path);
+                // You can add file content preview or insertion logic here
+              }}
+            />
+          </div>
+        )}
+
+        {/* Messages Area - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.length === 0 && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-muted-foreground">
+                <p className="text-lg mb-2">No messages yet</p>
+                <p className="text-sm">
+                  Start a conversation by typing a message below
+                </p>
+              </div>
+            </div>
+          )}
+
+          {processMessages(messages).map((item, index) => {
+            if (item.type === "accordion") {
+              return (
+                <Accordion
+                  key={index}
+                  type="single"
+                  collapsible
+                  className="w-full"
+                >
+                  <AccordionItem
+                    value="item-1"
+                    className="border rounded-lg px-2 last:border-b"
+                  >
+                    <AccordionTrigger>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {item.toolName}
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-4">
+                        {item.messages.map((msg, msgIndex) => (
+                          <AiMessageComponment key={msgIndex} message={msg} />
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              );
+            } else {
+              return <AiMessageComponment key={index} message={item.message} />;
+            }
+          })}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* Input Area - Fixed at Bottom */}
+      <div className="border-t bg-background p-4">
+        <div className="flex gap-2 items-end">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

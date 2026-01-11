@@ -105,14 +105,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <div className="min-h-screen bg-background text-foreground w-full">
-        <header className="flex h-16 border-b ">
+        {/* <header className="flex h-16 border-b ">
           <div className="flex items-center px-6 w-64">
             <Link href="/projects" className="font-semibold tracking-tight">
               DSystem Admin
             </Link>
             <SidebarTrigger className="-ml-1 md:hidden" />
           </div>
-        </header>
+        </header> */}
 
         <div className="grid grid-cols-[max-content_1fr] gap-4 min-h-screen w-full">
           <aside className="flex min-h-[calc(100vh-64px)]">
@@ -142,7 +142,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <main className="mt-4 flex justify-center">
+            <main className="flex justify-center">
               <QueryErrorBoundary>{children}</QueryErrorBoundary>
             </main>
           </div>
