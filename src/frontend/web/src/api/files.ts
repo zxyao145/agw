@@ -30,10 +30,15 @@ export class FileApiError extends Error {
 /**
  * List files and directories at the specified path
  */
-export async function listFiles(path: string): Promise<ListFilesResponse> {
+export async function listFiles(path: string, onlyModified: boolean = false): Promise<ListFilesResponse> {
   try {
+    const params = new URLSearchParams({ path });
+    if (onlyModified) {
+      params.append('onlyModified', 'true');
+    }
+
     const response = await fetch(
-      `/api/files/list?path=${encodeURIComponent(path)}`
+      `/api/files/list?${params.toString()}`
     );
 
     if (!response.ok) {
@@ -74,6 +79,42 @@ export async function readFile(path: string): Promise<string> {
     }
 
     return await response.text();
+  } catch (err) {
+    if (err instanceof FileApiError) {
+      throw err;
+    }
+    throw new FileApiError(
+      `Network error: ${(err as Error).message}`
+    );
+  }
+}
+
+export interface GitDiffResponse {
+  diff: string;
+  unchanged: boolean;
+  message?: string;
+  originalContent?: string;
+}
+
+/**
+ * Get git diff for the specified file
+ */
+export async function getFileDiff(path: string): Promise<GitDiffResponse> {
+  try {
+    const response = await fetch(
+      `/api/files/diff?path=${encodeURIComponent(path)}`
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new FileApiError(
+        errorData.error || `Failed to get diff: ${response.statusText}`,
+        response.status,
+        response.statusText
+      );
+    }
+
+    return await response.json();
   } catch (err) {
     if (err instanceof FileApiError) {
       throw err;

@@ -14,7 +14,17 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { listFiles, readFile, type FileItem } from "@/api/files";
+import { 
+  listFiles, 
+  readFile, 
+  getFileDiff,
+   type FileItem, 
+   type GitDiffResponse 
+  }  from "@/api/files";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { DiffViewer } from "./diff-viewer";
 
 interface FileExplorerProps {
   rootDirectory: string;
@@ -26,6 +36,7 @@ interface FileTreeNodeProps {
   item: FileItem;
   onFileSelect?: (path: string) => void;
   level: number;
+  diffMode: boolean;
 }
 
 const getFileIcon = (fileName: string) => {
@@ -68,7 +79,7 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-function FileTreeNode({ item, onFileSelect, level }: FileTreeNodeProps) {
+function FileTreeNode({ item, onFileSelect, level, diffMode }: FileTreeNodeProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [children, setChildren] = React.useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -81,7 +92,7 @@ function FileTreeNode({ item, onFileSelect, level }: FileTreeNodeProps) {
     setError(null);
 
     try {
-      const data = await listFiles(item.path);
+      const data = await listFiles(item.path, diffMode);
       setChildren(data.items || []);
     } catch (err) {
       console.error("Error loading directory:", err);
@@ -165,6 +176,7 @@ function FileTreeNode({ item, onFileSelect, level }: FileTreeNodeProps) {
               item={child}
               onFileSelect={onFileSelect}
               level={level + 1}
+              diffMode={diffMode}
             />
           ))}
         </div>
@@ -185,6 +197,9 @@ export function FileExplorer({
   const [fileContent, setFileContent] = React.useState<string>("");
   const [isLoadingContent, setIsLoadingContent] = React.useState(false);
   const [contentError, setContentError] = React.useState<string | null>(null);
+  const [showFileExplorer, setShowFileExplorer] = React.useState(true);
+  const [onlyModified, setOnlyModified] = React.useState(false);
+  const [onlyModifiedData, setOnlyModifiedData] = React.useState<GitDiffResponse | null>(null);
 
   const loadRootDirectory = React.useCallback(async () => {
     if (!rootDirectory || !rootDirectory.trim()) {
@@ -197,7 +212,7 @@ export function FileExplorer({
     setError(null);
 
     try {
-      const data = await listFiles(rootDirectory);
+      const data = await listFiles(rootDirectory, onlyModified);
       setRootItems(data.items || []);
     } catch (err) {
       console.error("Error loading root directory:", err);
@@ -206,28 +221,41 @@ export function FileExplorer({
     } finally {
       setIsLoading(false);
     }
-  }, [rootDirectory]);
+  }, [rootDirectory, onlyModified]);
 
   React.useEffect(() => {
     loadRootDirectory();
   }, [loadRootDirectory]);
 
-  const loadFileContent = React.useCallback(async (filePath: string) => {
-    setIsLoadingContent(true);
-    setContentError(null);
+  const loadFileContent = React.useCallback(
+    async (filePath: string) => {
+      setIsLoadingContent(true);
+      setContentError(null);
+      setOnlyModifiedData(null);
 
-    try {
-      const content = await readFile(filePath);
-      setFileContent(content);
-      setSelectedFile(filePath);
-    } catch (err) {
-      console.error("Error reading file:", err);
-      setContentError((err as Error).message);
-      setFileContent("");
-    } finally {
-      setIsLoadingContent(false);
-    }
-  }, []);
+      try {
+        if (onlyModified) {
+          const diff = await getFileDiff(filePath);
+          setOnlyModifiedData(diff);
+          setFileContent("");
+          setSelectedFile(filePath);
+        } else {
+          const content = await readFile(filePath);
+          setFileContent(content);
+          setOnlyModifiedData(null);
+          setSelectedFile(filePath);
+        }
+      } catch (err) {
+        console.error("Error loading file:", err);
+        setContentError((err as Error).message);
+        setFileContent("");
+        setOnlyModifiedData(null);
+      } finally {
+        setIsLoadingContent(false);
+      }
+    },
+    [onlyModified]
+  );
 
   const handleFileSelect = React.useCallback(
     (path: string) => {
@@ -237,98 +265,146 @@ export function FileExplorer({
     [loadFileContent, onFileSelect]
   );
 
+  // Reload current file when diff mode changes
+  React.useEffect(() => {
+    if (selectedFile) {
+      loadFileContent(selectedFile);
+    }
+  }, [onlyModified]); // Only depend on diffMode, not loadFileContent to avoid infinite loop
+
   return (
-    <div className="flex-1 flex overflow-hidden">
-      <div className="w-80 border-r shrink-0">
-        <div className={cn("border rounded-lg flex flex-col", className)}>
-          <div className="border-b px-3 py-2 bg-muted/50">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium">File Explorer</h3>
-              {isLoading && (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              )}
-            </div>
-            {rootDirectory && (
-              <p className="text-xs text-muted-foreground truncate mt-1">
-                {rootDirectory}
-              </p>
-            )}
-          </div>
-
-          <div className="flex-1 h-100 overflow-auto">
-            <div className="p-2">
-              {error && (
-                <div className="text-sm text-destructive p-2 bg-destructive/10 rounded">
-                  {error}
-                </div>
-              )}
-
-              {!error && !isLoading && rootItems.length === 0 && (
-                <div className="text-sm text-muted-foreground p-2 text-center">
-                  {rootDirectory
-                    ? "Directory is empty or cannot be accessed"
-                    : "Set a working directory in settings to browse files"}
-                </div>
-              )}
-
-              {!error && rootItems.length > 0 && (
-                <div>
-                  {rootItems.map((item) => (
-                    <FileTreeNode
-                      key={item.path}
-                      item={item}
-                      onFileSelect={handleFileSelect}
-                      level={0}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+    <>
+      <div className="flex items-center gap-4">
+        <Button
+          variant="ghost"
+          className="cursor-pointer"
+          size="sm"
+          onClick={() => setShowFileExplorer(!showFileExplorer)}
+          title={showFileExplorer ? "Hide file explorer" : "Show file explorer"}
+        >
+          <Folder className="h-4 w-4" />
+        </Button>
+        <div className="flex items-center gap-2">
+          <Switch
+            id="diff-mode"
+            checked={onlyModified}
+            onCheckedChange={setOnlyModified}
+          />
+          <Label htmlFor="diff-mode" className="text-sm cursor-pointer">
+            onlyModified
+          </Label>
         </div>
       </div>
-      <div className="flex-1 overflow-hidden flex flex-col">
-        {!selectedFile ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
-            <div className="text-center">
-              <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">Select a file to view its contents</p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col h-full">
-            <div className="border-b px-4 py-2 bg-muted/30">
-              <div className="flex items-center gap-2">
-                <File className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium truncate">
-                  {selectedFile.split("/").pop()}
-                </span>
+      <div className="flex-1 flex overflow-hidden">
+        {!showFileExplorer ? null : (
+          <div className="w-80 border-r shrink-0">
+            <div className={cn("border rounded-lg flex flex-col", className)}>
+              <div className="border-b px-3 py-2 bg-muted/50">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium">File Explorer</h3>
+                  {isLoading && (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+                {rootDirectory && (
+                  <p className="text-xs text-muted-foreground truncate mt-1">
+                    {rootDirectory}
+                  </p>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground truncate mt-0.5">
-                {selectedFile}
-              </p>
-            </div>
 
-            <div className="flex-1 overflow-auto">
-              {isLoadingContent ? (
-                <div className="flex items-center justify-center h-full">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <div className="flex-1 h-100 overflow-auto">
+                <div className="p-2">
+                  {error && (
+                    <div className="text-sm text-destructive p-2 bg-destructive/10 rounded">
+                      {error}
+                    </div>
+                  )}
+
+                  {!error && !isLoading && rootItems.length === 0 && (
+                    <div className="text-sm text-muted-foreground p-2 text-center">
+                      {rootDirectory
+                        ? "Directory is empty or cannot be accessed"
+                        : "Set a working directory in settings to browse files"}
+                    </div>
+                  )}
+
+                  {!error && rootItems.length > 0 && (
+                    <div>
+                      {rootItems.map((item) => (
+                        <FileTreeNode
+                          key={item.path}
+                          item={item}
+                          onFileSelect={handleFileSelect}
+                          level={0}
+                          diffMode={onlyModified}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : contentError ? (
-                <div className="p-4">
-                  <div className="text-sm text-destructive p-3 bg-destructive/10 rounded">
-                    Error loading file: {contentError}
-                  </div>
-                </div>
-              ) : (
-                <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words">
-                  <code>{fileContent}</code>
-                </pre>
-              )}
+              </div>
             </div>
           </div>
         )}
+        <div className="flex-1 overflow-hidden flex flex-col min-h-full">
+          {!selectedFile ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              <div className="text-center">
+                <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p className="text-sm">Select a file to view its contents</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col h-full">
+              <div className="border-b px-4 py-2 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <File className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium truncate">
+                    {selectedFile.split("/").pop()}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                  {selectedFile}
+                </p>
+              </div>
+
+              <div className="flex-1 overflow-auto">
+                {isLoadingContent ? (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : contentError ? (
+                  <div className="p-4">
+                    <div className="text-sm text-destructive p-3 bg-destructive/10 rounded">
+                      Error loading file: {contentError}
+                    </div>
+                  </div>
+                ) : onlyModified && onlyModifiedData ? (
+                  onlyModifiedData.unchanged ? (
+                    <div className="p-4">
+                      <div className="text-sm text-muted-foreground p-3 bg-muted/50 rounded mb-4">
+                        {onlyModifiedData.message || "No changes detected"}
+                      </div>
+                      {onlyModifiedData.originalContent && (
+                        <pre className="text-sm font-mono whitespace-pre-wrap break-words">
+                          <code>{onlyModifiedData.originalContent}</code>
+                        </pre>
+                      )}
+                    </div>
+                  ) : (
+                    <DiffViewer diff={onlyModifiedData.diff} />
+                  )
+                ) : (
+                  <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words">
+                    <code>{fileContent}</code>
+                  </pre>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

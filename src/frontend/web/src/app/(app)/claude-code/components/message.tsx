@@ -104,8 +104,6 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
       switch (type) {
         case MessageContentType.DataContent:
         case MessageContentType.ErrorContent:
-        case MessageContentType.FunctionCallContent:
-        case MessageContentType.FunctionResultContent:
         case MessageContentType.TextContent:
         case MessageContentType.TextReasoningContent:
           if(content.startsWith("<local-command-stdout>")){
@@ -114,6 +112,21 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
           }else{
             curNode += content;
           }
+          break;
+          
+        case MessageContentType.FunctionCallContent:
+        case MessageContentType.FunctionResultContent:
+          let contentTemp = content;
+          if(content.startsWith("<local-command-stdout>")){
+            contentTemp = content.replace("<local-command-stdout>", "")
+            .replace("</local-command-stdout>", "");
+          }
+          if(contentTemp.startsWith("{") && contentTemp.endsWith("}")){
+            // formatted
+            contentTemp = "\n```javascript\n" + JSON.stringify(JSON.parse(contentTemp), null, 2) + "\n```";
+          }
+
+          curNode += contentTemp;
           break;
         case MessageContentType.UriContent:
           curNode = content;
@@ -156,7 +169,7 @@ export const AiMessageComponment = ({ message }: { message: AiMessage }) => {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[80%] rounded-lg px-4 py-3 ${
+        className={`rounded-lg px-4 py-3 ${
           isUser
             ? "bg-primary text-primary-foreground ml-12"
             :  "bg-secondary mr-12"

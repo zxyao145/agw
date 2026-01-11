@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Settings } from "lucide-react";
+import { Settings, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PermissionMode } from "../types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface SettingsDialogProps {
   workingDirectory: string;
@@ -141,6 +146,16 @@ export function SettingsDialog({
           <div className="grid gap-2">
             <Label htmlFor="settings-apiKey">
               Anthropic API Key (Optional)
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <TriangleAlert className="w-4 h-4 text-red-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-red-400">
+                    WARNING: The API key will be transmitted over the network
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             </Label>
             <Input
               id="settings-apiKey"

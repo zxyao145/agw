@@ -1,6 +1,7 @@
 using DSystem.Api.Contracts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using System.IO;
 
 namespace DSystem.Api.Controllers;
 
@@ -16,7 +17,7 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("list")]
-    public async Task<IActionResult> ListAsync([FromQuery] string? path)
+    public async Task<IActionResult> ListAsync([FromQuery] string? path, [FromQuery] bool onlyModified = false)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -40,10 +41,44 @@ public class FilesController : ControllerBase
             var entries = Directory.GetFileSystemEntries(normalizedPath);
             var items = new List<FileItem>();
 
+            // Get modified files from git if requested
+            HashSet<string>? modifiedFiles = null;
+            if (onlyModified)
+            {
+                modifiedFiles = await GetModifiedFilesAsync(normalizedPath);
+                if (modifiedFiles == null || modifiedFiles.Count == 0)
+                {
+                    // No git repository or no modified files
+                    return Ok(new FileListResponse { Items = new List<FileItem>() });
+                }
+            }
+
             foreach (var entry in entries)
             {
                 var fileInfo = new FileInfo(entry);
                 var dirInfo = new DirectoryInfo(entry);
+
+                // If filtering by modified files
+                if (onlyModified && modifiedFiles != null)
+                {
+                    // For files, check if they are in the modified list
+                    if (fileInfo.Exists)
+                    {
+                        if (!modifiedFiles.Contains(entry))
+                        {
+                            continue; // Skip non-modified files
+                        }
+                    }
+                    // For directories, check if any modified file is inside
+                    else if (dirInfo.Exists)
+                    {
+                        var hasModifiedDescendant = modifiedFiles.Any(f => f.StartsWith(entry + Path.DirectorySeparatorChar));
+                        if (!hasModifiedDescendant)
+                        {
+                            continue; // Skip directories without modified files
+                        }
+                    }
+                }
 
                 var item = new FileItem
                 {
@@ -74,6 +109,71 @@ public class FilesController : ControllerBase
         {
             _logger.LogError(ex, "Error reading directory: {Path}", normalizedPath);
             return StatusCode(500, new { error = "Failed to read directory", details = ex.Message });
+        }
+    }
+
+    private async Task<HashSet<string>?> GetModifiedFilesAsync(string directory)
+    {
+        var gitDirectory = FindGitDirectory(directory);
+        if (gitDirectory == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = "status --porcelain",
+                    WorkingDirectory = gitDirectory,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+            {
+                return null;
+            }
+
+            var modifiedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var line in lines)
+            {
+                if (line.Length < 4) continue;
+
+                // Git status format: XY filename
+                // X = index status, Y = working tree status
+                var statusCode = line.Substring(0, 2);
+                var filename = line.Substring(3).Trim().Trim('"');
+
+                // Skip untracked files if needed (starts with ??)
+                // Include modified (M), added (A), deleted (D), renamed (R), etc.
+                if (statusCode.Trim() == "??")
+                {
+                    continue; // Skip untracked files
+                }
+
+                var fullPath = Path.GetFullPath(Path.Combine(gitDirectory, filename));
+                modifiedFiles.Add(fullPath);
+            }
+
+            return modifiedFiles;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get modified files from git");
+            return null;
         }
     }
 
@@ -112,5 +212,149 @@ public class FilesController : ControllerBase
             _logger.LogError(ex, "Error reading file: {Path}", normalizedPath);
             return StatusCode(500, new { error = "Failed to read file", details = ex.Message });
         }
+    }
+
+    [HttpGet("diff")]
+    public async Task<IActionResult> DiffAsync([FromQuery] string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return BadRequest(new { error = "Path parameter is required" });
+        }
+
+        // Security: Prevent path traversal attacks
+        var normalizedPath = Path.GetFullPath(path);
+        if (normalizedPath.Contains(".."))
+        {
+            return BadRequest(new { error = "Invalid path" });
+        }
+
+        try
+        {
+            if (!System.IO.File.Exists(normalizedPath))
+            {
+                return NotFound(new { error = "File not found" });
+            }
+
+            // Get git diff for the file
+            var gitDirectory = FindGitDirectory(normalizedPath);
+            if (gitDirectory == null)
+            {
+                return BadRequest(new { error = "File is not in a git repository" });
+            }
+
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = $"diff HEAD \"{normalizedPath}\"",
+                    WorkingDirectory = gitDirectory,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var error = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0 && !string.IsNullOrEmpty(error))
+            {
+                _logger.LogWarning("Git diff failed: {Error}", error);
+                return BadRequest(new { error = "Git diff failed", details = error });
+            }
+
+            // If no diff (file unchanged), try to get the file from git
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                var gitRootProcess = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "git",
+                        Arguments = "rev-parse --show-toplevel",
+                        WorkingDirectory = gitDirectory,
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+
+                gitRootProcess.Start();
+                var gitRoot = (await gitRootProcess.StandardOutput.ReadToEndAsync()).Trim();
+                await gitRootProcess.WaitForExitAsync();
+
+                var relativePath = Path.GetRelativePath(gitRoot, normalizedPath).Replace("\\", "/");
+
+                var showProcess = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "git",
+                        Arguments = $"show HEAD:\"{relativePath}\"",
+                        WorkingDirectory = gitDirectory,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+
+                showProcess.Start();
+                var originalContent = await showProcess.StandardOutput.ReadToEndAsync();
+                var showError = await showProcess.StandardError.ReadToEndAsync();
+                await showProcess.WaitForExitAsync();
+
+                if (showProcess.ExitCode == 0)
+                {
+                    return Ok(new
+                    {
+                        diff = "",
+                        message = "No changes detected",
+                        unchanged = true,
+                        originalContent
+                    });
+                }
+            }
+
+            return Ok(new
+            {
+                diff = output,
+                unchanged = false
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting git diff: {Path}", normalizedPath);
+            return StatusCode(500, new { error = "Failed to get git diff", details = ex.Message });
+        }
+    }
+
+    private string? FindGitDirectory(string filePath)
+    {
+        string? directory;
+        if (Directory.Exists(filePath))
+        {
+            directory = filePath;
+        }
+        else
+        {
+            directory = Path.GetDirectoryName(filePath);
+        }
+
+
+        while (directory != null)
+        {
+            if (Directory.Exists(Path.Combine(directory, ".git")))
+            {
+                return directory;
+            }
+            directory = Directory.GetParent(directory)?.FullName;
+        }
+        return null;
     }
 }

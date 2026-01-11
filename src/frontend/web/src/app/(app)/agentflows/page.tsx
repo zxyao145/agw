@@ -137,6 +137,7 @@ export default function AgentflowsPage() {
 
   const updateAgentflowMutation = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: any }) => {
+      // @ts-ignore - Dynamic path not supported by apiPut types
       return await apiPut(`/api/agentflows/${id}`, { body });
     },
     onSuccess: async () => {
@@ -150,6 +151,7 @@ export default function AgentflowsPage() {
 
   const deleteAgentflowMutation = useMutation({
     mutationFn: async (id: string) => {
+      // @ts-ignore - Dynamic path not supported by apiDelete types
       return await apiDelete(`/api/agentflows/${id}`);
     },
     onSuccess: async () => {
@@ -265,12 +267,10 @@ export default function AgentflowsPage() {
     async (agentflow: AgentflowDto) => {
       try {
         // We need to get full agentflow data including nodes and edges
-        const nodes = (await apiGet(
-          `/api/agentflows/${agentflow.id}/nodes`
-        )) as any[];
-        const edges = (await apiGet(
-          `/api/agentflows/${agentflow.id}/edges`
-        )) as any[];
+        // @ts-ignore - Dynamic path not supported by apiGet types
+        const nodes = (await apiGet(`/api/agentflows/${agentflow.id}/nodes`)) as any[];
+        // @ts-ignore - Dynamic path not supported by apiGet types
+        const edges = (await apiGet(`/api/agentflows/${agentflow.id}/edges`)) as any[];
 
         updateAgentflowMutation.mutate({
           id: agentflow.id,
@@ -305,12 +305,10 @@ export default function AgentflowsPage() {
   const handleEdit = React.useCallback(async (agentflow: AgentflowDto) => {
     try {
       // Fetch agentflow nodes and edges
-      const nodes = (await apiGet(
-        `/api/agentflows/${agentflow.id}/nodes`
-      )) as any[];
-      const edges = (await apiGet(
-        `/api/agentflows/${agentflow.id}/edges`
-      )) as any[];
+      // @ts-ignore - Dynamic path not supported by apiGet types
+      const nodes = (await apiGet(`/api/agentflows/${agentflow.id}/nodes`)) as any[];
+      // @ts-ignore - Dynamic path not supported by apiGet types
+      const edges = (await apiGet(`/api/agentflows/${agentflow.id}/edges`)) as any[];
 
       // Set editing agentflow data
       setEditingAgentflow({

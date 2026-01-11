@@ -525,82 +525,7 @@ export function VisualAgentflowBuilder({
     const result = await createGraphLayout(nodes, edges);
     setNodes(result.nodes);
     setEdges(result.edges);
-
-    return;
-    const canvasWidth = 800
-    const canvasHeight = 600
-    const padding = 100
-
-    switch (selectedPattern) {
-      case 0: // Concurrent - grid layout for nodes
-        const cols = Math.ceil(Math.sqrt(nodes.length))
-        const rows = Math.ceil(nodes.length / cols)
-        const spacingX = (canvasWidth - 2 * padding) / Math.max(1, cols - 1)
-        const spacingY = (canvasHeight - 2 * padding) / Math.max(1, rows - 1)
-
-        layoutNodes.forEach((node, i) => {
-          const col = i % cols
-          const row = Math.floor(i / cols)
-          node.position = {
-            x: padding + col * (cols === 1 ? 0 : spacingX),
-            y: padding + row * (rows === 1 ? 0 : spacingY),
-          }
-        })
-        break
-
-      case 1: // Sequential - horizontal line
-      case 3: // Handoff - horizontal line
-        const seqSpacing = (canvasWidth - 2 * padding) / Math.max(1, nodes.length - 1)
-        layoutNodes.forEach((node, i) => {
-          node.position = {
-            x: padding + i * (nodes.length === 1 ? 0 : seqSpacing),
-            y: canvasHeight / 2,
-          }
-        })
-        break
-
-      case 2: // GroupChat - circular layout for nodes
-        const radius = Math.min(canvasWidth, canvasHeight) / 3
-        const centerX = canvasWidth / 2
-        const centerY = canvasHeight / 2
-        const angleStep = (2 * Math.PI) / nodes.length
-
-        layoutNodes.forEach((node, i) => {
-          const angle = i * angleStep - Math.PI / 2 // Start from top
-          node.position = {
-            x: centerX + radius * Math.cos(angle),
-            y: centerY + radius * Math.sin(angle),
-          }
-        })
-        break
-
-      case 4: // Magentic - star topology (orchestrator in center)
-        if (nodes.length === 1) {
-          layoutNodes[0].position = { x: canvasWidth / 2, y: canvasHeight / 2 }
-        } else if (nodes.length > 1) {
-          const centerX = canvasWidth / 2
-          const centerY = canvasHeight / 2
-
-          // Orchestrator in center
-          layoutNodes[0].position = { x: centerX, y: centerY }
-
-          // Workers in circle around orchestrator
-          const workerRadius = Math.min(canvasWidth, canvasHeight) / 3
-          const workerAngleStep = (2 * Math.PI) / (nodes.length - 1)
-
-          for (let i = 1; i < nodes.length; i++) {
-            const angle = (i - 1) * workerAngleStep - Math.PI / 2
-            layoutNodes[i].position = {
-              x: centerX + workerRadius * Math.cos(angle),
-              y: centerY + workerRadius * Math.sin(angle),
-            }
-          }
-        }
-        break
-    }
-
-    setNodes(layoutNodes)
-  }, [nodes, setNodes])
+  }, [nodes, edges, setNodes, setEdges])
 
   // Auto-detect pattern based on graph structure
   const detectPatternFromStructure = React.useCallback((): number => {
@@ -710,6 +635,7 @@ export function VisualAgentflowBuilder({
     try {
       if (editingAgentflow) {
         // Update existing agentflow
+        // @ts-ignore - Dynamic path not supported by apiPut types
         await apiPut(`/api/agentflows/${editingAgentflow.id}`, { body: requestBody })
         toast.success(`Agentflow "${agentflowName}" updated successfully!`)
       } else {
