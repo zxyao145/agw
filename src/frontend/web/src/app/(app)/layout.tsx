@@ -41,6 +41,19 @@ const navItems: SidebarMenuGroupProps[] = [
       },
     ],
   },
+
+  {
+    groupLable: "ExternalAgents",
+    menus: [
+      {
+        url: "/claude-code",
+        title: "ClaudeCode",
+        isActive: true,
+        icon: <Terminal />
+      },
+    ],
+  },
+  
   {
     groupLable: "Agent & Flow",
     menus: [
@@ -55,12 +68,6 @@ const navItems: SidebarMenuGroupProps[] = [
         title: "Agents",
         isActive: true,
         icon: <Bot />
-      },
-      {
-        url: "/claude-code",
-        title: "ClaudeCode",
-        isActive: true,
-        icon: <Terminal />
       },
     ],
   },
