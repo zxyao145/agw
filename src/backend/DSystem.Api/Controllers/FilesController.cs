@@ -334,6 +334,171 @@ public class FilesController : ControllerBase
         }
     }
 
+    [HttpDelete("delete")]
+    public async Task<IActionResult> DeleteAsync([FromQuery] string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return BadRequest(new { error = "Path parameter is required" });
+        }
+
+        // Security: Prevent path traversal attacks
+        var normalizedPath = Path.GetFullPath(path);
+        if (normalizedPath.Contains(".."))
+        {
+            return BadRequest(new { error = "Invalid path" });
+        }
+
+        try
+        {
+            if (System.IO.File.Exists(normalizedPath))
+            {
+                System.IO.File.Delete(normalizedPath);
+                _logger.LogInformation("Deleted file: {Path}", normalizedPath);
+                return Ok(new { success = true, message = "File deleted successfully" });
+            }
+            else if (Directory.Exists(normalizedPath))
+            {
+                Directory.Delete(normalizedPath, recursive: true);
+                _logger.LogInformation("Deleted directory: {Path}", normalizedPath);
+                return Ok(new { success = true, message = "Directory deleted successfully" });
+            }
+            else
+            {
+                return NotFound(new { error = "File or directory not found" });
+            }
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogError(ex, "Access denied deleting: {Path}", normalizedPath);
+            return StatusCode(403, new { error = "Access denied", details = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting: {Path}", normalizedPath);
+            return StatusCode(500, new { error = "Failed to delete", details = ex.Message });
+        }
+    }
+
+    [HttpPost("reset")]
+    public async Task<IActionResult> ResetAsync([FromQuery] string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return BadRequest(new { error = "Path parameter is required" });
+        }
+
+        // Security: Prevent path traversal attacks
+        var normalizedPath = Path.GetFullPath(path);
+        if (normalizedPath.Contains(".."))
+        {
+            return BadRequest(new { error = "Invalid path" });
+        }
+
+        try
+        {
+            if (!System.IO.File.Exists(normalizedPath))
+            {
+                return NotFound(new { error = "File not found" });
+            }
+
+            // Check if file is in a git repository
+            var gitDirectory = FindGitDirectory(normalizedPath);
+            if (gitDirectory == null)
+            {
+                return BadRequest(new { error = "File is not in a git repository" });
+            }
+
+            // Get git root to construct relative path
+            var gitRootProcess = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = "rev-parse --show-toplevel",
+                    WorkingDirectory = gitDirectory,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            gitRootProcess.Start();
+            var gitRoot = (await gitRootProcess.StandardOutput.ReadToEndAsync()).Trim();
+            await gitRootProcess.WaitForExitAsync();
+
+            if (gitRootProcess.ExitCode != 0)
+            {
+                return BadRequest(new { error = "Failed to get git root directory" });
+            }
+
+            var relativePath = Path.GetRelativePath(gitRoot, normalizedPath).Replace("\\", "/");
+
+            // Check if file has modifications
+            var statusProcess = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = $"status --porcelain \"{relativePath}\"",
+                    WorkingDirectory = gitDirectory,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            statusProcess.Start();
+            var statusOutput = await statusProcess.StandardOutput.ReadToEndAsync();
+            await statusProcess.WaitForExitAsync();
+
+            if (statusProcess.ExitCode != 0)
+            {
+                return BadRequest(new { error = "Failed to check git status" });
+            }
+
+            if (string.IsNullOrWhiteSpace(statusOutput))
+            {
+                return Ok(new { success = false, message = "File has no modifications to reset" });
+            }
+
+            // Reset the file using git checkout
+            var resetProcess = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = $"checkout HEAD -- \"{relativePath}\"",
+                    WorkingDirectory = gitDirectory,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            resetProcess.Start();
+            var resetOutput = await resetProcess.StandardOutput.ReadToEndAsync();
+            var resetError = await resetProcess.StandardError.ReadToEndAsync();
+            await resetProcess.WaitForExitAsync();
+
+            if (resetProcess.ExitCode != 0)
+            {
+                _logger.LogError("Git reset failed: {Error}", resetError);
+                return StatusCode(500, new { error = "Git reset failed", details = resetError });
+            }
+
+            _logger.LogInformation("Reset file to HEAD: {Path}", normalizedPath);
+            return Ok(new { success = true, message = "File reset successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting file: {Path}", normalizedPath);
+            return StatusCode(500, new { error = "Failed to reset file", details = ex.Message });
+        }
+    }
+
     private string? FindGitDirectory(string filePath)
     {
         string? directory;

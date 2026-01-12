@@ -12,19 +12,31 @@ import {
   ChevronRight,
   ChevronDown,
   Loader2,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { 
-  listFiles, 
-  readFile, 
+import {
+  listFiles,
+  readFile,
   getFileDiff,
-   type FileItem, 
-   type GitDiffResponse 
+  deleteFile,
+  resetFile,
+   type FileItem,
+   type GitDiffResponse
   }  from "@/api/files";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { DiffViewer } from "./diff-viewer";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { toast } from "sonner";
 
 interface FileExplorerProps {
   rootDirectory: string;
@@ -37,6 +49,8 @@ interface FileTreeNodeProps {
   onFileSelect?: (path: string) => void;
   level: number;
   diffMode: boolean;
+  onFileDeleted?: () => void;
+  onFileReset?: () => void;
 }
 
 const getFileIcon = (fileName: string) => {
@@ -79,7 +93,7 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-function FileTreeNode({ item, onFileSelect, level, diffMode }: FileTreeNodeProps) {
+function FileTreeNode({ item, onFileSelect, level, diffMode, onFileDeleted, onFileReset }: FileTreeNodeProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [children, setChildren] = React.useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -119,45 +133,113 @@ function FileTreeNode({ item, onFileSelect, level, diffMode }: FileTreeNodeProps
     }
   };
 
+  const handleDelete = async (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const confirmMessage = item.type === "directory"
+      ? `Are you sure you want to delete the directory "${item.name}" and all its contents?`
+      : `Are you sure you want to delete "${item.name}"?`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      const result = await deleteFile(item.path);
+      if (result.success) {
+        toast.success(result.message);
+        onFileDeleted?.();
+      } else {
+        toast.error(result.message || "Failed to delete");
+      }
+    } catch (err) {
+      console.error("Error deleting:", err);
+      toast.error((err as Error).message);
+    }
+  };
+
+  const handleReset = async (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (item.type !== "file") {
+      toast.error("Can only reset files, not directories");
+      return;
+    }
+
+    try {
+      const result = await resetFile(item.path);
+      if (result.success) {
+        toast.success(result.message);
+        onFileReset?.();
+      } else {
+        toast.info(result.message || "No changes to reset");
+      }
+    } catch (err) {
+      console.error("Error resetting:", err);
+      toast.error((err as Error).message);
+    }
+  };
+
   const FileIcon = item.type === "file" ? getFileIcon(item.name) : null;
   const FolderIcon = isExpanded ? FolderOpen : Folder;
   const ChevronIcon = isExpanded ? ChevronDown : ChevronRight;
 
   return (
     <div>
-      <div
-        className={cn(
-          "flex items-center gap-1 py-1 px-2 hover:bg-accent hover:text-accent-foreground cursor-pointer rounded-sm group",
-          "transition-colors"
-        )}
-        style={{ paddingLeft: `${level * 12 + 8}px` }}
-        onClick={handleClick}
-      >
-        {item.type === "directory" && (
-          <ChevronIcon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-        )}
-        {item.type === "file" && <div className="w-4" />}
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            className={cn(
+              "flex items-center gap-1 py-1 px-2 hover:bg-accent hover:text-accent-foreground cursor-pointer rounded-sm group",
+              "transition-colors"
+            )}
+            style={{ paddingLeft: `${level * 12 + 8}px` }}
+            onClick={handleClick}
+          >
+            {item.type === "directory" && (
+              <ChevronIcon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+            )}
+            {item.type === "file" && <div className="w-4" />}
 
-        {item.type === "directory" ? (
-          <FolderIcon className="h-4 w-4 flex-shrink-0 text-blue-500" />
-        ) : (
-          FileIcon && (
-            <FileIcon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-          )
-        )}
+            {item.type === "directory" ? (
+              <FolderIcon className="h-4 w-4 flex-shrink-0 text-blue-500" />
+            ) : (
+              FileIcon && (
+                <FileIcon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              )
+            )}
 
-        <span className="text-sm truncate flex-1">{item.name}</span>
+            <span className="text-sm truncate flex-1">{item.name}</span>
 
-        {item.type === "file" && item.size !== undefined && (
-          <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-            {formatFileSize(item.size)}
-          </span>
-        )}
+            {item.type === "file" && item.size !== undefined && (
+              <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                {formatFileSize(item.size)}
+              </span>
+            )}
 
-        {isLoading && (
-          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-        )}
-      </div>
+            {isLoading && (
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+            )}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={handleDelete} variant="destructive">
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </ContextMenuItem>
+          {item.type === "file" && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={handleReset}>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reset to HEAD
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
 
       {error && (
         <div
@@ -177,6 +259,8 @@ function FileTreeNode({ item, onFileSelect, level, diffMode }: FileTreeNodeProps
               onFileSelect={onFileSelect}
               level={level + 1}
               diffMode={diffMode}
+              onFileDeleted={onFileDeleted}
+              onFileReset={onFileReset}
             />
           ))}
         </div>
@@ -265,6 +349,24 @@ export function FileExplorer({
     [loadFileContent, onFileSelect]
   );
 
+  const handleFileDeleted = React.useCallback(() => {
+    // Reload the directory after deletion
+    loadRootDirectory();
+    // Clear selected file if it was deleted
+    setSelectedFile(null);
+    setFileContent("");
+    setOnlyModifiedData(null);
+  }, [loadRootDirectory]);
+
+  const handleFileReset = React.useCallback(() => {
+    // Reload current file if it was reset
+    if (selectedFile) {
+      loadFileContent(selectedFile);
+    }
+    // Reload directory to update modified status
+    loadRootDirectory();
+  }, [selectedFile, loadFileContent, loadRootDirectory]);
+
   // Reload current file when diff mode changes
   React.useEffect(() => {
     if (selectedFile) {
@@ -331,13 +433,15 @@ export function FileExplorer({
 
                   {!error && rootItems.length > 0 && (
                     <div>
-                      {rootItems.map((item) => (
+                      {rootItems.map((item: FileItem) => (
                         <FileTreeNode
                           key={item.path}
                           item={item}
                           onFileSelect={handleFileSelect}
                           level={0}
                           diffMode={onlyModified}
+                          onFileDeleted={handleFileDeleted}
+                          onFileReset={handleFileReset}
                         />
                       ))}
                     </div>

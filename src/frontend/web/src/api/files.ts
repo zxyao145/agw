@@ -124,3 +124,67 @@ export async function getFileDiff(path: string): Promise<GitDiffResponse> {
     );
   }
 }
+
+/**
+ * Delete a file or directory
+ */
+export async function deleteFile(path: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const response = await fetch(
+      `/api/files/delete?path=${encodeURIComponent(path)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new FileApiError(
+        errorData.error || `Failed to delete: ${response.statusText}`,
+        response.status,
+        response.statusText
+      );
+    }
+
+    return await response.json();
+  } catch (err) {
+    if (err instanceof FileApiError) {
+      throw err;
+    }
+    throw new FileApiError(
+      `Network error: ${(err as Error).message}`
+    );
+  }
+}
+
+/**
+ * Reset file to git HEAD (discard modifications)
+ */
+export async function resetFile(path: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const response = await fetch(
+      `/api/files/reset?path=${encodeURIComponent(path)}`,
+      {
+        method: 'POST',
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new FileApiError(
+        errorData.error || `Failed to reset: ${response.statusText}`,
+        response.status,
+        response.statusText
+      );
+    }
+
+    return await response.json();
+  } catch (err) {
+    if (err instanceof FileApiError) {
+      throw err;
+    }
+    throw new FileApiError(
+      `Network error: ${(err as Error).message}`
+    );
+  }
+}
