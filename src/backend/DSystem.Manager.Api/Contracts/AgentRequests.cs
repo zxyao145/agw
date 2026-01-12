@@ -30,7 +30,7 @@ public record ChatMessageResponse(string Role, string Content);
 
 public record AgentExecuteResponse(
     string ThreadId,
-    IReadOnlyList<AiMessage2> Messages)
+    IReadOnlyList<AiMessage> Messages)
 {
     public static AgentExecuteResponse FromDomain(AgentExecutionResult result) =>
         new(result.ThreadId, result.Messages);

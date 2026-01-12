@@ -36,7 +36,7 @@ public class ClaudeCodeService
     /// <param name="maxTurns">Maximum number of turns (optional)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Async enumerable of ClaudeCodeMessage</returns>
-    public async IAsyncEnumerable<AiMessage2> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
         ClaudeCodeExecuteRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -131,7 +131,7 @@ public class ClaudeCodeService
         //}
     }
 
-    private AiMessage2? ConvertMessage(IMessage message)
+    private AiMessage? ConvertMessage(IMessage message)
     {
         return message switch
         {
@@ -146,7 +146,7 @@ public class ClaudeCodeService
     /// <summary>
     /// Convert AgentRunResponseUpdate to ClaudeCodeMessage DTO.
     /// </summary>
-    private AiMessage2 ConvertClaudeMessage(AgentRunResponseUpdate update)
+    private AiMessage ConvertClaudeMessage(AgentRunResponseUpdate update)
     {
         var role = update.Role;
         var roleStr = role.HasValue ? role.Value.Value : "";
@@ -194,7 +194,7 @@ public class ClaudeCodeService
             .Select(x => x!)
             .ToList();
 
-        var aiMessage = new AiMessage2
+        var aiMessage = new AiMessage
             (
                 update.MessageId ?? "",
                 update.AuthorName,
@@ -209,11 +209,11 @@ public class ClaudeCodeService
     /// <summary>
     /// Convert AssistantMessage to ClaudeCodeMessage.
     /// </summary>
-    private AiMessage2 ConvertAssistantMessage(AssistantMessage message)
+    private AiMessage ConvertAssistantMessage(AssistantMessage message)
     {
 
         var c = ConvertContent(message.Content);
-        return new AiMessage2(
+        return new AiMessage(
             "",
             message.Model,
             ChatRole.Assistant.Value,
@@ -255,7 +255,7 @@ public class ClaudeCodeService
     /// <summary>
     /// Convert ResultMessage to ClaudeCodeMessage.
     /// </summary>
-    private AiMessage2 ConvertResultMessage(ResultMessage message)
+    private AiMessage ConvertResultMessage(ResultMessage message)
     {
         //return new ClaudeCodeMessage
         //{
@@ -267,7 +267,7 @@ public class ClaudeCodeService
         //    ErrorMessage = message.IsError ? message.Result : null
         //};
 
-        return new AiMessage2
+        return new AiMessage
         ("", "result", ChatRole.System.Value,
         [new AiMessageContent("TextContent", message.Result ?? string.Empty)]
         );
@@ -277,13 +277,13 @@ public class ClaudeCodeService
     /// <summary>
     /// Convert SystemMessage to ClaudeCodeMessage.
     /// </summary>
-    private AiMessage2 ConvertSystemMessage(SystemMessage message)
+    private AiMessage ConvertSystemMessage(SystemMessage message)
     {
         // Convert Data dictionary to readable string
         var dataContent = string.Join("\n",
             message.Data.Select(kvp => $"{kvp.Key}: {kvp.Value}"));
 
-        return new AiMessage2
+        return new AiMessage
         ("", message.Subtype, ChatRole.System.Value,
         [ new AiMessageContent("TextContent", dataContent) ]
         );
@@ -292,7 +292,7 @@ public class ClaudeCodeService
     /// <summary>
     /// Convert UserMessage to ClaudeCodeMessage.
     /// </summary>
-    private AiMessage2 ConvertUserMessage(UserMessage message)
+    private AiMessage ConvertUserMessage(UserMessage message)
     {
         string c = "";
 
@@ -310,7 +310,7 @@ public class ClaudeCodeService
         {
             c = message.Content?.ToString() ?? string.Empty;
         }
-        var ccMsg = new AiMessage2(
+        var ccMsg = new AiMessage(
                  "",
                  "user",
                  ChatRole.Assistant.Value,

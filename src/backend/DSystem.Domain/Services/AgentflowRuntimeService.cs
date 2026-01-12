@@ -28,7 +28,7 @@ public class PlaceholderAgentflowAgentExecutor : IAgentflowAgentExecutor
 
 public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
 
-public record AgentflowExecutionResult(string ThreadId, IReadOnlyList<AiMessage2> Messages);
+public record AgentflowExecutionResult(string ThreadId, IReadOnlyList<AiMessage> Messages);
 
 public class AgentflowRuntimeService
 {
@@ -52,7 +52,7 @@ public class AgentflowRuntimeService
         _agentflowEdgeRepository = agentflowEdgeRepository;
     }
 
-    public async IAsyncEnumerable<AiMessage2> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
         Guid agentflowId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -98,7 +98,7 @@ public class AgentflowRuntimeService
                 foreach (var msg in result)
                 {
                     var contentObj = new AiMessageContent("text", msg.Text);
-                    var chatMsg = new AiMessage2(
+                    var chatMsg = new AiMessage(
                         msg.MessageId ?? "",
                         msg.AuthorName,
                         msg.Role.Value,
@@ -151,7 +151,7 @@ public class AgentflowRuntimeService
             }
         }
 
-        var outputs = new List<AiMessage2>();
+        var outputs = new List<AiMessage>();
 
         // Display aggregated results from all agents
         Console.WriteLine("===== Final Aggregated Results =====");
@@ -159,7 +159,7 @@ public class AgentflowRuntimeService
         {
             var contentObj = new AiMessageContent("text", message.Text);
             var chatMsg =
-                new AiMessage2(message.MessageId, message.AuthorName, message.Role.Value, [contentObj]);
+                new AiMessage(message.MessageId, message.AuthorName, message.Role.Value, [contentObj]);
             outputs.Add(chatMsg);
         }
 

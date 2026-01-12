@@ -21,7 +21,7 @@ namespace DSystem.Domain.Services;
 /// </summary>
 public record AgentExecutionResult(
     string ThreadId,
-    IReadOnlyList<AiMessage2> Messages);
+    IReadOnlyList<AiMessage> Messages);
 
 /// <summary>
 /// Shapes persisted Agent data plus its Model/Provider/API key into a runtime payload
@@ -174,7 +174,7 @@ public class AgentRuntimeService
     /// <summary>
     /// Executes an agent with streaming response.
     /// </summary>
-    public async IAsyncEnumerable<AiMessage2> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
         Guid agentId,
         string threadId,
         string input,
@@ -225,7 +225,7 @@ public class AgentRuntimeService
                 {
                     var contentText = text.Text;
                     var contentObj = new AiMessageContent("text", contentText);
-                    var msg = new AiMessage2(
+                    var msg = new AiMessage(
                         update.MessageId,
                         update.AuthorName,
                         update.Role?.Value,
@@ -296,7 +296,7 @@ public class AgentRuntimeService
             : [system, chatMsg];
         var stream = aiAgent.RunStreamingAsync(msgs, thread);
 
-        Dictionary<string, AiMessage2> messageDict = new ();
+        Dictionary<string, AiMessage> messageDict = new ();
         await foreach (var update in stream)
         {
             foreach(var content in update.Contents)
@@ -315,7 +315,7 @@ public class AgentRuntimeService
                     else
                     {
                         var contentObj = new AiMessageContent("text", contentText);
-                        var msg = new AiMessage2(update.MessageId ?? string.Empty, update.AuthorName, update.Role?.Value, [contentObj]);
+                        var msg = new AiMessage(update.MessageId ?? string.Empty, update.AuthorName, update.Role?.Value, [contentObj]);
                         messageDict[update.MessageId ?? string.Empty] = msg;
                     }
                 }
@@ -325,6 +325,6 @@ public class AgentRuntimeService
 
         return new AgentExecutionResult(
             threadId,
-            new List<AiMessage2>(messageDict.Values));
+            new List<AiMessage>(messageDict.Values));
     }
 }
