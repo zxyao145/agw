@@ -60,6 +60,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import {AiMessage, AiMessageContent} from "@/types"
+
 import { Pencil, Trash2, X, Play } from "lucide-react";
 import { ButtonGroup } from "@/components/ui/button-group";
 
@@ -99,13 +101,6 @@ type ModelProviderApiKeyDto = {
   providerId: string;
   providerName: string;
   modelName: string;
-};
-
-type AiMessage = {
-  messageId: string;
-  author: string;
-  role: string;
-  content: string;
 };
 
 type AgentExecuteRequest = {
@@ -309,10 +304,15 @@ export default function AgentsPage() {
                 if (existingIndex >= 0) {
                   // Merge content for same messageId
                   const updated = [...messages];
-                  updated[existingIndex] = {
-                    ...updated[existingIndex],
-                    content: updated[existingIndex].content + message.content,
-                  };
+                  const existingMsg = updated[existingIndex];
+                  const existingTextContent = existingMsg.contents.find(c => c.type === "text");
+                  const newTextContent = message.contents.find(c => c.type === "text");
+
+                  if (existingTextContent && newTextContent) {
+                    existingTextContent.content = (existingTextContent.content || "") + (newTextContent.content || "");
+                  }
+
+                  updated[existingIndex] = existingMsg;
                   console.debug('Updated message:', prev?.threadId , updated[existingIndex]);
                   return { threadId: prev?.threadId || '', messages: updated };
                 } else {
@@ -957,7 +957,11 @@ export default function AgentsPage() {
                   if (messageMap.has(msg.messageId)) {
                     // Merge content for same messageId
                     const existing = messageMap.get(msg.messageId)!;
-                    existing.content += msg.content;
+                    const existingTextContent = existing.contents.find(c => c.type === "text");
+                    const newTextContent = msg.contents.find(c => c.type === "text");
+                    if (existingTextContent && newTextContent) {
+                      existingTextContent.content = (existingTextContent.content || "") + (newTextContent.content || "");
+                    }
                   } else {
                     // New message, create a copy
                     messageMap.set(msg.messageId, { ...msg });
@@ -985,7 +989,7 @@ export default function AgentsPage() {
                             {msg.author}({msg.role ?? ""})
                           </div>
                           <div className="text-sm whitespace-pre-wrap">
-                            {msg.content}
+                            {msg.contents.find(c => c.type === "text")?.content || ""}
                           </div>
                         </div>
                       ))}

@@ -1,11 +1,7 @@
 import React from "react";
 import Image from "next/image";
-import {
-  AiMessage,
-  AiMessageContent,
-  MessageContentType,
-  MessageContentTypes,
-} from "../types";
+import {AiMessage, AiMessageContent, MessageContentType } from "@/types"
+
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import ReactMarkdown from "react-markdown";

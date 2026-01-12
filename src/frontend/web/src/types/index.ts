@@ -1,5 +1,7 @@
 import { ReactNode } from 'react';
 
+export * from "./message"
+
 export type TimelineSize = 'sm' | 'md' | 'lg';
 export type TimelineStatus = 'completed' | 'in-progress' | 'pending';
 export type TimelineColor = 'primary' | 'secondary' | 'muted' | 'accent' | 'destructive';

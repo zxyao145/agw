@@ -120,7 +120,8 @@ public class TaskManagerFactory
             {
                 var parts = agentExecutionResult!.Messages.Select(x =>
                 {
-                    return (new TextPart { Text = x.Content }) as Part;
+                    var textContent = x.Contents.Find(c => c.Type == "text");
+                    return (new TextPart { Text = textContent?.Content?.ToString() ?? "" }) as Part;
                 })
                      .ToList();
 

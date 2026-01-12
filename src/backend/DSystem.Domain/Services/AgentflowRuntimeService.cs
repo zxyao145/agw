@@ -28,7 +28,7 @@ public class PlaceholderAgentflowAgentExecutor : IAgentflowAgentExecutor
 
 public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
 
-public record AgentflowExecutionResult(string ThreadId, IReadOnlyList<AiMessage> Messages);
+public record AgentflowExecutionResult(string ThreadId, IReadOnlyList<AiMessage2> Messages);
 
 public class AgentflowRuntimeService
 {
@@ -52,7 +52,7 @@ public class AgentflowRuntimeService
         _agentflowEdgeRepository = agentflowEdgeRepository;
     }
 
-    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<AiMessage2> ExecuteStreamingAsync(
         Guid agentflowId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -97,12 +97,12 @@ public class AgentflowRuntimeService
                 var result = (List<ChatMessage>)outputEvt.Data!;
                 foreach (var msg in result)
                 {
-                    var chatMsg = new AiMessage(
+                    var contentObj = new AiMessageContent("text", msg.Text);
+                    var chatMsg = new AiMessage2(
                         msg.MessageId ?? "",
                         msg.AuthorName,
                         msg.Role.Value,
-                        AiMessageType.Text,
-                        msg.Text
+                        [contentObj]
                     );
                     yield return chatMsg;
                 }
@@ -151,14 +151,15 @@ public class AgentflowRuntimeService
             }
         }
 
-        var outputs = new List<AiMessage>();
+        var outputs = new List<AiMessage2>();
 
         // Display aggregated results from all agents
         Console.WriteLine("===== Final Aggregated Results =====");
         foreach (var message in result)
         {
+            var contentObj = new AiMessageContent("text", message.Text);
             var chatMsg =
-                new AiMessage(message.MessageId, message.AuthorName, message.Role.Value, AiMessageType.Text, message.Text);
+                new AiMessage2(message.MessageId, message.AuthorName, message.Role.Value, [contentObj]);
             outputs.Add(chatMsg);
         }
 

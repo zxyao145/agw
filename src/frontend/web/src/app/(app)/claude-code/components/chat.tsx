@@ -18,10 +18,12 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  AiMessage,
   InitMessageContent,
   PermissionMode,
 } from "../types";
+
+import {AiMessage, AiMessageContent} from "@/types"
+
 import { AiMessageComponment } from "./message";
 import { SettingsDialog } from "./settings-dialog";
 

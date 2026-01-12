@@ -21,7 +21,7 @@ namespace DSystem.Domain.Services;
 /// </summary>
 public record AgentExecutionResult(
     string ThreadId,
-    IReadOnlyList<AiMessage> Messages);
+    IReadOnlyList<AiMessage2> Messages);
 
 /// <summary>
 /// Shapes persisted Agent data plus its Model/Provider/API key into a runtime payload
@@ -174,7 +174,7 @@ public class AgentRuntimeService
     /// <summary>
     /// Executes an agent with streaming response.
     /// </summary>
-    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<AiMessage2> ExecuteStreamingAsync(
         Guid agentId,
         string threadId,
         string input,
@@ -224,12 +224,12 @@ public class AgentRuntimeService
                 if (content is TextContent text)
                 {
                     var contentText = text.Text;
-                    var msg = new AiMessage(
+                    var contentObj = new AiMessageContent("text", contentText);
+                    var msg = new AiMessage2(
                         update.MessageId,
-                        update.AuthorName, 
+                        update.AuthorName,
                         update.Role?.Value,
-                        AiMessageType.Text,
-                        contentText
+                        [contentObj]
                         );
                     yield return msg;
                 }
@@ -296,7 +296,7 @@ public class AgentRuntimeService
             : [system, chatMsg];
         var stream = aiAgent.RunStreamingAsync(msgs, thread);
 
-        Dictionary<string, AiMessage> messageDict = new ();
+        Dictionary<string, AiMessage2> messageDict = new ();
         await foreach (var update in stream)
         {
             foreach(var content in update.Contents)
@@ -307,11 +307,15 @@ public class AgentRuntimeService
                     if (messageDict.ContainsKey(update.MessageId ?? string.Empty))
                     {
                         var existing = messageDict[update.MessageId ?? string.Empty];
-                        messageDict[update.MessageId ?? string.Empty] = existing with { Content = existing.Content + contentText };
+                        var existingContent = existing.Contents.FirstOrDefault();
+                        var newContentText = (existingContent?.Content as string ?? "") + contentText;
+                        var newContent = new AiMessageContent("text", newContentText);
+                        messageDict[update.MessageId ?? string.Empty] = existing with { Contents = [newContent] };
                     }
                     else
                     {
-                        var msg = new AiMessage(update.MessageId ?? string.Empty, update.AuthorName, update.Role?.Value, AiMessageType.Text, contentText);
+                        var contentObj = new AiMessageContent("text", contentText);
+                        var msg = new AiMessage2(update.MessageId ?? string.Empty, update.AuthorName, update.Role?.Value, [contentObj]);
                         messageDict[update.MessageId ?? string.Empty] = msg;
                     }
                 }
@@ -321,6 +325,6 @@ public class AgentRuntimeService
 
         return new AgentExecutionResult(
             threadId,
-            new List<AiMessage>(messageDict.Values));
+            new List<AiMessage2>(messageDict.Values));
     }
 }

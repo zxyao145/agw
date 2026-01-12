@@ -4,12 +4,14 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  AiMessage,
   ClaudeCodeMessageType,
   InitMessageContent,
-  MessageContentType,
   PermissionMode,
 } from "./types";
+
+  
+import { AiMessage, AiMessageContent, MessageContentType } from "@/types";
+
 import { Ulid } from "id128";
 import { FileExplorer } from "./components/file-explorer";
 import { Chat } from "./components/chat";
