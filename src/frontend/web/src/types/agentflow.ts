@@ -1,52 +1,49 @@
-
-export type AgentDto = {
-  id: string
-  name: string
-  systemPrompt: string
-  modelProviderApiKeyId: string
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
+export interface BaseDto {
+  createBy?: string | null;
+  createTime?: string | null;
+  updateBy?: string | null;
+  updateTime?: string | null;
 }
 
-export enum AgentflowNodeType {
-  AgentNode = 0,
-  AgentflowNode = 1,
+export interface AgentDto extends BaseDto {
+  id: string;
+  name: string;
+  systemPrompt: string;
+  modelProviderApiKeyId: string;
 }
 
-export type AgentflowNodeDto = {
-  agentflowId: string
-  nodeId: string
-  type: AgentflowNodeType
-  relateId: string
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
+export const AgentflowNodeType = {
+  AgentNode: 0,
+  AgentflowNode: 1,
+} as const;
+
+export type AgentflowNodeType = (typeof AgentflowNodeType)[keyof typeof AgentflowNodeType];
+
+export interface AgentflowNodeDto extends BaseDto {
+  agentflowId: string;
+  nodeId: string;
+  type: AgentflowNodeType;
+  relateId: string;
 }
 
-export type AgentflowEdgeDto = {
-  agentflowId: string
-  edgeId: string
-  sourceNodeId: string
-  targetNodeId: string
-  animated: boolean
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
+export interface AgentflowEdgeDto extends BaseDto {
+  agentflowId: string;
+  edgeId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  animated: boolean;
 }
 
-export type AgentflowDto = {
-  id: string
-  name: string
-  description: string | null
-  pattern: number
-  configurationJson: string | null
-  enable: boolean
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
+export interface AgentflowDto extends BaseDto {
+  id: string;
+  name: string;
+  description: string | null;
+  pattern: number;
+  configurationJson: string | null;
+  enable: boolean;
+}
+
+export interface AgentflowDetailDto extends AgentflowDto {
+  nodes: AgentflowNodeDto[];
+  edges: AgentflowEdgeDto[];
 }

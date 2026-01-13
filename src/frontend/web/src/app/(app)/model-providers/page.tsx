@@ -421,15 +421,17 @@ function ModelProviderActions({
 
   const deleteModelProviderMutation = useMutation({
     mutationFn: async () => {
-      const keys = await listKeysByPair({ modelId, providerId })
+      const keys = await listKeysByPair({ modelProviderId })
       await Promise.all(
         keys.map((k) =>
-          apiDelete("/api/model-provider-keys/{id}", { params: { path: { id: k.id } } } as never)
+          // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
+          apiDelete("/api/model-provider-keys/{id}", { params: { path: { id: k.id } } })
         )
       )
+      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
       await apiDelete("/api/model-providers/{modelProviderId}", {
         params: { path: { modelProviderId } },
-      } as never)
+      })
     },
     onSuccess: async () => {
       toast.success("Deleted model provider and keys")

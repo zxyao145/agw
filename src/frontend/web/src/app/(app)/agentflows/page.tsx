@@ -43,13 +43,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { VisualAgentflowDialog } from "../agentflows/components/visual-agentflow-dialog";
-import { AgentDto, AgentflowDto } from "@/types/agentflow";
+import {
+  AgentDto,
+  AgentflowDto,
+  AgentflowNodeDto,
+  AgentflowEdgeDto,
+  AgentflowDetailDto
+} from "@/types/agentflow";
 import { Pencil, Trash2, X, Play } from "lucide-react";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Ulid } from "id128";
 
-import {AiMessage, AiMessageContent} from "@/types"
-
+import { AiMessage } from "@/types";
 
 type AgentflowExecuteRequest = {
   threadId: string | null;
@@ -61,32 +66,72 @@ type AgentflowExecuteResponse = {
   messages: AiMessage[];
 };
 
+const PATTERN_NAMES: Record<number, string> = {
+  0: "Concurrent",
+  1: "Sequential",
+  2: "GroupChat",
+  3: "Handoff",
+  4: "Magentic",
+};
+
 function getPatternName(pattern: number): string {
-  switch (pattern) {
-    case 0:
-      return "Concurrent";
-    case 1:
-      return "Sequential";
-    case 2:
-      return "GroupChat";
-    case 3:
-      return "Handoff";
-    case 4:
-      return "Magentic";
-    default:
-      return `Unknown (${pattern})`;
-  }
+  return PATTERN_NAMES[pattern] ?? `Unknown (${pattern})`;
 }
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (typeof error.body === "string" && error.body.trim().length) {
-      return error.body;
-    }
-    return `${error.status} ${error.statusText}`;
+    return error.body && typeof error.body === "string" && error.body.trim()
+      ? error.body
+      : `${error.status} ${error.statusText}`;
   }
-  if (error instanceof Error) return error.message;
-  return "Unknown error";
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
+function getTextContent(message: AiMessage): string {
+  return message.contents.find((c) => c.type === "text")?.content || "";
+}
+
+function mergeTextContent(existing: AiMessage, incoming: AiMessage): void {
+  const existingText = existing.contents.find((c) => c.type === "text");
+  const incomingText = incoming.contents.find((c) => c.type === "text");
+
+  if (existingText && incomingText) {
+    existingText.content = (existingText.content || "") + (incomingText.content || "");
+  }
+}
+
+function mergeMessages(messages: AiMessage[]): AiMessage[] {
+  const messageMap = new Map<string, AiMessage>();
+
+  messages.forEach((msg) => {
+    const existing = messageMap.get(msg.messageId);
+    if (existing) {
+      mergeTextContent(existing, msg);
+    } else {
+      messageMap.set(msg.messageId, { ...msg });
+    }
+  });
+
+  return Array.from(messageMap.values());
+}
+
+async function fetchAgentflowDetails(id: string): Promise<AgentflowDetailDto> {
+  const [nodes, edges] = await Promise.all([
+    // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
+    apiGet("/api/agentflows/{id}/nodes", {
+      params: { path: { id } },
+    }),
+    // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
+    apiGet("/api/agentflows/{id}/edges", {
+      params: { path: { id } },
+    }),
+  ]);
+
+  return {
+    id,
+    nodes: (nodes as AgentflowNodeDto[]) || [],
+    edges: (edges as AgentflowEdgeDto[]) || [],
+  } as AgentflowDetailDto;
 }
 
 export default function AgentflowsPage() {
@@ -109,16 +154,7 @@ export default function AgentflowsPage() {
   });
 
   const [visualOpen, setVisualOpen] = React.useState(false);
-  const [editingAgentflow, setEditingAgentflow] = React.useState<{
-    id: string;
-    name: string;
-    description: string | null;
-    pattern: number;
-    configurationJson: string | null;
-    enable: boolean;
-    nodes: any[];
-    edges: any[];
-  } | null>(null);
+  const [editingAgentflow, setEditingAgentflow] = React.useState<AgentflowDetailDto | null>(null);
 
   // Execute drawer state
   const [executeOpen, setExecuteOpen] = React.useState(false);
@@ -132,9 +168,11 @@ export default function AgentflowsPage() {
     React.useState<AgentflowExecuteResponse | null>(null);
 
   const updateAgentflowMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: string; body: any }) => {
-      // @ts-ignore - Dynamic path not supported by apiPut types
-      return await apiPut(`/api/agentflows/${id}`, { body });
+    mutationFn: async ({ id, body }: { id: string; body: AgentflowDetailDto }) => {
+      return await apiPut("/api/agentflows/{id}", {
+        params: { path: { id } },
+        body,
+      });
     },
     onSuccess: async () => {
       toast.success("Agentflow updated");
@@ -147,8 +185,10 @@ export default function AgentflowsPage() {
 
   const deleteAgentflowMutation = useMutation({
     mutationFn: async (id: string) => {
-      // @ts-ignore - Dynamic path not supported by apiDelete types
-      return await apiDelete(`/api/agentflows/${id}`);
+      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
+      return await apiDelete("/api/agentflows/{id}", {
+        params: { path: { id } },
+      });
     },
     onSuccess: async () => {
       toast.success("Agentflow deleted");
@@ -227,16 +267,8 @@ export default function AgentflowsPage() {
                 if (existingIndex >= 0) {
                   // Merge content for same messageId
                   const updated = [...messages];
-                  const existingMsg = updated[existingIndex];
-                  const existingTextContent = existingMsg.contents.find(c => c.type === "text");
-                  const newTextContent = message.contents.find(c => c.type === "text");
-
-                  if (existingTextContent && newTextContent) {
-                    existingTextContent.content = (existingTextContent.content || "") + (newTextContent.content || "");
-                  }
-
-                  updated[existingIndex] = existingMsg;
-                  console.debug('Updated message:', prev?.threadId , updated[existingIndex]);
+                  mergeTextContent(updated[existingIndex], message);
+                  console.debug('Updated message:', prev?.threadId, updated[existingIndex]);
                   return { threadId: prev?.threadId || '', messages: updated };
                 } else {
                   // New message
@@ -267,22 +299,14 @@ export default function AgentflowsPage() {
   const handleToggleEnabled = React.useCallback(
     async (agentflow: AgentflowDto) => {
       try {
-        // We need to get full agentflow data including nodes and edges
-        // @ts-ignore - Dynamic path not supported by apiGet types
-        const nodes = (await apiGet(`/api/agentflows/${agentflow.id}/nodes`)) as any[];
-        // @ts-ignore - Dynamic path not supported by apiGet types
-        const edges = (await apiGet(`/api/agentflows/${agentflow.id}/edges`)) as any[];
+        const details = await fetchAgentflowDetails(agentflow.id);
 
         updateAgentflowMutation.mutate({
           id: agentflow.id,
           body: {
-            name: agentflow.name,
-            description: agentflow.description,
-            pattern: agentflow.pattern,
-            configurationJson: agentflow.configurationJson,
+            ...agentflow,
+            ...details,
             enable: !agentflow.enable,
-            nodes: nodes || [],
-            edges: edges || [],
           },
         });
       } catch (error) {
@@ -305,25 +329,13 @@ export default function AgentflowsPage() {
 
   const handleEdit = React.useCallback(async (agentflow: AgentflowDto) => {
     try {
-      // Fetch agentflow nodes and edges
-      // @ts-ignore - Dynamic path not supported by apiGet types
-      const nodes = (await apiGet(`/api/agentflows/${agentflow.id}/nodes`)) as any[];
-      // @ts-ignore - Dynamic path not supported by apiGet types
-      const edges = (await apiGet(`/api/agentflows/${agentflow.id}/edges`)) as any[];
+      const details = await fetchAgentflowDetails(agentflow.id);
 
-      // Set editing agentflow data
       setEditingAgentflow({
-        id: agentflow.id,
-        name: agentflow.name,
-        description: agentflow.description,
-        pattern: agentflow.pattern,
-        configurationJson: agentflow.configurationJson,
-        enable: agentflow.enable,
-        nodes: nodes || [],
-        edges: edges || [],
+        ...agentflow,
+        ...details,
       });
 
-      // Open visual builder
       setVisualOpen(true);
     } catch (error) {
       toast.error("Failed to load agentflow details");
@@ -354,21 +366,21 @@ export default function AgentflowsPage() {
     if (!executingAgentflow || !executeInput.trim()) return;
 
     setExecuteResult((prev) => {
-      const userMg = {
+      const userMsg: AiMessage = {
         messageId: Ulid.generate().toCanonical(),
         author: "user",
         role: "user",
-        content: executeInput,
+        contents: [{ type: "text", content: executeInput }],
       };
       if (prev) {
         return {
           threadId: prev.threadId,
-          messages: [...prev.messages, userMg],
+          messages: [...prev.messages, userMsg],
         };
       }
       return {
         threadId: executeThreadId || Ulid.generate().toCanonical(),
-        messages: [userMg],
+        messages: [userMsg],
       };
     });
 
@@ -554,56 +566,32 @@ export default function AgentflowsPage() {
             )}
 
             {/* Execution results */}
-            {executeResult &&
-              executeResult.messages.length > 0 &&
-              (() => {
-                // Merge messages with the same messageId
-                const messageMap = new Map<string, AiMessage>();
-
-                executeResult.messages.forEach((msg) => {
-                  if (messageMap.has(msg.messageId)) {
-                    // Merge content for same messageId
-                    const existing = messageMap.get(msg.messageId)!;
-                    const existingTextContent = existing.contents.find(c => c.type === "text");
-                    const newTextContent = msg.contents.find(c => c.type === "text");
-                    if (existingTextContent && newTextContent) {
-                      existingTextContent.content = (existingTextContent.content || "") + (newTextContent.content || "");
-                    }
-                  } else {
-                    // New message, create a copy
-                    messageMap.set(msg.messageId, { ...msg });
-                  }
-                });
-
-                const mergedMessages = Array.from(messageMap.values());
-
-                return (
-                  <div className="space-y-2">
-                    <Label>Result</Label>
-                    <div className="border rounded-md p-3 max-h-96 overflow-y-auto space-y-3 bg-muted/20">
-                      {mergedMessages.map((msg) => (
-                        <div
-                          key={msg.messageId}
-                          className={`p-3 rounded-md ${
-                            msg.role === "user"
-                              ? "bg-primary/10 ml-8"
-                              : msg.role === "assistant"
-                                ? "bg-secondary/50 mr-8"
-                                : "bg-muted"
-                          }`}
-                        >
-                          <div className="text-xs font-medium text-muted-foreground mb-1">
-                            {msg.author}({msg.role ?? ""})
-                          </div>
-                          <div className="text-sm whitespace-pre-wrap">
-                            {msg.contents.find(c => c.type === "text")?.content || ""}
-                          </div>
-                        </div>
-                      ))}
+            {executeResult && executeResult.messages.length > 0 && (
+              <div className="space-y-2">
+                <Label>Result</Label>
+                <div className="border rounded-md p-3 max-h-96 overflow-y-auto space-y-3 bg-muted/20">
+                  {mergeMessages(executeResult.messages).map((msg) => (
+                    <div
+                      key={msg.messageId}
+                      className={`p-3 rounded-md ${
+                        msg.role === "user"
+                          ? "bg-primary/10 ml-8"
+                          : msg.role === "assistant"
+                            ? "bg-secondary/50 mr-8"
+                            : "bg-muted"
+                      }`}
+                    >
+                      <div className="text-xs font-medium text-muted-foreground mb-1">
+                        {msg.author}({msg.role ?? ""})
+                      </div>
+                      <div className="text-sm whitespace-pre-wrap">
+                        {getTextContent(msg)}
+                      </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Input area */}
           </div>

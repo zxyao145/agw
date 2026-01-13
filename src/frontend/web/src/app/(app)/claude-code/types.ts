@@ -1,15 +1,17 @@
-export type AdditionalProperties = Record<string, any>;
+export type AdditionalProperties = Record<string, unknown>;
 
-export enum ClaudeCodeMessageType {
-  system = "system",
-  assistant = "assistant",
-  result = "result",
-}
+export const ClaudeCodeMessageType = {
+  system: "system",
+  assistant: "assistant",
+  result: "result",
+} as const;
+
+export type ClaudeCodeMessageType = (typeof ClaudeCodeMessageType)[keyof typeof ClaudeCodeMessageType];
 
 export interface InitMessageContent {
   claudeCodeVersion: string;
-  permissionMode: string;
-  model:  string;
+  permissionMode: PermissionMode;
+  model: string;
   tools: string[];
   slashCommands: string[];
   agents: string[];
@@ -18,10 +20,12 @@ export interface InitMessageContent {
   mcpServers: string[];
 }
 
-
 export const PermissionMode = {
   default: "default",
   acceptEdits: "acceptEdits",
   plan: "plan",
   bypassPermissions: "bypassPermissions",
 } as const;
+
+export type PermissionMode = (typeof PermissionMode)[keyof typeof PermissionMode];
+

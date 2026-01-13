@@ -1,4 +1,5 @@
-export type AdditionalProperties = Record<string, any>;
+export type AdditionalProperties = Record<string, unknown>;
+
 export interface AiMessageContent {
   type: string;
   content: string;
@@ -13,7 +14,6 @@ export interface AiMessage {
   additionalProperties?: AdditionalProperties;
 }
 
-
 export const MessageContentType = {
   DataContent: "DataContent",
   ErrorContent: "ErrorContent",
@@ -27,5 +27,5 @@ export const MessageContentType = {
   UsageContent: "UsageContent",
 } as const;
 
-export type MessageContentTypes =
-  (typeof MessageContentType)[keyof typeof MessageContentType];
+export type MessageContentType = (typeof MessageContentType)[keyof typeof MessageContentType];
+

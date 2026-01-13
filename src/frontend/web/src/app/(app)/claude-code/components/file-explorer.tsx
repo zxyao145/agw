@@ -133,7 +133,7 @@ function FileTreeNode({ item, onFileSelect, level, diffMode, onFileDeleted, onFi
     }
   };
 
-  const handleDelete = async (e: Event) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -159,7 +159,7 @@ function FileTreeNode({ item, onFileSelect, level, diffMode, onFileDeleted, onFi
     }
   };
 
-  const handleReset = async (e: Event) => {
+  const handleReset = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 

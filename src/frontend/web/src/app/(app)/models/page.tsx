@@ -141,6 +141,7 @@ export default function ModelsPage() {
 
   const deleteModelMutation = useMutation({
     mutationFn: async (id: string) => {
+      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
       return await apiDelete("/api/models/{id}", {
         params: { path: { id } },
       })

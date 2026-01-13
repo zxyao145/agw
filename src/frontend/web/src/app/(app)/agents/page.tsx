@@ -220,7 +220,10 @@ export default function AgentsPage() {
       id: string;
       body: AgentCreateRequest;
     }) => {
-      return await apiPut(`/api/agents/${id}`, { body });
+      return await apiPut("/api/agents/{id}", {
+        params: { path: { id } },
+        body,
+      });
     },
     onSuccess: async () => {
       toast.success("Agent updated");
@@ -235,7 +238,10 @@ export default function AgentsPage() {
 
   const deleteAgentMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiDelete(`/api/agents/${id}`);
+      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
+      return await apiDelete("/api/agents/{id}", {
+        params: { path: { id } },
+      });
     },
     onSuccess: async () => {
       toast.success("Agent deleted");

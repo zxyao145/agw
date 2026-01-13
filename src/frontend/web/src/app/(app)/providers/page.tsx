@@ -96,6 +96,7 @@ export default function ProvidersPage() {
 
   const deleteProviderMutation = useMutation({
     mutationFn: async (id: string) => {
+      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
       return await apiDelete("/api/providers/{id}", {
         params: { path: { id } },
       })

@@ -34,7 +34,7 @@ export default function ClaudeCodePage() {
   const [initContent, setInitContent] =
     React.useState<InitMessageContent | null>(null);
 
-  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const wsRef = React.useRef<WebSocket | null>(null);
 
   // Auto-scroll to bottom when new messages arrive
