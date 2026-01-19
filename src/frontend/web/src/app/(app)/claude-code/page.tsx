@@ -9,7 +9,6 @@ import {
   PermissionMode,
 } from "./types";
 
-  
 import { AiMessage, AiMessageContent, MessageContentType } from "@/types";
 
 import { Ulid } from "id128";
@@ -17,7 +16,7 @@ import { FileExplorer } from "./components/file-explorer";
 import { Chat } from "./components/chat";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import "./page.css"
+import "./page.css";
 
 export default function ClaudeCodePage() {
   const [input, setInput] = React.useState("");
@@ -25,7 +24,7 @@ export default function ClaudeCodePage() {
   const [apiKey, setApiKey] = React.useState("");
   const [apiBaseUrl, setApiBaseUrl] = React.useState("");
   const [permissionMode, setPermissionMode] = React.useState<string>(
-    PermissionMode.default
+    PermissionMode.default,
   );
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
@@ -48,7 +47,7 @@ export default function ClaudeCodePage() {
     const savedApiKey = localStorage.getItem("claudecode_apiKey");
     const savedApiBaseUrl = localStorage.getItem("claudecode_apiBaseUrl");
     const savedPermissionMode = localStorage.getItem(
-      "claudecode_permissionMode"
+      "claudecode_permissionMode",
     );
     if (savedWorkingDir) setWorkingDirectory(savedWorkingDir);
     if (savedApiKey) setApiKey(savedApiKey);
@@ -80,7 +79,19 @@ export default function ClaudeCodePage() {
       try {
         const data: AiMessage = JSON.parse(event.data);
         console.debug("onmessage", data);
+
         if (data.role === "system") {
+          var author = data.author;
+          if (author === "d-system") {
+            var firstContent = data.contents[0];
+            if (firstContent.type === MessageContentType.ErrorContent) {
+              console.error("something error:", firstContent.content);
+              setIsExecuting(false);
+              setMessages((prev) => [...prev, data]);
+              return;
+            }
+          }
+
           if (
             data.additionalProperties!.type === "system" &&
             data.additionalProperties!.subtype === "init"
@@ -131,7 +142,7 @@ export default function ClaudeCodePage() {
         console.error(
           "WebSocket closed unexpectedly:",
           event.code,
-          event.reason
+          event.reason,
         );
         if (event.code === 1003) {
           toast.error("Invalid request data");
@@ -237,7 +248,7 @@ export default function ClaudeCodePage() {
       }
     } catch (error) {
       toast.error(
-        `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
       setIsExecuting(false);
     }
@@ -296,7 +307,8 @@ export default function ClaudeCodePage() {
         currentMsg.contents[0].type === MessageContentType.FunctionCallContent;
 
       if (isFunctionCall) {
-        const callId = currentMsg.contents[0].additionalProperties?.callId as string;
+        const callId = currentMsg.contents[0].additionalProperties
+          ?.callId as string;
 
         if (callId) {
           // Find all FunctionResults with matching callId (anywhere in the message list)
@@ -311,7 +323,8 @@ export default function ClaudeCodePage() {
               msg.contents[0].type === MessageContentType.FunctionResultContent;
 
             if (isFunctionResult) {
-              const resultCallId = msg.contents[0].additionalProperties?.callId as string;
+              const resultCallId = msg.contents[0].additionalProperties
+                ?.callId as string;
               if (resultCallId === callId) {
                 matchingResults.push({ msg, index: j });
               }
@@ -323,7 +336,7 @@ export default function ClaudeCodePage() {
             const toolName = currentMsg.contents[0].content;
             const groupedMessages = [
               currentMsg,
-              ...matchingResults.map(r => r.msg)
+              ...matchingResults.map((r) => r.msg),
             ];
 
             items.push({
@@ -334,7 +347,7 @@ export default function ClaudeCodePage() {
 
             // Mark all these messages as processed
             processedIndices.add(i);
-            matchingResults.forEach(r => processedIndices.add(r.index));
+            matchingResults.forEach((r) => processedIndices.add(r.index));
           } else {
             // FunctionCall without matching results, treat as normal
             items.push({
@@ -355,7 +368,8 @@ export default function ClaudeCodePage() {
         // Check if it's an orphaned FunctionResult
         const isFunctionResult =
           currentMsg?.contents?.length === 1 &&
-          currentMsg.contents[0].type === MessageContentType.FunctionResultContent;
+          currentMsg.contents[0].type ===
+            MessageContentType.FunctionResultContent;
 
         if (isFunctionResult) {
           // This FunctionResult wasn't matched to any FunctionCall

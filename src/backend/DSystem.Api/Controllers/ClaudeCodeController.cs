@@ -1,7 +1,10 @@
+using DSystem.Domain.Models;
 using DSystem.ExternalAgents;
 using DSystem.Infrastructure;
+using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.AI;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -147,13 +150,18 @@ public class ClaudeCodeController : ControllerBase
             return;
         }
 
-        var errorData = Encoding.UTF8.GetBytes(JsonUtil.Serialize(new
+        var agentUpdate = new AgentRunResponseUpdate
         {
-            type = "error",
-            content = errorMessage,
-            isError = true,
-            errorMessage = errorMessage
-        }));
+            Role = ChatRole.System,
+            AuthorName = "d-system",
+            Contents = [
+                new ErrorContent(errorMessage)
+            ]
+        };
+
+        var aiMsg = agentUpdate.ToAiMessage();
+        var str = aiMsg!.Serialize();
+        var errorData = Encoding.UTF8.GetBytes(str);
 
         await webSocket.SendAsync(
             new ArraySegment<byte>(errorData),

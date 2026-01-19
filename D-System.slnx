@@ -9,12 +9,15 @@
     <Project Path="src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/External/">
+    <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk.MAF/ClaudeCodeSdk.MAF.csproj" />
+    <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk/ClaudeCodeSdk.csproj" />
     <Project Path="src/backend/DSystem.ExternalAgents/DSystem.ExternalAgents.csproj" />
   </Folder>
   <Folder Name="/Host/">
     <Project Path="src/backend/DSystem.Host/DSystem.Host.csproj" />
   </Folder>
   <Folder Name="/解决方案项/">
+    <File Path=".gitignore" />
     <File Path="CLAUDE.md" />
     <File Path="src/backend/Directory.Build.props" />
     <File Path="src/backend/Directory.Packages.props" />

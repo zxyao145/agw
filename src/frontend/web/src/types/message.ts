@@ -12,6 +12,8 @@ export interface AiMessage {
   role?: string;
   contents: AiMessageContent[];
   additionalProperties?: AdditionalProperties;
+  // agent error
+  type?: string;
 }
 
 export const MessageContentType = {

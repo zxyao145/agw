@@ -366,3 +366,5 @@ d_system.db
 d_system.db-wal
 d_system.db-shm
 logs/
+
+tmpclaude-*
