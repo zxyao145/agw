@@ -74,6 +74,8 @@ type AgentDto = {
   systemPrompt: string;
   modelProviderApiKeyId: string;
   tools?: string | null;
+  type: number; // 0 = System, 1 = External
+  extra?: string | null;
   createBy?: string | null;
   createTime?: string | null;
   updateBy?: string | null;
@@ -159,6 +161,8 @@ export default function AgentsPage() {
   const [modelProviderApiKeyId, setModelProviderApiKeyId] = React.useState("");
   const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
   const [toolSearchTerm, setToolSearchTerm] = React.useState("");
+  const [agentType, setAgentType] = React.useState<string>("0"); // 0 = System, 1 = External
+  const [extra, setExtra] = React.useState("");
 
   // Edit dialog state
   const [editOpen, setEditOpen] = React.useState(false);
@@ -172,6 +176,8 @@ export default function AgentsPage() {
     []
   );
   const [editToolSearchTerm, setEditToolSearchTerm] = React.useState("");
+  const [editAgentType, setEditAgentType] = React.useState<string>("0");
+  const [editExtra, setEditExtra] = React.useState("");
 
   // Delete dialog state
   const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -205,6 +211,8 @@ export default function AgentsPage() {
       setModelProviderApiKeyId("");
       setSelectedTools([]);
       setToolSearchTerm("");
+      setAgentType("0");
+      setExtra("");
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
     onError: (error) => {
@@ -357,6 +365,8 @@ export default function AgentsPage() {
     setEditDescription(agent.description);
     setEditSystemPrompt(agent.systemPrompt);
     setEditModelProviderApiKeyId(agent.modelProviderApiKeyId);
+    setEditAgentType(agent.type.toString());
+    setEditExtra(agent.extra || "");
     // Parse tools from JSON string
     try {
       const tools = agent.tools ? JSON.parse(agent.tools) : [];
@@ -520,6 +530,39 @@ export default function AgentsPage() {
                 </div>
 
                 <div className="grid gap-2">
+                  <Label htmlFor="agentType">Agent Type</Label>
+                  <Select
+                    value={agentType}
+                    onValueChange={setAgentType}
+                  >
+                    <SelectTrigger id="agentType" className="w-full">
+                      <SelectValue placeholder="Select agent type..." />
+                    </SelectTrigger>
+                    <SelectContent position="popper" sideOffset={4}>
+                      <SelectGroup>
+                        <SelectLabel>Agent Type</SelectLabel>
+                        <SelectItem value="0">System</SelectItem>
+                        <SelectItem value="1">External</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="extra">Extra (JSON)</Label>
+                  <Textarea
+                    id="extra"
+                    value={extra}
+                    onChange={(e) => setExtra(e.target.value)}
+                    placeholder='{"env": {"VAR_NAME": "value"}}'
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    JSON object for additional data (e.g., environment variables)
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
                   <Label htmlFor="systemPrompt">System prompt</Label>
                   <Textarea
                     id="systemPrompt"
@@ -599,6 +642,8 @@ export default function AgentsPage() {
                         selectedTools.length > 0
                           ? JSON.stringify(selectedTools)
                           : null,
+                      type: parseInt(agentType),
+                      extra: extra.trim() || null,
                     })
                   }
                   disabled={
@@ -634,6 +679,7 @@ export default function AgentsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>System Prompt</TableHead>
                   <TableHead>Tools</TableHead>
@@ -654,6 +700,15 @@ export default function AgentsPage() {
                     <TableRow key={agent.id}>
                       <TableCell className="font-medium">
                         {agent.name}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          agent.type === 0
+                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                            : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                        }`}>
+                          {agent.type === 0 ? "System" : "External"}
+                        </span>
                       </TableCell>
                       <TableCell className="max-w-xs truncate">
                         {agent.description || "-"}
@@ -791,6 +846,39 @@ export default function AgentsPage() {
             </div>
 
             <div className="grid gap-2">
+              <Label htmlFor="edit-agentType">Agent Type</Label>
+              <Select
+                value={editAgentType}
+                onValueChange={setEditAgentType}
+              >
+                <SelectTrigger id="edit-agentType" className="w-full">
+                  <SelectValue placeholder="Select agent type..." />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={4}>
+                  <SelectGroup>
+                    <SelectLabel>Agent Type</SelectLabel>
+                    <SelectItem value="0">System</SelectItem>
+                    <SelectItem value="1">External</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-extra">Extra (JSON)</Label>
+              <Textarea
+                id="edit-extra"
+                value={editExtra}
+                onChange={(e) => setEditExtra(e.target.value)}
+                placeholder='{"env": {"VAR_NAME": "value"}}'
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                JSON object for additional data (e.g., environment variables)
+              </p>
+            </div>
+
+            <div className="grid gap-2">
               <Label htmlFor="edit-systemPrompt">System prompt</Label>
               <Textarea
                 id="edit-systemPrompt"
@@ -870,6 +958,8 @@ export default function AgentsPage() {
                         editSelectedTools.length > 0
                           ? JSON.stringify(editSelectedTools)
                           : null,
+                      type: parseInt(editAgentType),
+                      extra: editExtra.trim() || null,
                     },
                   });
                 }

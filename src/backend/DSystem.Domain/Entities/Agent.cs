@@ -1,3 +1,5 @@
+using DSystem.Domain.Enums;
+
 namespace DSystem.Domain.Entities;
 
 public class Agent : BaseEntity
@@ -8,6 +10,12 @@ public class Agent : BaseEntity
     public string SystemPrompt { get; set; } = string.Empty;
     public Guid ModelProviderApiKeyId { get; set; }
     public string? Tools { get; set; }  // JSON array of tool method names
+    public AgentType Type { get; set; } = AgentType.System;
+
+    /// <summary>
+    /// JSON object for additional data (e.g., environment variables).
+    /// </summary>
+    public string? Extra { get; set; }
 
     public ModelProviderApiKey? ModelProviderApiKey { get; set; }
 
