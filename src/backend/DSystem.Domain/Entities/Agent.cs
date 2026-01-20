@@ -11,7 +11,11 @@ public class Agent : BaseEntity
     public Guid ModelProviderApiKeyId { get; set; }
     public string? Tools { get; set; }  // JSON array of tool method names
     public AgentType Type { get; set; } = AgentType.System;
-    public string? Extra { get; set; }  // JSON object for additional data (e.g., environment variables)
+
+    /// <summary>
+    /// JSON object for additional data (e.g., environment variables).
+    /// </summary>
+    public string? Extra { get; set; }
 
     public ModelProviderApiKey? ModelProviderApiKey { get; set; }
 
