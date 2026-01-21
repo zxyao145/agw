@@ -1,103 +1,17 @@
 "use client"
 
 import * as React from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Trash2 } from "lucide-react"
-import { toast } from "sonner"
+import { useQuery } from "@tanstack/react-query"
 
-import { ApiError, apiDelete, apiGet, apiPost } from "@/api/client"
-import type { components } from "@/api/openapi"
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription as UiDialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle as UiDialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Checkbox } from "@/components/ui/checkbox"
+import { apiGet } from "@/api/client"
 
-type ModelCreateRequest = components["schemas"]["ModelCreateRequest"]
-
-type ModelDto = {
-  id: string
-  name: string
-  description: string | null
-  type: number
-  maxTokens: number
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
-}
-
-// [Flags] enum ModelType
-enum ModelType {
-  Chat = 1,
-  Image = 2,
-  Audio = 4,
-  Embedding = 8,
-}
-
-const MODEL_TYPE_OPTIONS = [
-  { value: ModelType.Chat, label: "Chat" },
-  { value: ModelType.Image, label: "Image" },
-  { value: ModelType.Audio, label: "Audio" },
-  { value: ModelType.Embedding, label: "Embedding" },
-]
-
-function getModelTypeLabel(type: number): string {
-  const types: string[] = []
-  if (type & ModelType.Chat) types.push("Chat")
-  if (type & ModelType.Image) types.push("Image")
-  if (type & ModelType.Audio) types.push("Audio")
-  if (type & ModelType.Embedding) types.push("Embedding")
-  return types.length > 0 ? types.join(" | ") : "None"
-}
-
-
-function getApiErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (typeof error.body === "string" && error.body.trim().length) {
-      return error.body
-    }
-    return `${error.status} ${error.statusText}`
-  }
-  if (error instanceof Error) return error.message
-  return "Unknown error"
-}
-
-function parseIntOrNull(value: string): number | null {
-  const trimmed = value.trim()
-  if (!trimmed.length) return null
-  const n = Number(trimmed)
-  if (!Number.isFinite(n)) return null
-  return Math.trunc(n)
-}
+import { ModelsHeader } from "./components/models-header"
+import { CreateModelDialog } from "./components/create-model-dialog"
+import { ModelsTable } from "./components/models-table"
+import type { ModelDto } from "./components/types"
 
 export default function ModelsPage() {
-  const queryClient = useQueryClient()
+  const [createOpen, setCreateOpen] = React.useState(false)
 
   const modelsQuery = useQuery({
     queryKey: ["models"],
@@ -107,254 +21,22 @@ export default function ModelsPage() {
     },
   })
 
-  const [createOpen, setCreateOpen] = React.useState(false)
-  const [name, setName] = React.useState("")
-  const [description, setDescription] = React.useState("")
-  const [selectedTypes, setSelectedTypes] = React.useState<number>(0)
-  const [maxTokens, setMaxTokens] = React.useState("4096")
-
-  const toggleType = (typeValue: number) => {
-    setSelectedTypes((prev) => prev ^ typeValue) // XOR to toggle bit
-  }
-
-  const isTypeSelected = (typeValue: number) => {
-    return (selectedTypes & typeValue) === typeValue
-  }
-
-  const createModelMutation = useMutation({
-    mutationFn: async (body: ModelCreateRequest) => {
-      return await apiPost("/api/models", { body })
-    },
-    onSuccess: async () => {
-      toast.success("Model created")
-      setCreateOpen(false)
-      setName("")
-      setDescription("")
-      setSelectedTypes(0)
-      setMaxTokens("4096")
-      await queryClient.invalidateQueries({ queryKey: ["models"] })
-    },
-    onError: (error) => {
-      toast.error(`Create failed: ${getApiErrorMessage(error)}`)
-    },
-  })
-
-  const deleteModelMutation = useMutation({
-    mutationFn: async (id: string) => {
-      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
-      return await apiDelete("/api/models/{id}", {
-        params: { path: { id } },
-      })
-    },
-    onSuccess: async () => {
-      toast.success("Model deleted")
-      await queryClient.invalidateQueries({ queryKey: ["models"] })
-    },
-    onError: (error) => {
-      toast.error(`Delete failed: ${getApiErrorMessage(error)}`)
-    },
-  })
-
-  const parsedMaxTokens = parseIntOrNull(maxTokens)
-
-  const createDisabled =
-    !name.trim() ||
-    selectedTypes === 0 ||
-    parsedMaxTokens === null ||
-    createModelMutation.isPending
-
   return (
     <div className="space-y-6 w-full">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold">Models</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage LLM models (type/maxTokens).
-          </p>
-        </div>
+      <ModelsHeader
+        onRefresh={() => modelsQuery.refetch()}
+        isRefreshing={modelsQuery.isFetching}
+        onCreateClick={() => setCreateOpen(true)}
+      />
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Button
-            variant="outline"
-            onClick={() => modelsQuery.refetch()}
-            disabled={modelsQuery.isFetching}
-          >
-            Refresh
-          </Button>
+      <ModelsTable
+        models={modelsQuery.data}
+        isLoading={modelsQuery.isLoading}
+        isError={modelsQuery.isError}
+        error={modelsQuery.error}
+      />
 
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>Create model</Button>
-            </DialogTrigger>
-
-            <DialogContent>
-              <DialogHeader>
-                <UiDialogTitle>Create model</UiDialogTitle>
-                <UiDialogDescription>
-                  Uses <code>/api/models</code> with{" "}
-                  <code>ModelCreateRequest</code>.
-                </UiDialogDescription>
-              </DialogHeader>
-
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="gpt-4o-mini"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label>Type (Flags enum - select one or more)</Label>
-                  <div className="space-y-2 rounded-md border p-3">
-                    {MODEL_TYPE_OPTIONS.map((option) => (
-                      <div key={option.value} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`type-${option.value}`}
-                          checked={isTypeSelected(option.value)}
-                          onCheckedChange={() => toggleType(option.value)}
-                        />
-                        <label
-                          htmlFor={`type-${option.value}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                        >
-                          {option.label} ({option.value})
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Selected value: {selectedTypes} ({getModelTypeLabel(selectedTypes)})
-                  </p>
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="maxTokens">Max tokens (int)</Label>
-                  <Input
-                    id="maxTokens"
-                    inputMode="numeric"
-                    value={maxTokens}
-                    onChange={(e) => setMaxTokens(e.target.value)}
-                    placeholder="4096"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="description">Description (nullable)</Label>
-                  <Textarea
-                    id="description"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-              </div>
-
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="outline">
-                    Cancel
-                  </Button>
-                </DialogClose>
-
-                <Button
-                  type="button"
-                  disabled={createDisabled}
-                  onClick={() =>
-                    createModelMutation.mutate({
-                      name,
-                      description: description.length ? description : null,
-                      type: selectedTypes,
-                      maxTokens: parsedMaxTokens ?? 0,
-                    })
-                  }
-                >
-                  {createModelMutation.isPending ? "Creating..." : "Create"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Models</CardTitle>
-          <CardDescription>
-            Fetched from <code>/api/models</code>.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {modelsQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">Loading...</div>
-          ) : modelsQuery.isError ? (
-            <div className="text-sm text-destructive">
-              Failed to load models: {getApiErrorMessage(modelsQuery.error)}
-            </div>
-          ) : modelsQuery.data && modelsQuery.data.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Max Tokens</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-24 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {modelsQuery.data.map((model) => (
-                  <TableRow key={model.id}>
-                    <TableCell className="font-medium">{model.name}</TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {model.description || "-"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">{getModelTypeLabel(model.type)}</div>
-                      <div className="text-xs text-muted-foreground font-mono">
-                        {model.type}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {model.maxTokens.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {model.createTime
-                        ? new Date(model.createTime).toLocaleString()
-                        : "-"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        disabled={deleteModelMutation.isPending}
-                        onClick={() => {
-                          const ok = window.confirm(
-                            `Delete model "${model.name}"?\n\nThis action cannot be undone.`
-                          )
-                          if (!ok) return
-                          deleteModelMutation.mutate(model.id)
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="text-sm text-muted-foreground">
-              No models found. Create one to get started.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <CreateModelDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   )
 }
