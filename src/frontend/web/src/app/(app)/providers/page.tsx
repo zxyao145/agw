@@ -1,68 +1,17 @@
 "use client"
 
 import * as React from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Trash2 } from "lucide-react"
-import { toast } from "sonner"
+import { useQuery } from "@tanstack/react-query"
 
-import { ApiError, apiDelete, apiGet, apiPost } from "@/api/client"
-import type { components } from "@/api/openapi"
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription as UiDialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle as UiDialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { apiGet } from "@/api/client"
 
-type ProviderCreateRequest = components["schemas"]["ProviderCreateRequest"]
-
-type ProviderDto = {
-  id: string
-  name: string
-  description: string | null
-  endpoint: string
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
-}
-
-function getApiErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (typeof error.body === "string" && error.body.trim().length) {
-      return error.body
-    }
-    return `${error.status} ${error.statusText}`
-  }
-  if (error instanceof Error) return error.message
-  return "Unknown error"
-}
+import { ProvidersHeader } from "./components/providers-header"
+import { CreateProviderDialog } from "./components/create-provider-dialog"
+import { ProvidersTable } from "./components/providers-table"
+import type { ProviderDto } from "./components/types"
 
 export default function ProvidersPage() {
-  const queryClient = useQueryClient()
+  const [createOpen, setCreateOpen] = React.useState(false)
 
   const providersQuery = useQuery({
     queryKey: ["providers"],
@@ -72,205 +21,22 @@ export default function ProvidersPage() {
     },
   })
 
-  const [createOpen, setCreateOpen] = React.useState(false)
-  const [name, setName] = React.useState("")
-  const [description, setDescription] = React.useState<string>("")
-  const [endpoint, setEndpoint] = React.useState("")
-
-  const createProviderMutation = useMutation({
-    mutationFn: async (body: ProviderCreateRequest) => {
-      return await apiPost("/api/providers", { body })
-    },
-    onSuccess: async () => {
-      toast.success("Provider created")
-      setCreateOpen(false)
-      setName("")
-      setDescription("")
-      setEndpoint("")
-      await queryClient.invalidateQueries({ queryKey: ["providers"] })
-    },
-    onError: (error) => {
-      toast.error(`Create failed: ${getApiErrorMessage(error)}`)
-    },
-  })
-
-  const deleteProviderMutation = useMutation({
-    mutationFn: async (id: string) => {
-      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
-      return await apiDelete("/api/providers/{id}", {
-        params: { path: { id } },
-      })
-    },
-    onSuccess: async () => {
-      toast.success("Provider deleted")
-      await queryClient.invalidateQueries({ queryKey: ["providers"] })
-    },
-    onError: (error) => {
-      toast.error(`Delete failed: ${getApiErrorMessage(error)}`)
-    },
-  })
-
   return (
     <div className="space-y-6 w-full">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold">Providers</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage model providers endpoints.
-          </p>
-        </div>
+      <ProvidersHeader
+        onRefresh={() => providersQuery.refetch()}
+        isRefreshing={providersQuery.isFetching}
+        onCreateClick={() => setCreateOpen(true)}
+      />
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Button
-            variant="outline"
-            onClick={() => providersQuery.refetch()}
-            disabled={providersQuery.isFetching}
-          >
-            Refresh
-          </Button>
+      <ProvidersTable
+        providers={providersQuery.data}
+        isLoading={providersQuery.isLoading}
+        isError={providersQuery.isError}
+        error={providersQuery.error}
+      />
 
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>Create provider</Button>
-            </DialogTrigger>
-
-            <DialogContent>
-              <DialogHeader>
-                <UiDialogTitle>Create provider</UiDialogTitle>
-                <UiDialogDescription>
-                  Uses <code>/api/providers</code>.
-                </UiDialogDescription>
-              </DialogHeader>
-
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="openai"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="endpoint">Endpoint</Label>
-                  <Input
-                    id="endpoint"
-                    value={endpoint}
-                    onChange={(e) => setEndpoint(e.target.value)}
-                    placeholder="https://api.openai.com/v1"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-              </div>
-
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="outline">
-                    Cancel
-                  </Button>
-                </DialogClose>
-                <Button
-                  type="button"
-                  onClick={() =>
-                    createProviderMutation.mutate({
-                      name,
-                      endpoint,
-                      description: description.length ? description : null,
-                    })
-                  }
-                  disabled={
-                    !name.trim() ||
-                    !endpoint.trim() ||
-                    createProviderMutation.isPending
-                  }
-                >
-                  {createProviderMutation.isPending ? "Creating..." : "Create"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Providers</CardTitle>
-          <CardDescription>
-            Fetched from <code>/api/providers</code>.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {providersQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">Loading...</div>
-          ) : providersQuery.isError ? (
-            <div className="text-sm text-destructive">
-              Failed to load providers: {getApiErrorMessage(providersQuery.error)}
-            </div>
-          ) : providersQuery.data && providersQuery.data.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Endpoint</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-24 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {providersQuery.data.map((provider) => (
-                  <TableRow key={provider.id}>
-                    <TableCell className="font-medium">{provider.name}</TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {provider.description || "-"}
-                    </TableCell>
-                    <TableCell className="max-w-sm truncate font-mono text-xs">
-                      {provider.endpoint}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {provider.createTime
-                        ? new Date(provider.createTime).toLocaleString()
-                        : "-"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        disabled={deleteProviderMutation.isPending}
-                        onClick={() => {
-                          const ok = window.confirm(
-                            `Delete provider "${provider.name}"?\n\nThis action cannot be undone.`
-                          )
-                          if (!ok) return
-                          deleteProviderMutation.mutate(provider.id)
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="text-sm text-muted-foreground">
-              No providers found. Create one to get started.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <CreateProviderDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   )
 }
