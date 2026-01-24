@@ -1,0 +1,211 @@
+import { Ulid } from 'id128';
+import type { AiMessage } from '@/types';
+import {
+  getChatHistoryDatabase,
+  calculateSessionSize,
+  cleanupOldSessions,
+  type ChatSessionDocument,
+  type ChatHistoryDatabase,
+} from './chat-history-db';
+
+/**
+ * Generate a title from the first user message
+ */
+function generateTitle(messages: AiMessage[]): string {
+  const firstUserMessage = messages.find((msg) => msg.role === 'user');
+  if (!firstUserMessage || !firstUserMessage.contents?.length) {
+    return 'New Chat';
+  }
+
+  const firstContent = firstUserMessage.contents[0];
+  const text = firstContent.content || 'New Chat';
+
+  // Truncate to 50 characters
+  return text.length > 50 ? text.substring(0, 50) + '...' : text;
+}
+
+/**
+ * Create or update a chat session
+ */
+export async function saveSession(
+  threadId: string,
+  messages: AiMessage[],
+  title?: string
+): Promise<ChatSessionDocument> {
+  const db = await getChatHistoryDatabase();
+
+  // Find existing session by threadId
+  const existing = await db.sessions
+    .findOne({
+      selector: { threadId },
+    })
+    .exec();
+
+  const now = Date.now();
+  const sessionTitle = title || (existing?.title) || generateTitle(messages);
+
+  const sessionData = {
+    threadId,
+    title: sessionTitle,
+    messages,
+    updatedAt: now,
+  };
+
+  const size = calculateSessionSize({
+    ...sessionData,
+    id: existing?.id || '',
+    createdAt: existing?.createdAt || now,
+  });
+
+  if (existing) {
+    // Update existing session
+    await existing.patch({
+      ...sessionData,
+      size,
+    });
+
+    // Cleanup after update
+    await cleanupOldSessions(db);
+
+    return existing.toJSON() as ChatSessionDocument;
+  } else {
+    // Create new session
+    const newSession = await db.sessions.insert({
+      id: Ulid.generate().toCanonical(),
+      ...sessionData,
+      createdAt: now,
+      size,
+    });
+
+    // Cleanup after insert
+    await cleanupOldSessions(db);
+
+    return newSession.toJSON() as ChatSessionDocument;
+  }
+}
+
+/**
+ * Get a session by threadId
+ */
+export async function getSessionByThreadId(
+  threadId: string
+): Promise<ChatSessionDocument | null> {
+  const db = await getChatHistoryDatabase();
+  const session = await db.sessions
+    .findOne({
+      selector: { threadId },
+    })
+    .exec();
+
+  return session ? (session.toJSON() as ChatSessionDocument) : null;
+}
+
+/**
+ * Get all sessions, sorted by most recently updated
+ */
+export async function getAllSessions(): Promise<ChatSessionDocument[]> {
+  const db = await getChatHistoryDatabase();
+  const sessions = await db.sessions
+    .find()
+    .sort({ updatedAt: 'desc' })
+    .exec();
+
+  return sessions.map((s) => s.toJSON() as ChatSessionDocument);
+}
+
+/**
+ * Delete a session by ID
+ */
+export async function deleteSession(sessionId: string): Promise<boolean> {
+  const db = await getChatHistoryDatabase();
+  const session = await db.sessions
+    .findOne({
+      selector: { id: sessionId },
+    })
+    .exec();
+
+  if (session) {
+    await session.remove();
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Delete a session by threadId
+ */
+export async function deleteSessionByThreadId(threadId: string): Promise<boolean> {
+  const db = await getChatHistoryDatabase();
+  const session = await db.sessions
+    .findOne({
+      selector: { threadId },
+    })
+    .exec();
+
+  if (session) {
+    await session.remove();
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Update session title
+ */
+export async function updateSessionTitle(
+  sessionId: string,
+  newTitle: string
+): Promise<boolean> {
+  const db = await getChatHistoryDatabase();
+  const session = await db.sessions
+    .findOne({
+      selector: { id: sessionId },
+    })
+    .exec();
+
+  if (session) {
+    await session.patch({
+      title: newTitle,
+      updatedAt: Date.now(),
+    });
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Clear all sessions
+ */
+export async function clearAllSessions(): Promise<void> {
+  const db = await getChatHistoryDatabase();
+  await db.sessions.find().remove();
+}
+
+/**
+ * Subscribe to session changes
+ */
+export function subscribeToSessions(
+  callback: (sessions: ChatSessionDocument[]) => void
+): () => void {
+  let db: ChatHistoryDatabase | null = null;
+  let subscription: any = null;
+
+  getChatHistoryDatabase().then((database) => {
+    db = database;
+    subscription = db.sessions
+      .find()
+      .sort({ updatedAt: 'desc' })
+      .$.subscribe((sessions) => {
+        callback(sessions.map((s) => s.toJSON() as ChatSessionDocument));
+      });
+  });
+
+  return () => {
+    if (subscription) {
+      subscription.unsubscribe();
+    }
+  };
+}
