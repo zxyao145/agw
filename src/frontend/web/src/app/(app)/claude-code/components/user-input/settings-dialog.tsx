@@ -28,7 +28,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { PermissionMode, SettingsDialogProps } from "../types";
+import { PermissionMode, SettingsDialogProps } from "../../types";
 
 export function SettingsDialog({
   workingDirectory,

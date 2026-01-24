@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { DiffViewer } from "../diff-viewer";
+import { DiffViewer } from "./diff-viewer";
 import { FileExplorerProps } from "../../types";
 import ColResizeSplit from "../split-layout";
 import NoSelectedFile from "./no-selected-file";
@@ -98,7 +98,7 @@ export function FileExplorer({
       if (filePath && filePath !== selectedFile) {
         setSelectedFile(filePath);
         loadFileContent(filePath);
-        
+
         if (onFileSelect) {
           onFileSelect(filePath);
         }
@@ -115,7 +115,7 @@ export function FileExplorer({
   }, [onlyDiff]); // Only depend on diffMode, not loadFileContent to avoid infinite loop
 
   return (
-    <div className="pb-36">
+    <div>
       {/* tools */}
       <div className="flex items-center gap-4">
         <Button

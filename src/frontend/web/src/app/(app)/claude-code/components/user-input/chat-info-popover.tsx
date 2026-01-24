@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { InitMessageContent } from "../types";
+import { InitMessageContent } from "../../types";
 
 interface ChatInfoPopoverProps {
   initContent: InitMessageContent | null;

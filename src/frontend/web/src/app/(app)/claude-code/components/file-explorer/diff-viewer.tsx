@@ -10,7 +10,7 @@ import {
   DiffViewerProps,
   LineComment,
   DiffLineRowProps,
-} from "../types";
+} from "../../types";
 
 /**
  * Parse unified diff format into structured data

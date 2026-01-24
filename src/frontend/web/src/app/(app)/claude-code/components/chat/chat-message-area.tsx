@@ -7,8 +7,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import type { ChatMessageAreaProps } from "../types";
-import { AiMessageComponent } from "./message";
+import type { ChatMessageAreaProps } from "../../types";
+import { AiMessageComponent } from "../message";
 
 export function ChatMessageArea({
   messages,

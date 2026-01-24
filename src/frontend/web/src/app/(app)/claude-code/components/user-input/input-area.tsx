@@ -3,11 +3,11 @@
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { ChatInputAreaProps } from "../types";
+import type { ChatInputAreaProps } from "../../types";
 import { SettingsDialog } from "./settings-dialog";
 import { ChatInfoPopover } from "./chat-info-popover";
 
-export function ChatInputArea({
+export function InputArea({
   input,
   setInput,
   isExecuting,

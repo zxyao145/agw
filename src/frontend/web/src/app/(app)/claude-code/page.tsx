@@ -14,8 +14,8 @@ import { AiMessage, MessageContentType } from "@/types";
 
 import { Ulid } from "id128";
 import { FileExplorer } from "./components/file-explorer";
-import { Chat } from "./components/chat";
-import { ChatInputArea } from "./components/chat-input-area";
+import { Chat } from "./components/chat/chat";
+import { InputArea } from "./components/user-input/input-area";
 import { Label } from "@/components/ui/label";
 import "./page.css";
 
@@ -406,15 +406,15 @@ export default function ClaudeCodePage() {
     <div className="relative flex flex-col h-[calc(100vh-58px)] w-full max-w-8xl mx-auto mr-2">
       <div className="flex-1 overflow-y-auto">
         <Tabs
-          defaultValue="code"
-          className="w-full flex flex-col flex-1 min-h-0"
+          defaultValue="chat"
+          className="w-full flex flex-col flex-1 min-h-0 pb-36"
         >
           <TabsList className="w-fit">
-            <TabsTrigger value="code">Code</TabsTrigger>
+            <TabsTrigger value="chat">Chat</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="code">
+          <TabsContent value="chat">
             <Chat
               messages={messages}
               messagesEndRef={messagesEndRef}
@@ -435,7 +435,7 @@ export default function ClaudeCodePage() {
       </div>
 
       <div className="absolute bottom-0 left-0 right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
-        <ChatInputArea
+        <InputArea
           input={input}
           setInput={setInput}
           isExecuting={isExecuting}
