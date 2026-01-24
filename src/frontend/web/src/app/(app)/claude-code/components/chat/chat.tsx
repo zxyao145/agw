@@ -30,7 +30,7 @@ export function Chat({
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <>
       <ColResizeSplit>
         <ColResizeSplit.Left>
           <ChatHistoryList
@@ -46,6 +46,6 @@ export function Chat({
           </div>
         </ColResizeSplit.Right>
       </ColResizeSplit>
-    </div>
+    </>
   );
 }

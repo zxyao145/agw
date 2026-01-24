@@ -477,14 +477,14 @@ export default function ClaudeCodePage() {
       <div className="flex-1 overflow-y-auto">
         <Tabs
           defaultValue="chat"
-          className="w-full h-full flex flex-col flex-1 min-h-0"
+          className="w-full h-full"
         >
           <TabsList className="w-fit">
             <TabsTrigger value="chat">Chat</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="chat" className="h-full">
+          <TabsContent value="chat" className="flex h-full">
             <Chat
               messages={messages}
               messagesEndRef={messagesEndRef}
@@ -495,7 +495,7 @@ export default function ClaudeCodePage() {
             />
           </TabsContent>
 
-          <TabsContent value="files" className="h-full">
+          <TabsContent value="files" className="flex h-full">
             <FileExplorer
               rootDirectory={workingDirectory}
               comments={comments}

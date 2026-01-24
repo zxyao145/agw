@@ -16,7 +16,7 @@ export function ChatMessageArea({
   processMessages,
 }: ChatMessageAreaProps) {
   return (
-    <div className="flex-1 flex pb-36">
+    <div className="flex-1 flex min-h-full pb-36">
       <div className="flex-1 overflow-y-auto space-y-4">
         {(messages?.length ?? 0) === 0 && (
           <div className="flex items-center justify-center h-40">

@@ -85,33 +85,35 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => 
   }, [isResizing]);
 
   return (
-    <div className="w-full flex flex-row min-h-full">
-      {left && (
-        <>
-          <div
-            className="flex overflow-auto"
-            ref={resizeRef}
-            style={{ width: panelWidth }}
-          >
-            {left}
-          </div>
-          {/* Resize handle */}
-          <div
-            className={cn(
-              "w-1 cursor-col-resize flex items-center justify-center bg-primary/20 transition-colors group",
-              isResizing && "bg-primary/30",
-            )}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setIsResizing(true);
-            }}
-          >
-            <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-        </>
-      )}
+    <div className="flex flex-col flex-1">
+      <div className="w-full flex flex-1 flex-row">
+        {left && (
+          <>
+            <div
+              className="flex overflow-auto"
+              ref={resizeRef}
+              style={{ width: panelWidth }}
+            >
+              {left}
+            </div>
+            {/* Resize handle */}
+            <div
+              className={cn(
+                "w-1 cursor-col-resize flex items-center justify-center bg-primary/20 transition-colors group",
+                isResizing && "bg-primary/30",
+              )}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsResizing(true);
+              }}
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+          </>
+        )}
 
-      <div className="flex flex-1">{right}</div>
+        <div className="flex flex-1">{right}</div>
+      </div>
     </div>
   );
 }
