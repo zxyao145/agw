@@ -9,6 +9,8 @@ export interface FileItem {
   type: "file" | "directory";
   size?: number;
   modifiedTime?: string;
+  gitStatus?: "added" | "modified" | "deleted" | "untracked";
+  children?: FileItem[];  // For tree structure support (used in recursive mode)
 }
 
 export interface ListFilesResponse {
@@ -29,12 +31,18 @@ export class FileApiError extends Error {
 
 /**
  * List files and directories at the specified path
+ * @param path - Directory path to list
+ * @param diff - If true, only return modified files (requires git)
+ * @param recursive - If true with onlyModified, return all changed files recursively (not just direct children)
  */
-export async function listFiles(path: string, onlyModified: boolean = false): Promise<ListFilesResponse> {
+export async function listFiles(path: string, diff: boolean = false, recursive: boolean = false): Promise<ListFilesResponse> {
   try {
     const params = new URLSearchParams({ path });
-    if (onlyModified) {
-      params.append('onlyModified', 'true');
+    if (diff) {
+      params.append('diff', 'true');
+    }
+    if (recursive) {
+      params.append('recursive', 'true');
     }
 
     const response = await fetch(

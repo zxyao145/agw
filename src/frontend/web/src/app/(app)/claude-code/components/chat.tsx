@@ -20,37 +20,13 @@ import {
 import {
   InitMessageContent,
   PermissionMode,
+  ChatProps,
 } from "../types";
 
 import {AiMessage, AiMessageContent} from "@/types"
 
 import { AiMessageComponment } from "./message";
 import { SettingsDialog } from "./settings-dialog";
-
-interface ChatProps {
-  messages: AiMessage[];
-  input: string;
-  setInput: (value: string) => void;
-  isExecuting: boolean;
-  workingDirectory: string;
-  setWorkingDirectory: (value: string) => void;
-  apiKey: string;
-  setApiKey: (value: string) => void;
-  apiBaseUrl: string;
-  setApiBaseUrl: (value: string) => void;
-  permissionMode: string;
-  setPermissionMode: (value: string) => void;
-  initContent: InitMessageContent | null;
-  messagesEndRef: React.RefObject<HTMLDivElement>;
-  onExecute: () => void;
-  onClearSession: () => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  processMessages: (msgs: AiMessage[]) => Array<
-    | { type: "accordion"; messages: AiMessage[]; toolName: string }
-    | { type: "normal"; message: AiMessage }
-  >;
-  createArr: (key: string, value: string[]) => React.ReactNode;
-}
 
 export function Chat({
   messages,
@@ -68,11 +44,13 @@ export function Chat({
   initContent,
   messagesEndRef,
   onExecute,
+  onExecuteWithComment: sendComment,
   onClearSession,
   onKeyDown,
   processMessages,
   createArr,
 }: ChatProps) {
+
   return (
     <div className="flex flex-col min-h-[calc(100vh-96px)]">
       {/* Header Area */}
@@ -209,6 +187,16 @@ export function Chat({
 
         {/* Input Area - Fixed at Bottom */}
         <div className="border-t bg-background p-4">
+          <div className="flex mb-2">
+            <div>              
+            </div>
+            <div className="flex-1"></div>
+            <div>
+              <Button onClick={sendComment}>
+                Send comment
+              </Button>
+            </div>
+          </div>
           <div className="flex gap-2 items-end">
             <Textarea
               value={input}

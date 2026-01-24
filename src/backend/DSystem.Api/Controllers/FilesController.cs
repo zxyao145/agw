@@ -17,7 +17,7 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("list")]
-    public async Task<IActionResult> ListAsync([FromQuery] string? path, [FromQuery] bool onlyModified = false)
+    public async Task<IActionResult> ListAsync([FromQuery] string? path, [FromQuery] bool diff = false, [FromQuery] bool recursive = false)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -38,17 +38,24 @@ public class FilesController : ControllerBase
                 return NotFound(new { error = "Directory not found" });
             }
 
+            // If all=true and onlyModified=true, return all changed files recursively
+            if (recursive && diff)
+            {
+                return await GetAllChangedFilesAsync(normalizedPath);
+            }
+
+            // Default behavior: list direct children only
             var entries = Directory.GetFileSystemEntries(normalizedPath);
             var items = new List<FileItem>();
 
-            // Get modified files from git if requested
-            HashSet<string>? modifiedFiles = null;
-            if (onlyModified)
+            // Get changed files from git if requested
+            GitChangedFiles? changedFiles = null;
+            if (diff)
             {
-                modifiedFiles = await GetModifiedFilesAsync(normalizedPath);
-                if (modifiedFiles == null || modifiedFiles.Count == 0)
+                changedFiles = await GetChangedFilesAsync(normalizedPath);
+                if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
                 {
-                    // No git repository or no modified files
+                    // No git repository or no changed files
                     return Ok(new FileListResponse { Items = new List<FileItem>() });
                 }
             }
@@ -58,24 +65,24 @@ public class FilesController : ControllerBase
                 var fileInfo = new FileInfo(entry);
                 var dirInfo = new DirectoryInfo(entry);
 
-                // If filtering by modified files
-                if (onlyModified && modifiedFiles != null)
+                // If filtering by changed files
+                if (diff && changedFiles != null)
                 {
-                    // For files, check if they are in the modified list
+                    // For files, check if they are in the changed list
                     if (fileInfo.Exists)
                     {
-                        if (!modifiedFiles.Contains(entry))
+                        if (!changedFiles.FileStatuses.ContainsKey(entry))
                         {
-                            continue; // Skip non-modified files
+                            continue; // Skip unchanged files
                         }
                     }
-                    // For directories, check if any modified file is inside
+                    // For directories, check if any changed file is inside
                     else if (dirInfo.Exists)
                     {
-                        var hasModifiedDescendant = modifiedFiles.Any(f => f.StartsWith(entry + Path.DirectorySeparatorChar));
-                        if (!hasModifiedDescendant)
+                        var hasChangedDescendant = changedFiles.FileStatuses.Keys.Any(f => f.StartsWith(entry + Path.DirectorySeparatorChar));
+                        if (!hasChangedDescendant)
                         {
-                            continue; // Skip directories without modified files
+                            continue; // Skip directories without changed files
                         }
                     }
                 }
@@ -86,10 +93,33 @@ public class FilesController : ControllerBase
                     Path = entry,
                     Type = dirInfo.Exists ? "directory" : "file",
                     Size = fileInfo.Exists ? fileInfo.Length : null,
-                    ModifiedTime = fileInfo.Exists ? fileInfo.LastWriteTimeUtc : dirInfo.LastWriteTimeUtc
+                    ModifiedTime = fileInfo.Exists ? fileInfo.LastWriteTimeUtc : dirInfo.LastWriteTimeUtc,
+                    GitStatus = changedFiles?.FileStatuses.GetValueOrDefault(entry)
                 };
 
                 items.Add(item);
+            }
+
+            // Add deleted files (they don't exist in filesystem but are tracked by git)
+            if (diff && changedFiles != null)
+            {
+                foreach (var deletedFile in changedFiles.DeletedFiles)
+                {
+                    // Only include deleted files that would be in this directory
+                    var deletedDir = Path.GetDirectoryName(deletedFile);
+                    if (string.Equals(deletedDir, normalizedPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        items.Add(new FileItem
+                        {
+                            Name = Path.GetFileName(deletedFile),
+                            Path = deletedFile,
+                            Type = "file",
+                            Size = null,
+                            ModifiedTime = null,
+                            GitStatus = "deleted"
+                        });
+                    }
+                }
             }
 
             // Sort: directories first, then by name
@@ -112,7 +142,73 @@ public class FilesController : ControllerBase
         }
     }
 
-    private async Task<HashSet<string>?> GetModifiedFilesAsync(string directory)
+    private async Task<IActionResult> GetAllChangedFilesAsync(string directoryPath)
+    {
+        var changedFiles = await GetChangedFilesAsync(directoryPath);
+        if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
+        {
+            // No git repository or no changed files
+            return Ok(new FileListResponse { Items = new List<FileItem>() });
+        }
+
+        var items = new List<FileItem>();
+
+        // Add all changed files under the specified directory
+        foreach (var (filePath, status) in changedFiles.FileStatuses)
+        {
+            // Check if the file is under the specified directory
+            if (!filePath.StartsWith(directoryPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // Skip if it's exactly the directory itself
+            if (string.Equals(filePath, directoryPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // For deleted files or files that don't exist, add them with limited info
+            if (!System.IO.File.Exists(filePath))
+            {
+                items.Add(new FileItem
+                {
+                    Name = Path.GetFileName(filePath),
+                    Path = filePath,
+                    Type = "file",
+                    Size = null,
+                    ModifiedTime = null,
+                    GitStatus = status
+                });
+                continue;
+            }
+
+            var fileInfo = new FileInfo(filePath);
+            items.Add(new FileItem
+            {
+                Name = fileInfo.Name,
+                Path = filePath,
+                Type = "file",
+                Size = fileInfo.Length,
+                ModifiedTime = fileInfo.LastWriteTimeUtc,
+                GitStatus = status
+            });
+        }
+
+        // Sort by path
+        items = items
+            .OrderBy(x => x.Path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return Ok(new FileListResponse { Items = items });
+    }
+
+    private record GitChangedFiles(
+        Dictionary<string, string> FileStatuses, // path -> status ("added", "modified", "deleted", "untracked")
+        HashSet<string> DeletedFiles
+    );
+
+    private async Task<GitChangedFiles?> GetChangedFilesAsync(string directory)
     {
         var gitDirectory = FindGitDirectory(directory);
         if (gitDirectory == null)
@@ -145,34 +241,49 @@ public class FilesController : ControllerBase
                 return null;
             }
 
-            var modifiedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var fileStatuses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var deletedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             foreach (var line in lines)
             {
-                if (line.Length < 4) continue;
+                if (line.Length < 3) continue;
 
                 // Git status format: XY filename
                 // X = index status, Y = working tree status
                 var statusCode = line.Substring(0, 2);
                 var filename = line.Substring(3).Trim().Trim('"');
 
-                // Skip untracked files if needed (starts with ??)
-                // Include modified (M), added (A), deleted (D), renamed (R), etc.
-                if (statusCode.Trim() == "??")
+                var fullPath = Path.GetFullPath(Path.Combine(gitDirectory, filename));
+
+                // Determine git status
+                string status;
+                if (statusCode == "??")
                 {
-                    continue; // Skip untracked files
+                    status = "untracked";
+                }
+                else if (statusCode.Contains('D'))
+                {
+                    status = "deleted";
+                    deletedFiles.Add(fullPath);
+                }
+                else if (statusCode.Contains('A'))
+                {
+                    status = "added";
+                }
+                else
+                {
+                    status = "modified";
                 }
 
-                var fullPath = Path.GetFullPath(Path.Combine(gitDirectory, filename));
-                modifiedFiles.Add(fullPath);
+                fileStatuses[fullPath] = status;
             }
 
-            return modifiedFiles;
+            return new GitChangedFiles(fileStatuses, deletedFiles);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get modified files from git");
+            _logger.LogWarning(ex, "Failed to get changed files from git");
             return null;
         }
     }

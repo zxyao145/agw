@@ -7,6 +7,7 @@ import {
   ClaudeCodeMessageType,
   InitMessageContent,
   PermissionMode,
+  LineComment,
 } from "./types";
 
 import { AiMessage, AiMessageContent, MessageContentType } from "@/types";
@@ -29,6 +30,7 @@ export default function ClaudeCodePage() {
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [threadId, setThreadId] = React.useState<string | null>(null);
+  const [comments, setComments] = React.useState<LineComment[]>([]);
 
   const [initContent, setInitContent] =
     React.useState<InitMessageContent | null>(null);
@@ -161,6 +163,40 @@ export default function ClaudeCodePage() {
       return;
     }
 
+    await sendInputToClaudeCode(input.trim());
+    setInput(""); // Clear input after sending
+  };
+
+  
+  const executeClaudeCodeWithComment = async () =>{
+    if(!comments || comments.length == 0){
+      toast.error("Please add comments first");
+      return;
+    }
+    console.debug("comments", comments)
+
+    let input = "";
+    if (input.trim()) {
+      input = input.trim();
+    } else {
+      input = "Please make modifications based on the following review comments"
+    }
+    input += "\n\n"
+
+    comments.forEach((comment) => {
+      let msg = 
+      // `The ${comment.lineNumber}th line ${comment.isAfter ? "after" : "before"} the modification of file ${comment.filePath}: `
+      `file ${comment.filePath}, ${comment.isAfter ? "after" : "before"} the modification, the ${comment.lineIndex}th line: `
+      msg += comment.content + "\n\n";
+      input += msg;
+    });
+    console.debug("Final input with comments:", input);
+    await sendInputToClaudeCode(input);
+    setComments([]); // Clear comments after sending
+    setInput(""); // Clear input after sending
+  }
+
+  const sendInputToClaudeCode = async (inputMsg: string) =>{
     setIsExecuting(true);
 
     try {
@@ -217,7 +253,7 @@ export default function ClaudeCodePage() {
           contents: [
             {
               type: MessageContentType.TextContent,
-              content: input,
+              content: inputMsg,
             },
           ],
         };
@@ -233,7 +269,7 @@ export default function ClaudeCodePage() {
         }
 
         const request = {
-          input: input,
+          input: inputMsg,
           workingDirectory: workingDirectory.trim() || null,
           apiKey: apiKey.trim() || null,
           apiBaseUrl: apiBaseUrl.trim() || null,
@@ -244,7 +280,6 @@ export default function ClaudeCodePage() {
         };
 
         ws.send(JSON.stringify(request));
-        setInput(""); // Clear input after sending
       }
     } catch (error) {
       toast.error(
@@ -252,7 +287,8 @@ export default function ClaudeCodePage() {
       );
       setIsExecuting(false);
     }
-  };
+  }
+
 
   const handleClearSession = () => {
     setMessages([]);
@@ -395,7 +431,7 @@ export default function ClaudeCodePage() {
   return (
     <div className="flex flex-col h-[calc(100vh-52px)] w-full max-w-8xl mx-auto mr-2">
       {/* Header with Tabs */}
-      <div className="border-b mb-2 h-full">
+      <div className="mb-2 h-full">
         <Tabs defaultValue="code" className="w-full h-full flex-col">
           <TabsList>
             <TabsTrigger value="code">Code</TabsTrigger>
@@ -419,6 +455,7 @@ export default function ClaudeCodePage() {
               initContent={initContent}
               messagesEndRef={messagesEndRef}
               onExecute={executeClaudeCode}
+              onExecuteWithComment={executeClaudeCodeWithComment}
               onClearSession={handleClearSession}
               onKeyDown={handleKeyDown}
               processMessages={processMessages}
@@ -429,8 +466,10 @@ export default function ClaudeCodePage() {
           <TabsContent value="files" className="mt-0 py-2">
             <div className="flex flex-col min-h-[calc(100vh-96px)]">
               <FileExplorer
-                rootDirectory={workingDirectory}
                 className="h-full border-0 rounded-none"
+                rootDirectory={workingDirectory}
+                comments={comments}
+                setComments={setComments}
               />
             </div>
           </TabsContent>

@@ -24,23 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PermissionMode } from "../types";
+import { PermissionMode, SettingsDialogProps } from "../types";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-
-interface SettingsDialogProps {
-  workingDirectory: string;
-  setWorkingDirectory: (value: string) => void;
-  apiKey: string;
-  setApiKey: (value: string) => void;
-  apiBaseUrl: string;
-  setApiBaseUrl: (value: string) => void;
-  permissionMode: string;
-  setPermissionMode: (value: string) => void;
-}
 
 export function SettingsDialog({
   workingDirectory,
