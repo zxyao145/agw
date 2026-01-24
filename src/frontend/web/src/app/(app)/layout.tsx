@@ -31,18 +31,6 @@ import { group } from "console";
 
 const navItems: SidebarMenuGroupProps[] = [
   {
-    groupLable: "Projects",
-    menus: [
-      {
-        url: "/projects",
-        title: "Projects",
-        isActive: true,
-        icon: <LayoutDashboard />,
-      },
-    ],
-  },
-
-  {
     groupLable: "ExternalAgents",
     menus: [
       {
@@ -50,6 +38,18 @@ const navItems: SidebarMenuGroupProps[] = [
         title: "ClaudeCode",
         isActive: true,
         icon: <Terminal />
+      },
+    ],
+  },
+
+  {
+    groupLable: "Projects",
+    menus: [
+      {
+        url: "/projects",
+        title: "Projects",
+        isActive: true,
+        icon: <LayoutDashboard />,
       },
     ],
   },
