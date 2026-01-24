@@ -124,7 +124,17 @@ try
         return new TaskManagerFactory(sp);
     });
 
+    // Register database seeder
+    builder.Services.AddScoped<DSystem.Infrastructure.Data.DbSeeder>();
+
     var app = builder.Build();
+
+    // Seed database on startup
+    using (var scope = app.Services.CreateScope())
+    {
+        var seeder = scope.ServiceProvider.GetRequiredService<DSystem.Infrastructure.Data.DbSeeder>();
+        await seeder.SeedAsync();
+    }
 
     if (app.Environment.IsDevelopment())
     {
