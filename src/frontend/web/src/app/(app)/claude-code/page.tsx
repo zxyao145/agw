@@ -20,6 +20,7 @@ import { InputArea } from "./components/user-input/input-area";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import "./page.css";
+import { Badge } from "@/components/ui/badge";
 
 export default function ClaudeCodePage() {
   const [input, setInput] = React.useState("");
@@ -265,6 +266,14 @@ export default function ClaudeCodePage() {
         } else {
           tid = Ulid.generate().toCanonical();
           handleThreadId(tid);
+        }
+
+        // Convert array format [{key, value}] to object {key: value}
+        const envObj: Record<string, string> = {};
+        if (Array.isArray(envVars)) {
+          envVars.forEach((item: { key: string; value: string }) => {
+            if (item.key) envObj[item.key] = item.value || "";
+          });
         }
 
         // Convert array format [{key, value}] to object {key: value}
