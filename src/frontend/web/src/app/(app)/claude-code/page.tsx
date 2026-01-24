@@ -17,6 +17,8 @@ import { FileExplorer } from "./components/file-explorer";
 import { Chat } from "./components/chat/chat";
 import { InputArea } from "./components/user-input/input-area";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { saveSession } from "./lib/chat-history-service";
 import "./page.css";
 
 export default function ClaudeCodePage() {
@@ -277,6 +279,34 @@ export default function ClaudeCodePage() {
     }
   };
 
+  const handleSessionSelect = (newMessages: AiMessage[], newThreadId: string) => {
+    setMessages(newMessages);
+    setThreadId(newThreadId);
+    // Close existing WebSocket to start fresh with loaded session
+    if (wsRef.current) {
+      wsRef.current.close(1000, "Session switched");
+      wsRef.current = null;
+    }
+  };
+
+  const handleNewChat = () => {
+    handleClearSession();
+  };
+
+  // Auto-save messages to database when they change
+  React.useEffect(() => {
+    if (threadId && messages.length > 0) {
+      // Debounce saves to avoid too frequent writes
+      const timeoutId = setTimeout(() => {
+        saveSession(threadId, messages).catch((error) => {
+          console.error("Failed to save session:", error);
+        });
+      }, 1000);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [messages, threadId]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -414,11 +444,14 @@ export default function ClaudeCodePage() {
             <TabsTrigger value="files">Files</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="chat">
+          <TabsContent value="chat" className="h-full">
             <Chat
               messages={messages}
               messagesEndRef={messagesEndRef}
               processMessages={processMessages}
+              currentThreadId={threadId}
+              onSessionSelect={handleSessionSelect}
+              onNewChat={handleNewChat}
             />
           </TabsContent>
 
