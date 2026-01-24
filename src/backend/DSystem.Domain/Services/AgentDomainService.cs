@@ -1,4 +1,5 @@
 using DSystem.Domain.Entities;
+using DSystem.Domain.Enums;
 using DSystem.Domain.Repositories;
 using System.Linq.Expressions;
 
@@ -22,10 +23,32 @@ public class AgentDomainService
 
     public async Task<Agent?> CreateAsync(Agent agent, string user)
     {
-        var apiKey = await _apiKeyRepository.GetByIdAsync(agent.ModelProviderApiKeyId);
-        if (apiKey == null)
+        // Validate ModelProviderApiKeyId based on AgentType
+        if (agent.Type == AgentType.System)
         {
-            return null;
+            // System agents require a valid ModelProviderApiKeyId
+            if (!agent.ModelProviderApiKeyId.HasValue)
+            {
+                throw new InvalidOperationException("System agents must have a ModelProviderApiKeyId.");
+            }
+
+            var apiKey = await _apiKeyRepository.GetByIdAsync(agent.ModelProviderApiKeyId.Value);
+            if (apiKey == null)
+            {
+                return null;
+            }
+        }
+        else if (agent.Type == AgentType.External)
+        {
+            // External agents can have optional ModelProviderApiKeyId
+            if (agent.ModelProviderApiKeyId.HasValue)
+            {
+                var apiKey = await _apiKeyRepository.GetByIdAsync(agent.ModelProviderApiKeyId.Value);
+                if (apiKey == null)
+                {
+                    return null;
+                }
+            }
         }
 
         agent.Id = agent.Id == Guid.Empty ? Guid.NewGuid() : agent.Id;

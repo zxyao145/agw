@@ -85,10 +85,12 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.SystemPrompt).HasMaxLength(4000);
             entity.Property(e => e.Tools).HasMaxLength(4000);  // JSON array of tool names
 
+            // ModelProviderApiKeyId is optional - required for System agents, optional for External agents
             entity.HasOne(e => e.ModelProviderApiKey)
                 .WithMany(k => k.Agents)
                 .HasForeignKey(e => e.ModelProviderApiKeyId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired(false);
         });
 
         modelBuilder.Entity<Agentflow>(entity =>

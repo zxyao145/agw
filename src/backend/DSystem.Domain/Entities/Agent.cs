@@ -8,7 +8,12 @@ public class Agent : BaseEntity
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string SystemPrompt { get; set; } = string.Empty;
-    public Guid ModelProviderApiKeyId { get; set; }
+
+    /// <summary>
+    /// Model Provider API Key ID. Required for System agents, optional for External agents.
+    /// </summary>
+    public Guid? ModelProviderApiKeyId { get; set; }
+
     public string? Tools { get; set; }  // JSON array of tool method names
     public AgentType Type { get; set; } = AgentType.System;
 

@@ -47,7 +47,7 @@ public class DbSeeder
 
     private async Task SeedClaudeCodeAgentAsync()
     {
-        const string ClaudeCodeAgentName = "Claude Code Agent";
+        const string ClaudeCodeAgentName = "ClaudeCode";
 
         // Check if Claude Code agent already exists
         var existingAgent = await _context.Agents
@@ -65,38 +65,19 @@ public class DbSeeder
         var claudeCodeOptions = new ClaudeCodeAIAgentOptions();
         var extraJson = JsonUtil.Serialize(claudeCodeOptions);
 
-        // Create a dummy ModelProviderApiKey since Agent requires it
-        // In a real scenario, this should be properly configured
-        var dummyApiKeyId = Guid.NewGuid();
-
-        // Check if we need to create a dummy ModelProvider and ModelProviderApiKey
-        // For now, we'll create a minimal agent with a placeholder API key
-        var dummyModelProviderId = Guid.NewGuid();
-
-        // Create dummy ModelProviderApiKey if needed
-        var existingApiKey = await _context.ModelProviderApiKeys.FirstOrDefaultAsync();
-        if (existingApiKey == null)
-        {
-            _logger.LogWarning("No ModelProviderApiKey found. Claude Code Agent requires a valid ModelProviderApiKey. Please configure one manually.");
-            // We'll skip creating the agent if no API key exists
-            return;
-        }
-
-        // Use the first available API key
-        dummyApiKeyId = existingApiKey.Id;
-
+        // External agents don't require a ModelProviderApiKey
         var claudeCodeAgent = new Agent
         {
             Id = Guid.NewGuid(),
             Name = ClaudeCodeAgentName,
             Description = "External agent for Claude Code integration with AI-powered coding assistance",
-            SystemPrompt = "You are a helpful AI coding assistant powered by Claude Code.",
+            SystemPrompt = string.Empty,
             Type = AgentType.External,
             Extra = extraJson,
-            ModelProviderApiKeyId = dummyApiKeyId,
+            ModelProviderApiKeyId = null,  // External agents can have null ModelProviderApiKeyId
             Tools = null,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            CreateTime = DateTime.UtcNow,
+            UpdateTime = DateTime.UtcNow
         };
 
         _context.Agents.Add(claudeCodeAgent);

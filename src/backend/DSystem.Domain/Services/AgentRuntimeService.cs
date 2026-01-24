@@ -68,7 +68,13 @@ public class AgentRuntimeService
 
     public async Task<AIAgent?> CreateAiAgentAsync(Agent agent)
     {
-        var apiKey = await _apiKeyRepository.GetByIdAsync(agent.ModelProviderApiKeyId);
+        // External agents may not have a ModelProviderApiKeyId
+        if (!agent.ModelProviderApiKeyId.HasValue)
+        {
+            return null;
+        }
+
+        var apiKey = await _apiKeyRepository.GetByIdAsync(agent.ModelProviderApiKeyId.Value);
         if (apiKey == null || !apiKey.Enable)
         {
             return null;
