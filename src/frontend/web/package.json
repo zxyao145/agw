@@ -40,7 +40,6 @@
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^4.4.2",
     "reactflow": "^11.11.4",
     "remark-gfm": "^4.0.1",
     "rxdb": "^16.21.1",

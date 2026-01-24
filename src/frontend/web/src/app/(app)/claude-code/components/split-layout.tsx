@@ -10,9 +10,14 @@ interface SlotProps {
   children: React.ReactNode;
 }
 
+interface LeftSlotProps extends SlotProps {
+  minWidth?: number;
+  maxWidth?: number;
+}
+
 // 定义组件类型，包含命名插槽
 interface ColResizeSplitComponent extends FC<ColSplitProps> {
-  Left: FC<SlotProps>;
+  Left: FC<LeftSlotProps>;
   Right: FC<SlotProps>;
 }
 
@@ -20,6 +25,8 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => 
   // 拆分 children，找到 left 和 right
   let left: React.ReactNode = null;
   let right: React.ReactNode = null;
+  let leftProps: LeftSlotProps = { children: null };
+  let rightProps: SlotProps = { children: null };
 
     React.Children.forEach(children, (child) => {
     if (!React.isValidElement(child)) return;
@@ -28,9 +35,11 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => 
     const element = child as ReactElement<SlotProps>;
 
     if (element.type === ColResizeSplit.Left) {
-      left = element.props.children;
+      leftProps = element.props as LeftSlotProps;
+      left = leftProps.children;
     } else if (element.type === ColResizeSplit.Right) {
-      right = element.props.children;
+      rightProps = element.props;
+      right = rightProps.children;
     }
   });
 
@@ -49,8 +58,11 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => 
       if (!containerRect) return;
 
       const newWidth = e.clientX - containerRect.left;
+      const minWidth = leftProps?.minWidth ?? 200;
+      const maxWidth = leftProps?.maxWidth ?? 600;
+      
       // Clamp between min 200px and max 600px
-      setPanelWidth(Math.max(200, Math.min(600, newWidth)));
+      setPanelWidth(Math.max(minWidth, Math.min(maxWidth, newWidth)));
     };
 
     const handleMouseUp = () => {

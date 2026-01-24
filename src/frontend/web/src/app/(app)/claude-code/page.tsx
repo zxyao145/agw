@@ -21,7 +21,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { saveSession } from "./lib/chat-history-service";
 import "./page.css";
-import { Badge } from "@/components/ui/badge";
 
 export default function ClaudeCodePage() {
   const [input, setInput] = React.useState("");
@@ -36,6 +35,14 @@ export default function ClaudeCodePage() {
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [threadId, setThreadId] = React.useState<string | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
+
+
+  const handleThreadId = (newThreadId: string | null) => {
+    if(newThreadId){
+      console.debug("Set threadId:", newThreadId);
+    }
+    setThreadId(newThreadId);
+  };
 
   const [initContent, setInitContent] =
     React.useState<InitMessageContent | null>(null);
@@ -258,7 +265,7 @@ export default function ClaudeCodePage() {
           tid = threadId;
         } else {
           tid = Ulid.generate().toCanonical();
-          setThreadId(tid);
+          handleThreadId(tid);
         }
 
         // Convert array format [{key, value}] to object {key: value}
@@ -293,7 +300,7 @@ export default function ClaudeCodePage() {
 
   const handleClearSession = () => {
     setMessages([]);
-    setThreadId(null);
+    handleThreadId(null);
     // Close WebSocket to start fresh session on next message
     if (wsRef.current) {
       wsRef.current.close(1000, "Session cleared");
@@ -303,7 +310,7 @@ export default function ClaudeCodePage() {
 
   const handleSessionSelect = (newMessages: AiMessage[], newThreadId: string) => {
     setMessages(newMessages);
-    setThreadId(newThreadId);
+    handleThreadId(newThreadId);
     // Close existing WebSocket to start fresh with loaded session
     if (wsRef.current) {
       wsRef.current.close(1000, "Session switched");
@@ -317,6 +324,7 @@ export default function ClaudeCodePage() {
 
   // Auto-save messages to database when they change
   React.useEffect(() => {
+    console.info("Messages changed, auto-saving...", threadId,  messages.length);
     if (threadId && messages.length > 0) {
       // Debounce saves to avoid too frequent writes
       const timeoutId = setTimeout(() => {
@@ -465,7 +473,7 @@ export default function ClaudeCodePage() {
       <div className="flex-1 overflow-y-auto">
         <Tabs
           defaultValue="chat"
-          className="w-full flex flex-col flex-1 min-h-0 pb-36"
+          className="w-full h-full flex flex-col flex-1 min-h-0 pb-36"
         >
           <TabsList className="w-fit">
             <TabsTrigger value="chat">Chat</TabsTrigger>

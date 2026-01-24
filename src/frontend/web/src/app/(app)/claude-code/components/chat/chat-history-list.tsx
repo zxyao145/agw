@@ -9,8 +9,8 @@ import {
   deleteSession,
   updateSessionTitle,
   clearAllSessions,
-} from "../lib/chat-history-service";
-import type { ChatSessionDocument } from "../lib/chat-history-db";
+} from "../../lib/chat-history-service";
+import type { ChatSessionDocument } from "../../lib/chat-history-db";
 import { cn } from "@/lib/utils";
 
 interface ChatHistoryListProps {
@@ -134,7 +134,7 @@ export function ChatHistoryList({
   const totalSize = sessions.reduce((sum, s) => sum + s.size, 0);
 
   return (
-    <div className="flex flex-col h-full bg-muted/30">
+    <div className="flex flex-col bg-muted/30 w-full">
       {/* Header */}
       <div className="p-4 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">Chat History</h2>

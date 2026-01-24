@@ -21,7 +21,7 @@ function generateTitle(messages: AiMessage[]): string {
   const text = firstContent.content || 'New Chat';
 
   // Truncate to 50 characters
-  return text.length > 50 ? text.substring(0, 50) + '...' : text;
+  return text.length > 20 ? text.substring(0, 20) + '...' : text;
 }
 
 /**
