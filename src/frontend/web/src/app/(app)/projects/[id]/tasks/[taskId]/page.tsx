@@ -129,7 +129,7 @@ function ChatMessages({ outputJson }: { outputJson: string }) {
         const isAssistantMessage = message.Role.toLowerCase() !== "user";
         return (
           <div key={index} className="flex items-start gap-4">
-            <div className="flex flex-col items-center flex-shrink-0">
+            <div className="flex flex-col items-center shrink-0">
               <div
                 className="relative flex items-center justify-center rounded-full ring-8 ring-background shadow-sm h-8 w-8"
                 style={{

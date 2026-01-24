@@ -4,18 +4,18 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  ClaudeCodeMessageType,
   InitMessageContent,
   PermissionMode,
   LineComment,
+  ProcessedMessageItem,
 } from "./types";
 
-import { AiMessage, AiMessageContent, MessageContentType } from "@/types";
+import { AiMessage, MessageContentType } from "@/types";
 
 import { Ulid } from "id128";
 import { FileExplorer } from "./components/file-explorer";
 import { Chat } from "./components/chat";
-import { Badge } from "@/components/ui/badge";
+import { ChatInputArea } from "./components/chat-input-area";
 import { Label } from "@/components/ui/label";
 import "./page.css";
 
@@ -167,40 +167,49 @@ export default function ClaudeCodePage() {
     setInput(""); // Clear input after sending
   };
 
-  
-  const executeClaudeCodeWithComment = async () =>{
-    if(!comments || comments.length == 0){
+  const executeClaudeCodeWithComment = async () => {
+    if (!comments || comments.length === 0) {
       toast.error("Please add comments first");
       return;
     }
-    console.debug("comments", comments)
+    console.debug("comments", comments);
 
-    let input = "";
-    if (input.trim()) {
-      input = input.trim();
-    } else {
-      input = "Please make modifications based on the following review comments"
-    }
-    input += "\n\n"
+    let prompt = input.trim()
+      ? input.trim()
+      : "Please make modifications based on the following review comments";
+    prompt += "\n\n";
 
     comments.forEach((comment) => {
-      let msg = 
-      // `The ${comment.lineNumber}th line ${comment.isAfter ? "after" : "before"} the modification of file ${comment.filePath}: `
-      `file ${comment.filePath}, ${comment.isAfter ? "after" : "before"} the modification, the ${comment.lineIndex}th line: `
-      msg += comment.content + "\n\n";
-      input += msg;
+      prompt += `file ${comment.filePath}, ${comment.isAfter ? "after" : "before"} the modification, the ${comment.lineIndex}th line: `;
+      prompt += comment.content + "\n\n";
     });
-    console.debug("Final input with comments:", input);
-    await sendInputToClaudeCode(input);
-    setComments([]); // Clear comments after sending
-    setInput(""); // Clear input after sending
-  }
+    console.debug("Final input with comments:", prompt);
+    await sendInputToClaudeCode(prompt);
+    setComments([]);
+    setInput("");
+  };
 
-  const sendInputToClaudeCode = async (inputMsg: string) =>{
+  const waitForWebSocketOpen = (ws: WebSocket): Promise<void> => {
+    return new Promise<void>((resolve, reject) => {
+      const onOpen = () => {
+        ws.removeEventListener("open", onOpen);
+        ws.removeEventListener("error", onError);
+        resolve();
+      };
+      const onError = () => {
+        ws.removeEventListener("open", onOpen);
+        ws.removeEventListener("error", onError);
+        reject(new Error("Failed to connect"));
+      };
+      ws.addEventListener("open", onOpen);
+      ws.addEventListener("error", onError);
+    });
+  };
+
+  const sendInputToClaudeCode = async (inputMsg: string) => {
     setIsExecuting(true);
 
     try {
-      // Check if WebSocket exists and is open
       let ws = wsRef.current;
 
       if (
@@ -208,43 +217,12 @@ export default function ClaudeCodePage() {
         ws.readyState === WebSocket.CLOSED ||
         ws.readyState === WebSocket.CLOSING
       ) {
-        // Create new connection
         ws = setupWebSocket();
-
-        // Wait for connection to open
-        await new Promise<void>((resolve, reject) => {
-          const onOpen = () => {
-            ws!.removeEventListener("open", onOpen);
-            ws!.removeEventListener("error", onError);
-            resolve();
-          };
-          const onError = () => {
-            ws!.removeEventListener("open", onOpen);
-            ws!.removeEventListener("error", onError);
-            reject(new Error("Failed to connect"));
-          };
-          ws!.addEventListener("open", onOpen);
-          ws!.addEventListener("error", onError);
-        });
+        await waitForWebSocketOpen(ws);
       } else if (ws.readyState === WebSocket.CONNECTING) {
-        // Wait for existing connection to open
-        await new Promise<void>((resolve, reject) => {
-          const onOpen = () => {
-            ws!.removeEventListener("open", onOpen);
-            ws!.removeEventListener("error", onError);
-            resolve();
-          };
-          const onError = () => {
-            ws!.removeEventListener("open", onOpen);
-            ws!.removeEventListener("error", onError);
-            reject(new Error("Failed to connect"));
-          };
-          ws!.addEventListener("open", onOpen);
-          ws!.addEventListener("error", onError);
-        });
+        await waitForWebSocketOpen(ws);
       }
 
-      // Send message
       if (ws.readyState === WebSocket.OPEN) {
         const userMsg: AiMessage = {
           messageId: "",
@@ -287,8 +265,7 @@ export default function ClaudeCodePage() {
       );
       setIsExecuting(false);
     }
-  }
-
+  };
 
   const handleClearSession = () => {
     setMessages([]);
@@ -307,25 +284,22 @@ export default function ClaudeCodePage() {
     }
   };
 
-  const createArr = (key: string, value: string[]) => {
+  const createArr = (key: string, value: string[] | undefined) => {
     return (
       <div className="grid grid-cols-3 items-center py-2 border-b">
         <Label>{key}</Label>
         <div className="col-span-2">
-          {!value
+          {!value || value.length === 0
             ? "-"
-            : value.map((item) => <Badge variant="outline">{item}</Badge>)}
+            : value.map((item, i) => <Badge key={i} variant="outline">{item}</Badge>)}
         </div>
       </div>
     );
   };
 
   // Process messages to identify FunctionCall + FunctionResult(s) groups by callId
-  const processMessages = (msgs: AiMessage[]) => {
-    const items: Array<
-      | { type: "accordion"; messages: AiMessage[]; toolName: string }
-      | { type: "normal"; message: AiMessage }
-    > = [];
+  const processMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
+    const items: ProcessedMessageItem[] = [];
 
     // Track which message indices have been processed
     const processedIndices = new Set<number>();
@@ -429,44 +403,28 @@ export default function ClaudeCodePage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-52px)] w-full max-w-8xl mx-auto mr-2">
-      {/* Header with Tabs */}
-      <div className="mb-2 h-full">
-        <Tabs defaultValue="code" className="w-full h-full flex-col">
-          <TabsList>
+    <div className="relative flex flex-col h-[calc(100vh-58px)] w-full max-w-8xl mx-auto mr-2">
+      <div className="flex-1 overflow-y-auto">
+        <Tabs
+          defaultValue="code"
+          className="w-full flex flex-col flex-1 min-h-0"
+        >
+          <TabsList className="w-fit">
             <TabsTrigger value="code">Code</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="code" className="mt-0 py-2">
+          <TabsContent value="code">
             <Chat
               messages={messages}
-              input={input}
-              setInput={setInput}
-              isExecuting={isExecuting}
-              workingDirectory={workingDirectory}
-              setWorkingDirectory={setWorkingDirectory}
-              apiKey={apiKey}
-              setApiKey={setApiKey}
-              apiBaseUrl={apiBaseUrl}
-              setApiBaseUrl={setApiBaseUrl}
-              permissionMode={permissionMode}
-              setPermissionMode={setPermissionMode}
-              initContent={initContent}
               messagesEndRef={messagesEndRef}
-              onExecute={executeClaudeCode}
-              onExecuteWithComment={executeClaudeCodeWithComment}
-              onClearSession={handleClearSession}
-              onKeyDown={handleKeyDown}
               processMessages={processMessages}
-              createArr={createArr}
             />
           </TabsContent>
 
-          <TabsContent value="files" className="mt-0 py-2">
-            <div className="flex flex-col min-h-[calc(100vh-96px)]">
+          <TabsContent value="files">
+            <div className="flex flex-col h-full">
               <FileExplorer
-                className="h-full border-0 rounded-none"
                 rootDirectory={workingDirectory}
                 comments={comments}
                 setComments={setComments}
@@ -474,6 +432,29 @@ export default function ClaudeCodePage() {
             </div>
           </TabsContent>
         </Tabs>
+      </div>
+
+      <div className="absolute bottom-0 left-0 right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
+        <ChatInputArea
+          input={input}
+          setInput={setInput}
+          isExecuting={isExecuting}
+          hasMessages={messages.length > 0}
+          onKeyDown={handleKeyDown}
+          onExecute={executeClaudeCode}
+          onExecuteWithComment={executeClaudeCodeWithComment}
+          onClearSession={handleClearSession}
+          workingDirectory={workingDirectory}
+          setWorkingDirectory={setWorkingDirectory}
+          apiKey={apiKey}
+          setApiKey={setApiKey}
+          apiBaseUrl={apiBaseUrl}
+          setApiBaseUrl={setApiBaseUrl}
+          permissionMode={permissionMode}
+          setPermissionMode={setPermissionMode}
+          initContent={initContent}
+          createArr={createArr}
+        />
       </div>
     </div>
   );

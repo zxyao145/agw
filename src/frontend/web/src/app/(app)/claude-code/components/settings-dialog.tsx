@@ -3,7 +3,6 @@
 import * as React from "react";
 import { Settings, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,12 +23,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PermissionMode, SettingsDialogProps } from "../types";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
+} from "@/components/ui/tooltip";
+import { PermissionMode, SettingsDialogProps } from "../types";
 
 export function SettingsDialog({
   workingDirectory,

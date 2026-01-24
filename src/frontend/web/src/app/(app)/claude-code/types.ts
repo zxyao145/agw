@@ -1,4 +1,5 @@
-import { FileItem } from "@/api/files";
+import { FileItem, GitDiffResponse } from "@/api/files";
+import { AiMessage } from "@/types";
 
 export type AdditionalProperties = Record<string, unknown>;
 
@@ -35,11 +36,25 @@ export type PermissionMode = (typeof PermissionMode)[keyof typeof PermissionMode
 // Chat Component Types
 // ============================================================================
 
-export interface ChatProps {
-  messages: any[];
+export type ProcessedMessageItem =
+  | { type: "accordion"; messages: AiMessage[]; toolName: string }
+  | { type: "normal"; message: AiMessage };
+
+export interface ChatMessageAreaProps {
+  messages: AiMessage[];
+  messagesEndRef: React.RefObject<HTMLDivElement>;
+  processMessages: (msgs: AiMessage[]) => ProcessedMessageItem[];
+}
+
+export interface ChatInputAreaProps {
   input: string;
   setInput: (value: string) => void;
   isExecuting: boolean;
+  hasMessages: boolean;
+  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onExecute: () => void;
+  onExecuteWithComment: () => void;
+  onClearSession: () => void;
   workingDirectory: string;
   setWorkingDirectory: (value: string) => void;
   apiKey: string;
@@ -49,16 +64,7 @@ export interface ChatProps {
   permissionMode: string;
   setPermissionMode: (value: string) => void;
   initContent: InitMessageContent | null;
-  messagesEndRef: React.RefObject<HTMLDivElement>;
-  onExecute: () => void;
-  onExecuteWithComment: () => void;
-  onClearSession: () => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  processMessages: (msgs: any[]) => Array<
-    | { type: "accordion"; messages: any[]; toolName: string }
-    | { type: "normal"; message: any }
-  >;
-  createArr: (key: string, value: string[]) => React.ReactNode;
+  createArr: (key: string, value: string[] | undefined) => React.ReactNode;
 }
 
 // ============================================================================
@@ -76,7 +82,6 @@ export interface LineComment {
 
 export interface FileExplorerProps {
   rootDirectory: string;
-  className?: string;
   onFileSelect?: (path: string) => void;
   comments: LineComment[];
   setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
@@ -88,8 +93,8 @@ export interface FileTreeNodeProps {
   level: number;
   diffMode: boolean;
   recursiveMode: boolean;
-  onFileDeleted?: () => void;
-  onFileReset?: () => void;
+  onFileDeleted?: (filePath: string) => void;
+  onFileReset?: (filePath: string) => void;
   defaultExpanded?: boolean;
 }
 
@@ -152,3 +157,10 @@ export interface SettingsDialogProps {
   setPermissionMode: (value: string) => void;
 }
 
+
+export interface UnChangedFileProps {
+  diffContentData: GitDiffResponse;
+  selectedFile: string;
+  comments: LineComment[];
+  setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
+}
