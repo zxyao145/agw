@@ -294,28 +294,6 @@ export function ChatHistoryList({
         )}
       </div>
 
-      {/* Footer with stats */}
-      <div className="p-3 border-t text-xs text-muted-foreground space-y-1">
-        <div className="flex justify-between">
-          <span>Total sessions:</span>
-          <span className="font-mono">{sessions.length} / 1000</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Storage used:</span>
-          <span className="font-mono">{formatSize(totalSize)} / 200 MB</span>
-        </div>
-        {sessions.length > 0 && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full mt-2"
-            onClick={handleClearAll}
-          >
-            Clear All History
-          </Button>
-        )}
-      </div>
-
       {/* Info Modal */}
       <Dialog open={infoModalOpen} onOpenChange={setInfoModalOpen}>
         <DialogContent className="sm:max-w-md">

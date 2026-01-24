@@ -495,19 +495,17 @@ export default function ClaudeCodePage() {
             />
           </TabsContent>
 
-          <TabsContent value="files">
-            <div className="flex flex-col h-full">
-              <FileExplorer
-                rootDirectory={workingDirectory}
-                comments={comments}
-                setComments={setComments}
-              />
-            </div>
+          <TabsContent value="files" className="h-full">
+            <FileExplorer
+              rootDirectory={workingDirectory}
+              comments={comments}
+              setComments={setComments}
+            />
           </TabsContent>
         </Tabs>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
+      <div className="absolute bottom-0 z-10 left-0 right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
         <InputArea
           input={input}
           setInput={setInput}
@@ -527,7 +525,6 @@ export default function ClaudeCodePage() {
           setPermissionMode={setPermissionMode}
           envVars={envVars}
           setEnvVars={setEnvVars}
-
           initContent={initContent}
           createArr={createArr}
         />
