@@ -1,12 +1,18 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { ChatMessageArea } from "./chat-message-area";
-import { ChatHistoryList } from "./chat-history-list";
 import type { ChatMessageAreaProps } from "../../types";
 import type { ChatSessionDocument } from "../../lib/chat-history-db";
 import type { AiMessage } from "@/types";
 import ColResizeSplit from "../split-layout";
+
+// Dynamically import ChatHistoryList to avoid SSR issues with PouchDB
+const ChatHistoryList = dynamic(
+  () => import("./chat-history-list").then(mod => ({ default: mod.ChatHistoryList })),
+  { ssr: false }
+);
 
 export interface ChatProps extends ChatMessageAreaProps {
   currentThreadId: string | null;
@@ -36,7 +42,7 @@ export function Chat({
         </ColResizeSplit.Left>
 
         <ColResizeSplit.Right>
-          <div className="flex flex-col h-full overflow-hidden">
+          <div className="flex flex-col flex-1">
             <ChatMessageArea {...messageAreaProps} />
           </div>
         </ColResizeSplit.Right>

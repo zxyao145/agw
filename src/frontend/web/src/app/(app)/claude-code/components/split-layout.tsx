@@ -85,7 +85,7 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => 
   }, [isResizing]);
 
   return (
-    <div className="w-full flex flex-row h-full">
+    <div className="w-full flex flex-row min-h-full">
       {left && (
         <>
           <div

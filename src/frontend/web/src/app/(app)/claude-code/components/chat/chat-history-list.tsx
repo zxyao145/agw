@@ -1,9 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { MessageSquare, Trash2, Plus, Edit2, Check, X } from "lucide-react";
+import { MessageSquare, Trash2, Plus, Edit2, Check, X, Info } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   subscribeToSessions,
   deleteSession,
@@ -28,6 +35,7 @@ export function ChatHistoryList({
   const [sessions, setSessions] = React.useState<ChatSessionDocument[]>([]);
   const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState("");
+  const [infoModalOpen, setInfoModalOpen] = React.useState(false);
 
   // Subscribe to session changes
   React.useEffect(() => {
@@ -96,7 +104,7 @@ export function ChatHistoryList({
 
   const startEditing = (session: ChatSessionDocument, e: React.MouseEvent) => {
     e.stopPropagation();
-    setEditingSessionId(session.id);
+    setEditingSessionId(session._id);
     setEditTitle(session.title);
   };
 
@@ -135,12 +143,12 @@ export function ChatHistoryList({
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+    // const diffDays = Math.floor(diffMs / 86400000);
 
     if (diffMins < 1) return "Just now";
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
+    // if (diffDays < 7) return `${diffDays}d ago`;
 
     return date.toLocaleDateString(undefined, {
       month: "short",
@@ -149,6 +157,9 @@ export function ChatHistoryList({
   };
 
   const formatSize = (bytes: number) => {
+    if(!bytes){
+      return "0 B";
+    }
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -161,9 +172,24 @@ export function ChatHistoryList({
       {/* Header */}
       <div className="p-4 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">Chat History</h2>
-        <Button size="sm" variant="ghost" onClick={onNewChat}>
-          <Plus className="h-4 w-4" />
-        </Button>
+        <div>
+          <Button
+            className="cursor-pointer"
+            size="sm"
+            variant="ghost"
+            onClick={onNewChat}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+          <Button
+            className="cursor-pointer"
+            size="sm"
+            variant="ghost"
+            onClick={() => setInfoModalOpen(true)}
+          >
+            <Info className="h-4 w-4 " />
+          </Button>
+        </div>
       </div>
 
       {/* Session list */}
@@ -175,24 +201,26 @@ export function ChatHistoryList({
         ) : (
           sessions.map((session) => {
             const isActive = session.threadId === currentThreadId;
-            const isEditing = editingSessionId === session.id;
+            const isEditing = editingSessionId === session._id;
 
             return (
               <div
-                key={session.id}
+                key={session._id}
                 onClick={() => !isEditing && onSessionSelect(session)}
                 className={cn(
                   "group p-3 rounded-md cursor-pointer transition-colors border",
                   isActive
-                    ? "bg-primary/10 border-primary/20"
-                    : "bg-card hover:bg-accent/50 border-transparent"
+                    ? "bg-blue-50"
+                    : "bg-card hover:bg-accent/50 border-transparent",
                 )}
               >
                 <div className="flex items-start gap-2">
-                  <MessageSquare className="h-4 w-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
                     {isEditing ? (
-                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        className="flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <input
                           type="text"
                           value={editTitle}
@@ -201,7 +229,7 @@ export function ChatHistoryList({
                           autoFocus
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
-                              saveEdit(session.id, e as any);
+                              saveEdit(session._id, e as any);
                             } else if (e.key === "Escape") {
                               cancelEditing(e as any);
                             }
@@ -211,7 +239,7 @@ export function ChatHistoryList({
                           size="sm"
                           variant="ghost"
                           className="h-6 w-6 p-0"
-                          onClick={(e) => saveEdit(session.id, e)}
+                          onClick={(e) => saveEdit(session._id, e)}
                         >
                           <Check className="h-3 w-3" />
                         </Button>
@@ -230,9 +258,9 @@ export function ChatHistoryList({
                           {session.title}
                         </div>
                         <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                          <span>{formatDate(session.updatedAt)}</span>
+                          <span>{formatDate(session.createdAt)}</span>
                           <span>•</span>
-                          <span>{session.messages.length} msgs</span>
+                          <span>{session.messages?.length ?? 0} msgs</span>
                           <span>•</span>
                           <span>{formatSize(session.size)}</span>
                         </div>
@@ -253,7 +281,7 @@ export function ChatHistoryList({
                         size="sm"
                         variant="ghost"
                         className="h-6 w-6 p-0 text-destructive"
-                        onClick={(e) => handleDelete(session.id, e)}
+                        onClick={(e) => handleDelete(session._id, e)}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -287,6 +315,56 @@ export function ChatHistoryList({
           </Button>
         )}
       </div>
+
+      {/* Info Modal */}
+      <Dialog open={infoModalOpen} onOpenChange={setInfoModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Chat History Storage</DialogTitle>
+            <DialogDescription>
+              Storage statistics and management options
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Total sessions:</span>
+                <span className="font-mono font-medium">
+                  {sessions.length} / 1000
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Storage used:</span>
+                <span className="font-mono font-medium">
+                  {formatSize(totalSize)} / 200 MB
+                </span>
+              </div>
+            </div>
+
+            {sessions.length > 0 && (
+              <Button
+                variant="destructive"
+                className="w-full"
+                onClick={async () => {
+                  await handleClearAll();
+                  setInfoModalOpen(false);
+                }}
+              >
+                Clear All History
+              </Button>
+            )}
+
+            <div className="text-xs text-muted-foreground border-t pt-4">
+              <p className="mb-2">Storage limits:</p>
+              <ul className="space-y-1 list-disc list-inside">
+                <li>Maximum 1000 chat sessions</li>
+                <li>Maximum 200 MB total storage</li>
+                <li>Oldest sessions are automatically deleted when limits are exceeded</li>
+              </ul>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

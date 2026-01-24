@@ -19,7 +19,6 @@ import { Chat } from "./components/chat/chat";
 import { InputArea } from "./components/user-input/input-area";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { saveSession } from "./lib/chat-history-service";
 import "./page.css";
 
 export default function ClaudeCodePage() {
@@ -324,13 +323,18 @@ export default function ClaudeCodePage() {
 
   // Auto-save messages to database when they change
   React.useEffect(() => {
-    console.info("Messages changed, auto-saving...", threadId,  messages.length);
-    if (threadId && messages.length > 0) {
+    const msgLength = messages?.length ?? 0;
+    console.debug("Messages changed, auto-saving...", threadId,  msgLength);
+    if (threadId && msgLength > 0) {
       // Debounce saves to avoid too frequent writes
-      const timeoutId = setTimeout(() => {
-        saveSession(threadId, messages).catch((error) => {
+      const timeoutId = setTimeout(async () => {
+        // Dynamically import saveSession to avoid SSR issues
+        try {
+          const { saveSession } = await import("./lib/chat-history-service");
+          await saveSession(threadId, messages);
+        } catch (error) {
           console.error("Failed to save session:", error);
-        });
+        }
       }, 1000);
 
       return () => clearTimeout(timeoutId);
@@ -369,8 +373,8 @@ export default function ClaudeCodePage() {
 
     // Track which message indices have been processed
     const processedIndices = new Set<number>();
-
-    for (let i = 0; i < msgs.length; i++) {
+    const msgLength = msgs?.length ?? 0;
+    for (let i = 0; i < msgLength; i++) {
       if (processedIndices.has(i)) {
         continue; // Skip already processed messages
       }
@@ -508,7 +512,7 @@ export default function ClaudeCodePage() {
           input={input}
           setInput={setInput}
           isExecuting={isExecuting}
-          hasMessages={messages.length > 0}
+          hasMessages={(messages?.length ?? 0) > 0}
           onKeyDown={handleKeyDown}
           onExecute={executeClaudeCode}
           onExecuteWithComment={executeClaudeCodeWithComment}
