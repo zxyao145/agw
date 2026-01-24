@@ -190,22 +190,37 @@ export async function clearAllSessions(): Promise<void> {
 export function subscribeToSessions(
   callback: (sessions: ChatSessionDocument[]) => void
 ): () => void {
-  let db: ChatHistoryDatabase | null = null;
   let subscription: any = null;
+  let isSubscribed = false;
 
-  getChatHistoryDatabase().then((database) => {
-    db = database;
-    subscription = db.sessions
-      .find()
-      .sort({ updatedAt: 'desc' })
-      .$.subscribe((sessions) => {
-        callback(sessions.map((s) => s.toJSON() as ChatSessionDocument));
-      });
-  });
+  // Initialize database and set up subscription
+  getChatHistoryDatabase()
+    .then((db) => {
+      if (isSubscribed) {
+        // Create observable query
+        const query = db.sessions
+          .find()
+          .sort({ updatedAt: 'desc' });
 
+        // Subscribe to changes
+        subscription = query.$.subscribe((sessions) => {
+          callback(sessions.map((s) => s.toJSON() as ChatSessionDocument));
+        });
+      }
+    })
+    .catch((error) => {
+      console.error('Failed to initialize chat history database:', error);
+    });
+
+  // Mark as interested in subscription
+  isSubscribed = true;
+
+  // Return cleanup function
   return () => {
+    isSubscribed = false;
     if (subscription) {
       subscription.unsubscribe();
+      subscription = null;
     }
   };
 }

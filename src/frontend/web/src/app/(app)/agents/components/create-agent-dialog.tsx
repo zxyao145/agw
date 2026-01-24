@@ -120,8 +120,6 @@ export function CreateAgentDialog({
                   selectedTools.length > 0
                     ? JSON.stringify(selectedTools)
                     : null,
-                type: parseInt(agentType),
-                extra: extra.trim() || null,
               })
             }
             disabled={

@@ -9,6 +9,7 @@ import {
   deleteSession,
   updateSessionTitle,
   clearAllSessions,
+  getAllSessions,
 } from "../../lib/chat-history-service";
 import type { ChatSessionDocument } from "../../lib/chat-history-db";
 import { cn } from "@/lib/utils";
@@ -30,11 +31,33 @@ export function ChatHistoryList({
 
   // Subscribe to session changes
   React.useEffect(() => {
+    let isMounted = true;
+
+    // Load initial sessions immediately
+    const loadInitialSessions = async () => {
+      try {
+        const initialSessions = await getAllSessions();
+        if (isMounted) {
+          setSessions(initialSessions);
+        }
+      } catch (error) {
+        console.error('Failed to load chat history:', error);
+      }
+    };
+
+    loadInitialSessions();
+
+    // Subscribe to subsequent changes
     const unsubscribe = subscribeToSessions((newSessions) => {
-      setSessions(newSessions);
+      if (isMounted) {
+        setSessions(newSessions);
+      }
     });
 
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const handleDelete = async (sessionId: string, e: React.MouseEvent) => {

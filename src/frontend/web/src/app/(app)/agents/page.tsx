@@ -211,10 +211,10 @@ export default function AgentsPage() {
                   const updated = [...messages];
                   const existingMsg = updated[existingIndex];
                   const existingTextContent = existingMsg.contents.find(
-                    (c) => c.type === "text"
+                    (c: any) => c.type === "text"
                   );
                   const newTextContent = message.contents.find(
-                    (c) => c.type === "text"
+                    (c: any) => c.type === "text"
                   );
 
                   if (existingTextContent && newTextContent) {
