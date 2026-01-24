@@ -66,30 +66,48 @@ const chatSessionSchema = {
 };
 
 let dbInstance: ChatHistoryDatabase | null = null;
+let dbPromise: Promise<ChatHistoryDatabase> | null = null;
 
 /**
  * Get or create the chat history database instance
+ * Uses Promise-based singleton pattern to prevent multiple instantiations
  */
 export async function getChatHistoryDatabase(): Promise<ChatHistoryDatabase> {
+  // Return existing instance if available
   if (dbInstance) {
     return dbInstance;
   }
 
-  // Create database
-  const db = await createRxDatabase<ChatHistoryDatabaseCollections>({
-    name: 'claudecode_chat_history',
-    storage: getRxStorageDexie(),
-  });
+  // Return existing promise if database is being created
+  if (dbPromise) {
+    return dbPromise;
+  }
 
-  // Add collections
-  await db.addCollections({
-    sessions: {
-      schema: chatSessionSchema,
-    },
-  });
+  // Create new database
+  dbPromise = (async () => {
+    try {
+      const db = await createRxDatabase<ChatHistoryDatabaseCollections>({
+        name: 'claudecode_chat_history',
+        storage: getRxStorageDexie(),
+      });
 
-  dbInstance = db;
-  return db;
+      // Add collections
+      await db.addCollections({
+        sessions: {
+          schema: chatSessionSchema,
+        },
+      });
+
+      dbInstance = db;
+      return db;
+    } catch (error) {
+      // Reset promise on error so retry is possible
+      dbPromise = null;
+      throw error;
+    }
+  })();
+
+  return dbPromise;
 }
 
 /**

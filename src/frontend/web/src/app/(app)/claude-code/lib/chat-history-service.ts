@@ -31,56 +31,66 @@ export async function saveSession(
   threadId: string,
   messages: AiMessage[],
   title?: string
-): Promise<ChatSessionDocument> {
-  const db = await getChatHistoryDatabase();
+): Promise<ChatSessionDocument | null> {
+  // Don't save sessions without messages
+  if (!messages || messages.length === 0) {
+    return null;
+  }
 
-  // Find existing session by threadId
-  const existing = await db.sessions
-    .findOne({
-      selector: { threadId },
-    })
-    .exec();
+  try {
+    const db = await getChatHistoryDatabase();
 
-  const now = Date.now();
-  const sessionTitle = title || (existing?.title) || generateTitle(messages);
+    // Find existing session by threadId
+    const existing = await db.sessions
+      .findOne({
+        selector: { threadId },
+      })
+      .exec();
 
-  const sessionData = {
-    threadId,
-    title: sessionTitle,
-    messages,
-    updatedAt: now,
-  };
+    const now = Date.now();
+    const sessionTitle = title || (existing?.title) || generateTitle(messages);
 
-  const size = calculateSessionSize({
-    ...sessionData,
-    id: existing?.id || '',
-    createdAt: existing?.createdAt || now,
-  });
+    const sessionData = {
+      threadId,
+      title: sessionTitle,
+      messages,
+      updatedAt: now,
+    };
 
-  if (existing) {
-    // Update existing session
-    await existing.patch({
+    const size = calculateSessionSize({
       ...sessionData,
-      size,
+      id: existing?.id || '',
+      createdAt: existing?.createdAt || now,
     });
 
-    // Cleanup after update
-    await cleanupOldSessions(db);
+    if (existing) {
+      // Update existing session
+      await existing.patch({
+        ...sessionData,
+        size,
+      });
 
-    return existing.toJSON() as ChatSessionDocument;
-  } else {
-    // Create new session
-    const newSession = await db.sessions.insert({
-      id: Ulid.generate().toCanonical(),
-      ...sessionData,
-      createdAt: now,
-      size,
-    });
+      // Cleanup after update
+      await cleanupOldSessions(db);
 
-    // Cleanup after insert
-    await cleanupOldSessions(db);
+      return existing.toJSON() as ChatSessionDocument;
+    } else {
+      // Create new session
+      const newSession = await db.sessions.insert({
+        id: Ulid.generate().toCanonical(),
+        ...sessionData,
+        createdAt: now,
+        size,
+      });
 
-    return newSession.toJSON() as ChatSessionDocument;
+      // Cleanup after insert
+      await cleanupOldSessions(db);
+
+      return newSession.toJSON() as ChatSessionDocument;
+    }
+  } catch (error) {
+    console.error('Failed to save session:', error);
+    return null;
   }
 }
 
@@ -104,13 +114,18 @@ export async function getSessionByThreadId(
  * Get all sessions, sorted by most recently updated
  */
 export async function getAllSessions(): Promise<ChatSessionDocument[]> {
-  const db = await getChatHistoryDatabase();
-  const sessions = await db.sessions
-    .find()
-    .sort({ updatedAt: 'desc' })
-    .exec();
+  try {
+    const db = await getChatHistoryDatabase();
+    const sessions = await db.sessions
+      .find()
+      .sort({ updatedAt: 'desc' })
+      .exec();
 
-  return sessions.map((s) => s.toJSON() as ChatSessionDocument);
+    return sessions.map((s) => s.toJSON() as ChatSessionDocument);
+  } catch (error) {
+    console.error('Failed to get all sessions:', error);
+    return [];
+  }
 }
 
 /**
@@ -203,13 +218,22 @@ export function subscribeToSessions(
           .sort({ updatedAt: 'desc' });
 
         // Subscribe to changes
-        subscription = query.$.subscribe((sessions) => {
-          callback(sessions.map((s) => s.toJSON() as ChatSessionDocument));
+        subscription = query.$.subscribe({
+          next: (sessions: any[]) => {
+            try {
+              callback(sessions.map((s) => s.toJSON() as ChatSessionDocument));
+            } catch (error) {
+              console.error('Error in session callback:', error);
+            }
+          },
+          error: (error: Error) => {
+            console.error('Error in session subscription:', error);
+          }
         });
       }
     })
     .catch((error) => {
-      console.error('Failed to initialize chat history database:', error);
+      console.error('Failed to initialize chat history database subscription:', error);
     });
 
   // Mark as interested in subscription
