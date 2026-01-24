@@ -8,6 +8,7 @@ import {
   PermissionMode,
   LineComment,
   ProcessedMessageItem,
+  EnvVar,
 } from "./types";
 
 import { AiMessage, MessageContentType } from "@/types";
@@ -18,7 +19,6 @@ import { Chat } from "./components/chat/chat";
 import { InputArea } from "./components/user-input/input-area";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { saveSession } from "./lib/chat-history-service";
 import "./page.css";
 
 export default function ClaudeCodePage() {
@@ -29,10 +29,19 @@ export default function ClaudeCodePage() {
   const [permissionMode, setPermissionMode] = React.useState<string>(
     PermissionMode.default,
   );
+  const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [threadId, setThreadId] = React.useState<string | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
+
+
+  const handleThreadId = (newThreadId: string | null) => {
+    if(newThreadId){
+      console.debug("Set threadId:", newThreadId);
+    }
+    setThreadId(newThreadId);
+  };
 
   const [initContent, setInitContent] =
     React.useState<InitMessageContent | null>(null);
@@ -53,10 +62,20 @@ export default function ClaudeCodePage() {
     const savedPermissionMode = localStorage.getItem(
       "claudecode_permissionMode",
     );
+    const savedEnvVars = localStorage.getItem("claudecode_envVars");
+
     if (savedWorkingDir) setWorkingDirectory(savedWorkingDir);
     if (savedApiKey) setApiKey(savedApiKey);
     if (savedApiBaseUrl) setApiBaseUrl(savedApiBaseUrl);
     if (savedPermissionMode) setPermissionMode(savedPermissionMode);
+    if (savedEnvVars) {
+      try {
+        const parsed = JSON.parse(savedEnvVars);
+        setEnvVars(parsed);
+      } catch (e) {
+        console.error("Failed to parse env vars:", e);
+      }
+    }
   }, []);
 
   // Cleanup WebSocket on unmount
@@ -245,7 +264,15 @@ export default function ClaudeCodePage() {
           tid = threadId;
         } else {
           tid = Ulid.generate().toCanonical();
-          setThreadId(tid);
+          handleThreadId(tid);
+        }
+
+        // Convert array format [{key, value}] to object {key: value}
+        const envObj: Record<string, string> = {};
+        if (Array.isArray(envVars)) {
+          envVars.forEach((item: { key: string; value: string }) => {
+            if (item.key) envObj[item.key] = item.value || "";
+          });
         }
 
         const request = {
@@ -257,8 +284,9 @@ export default function ClaudeCodePage() {
           maxTurns: null,
           threadId: tid,
           permissionMode: permissionMode,
+          environmentVariables: envObj,
         };
-
+        console.log("Sending request:", request, envObj);
         ws.send(JSON.stringify(request));
       }
     } catch (error) {
@@ -271,7 +299,7 @@ export default function ClaudeCodePage() {
 
   const handleClearSession = () => {
     setMessages([]);
-    setThreadId(null);
+    handleThreadId(null);
     // Close WebSocket to start fresh session on next message
     if (wsRef.current) {
       wsRef.current.close(1000, "Session cleared");
@@ -281,7 +309,7 @@ export default function ClaudeCodePage() {
 
   const handleSessionSelect = (newMessages: AiMessage[], newThreadId: string) => {
     setMessages(newMessages);
-    setThreadId(newThreadId);
+    handleThreadId(newThreadId);
     // Close existing WebSocket to start fresh with loaded session
     if (wsRef.current) {
       wsRef.current.close(1000, "Session switched");
@@ -295,12 +323,18 @@ export default function ClaudeCodePage() {
 
   // Auto-save messages to database when they change
   React.useEffect(() => {
-    if (threadId && messages.length > 0) {
+    const msgLength = messages?.length ?? 0;
+    console.debug("Messages changed, auto-saving...", threadId,  msgLength);
+    if (threadId && msgLength > 0) {
       // Debounce saves to avoid too frequent writes
-      const timeoutId = setTimeout(() => {
-        saveSession(threadId, messages).catch((error) => {
+      const timeoutId = setTimeout(async () => {
+        // Dynamically import saveSession to avoid SSR issues
+        try {
+          const { saveSession } = await import("./lib/chat-history-service");
+          await saveSession(threadId, messages);
+        } catch (error) {
           console.error("Failed to save session:", error);
-        });
+        }
       }, 1000);
 
       return () => clearTimeout(timeoutId);
@@ -321,7 +355,13 @@ export default function ClaudeCodePage() {
         <div className="col-span-2">
           {!value || value.length === 0
             ? "-"
-            : value.map((item, i) => <Badge key={i} variant="outline">{item}</Badge>)}
+            : value.map((item, i) => {
+                // Handle objects with name/path structure
+                const displayValue = typeof item === 'object'
+                  ? (item as any)?.name || JSON.stringify(item)
+                  : item;
+                return <Badge key={i} variant="outline">{displayValue}</Badge>;
+              })}
         </div>
       </div>
     );
@@ -333,8 +373,8 @@ export default function ClaudeCodePage() {
 
     // Track which message indices have been processed
     const processedIndices = new Set<number>();
-
-    for (let i = 0; i < msgs.length; i++) {
+    const msgLength = msgs?.length ?? 0;
+    for (let i = 0; i < msgLength; i++) {
       if (processedIndices.has(i)) {
         continue; // Skip already processed messages
       }
@@ -437,7 +477,7 @@ export default function ClaudeCodePage() {
       <div className="flex-1 overflow-y-auto">
         <Tabs
           defaultValue="chat"
-          className="w-full flex flex-col flex-1 min-h-0 pb-36"
+          className="w-full h-full flex flex-col flex-1 min-h-0 pb-36"
         >
           <TabsList className="w-fit">
             <TabsTrigger value="chat">Chat</TabsTrigger>
@@ -455,24 +495,22 @@ export default function ClaudeCodePage() {
             />
           </TabsContent>
 
-          <TabsContent value="files">
-            <div className="flex flex-col h-full">
-              <FileExplorer
-                rootDirectory={workingDirectory}
-                comments={comments}
-                setComments={setComments}
-              />
-            </div>
+          <TabsContent value="files" className="h-full">
+            <FileExplorer
+              rootDirectory={workingDirectory}
+              comments={comments}
+              setComments={setComments}
+            />
           </TabsContent>
         </Tabs>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
+      <div className="absolute bottom-0 z-10 left-0 right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
         <InputArea
           input={input}
           setInput={setInput}
           isExecuting={isExecuting}
-          hasMessages={messages.length > 0}
+          hasMessages={(messages?.length ?? 0) > 0}
           onKeyDown={handleKeyDown}
           onExecute={executeClaudeCode}
           onExecuteWithComment={executeClaudeCodeWithComment}
@@ -485,6 +523,8 @@ export default function ClaudeCodePage() {
           setApiBaseUrl={setApiBaseUrl}
           permissionMode={permissionMode}
           setPermissionMode={setPermissionMode}
+          envVars={envVars}
+          setEnvVars={setEnvVars}
           initContent={initContent}
           createArr={createArr}
         />

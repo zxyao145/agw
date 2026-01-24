@@ -24,6 +24,8 @@ export function InputArea({
   setApiBaseUrl,
   permissionMode,
   setPermissionMode,
+  envVars,
+  setEnvVars,
   initContent,
   createArr,
 }: ChatInputAreaProps) {
@@ -40,6 +42,8 @@ export function InputArea({
             setApiBaseUrl={setApiBaseUrl}
             permissionMode={permissionMode}
             setPermissionMode={setPermissionMode}
+            envVars={envVars}
+            setEnvVars={setEnvVars}
           />
           <ChatInfoPopover initContent={initContent} createArr={createArr} />
         </div>

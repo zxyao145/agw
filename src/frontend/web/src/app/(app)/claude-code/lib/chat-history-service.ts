@@ -1,3 +1,5 @@
+'use client';
+
 import { Ulid } from 'id128';
 import type { AiMessage } from '@/types';
 import {
@@ -5,7 +7,7 @@ import {
   calculateSessionSize,
   cleanupOldSessions,
   type ChatSessionDocument,
-  type ChatHistoryDatabase,
+  upsert,
 } from './chat-history-db';
 
 /**
@@ -21,7 +23,7 @@ function generateTitle(messages: AiMessage[]): string {
   const text = firstContent.content || 'New Chat';
 
   // Truncate to 50 characters
-  return text.length > 50 ? text.substring(0, 50) + '...' : text;
+  return text.length > 20 ? text.substring(0, 20) + '...' : text;
 }
 
 /**
@@ -31,56 +33,61 @@ export async function saveSession(
   threadId: string,
   messages: AiMessage[],
   title?: string
-): Promise<ChatSessionDocument> {
-  const db = await getChatHistoryDatabase();
+): Promise<ChatSessionDocument | null> {
+  // Don't save sessions without messages
+  if (!messages || messages.length === 0) {
+    return null;
+  }
 
-  // Find existing session by threadId
-  const existing = await db.sessions
-    .findOne({
+  try {
+    const db = await getChatHistoryDatabase();
+
+    // Find existing session by threadId
+    const result = await db.find({
       selector: { threadId },
-    })
-    .exec();
-
-  const now = Date.now();
-  const sessionTitle = title || (existing?.title) || generateTitle(messages);
-
-  const sessionData = {
-    threadId,
-    title: sessionTitle,
-    messages,
-    updatedAt: now,
-  };
-
-  const size = calculateSessionSize({
-    ...sessionData,
-    id: existing?.id || '',
-    createdAt: existing?.createdAt || now,
-  });
-
-  if (existing) {
-    // Update existing session
-    await existing.patch({
-      ...sessionData,
-      size,
+      limit: 1
     });
 
-    // Cleanup after update
-    await cleanupOldSessions(db);
+    const existing = result.docs[0];
 
-    return existing.toJSON() as ChatSessionDocument;
-  } else {
-    // Create new session
-    const newSession = await db.sessions.insert({
-      id: Ulid.generate().toCanonical(),
-      ...sessionData,
-      createdAt: now,
-      size,
+    const now = Date.now();
+    const sessionTitle = title || (existing?.title) || generateTitle(messages);
+
+    const docId = existing?._id || Ulid.generate().toCanonical();
+
+    const sessionData: ChatSessionDocument = {
+      _id: docId,
+      threadId,
+      title: sessionTitle,
+      messages,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      size: 0, // Will be calculated below
+    };
+
+    console.debug('Saving session:', sessionData);
+    sessionData.size = calculateSessionSize(sessionData);
+
+    // Put will insert or update based on _id
+    // const response = await db.put(sessionData);
+   const response = await upsert(db, docId, (doc: ChatSessionDocument) => {
+      // doc.updatedAt = Date.now();
+      // doc.messages = messages;
+
+      console.debug('Upsert session data:', doc);
+      return sessionData;
     });
-
-    // Cleanup after insert
+    // Cleanup after save
     await cleanupOldSessions(db);
 
-    return newSession.toJSON() as ChatSessionDocument;
+    // Get the updated document
+    const savedDoc = await db.get(response.id);
+    console.debug('savedDoc:', savedDoc);
+
+    return savedDoc;
+  } catch (error) {
+    console.error('Failed to save session:', error);
+    return null;
   }
 }
 
@@ -90,65 +97,82 @@ export async function saveSession(
 export async function getSessionByThreadId(
   threadId: string
 ): Promise<ChatSessionDocument | null> {
-  const db = await getChatHistoryDatabase();
-  const session = await db.sessions
-    .findOne({
+  try {
+    const db = await getChatHistoryDatabase();
+    const result = await db.find({
       selector: { threadId },
-    })
-    .exec();
+      limit: 1
+    });
 
-  return session ? (session.toJSON() as ChatSessionDocument) : null;
+    if (result.docs.length === 0) {
+      return null;
+    }
+
+    return result.docs[0];
+  } catch (error) {
+    console.error('Failed to get session by threadId:', error);
+    return null;
+  }
 }
 
 /**
  * Get all sessions, sorted by most recently updated
  */
 export async function getAllSessions(): Promise<ChatSessionDocument[]> {
-  const db = await getChatHistoryDatabase();
-  const sessions = await db.sessions
-    .find()
-    .sort({ updatedAt: 'desc' })
-    .exec();
+  try {
+    const db = await getChatHistoryDatabase();
+    const result = await db.find({
+      selector: {},
+      sort: [{ updatedAt: 'desc' }]
+    });
 
-  return sessions.map((s) => s.toJSON() as ChatSessionDocument);
+    return result.docs;
+  } catch (error) {
+    console.error('Failed to get all sessions:', error);
+    return [];
+  }
 }
 
 /**
  * Delete a session by ID
  */
 export async function deleteSession(sessionId: string): Promise<boolean> {
-  const db = await getChatHistoryDatabase();
-  const session = await db.sessions
-    .findOne({
-      selector: { id: sessionId },
-    })
-    .exec();
-
-  if (session) {
-    await session.remove();
+  try {
+    const db = await getChatHistoryDatabase();
+    const doc = await db.get(sessionId);
+    await db.remove(doc);
     return true;
+  } catch (error) {
+    if ((error as any).status === 404) {
+      console.warn('Session not found:', sessionId);
+      return false;
+    }
+    console.error('Failed to delete session:', error);
+    return false;
   }
-
-  return false;
 }
 
 /**
  * Delete a session by threadId
  */
 export async function deleteSessionByThreadId(threadId: string): Promise<boolean> {
-  const db = await getChatHistoryDatabase();
-  const session = await db.sessions
-    .findOne({
+  try {
+    const db = await getChatHistoryDatabase();
+    const result = await db.find({
       selector: { threadId },
-    })
-    .exec();
+      limit: 1
+    });
 
-  if (session) {
-    await session.remove();
+    if (result.docs.length === 0) {
+      return false;
+    }
+
+    await db.remove(result.docs[0]);
     return true;
+  } catch (error) {
+    console.error('Failed to delete session by threadId:', error);
+    return false;
   }
-
-  return false;
 }
 
 /**
@@ -158,54 +182,89 @@ export async function updateSessionTitle(
   sessionId: string,
   newTitle: string
 ): Promise<boolean> {
-  const db = await getChatHistoryDatabase();
-  const session = await db.sessions
-    .findOne({
-      selector: { id: sessionId },
-    })
-    .exec();
+  try {
+    const db = await getChatHistoryDatabase();
+    const doc = await db.get(sessionId);
+    doc.title = newTitle;
+    doc.updatedAt = Date.now();
+    // Recalculate size in case title changed
+    doc.size = calculateSessionSize(doc);
 
-  if (session) {
-    await session.patch({
-      title: newTitle,
-      updatedAt: Date.now(),
-    });
+    await db.put(doc);
     return true;
+  } catch (error) {
+    console.error('Failed to update session title:', error);
+    return false;
   }
-
-  return false;
 }
 
 /**
  * Clear all sessions
  */
 export async function clearAllSessions(): Promise<void> {
-  const db = await getChatHistoryDatabase();
-  await db.sessions.find().remove();
+  try {
+    const db = await getChatHistoryDatabase();
+    const result = await db.allDocs({ include_docs: true });
+
+    // Delete all documents
+    await Promise.all(
+      result.rows.map(async (row) => {
+        if (row.doc) {
+          await db.remove(row.doc);
+        }
+      })
+    );
+  } catch (error) {
+    console.error('Failed to clear all sessions:', error);
+  }
 }
 
 /**
- * Subscribe to session changes
+ * Subscribe to session changes using PouchDB changes() feed
  */
 export function subscribeToSessions(
   callback: (sessions: ChatSessionDocument[]) => void
 ): () => void {
-  let db: ChatHistoryDatabase | null = null;
-  let subscription: any = null;
+  let isSubscribed = true;
+  let changes: PouchDB.Core.Changes<ChatSessionDocument> | null = null;
 
-  getChatHistoryDatabase().then((database) => {
-    db = database;
-    subscription = db.sessions
-      .find()
-      .sort({ updatedAt: 'desc' })
-      .$.subscribe((sessions) => {
-        callback(sessions.map((s) => s.toJSON() as ChatSessionDocument));
+  // Initialize database and set up subscription
+  getChatHistoryDatabase()
+    .then((db) => {
+      if (!isSubscribed) return;
+
+      // Initial load
+      getAllSessions().then((sessions) => {
+        if (isSubscribed) {
+          callback(sessions);
+        }
       });
-  });
 
+      // Listen for changes
+      changes = db.changes({
+        since: 'now',
+        live: true,
+        include_docs: true
+      }).on('change', async () => {
+        if (!isSubscribed) return;
+
+        // Reload all sessions when any change occurs
+        const sessions = await getAllSessions();
+        if (isSubscribed) {
+          callback(sessions);
+        }
+      });
+    })
+    .catch((error) => {
+      console.error('Failed to initialize chat history database subscription:', error);
+    });
+
+  // Return cleanup function
   return () => {
-    if (subscription) {
-      subscription.unsubscribe();
+    isSubscribed = false;
+    if (changes) {
+      changes.cancel();
+      changes = null;
     }
   };
 }

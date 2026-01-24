@@ -16,9 +16,9 @@ export function ChatMessageArea({
   processMessages,
 }: ChatMessageAreaProps) {
   return (
-    <div className="flex-1 flex overflow-hidden min-h-full">
+    <div className="flex-1 flex">
       <div className="flex-1 overflow-y-auto space-y-4">
-        {messages.length === 0 && (
+        {(messages?.length ?? 0) === 0 && (
           <div className="flex items-center justify-center h-40">
             <div className="text-center text-muted-foreground ">
               <p className="text-lg mb-2">No messages yet</p>

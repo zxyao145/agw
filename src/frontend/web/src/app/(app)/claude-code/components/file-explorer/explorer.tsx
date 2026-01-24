@@ -252,7 +252,7 @@ export default function Export({
   return (
     <div
       className={cn(
-        "border rounded-lg flex flex-col flex-1",
+        "border rounded-lg flex flex-col flex-1 ",
         "h-full border-0 rounded-none",
       )}
     >

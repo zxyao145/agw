@@ -124,8 +124,6 @@ export function EditAgentDialog({
                       selectedTools.length > 0
                         ? JSON.stringify(selectedTools)
                         : null,
-                    type: parseInt(agentType),
-                    extra: extra.trim() || null,
                   },
                 });
               }
