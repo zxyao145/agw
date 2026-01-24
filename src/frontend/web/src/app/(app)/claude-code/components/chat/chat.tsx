@@ -13,7 +13,6 @@ const ChatHistoryList = dynamic(
   () => import("./chat-history-list").then(mod => ({ default: mod.ChatHistoryList })),
   { ssr: false }
 );
-
 export interface ChatProps extends ChatMessageAreaProps {
   currentThreadId: string | null;
   onSessionSelect: (messages: AiMessage[], threadId: string) => void;
