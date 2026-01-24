@@ -169,7 +169,7 @@ export function FileExplorer({
           )}
         </ColResizeSplit.Left>
         <ColResizeSplit.Right>
-          <div className="flex-1 flex flex-col min-h-full">
+          <div className="flex-1 flex flex-col min-h-full pb-36">
             {!selectedFile ? (
               NoSelectedFile()
             ) : (

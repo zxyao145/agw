@@ -41,7 +41,7 @@ export function Chat({
         </ColResizeSplit.Left>
 
         <ColResizeSplit.Right>
-          <div className="flex flex-col flex-1">
+          <div className="flex flex-col flex-1 px-2">
             <ChatMessageArea {...messageAreaProps} />
           </div>
         </ColResizeSplit.Right>

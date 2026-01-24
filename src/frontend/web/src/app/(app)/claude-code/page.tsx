@@ -477,7 +477,7 @@ export default function ClaudeCodePage() {
       <div className="flex-1 overflow-y-auto">
         <Tabs
           defaultValue="chat"
-          className="w-full h-full flex flex-col flex-1 min-h-0 pb-36"
+          className="w-full h-full flex flex-col flex-1 min-h-0"
         >
           <TabsList className="w-fit">
             <TabsTrigger value="chat">Chat</TabsTrigger>
