@@ -63,6 +63,9 @@ export interface ChatInputAreaProps {
   setApiBaseUrl: (value: string) => void;
   permissionMode: string;
   setPermissionMode: (value: string) => void;
+  envVars: EnvVar[];
+  setEnvVars: (value: EnvVar[]) => void;
+
   initContent: InitMessageContent | null;
   createArr: (key: string, value: string[] | undefined) => React.ReactNode;
 }
@@ -145,6 +148,10 @@ export interface DiffLineRowProps {
 // ============================================================================
 // Settings Dialog Component Types
 // ============================================================================
+export interface EnvVar {
+  key: string;
+  value: string;
+}
 
 export interface SettingsDialogProps {
   workingDirectory: string;
@@ -155,6 +162,8 @@ export interface SettingsDialogProps {
   setApiBaseUrl: (value: string) => void;
   permissionMode: string;
   setPermissionMode: (value: string) => void;
+  envVars: EnvVar[];
+  setEnvVars: (value: EnvVar[]) => void;
 }
 
 

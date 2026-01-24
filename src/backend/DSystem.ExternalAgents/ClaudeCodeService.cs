@@ -60,12 +60,7 @@ public class ClaudeCodeService
             MaxTurns = maxTurns,
             PermissionMode = mode,
         };
-        options.EnvironmentVariables = new Dictionary<string, string?>()
-        {
-            //{"ANTHROPIC_AUTH_TOKEN", apiKey },
-            { "HTTP_PROXY", "http://127.0.0.1:30518" },
-            { "HTTPS_PROXY", "http://127.0.0.1:30518" },
-        };
+        options.EnvironmentVariables = request.EnvironmentVariables;
 
         if (!string.IsNullOrEmpty(apiKey))
         {

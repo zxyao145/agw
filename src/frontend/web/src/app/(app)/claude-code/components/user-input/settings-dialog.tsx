@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Settings, TriangleAlert } from "lucide-react";
+import { Settings, TriangleAlert, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,27 +28,65 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { PermissionMode, SettingsDialogProps } from "../../types";
+import { EnvVar, PermissionMode, SettingsDialogProps } from "../../types";
+
+
+
 
 export function SettingsDialog({
   workingDirectory,
   setWorkingDirectory,
+
   apiKey,
   setApiKey,
+
   apiBaseUrl,
   setApiBaseUrl,
+
   permissionMode,
   setPermissionMode,
+  
+  envVars,
+  setEnvVars,
 }: SettingsDialogProps) {
   const [open, setOpen] = React.useState(false);
+
+  // Load env vars on mount
+  React.useEffect(() => {
+    if (open) {
+      try {
+        const saved = localStorage.getItem("claudecode_envVars");
+        if (saved) {
+          setEnvVars(JSON.parse(saved));
+        }
+      } catch (e) {
+        console.error("Failed to load env vars:", e);
+      }
+    }
+  }, [open]);
 
   const saveSettings = () => {
     localStorage.setItem("claudecode_workingDir", workingDirectory);
     localStorage.setItem("claudecode_apiKey", apiKey);
     localStorage.setItem("claudecode_apiBaseUrl", apiBaseUrl);
     localStorage.setItem("claudecode_permissionMode", permissionMode);
+    localStorage.setItem("claudecode_envVars", JSON.stringify(envVars));
     setOpen(false);
     toast.success("Settings saved");
+  };
+
+  const addEnvVar = () => {
+    setEnvVars([...envVars, { key: "", value: "" }]);
+  };
+
+  const removeEnvVar = (index: number) => {
+    setEnvVars(envVars.filter((_, i) => i !== index));
+  };
+
+  const updateEnvVar = (index: number, field: keyof EnvVar, value: string) => {
+    const updated = [...envVars];
+    updated[index][field] = value;
+    setEnvVars(updated);
   };
 
   return (
@@ -59,15 +97,13 @@ export function SettingsDialog({
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>ClaudeCode Settings</DialogTitle>
-          <DialogDescription>
-            Configure working directory, API key, and permission mode
-          </DialogDescription>
+          <DialogTitle>Settings</DialogTitle>
+          <DialogDescription>Configure ClaudeCode settings</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-3 py-2">
           <div className="grid gap-2">
             <Label htmlFor="settings-workingDir">
               Working Directory (Optional)
@@ -87,10 +123,7 @@ export function SettingsDialog({
           <div className="grid gap-2">
             <Label htmlFor="settings-permissionMode">Permission Mode</Label>
             <Select value={permissionMode} onValueChange={setPermissionMode}>
-              <SelectTrigger
-                id="settings-permissionMode"
-                className="w-full py-6"
-              >
+              <SelectTrigger id="settings-permissionMode" className="w-full">
                 <SelectValue placeholder="Select permission mode" />
               </SelectTrigger>
               <SelectContent>
@@ -164,6 +197,69 @@ export function SettingsDialog({
               onChange={(e) => setApiBaseUrl(e.target.value)}
               placeholder="https://api.anthropic.com"
             />
+          </div>
+
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <Label>Environment Variables</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={addEnvVar}
+                className="h-7 px-2"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Add
+              </Button>
+            </div>
+            {envVars.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-2">
+                No environment variables set
+              </div>
+            ) : (
+              <div className="border rounded-md">
+                <div className="grid grid-cols-12 gap-2 p-2 border-b bg-muted/50 text-xs font-medium text-muted-foreground">
+                  <div className="col-span-5">Key</div>
+                  <div className="col-span-6">Value</div>
+                  <div className="col-span-1"></div>
+                </div>
+                {envVars.map((env, index) => (
+                  <div
+                    key={index}
+                    className="grid grid-cols-12 gap-2 p-2 border-b last:border-b-0"
+                  >
+                    <Input
+                      value={env.key}
+                      onChange={(e) =>
+                        updateEnvVar(index, "key", e.target.value)
+                      }
+                      placeholder="KEY"
+                      className="col-span-5 h-8 text-xs md:text-xs"
+                    />
+                    <Input
+                      value={env.value}
+                      onChange={(e) =>
+                        updateEnvVar(index, "value", e.target.value)
+                      }
+                      placeholder="value"
+                      className="col-span-6 h-8 text-xs md:text-xs"
+                    />
+                    <div className="col-span-1 flex items-center">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeEnvVar(index)}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

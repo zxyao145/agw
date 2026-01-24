@@ -8,6 +8,7 @@ import {
   PermissionMode,
   LineComment,
   ProcessedMessageItem,
+  EnvVar,
 } from "./types";
 
 import { AiMessage, MessageContentType } from "@/types";
@@ -20,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { saveSession } from "./lib/chat-history-service";
 import "./page.css";
+import { Badge } from "@/components/ui/badge";
 
 export default function ClaudeCodePage() {
   const [input, setInput] = React.useState("");
@@ -29,6 +31,7 @@ export default function ClaudeCodePage() {
   const [permissionMode, setPermissionMode] = React.useState<string>(
     PermissionMode.default,
   );
+  const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [threadId, setThreadId] = React.useState<string | null>(null);
@@ -53,10 +56,20 @@ export default function ClaudeCodePage() {
     const savedPermissionMode = localStorage.getItem(
       "claudecode_permissionMode",
     );
+    const savedEnvVars = localStorage.getItem("claudecode_envVars");
+
     if (savedWorkingDir) setWorkingDirectory(savedWorkingDir);
     if (savedApiKey) setApiKey(savedApiKey);
     if (savedApiBaseUrl) setApiBaseUrl(savedApiBaseUrl);
     if (savedPermissionMode) setPermissionMode(savedPermissionMode);
+    if (savedEnvVars) {
+      try {
+        const parsed = JSON.parse(savedEnvVars);
+        setEnvVars(parsed);
+      } catch (e) {
+        console.error("Failed to parse env vars:", e);
+      }
+    }
   }, []);
 
   // Cleanup WebSocket on unmount
@@ -248,6 +261,14 @@ export default function ClaudeCodePage() {
           setThreadId(tid);
         }
 
+        // Convert array format [{key, value}] to object {key: value}
+        const envObj: Record<string, string> = {};
+        if (Array.isArray(envVars)) {
+          envVars.forEach((item: { key: string; value: string }) => {
+            if (item.key) envObj[item.key] = item.value || "";
+          });
+        }
+
         const request = {
           input: inputMsg,
           workingDirectory: workingDirectory.trim() || null,
@@ -257,8 +278,9 @@ export default function ClaudeCodePage() {
           maxTurns: null,
           threadId: tid,
           permissionMode: permissionMode,
+          environmentVariables: envObj,
         };
-
+        console.log("Sending request:", request, envObj);
         ws.send(JSON.stringify(request));
       }
     } catch (error) {
@@ -321,7 +343,13 @@ export default function ClaudeCodePage() {
         <div className="col-span-2">
           {!value || value.length === 0
             ? "-"
-            : value.map((item, i) => <Badge key={i} variant="outline">{item}</Badge>)}
+            : value.map((item, i) => {
+                // Handle objects with name/path structure
+                const displayValue = typeof item === 'object'
+                  ? (item as any)?.name || JSON.stringify(item)
+                  : item;
+                return <Badge key={i} variant="outline">{displayValue}</Badge>;
+              })}
         </div>
       </div>
     );
@@ -485,6 +513,9 @@ export default function ClaudeCodePage() {
           setApiBaseUrl={setApiBaseUrl}
           permissionMode={permissionMode}
           setPermissionMode={setPermissionMode}
+          envVars={envVars}
+          setEnvVars={setEnvVars}
+
           initContent={initContent}
           createArr={createArr}
         />

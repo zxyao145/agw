@@ -46,4 +46,6 @@ public record ClaudeCodeExecuteRequest
     public string ThreadId { get; init; } = "";
 
     public string? PermissionMode { get; init; }
+    
+    public Dictionary<string, string?>? EnvironmentVariables { get; init; }
 }
