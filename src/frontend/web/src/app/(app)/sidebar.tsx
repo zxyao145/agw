@@ -82,7 +82,7 @@ export function AppSidebar( props: AppSidebarProps) {
 
   return (
     <>
-      <Sidebar collapsible="icon" className="relative w-64 h-full">
+      <Sidebar collapsible="icon" className="relative w-54 h-full">
         <SidebarHeader className="border-b border-slate-200">
           <SidebarMenu>
             <SidebarMenuItem>
