@@ -68,6 +68,9 @@ export interface ChatInputAreaProps {
 
   initContent: InitMessageContent | null;
   createArr: (key: string, value: string[] | undefined) => React.ReactNode;
+
+  currentTab: string;
+  comments: LineComment[];
 }
 
 // ============================================================================

@@ -353,9 +353,13 @@ export default function ClaudeCodePage() {
   }, [messages, threadId]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) {
       e.preventDefault();
-      executeClaudeCode();
+      if (currentTab === "files") {
+        executeClaudeCodeWithComment();
+      } else {
+        executeClaudeCode();
+      }
     }
   };
 
@@ -571,6 +575,8 @@ export default function ClaudeCodePage() {
           setEnvVars={setEnvVars}
           initContent={initContent}
           createArr={createArr}
+          currentTab={currentTab}
+          comments={comments}
         />
       </div>
 
