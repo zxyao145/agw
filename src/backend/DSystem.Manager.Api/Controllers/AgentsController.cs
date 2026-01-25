@@ -42,10 +42,14 @@ public class AgentsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] AgentCreateRequest request)
     {
-        var apiKey = await _apiKeyService.GetAsync(request.ModelProviderApiKeyId);
-        if (apiKey == null || !apiKey.Enable)
+        // Validate ModelProviderApiKeyId if provided
+        if (request.ModelProviderApiKeyId.HasValue)
         {
-            return BadRequest("Invalid or disabled ModelProviderApiKey.");
+            var apiKey = await _apiKeyService.GetAsync(request.ModelProviderApiKeyId.Value);
+            if (apiKey == null || !apiKey.Enable)
+            {
+                return BadRequest("Invalid or disabled ModelProviderApiKey.");
+            }
         }
 
         var user = User?.Identity?.Name ?? "system";
@@ -70,10 +74,14 @@ public class AgentsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
     {
-        var apiKey = await _apiKeyService.GetAsync(request.ModelProviderApiKeyId);
-        if (apiKey == null || !apiKey.Enable)
+        // Validate ModelProviderApiKeyId if provided
+        if (request.ModelProviderApiKeyId.HasValue)
         {
-            return BadRequest("Invalid or disabled ModelProviderApiKey.");
+            var apiKey = await _apiKeyService.GetAsync(request.ModelProviderApiKeyId.Value);
+            if (apiKey == null || !apiKey.Enable)
+            {
+                return BadRequest("Invalid or disabled ModelProviderApiKey.");
+            }
         }
 
         var user = User?.Identity?.Name ?? "system";
