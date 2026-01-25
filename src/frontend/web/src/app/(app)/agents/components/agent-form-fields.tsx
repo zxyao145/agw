@@ -46,6 +46,15 @@ interface AgentFormFieldsProps {
     extra?: boolean;
     tools?: boolean;
   };
+  hiddenFields?: {
+    name?: boolean;
+    description?: boolean;
+    systemPrompt?: boolean;
+    modelProviderApiKeyId?: boolean;
+    agentType?: boolean;
+    extra?: boolean;
+    tools?: boolean;
+  };
 }
 
 export function AgentFormFields({
@@ -70,6 +79,7 @@ export function AgentFormFields({
   toggleTool,
   idPrefix = "",
   disabledFields = {},
+  hiddenFields = {},
 }: AgentFormFieldsProps) {
   return (
     <div className="grid gap-4 overflow-y-auto pr-2 -mr-2">
@@ -79,7 +89,7 @@ export function AgentFormFields({
           id={`${idPrefix}name`}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="demo-agent"
+          placeholder="agent name"
           disabled={disabledFields.name}
         />
       </div>
@@ -95,28 +105,39 @@ export function AgentFormFields({
         />
       </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}agentType`}>Agent Type</Label>
-        <Select value={agentType} onValueChange={setAgentType} disabled={disabledFields.agentType}>
-          <SelectTrigger id={`${idPrefix}agentType`} className="w-full" disabled={disabledFields.agentType}>
-            <SelectValue placeholder="Select agent type..." />
-          </SelectTrigger>
-          <SelectContent position="popper" sideOffset={4}>
-            <SelectGroup>
-              <SelectLabel>Agent Type</SelectLabel>
-              <SelectItem value="0">System</SelectItem>
-              <SelectItem value="1">External</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
-
+      {!hiddenFields.agentType && (
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}agentType`}>Agent Type</Label>
+          <Select
+            value={agentType}
+            onValueChange={setAgentType}
+            disabled={disabledFields.agentType}
+          >
+            <SelectTrigger
+              id={`${idPrefix}agentType`}
+              className="w-full"
+              disabled={disabledFields.agentType}
+            >
+              <SelectValue placeholder="Select agent type..." />
+            </SelectTrigger>
+            <SelectContent position="popper" sideOffset={4}>
+              <SelectGroup>
+                <SelectLabel>Agent Type</SelectLabel>
+                <SelectItem value="0">System</SelectItem>
+                <SelectItem value="1">External</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}modelProviderApiKeyId`}>
           Model Provider API Key
           {agentType === "1" && (
-            <span className="text-xs text-muted-foreground ml-2">(Optional)</span>
+            <span className="text-xs text-muted-foreground ml-2">
+              (Optional)
+            </span>
           )}
         </Label>
         <Select
@@ -124,8 +145,18 @@ export function AgentFormFields({
           onValueChange={setModelProviderApiKeyId}
           disabled={disabledFields.modelProviderApiKeyId}
         >
-          <SelectTrigger id={`${idPrefix}modelProviderApiKeyId`} className="w-full" disabled={disabledFields.modelProviderApiKeyId}>
-            <SelectValue placeholder={agentType === "1" ? "Optional: Select an API key..." : "Select an API key..."} />
+          <SelectTrigger
+            id={`${idPrefix}modelProviderApiKeyId`}
+            className="w-full"
+            disabled={disabledFields.modelProviderApiKeyId}
+          >
+            <SelectValue
+              placeholder={
+                agentType === "1"
+                  ? "Optional: Select an API key..."
+                  : "Select an API key..."
+              }
+            />
           </SelectTrigger>
           <SelectContent position="popper" sideOffset={4}>
             <SelectGroup>
@@ -151,7 +182,7 @@ export function AgentFormFields({
           </SelectContent>
         </Select>
       </div>
-      
+
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}extra`}>Extra (JSON)</Label>
         <Textarea
@@ -167,63 +198,71 @@ export function AgentFormFields({
         </p>
       </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}systemPrompt`}>System prompt</Label>
-        <Textarea
-          id={`${idPrefix}systemPrompt`}
-          value={systemPrompt}
-          onChange={(e) => setSystemPrompt(e.target.value)}
-          rows={4}
-          disabled={disabledFields.systemPrompt}
-        />
-      </div>
-
-      <div className="grid gap-2">
-        <Label>Tools</Label>
-        <Input
-          placeholder="Search tools..."
-          value={toolSearchTerm}
-          onChange={(e) => setToolSearchTerm(e.target.value)}
-          className="mb-2"
-          disabled={disabledFields.tools}
-        />
-        <div className={`border rounded-md p-3 max-h-48 overflow-y-auto space-y-2 ${disabledFields.tools ? 'opacity-50 pointer-events-none' : ''}`}>
-          {toolsQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">
-              Loading tools...
-            </div>
-          ) : filteredTools.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No tools found</div>
-          ) : (
-            filteredTools.map((tool) => (
-              <div key={tool.name} className="flex items-start space-x-2">
-                <Checkbox
-                  id={`${idPrefix}tool-${tool.name}`}
-                  checked={selectedTools.includes(tool.name)}
-                  onCheckedChange={() => toggleTool(tool.name)}
-                />
-                <div className="grid gap-1 leading-none">
-                  <label
-                    htmlFor={`${idPrefix}tool-${tool.name}`}
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                  >
-                    {tool.name}
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      ({tool.category})
-                    </span>
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    {tool.description}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
+      {!hiddenFields.systemPrompt && (
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}systemPrompt`}>System prompt</Label>
+          <Textarea
+            id={`${idPrefix}systemPrompt`}
+            value={systemPrompt}
+            onChange={(e) => setSystemPrompt(e.target.value)}
+            rows={4}
+            disabled={disabledFields.systemPrompt}
+          />
         </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          {selectedTools.length} tool(s) selected
-        </p>
-      </div>
+      )}
+
+      {!hiddenFields.tools && (
+        <div className="grid gap-2">
+          <Label>Tools</Label>
+          <Input
+            placeholder="Search tools..."
+            value={toolSearchTerm}
+            onChange={(e) => setToolSearchTerm(e.target.value)}
+            className="mb-2"
+            disabled={disabledFields.tools}
+          />
+          <div
+            className={`border rounded-md p-3 max-h-48 overflow-y-auto space-y-2 ${disabledFields.tools ? "opacity-50 pointer-events-none" : ""}`}
+          >
+            {toolsQuery.isLoading ? (
+              <div className="text-sm text-muted-foreground">
+                Loading tools...
+              </div>
+            ) : filteredTools.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                No tools found
+              </div>
+            ) : (
+              filteredTools.map((tool) => (
+                <div key={tool.name} className="flex items-start space-x-2">
+                  <Checkbox
+                    id={`${idPrefix}tool-${tool.name}`}
+                    checked={selectedTools.includes(tool.name)}
+                    onCheckedChange={() => toggleTool(tool.name)}
+                  />
+                  <div className="grid gap-1 leading-none">
+                    <label
+                      htmlFor={`${idPrefix}tool-${tool.name}`}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                    >
+                      {tool.name}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        ({tool.category})
+                      </span>
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {tool.description}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {selectedTools.length} tool(s) selected
+          </p>
+        </div>
+      )}
     </div>
   );
 }

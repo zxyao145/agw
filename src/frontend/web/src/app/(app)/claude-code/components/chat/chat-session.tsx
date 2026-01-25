@@ -10,7 +10,7 @@ import {
 import type { ChatMessageAreaProps } from "../../types";
 import { AiMessageComponent } from "../message";
 
-export function ChatMessageArea({
+export function ChatSession({
   messages,
   messagesEndRef,
   processMessages,

@@ -111,6 +111,16 @@ export function EditAgentDialog({
                 }
               : undefined
           }
+          hiddenFields={
+            agentType === "1"
+              ? {
+                  name: true,
+                  systemPrompt: true,
+                  agentType: true,
+                  tools: true,
+                }
+              : undefined
+          }
         />
 
         <DialogFooter>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { ChatMessageArea } from "./chat-message-area";
+import { ChatSession } from "./chat-session";
 import type { ChatMessageAreaProps } from "../../types";
 import type { ChatSessionDocument } from "../../lib/chat-history-db";
 import type { AiMessage } from "@/types";
@@ -42,7 +42,7 @@ export function Chat({
 
         <ColResizeSplit.Right>
           <div className="flex flex-col flex-1 px-2">
-            <ChatMessageArea {...messageAreaProps} />
+            <ChatSession {...messageAreaProps} />
           </div>
         </ColResizeSplit.Right>
       </ColResizeSplit>
