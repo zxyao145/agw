@@ -1,4 +1,4 @@
-import FileViewer from "./code-viewer";
+import FileViewer from "./file-viewer";
 import { UnChangedFileProps } from "../../types";
 
 

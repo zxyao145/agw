@@ -19,6 +19,15 @@ import { Chat } from "./components/chat/chat";
 import { InputArea } from "./components/user-input/input-area";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import "./page.css";
 
 export default function ClaudeCodePage() {
@@ -34,6 +43,8 @@ export default function ClaudeCodePage() {
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [threadId, setThreadId] = React.useState<string | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
+  const [currentTab, setCurrentTab] = React.useState("chat");
+  const [showCommentDialog, setShowCommentDialog] = React.useState(false);
 
 
   const handleThreadId = (newThreadId: string | null) => {
@@ -472,11 +483,44 @@ export default function ClaudeCodePage() {
     return items;
   };
 
+  const handleTabChange = (value: string) => {
+    // If switching from files to chat and there are unsent comments
+    if (value === "chat" && comments && comments.length > 0) {
+      setShowCommentDialog(true);
+    } else {
+      // No unsent comments or switching to files, allow tab change
+      setCurrentTab(value);
+    }
+  };
+
+  const handleConfirmSend = async () => {
+    setShowCommentDialog(false);
+    await executeClaudeCodeWithComment();
+    // Tab will switch after comments are sent
+    setCurrentTab("chat");
+  };
+
+  const handleCancelSend = () => {
+    setComments([]);
+    setShowCommentDialog(false);
+    // Tab will switch after comments are cleared
+    setCurrentTab("chat");
+  };
+
+  const handleDialogClose = (open: boolean) => {
+    if (!open) {
+      // Dialog close button clicked, stay on files tab
+      setCurrentTab("files");
+    }
+    setShowCommentDialog(open);
+  };
+
   return (
     <div className="relative flex flex-col h-[calc(100vh-58px)] w-full max-w-8xl mx-auto mr-2">
       <div className="flex-1 overflow-y-auto">
         <Tabs
-          defaultValue="chat"
+          value={currentTab}
+          onValueChange={handleTabChange}
           className="w-full h-full"
         >
           <TabsList className="w-fit">
@@ -529,6 +573,26 @@ export default function ClaudeCodePage() {
           createArr={createArr}
         />
       </div>
+
+      <Dialog open={showCommentDialog} onOpenChange={handleDialogClose}>
+        <DialogContent showCloseButton={true}>
+          <DialogHeader>
+            <DialogTitle>Unsent Comments</DialogTitle>
+            <DialogDescription>
+              You have {comments.length} unsent comment(s). These will be cleared if you don't send them.
+              Would you like to send them now?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancelSend}>
+              Clear Comments
+            </Button>
+            <Button onClick={handleConfirmSend}>
+              Send Comments
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

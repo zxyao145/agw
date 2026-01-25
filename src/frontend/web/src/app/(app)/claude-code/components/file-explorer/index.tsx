@@ -19,7 +19,7 @@ import NoSelectedFile from "./no-selected-file";
 import FileHeader from "./file-header";
 import FileLoading from "./file-loading";
 import FileError from "./file-error";
-import FileViewer from "./code-viewer";
+import FileViewer from "./file-viewer";
 import UnChangedFile from "./unchanged-file";
 import Export from "./explorer";
 
