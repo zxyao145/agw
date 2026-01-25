@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { ChatSession } from "./chat-session";
-import type { ChatMessageAreaProps } from "../../types";
+import { ChatSession,ChatSessionProps } from "../../../../../components/message/chat-session";
 import type { ChatSessionDocument } from "../../lib/chat-history-db";
 import type { AiMessage } from "@/types";
 import ColResizeSplit from "../split-layout";
@@ -13,7 +12,7 @@ const ChatHistoryList = dynamic(
   () => import("./chat-history-list").then(mod => ({ default: mod.ChatHistoryList })),
   { ssr: false }
 );
-export interface ChatProps extends ChatMessageAreaProps {
+export interface ChatProps extends ChatSessionProps {
   currentThreadId: string | null;
   onSessionSelect: (messages: AiMessage[], threadId: string) => void;
   onNewChat: () => void;

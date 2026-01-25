@@ -36,24 +36,11 @@ export type PermissionMode = (typeof PermissionMode)[keyof typeof PermissionMode
 // Chat Component Types
 // ============================================================================
 
-export type ProcessedMessageItem =
-  | { type: "accordion"; messages: AiMessage[]; toolName: string }
-  | { type: "normal"; message: AiMessage };
-
-export interface ChatMessageAreaProps {
-  messages: AiMessage[];
-  messagesEndRef: React.RefObject<HTMLDivElement>;
-  processMessages: (msgs: AiMessage[]) => ProcessedMessageItem[];
-}
-
 export interface ChatInputAreaProps {
-  input: string;
-  setInput: (value: string) => void;
   isExecuting: boolean;
   hasMessages: boolean;
-  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  onExecute: () => void;
-  onExecuteWithComment: () => void;
+  onExecute: (value: string) => void;
+  onExecuteWithComment: (value: string) => void;
   onClearSession: () => void;
   workingDirectory: string;
   setWorkingDirectory: (value: string) => void;

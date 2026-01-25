@@ -7,14 +7,42 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import type { ChatMessageAreaProps } from "../../types";
-import { AiMessageComponent } from "../message";
+import { AiMessageComponent } from "./message";
+import { AiMessage, ProcessedMessageItem } from "@/types";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+
+export interface ChatSessionProps {
+  messages: AiMessage[];
+  messagesEndRef: React.RefObject<HTMLDivElement>;
+  processMessages: (msgs: AiMessage[]) => ProcessedMessageItem[];
+}
 
 export function ChatSession({
   messages,
   messagesEndRef,
   processMessages,
-}: ChatMessageAreaProps) {
+}: ChatSessionProps) {
+  if (!messages || messages.length == 0) {
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyTitle>No Message Yet</EmptyTitle>
+          <EmptyDescription>
+            There are currently no messages.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent className="flex-row justify-center gap-2">
+        </EmptyContent>
+      </Empty>
+    );
+  }
+
   return (
     <div className="flex-1 flex min-h-full pb-36">
       <div className="flex-1 overflow-y-auto space-y-4">
@@ -33,11 +61,7 @@ export function ChatSession({
           if (item.type === "accordion") {
             return (
               <div className="max-w-[80%]" key={index}>
-                <Accordion
-                  type="single"
-                  collapsible
-                  className="w-full"
-                >
+                <Accordion type="single" collapsible className="w-full">
                   <AccordionItem
                     value="item-1"
                     className="border rounded-lg px-2 last:border-b"
@@ -52,10 +76,7 @@ export function ChatSession({
                     <AccordionContent>
                       <div className="space-y-4">
                         {item.messages.map((msg, msgIndex) => (
-                          <AiMessageComponent
-                            key={msgIndex}
-                            message={msg}
-                          />
+                          <AiMessageComponent key={msgIndex} message={msg} />
                         ))}
                       </div>
                     </AccordionContent>

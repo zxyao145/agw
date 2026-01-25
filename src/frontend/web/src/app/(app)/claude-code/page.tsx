@@ -7,11 +7,10 @@ import {
   InitMessageContent,
   PermissionMode,
   LineComment,
-  ProcessedMessageItem,
   EnvVar,
 } from "./types";
 
-import { AiMessage, MessageContentType } from "@/types";
+import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
 
 import { Ulid } from "id128";
 import { FileExplorer } from "./components/file-explorer";
@@ -31,7 +30,6 @@ import { Button } from "@/components/ui/button";
 import "./page.css";
 
 export default function ClaudeCodePage() {
-  const [input, setInput] = React.useState("");
   const [workingDirectory, setWorkingDirectory] = React.useState("");
   const [apiKey, setApiKey] = React.useState("");
   const [apiBaseUrl, setApiBaseUrl] = React.useState("");
@@ -189,25 +187,24 @@ export default function ClaudeCodePage() {
     return ws;
   };
 
-  const executeClaudeCode = async () => {
-    if (!input.trim()) {
+  const executeClaudeCode = async (value: string) => {
+    if (!value.trim()) {
       toast.error("Please enter a prompt");
       return;
     }
 
-    await sendInputToClaudeCode(input.trim());
-    setInput(""); // Clear input after sending
+    await sendInputToClaudeCode(value.trim());
   };
 
-  const executeClaudeCodeWithComment = async () => {
+  const executeClaudeCodeWithComment = async (value: string) => {
     if (!comments || comments.length === 0) {
       toast.error("Please add comments first");
       return;
     }
     console.debug("comments", comments);
 
-    let prompt = input.trim()
-      ? input.trim()
+    let prompt = value.trim()
+      ? value.trim()
       : "Please make modifications based on the following review comments";
     prompt += "\n\n";
 
@@ -218,7 +215,6 @@ export default function ClaudeCodePage() {
     console.debug("Final input with comments:", prompt);
     await sendInputToClaudeCode(prompt);
     setComments([]);
-    setInput("");
   };
 
   const waitForWebSocketOpen = (ws: WebSocket): Promise<void> => {
@@ -352,16 +348,6 @@ export default function ClaudeCodePage() {
     }
   }, [messages, threadId]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) {
-      e.preventDefault();
-      if (currentTab === "files") {
-        executeClaudeCodeWithComment();
-      } else {
-        executeClaudeCode();
-      }
-    }
-  };
 
   const createArr = (key: string, value: string[] | undefined) => {
     return (
@@ -555,11 +541,8 @@ export default function ClaudeCodePage() {
 
       <div className="absolute bottom-0 z-10 left-0 right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
         <InputArea
-          input={input}
-          setInput={setInput}
           isExecuting={isExecuting}
           hasMessages={(messages?.length ?? 0) > 0}
-          onKeyDown={handleKeyDown}
           onExecute={executeClaudeCode}
           onExecuteWithComment={executeClaudeCodeWithComment}
           onClearSession={handleClearSession}

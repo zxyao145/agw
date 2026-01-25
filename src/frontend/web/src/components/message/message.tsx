@@ -12,6 +12,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
     message.role === "user" &&
     message.author === "user" &&
     !message.additionalProperties;
+    
   const isResult =
     message.role === "system" &&
     message.additionalProperties!.type === "result";

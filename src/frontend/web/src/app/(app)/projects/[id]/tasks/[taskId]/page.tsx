@@ -6,7 +6,6 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, ArrowDownFromLine } from "lucide-react";
 
 import { apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -19,21 +18,11 @@ import {
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ButtonGroup } from "@/components/ui/button-group";
-
-type ProjectTaskDto = {
-  id: string;
-  projectId: string;
-  agentflowId: string;
-  status: number;
-  description: string;
-  input: string;
-  outputJson?: string | null;
-  errorMessage?: string | null;
-  createTime?: string | null;
-  updateTime?: string | null;
-  startedTime?: string | null;
-  finishedTime?: string | null;
-};
+import type { AiMessage, ProcessedMessageItem } from "@/types/message";
+import { ChatSession } from "@/components/message/chat-session";
+import { ProjectTaskDto } from "./types";
+import { Conversation } from "./components/conversation";
+import { UserInput } from "@/components/message/user-input";
 
 function formatDate(value?: string | null): string {
   if (!value) return "-";
@@ -87,23 +76,41 @@ type ChatMessage = {
   Content: string;
 };
 
-function ChatMessages({ outputJson }: { outputJson: string }) {
-  const messages = React.useMemo(() => {
+function OutputChatSession({ outputJson }: { outputJson: string }) {
+  const messagesEndRef = React.useRef<HTMLDivElement>(null!);
+
+  const messages = React.useMemo<AiMessage[]>(() => {
     try {
       const parsed = JSON.parse(outputJson);
 
       if (parsed.Outputs && Array.isArray(parsed.Outputs)) {
         return parsed.Outputs.filter(
-          (msg: ChatMessage) => msg.Role && msg.Content
-        );
+          (msg: ChatMessage) => msg.Role && msg.Content,
+        ).map((msg: ChatMessage, index: number) => ({
+          messageId: `msg-${index}`,
+          author: msg.AuthorName,
+          role: msg.Role,
+          contents: [
+            {
+              type: "TextContent",
+              content: msg.Content,
+            },
+          ],
+        }));
       }
 
-      // If no messages found, return empty array
       return [];
     } catch {
       return [];
     }
   }, [outputJson]);
+
+  const processMessages = React.useCallback(
+    (msgs: AiMessage[]): ProcessedMessageItem[] => {
+      return msgs.map((msg) => ({ type: "normal", message: msg }));
+    },
+    [],
+  );
 
   // If no valid messages, show raw JSON
   if (messages.length === 0) {
@@ -117,52 +124,12 @@ function ChatMessages({ outputJson }: { outputJson: string }) {
     );
   }
 
-  // Filter out user messages before mapping
-  const assistantMessages = messages.filter(
-    (msg: ChatMessage) => msg.Role.toLowerCase() !== "user"
-  );
-
   return (
-    <div className="space-y-6">
-      {messages.map((message: ChatMessage, index: number) => {
-        const showConnector = index !== assistantMessages.length - 1;
-        const isAssistantMessage = message.Role.toLowerCase() !== "user";
-        return (
-          <div key={index} className="flex items-start gap-4">
-            <div className="flex flex-col items-center shrink-0">
-              <div
-                className="relative flex items-center justify-center rounded-full ring-8 ring-background shadow-sm h-8 w-8"
-                style={{
-                  backgroundColor: "hsl(142, 76%, 36%)",
-                }}
-              >
-                {isAssistantMessage ? (
-                  <Check size={16} color="#ffffff" />
-                ) : (
-                  <ArrowDownFromLine size={16} color="#ffffff" />
-                )}
-              </div>
-              {showConnector && (
-                <div className="w-0.5 flex-1 bg-border mt-2 min-h-16" />
-              )}
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 pt-1">
-              <div className="mb-2">
-                <h3 className="font-semibold text-sm">{message.AuthorName}</h3>
-                <p className="text-xs text-muted-foreground">{message.Role}</p>
-              </div>
-              <div className="rounded-lg rounded-tl-none px-4 py-3 bg-muted prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {message.Content}
-                </ReactMarkdown>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <ChatSession
+      messages={messages}
+      messagesEndRef={messagesEndRef}
+      processMessages={processMessages}
+    />
   );
 }
 
@@ -170,6 +137,9 @@ export default function TaskDetailsPage() {
   const params = useParams<{ id: string; taskId: string }>();
   const projectId = params.id;
   const taskId = params.taskId;
+
+  const [isExecuting, setIsExecuting] = React.useState<boolean>(false);
+  const handleOnExecute = (value: string) => {};
 
   const taskQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", taskId],
@@ -183,27 +153,27 @@ export default function TaskDetailsPage() {
   const task = taskQuery.data;
 
   return (
-    <div className="space-y-6 w-full">
+    <div className="space-y-3 w-full flex flex-col">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-xl font-semibold">
               {taskQuery.isLoading
                 ? "Loading task..."
-                : task?.description ?? "Task"}
+                : (task?.description ?? "Task")}
             </h1>
             {task ? (
               <>
                 <span
                   className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(
-                    task.status
+                    task.status,
                   )}`}
                 >
                   {task?.id}
                 </span>
                 <span
                   className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(
-                    task.status
+                    task.status,
                   )}`}
                 >
                   {statusLabel(task.status)}
@@ -239,52 +209,11 @@ export default function TaskDetailsPage() {
           Failed to load task: {getApiErrorMessage(taskQuery.error)}
         </div>
       ) : task ? (
-        <div className="space-y-6">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Conversation</span>
-            {task.createTime && (
-              <>
-                <span>•</span>
-                <span>Created: {formatDate(task.createTime)}</span>
-              </>
-            )}
-            {task.startedTime && (
-              <>
-                <span>•</span>
-                <span>Started: {formatDate(task.startedTime)}</span>
-              </>
-            )}
-            {task.finishedTime && (
-              <>
-                <span>•</span>
-                <span>Completed: {formatDate(task.finishedTime)}</span>
-              </>
-            )}
-          </div>
-
-          <Card>
-            <CardHeader className="border-b [.border-b]:pb-4">
-              <CardTitle>Input</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {task.input}
-              </ReactMarkdown>
-            </CardContent>
-          </Card>
+        <div className="space-y-6 flex-1 relative">
+          {/* <Conversation task={task} /> */}
 
           {task.outputJson ? (
-            <Card>
-              <CardHeader className="border-b [.border-b]:pb-4">
-                <CardTitle>Output</CardTitle>
-                <CardDescription>
-                  Task execution conversation history.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ChatMessages outputJson={task.outputJson} />
-              </CardContent>
-            </Card>
+            <OutputChatSession outputJson={task.outputJson} />
           ) : null}
 
           {task.errorMessage ? (
@@ -300,6 +229,13 @@ export default function TaskDetailsPage() {
               </CardContent>
             </Card>
           ) : null}
+
+          <div className="absolute bottom-0 z-10 left-0 right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
+            <UserInput
+              isExecuting={isExecuting}
+              onExecute={handleOnExecute}
+            ></UserInput>
+          </div>
         </div>
       ) : null}
     </div>

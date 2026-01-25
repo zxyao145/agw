@@ -140,7 +140,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <AppSidebar menus={navItems} />
           </aside>
 
-          <div className="px-2 flex-1">
+          <div className="px-2 flex-1 flex flex-col">
             <div className="sticky top-0 z-40 flex items-center gap-3 bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60 py-2">
               <div className="min-w-0 flex-1">
                 <Breadcrumb>
@@ -163,7 +163,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <main className="flex justify-center">
+            <main className="flex flex-1 justify-center">
               <QueryErrorBoundary>{children}</QueryErrorBoundary>
             </main>
           </div>

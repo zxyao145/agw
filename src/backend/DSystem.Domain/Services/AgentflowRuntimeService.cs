@@ -159,7 +159,7 @@ public class AgentflowRuntimeService
         {
             var contentObj = new AiMessageContent("text", message.Text);
             var chatMsg =
-                new AiMessage(message.MessageId, message.AuthorName, message.Role.Value, [contentObj]);
+                new AiMessage(message.MessageId ?? "", message.AuthorName, message.Role.Value, [contentObj]);
             outputs.Add(chatMsg);
         }
 
