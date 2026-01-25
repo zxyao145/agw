@@ -101,6 +101,16 @@ export function EditAgentDialog({
           toolsQuery={toolsQuery}
           toggleTool={toggleTool}
           idPrefix="edit-"
+          disabledFields={
+            agentType === "1"
+              ? {
+                  name: true,
+                  systemPrompt: true,
+                  agentType: true,
+                  tools: true,
+                }
+              : undefined
+          }
         />
 
         <DialogFooter>
@@ -130,7 +140,7 @@ export function EditAgentDialog({
             }}
             disabled={
               !name.trim() ||
-              !modelProviderApiKeyId.trim() ||
+              (agentType === "0" && !modelProviderApiKeyId?.trim()) ||
               updateAgentMutation.isPending
             }
           >

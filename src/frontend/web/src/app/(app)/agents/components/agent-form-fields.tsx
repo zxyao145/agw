@@ -37,6 +37,15 @@ interface AgentFormFieldsProps {
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   toggleTool: (toolName: string) => void;
   idPrefix?: string;
+  disabledFields?: {
+    name?: boolean;
+    description?: boolean;
+    systemPrompt?: boolean;
+    modelProviderApiKeyId?: boolean;
+    agentType?: boolean;
+    extra?: boolean;
+    tools?: boolean;
+  };
 }
 
 export function AgentFormFields({
@@ -60,6 +69,7 @@ export function AgentFormFields({
   toolsQuery,
   toggleTool,
   idPrefix = "",
+  disabledFields = {},
 }: AgentFormFieldsProps) {
   return (
     <div className="grid gap-4 overflow-y-auto pr-2 -mr-2">
@@ -70,6 +80,7 @@ export function AgentFormFields({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="demo-agent"
+          disabled={disabledFields.name}
         />
       </div>
 
@@ -80,19 +91,41 @@ export function AgentFormFields({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Agent description..."
+          disabled={disabledFields.description}
         />
       </div>
 
       <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}agentType`}>Agent Type</Label>
+        <Select value={agentType} onValueChange={setAgentType} disabled={disabledFields.agentType}>
+          <SelectTrigger id={`${idPrefix}agentType`} className="w-full" disabled={disabledFields.agentType}>
+            <SelectValue placeholder="Select agent type..." />
+          </SelectTrigger>
+          <SelectContent position="popper" sideOffset={4}>
+            <SelectGroup>
+              <SelectLabel>Agent Type</SelectLabel>
+              <SelectItem value="0">System</SelectItem>
+              <SelectItem value="1">External</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+
+
+      <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}modelProviderApiKeyId`}>
           Model Provider API Key
+          {agentType === "1" && (
+            <span className="text-xs text-muted-foreground ml-2">(Optional)</span>
+          )}
         </Label>
         <Select
           value={modelProviderApiKeyId}
           onValueChange={setModelProviderApiKeyId}
+          disabled={disabledFields.modelProviderApiKeyId}
         >
-          <SelectTrigger id={`${idPrefix}modelProviderApiKeyId`} className="w-full">
-            <SelectValue placeholder="Select an API key..." />
+          <SelectTrigger id={`${idPrefix}modelProviderApiKeyId`} className="w-full" disabled={disabledFields.modelProviderApiKeyId}>
+            <SelectValue placeholder={agentType === "1" ? "Optional: Select an API key..." : "Select an API key..."} />
           </SelectTrigger>
           <SelectContent position="popper" sideOffset={4}>
             <SelectGroup>
@@ -118,23 +151,7 @@ export function AgentFormFields({
           </SelectContent>
         </Select>
       </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}agentType`}>Agent Type</Label>
-        <Select value={agentType} onValueChange={setAgentType}>
-          <SelectTrigger id={`${idPrefix}agentType`} className="w-full">
-            <SelectValue placeholder="Select agent type..." />
-          </SelectTrigger>
-          <SelectContent position="popper" sideOffset={4}>
-            <SelectGroup>
-              <SelectLabel>Agent Type</SelectLabel>
-              <SelectItem value="0">System</SelectItem>
-              <SelectItem value="1">External</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
-
+      
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}extra`}>Extra (JSON)</Label>
         <Textarea
@@ -143,6 +160,7 @@ export function AgentFormFields({
           onChange={(e) => setExtra(e.target.value)}
           placeholder='{"env": {"VAR_NAME": "value"}}'
           rows={3}
+          disabled={disabledFields.extra}
         />
         <p className="text-xs text-muted-foreground">
           JSON object for additional data (e.g., environment variables)
@@ -156,6 +174,7 @@ export function AgentFormFields({
           value={systemPrompt}
           onChange={(e) => setSystemPrompt(e.target.value)}
           rows={4}
+          disabled={disabledFields.systemPrompt}
         />
       </div>
 
@@ -166,8 +185,9 @@ export function AgentFormFields({
           value={toolSearchTerm}
           onChange={(e) => setToolSearchTerm(e.target.value)}
           className="mb-2"
+          disabled={disabledFields.tools}
         />
-        <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+        <div className={`border rounded-md p-3 max-h-48 overflow-y-auto space-y-2 ${disabledFields.tools ? 'opacity-50 pointer-events-none' : ''}`}>
           {toolsQuery.isLoading ? (
             <div className="text-sm text-muted-foreground">
               Loading tools...

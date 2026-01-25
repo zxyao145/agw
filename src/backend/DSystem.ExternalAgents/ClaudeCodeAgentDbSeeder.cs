@@ -1,20 +1,22 @@
 using ClaudeCodeSdk.MAF;
 using DSystem.Domain.Entities;
 using DSystem.Domain.Enums;
+using DSystem.Infrastructure;
+using DSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace DSystem.Infrastructure.Data;
+namespace DSystem.ExternalAgents;
 
 /// <summary>
 /// Database seeder for initializing default data on application startup.
 /// </summary>
-public class DbSeeder
+public class ClaudeCodeAgentDbSeeder
 {
     private readonly LlmDbContext _context;
-    private readonly ILogger<DbSeeder> _logger;
+    private readonly ILogger<ClaudeCodeAgentDbSeeder> _logger;
 
-    public DbSeeder(LlmDbContext context, ILogger<DbSeeder> logger)
+    public ClaudeCodeAgentDbSeeder(LlmDbContext context, ILogger<ClaudeCodeAgentDbSeeder> logger)
     {
         _context = context;
         _logger = logger;

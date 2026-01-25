@@ -124,7 +124,7 @@ export function CreateAgentDialog({
             }
             disabled={
               !name.trim() ||
-              !modelProviderApiKeyId.trim() ||
+              (agentType === "0" && !modelProviderApiKeyId?.trim()) ||
               createAgentMutation.isPending
             }
           >

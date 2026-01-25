@@ -125,14 +125,14 @@ try
     });
 
     // Register database seeder
-    builder.Services.AddScoped<DSystem.Infrastructure.Data.DbSeeder>();
+    builder.Services.AddScoped<ClaudeCodeAgentDbSeeder>();
 
     var app = builder.Build();
 
     // Seed database on startup
     using (var scope = app.Services.CreateScope())
     {
-        var seeder = scope.ServiceProvider.GetRequiredService<DSystem.Infrastructure.Data.DbSeeder>();
+        var seeder = scope.ServiceProvider.GetRequiredService<ClaudeCodeAgentDbSeeder>();
         await seeder.SeedAsync();
     }
 
