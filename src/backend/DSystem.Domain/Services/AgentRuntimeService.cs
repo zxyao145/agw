@@ -5,14 +5,11 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using OpenAI;
- using OpenAI.Chat;
+using OpenAI.Chat;
 using System.ClientModel;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using AIMessage = Microsoft.Extensions.AI.ChatMessage;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
-using OpenAIMessage = OpenAI.Chat.ChatMessage;
 
 namespace DSystem.Domain.Services;
 
@@ -93,7 +90,7 @@ public class AgentRuntimeService
             return null;
         }
 
-        // Create tools if specified
+        // Create tools if specified using the new unified approach
         IList<AITool>? tools = null;
         if (!string.IsNullOrWhiteSpace(agent.Tools))
         {
@@ -102,18 +99,10 @@ public class AgentRuntimeService
                 var toolNames = JsonSerializer.Deserialize<string[]>(agent.Tools);
                 if (toolNames != null && toolNames.Length > 0)
                 {
-                    tools = new List<AITool>();
-                    foreach (var toolName in toolNames)
+                    var functions = _toolRegistry.CreateAIFunctions(toolNames);
+                    if (functions.Count > 0)
                     {
-                        var methodInfo = _toolRegistry.GetToolMethod(toolName);
-                        if (methodInfo != null)
-                        {
-                            // Create delegate from static method
-                            var delegateType = GetDelegateType(methodInfo);
-                            var toolDelegate = Delegate.CreateDelegate(delegateType, methodInfo);
-                            var aiTool = AIFunctionFactory.Create(toolDelegate);
-                            tools.Add(aiTool);
-                        }
+                        tools = functions.Cast<AITool>().ToList();
                     }
                 }
             }
@@ -136,45 +125,8 @@ public class AgentRuntimeService
             name: agent.Name,
             tools: tools
             );
-        
+
         return aIAgent;
-    }
-
-    /// <summary>
-    /// Gets the appropriate delegate type for a method.
-    /// </summary>
-    private static Type GetDelegateType(System.Reflection.MethodInfo method)
-    {
-        var parameters = method.GetParameters();
-        var paramTypes = parameters.Select(p => p.ParameterType).ToArray();
-        var returnType = method.ReturnType;
-
-        // Build Func<> or Action<> type
-        if (returnType == typeof(void))
-        {
-            return paramTypes.Length switch
-            {
-                0 => typeof(Action),
-                1 => typeof(Action<>).MakeGenericType(paramTypes),
-                2 => typeof(Action<,>).MakeGenericType(paramTypes),
-                3 => typeof(Action<,,>).MakeGenericType(paramTypes),
-                4 => typeof(Action<,,,>).MakeGenericType(paramTypes),
-                _ => throw new NotSupportedException($"Action with {paramTypes.Length} parameters is not supported")
-            };
-        }
-        else
-        {
-            var allTypes = paramTypes.Concat(new[] { returnType }).ToArray();
-            return allTypes.Length switch
-            {
-                1 => typeof(Func<>).MakeGenericType(allTypes),
-                2 => typeof(Func<,>).MakeGenericType(allTypes),
-                3 => typeof(Func<,,>).MakeGenericType(allTypes),
-                4 => typeof(Func<,,,>).MakeGenericType(allTypes),
-                5 => typeof(Func<,,,,>).MakeGenericType(allTypes),
-                _ => throw new NotSupportedException($"Func with {allTypes.Length - 1} parameters is not supported")
-            };
-        }
     }
 
     /// <summary>
@@ -292,10 +244,6 @@ public class AgentRuntimeService
         }
 
         ChatMessage? system = null;
-        //if (!string.IsNullOrWhiteSpace(agent.SystemPrompt))
-        //{
-        //    system = new ChatMessage(ChatRole.System, agent.SystemPrompt);
-        //}
         var chatMsg = new ChatMessage(ChatRole.User, input);
         IEnumerable<ChatMessage> msgs = system == null
             ? [chatMsg]
