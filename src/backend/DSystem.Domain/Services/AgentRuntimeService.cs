@@ -120,7 +120,7 @@ public class AgentRuntimeService
         };
         OpenAIClient client = new OpenAIClient(credential, options);
         var chatCompletionClient = client.GetChatClient(model.Name);
-        AIAgent aIAgent = chatCompletionClient.CreateAIAgent(
+        AIAgent aIAgent = chatCompletionClient.AsAIAgent(
             instructions: agent.SystemPrompt,
             name: agent.Name,
             tools: tools
@@ -148,7 +148,7 @@ public class AgentRuntimeService
         if (string.IsNullOrWhiteSpace(threadId))
         {
             threadId = Guid.NewGuid().ToString();
-            thread = aiAgent.GetNewThread();
+            thread = await aiAgent.GetNewThreadAsync();
         }
         else
         {
@@ -158,12 +158,12 @@ public class AgentRuntimeService
             });
             if (string.IsNullOrWhiteSpace(value))
             {
-                thread = aiAgent.GetNewThread();
+                thread = await aiAgent.GetNewThreadAsync();
             }
             else
             {
                 var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
-                thread = aiAgent.DeserializeThread(serializedThread);
+                thread = await aiAgent.DeserializeThreadAsync(serializedThread);
             }
         }
 
@@ -224,7 +224,7 @@ public class AgentRuntimeService
         if (string.IsNullOrWhiteSpace(threadId))
         {
             threadId = Guid.NewGuid().ToString();
-            thread = aiAgent.GetNewThread();
+            thread = await aiAgent.GetNewThreadAsync();
         }
         else
         {
@@ -234,12 +234,12 @@ public class AgentRuntimeService
             });
             if (string.IsNullOrWhiteSpace(value))
             {
-                thread = aiAgent.GetNewThread();
+                thread = await aiAgent.GetNewThreadAsync();
             }
             else
             {
                 var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
-                thread = aiAgent.DeserializeThread(serializedThread);
+                thread = await aiAgent.DeserializeThreadAsync(serializedThread);
             }
         }
 

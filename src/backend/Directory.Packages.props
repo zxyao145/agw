@@ -7,14 +7,13 @@
     <PackageVersion Include="A2A" Version="0.3.3-preview" />
     <PackageVersion Include="A2A.AspNetCore" Version="0.3.3-preview" />
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
-    <PackageVersion Include="ClaudeCodeSdk" Version="0.10.0-preview2" />
-    <PackageVersion Include="ClaudeCodeSdk.MAF" Version="0.10.0-preview2" />
+    <PackageVersion Include="ClaudeCodeSdk.MAF" Version="0.10.1-preview1" />
     <PackageVersion Include="CSRedisCore" Version="3.8.807" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.0-rc.2" />
-    <PackageVersion Include="Microsoft.Agents.AI" Version="1.0.0-preview.251204.1" />
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.0.0-preview.260121.1" />
     <PackageVersion Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.0.0-preview.251219.1" />
-    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-preview.251204.1" />
-    <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-preview.251204.1" />
+    <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-preview.260121.1" />
+    <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-preview.260121.1" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Identity.UI" Version="10.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.RateLimiting" Version="7.0.0-rc.2.22476.2" />
@@ -53,7 +52,6 @@
     <PackageVersion Include="System.Linq.Dynamic.Core" Version="1.7.0" />
     <PackageVersion Include="System.Net.Http" Version="4.3.4" />
     <PackageVersion Include="System.Text.RegularExpressions" Version="4.3.1" />
-    <PackageVersion Include="XC.RSAUtil" Version="1.3.7" />
   </ItemGroup>
   <!--utest-->
   <ItemGroup>

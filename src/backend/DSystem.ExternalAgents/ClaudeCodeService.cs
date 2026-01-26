@@ -80,12 +80,12 @@ public class ClaudeCodeService
         });
         if (string.IsNullOrWhiteSpace(value))
         {
-            agentThread = aiAgent.GetNewThread();
+            agentThread = await aiAgent.GetNewThreadAsync();
         }
         else
         {
             var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
-            agentThread = aiAgent.DeserializeThread(serializedThread);
+            agentThread = await aiAgent.DeserializeThreadAsync(serializedThread);
         }
 
 

@@ -150,7 +150,7 @@ public class ClaudeCodeController : ControllerBase
             return;
         }
 
-        var agentUpdate = new AgentRunResponseUpdate
+        var agentUpdate = new AgentResponseUpdate
         {
             Role = ChatRole.System,
             AuthorName = "d-system",

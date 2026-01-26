@@ -8,7 +8,7 @@ namespace DSystem.Domain.Services;
 /// <summary>
 /// Extension methods for <see cref="MsAgentWorkflowBuilder"/> to support additional orchestration patterns.
 /// </summary>
-public static class AgentWorkflowBuilder
+public static class DxAgentWorkflowBuilder
 {
     /// <summary>
     /// Builds a handoff workflow based on edge connections.
@@ -51,7 +51,7 @@ public static class AgentWorkflowBuilder
         }
 
         // Initialize the handoff workflow with the starting agent
-        var builder = MsAgentWorkflowBuilder.StartHandoffWith(startAgent);
+        var builder = MsAgentWorkflowBuilder.CreateHandoffBuilderWith(startAgent);
 
         // Group edges by source node to build handoff relationships
         // Each source agent can hand off to multiple target agents

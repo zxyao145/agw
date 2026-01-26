@@ -142,7 +142,7 @@ public class AgentflowRuntimeService
         List<ChatMessage> result = new();
         await foreach (WorkflowEvent evt in run.WatchStreamAsync().ConfigureAwait(false))
         {
-            if (evt is AgentRunUpdateEvent e)
+            if (evt is AgentResponseUpdateEvent e)
             {
                 Console.WriteLine($"{e.ExecutorId}: {e.Data}");
             }
@@ -252,11 +252,11 @@ public class AgentflowRuntimeService
                 break;
 
             case AgentflowOrchestrationPattern.Handoff:
-                aiFlow = AgentWorkflowBuilder.BuildHandoff(aiAgents, agentflowEdges, nodeIdToAgent);
+                aiFlow = DxAgentWorkflowBuilder.BuildHandoff(aiAgents, agentflowEdges, nodeIdToAgent);
                 break;
 
             case AgentflowOrchestrationPattern.Magentic:
-                aiFlow = AgentWorkflowBuilder.BuildMagentic(
+                aiFlow = DxAgentWorkflowBuilder.BuildMagentic(
                     aiAgents,
                     maxRounds: GetConfigInt(config, "maxRounds", 10),
                     maxStallCount: GetConfigInt(config, "maxStallCount", 3),

@@ -9,7 +9,7 @@ public static class AgentRunResponseUpdateExtensions
     /// <summary>
     /// Convert AgentRunResponseUpdate to ClaudeCodeMessage DTO. agentRunResponseUpdate
     /// </summary>
-    public static AiMessage? ToAiMessage(this AgentRunResponseUpdate? update)
+    public static AiMessage? ToAiMessage(this AgentResponseUpdate? update)
     {
         if (update == null)
         {
