@@ -6,6 +6,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 namespace DSystem.Domain.Services;
 
@@ -187,28 +188,44 @@ public class AgentflowRuntimeService
         var agentflowNodes = await _agentflowNodeRepository
             .ListAsync(x => x.AgentflowId == agentflowId);
 
-        var agentflowEdges = await _agentflowNodeRepository
+        var agentflowEdges = await _agentflowEdgeRepository
             .ListAsync(x => x.AgentflowId == agentflowId);
 
+        if (agentflowNodes.Count == 0)
+        {
+            return null;
+        }
+
+        // Parse configuration JSON for pattern-specific settings
+        var config = ParseConfiguration(agentflow.ConfigurationJson);
+
+        // Order nodes based on edges for patterns that require ordering
+        var orderedNodes = OrderNodesByEdges(agentflowNodes, agentflowEdges, agentflow.Pattern);
+
+        // Create a map from NodeId to AIAgent for handoff routing
+        var nodeIdToAgent = new Dictionary<string, AIAgent>();
         List<AIAgent> aiAgents = new();
-        foreach (var node in agentflowNodes)
+
+        foreach (var node in orderedNodes)
         {
             AIAgent? aiAgent;
             if (node.Type == AgentflowNodeType.AgentNode)
             {
                 aiAgent = await _agentRuntimeService.CreateAiAgentAsync(node.RelateId);
-
             }
             else
             {
                 var flowNode = await this.CreateAiWorkflow(node.RelateId, cancellationToken);
                 aiAgent = flowNode?.AsAgent() ?? null;
             }
+
             if (aiAgent == null)
             {
                 return null;
             }
+
             aiAgents.Add(aiAgent);
+            nodeIdToAgent[node.NodeId] = aiAgent;
         }
 
         Workflow? aiFlow;
@@ -217,45 +234,228 @@ public class AgentflowRuntimeService
             case AgentflowOrchestrationPattern.Concurrent:
                 aiFlow = AgentWorkflowBuilder.BuildConcurrent(aiAgents);
                 break;
+
             case AgentflowOrchestrationPattern.Sequential:
                 aiFlow = AgentWorkflowBuilder.BuildSequential(aiAgents);
                 break;
+
             case AgentflowOrchestrationPattern.GroupChat:
+                var maxIterations = config.GetValueOrDefault("maximumIterationCount", 5);
                 aiFlow = AgentWorkflowBuilder.CreateGroupChatBuilderWith(
                      agents => new RoundRobinGroupChatManager(agents)
                      {
-                         MaximumIterationCount = 5
+                         MaximumIterationCount = maxIterations
                      })
                      .AddParticipants(aiAgents.ToArray())
                      .Build();
                 break;
+
             case AgentflowOrchestrationPattern.Handoff:
-                aiFlow = null;
-                //aiFlow = AgentWorkflowBuilder.StartHandoffWith(triageAgent)
-                //    .WithHandoffs(triageAgent, [mathTutor, historyTutor]) // Triage can route to either specialist
-                //    .WithHandoff(mathTutor, triageAgent)                  // Math tutor can return to triage
-                //    .WithHandoff(historyTutor, triageAgent)               // History tutor can return to triage
-                //    .Build();
+                aiFlow = BuildHandoffWorkflow(aiAgents, agentflowEdges, nodeIdToAgent, orderedNodes);
                 break;
+
             case AgentflowOrchestrationPattern.Magentic:
-                aiFlow = null;
-                //int maxRounds = 10;
-                //int maxStallCount = 3;
-                //aiFlow = AgentWorkflowBuilder.CreateGroupChatBuilderWith(
-                //    allAgents => new MagenticOrchestrationManager(
-                //        allAgents,
-                //        maxRounds: maxRounds,
-                //        maxStallCount: maxStallCount,
-                //        maxResetCount: 2
-                //    ))
-                //    .AddParticipants([orchestrator, .. workers])
-                //    .Build();
+                aiFlow = BuildMagenticWorkflow(aiAgents, config);
                 break;
+
             default:
                 aiFlow = null;
                 break;
         }
 
         return aiFlow;
+    }
+
+    /// <summary>
+    /// Parses the configuration JSON and returns a dictionary of settings.
+    /// </summary>
+    private static Dictionary<string, int> ParseConfiguration(string? configurationJson)
+    {
+        var config = new Dictionary<string, int>();
+        if (string.IsNullOrWhiteSpace(configurationJson))
+        {
+            return config;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(configurationJson);
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetInt32(out var intValue))
+                {
+                    config[prop.Name] = intValue;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore invalid JSON
+        }
+
+        return config;
+    }
+
+    /// <summary>
+    /// Orders nodes based on edges using topological sort for sequential patterns,
+    /// or returns nodes in their original order for other patterns.
+    /// </summary>
+    private static IReadOnlyList<AgentflowNode> OrderNodesByEdges(
+        IReadOnlyList<AgentflowNode> nodes,
+        IReadOnlyList<AgentflowEdge> edges,
+        AgentflowOrchestrationPattern pattern)
+    {
+        // For patterns that don't require ordering, return as-is
+        if (pattern == AgentflowOrchestrationPattern.Concurrent ||
+            pattern == AgentflowOrchestrationPattern.GroupChat)
+        {
+            return nodes;
+        }
+
+        // If no edges, return nodes as-is
+        if (edges.Count == 0)
+        {
+            return nodes;
+        }
+
+        // Build adjacency list and in-degree map for topological sort
+        var nodeMap = nodes.ToDictionary(n => n.NodeId);
+        var adjList = new Dictionary<string, List<string>>();
+        var inDegree = new Dictionary<string, int>();
+
+        foreach (var node in nodes)
+        {
+            adjList[node.NodeId] = new List<string>();
+            inDegree[node.NodeId] = 0;
+        }
+
+        foreach (var edge in edges)
+        {
+            if (adjList.ContainsKey(edge.SourceNodeId) && inDegree.ContainsKey(edge.TargetNodeId))
+            {
+                adjList[edge.SourceNodeId].Add(edge.TargetNodeId);
+                inDegree[edge.TargetNodeId]++;
+            }
+        }
+
+        // Kahn's algorithm for topological sort
+        var queue = new Queue<string>();
+        foreach (var node in nodes)
+        {
+            if (inDegree[node.NodeId] == 0)
+            {
+                queue.Enqueue(node.NodeId);
+            }
+        }
+
+        var sorted = new List<AgentflowNode>();
+        while (queue.Count > 0)
+        {
+            var nodeId = queue.Dequeue();
+            sorted.Add(nodeMap[nodeId]);
+
+            foreach (var neighbor in adjList[nodeId])
+            {
+                inDegree[neighbor]--;
+                if (inDegree[neighbor] == 0)
+                {
+                    queue.Enqueue(neighbor);
+                }
+            }
+        }
+
+        // If we couldn't sort all nodes (cycle detected), return original order
+        if (sorted.Count != nodes.Count)
+        {
+            return nodes;
+        }
+
+        return sorted;
+    }
+
+    /// <summary>
+    /// Builds a handoff workflow based on edge connections.
+    /// The first node (or node with no incoming edges) is the triage/start agent.
+    /// Edges define which agents can handoff to which.
+    /// </summary>
+    private static Workflow? BuildHandoffWorkflow(
+        IReadOnlyList<AIAgent> orderedAgents,
+        IReadOnlyList<AgentflowEdge> edges,
+        Dictionary<string, AIAgent> nodeIdToAgent,
+        IReadOnlyList<AgentflowNode> orderedNodes)
+    {
+        if (orderedAgents.Count == 0)
+        {
+            return null;
+        }
+
+        // The first agent in the ordered list is the starting agent
+        var startAgent = orderedAgents[0];
+
+        if (orderedAgents.Count == 1)
+        {
+            // Single agent, just return a simple sequential workflow
+            return AgentWorkflowBuilder.BuildSequential(orderedAgents);
+        }
+
+        // Build handoff workflow based on edges
+        var builder = AgentWorkflowBuilder.StartHandoffWith(startAgent);
+
+        // Group edges by source to build handoff relationships
+        var edgesBySource = edges
+            .Where(e => nodeIdToAgent.ContainsKey(e.SourceNodeId) && nodeIdToAgent.ContainsKey(e.TargetNodeId))
+            .GroupBy(e => e.SourceNodeId)
+            .ToDictionary(g => g.Key, g => g.Select(e => e.TargetNodeId).ToList());
+
+        foreach (var (sourceNodeId, targetNodeIds) in edgesBySource)
+        {
+            var sourceAgent = nodeIdToAgent[sourceNodeId];
+            var targetAgents = targetNodeIds
+                .Select(id => nodeIdToAgent[id])
+                .ToArray();
+
+            if (targetAgents.Length > 0)
+            {
+                builder = builder.WithHandoffs(sourceAgent, targetAgents);
+            }
+        }
+
+        return builder.Build();
+    }
+
+    /// <summary>
+    /// Builds a Magentic workflow where the first agent is the orchestrator
+    /// and remaining agents are workers.
+    /// </summary>
+    private static Workflow? BuildMagenticWorkflow(
+        IReadOnlyList<AIAgent> agents,
+        Dictionary<string, int> config)
+    {
+        if (agents.Count < 2)
+        {
+            // Magentic requires at least 2 agents (orchestrator + workers)
+            // Fall back to sequential for single agent
+            if (agents.Count == 1)
+            {
+                return AgentWorkflowBuilder.BuildSequential(agents);
+            }
+            return null;
+        }
+
+        var maxRounds = config.GetValueOrDefault("maxRounds", 10);
+        var maxStallCount = config.GetValueOrDefault("maxStallCount", 3);
+        var maxResetCount = config.GetValueOrDefault("maxResetCount", 2);
+
+        var workflow = AgentWorkflowBuilder.CreateGroupChatBuilderWith(
+            allAgents => new MagenticOrchestrationManager(
+                allAgents,
+                maxRounds: maxRounds,
+                maxStallCount: maxStallCount,
+                maxResetCount: maxResetCount
+            ))
+            .AddParticipants(agents.ToArray())
+            .Build();
+
+        return workflow;
     }
 }

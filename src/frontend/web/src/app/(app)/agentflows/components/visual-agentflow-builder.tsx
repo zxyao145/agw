@@ -210,6 +210,10 @@ export function VisualAgentflowBuilder({
   const [selectedItemId, setSelectedItemId] = React.useState<string>("")
   const [pattern, setPattern] = React.useState<number>(-1) // Default to manual mode
   const [maximumIterationCount, setMaximumIterationCount] = React.useState<number>(5) // Group Chat parameter
+  // Magentic pattern parameters
+  const [maxRounds, setMaxRounds] = React.useState<number>(10)
+  const [maxStallCount, setMaxStallCount] = React.useState<number>(3)
+  const [maxResetCount, setMaxResetCount] = React.useState<number>(2)
 
   // agentflow creation states
   const [agentflowName, setAgentflowName] = React.useState("")
@@ -263,6 +267,20 @@ export function VisualAgentflowBuilder({
           setMaximumIterationCount(config.maximumIterationCount || 5)
         } catch {
           setMaximumIterationCount(5)
+        }
+      }
+
+      // Parse configuration for Magentic pattern
+      if (editingAgentflow.pattern === 4 && editingAgentflow.configurationJson) {
+        try {
+          const config = JSON.parse(editingAgentflow.configurationJson)
+          setMaxRounds(config.maxRounds || 10)
+          setMaxStallCount(config.maxStallCount || 3)
+          setMaxResetCount(config.maxResetCount || 2)
+        } catch {
+          setMaxRounds(10)
+          setMaxStallCount(3)
+          setMaxResetCount(2)
         }
       }
 
@@ -619,6 +637,9 @@ export function VisualAgentflowBuilder({
     if (effectivePattern === 2) {
       // Group Chat pattern
       configurationJson = JSON.stringify({ maximumIterationCount })
+    } else if (effectivePattern === 4) {
+      // Magentic pattern
+      configurationJson = JSON.stringify({ maxRounds, maxStallCount, maxResetCount })
     }
 
     const requestBody = {
@@ -650,6 +671,9 @@ export function VisualAgentflowBuilder({
       setAgentflowEnabled(true)
       setPattern(-1)
       setMaximumIterationCount(5)
+      setMaxRounds(10)
+      setMaxStallCount(3)
+      setMaxResetCount(2)
 
       // Clear canvas
       setNodes([])
@@ -671,6 +695,9 @@ export function VisualAgentflowBuilder({
     agentflowDescription,
     agentflowEnabled,
     maximumIterationCount,
+    maxRounds,
+    maxStallCount,
+    maxResetCount,
     editingAgentflow,
     detectPatternFromStructure,
     setNodes,
@@ -856,6 +883,84 @@ export function VisualAgentflowBuilder({
               className="w-[120px]"
             />
           </div>
+        )}
+
+        {/* Magentic Pattern Configuration */}
+        {pattern === 4 && (
+          <>
+            <div className="space-y-2">
+              <Label>
+                Max Rounds
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info
+                      size={16}
+                      className="text-muted-foreground ml-1 inline"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p>Maximum collaboration rounds before termination</p>
+                  </TooltipContent>
+                </Tooltip>
+              </Label>
+              <Input
+                type="number"
+                min="1"
+                max="100"
+                value={maxRounds}
+                onChange={(e) => setMaxRounds(Number(e.target.value))}
+                className="w-[120px]"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>
+                Stall Count
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info
+                      size={16}
+                      className="text-muted-foreground ml-1 inline"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p>Rounds without progress before orchestrator intervention</p>
+                  </TooltipContent>
+                </Tooltip>
+              </Label>
+              <Input
+                type="number"
+                min="1"
+                max="10"
+                value={maxStallCount}
+                onChange={(e) => setMaxStallCount(Number(e.target.value))}
+                className="w-[100px]"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>
+                Max Resets
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info
+                      size={16}
+                      className="text-muted-foreground ml-1 inline"
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p>Maximum allowed plan resets before termination</p>
+                  </TooltipContent>
+                </Tooltip>
+              </Label>
+              <Input
+                type="number"
+                min="0"
+                max="10"
+                value={maxResetCount}
+                onChange={(e) => setMaxResetCount(Number(e.target.value))}
+                className="w-[100px]"
+              />
+            </div>
+          </>
         )}
       </div>
 
