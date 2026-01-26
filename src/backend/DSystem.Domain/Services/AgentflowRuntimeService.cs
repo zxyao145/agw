@@ -7,6 +7,7 @@ using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using MsAgentWorkflowBuilder = Microsoft.Agents.AI.Workflows.AgentWorkflowBuilder;
 
 namespace DSystem.Domain.Services;
 
@@ -232,16 +233,16 @@ public class AgentflowRuntimeService
         switch (agentflow.Pattern)
         {
             case AgentflowOrchestrationPattern.Concurrent:
-                aiFlow = AgentWorkflowBuilder.BuildConcurrent(aiAgents);
+                aiFlow = MsAgentWorkflowBuilder.BuildConcurrent(aiAgents);
                 break;
 
             case AgentflowOrchestrationPattern.Sequential:
-                aiFlow = AgentWorkflowBuilder.BuildSequential(aiAgents);
+                aiFlow = MsAgentWorkflowBuilder.BuildSequential(aiAgents);
                 break;
 
             case AgentflowOrchestrationPattern.GroupChat:
-                var maxIterations = config.GetValueOrDefault("maximumIterationCount", 5);
-                aiFlow = AgentWorkflowBuilder.CreateGroupChatBuilderWith(
+                var maxIterations = GetConfigInt(config, "maximumIterationCount", 5);
+                aiFlow = MsAgentWorkflowBuilder.CreateGroupChatBuilderWith(
                      agents => new RoundRobinGroupChatManager(agents)
                      {
                          MaximumIterationCount = maxIterations
@@ -251,15 +252,15 @@ public class AgentflowRuntimeService
                 break;
 
             case AgentflowOrchestrationPattern.Handoff:
-                aiFlow = AgentWorkflowBuilderExtensions.BuildHandoff(aiAgents, agentflowEdges, nodeIdToAgent);
+                aiFlow = AgentWorkflowBuilder.BuildHandoff(aiAgents, agentflowEdges, nodeIdToAgent);
                 break;
 
             case AgentflowOrchestrationPattern.Magentic:
-                aiFlow = AgentWorkflowBuilderExtensions.BuildMagentic(
+                aiFlow = AgentWorkflowBuilder.BuildMagentic(
                     aiAgents,
-                    maxRounds: config.GetValueOrDefault("maxRounds", 10),
-                    maxStallCount: config.GetValueOrDefault("maxStallCount", 3),
-                    maxResetCount: config.GetValueOrDefault("maxResetCount", 2));
+                    maxRounds: GetConfigInt(config, "maxRounds", 10),
+                    maxStallCount: GetConfigInt(config, "maxStallCount", 3),
+                    maxResetCount: GetConfigInt(config, "maxResetCount", 2));
                 break;
 
             default:
@@ -273,9 +274,9 @@ public class AgentflowRuntimeService
     /// <summary>
     /// Parses the configuration JSON and returns a dictionary of settings.
     /// </summary>
-    private static Dictionary<string, int> ParseConfiguration(string? configurationJson)
+    private static Dictionary<string, JsonElement> ParseConfiguration(string? configurationJson)
     {
-        var config = new Dictionary<string, int>();
+        var config = new Dictionary<string, JsonElement>();
         if (string.IsNullOrWhiteSpace(configurationJson))
         {
             return config;
@@ -286,10 +287,7 @@ public class AgentflowRuntimeService
             using var doc = JsonDocument.Parse(configurationJson);
             foreach (var prop in doc.RootElement.EnumerateObject())
             {
-                if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetInt32(out var intValue))
-                {
-                    config[prop.Name] = intValue;
-                }
+                config[prop.Name] = prop.Value.Clone();
             }
         }
         catch (JsonException)
@@ -298,6 +296,20 @@ public class AgentflowRuntimeService
         }
 
         return config;
+    }
+
+    /// <summary>
+    /// Gets an integer value from the configuration dictionary with a default fallback.
+    /// </summary>
+    private static int GetConfigInt(Dictionary<string, JsonElement> config, string key, int defaultValue)
+    {
+        if (config.TryGetValue(key, out var element) &&
+            element.ValueKind == JsonValueKind.Number &&
+            element.TryGetInt32(out var value))
+        {
+            return value;
+        }
+        return defaultValue;
     }
 
     /// <summary>

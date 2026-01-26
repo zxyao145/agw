@@ -1,13 +1,14 @@
 using DSystem.Domain.Entities;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
+using MsAgentWorkflowBuilder = Microsoft.Agents.AI.Workflows.AgentWorkflowBuilder;
 
 namespace DSystem.Domain.Services;
 
 /// <summary>
-/// Extension methods for <see cref="AgentWorkflowBuilder"/> to support additional orchestration patterns.
+/// Extension methods for <see cref="MsAgentWorkflowBuilder"/> to support additional orchestration patterns.
 /// </summary>
-public static class AgentWorkflowBuilderExtensions
+public static class AgentWorkflowBuilder
 {
     /// <summary>
     /// Builds a handoff workflow based on edge connections.
@@ -46,11 +47,11 @@ public static class AgentWorkflowBuilderExtensions
         if (orderedAgents.Count == 1)
         {
             // Single agent - fall back to sequential workflow
-            return AgentWorkflowBuilder.BuildSequential(orderedAgents);
+            return MsAgentWorkflowBuilder.BuildSequential(orderedAgents);
         }
 
         // Initialize the handoff workflow with the starting agent
-        var builder = AgentWorkflowBuilder.StartHandoffWith(startAgent);
+        var builder = MsAgentWorkflowBuilder.StartHandoffWith(startAgent);
 
         // Group edges by source node to build handoff relationships
         // Each source agent can hand off to multiple target agents
@@ -107,12 +108,12 @@ public static class AgentWorkflowBuilderExtensions
             // Fall back to sequential for single agent
             if (agents.Count == 1)
             {
-                return AgentWorkflowBuilder.BuildSequential(agents);
+                return MsAgentWorkflowBuilder.BuildSequential(agents);
             }
             return null;
         }
 
-        var workflow = AgentWorkflowBuilder.CreateGroupChatBuilderWith(
+        var workflow = MsAgentWorkflowBuilder.CreateGroupChatBuilderWith(
             allAgents => new MagenticOrchestrationManager(
                 allAgents,
                 maxRounds: maxRounds,
