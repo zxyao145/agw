@@ -251,11 +251,15 @@ public class AgentflowRuntimeService
                 break;
 
             case AgentflowOrchestrationPattern.Handoff:
-                aiFlow = BuildHandoffWorkflow(aiAgents, agentflowEdges, nodeIdToAgent, orderedNodes);
+                aiFlow = AgentWorkflowBuilderExtensions.BuildHandoff(aiAgents, agentflowEdges, nodeIdToAgent);
                 break;
 
             case AgentflowOrchestrationPattern.Magentic:
-                aiFlow = BuildMagenticWorkflow(aiAgents, config);
+                aiFlow = AgentWorkflowBuilderExtensions.BuildMagentic(
+                    aiAgents,
+                    maxRounds: config.GetValueOrDefault("maxRounds", 10),
+                    maxStallCount: config.GetValueOrDefault("maxStallCount", 3),
+                    maxResetCount: config.GetValueOrDefault("maxResetCount", 2));
                 break;
 
             default:
@@ -318,9 +322,21 @@ public class AgentflowRuntimeService
             return nodes;
         }
 
-        // Build adjacency list and in-degree map for topological sort
+        // Build data structures for Kahn's topological sort algorithm
         var nodeMap = nodes.ToDictionary(n => n.NodeId);
+
+        // Adjacency List (adjList):
+        // A graph representation where each node maps to a list of its outgoing neighbors.
+        // For example, if we have edges A→B and A→C, then adjList["A"] = ["B", "C"].
+        // This represents "which nodes can this node reach directly?"
+        // Used to traverse the graph and update in-degrees when a node is processed.
         var adjList = new Dictionary<string, List<string>>();
+
+        // In-Degree Map (inDegree):
+        // Tracks the number of incoming edges for each node.
+        // A node with inDegree=0 has no dependencies and can be processed immediately.
+        // For example, in A→B→C: inDegree["A"]=0, inDegree["B"]=1, inDegree["C"]=1.
+        // Nodes are processed in order of their in-degrees reaching zero.
         var inDegree = new Dictionary<string, int>();
 
         foreach (var node in nodes)
@@ -373,89 +389,4 @@ public class AgentflowRuntimeService
         return sorted;
     }
 
-    /// <summary>
-    /// Builds a handoff workflow based on edge connections.
-    /// The first node (or node with no incoming edges) is the triage/start agent.
-    /// Edges define which agents can handoff to which.
-    /// </summary>
-    private static Workflow? BuildHandoffWorkflow(
-        IReadOnlyList<AIAgent> orderedAgents,
-        IReadOnlyList<AgentflowEdge> edges,
-        Dictionary<string, AIAgent> nodeIdToAgent,
-        IReadOnlyList<AgentflowNode> orderedNodes)
-    {
-        if (orderedAgents.Count == 0)
-        {
-            return null;
-        }
-
-        // The first agent in the ordered list is the starting agent
-        var startAgent = orderedAgents[0];
-
-        if (orderedAgents.Count == 1)
-        {
-            // Single agent, just return a simple sequential workflow
-            return AgentWorkflowBuilder.BuildSequential(orderedAgents);
-        }
-
-        // Build handoff workflow based on edges
-        var builder = AgentWorkflowBuilder.StartHandoffWith(startAgent);
-
-        // Group edges by source to build handoff relationships
-        var edgesBySource = edges
-            .Where(e => nodeIdToAgent.ContainsKey(e.SourceNodeId) && nodeIdToAgent.ContainsKey(e.TargetNodeId))
-            .GroupBy(e => e.SourceNodeId)
-            .ToDictionary(g => g.Key, g => g.Select(e => e.TargetNodeId).ToList());
-
-        foreach (var (sourceNodeId, targetNodeIds) in edgesBySource)
-        {
-            var sourceAgent = nodeIdToAgent[sourceNodeId];
-            var targetAgents = targetNodeIds
-                .Select(id => nodeIdToAgent[id])
-                .ToArray();
-
-            if (targetAgents.Length > 0)
-            {
-                builder = builder.WithHandoffs(sourceAgent, targetAgents);
-            }
-        }
-
-        return builder.Build();
-    }
-
-    /// <summary>
-    /// Builds a Magentic workflow where the first agent is the orchestrator
-    /// and remaining agents are workers.
-    /// </summary>
-    private static Workflow? BuildMagenticWorkflow(
-        IReadOnlyList<AIAgent> agents,
-        Dictionary<string, int> config)
-    {
-        if (agents.Count < 2)
-        {
-            // Magentic requires at least 2 agents (orchestrator + workers)
-            // Fall back to sequential for single agent
-            if (agents.Count == 1)
-            {
-                return AgentWorkflowBuilder.BuildSequential(agents);
-            }
-            return null;
-        }
-
-        var maxRounds = config.GetValueOrDefault("maxRounds", 10);
-        var maxStallCount = config.GetValueOrDefault("maxStallCount", 3);
-        var maxResetCount = config.GetValueOrDefault("maxResetCount", 2);
-
-        var workflow = AgentWorkflowBuilder.CreateGroupChatBuilderWith(
-            allAgents => new MagenticOrchestrationManager(
-                allAgents,
-                maxRounds: maxRounds,
-                maxStallCount: maxStallCount,
-                maxResetCount: maxResetCount
-            ))
-            .AddParticipants(agents.ToArray())
-            .Build();
-
-        return workflow;
-    }
 }

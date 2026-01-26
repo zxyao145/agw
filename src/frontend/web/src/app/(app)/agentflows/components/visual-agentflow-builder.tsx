@@ -41,6 +41,7 @@ import { AgentDto, AgentflowDto, AgentflowNodeType } from "@/types/agentflow"
 import { toast } from "sonner"
 import { apiPost, apiPut } from "@/api/client"
 import { createGraphLayout } from "./autoLayout"
+import { GroupChatConfig, MagenticConfig } from "./pattern-configs"
 
 type AgentNodeData = {
   nodeId: string
@@ -859,108 +860,22 @@ export function VisualAgentflowBuilder({
 
         {/* Group Chat Configuration */}
         {pattern === 2 && (
-          <div className="space-y-2">
-            <Label>
-              Max Iterations
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info
-                    size={16}
-                    className="text-muted-foreground ml-1 inline"
-                  />
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>Maximum number of iterations for Group Chat pattern</p>
-                </TooltipContent>
-              </Tooltip>
-            </Label>
-            <Input
-              type="number"
-              min="1"
-              max="100"
-              value={maximumIterationCount}
-              onChange={(e) => setMaximumIterationCount(Number(e.target.value))}
-              className="w-[120px]"
-            />
-          </div>
+          <GroupChatConfig
+            maximumIterationCount={maximumIterationCount}
+            onMaximumIterationCountChange={setMaximumIterationCount}
+          />
         )}
 
         {/* Magentic Pattern Configuration */}
         {pattern === 4 && (
-          <>
-            <div className="space-y-2">
-              <Label>
-                Max Rounds
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      size={16}
-                      className="text-muted-foreground ml-1 inline"
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p>Maximum collaboration rounds before termination</p>
-                  </TooltipContent>
-                </Tooltip>
-              </Label>
-              <Input
-                type="number"
-                min="1"
-                max="100"
-                value={maxRounds}
-                onChange={(e) => setMaxRounds(Number(e.target.value))}
-                className="w-[120px]"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>
-                Stall Count
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      size={16}
-                      className="text-muted-foreground ml-1 inline"
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p>Rounds without progress before orchestrator intervention</p>
-                  </TooltipContent>
-                </Tooltip>
-              </Label>
-              <Input
-                type="number"
-                min="1"
-                max="10"
-                value={maxStallCount}
-                onChange={(e) => setMaxStallCount(Number(e.target.value))}
-                className="w-[100px]"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>
-                Max Resets
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      size={16}
-                      className="text-muted-foreground ml-1 inline"
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p>Maximum allowed plan resets before termination</p>
-                  </TooltipContent>
-                </Tooltip>
-              </Label>
-              <Input
-                type="number"
-                min="0"
-                max="10"
-                value={maxResetCount}
-                onChange={(e) => setMaxResetCount(Number(e.target.value))}
-                className="w-[100px]"
-              />
-            </div>
-          </>
+          <MagenticConfig
+            maxRounds={maxRounds}
+            maxStallCount={maxStallCount}
+            maxResetCount={maxResetCount}
+            onMaxRoundsChange={setMaxRounds}
+            onMaxStallCountChange={setMaxStallCount}
+            onMaxResetCountChange={setMaxResetCount}
+          />
         )}
       </div>
 
