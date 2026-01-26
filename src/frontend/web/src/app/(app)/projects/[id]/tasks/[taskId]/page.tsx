@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
+import { Ulid } from "id128";
 
 import { apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -76,6 +78,34 @@ type ChatMessage = {
   Content: string;
 };
 
+function StreamingChatSession({ messages }: { messages: AiMessage[] }) {
+  const messagesEndRef = React.useRef<HTMLDivElement>(null!);
+
+  const processMessages = React.useCallback(
+    (msgs: AiMessage[]): ProcessedMessageItem[] => {
+      return msgs.map((msg) => ({ type: "normal", message: msg }));
+    },
+    []
+  );
+
+  if (messages.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="border-t pt-4">
+      <div className="text-sm font-medium text-muted-foreground mb-2">
+        Live Conversation
+      </div>
+      <ChatSession
+        messages={messages}
+        messagesEndRef={messagesEndRef}
+        processMessages={processMessages}
+      />
+    </div>
+  );
+}
+
 function OutputChatSession({ outputJson }: { outputJson: string }) {
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
 
@@ -139,7 +169,8 @@ export default function TaskDetailsPage() {
   const taskId = params.taskId;
 
   const [isExecuting, setIsExecuting] = React.useState<boolean>(false);
-  const handleOnExecute = (value: string) => {};
+  const [streamingMessages, setStreamingMessages] = React.useState<AiMessage[]>([]);
+  const [threadId, setThreadId] = React.useState<string>(() => Ulid.generate().toCanonical());
 
   const taskQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", taskId],
@@ -151,6 +182,105 @@ export default function TaskDetailsPage() {
   });
 
   const task = taskQuery.data;
+
+  const handleOnExecute = React.useCallback(async (value: string) => {
+    if (!task?.agentflowId || !value.trim()) return;
+
+    setIsExecuting(true);
+
+    // Add user message to streaming messages
+    const userMessage: AiMessage = {
+      messageId: Ulid.generate().toCanonical(),
+      author: "user",
+      role: "user",
+      contents: [{ type: "TextContent", content: value }],
+    };
+    setStreamingMessages((prev) => [...prev, userMessage]);
+
+    try {
+      const response = await fetch(`/api/agentflows/${task.agentflowId}/execute-sse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          threadId,
+          input: value,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Execute failed: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(chunk, { stream: true });
+        const lines = buffer.split("\n\n");
+
+        // Keep the last incomplete line in buffer
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const json = line.substring(6);
+            try {
+              const message: AiMessage = JSON.parse(json);
+              // Skip user messages from the stream (we already added it)
+              if (message.role === "user") continue;
+
+              setStreamingMessages((prev) => {
+                const existingIndex = prev.findIndex(
+                  (m) => m.messageId === message.messageId
+                );
+
+                if (existingIndex >= 0) {
+                  // Merge content for same messageId
+                  const updated = [...prev];
+                  const existingMsg = updated[existingIndex];
+                  const existingTextContent = existingMsg.contents.find(
+                    (c) => c.type === "TextContent" || c.type === "text"
+                  );
+                  const newTextContent = message.contents.find(
+                    (c) => c.type === "TextContent" || c.type === "text"
+                  );
+
+                  if (existingTextContent && newTextContent) {
+                    existingTextContent.content =
+                      (existingTextContent.content || "") +
+                      (newTextContent.content || "");
+                  }
+
+                  return updated;
+                } else {
+                  // New message
+                  return [...prev, message];
+                }
+              });
+            } catch (e) {
+              console.error("Parse error:", e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      toast.error(
+        `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`
+      );
+    } finally {
+      setIsExecuting(false);
+    }
+  }, [task?.agentflowId, threadId]);
 
   return (
     <div className="space-y-3 w-full flex flex-col">
@@ -214,6 +344,10 @@ export default function TaskDetailsPage() {
 
           {task.outputJson ? (
             <OutputChatSession outputJson={task.outputJson} />
+          ) : null}
+
+          {streamingMessages.length > 0 ? (
+            <StreamingChatSession messages={streamingMessages} />
           ) : null}
 
           {task.errorMessage ? (
