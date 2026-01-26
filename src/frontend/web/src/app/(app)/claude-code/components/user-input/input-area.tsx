@@ -1,10 +1,11 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { UserInput } from "@/components/message/user-input";
+import { SuggestionItem, UserInput } from "@/components/message/user-input";
 import type { ChatInputAreaProps } from "../../types";
 import { SettingsDialog } from "./settings-dialog";
 import { ChatInfoPopover } from "./chat-info-popover";
+import { text } from "stream/consumers";
 
 export function InputArea({
   isExecuting,
@@ -38,8 +39,39 @@ export function InputArea({
     }
   };
 
+  const onInputChange = (value: string) => {
+    if (!value.startsWith("/")) {
+      return [];
+    }
+    const metaArr = value.split("/");
+    if (!metaArr || metaArr.length < 2) {
+      return [];
+    }
+    const meta = metaArr[1];
+    if (!meta) {
+      return [];
+    }
+    console.log("meta", meta);
+    let contents =
+      initContent?.slashCommands.filter((x) => x.indexOf(meta) > -1) ?? [];
+    if (contents.length > 10) {
+      contents = contents.splice(10);
+    }
+    const suggestions = contents.map((x) => {
+      return {
+        text: "/" + x,
+      };
+    });
+    console.log("suggestions", suggestions)
+    return suggestions;
+  };
+
   return (
-    <UserInput isExecuting={isExecuting} onExecute={handleOnExecute}>
+    <UserInput
+      onSuggestion={onInputChange}
+      isExecuting={isExecuting}
+      onExecute={handleOnExecute}
+    >
       <UserInput.TopLeft>
         <SettingsDialog
           workingDirectory={workingDirectory}

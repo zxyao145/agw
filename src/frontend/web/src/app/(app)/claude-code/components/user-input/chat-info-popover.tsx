@@ -52,8 +52,9 @@ export function ChatInfoPopover({ initContent, createArr }: ChatInfoPopoverProps
             </div>
             {createArr("tools", initContent.tools)}
             {createArr("slashCommands", initContent.slashCommands)}
-            {createArr("agents", initContent.agents)}
+            {createArr("skills", initContent.skills)}
             {createArr("plugins", initContent.plugins)}
+            {createArr("agents", initContent.agents)}
             {createArr("mcpServers", initContent.mcpServers)}
           </div>
         </div>

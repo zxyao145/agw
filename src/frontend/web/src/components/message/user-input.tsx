@@ -5,9 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { KeyboardEvent, ReactNode, createContext, useContext } from "react";
 import React from "react";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
 
 // Context for UserInput state
 interface UserInputContextValue {
+  onSuggestion?: (value: string) => SuggestionItem[];
   isExecuting: boolean;
   onExecute?: (value: string) => void;
   placeholder: string;
@@ -17,8 +26,13 @@ interface UserInputContextValue {
 
 const UserInputContext = createContext<UserInputContextValue | null>(null);
 
+export interface SuggestionItem {
+  text: string;
+}
+
 // Main UserInput component
 export interface UserInputProps {
+  onSuggestion?: (value: string) => SuggestionItem[];
   // Execution state
   isExecuting?: boolean;
 
@@ -41,8 +55,10 @@ function UserInputRoot({
   rows = 1,
   maxHeight = "max-h-50",
   children,
+  onSuggestion: onSuggestion,
 }: UserInputProps) {
   const contextValue: UserInputContextValue = {
+    onSuggestion: onSuggestion,
     isExecuting,
     onExecute,
     placeholder,
@@ -50,9 +66,18 @@ function UserInputRoot({
     maxHeight,
   };
   const [input, setInput] = React.useState("");
-  
+  const [suggestions, setSuggestions] = React.useState<SuggestionItem[]>([]);
+
+  const handleOnSuggestionClick = (s: SuggestionItem) => {
+    setInput(s.text + " ");
+  };
+
   const onChange = (value: string) => {
     setInput(value);
+    if (onSuggestion) {
+      const suggestions = onSuggestion?.(value);
+      setSuggestions(suggestions ?? []);
+    }
   };
 
   const handleSend = () => {
@@ -71,7 +96,7 @@ function UserInputRoot({
     }
 
     // Enter (alone): New line (default behavior)
-  };;
+  };
 
   // Extract children slots
   const topLeftSlots: ReactNode[] = [];
@@ -103,6 +128,21 @@ function UserInputRoot({
   return (
     <UserInputContext.Provider value={contextValue}>
       <div className="relative">
+        {suggestions && suggestions.length > 0 && (
+          <div className="pointer-events-auto bg-background inline-flex flex-col shadow mb-2 p-2 rounded-md">
+            {suggestions.map((suggestion, index) => (
+              <Item
+                key={index}
+                onClick={() => handleOnSuggestionClick(suggestion)}
+                variant="outline"
+                className="cursor-pointer text-xs p-1 border-none text-gray-500 hover:text-gray-900"
+              >
+                {suggestion.text}
+              </Item>
+            ))}
+          </div>
+        )}
+
         {/* Top bar with tools and actions */}
         <div className="flex mb-2 gap-2 pointer-events-auto">
           <div className="bg-background border rounded-md flex gap-2 items-center p-0">
@@ -113,7 +153,6 @@ function UserInputRoot({
             {topRightSlots.length > 0 && <>{topRightSlots}</>}
           </div>
         </div>
-
         {/* Input area with textarea and action button */}
         <div className="relative">
           <div className="flex flex-row gap-0 items-end bg-background border rounded-lg pointer-events-auto">
@@ -141,7 +180,6 @@ function UserInputRoot({
             </Button>
           </div>
         </div>
-
         {/* Helper text */}
         <div className="text-xs text-muted-foreground mt-2">
           {helpSlots.length > 0 ? (
