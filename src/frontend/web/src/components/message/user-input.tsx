@@ -1,33 +1,23 @@
 "use client";
 
-import { Send } from "lucide-react";
+import { Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { KeyboardEvent, ReactNode, createContext, useContext } from "react";
+import { KeyboardEvent, ReactNode } from "react";
 import React from "react";
 import {
   Item,
   ItemActions,
   ItemContent,
   ItemDescription,
+  ItemGroup,
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
 
-// Context for UserInput state
-interface UserInputContextValue {
-  onSuggestion?: (value: string) => SuggestionItem[];
-  isExecuting: boolean;
-  onExecute?: (value: string) => void;
-  placeholder: string;
-  rows: number;
-  maxHeight: string;
-}
-
-const UserInputContext = createContext<UserInputContextValue | null>(null);
-
 export interface SuggestionItem {
   text: string;
+  description?: string;
 }
 
 // Main UserInput component
@@ -48,148 +38,253 @@ export interface UserInputProps {
   children?: ReactNode;
 }
 
+interface UserInputSlots {
+  topLeft: ReactNode[];
+  topRight: ReactNode[];
+  help: ReactNode[];
+  sender: ReactNode[];
+}
+
+interface UserInputRootProps {
+  isExecuting: boolean;
+  placeholder: string;
+  rows: number;
+  maxHeight: string;
+  input: string;
+  suggestions?: ReactNode;
+  slots: UserInputSlots;
+  onInputChange: (value: string) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onSend: () => void;
+}
+
 function UserInputRoot({
+  isExecuting,
+  placeholder,
+  rows,
+  maxHeight,
+  input,
+  suggestions,
+  slots,
+  onInputChange,
+  onKeyDown,
+  onSend,
+}: UserInputRootProps) {
+  const { topLeft, topRight, help, sender } = slots;
+
+  return (
+    <div className="relative">
+      {suggestions}
+
+      {/* Top bar with tools and actions */}
+      <div className="flex mb-2 gap-2 pointer-events-auto">
+        <div className="bg-background border rounded-md flex gap-2 items-center p-0">
+          {topLeft.length > 0 && <>{topLeft}</>}
+        </div>
+        <div className="flex-1" />
+        <div className="bg-background border rounded-md flex gap-2 items-center p-0">
+          {topRight.length > 0 && <>{topRight}</>}
+        </div>
+      </div>
+      {/* Input area with textarea and action button */}
+      <div className="relative">
+        <div className="flex flex-row gap-0 items-end bg-background border rounded-lg pointer-events-auto">
+          <Textarea
+            value={input}
+            onChange={(e) => onInputChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={placeholder}
+            rows={rows}
+            className={`${maxHeight} min-h-12 flex-1 resize-none bg-background border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0`}
+            disabled={isExecuting}
+          />
+
+          {/* Action button - comment mode or regular send */}
+          <Button
+            className="cursor-pointer m-2"
+            onClick={onSend}
+            disabled={!input.trim() || isExecuting}
+          >
+            {sender.length > 0 ? <>{sender}</> : <Send className="w-5 h-5" />}
+          </Button>
+        </div>
+      </div>
+      {/* Helper text */}
+      <div className="text-xs text-muted-foreground mt-2">
+        {help.length > 0 ? (
+          <>{help}</>
+        ) : (
+          "Press Enter for new line • Enter/Shift+Enter to send"
+        )}
+      </div>
+    </div>
+  );
+}
+
+function getUserInputSlots(children?: ReactNode): UserInputSlots {
+  const slots: UserInputSlots = {
+    topLeft: [],
+    topRight: [],
+    help: [],
+    sender: [],
+  };
+
+  if (!children) {
+    return slots;
+  }
+
+  const childArray = Array.isArray(children) ? children : [children];
+  childArray.forEach((child) => {
+    if (!child || typeof child !== "object" || !("type" in child)) {
+      return;
+    }
+
+    const element = child as { type: { displayName?: string } };
+    switch (element.type?.displayName) {
+      case "UserInput.TopLeft":
+        slots.topLeft.push(child);
+        break;
+      case "UserInput.TopRight":
+        slots.topRight.push(child);
+        break;
+      case "UserInput.Help":
+        slots.help.push(child);
+        break;
+      case "UserInput.Sender":
+        slots.sender.push(child);
+        break;
+      default:
+        break;
+    }
+  });
+
+  return slots;
+}
+
+interface UserInputSuggestionsProps {
+  suggestions: SuggestionItem[];
+  onSelect: (suggestion: SuggestionItem) => void;
+}
+
+function UserInputSuggestions({
+  suggestions,
+  onSelect,
+}: UserInputSuggestionsProps) {
+  if (suggestions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-auto mb-3 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur-sm">
+      <div className="flex items-center justify-between px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Suggestions
+        <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+          Tab
+        </span>
+      </div>
+      <ItemGroup className="gap-1">
+        {suggestions.map((suggestion, index) => (
+          <Item
+            key={`${suggestion.text}-${index}`}
+            onClick={() => onSelect(suggestion)}
+            variant="outline"
+            size="sm"
+            className="cursor-pointer border-transparent bg-transparent px-2 py-2 text-xs text-foreground transition hover:border-border hover:bg-accent/50"
+          >
+            <ItemMedia
+              variant="icon"
+              className="size-7 border-border/60 bg-muted/60"
+            >
+              <Sparkles className="size-3 text-muted-foreground" />
+            </ItemMedia>
+            <ItemContent>
+              <ItemTitle className="text-xs font-medium text-foreground">
+                {suggestion.text}
+              </ItemTitle>
+              {suggestion.description && (
+                <ItemDescription className="text-[11px]">
+                  {suggestion.description}
+                </ItemDescription>
+              )}
+            </ItemContent>
+            <ItemActions>
+              <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                Enter
+              </span>
+            </ItemActions>
+          </Item>
+        ))}
+      </ItemGroup>
+    </div>
+  );
+}
+
+function UserInputContainer({
   isExecuting = false,
   onExecute,
   placeholder = "Type your message...",
   rows = 1,
   maxHeight = "max-h-50",
   children,
-  onSuggestion: onSuggestion,
+  onSuggestion,
 }: UserInputProps) {
-  const contextValue: UserInputContextValue = {
-    onSuggestion: onSuggestion,
-    isExecuting,
-    onExecute,
-    placeholder,
-    rows,
-    maxHeight,
-  };
   const [input, setInput] = React.useState("");
   const [suggestions, setSuggestions] = React.useState<SuggestionItem[]>([]);
+  const slots = getUserInputSlots(children);
 
-  const handleOnSuggestionClick = (s: SuggestionItem) => {
-    setInput(s.text + " ");
-  };
-
-  const onChange = (value: string) => {
-    setInput(value);
+  const handleSuggestionClick = (suggestion: SuggestionItem) => {
+    const nextValue = `${suggestion.text} `;
+    setInput(nextValue);
     if (onSuggestion) {
-      const suggestions = onSuggestion?.(value);
-      setSuggestions(suggestions ?? []);
+      setSuggestions(onSuggestion(nextValue) ?? []);
     }
   };
+
+  const handleInputChange = (value: string) => {
+    setInput(value);
+    if (!onSuggestion) {
+      if (suggestions.length > 0) {
+        setSuggestions([]);
+      }
+      return;
+    }
+
+    setSuggestions(onSuggestion(value) ?? []);
+  };
+
+  const suggestionContent = (
+    <UserInputSuggestions
+      suggestions={suggestions}
+      onSelect={handleSuggestionClick}
+    />
+  );
 
   const handleSend = () => {
     onExecute?.(input);
   };
 
-  // Handle keyboard shortcuts
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Ctrl+Enter or Shift+Enter: Send message
-    if (e.key === "Enter" && (e.ctrlKey || e.shiftKey)) {
-      e.preventDefault();
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && (event.ctrlKey || event.shiftKey)) {
+      event.preventDefault();
       if (input && input.trim()) {
         onExecute?.(input.trim());
       }
-      return;
     }
-
-    // Enter (alone): New line (default behavior)
   };
 
-  // Extract children slots
-  const topLeftSlots: ReactNode[] = [];
-  const topRightSlots: ReactNode[] = [];
-  const helpSlots: ReactNode[] = [];
-  const senderSlots: ReactNode[] = [];
-
-  if (children) {
-    const childArray = Array.isArray(children) ? children : [children];
-    childArray.forEach((child) => {
-      if (!child) return;
-
-      // Check if it's a valid React element with a type property
-      if (typeof child === "object" && "type" in child) {
-        const element = child as { type: { displayName?: string } };
-        if (element.type?.displayName === "UserInput.TopLeft") {
-          topLeftSlots.push(child);
-        } else if (element.type?.displayName === "UserInput.TopRight") {
-          topRightSlots.push(child);
-        } else if (element.type?.displayName === "UserInput.Help") {
-          helpSlots.push(child);
-        } else if (element.type?.displayName === "UserInput.Sender") {
-          senderSlots.push(child);
-        }
-      }
-    });
-  }
-
   return (
-    <UserInputContext.Provider value={contextValue}>
-      <div className="relative">
-        {suggestions && suggestions.length > 0 && (
-          <div className="pointer-events-auto bg-background inline-flex flex-col shadow mb-2 p-2 rounded-md">
-            {suggestions.map((suggestion, index) => (
-              <Item
-                key={index}
-                onClick={() => handleOnSuggestionClick(suggestion)}
-                variant="outline"
-                className="cursor-pointer text-xs p-1 border-none text-gray-500 hover:text-gray-900"
-              >
-                {suggestion.text}
-              </Item>
-            ))}
-          </div>
-        )}
-
-        {/* Top bar with tools and actions */}
-        <div className="flex mb-2 gap-2 pointer-events-auto">
-          <div className="bg-background border rounded-md flex gap-2 items-center p-0">
-            {topLeftSlots.length > 0 && <>{topLeftSlots}</>}
-          </div>
-          <div className="flex-1" />
-          <div className="bg-background border rounded-md flex gap-2 items-center p-0">
-            {topRightSlots.length > 0 && <>{topRightSlots}</>}
-          </div>
-        </div>
-        {/* Input area with textarea and action button */}
-        <div className="relative">
-          <div className="flex flex-row gap-0 items-end bg-background border rounded-lg pointer-events-auto">
-            <Textarea
-              value={input}
-              onChange={(e) => onChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              rows={rows}
-              className={`${maxHeight} min-h-12 flex-1 resize-none bg-background border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0`}
-              disabled={isExecuting}
-            />
-
-            {/* Action button - comment mode or regular send */}
-            <Button
-              className="cursor-pointer m-2"
-              onClick={handleSend}
-              disabled={!input.trim() || isExecuting}
-            >
-              {senderSlots.length > 0 ? (
-                <>{senderSlots}</>
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
-            </Button>
-          </div>
-        </div>
-        {/* Helper text */}
-        <div className="text-xs text-muted-foreground mt-2">
-          {helpSlots.length > 0 ? (
-            <>{helpSlots}</>
-          ) : (
-            "Press Enter for new line • Enter/Shift+Enter to send"
-          )}
-        </div>
-      </div>
-    </UserInputContext.Provider>
+    <UserInputRoot
+      isExecuting={isExecuting}
+      placeholder={placeholder}
+      rows={rows}
+      maxHeight={maxHeight}
+      input={input}
+      suggestions={suggestionContent}
+      slots={slots}
+      onInputChange={handleInputChange}
+      onKeyDown={handleKeyDown}
+      onSend={handleSend}
+    />
   );
 }
 
@@ -234,7 +329,7 @@ function Sender({ children }: SenderProps) {
 Sender.displayName = "UserInput.Sender";
 
 // Export compound component
-export const UserInput = Object.assign(UserInputRoot, {
+export const UserInput = Object.assign(UserInputContainer, {
   TopLeft: TopLeft,
   TopRight: TopRight,
   Help: Help,
