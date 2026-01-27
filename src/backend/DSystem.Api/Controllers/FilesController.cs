@@ -610,6 +610,128 @@ public class FilesController : ControllerBase
         }
     }
 
+    private static HashSet<string> IgnoreDir = new HashSet<string>()
+    {
+        "node_modules",
+    };
+    private static HashSet<string> IgnoreFiles = new HashSet<string>()
+    {
+        "tmpclaude*",
+    };
+
+    private void SearchFilesRecursive(
+        string rootPath,
+        string currentPath, 
+        string keyword, 
+        int limit,
+        List<FileSearchResult> results
+        )
+    {
+        // Check if current directory name starts with "."
+        var currentDirName = new DirectoryInfo(currentPath).Name;
+        if (currentDirName.StartsWith("."))
+        {
+            return; // Skip dot-folders
+        }
+        if (IgnoreDir.Contains(currentDirName))
+        {
+            return;
+        }
+
+        if (results.Count >= limit)
+        {
+            return;
+        }
+
+        // Search files in current directory
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(currentPath, $"*{keyword}*"))
+            {
+                var fileInfo = new FileInfo(file);
+                var fileName = fileInfo.Name;
+                bool ignore = false;
+                foreach (var item in IgnoreFiles)
+                {
+                    if (item.StartsWith("*") && fileName.EndsWith(item.Substring(1)))
+                    {
+                        ignore = true;
+                        continue;
+                    }
+                    if (item.EndsWith("*") && fileName.StartsWith(item.Substring(0, item.Length - 1)))
+                    {
+                        ignore = true;
+                        continue;
+                    }
+                    if(item == fileName)
+                    {
+                        ignore = true;
+                        continue;
+                    }
+                }
+                if (ignore)
+                {
+                    continue;
+                }
+
+                results.Add(new FileSearchResult
+                {
+                    FullPath = fileInfo.FullName,
+                    RelativePath = Path.GetRelativePath(rootPath, fileInfo.FullName),
+                    Type = "file"
+                });                
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Skip directories we can't access
+        }
+
+        // Recursively search subdirectories
+        try
+        {
+            foreach (var dir in Directory.EnumerateDirectories(currentPath))
+            {
+                var dirName = new DirectoryInfo(dir).Name;
+                if (!dirName.StartsWith("."))
+                {
+                    SearchFilesRecursive(rootPath, dir, keyword, limit, results);
+                }
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Skip directories we can't access
+        }
+    }
+
+    private void SearchFilesNonRecursive(string rootPath, string keyword, int limit, List<FileSearchResult> results)
+    {
+        // Search files in current directory only
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(rootPath, $"*{keyword}*"))
+            {
+                var fileInfo = new FileInfo(file);
+                results.Add(new FileSearchResult
+                {
+                    FullPath = fileInfo.FullName,
+                    RelativePath = Path.GetRelativePath(rootPath, fileInfo.FullName),
+                    Type = "file"
+                });
+
+                if (results.Count >= limit)
+                {
+                    return;
+                }
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Skip directories we can't access
+        }
+    }
+
     private string? FindGitDirectory(string filePath)
     {
         string? directory;
@@ -632,5 +754,69 @@ public class FilesController : ControllerBase
             directory = Directory.GetParent(directory)?.FullName;
         }
         return null;
+    }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> SearchAsync(
+        [FromQuery] string path,
+        [FromQuery] string? keyword,
+        [FromQuery] int limit = 10,
+        [FromQuery] bool recursive = true)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return BadRequest(new { error = "Path parameter is required" });
+        }
+        keyword ??= "";
+        // Security: Prevent path traversal attacks
+        var normalizedPath = Path.GetFullPath(path);
+        if (normalizedPath.Contains(".."))
+        {
+            return BadRequest(new { error = "Invalid path" });
+        }
+
+        try
+        {
+            if (!Directory.Exists(normalizedPath))
+            {
+                return NotFound(new { error = "Directory not found" });
+            }
+
+            var results = new List<FileSearchResult>();
+
+            // Search for files and directories matching the keyword
+            await Task.Run(() =>
+            {
+                if (recursive)
+                {
+                    // Recursive search with dot-folder filtering
+                    SearchFilesRecursive(normalizedPath, normalizedPath, keyword, limit, results);
+                }
+                else
+                {
+                    // Non-recursive search: only direct children
+                    SearchFilesNonRecursive(normalizedPath, keyword, limit, results);
+                }
+            });
+
+            // Sort: directories first, then by relative path
+            results = results
+                .OrderBy(x => x.Type == "file")
+                .ThenBy(x => x.RelativePath, StringComparer.OrdinalIgnoreCase)
+                .Take(limit)
+                .ToList();
+
+            return Ok(new FileSearchResponse { Results = results });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogError(ex, "Access denied searching directory: {Path}", normalizedPath);
+            return StatusCode(403, new { error = "Access denied", details = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching directory: {Path}", normalizedPath);
+            return StatusCode(500, new { error = "Failed to search directory", details = ex.Message });
+        }
     }
 }

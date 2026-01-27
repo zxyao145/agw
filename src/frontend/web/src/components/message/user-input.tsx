@@ -22,7 +22,7 @@ export interface SuggestionItem {
 
 // Main UserInput component
 export interface UserInputProps {
-  onSuggestion?: (value: string) => SuggestionItem[];
+  onSuggestion?: (value: string) => SuggestionItem[] | Promise<SuggestionItem[]>;
   // Execution state
   isExecuting?: boolean;
 
@@ -255,7 +255,15 @@ function UserInputContainer({
       return;
     }
 
-    setSuggestions(onSuggestion(value) ?? []);
+    const result = onSuggestion(value);
+    if (result instanceof Promise) {
+      // Async suggestion - clear current suggestions while loading
+      setSuggestions([]);
+      result.then((suggestions) => setSuggestions(suggestions)).catch(() => setSuggestions([]));
+    } else {
+      // Sync suggestion
+      setSuggestions(result ?? []);
+    }
   };
 
   const suggestionContent = (

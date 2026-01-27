@@ -196,3 +196,53 @@ export async function resetFile(path: string): Promise<{ success: boolean; messa
     );
   }
 }
+
+export interface FileSearchResult {
+  fullPath: string;
+  relativePath: string;
+  type: "file" | "directory";
+}
+
+export interface SearchFilesResponse {
+  results: FileSearchResult[];
+}
+
+/**
+ * Search for files and directories by keyword
+ * @param path - Root directory to search in
+ * @param keyword - Search keyword (matches file/folder names)
+ * @param recursive - If true, search subdirectories (default: true)
+ */
+export async function searchFiles(path: string, keyword: string, recursive: boolean = true): Promise<SearchFilesResponse> {
+  try {
+    const params = new URLSearchParams({
+      path,
+      keyword,
+    });
+    if (recursive) {
+      params.append('recursive', 'true');
+    }
+
+    const response = await fetch(
+      `/api/files/search?${params.toString()}`
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new FileApiError(
+        errorData.error || `Failed to search files: ${response.statusText}`,
+        response.status,
+        response.statusText
+      );
+    }
+
+    return await response.json();
+  } catch (err) {
+    if (err instanceof FileApiError) {
+      throw err;
+    }
+    throw new FileApiError(
+      `Network error: ${(err as Error).message}`
+    );
+  }
+}

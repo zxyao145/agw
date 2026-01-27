@@ -14,3 +14,15 @@ public class FileItem
     public DateTime? ModifiedTime { get; set; }
     public string? GitStatus { get; set; } // "added", "modified", "deleted", "untracked", or null
 }
+
+public class FileSearchResponse
+{
+    public List<FileSearchResult> Results { get; set; } = new();
+}
+
+public class FileSearchResult
+{
+    public string FullPath { get; set; } = string.Empty;
+    public string RelativePath { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty; // "file" or "directory"
+}

@@ -3,7 +3,6 @@
 
 import { SuggestionItem } from "@/components/message/user-input";
 import Fuse from "fuse.js";
-import { describe } from "node:test";
 
 // Commands to ignore/filter out
 export const IGNORED_COMMANDS = [
@@ -66,13 +65,13 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   // Add more descriptions as needed
 };
 
-export const searchCommand = (keyword: string, allCommands: string[]) => {
+export const searchCommand = (keyword: string, allCommands: string[]): Promise<SuggestionItem[]> => {
   const commands: SuggestionItem[] = [
     ...DEFAULT_COMMANDS
   ];
 
   if(!allCommands){
-    return commands;
+    return Promise.resolve(commands);
   }
   // Add commands from metadata.slashCommands (filter with ignore list)
   for (const cmd of allCommands) {
@@ -100,8 +99,12 @@ export const searchCommand = (keyword: string, allCommands: string[]) => {
     shouldSort: true,
   });
 
-  // Search and limit results to 10
+  // Search and limit results to 5
   const results = fuse.search(keyword, { limit: 5 });
-  console.log("results", results)
-  return results.map((result) => ({ text: `/${result.item.text}`, description: result.item.description, }));
+  const suggestions = results.map((result) => ({
+    text: `/${result.item.text}`,
+    description: result.item.description,
+  }));
+
+  return Promise.resolve(suggestions);
 };

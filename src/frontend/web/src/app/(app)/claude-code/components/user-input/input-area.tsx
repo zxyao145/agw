@@ -44,7 +44,7 @@ export function InputArea({
     }
   };
 
-  const handleSuggestion = (input: string): SuggestionItem[] => {
+  const handleSuggestion = (input: string): SuggestionItem[] | Promise<SuggestionItem[]> => {
     input = input.trimStart();
     let value = "";
     if(input.indexOf(' ') < 0){
@@ -58,15 +58,12 @@ export function InputArea({
     }
     // Extract the search query after the slash
     const query = value.slice(1).trim();
-    if (!query) {
-      return [];
-    }
 
     if (value.startsWith("/")) {
       return searchCommand(query, initContent?.slashCommands ?? []);
     }
     if (value.startsWith("@")) {
-      return searchFile(query);
+      return searchFile(workingDirectory, query);
     }
 
     return [];
