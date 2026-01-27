@@ -9,12 +9,15 @@ import {
   Item,
   ItemActions,
   ItemContent,
+  ItemDescription,
   ItemGroup,
+  ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
 
 export interface SuggestionItem {
   text: string;
+  description?: string;
 }
 
 // Main UserInput component
@@ -48,12 +51,11 @@ interface UserInputRootProps {
   rows: number;
   maxHeight: string;
   input: string;
-  suggestions: SuggestionItem[];
+  suggestions?: ReactNode;
   slots: UserInputSlots;
   onInputChange: (value: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onSend: () => void;
-  onSuggestionClick: (suggestion: SuggestionItem) => void;
 }
 
 function UserInputRoot({
@@ -67,39 +69,12 @@ function UserInputRoot({
   onInputChange,
   onKeyDown,
   onSend,
-  onSuggestionClick,
 }: UserInputRootProps) {
   const { topLeft, topRight, help, sender } = slots;
 
   return (
     <div className="relative">
-      {suggestions.length > 0 && (
-        <div className="pointer-events-auto mb-3 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur-sm">
-          <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Suggestions
-          </div>
-          <ItemGroup className="gap-1">
-            {suggestions.map((suggestion, index) => (
-              <Item
-                key={`${suggestion.text}-${index}`}
-                onClick={() => onSuggestionClick(suggestion)}
-                variant="outline"
-                size="sm"
-                className="cursor-pointer border-transparent bg-transparent px-2 py-2 text-xs text-foreground transition hover:border-border hover:bg-accent/50"
-              >
-                <ItemContent>
-                  <ItemTitle className="text-xs font-medium text-foreground">
-                    {suggestion.text}
-                  </ItemTitle>
-                </ItemContent>
-                <ItemActions>
-                  <Sparkles className="size-3 text-muted-foreground" />
-                </ItemActions>
-              </Item>
-            ))}
-          </ItemGroup>
-        </div>
-      )}
+      {suggestions}
 
       {/* Top bar with tools and actions */}
       <div className="flex mb-2 gap-2 pointer-events-auto">
@@ -186,6 +161,64 @@ function getUserInputSlots(children?: ReactNode): UserInputSlots {
   return slots;
 }
 
+interface UserInputSuggestionsProps {
+  suggestions: SuggestionItem[];
+  onSelect: (suggestion: SuggestionItem) => void;
+}
+
+function UserInputSuggestions({
+  suggestions,
+  onSelect,
+}: UserInputSuggestionsProps) {
+  if (suggestions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-auto mb-3 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur-sm">
+      <div className="flex items-center justify-between px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Suggestions
+        <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+          Tab
+        </span>
+      </div>
+      <ItemGroup className="gap-1">
+        {suggestions.map((suggestion, index) => (
+          <Item
+            key={`${suggestion.text}-${index}`}
+            onClick={() => onSelect(suggestion)}
+            variant="outline"
+            size="sm"
+            className="cursor-pointer border-transparent bg-transparent px-2 py-2 text-xs text-foreground transition hover:border-border hover:bg-accent/50"
+          >
+            <ItemMedia
+              variant="icon"
+              className="size-7 border-border/60 bg-muted/60"
+            >
+              <Sparkles className="size-3 text-muted-foreground" />
+            </ItemMedia>
+            <ItemContent>
+              <ItemTitle className="text-xs font-medium text-foreground">
+                {suggestion.text}
+              </ItemTitle>
+              {suggestion.description && (
+                <ItemDescription className="text-[11px]">
+                  {suggestion.description}
+                </ItemDescription>
+              )}
+            </ItemContent>
+            <ItemActions>
+              <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                Enter
+              </span>
+            </ItemActions>
+          </Item>
+        ))}
+      </ItemGroup>
+    </div>
+  );
+}
+
 function UserInputContainer({
   isExecuting = false,
   onExecute,
@@ -219,6 +252,13 @@ function UserInputContainer({
     setSuggestions(onSuggestion(value) ?? []);
   };
 
+  const suggestionContent = (
+    <UserInputSuggestions
+      suggestions={suggestions}
+      onSelect={handleSuggestionClick}
+    />
+  );
+
   const handleSend = () => {
     onExecute?.(input);
   };
@@ -239,12 +279,11 @@ function UserInputContainer({
       rows={rows}
       maxHeight={maxHeight}
       input={input}
-      suggestions={suggestions}
+      suggestions={suggestionContent}
       slots={slots}
       onInputChange={handleInputChange}
       onKeyDown={handleKeyDown}
       onSend={handleSend}
-      onSuggestionClick={handleSuggestionClick}
     />
   );
 }
