@@ -3,7 +3,7 @@
 import { Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { KeyboardEvent, ReactNode } from "react";
+import { KeyboardEvent, ReactNode, useRef } from "react";
 import React from "react";
 import {
   Item,
@@ -56,6 +56,7 @@ interface UserInputRootProps {
   onInputChange: (value: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onSend: () => void;
+  textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
 function UserInputRoot({
@@ -69,6 +70,7 @@ function UserInputRoot({
   onInputChange,
   onKeyDown,
   onSend,
+  textareaRef,
 }: UserInputRootProps) {
   const { topLeft, topRight, help, sender } = slots;
 
@@ -90,6 +92,7 @@ function UserInputRoot({
       <div className="relative">
         <div className="flex flex-row gap-0 items-end bg-background border rounded-lg pointer-events-auto">
           <Textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={onKeyDown}
@@ -175,12 +178,12 @@ function UserInputSuggestions({
   }
 
   return (
-    <div className="pointer-events-auto mb-3 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur-sm">
+    <div className="absolute z-99 bottom-18 left-0  right-0 pointer-events-auto mb-3 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur-sm">
       <div className="flex items-center justify-between px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Suggestions
-        <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+        {/* <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
           Tab
-        </span>
+        </span> */}
       </div>
       <ItemGroup className="gap-1">
         {suggestions.map((suggestion, index) => (
@@ -197,7 +200,7 @@ function UserInputSuggestions({
             >
               <Sparkles className="size-3 text-muted-foreground" />
             </ItemMedia>
-            <ItemContent>
+            <ItemContent className="flex flex-row items-center justify-between">
               <ItemTitle className="text-xs font-medium text-foreground">
                 {suggestion.text}
               </ItemTitle>
@@ -207,11 +210,6 @@ function UserInputSuggestions({
                 </ItemDescription>
               )}
             </ItemContent>
-            <ItemActions>
-              <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                Enter
-              </span>
-            </ItemActions>
           </Item>
         ))}
       </ItemGroup>
@@ -231,13 +229,21 @@ function UserInputContainer({
   const [input, setInput] = React.useState("");
   const [suggestions, setSuggestions] = React.useState<SuggestionItem[]>([]);
   const slots = getUserInputSlots(children);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSuggestionClick = (suggestion: SuggestionItem) => {
     const nextValue = `${suggestion.text} `;
     setInput(nextValue);
-    if (onSuggestion) {
-      setSuggestions(onSuggestion(nextValue) ?? []);
-    }
+    setSuggestions([]);
+
+    // Focus textarea and move cursor to end
+    setTimeout(() => {
+      const textarea = textareaRef.current;
+      if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(nextValue.length, nextValue.length);
+      }
+    }, 0);
   };
 
   const handleInputChange = (value: string) => {
@@ -261,13 +267,14 @@ function UserInputContainer({
 
   const handleSend = () => {
     onExecute?.(input);
+    setInput("");
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && (event.ctrlKey || event.shiftKey)) {
       event.preventDefault();
       if (input && input.trim()) {
-        onExecute?.(input.trim());
+        handleSend();
       }
     }
   };
@@ -284,6 +291,7 @@ function UserInputContainer({
       onInputChange={handleInputChange}
       onKeyDown={handleKeyDown}
       onSend={handleSend}
+      textareaRef={textareaRef}
     />
   );
 }

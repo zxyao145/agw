@@ -5,7 +5,8 @@ import { SuggestionItem, UserInput } from "@/components/message/user-input";
 import type { ChatInputAreaProps } from "../../types";
 import { SettingsDialog } from "./settings-dialog";
 import { ChatInfoPopover } from "./chat-info-popover";
-import { text } from "stream/consumers";
+import { searchCommand } from "../../lib/search_command";
+import { searchFile } from "../../lib/search_file";
 
 export function InputArea({
   isExecuting,
@@ -43,36 +44,37 @@ export function InputArea({
     }
   };
 
-  const onInputChange = (value: string) => {
-    if (!value.startsWith("/")) {
+  const handleSuggestion = (input: string): SuggestionItem[] => {
+    input = input.trimStart();
+    let value = "";
+    if(input.indexOf(' ') < 0){
+      value = input;
+    }else{
+      const textInfo = input.split(' ');
+      value = textInfo[textInfo.length - 1]
+    }
+    if (!value) {
       return [];
     }
-    const metaArr = value.split("/");
-    if (!metaArr || metaArr.length < 2) {
+    // Extract the search query after the slash
+    const query = value.slice(1).trim();
+    if (!query) {
       return [];
     }
-    const meta = metaArr[1];
-    if (!meta) {
-      return [];
+
+    if (value.startsWith("/")) {
+      return searchCommand(query, initContent?.slashCommands ?? []);
     }
-    console.log("meta", meta);
-    let contents =
-      initContent?.slashCommands.filter((x) => x.indexOf(meta) > -1) ?? [];
-    if (contents.length > 10) {
-      contents = contents.splice(10);
+    if (value.startsWith("@")) {
+      return searchFile(query);
     }
-    const suggestions = contents.map((x) => {
-      return {
-        text: "/" + x,
-      };
-    });
-    console.log("suggestions", suggestions)
-    return suggestions;
+
+    return [];
   };
 
   return (
     <UserInput
-      onSuggestion={onInputChange}
+      onSuggestion={handleSuggestion}
       isExecuting={isExecuting}
       onExecute={handleOnExecute}
     >
