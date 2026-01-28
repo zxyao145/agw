@@ -32,6 +32,13 @@ export const PermissionMode = {
 
 export type PermissionMode = (typeof PermissionMode)[keyof typeof PermissionMode];
 
+export const DirectoryMode = {
+  workingDirectory: "workingDirectory",
+  gitAddress: "gitAddress",
+} as const;
+
+export type DirectoryMode = (typeof DirectoryMode)[keyof typeof DirectoryMode];
+
 // ============================================================================
 // Chat Component Types
 // ============================================================================
@@ -44,6 +51,10 @@ export interface ChatInputAreaProps {
   onClearSession: () => void;
   workingDirectory: string;
   setWorkingDirectory: (value: string) => void;
+  gitAddress: string;
+  setGitAddress: (value: string) => void;
+  directoryMode: DirectoryMode;
+  setDirectoryMode: (value: DirectoryMode) => void;
   apiKey: string;
   setApiKey: (value: string) => void;
   apiBaseUrl: string;
@@ -146,6 +157,10 @@ export interface EnvVar {
 export interface SettingsDialogProps {
   workingDirectory: string;
   setWorkingDirectory: (value: string) => void;
+  gitAddress: string;
+  setGitAddress: (value: string) => void;
+  directoryMode: DirectoryMode;
+  setDirectoryMode: (value: DirectoryMode) => void;
   apiKey: string;
   setApiKey: (value: string) => void;
   apiBaseUrl: string;

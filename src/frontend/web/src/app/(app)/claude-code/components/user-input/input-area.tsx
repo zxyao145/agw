@@ -15,6 +15,10 @@ export function InputArea({
   onClearSession,
   workingDirectory,
   setWorkingDirectory,
+  gitAddress,
+  setGitAddress,
+  directoryMode,
+  setDirectoryMode,
   apiKey,
   setApiKey,
   apiBaseUrl,
@@ -76,6 +80,10 @@ export function InputArea({
         <SettingsDialog
           workingDirectory={workingDirectory}
           setWorkingDirectory={setWorkingDirectory}
+          gitAddress={gitAddress}
+          setGitAddress={setGitAddress}
+          directoryMode={directoryMode}
+          setDirectoryMode={setDirectoryMode}
           apiKey={apiKey}
           setApiKey={setApiKey}
           apiBaseUrl={apiBaseUrl}

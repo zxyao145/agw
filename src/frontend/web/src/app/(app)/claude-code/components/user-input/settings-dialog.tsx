@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Settings, TriangleAlert, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { Autocomplete } from "@/components/ui/autocomplete";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,14 +29,25 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { EnvVar, PermissionMode, SettingsDialogProps } from "../../types";
+import {
+  DirectoryMode,
+  EnvVar,
+  PermissionMode,
+  SettingsDialogProps,
+} from "../../types";
 
+const WORKING_DIR_HISTORY_KEY = "claudecode_workingDirHistory";
+const GIT_ADDRESS_HISTORY_KEY = "claudecode_gitAddressHistory";
 
 
 
 export function SettingsDialog({
   workingDirectory,
   setWorkingDirectory,
+  gitAddress,
+  setGitAddress,
+  directoryMode,
+  setDirectoryMode,
 
   apiKey,
   setApiKey,
@@ -50,6 +62,12 @@ export function SettingsDialog({
   setEnvVars,
 }: SettingsDialogProps) {
   const [open, setOpen] = React.useState(false);
+  const [workingDirHistory, setWorkingDirHistory] = React.useState<string[]>(
+    [],
+  );
+  const [gitAddressHistory, setGitAddressHistory] = React.useState<string[]>(
+    [],
+  );
 
   // Load env vars on mount
   React.useEffect(() => {
@@ -59,18 +77,60 @@ export function SettingsDialog({
         if (saved) {
           setEnvVars(JSON.parse(saved));
         }
+        const savedWorkingDirHistory = localStorage.getItem(
+          WORKING_DIR_HISTORY_KEY,
+        );
+        if (savedWorkingDirHistory) {
+          setWorkingDirHistory(JSON.parse(savedWorkingDirHistory));
+        }
+        const savedGitAddressHistory = localStorage.getItem(
+          GIT_ADDRESS_HISTORY_KEY,
+        );
+        if (savedGitAddressHistory) {
+          setGitAddressHistory(JSON.parse(savedGitAddressHistory));
+        }
       } catch (e) {
         console.error("Failed to load env vars:", e);
       }
     }
   }, [open]);
 
+  const updateHistory = React.useCallback(
+    (
+      value: string,
+      storageKey: string,
+      setHistory: React.Dispatch<React.SetStateAction<string[]>>,
+    ) => {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return;
+      }
+      setHistory((prev) => {
+        const next = [trimmed, ...prev.filter((item) => item !== trimmed)].slice(
+          0,
+          20,
+        );
+        localStorage.setItem(storageKey, JSON.stringify(next));
+        return next;
+      });
+    },
+    [],
+  );
+
   const saveSettings = () => {
     localStorage.setItem("claudecode_workingDir", workingDirectory);
+    localStorage.setItem("claudecode_gitAddress", gitAddress);
+    localStorage.setItem("claudecode_directoryMode", directoryMode);
     localStorage.setItem("claudecode_apiKey", apiKey);
     localStorage.setItem("claudecode_apiBaseUrl", apiBaseUrl);
     localStorage.setItem("claudecode_permissionMode", permissionMode);
     localStorage.setItem("claudecode_envVars", JSON.stringify(envVars));
+    updateHistory(
+      workingDirectory,
+      WORKING_DIR_HISTORY_KEY,
+      setWorkingDirHistory,
+    );
+    updateHistory(gitAddress, GIT_ADDRESS_HISTORY_KEY, setGitAddressHistory);
     setOpen(false);
     toast.success("Settings saved");
   };
@@ -105,20 +165,74 @@ export function SettingsDialog({
 
         <div className="grid gap-3 py-2">
           <div className="grid gap-2">
-            <Label htmlFor="settings-workingDir">
-              Working Directory (Optional)
-            </Label>
-            <Input
-              id="settings-workingDir"
-              value={workingDirectory}
-              onChange={(e) => setWorkingDirectory(e.target.value)}
-              placeholder="e.g., /path/to/project"
-            />
-            <p className="text-xs text-muted-foreground">
-              Directory where Claude Code will execute. Leave empty for current
-              directory.
-            </p>
+            <Label htmlFor="settings-directoryMode">Input Source</Label>
+            <div
+              id="settings-directoryMode"
+              role="radiogroup"
+              className="flex flex-row gap-2"
+            >
+              <Button
+                type="button"
+                variant={
+                  directoryMode === DirectoryMode.workingDirectory
+                    ? "default"
+                    : "outline"
+                }
+                aria-checked={directoryMode === DirectoryMode.workingDirectory}
+                role="radio"
+                onClick={() => setDirectoryMode(DirectoryMode.workingDirectory)}
+              >
+                Working Directory
+              </Button>
+              <Button
+                type="button"
+                variant={
+                  directoryMode === DirectoryMode.gitAddress
+                    ? "default"
+                    : "outline"
+                }
+                aria-checked={directoryMode === DirectoryMode.gitAddress}
+                role="radio"
+                onClick={() => setDirectoryMode(DirectoryMode.gitAddress)}
+              >
+                Git Address
+              </Button>
+            </div>
           </div>
+
+          {directoryMode === DirectoryMode.workingDirectory ? (
+            <div className="grid gap-2">
+              <Label htmlFor="settings-workingDir">
+                Working Directory (Optional)
+              </Label>
+              <Autocomplete
+                id="settings-workingDir"
+                value={workingDirectory}
+                onChange={(e) => setWorkingDirectory(e.target.value)}
+                placeholder="e.g., /path/to/project"
+                options={workingDirHistory}
+              />
+              <p className="text-xs text-muted-foreground">
+                Directory where Claude Code will execute. Leave empty for current
+                directory.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              <Label htmlFor="settings-gitAddress">Git Address</Label>
+              <Autocomplete
+                id="settings-gitAddress"
+                value={gitAddress}
+                onChange={(e) => setGitAddress(e.target.value)}
+                placeholder="e.g., https://github.com/org/repo.git"
+                options={gitAddressHistory}
+              />
+              <p className="text-xs text-muted-foreground">
+                Working directory will be resolved as ./&lt;repo&gt;/&lt;session
+                id&gt; (e.g., ./dir1/abc-123).
+              </p>
+            </div>
+          )}
 
           <div className="grid gap-2">
             <Label htmlFor="settings-permissionMode">Permission Mode</Label>
