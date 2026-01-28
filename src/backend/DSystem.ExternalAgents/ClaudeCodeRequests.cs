@@ -3,15 +3,47 @@ using ClaudeCodeSdk.Types;
 namespace DSystem.ExternalAgents;
 
 /// <summary>
-/// Request for executing ClaudeCode query.
+/// Message type for WebSocket communication.
 /// </summary>
-public record ClaudeCodeExecuteRequest
+public enum ClaudeCodeMessageType
 {
     /// <summary>
-    /// User prompt to send to ClaudeCode.
+    /// Initialize session with configuration.
     /// </summary>
-    public required string Input { get; init; }
+    Setting = 0,
 
+    /// <summary>
+    /// Execute input with existing session.
+    /// </summary>
+    Input = 1
+}
+
+/// <summary>
+/// Wrapper for WebSocket requests.
+/// </summary>
+public record ClaudeCodeWsRequest
+{
+    /// <summary>
+    /// Message type.
+    /// </summary>
+    public required ClaudeCodeMessageType Type { get; init; }
+
+    /// <summary>
+    /// Init request (present when Type is Init).
+    /// </summary>
+    public ClaudeCodeSettingRequest? Setting { get; init; }
+
+    /// <summary>
+    /// Input request (present when Type is Input).
+    /// </summary>
+    public ClaudeCodeInputRequest? Input { get; init; }
+}
+
+/// <summary>
+/// Request for initializing ClaudeCode session (sent once on WebSocket connection).
+/// </summary>
+public record ClaudeCodeSettingRequest
+{
     /// <summary>
     /// Working directory for ClaudeCode (optional).
     /// If not specified, uses the current directory.
@@ -41,11 +73,28 @@ public record ClaudeCodeExecuteRequest
     public int? MaxTurns { get; init; }
 
     /// <summary>
-    /// SessionId
+    /// Thread ID for conversation context.
     /// </summary>
-    public string ThreadId { get; init; } = "";
+    public string SessionId { get; init; } = "";
 
+    /// <summary>
+    /// Permission mode for tool execution.
+    /// </summary>
     public string? PermissionMode { get; init; }
-    
+
+    /// <summary>
+    /// Environment variables (optional).
+    /// </summary>
     public Dictionary<string, string?>? EnvironmentVariables { get; init; }
+}
+
+/// <summary>
+/// Request for executing input with existing session (sent after initialization).
+/// </summary>
+public record ClaudeCodeInputRequest
+{
+    /// <summary>
+    /// User prompt to send to ClaudeCode.
+    /// </summary>
+    public required string Input { get; init; }
 }

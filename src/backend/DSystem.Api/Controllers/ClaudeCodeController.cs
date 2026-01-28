@@ -5,6 +5,7 @@ using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -13,14 +14,11 @@ namespace DSystem.Api.Controllers;
 
 [ApiController]
 [Route("api/external-agents/claude-code")]
-public class ClaudeCodeController : ControllerBase
+public class ClaudeCodeController(
+    ClaudeCodeService claudeCodeService,
+    ILogger<ClaudeCodeController> logger) : ControllerBase
 {
-    private readonly ClaudeCodeService _claudeCodeService;
-
-    public ClaudeCodeController(ClaudeCodeService claudeCodeService)
-    {
-        _claudeCodeService = claudeCodeService;
-    }
+    private const int BufferSize = 1024 * 4;
 
     /// <summary>
     /// Execute ClaudeCode query with WebSocket streaming (persistent connection).
@@ -35,138 +33,175 @@ public class ClaudeCodeController : ControllerBase
         }
 
         using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+        ClaudeCodeSession? session = null;
 
         try
         {
-            // Keep connection open and process multiple messages
             while (webSocket.State == WebSocketState.Open)
             {
-                // Receive the execution request from client
-                var buffer = new byte[1024 * 4];
-                var receiveResult = await webSocket.ReceiveAsync(
-                    new ArraySegment<byte>(buffer),
-                    HttpContext.RequestAborted);
+                var (request, closeReceived) = await ReceiveRequestAsync(webSocket);
+                if (closeReceived) break;
+                if (request == null) continue;
 
-                // Handle close message
-                if (receiveResult.MessageType == WebSocketMessageType.Close)
-                {
-                    await webSocket.CloseAsync(
-                        WebSocketCloseStatus.NormalClosure,
-                        "Connection closed by client",
-                        HttpContext.RequestAborted);
-                    break;
-                }
-
-                // Parse the request
-                var requestJson = Encoding.UTF8.GetString(buffer, 0, receiveResult.Count);
-                ClaudeCodeExecuteRequest? request = null;
-
-                try
-                {
-                    request = JsonUtil.Deserialize<ClaudeCodeExecuteRequest>(requestJson);
-                }
-                catch (JsonException ex)
-                {
-                    // Send error for invalid JSON
-                    await SendErrorAsync(webSocket, $"Invalid JSON: {ex.Message}", keepOpen: true);
-                    continue;
-                }
-
-                // Validate request
-                if (request == null || string.IsNullOrWhiteSpace(request.Input))
-                {
-                    await SendErrorAsync(webSocket, "Invalid request: Input is required", keepOpen: true);
-                    continue;
-                }
-
-                // Process the request and stream responses
-                try
-                {
-                    await foreach (var message in _claudeCodeService.ExecuteStreamingAsync(
-                        request,
-                        cancellationToken: HttpContext.RequestAborted
-                        ))
-                    {
-                        if (webSocket.State != WebSocketState.Open)
-                        {
-                            break;
-                        }
-
-                        var json = JsonUtil.Serialize(message);
-                        var data = Encoding.UTF8.GetBytes(json);
-
-                        await webSocket.SendAsync(
-                            new ArraySegment<byte>(data),
-                            WebSocketMessageType.Text,
-                            endOfMessage: true,
-                            HttpContext.RequestAborted);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Send error message but keep connection open for next request
-                    await SendErrorAsync(webSocket, $"Execution error: {ex.Message}", keepOpen: true);
-                }
+                session = await ProcessRequestAsync(webSocket, session, request);
             }
         }
         catch (OperationCanceledException)
         {
-            // Client disconnected or request was cancelled
-            if (webSocket.State == WebSocketState.Open)
-            {
-                await webSocket.CloseAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "Request cancelled",
-                    CancellationToken.None);
-            }
+            await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Request cancelled");
         }
         catch (WebSocketException)
         {
-            // WebSocket connection error - connection already closed
-            // No need to close again
+            // Connection already closed, no action needed
         }
         catch (Exception ex)
         {
-            // Unexpected error - try to close gracefully
-            if (webSocket.State == WebSocketState.Open)
-            {
-                await SendErrorAsync(webSocket, $"Unexpected error: {ex.Message}", keepOpen: false);
-
-                await webSocket.CloseAsync(
-                    WebSocketCloseStatus.InternalServerError,
-                    "Unexpected error",
-                    CancellationToken.None);
-            }
+            logger.LogError(ex, "Unexpected error in WebSocket handler");
+            await SendErrorAsync(webSocket, $"Unexpected error: {ex.Message}");
+            await TryCloseAsync(webSocket, WebSocketCloseStatus.InternalServerError, "Unexpected error");
+        }
+        finally
+        {
+            if (session != null) await session.DisposeAsync();
+            logger.LogDebug("ClaudeCode WebSocket connection closed");
         }
     }
 
-    /// <summary>
-    /// Helper method to send error messages via WebSocket.
-    /// </summary>
-    private async Task SendErrorAsync(WebSocket webSocket, string errorMessage, bool keepOpen)
+    private async Task<(ClaudeCodeWsRequest? request, bool closeReceived)> ReceiveRequestAsync(WebSocket webSocket)
     {
-        if (webSocket.State != WebSocketState.Open)
+        var buffer = new byte[BufferSize];
+        var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), HttpContext.RequestAborted);
+
+        if (result.MessageType == WebSocketMessageType.Close)
         {
+            await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Connection closed by client", HttpContext.RequestAborted);
+            return (null, true);
+        }
+
+        var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+        var request = TryParseRequest(json);
+        return (request, false);
+    }
+
+    private static ClaudeCodeWsRequest? TryParseRequest(string json)
+    {
+        try { return JsonUtil.Deserialize<ClaudeCodeWsRequest>(json); }
+        catch (JsonException) { return null; }
+    }
+
+    private async Task<ClaudeCodeSession?> ProcessRequestAsync(
+        WebSocket webSocket,
+        ClaudeCodeSession? currentSession,
+        ClaudeCodeWsRequest request)
+    {
+        if (request.Type == ClaudeCodeMessageType.Setting)
+            return await HandleSettingRequestAsync(webSocket, request.Setting, currentSession);
+
+        if (request.Type == ClaudeCodeMessageType.Input)
+            await HandleInputRequestAsync(webSocket, currentSession, request.Input);
+
+        return currentSession;
+    }
+
+    private async Task<ClaudeCodeSession> HandleSettingRequestAsync(
+        WebSocket webSocket,
+        ClaudeCodeSettingRequest? setting,
+        ClaudeCodeSession? currentSession)
+    {
+        if (setting == null)
+        {
+            await SendErrorAsync(webSocket, "Invalid init request: Setting data is required");
+            return currentSession!;
+        }
+
+        if (currentSession != null) await currentSession.DisposeAsync();
+
+        try
+        {
+            var session = await claudeCodeService.InitializeSessionAsync(setting, HttpContext.RequestAborted);
+            logger.LogInformation("ClaudeCode session initialized: {ThreadId}", setting.SessionId);
+            await SendMessageAsync(webSocket, "Session initialized successfully");
+            return session;
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(webSocket, $"Initialization error: {ex.Message}");
+            return currentSession!;
+        }
+    }
+
+    private async Task HandleInputRequestAsync(
+        WebSocket webSocket,
+        ClaudeCodeSession? session,
+        ClaudeCodeInputRequest? input)
+    {
+        if (session == null)
+        {
+            await SendErrorAsync(webSocket, "No active session. Please initialize first.");
             return;
         }
 
-        var agentUpdate = new AgentResponseUpdate
+        if (input?.Input is null or { Length: 0 })
         {
-            Role = ChatRole.System,
-            AuthorName = "d-system",
-            Contents = [
-                new ErrorContent(errorMessage)
-            ]
-        };
+            await SendErrorAsync(webSocket, "Invalid input request: Input is required");
+            return;
+        }
 
-        var aiMsg = agentUpdate.ToAiMessage();
-        var str = aiMsg!.Serialize();
-        var errorData = Encoding.UTF8.GetBytes(str);
+        await ProcessInputAsync(webSocket, session, input.Input);
+    }
 
-        await webSocket.SendAsync(
-            new ArraySegment<byte>(errorData),
+    private async Task ProcessInputAsync(WebSocket webSocket, ClaudeCodeSession session, string input)
+    {
+        try
+        {
+            await foreach (var message in claudeCodeService.ExecuteSessionStreamingAsync(
+                session, input, HttpContext.RequestAborted))
+            {
+                if (webSocket.State != WebSocketState.Open) break;
+                await SendJsonAsync(webSocket, JsonUtil.Serialize(message));
+            }
+        }
+        catch (Exception ex)
+        {
+            await SendErrorAsync(webSocket, $"Execution error: {ex.Message}");
+        }
+    }
+
+    private Task SendMessageAsync(WebSocket webSocket, string message) =>
+        SendJsonAsync(webSocket, CreateSystemMessage(message).ToAiMessage()!.Serialize());
+
+    private Task SendErrorAsync(WebSocket webSocket, string errorMessage) =>
+        SendJsonAsync(webSocket, CreateErrorMessage(errorMessage).ToAiMessage()!.Serialize());
+
+    private static Task SendJsonAsync(WebSocket webSocket, string json)
+    {
+        if (webSocket.State != WebSocketState.Open) return Task.CompletedTask;
+
+        var data = Encoding.UTF8.GetBytes(json);
+        return webSocket.SendAsync(
+            new ArraySegment<byte>(data),
             WebSocketMessageType.Text,
             endOfMessage: true,
             CancellationToken.None);
     }
+
+    private static Task TryCloseAsync(WebSocket webSocket, WebSocketCloseStatus status, string reason)
+    {
+        if (webSocket.State != WebSocketState.Open) return Task.CompletedTask;
+        return webSocket.CloseAsync(status, reason, CancellationToken.None);
+    }
+
+    private static AgentResponseUpdate CreateSystemMessage(string message) => new()
+    {
+        Role = ChatRole.System,
+        AuthorName = "d-system",
+        Contents = [new TextContent(message)]
+    };
+
+    private static AgentResponseUpdate CreateErrorMessage(string errorMessage) => new()
+    {
+        Role = ChatRole.System,
+        AuthorName = "d-system",
+        Contents = [new ErrorContent(errorMessage)]
+    };
 }

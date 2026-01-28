@@ -256,27 +256,26 @@ function Sidebar({
 function SidebarTrigger({
   className,
   onClick,
-  ...props
-}: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar()
+}: {
+  className: string;
+  onClick: () => void;
+}) {
+  const { toggleSidebar } = useSidebar();
 
   return (
-    <Button
+    <span
       data-sidebar="trigger"
       data-slot="sidebar-trigger"
-      variant="ghost"
-      size="icon"
       className={cn("size-4", "cursor-pointer", className)}
-      onClick={(event) => {
-        onClick?.(event)
-        toggleSidebar()
+      onClick={() => {
+        onClick?.();
+        toggleSidebar();
       }}
-      {...props}
     >
-      <PanelLeftIcon />
+      <PanelLeftIcon size={16} />
       <span className="sr-only">Toggle Sidebar</span>
-    </Button>
-  )
+    </span>
+  );
 }
 
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {

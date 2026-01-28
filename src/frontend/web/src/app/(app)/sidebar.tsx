@@ -1,38 +1,29 @@
 "use client";
 
-import React, { ReactElement, useCallback, useMemo, useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ChevronDown,
-  UserRound,
-  ShieldPlus,
-  Fingerprint,
-  Dot,
-  LayoutGrid,
-  Menu,
-  X,
   ChevronRight,
-  LucideIcon,
+  PanelLeftIcon,
 } from "lucide-react";
 
-import { Separator } from "@/components/ui/separator";
 import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarInset,
   SidebarProvider,
   SidebarTrigger,
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar";
 import {
@@ -41,10 +32,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-export type MenuLink = {
-  title: string;
-  url: string;
-};
+export type MenuLink = { title: string; url: string };
 
 export type MenuItem = {
   title: string;
@@ -54,29 +42,19 @@ export type MenuItem = {
   subMenuItems?: MenuLink[];
 };
 
-const normalizeHref = (href: string) => href.replace(/\/$/, "");
-
-const isActive = (pathname: string | null, href: string) => {
-  if (!pathname) {
-    return false;
-  }
-  const normalizedHref = normalizeHref(href);
-  return (
-    pathname === normalizedHref // || pathname.startsWith(`${normalizedHref}/`)
-  );
-};
-
-
 export type SidebarMenuGroupProps = {
   groupLable?: string | null;
   menus: MenuItem[];
 };
 
-type AppSidebarProps = {
-  menus: SidebarMenuGroupProps[];
-};
+type AppSidebarProps = { menus: SidebarMenuGroupProps[] };
 
-export function AppSidebar( props: AppSidebarProps) {
+const normalizeHref = (href: string) => href.replace(/\/$/, "");
+
+const isActive = (pathname: string | null, href: string) =>
+  pathname ? normalizeHref(href) === pathname : false;
+
+export function AppSidebar({ menus }: AppSidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -85,16 +63,15 @@ export function AppSidebar( props: AppSidebarProps) {
         <SidebarHeader className="border-b border-slate-200">
           <SidebarMenu>
             <SidebarMenuItem>
-              <div className="flex items-center flex-row-reverse justify-between">
+              <SidebarMenuButton className="flex-row-reverse justify-between">
                 <SidebarTrigger className="-ml-1" />
                 <span>DSystem Admin</span>
-              </div>
-             
+              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
-          {props.menus.map((grpItem, index) => (
+          {menus.map((grpItem, index) => (
             <SidebarGroup key={index}>
               {grpItem.groupLable && (
                 <SidebarGroupLabel>{grpItem.groupLable}</SidebarGroupLabel>
@@ -108,8 +85,7 @@ export function AppSidebar( props: AppSidebarProps) {
                     className="group/collapsible"
                   >
                     <SidebarMenuItem>
-                      {item.subMenuItems == null ||
-                      item.subMenuItems.length === 0 ? (
+                      {!item.subMenuItems?.length ? (
                         <SidebarMenuButton
                           tooltip={item.title}
                           className={`${isActive(pathname, item.url) ? "font-bold" : ""}`}
@@ -130,15 +106,11 @@ export function AppSidebar( props: AppSidebarProps) {
                           </CollapsibleTrigger>
                           <CollapsibleContent>
                             <SidebarMenuSub>
-                              {item.subMenuItems?.map((subItem) => (
+                              {item.subMenuItems.map((subItem) => (
                                 <SidebarMenuSubItem key={subItem.title}>
                                   <SidebarMenuSubButton
                                     asChild
-                                    className={`${
-                                      isActive(pathname, subItem.url)
-                                        ? "font-bold"
-                                        : ""
-                                    }`}
+                                    className={`${isActive(pathname, subItem.url) ? "font-bold" : ""}`}
                                   >
                                     <Link href={subItem.url}>
                                       <span>{subItem.title}</span>
@@ -157,9 +129,12 @@ export function AppSidebar( props: AppSidebarProps) {
             </SidebarGroup>
           ))}
         </SidebarContent>
-        <SidebarFooter></SidebarFooter>
+        <SidebarFooter />
         <SidebarRail />
       </Sidebar>
     </>
   );
 }
+
+// Re-export SidebarInset for use in layouts
+export { SidebarInset };

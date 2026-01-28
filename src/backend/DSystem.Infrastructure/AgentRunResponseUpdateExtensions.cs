@@ -1,84 +1,63 @@
-﻿using DSystem.Infrastructure;
+using DSystem.Domain.Models;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace DSystem.Domain.Models;
+namespace DSystem.Infrastructure;
 
 public static class AgentRunResponseUpdateExtensions
 {
     /// <summary>
-    /// Convert AgentRunResponseUpdate to ClaudeCodeMessage DTO. agentRunResponseUpdate
+    /// Convert AgentResponseUpdate to AiMessage DTO.
     /// </summary>
     public static AiMessage? ToAiMessage(this AgentResponseUpdate? update)
     {
-        if (update == null)
-        {
-            return null;
-        }
+        if (update == null) return null;
 
-        var contents = update.Contents;
-
-        var aiMsgContents = contents.Select(content =>
-        {
-            var contentAadditionalProperties = content.AdditionalProperties ?? new AdditionalPropertiesDictionary();
-
-            AiMessageContent? aiMsgContent = null;
-            if (content is TextContent textContent)
-            {
-                aiMsgContent = new AiMessageContent(content.GetType().Name, textContent.Text, content.AdditionalProperties);
-            }
-            else if (content is FunctionCallContent call)
-            {
-                contentAadditionalProperties.Add("callId", call.CallId);
-                aiMsgContent = new AiMessageContent(content.GetType().Name, call.Name, contentAadditionalProperties);
-            }
-            else if (content is FunctionResultContent callResult)
-            {
-                var callResultContent = callResult.Result == null
-                    ? ""
-                    : JsonUtil.Serialize(callResult.Result);
-                contentAadditionalProperties.Add("callId", callResult.CallId);
-                aiMsgContent = new AiMessageContent(content.GetType().Name, callResultContent, contentAadditionalProperties);
-            }
-            else if (content is TextReasoningContent thinkingContent)
-            {
-                var t = thinkingContent.Text;
-                aiMsgContent = new AiMessageContent(content.GetType().Name, t, content.AdditionalProperties);
-            }
-            else if (content is ErrorContent error)
-            {
-                aiMsgContent = new AiMessageContent(content.GetType().Name, error.Message, content.AdditionalProperties);
-            }
-            else if (content is UsageContent usageContent)
-            {
-                aiMsgContent = new AiMessageContent(content.GetType().Name, usageContent.Details, content.AdditionalProperties);
-            }
-            return aiMsgContent;
-        })
-            .Where(x => x != null)
-            .Select(x => x!)
+        var contents = update.Contents
+            .Select(ConvertContent)
+            .OfType<AiMessageContent>()
             .ToList();
 
-        var role = update.Role;
+        return new AiMessage(
+            update.MessageId ?? "",
+            update.AuthorName,
+            update.Role.HasValue ? update.Role.Value.Value : "",
+            contents,
+            update.AdditionalProperties
+        );
+    }
 
-        var aiMessage = new AiMessage
-            (
-                update.MessageId ?? "",
-                update.AuthorName,
-                role.HasValue ? role.Value.Value : "",
-                aiMsgContents,
-                update.AdditionalProperties
-            );
+    private static AiMessageContent? ConvertContent(AIContent content)
+    {
+        var additionalProps = content.AdditionalProperties ?? [];
 
-        return aiMessage;
+        return content switch
+        {
+            TextContent text => new(content.GetType().Name, text.Text, content.AdditionalProperties),
+            FunctionCallContent call => CreateFunctionCallContent(call, additionalProps),
+            FunctionResultContent result => CreateFunctionResultContent(result, additionalProps),
+            TextReasoningContent thinking => new(content.GetType().Name, thinking.Text, content.AdditionalProperties),
+            ErrorContent error => new(content.GetType().Name, error.Message, content.AdditionalProperties),
+            UsageContent usage => new(content.GetType().Name, usage.Details, content.AdditionalProperties),
+            _ => null
+        };
+    }
+
+    private static AiMessageContent CreateFunctionCallContent(FunctionCallContent call, AdditionalPropertiesDictionary props)
+    {
+        props["callId"] = call.CallId;
+        return new(call.GetType().Name, call.Name, props);
+    }
+
+    private static AiMessageContent CreateFunctionResultContent(FunctionResultContent result, AdditionalPropertiesDictionary props)
+    {
+        props["callId"] = result.CallId;
+        var content = result.Result == null ? "" : JsonUtil.Serialize(result.Result);
+        return new(result.GetType().Name, content, props);
     }
 }
 
-
 public static class AiMessageExtensions
 {
-    public static string Serialize(this AiMessage aiMessage)
-    {
-        return JsonUtil.Serialize(aiMessage);
-    }
+    public static string Serialize(this AiMessage message) => JsonUtil.Serialize(message);
 }

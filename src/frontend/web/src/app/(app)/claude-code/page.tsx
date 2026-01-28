@@ -50,12 +50,15 @@ export default function ClaudeCodePage() {
   const [showCommentDialog, setShowCommentDialog] = React.useState(false);
   const statusRequestPendingRef = React.useRef(false);
   const statusRequestSentRef = React.useRef(false);
+  const settingsRequestSessionRef = React.useRef<string | null>(null);
 
   const handleThreadId = (newThreadId: string | null) => {
-    if(newThreadId){
+    if (newThreadId !== threadId) {
+      settingsRequestSessionRef.current = null;
+    }
+    if (newThreadId) {
       console.debug("Set threadId:", newThreadId);
     }
-    console.log("handleThreadId", Uuid4.generate().toCanonical());
     setThreadId(newThreadId);
   };
 
@@ -104,6 +107,18 @@ export default function ClaudeCodePage() {
       }
     }
   }, []);
+
+  React.useEffect(() => {
+    settingsRequestSessionRef.current = null;
+  }, [
+    workingDirectory,
+    gitAddress,
+    directoryMode,
+    apiKey,
+    apiBaseUrl,
+    permissionMode,
+    envVars,
+  ]);
 
   const getRepositoryName = React.useCallback((address: string) => {
     const trimmed = address.trim().replace(/\/$/, "");
@@ -158,20 +173,54 @@ export default function ClaudeCodePage() {
     return envObj;
   };
 
+  const buildSettingRequest = (sessionId: string) => {
+    return {
+      type: 0,
+      setting: {
+        workingDirectory: getResolvedWorkingDirectory(sessionId),
+        apiKey: apiKey.trim() || null,
+        apiBaseUrl: apiBaseUrl.trim() || null,
+        systemPrompt: null,
+        maxTurns: null,
+        sessionId: sessionId,
+        permissionMode: permissionMode,
+        environmentVariables: buildEnvironmentVariables(),
+      },
+    };
+  };
+
+  const buildInputRequest = (inputMsg: string) => {
+    return {
+      type: 1,
+      input: {
+        input: inputMsg,
+      },
+    };
+  };
+
+  const sendSettingIfNeeded = (ws: WebSocket, sessionId: string) => {
+    if (settingsRequestSessionRef.current === sessionId) {
+      return;
+    }
+    const settingRequest = buildSettingRequest(sessionId);
+    ws.send(JSON.stringify(settingRequest));
+    settingsRequestSessionRef.current = sessionId;
+  };
+
+  const ensureThreadId = () => {
+    if (threadId) {
+      return threadId;
+    }
+    const newThreadId = Uuid4.generate().toCanonical();
+    handleThreadId(newThreadId);
+    return newThreadId;
+  };
+
   const sendStatusRequest = (ws: WebSocket) => {
     statusRequestPendingRef.current = true;
-    const request = {
-      input: "/status",
-      workingDirectory: getResolvedWorkingDirectory(threadId),
-      apiKey: apiKey.trim() || null,
-      apiBaseUrl: apiBaseUrl.trim() || null,
-      systemPrompt: null,
-      maxTurns: null,
-      threadId: threadId ?? "",
-      permissionMode: permissionMode,
-      environmentVariables: buildEnvironmentVariables(),
-    };
-    ws.send(JSON.stringify(request));
+    const sessionId = ensureThreadId();
+    sendSettingIfNeeded(ws, sessionId);
+    ws.send(JSON.stringify(buildInputRequest("/status")));
   };
 
   // Initialize WebSocket and fetch status on mount
@@ -259,9 +308,14 @@ export default function ClaudeCodePage() {
             }
           }
 
+          if (!data.additionalProperties) {
+            setMessages((prev) => [...prev, data]);
+            return;
+          }
+
           if (
-            data.additionalProperties!.type === "system" &&
-            data.additionalProperties!.subtype === "init"
+            data.additionalProperties.type === "system" &&
+            data.additionalProperties.subtype === "init"
           ) {
             const content = JSON.parse(data.contents[0].content);
             const initContent: InitMessageContent = {
@@ -278,7 +332,7 @@ export default function ClaudeCodePage() {
             };
 
             setInitContent(initContent);
-          } else if (data.additionalProperties!.type === "result") {
+          } else if (data.additionalProperties.type === "result") {
             setIsExecuting(false);
             setMessages((prev) => [...prev, data]);
           } else {
@@ -303,6 +357,7 @@ export default function ClaudeCodePage() {
     ws.onclose = (event) => {
       console.debug("WebSocket closed:", event.code, event.reason);
       wsRef.current = null;
+      settingsRequestSessionRef.current = null;
       setIsExecuting(false);
 
       if (event.code !== 1000) {
@@ -402,28 +457,10 @@ export default function ClaudeCodePage() {
         // Add user message to chat immediately
         setMessages((prev) => [...prev, userMsg]);
 
-        let tid;
-        if (threadId) {
-          tid = threadId;
-        } else {
-          tid = Uuid4.generate().toCanonical();
-          console.log("Uuid4 tid", tid)
-          handleThreadId(tid);        
-        }
-
-        const environmentVariables = buildEnvironmentVariables();
-        const request = {
-          input: inputMsg,
-          workingDirectory: getResolvedWorkingDirectory(tid),
-          apiKey: apiKey.trim() || null,
-          apiBaseUrl: apiBaseUrl.trim() || null,
-          systemPrompt: null,
-          maxTurns: null,
-          threadId: tid,
-          permissionMode: permissionMode,
-          environmentVariables: environmentVariables,
-        };
-        console.log("Sending request:", request, environmentVariables);
+        const tid = ensureThreadId();
+        sendSettingIfNeeded(ws, tid);
+        const request = buildInputRequest(inputMsg);
+        console.debug("Sending request:", request);
         ws.send(JSON.stringify(request));
       }
     } catch (error) {
@@ -442,6 +479,7 @@ export default function ClaudeCodePage() {
       wsRef.current.close(1000, "Session cleared");
       wsRef.current = null;
     }
+    settingsRequestSessionRef.current = null;
   };
 
   const handleSessionSelect = (newMessages: AiMessage[], newThreadId: string) => {
@@ -452,6 +490,7 @@ export default function ClaudeCodePage() {
       wsRef.current.close(1000, "Session switched");
       wsRef.current = null;
     }
+    settingsRequestSessionRef.current = null;
   };
 
   const handleNewChat = () => {

@@ -1,181 +1,141 @@
 import React from "react";
 import Image from "next/image";
 import { AiMessage, AiMessageContent, MessageContentType } from "@/types";
-
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
-  const isUser =
-    message.role === "user" &&
-    message.author === "user" &&
-    !message.additionalProperties;
-    
-  const isResult =
-    message.role === "system" &&
-    message.additionalProperties!.type === "result";
+type MessageNode = { type: string; content: string };
 
-  const parseContents = (msg: AiMessage) => {
-    const { contents } = msg;
-    const nodes: React.ReactNode[] = [];
-    let curNode: string = "";
-    let lastType = "";
+const stripCommandTags = (str: string) =>
+  str.replace("<local-command-stdout>", "").replace("</local-command-stdout>", "");
 
-    const appendNodes = () => {
-      let node: React.ReactNode = null;
-      switch (lastType) {
-        case MessageContentType.DataContent:
-        case MessageContentType.ErrorContent:
-        case MessageContentType.FunctionCallContent:
-        case MessageContentType.FunctionResultContent:
-        case MessageContentType.TextContent:
-        case MessageContentType.TextReasoningContent:
-          node = (
-            <div className="text-sm whitespace-pre-wrap wrap-break-word">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {curNode}
-              </ReactMarkdown>
-            </div>
-          );
-          break;
-        case MessageContentType.UriContent:
-          node = (
-            <div className="text-sm whitespace-pre-wrap wrap-break-word">
-              <Image src={curNode} alt="Image content" />
-            </div>
-          );
-          break;
-        case MessageContentType.UsageContent:
-          node = (
-            <div className="text-sm whitespace-pre-wrap wrap-break-word w-full relative">
-              <div className="w-full flex justify-center relative z-1">
-                <Badge
-                  variant="secondary"
-                  className="bg-blue-500 text-white dark:bg-blue-600"
-                >
-                  {curNode}
-                </Badge>
-              </div>
-              <Separator className="w-full relative top-[-50%] z-0" />
-            </div>
-          );
-          break;
+const getNodePrefix = (type: string): string =>
+  type === MessageContentType.ErrorContent ? "ERROR: " :
+  type === MessageContentType.FunctionCallContent ? "Tool use: " :
+  type === MessageContentType.FunctionResultContent ? "Tool result: " :
+  type === MessageContentType.TextReasoningContent ? "Thinking:" :
+  type === MessageContentType.UsageContent ? "Usage:" :
+  "";
+
+const isTextNode = (type: string) => [
+  MessageContentType.DataContent,
+  MessageContentType.ErrorContent,
+  MessageContentType.FunctionCallContent,
+  MessageContentType.FunctionResultContent,
+  MessageContentType.TextContent,
+  MessageContentType.TextReasoningContent,
+].includes(type);
+
+const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
+  if (isTextNode(node.type)) {
+    return (
+      <div className="text-sm whitespace-pre-wrap wrap-break-word">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{node.content}</ReactMarkdown>
+      </div>
+    );
+  }
+
+  if (node.type === MessageContentType.UriContent) {
+    return (
+      <div className="text-sm whitespace-pre-wrap wrap-break-word">
+        <Image src={node.content} alt="Image content" />
+      </div>
+    );
+  }
+
+  if (node.type === MessageContentType.UsageContent) {
+    return (
+      <div className="text-sm whitespace-pre-wrap wrap-break-word w-full relative">
+        <div className="w-full flex justify-center relative z-1">
+          <Badge variant="secondary" className="bg-blue-500 text-white dark:bg-blue-600">
+            {node.content}
+          </Badge>
+        </div>
+        <Separator className="w-full relative top-[-50%] z-0" />
+      </div>
+    );
+  }
+
+  return null;
+};
+
+const buildContentNode = (content: AiMessageContent, message: AiMessage): string => {
+  const { type, content: value } = content;
+
+  if (type === MessageContentType.UsageContent) {
+    const contentAny = value as unknown as { inputTokenCount: number; outputTokenCount: number };
+    let result = `inputToken: ${contentAny.inputTokenCount} • outputToken: ${contentAny.outputTokenCount}`;
+    const usd = message?.additionalProperties?.totalCostUsd as number | undefined;
+    if (usd !== undefined) result += ` • totalCost: ${usd} (USD)`;
+    return result;
+  }
+
+  if (type === MessageContentType.UriContent) {
+    return value as string;
+  }
+
+  let processed = typeof value === "string" && value.startsWith("<local-command-stdout>")
+    ? stripCommandTags(value)
+    : (value as string);
+
+  if (type === MessageContentType.FunctionCallContent || type === MessageContentType.FunctionResultContent) {
+    if (processed.startsWith("{") && processed.endsWith("}")) {
+      try {
+        processed = "\n```json\n" + JSON.stringify(JSON.parse(processed), null, 2) + "\n```";
+      } catch {
+        // Keep original if invalid JSON
       }
-      if (node) {
-        nodes.push(node);
-      }
-    };
-
-    const initNode = (type: string) => {
-      switch (type) {
-        case MessageContentType.DataContent:
-          curNode = "";
-          break;
-        case MessageContentType.ErrorContent:
-          curNode = "ERROR: ";
-          break;
-        case MessageContentType.FunctionCallContent:
-          curNode = "Tool use: ";
-          break;
-        case MessageContentType.FunctionResultContent:
-          curNode = "Tool result: ";
-          break;
-        case MessageContentType.TextContent:
-          curNode = "";
-          break;
-        case MessageContentType.TextReasoningContent:
-          curNode = "Thinking:";
-          break;
-        case MessageContentType.UriContent:
-          curNode = "";
-          break;
-        case MessageContentType.UsageContent:
-          curNode = "Usage:";
-          break;
-        default:
-          curNode = "";
-      }
-    };
-
-    const buildCurNode = ({ type, content }: AiMessageContent) => {
-      const stripCommandTags = (str: string) =>
-        str.replace("<local-command-stdout>", "").replace("</local-command-stdout>", "");
-
-      switch (type) {
-        case MessageContentType.DataContent:
-        case MessageContentType.ErrorContent:
-        case MessageContentType.TextContent:
-        case MessageContentType.TextReasoningContent:
-          curNode += content.startsWith("<local-command-stdout>")
-            ? stripCommandTags(content)
-            : content;
-          break;
-
-        case MessageContentType.FunctionCallContent:
-        case MessageContentType.FunctionResultContent: {
-          let contentTemp = content.startsWith("<local-command-stdout>")
-            ? stripCommandTags(content)
-            : content;
-          if (contentTemp.startsWith("{") && contentTemp.endsWith("}")) {
-            contentTemp = "\n```json\n" + JSON.stringify(JSON.parse(contentTemp), null, 2) + "\n```";
-          }
-          curNode += contentTemp;
-          break;
-        }
-
-        case MessageContentType.UriContent:
-          curNode = content;
-          break;
-
-        case MessageContentType.UsageContent: {
-          const contentAny = content as unknown as { inputTokenCount: number; outputTokenCount: number };
-          curNode = `inputToken: ${contentAny.inputTokenCount} • outputToken: ${contentAny.outputTokenCount}`;
-          const usd = message?.additionalProperties?.totalCostUsd as number | undefined;
-          if (usd !== undefined) {
-            curNode += ` • totalCost: ${usd} (USD)`;
-          }
-          break;
-        }
-      }
-    };
-
-    for (const content of contents) {
-      const type = content.type;
-      if (lastType === "") {
-        initNode(type);
-      } else if (type !== lastType) {
-        appendNodes();
-        initNode(type);
-      }
-      buildCurNode(content);
-      lastType = type;
     }
-    appendNodes();
-    return nodes;
-  };
+  }
+
+  return processed;
+};
+
+const groupContentsByType = (contents: AiMessageContent[], message: AiMessage): MessageNode[] => {
+  const nodes: MessageNode[] = [];
+  let currentContent = "";
+  let lastType = "";
+
+  for (const content of contents) {
+    const { type } = content;
+
+    if (lastType && type !== lastType) {
+      nodes.push({ type: lastType, content: currentContent });
+      currentContent = "";
+    }
+
+    currentContent += (currentContent ? "" : getNodePrefix(type)) + buildContentNode(content, message);
+    lastType = type;
+  }
+
+  if (lastType) {
+    nodes.push({ type: lastType, content: currentContent });
+  }
+
+  return nodes;
+};
+
+export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
+  const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
+  const isResult = message.role === "system" && message.additionalProperties?.type === "result";
+  const contentNodes = React.useMemo(() => groupContentsByType(message.contents, message), [message]);
 
   if (isResult) {
-    return <div className="flex justify-center">{...parseContents(message)}</div>;
+    return <div className="flex justify-center">{contentNodes.map((n, i) => <React.Fragment key={i}>{renderNode(n, message)}</React.Fragment>)}</div>;
   }
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`rounded-lg px-4 py-3 ${
-          isUser
-            ? "bg-primary text-primary-foreground ml-12"
-            : "bg-secondary mr-12"
-        }`}
-      >
+      <div className={`rounded-lg px-4 py-3 ${isUser ? "bg-primary text-primary-foreground ml-12" : "bg-secondary mr-12"}`}>
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-semibold opacity-70">
             {isUser ? "You" : message.role || message.author}
           </span>
         </div>
         <div className="text-sm whitespace-pre-wrap wrap-break-word">
-          {...parseContents(message)}
+          {contentNodes.map((n, i) => <React.Fragment key={i}>{renderNode(n, message)}</React.Fragment>)}
         </div>
       </div>
     </div>

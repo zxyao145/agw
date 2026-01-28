@@ -8,6 +8,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace DSystem.ExternalAgents;
 
@@ -26,89 +27,134 @@ public class ClaudeCodeService
     }
 
     /// <summary>
-    /// Execute ClaudeCode query with streaming responses.
+    /// Initialize a new ClaudeCode session with the specified configuration.
     /// </summary>
-    /// <param name="prompt">User prompt to send to ClaudeCode</param>
-    /// <param name="workingDirectory">Working directory for ClaudeCode (optional)</param>
-    /// <param name="apiKey">Anthropic API key (optional, uses environment variable if not provided)</param>
-    /// <param name="apiBaseUrl">Anthropic base URL (optional)</param>
-    /// <param name="systemPrompt">System prompt for ClaudeCode (optional)</param>
-    /// <param name="maxTurns">Maximum number of turns (optional)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Async enumerable of ClaudeCodeMessage</returns>
-    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
-        ClaudeCodeExecuteRequest request,
+    public async Task<ClaudeCodeSession> InitializeSessionAsync(
+        ClaudeCodeSettingRequest initRequest,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(initRequest.SessionId);
+
+        var options = BuildAgentOptions(initRequest);
+        var agent = new ClaudeCodeAIAgent(options, _logger);
+        var thread = await GetOrLoadThreadAsync(agent, initRequest.SessionId, cancellationToken);
+
+        return new ClaudeCodeSession(agent, thread, initRequest, _logger);
+    }
+
+    /// <summary>
+    /// Execute ClaudeCode query with streaming responses using an existing session.
+    /// </summary>
+    public async IAsyncEnumerable<AiMessage> ExecuteSessionStreamingAsync(
+        ClaudeCodeSession session,
+        string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var threadId = request.ThreadId;
-        ArgumentException.ThrowIfNullOrWhiteSpace(threadId, nameof(threadId));
-        string prompt = request.Input;
-        string? workingDirectory = request.WorkingDirectory;
-        string? apiKey = request.ApiKey;
-        string? apiBaseUrl = request.ApiBaseUrl;
-        string? systemPrompt = request.SystemPrompt;
-        int? maxTurns = request.MaxTurns;
-        PermissionMode? mode = null;
-        if (!string.IsNullOrWhiteSpace(request.PermissionMode))
+        ArgumentException.ThrowIfNullOrWhiteSpace(input);
+
+        var content = new AiMessageInputContent(
+            AiMessageContentType.TextContent,
+            JsonSerializer.SerializeToElement(input));
+
+        await foreach (var message in ExecuteSessionStreamingAsync(session, [content], cancellationToken))
         {
-            mode = Enum.Parse<PermissionMode>(request.PermissionMode);
+            yield return message;
         }
-        var options = new ClaudeCodeAIAgentOptions
-        {
-            WorkingDirectory = workingDirectory,
-            SystemPrompt = systemPrompt,
-            MaxTurns = maxTurns,
-            PermissionMode = mode,
-        };
-        options.EnvironmentVariables = request.EnvironmentVariables;
+    }
 
-        if (!string.IsNullOrEmpty(apiKey))
-        {
-            options.ApiKey = apiKey;
-        }
-        if (!string.IsNullOrEmpty(apiBaseUrl))
-        {
-            options.BaseUrl = apiBaseUrl;
-        }
+    /// <summary>
+    /// Execute ClaudeCode query with streaming responses using an existing session.
+    /// </summary>
+    public async IAsyncEnumerable<AiMessage> ExecuteSessionStreamingAsync(
+        ClaudeCodeSession session,
+        List<AiMessageInputContent> contents,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var aiContents = ConvertToAIContents(contents);
+        var message = new ChatMessage(ChatRole.User, aiContents);
 
-        using var aiAgent = new ClaudeCodeAIAgent(options, _logger);
-
-        AgentThread agentThread;
-        var value = await _cache.GetOrCreateAsync<string>(threadId, (c) =>
+        await foreach (var update in session.Agent.RunStreamingAsync(message, session.Thread, cancellationToken: cancellationToken))
         {
-            return ValueTask.FromResult("");
-        });
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            agentThread = await aiAgent.GetNewThreadAsync();
-        }
-        else
-        {
-            var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
-            agentThread = await aiAgent.DeserializeThreadAsync(serializedThread);
-        }
-
-
-        var agentRunResponseUpdate = aiAgent
-            .RunStreamingAsync(prompt, agentThread, cancellationToken: cancellationToken);
-
-        await foreach (var update in agentRunResponseUpdate)
-        {
-            // Convert SDK message to our DTO
             var aiMessage = update.ToAiMessage();
-            if (aiMessage != null)
+            if (aiMessage != null) yield return aiMessage;
+        }
+
+        await SaveThreadStateAsync(session, cancellationToken);
+    }
+
+    private static List<AIContent> ConvertToAIContents(List<AiMessageInputContent> contents)
+    {
+        var aiContents = new List<AIContent>();
+
+        foreach (var item in contents)
+        {
+            if (item.Type == AiMessageContentType.TextContent)
             {
-                yield return aiMessage;
+                aiContents.Add(new TextContent(item.Content.GetString()));
+                continue;
+            }
+            if (item.Type == AiMessageContentType.UriContent)
+            {
+                var uri = item.Content.GetProperty("uri").GetString() ?? "";
+                var mediaType = item.Content.GetProperty("mediaType").GetString() ?? "";
+                aiContents.Add(new UriContent(uri, mediaType));
             }
         }
 
-        // Save thread state to cache after execution
-        var serializeJsonElement = agentThread.Serialize();
-        if (serializeJsonElement.ValueKind != JsonValueKind.Undefined
-            && serializeJsonElement.ValueKind == JsonValueKind.Null)
+        return aiContents;
+    }
+
+    private async Task<AgentThread> GetOrLoadThreadAsync(
+        ClaudeCodeAIAgent agent,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        var cachedThread = await _cache.GetOrCreateAsync(
+            sessionId,
+            _ => ValueTask.FromResult<string>(""));
+
+        if (string.IsNullOrWhiteSpace(cachedThread))
         {
-            var serialized = JsonSerializer.Serialize(serializeJsonElement);
-            await _cache.SetAsync(threadId, serialized, cancellationToken: cancellationToken);
+            _logger.LogDebug("Created new thread for session: {ThreadId}", sessionId);
+            return await agent.GetNewThreadAsync(cancellationToken);
         }
+
+        _logger.LogDebug("Loaded existing thread for session: {ThreadId}", sessionId);
+        var serialized = JsonSerializer.Deserialize<JsonElement>(cachedThread);
+        return await agent.DeserializeThreadAsync(serialized);
+    }
+
+    private static ClaudeCodeAIAgentOptions BuildAgentOptions(ClaudeCodeSettingRequest request)
+    {
+        PermissionMode? permissionMode = null;
+        if (!string.IsNullOrWhiteSpace(request.PermissionMode))
+            permissionMode = Enum.Parse<PermissionMode>(request.PermissionMode);
+
+        var options = new ClaudeCodeAIAgentOptions
+        {
+            WorkingDirectory = request.WorkingDirectory,
+            SystemPrompt = request.SystemPrompt,
+            MaxTurns = request.MaxTurns,
+            EnvironmentVariables = request.EnvironmentVariables,
+            PermissionMode = permissionMode
+        };
+
+        if (!string.IsNullOrEmpty(request.ApiKey)) options.ApiKey = request.ApiKey;
+        if (!string.IsNullOrEmpty(request.ApiBaseUrl)) options.BaseUrl = request.ApiBaseUrl;
+
+        return options;
+    }
+
+    private async Task SaveThreadStateAsync(ClaudeCodeSession session, CancellationToken cancellationToken)
+    {
+        var serialized = session.Thread.Serialize();
+        if (serialized.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return;
+
+        await _cache.SetAsync(
+            session.Configuration.SessionId,
+            JsonSerializer.Serialize(serialized),
+            cancellationToken: cancellationToken);
+
+        _logger.LogDebug("Saved thread state for session: {ThreadId}", session.Configuration.SessionId);
     }
 }
