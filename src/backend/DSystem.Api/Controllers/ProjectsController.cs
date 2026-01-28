@@ -38,7 +38,8 @@ public class ProjectsController : ControllerBase
         {
             Name = request.Name,
             Description = request.Description,
-            Enable = request.Enable
+            Enable = request.Enable,
+            ExtraSetting = request.ExtraSetting
         };
 
         var created = await _projectService.CreateAsync(project, user);
@@ -60,6 +61,7 @@ public class ProjectsController : ControllerBase
             project.Name = request.Name;
             project.Description = request.Description;
             project.Enable = request.Enable;
+            project.ExtraSetting = request.ExtraSetting;
         }, user);
 
         return updated == null ? NotFound() : Ok(updated);

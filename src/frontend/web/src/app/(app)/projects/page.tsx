@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import Editor from "@monaco-editor/react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
@@ -29,14 +30,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
-type ProjectCreateRequest = components["schemas"]["ProjectCreateRequest"]
-type ProjectUpdateRequest = components["schemas"]["ProjectUpdateRequest"]
+type ProjectCreateRequest = components["schemas"]["ProjectCreateRequest"] & {
+  extraSetting?: string | null
+}
+type ProjectUpdateRequest = components["schemas"]["ProjectUpdateRequest"] & {
+  extraSetting?: string | null
+}
 
 type ProjectDto = {
   id: string
   name: string
   description: string | null
   enable: boolean
+  extraSetting?: string | null
   createBy?: string | null
   createTime?: string | null
   updateBy?: string | null
@@ -68,6 +74,22 @@ function getApiErrorMessage(error: unknown): string {
   return "Unknown error"
 }
 
+function isValidJsonPayload(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed.length) return true
+  try {
+    JSON.parse(trimmed)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function normalizeJsonPayload(value: string): string | null {
+  const trimmed = value.trim()
+  return trimmed.length ? trimmed : null
+}
+
 export default function ProjectsPage() {
   const queryClient = useQueryClient()
 
@@ -83,6 +105,7 @@ export default function ProjectsPage() {
   const [name, setName] = React.useState("")
   const [description, setDescription] = React.useState<string>("")
   const [enable, setEnable] = React.useState(true)
+  const [extraSetting, setExtraSetting] = React.useState("{\n  \n}")
 
   const createProjectMutation = useMutation({
     mutationFn: async (body: ProjectCreateRequest) => {
@@ -95,6 +118,7 @@ export default function ProjectsPage() {
       setName("")
       setDescription("")
       setEnable(true)
+      setExtraSetting("{\n  \n}")
       await queryClient.invalidateQueries({ queryKey: ["projects"] })
     },
     onError: (error) => {
@@ -107,12 +131,14 @@ export default function ProjectsPage() {
   const [editName, setEditName] = React.useState("")
   const [editDescription, setEditDescription] = React.useState<string>("")
   const [editEnable, setEditEnable] = React.useState(true)
+  const [editExtraSetting, setEditExtraSetting] = React.useState("{\n  \n}")
 
   const openEdit = React.useCallback((project: ProjectDto) => {
     setEditProjectId(project.id)
     setEditName(project.name ?? "")
     setEditDescription(project.description ?? "")
     setEditEnable(Boolean(project.enable))
+    setEditExtraSetting(project.extraSetting ?? "{\n  \n}")
     setEditOpen(true)
   }, [])
 
@@ -213,6 +239,28 @@ export default function ProjectsPage() {
                   />
                 </div>
 
+                <div className="grid gap-2">
+                  <Label>Settings (JSON)</Label>
+                  <div className="overflow-hidden rounded-md border">
+                    <Editor
+                      height="200px"
+                      language="json"
+                      path="project-settings-create.json"
+                      value={extraSetting}
+                      onChange={(value) => setExtraSetting(value ?? "")}
+                      options={{
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        fontSize: 13,
+                        automaticLayout: true,
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Optional JSON settings stored with the project.
+                  </p>
+                </div>
+
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -231,13 +279,18 @@ export default function ProjectsPage() {
                 </DialogClose>
                 <Button
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
+                    if (!isValidJsonPayload(extraSetting)) {
+                      toast.error("Settings must be valid JSON.")
+                      return
+                    }
                     createProjectMutation.mutate({
                       name,
                       description: description.length ? description : null,
                       enable,
+                      extraSetting: normalizeJsonPayload(extraSetting),
                     })
-                  }
+                  }}
                   disabled={!name.trim() || createProjectMutation.isPending}
                 >
                   {createProjectMutation.isPending ? "Creating..." : "Create"}
@@ -358,6 +411,28 @@ export default function ProjectsPage() {
               />
             </div>
 
+            <div className="grid gap-2">
+              <Label>Settings (JSON)</Label>
+              <div className="overflow-hidden rounded-md border">
+                <Editor
+                  height="200px"
+                  language="json"
+                  path="project-settings-edit.json"
+                  value={editExtraSetting}
+                  onChange={(value) => setEditExtraSetting(value ?? "")}
+                  options={{
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    fontSize: 13,
+                    automaticLayout: true,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Optional JSON settings stored with the project.
+              </p>
+            </div>
+
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -378,12 +453,17 @@ export default function ProjectsPage() {
               type="button"
               onClick={() => {
                 if (!editProjectId) return
+                if (!isValidJsonPayload(editExtraSetting)) {
+                  toast.error("Settings must be valid JSON.")
+                  return
+                }
                 updateProjectMutation.mutate({
                   id: editProjectId,
                   body: {
                     name: editName,
                     description: editDescription.length ? editDescription : null,
                     enable: editEnable,
+                    extraSetting: normalizeJsonPayload(editExtraSetting),
                   },
                 })
               }}
