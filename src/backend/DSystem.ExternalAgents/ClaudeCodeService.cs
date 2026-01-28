@@ -71,7 +71,7 @@ public class ClaudeCodeService
             options.BaseUrl = apiBaseUrl;
         }
 
-        var aiAgent = new ClaudeCodeAIAgent(options, _logger);
+        using var aiAgent = new ClaudeCodeAIAgent(options, _logger);
 
         AgentThread agentThread;
         var value = await _cache.GetOrCreateAsync<string>(threadId, (c) =>

@@ -18,6 +18,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@/components/ui/radio-group";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -165,39 +169,25 @@ export function SettingsDialog({
 
         <div className="grid gap-3 py-2">
           <div className="grid gap-2">
-            <Label htmlFor="settings-directoryMode">Input Source</Label>
-            <div
-              id="settings-directoryMode"
-              role="radiogroup"
-              className="flex flex-row gap-2"
+            <Label>Input Source</Label>
+            <RadioGroup
+              value={directoryMode}
+              onValueChange={(value) => setDirectoryMode(value as DirectoryMode)}
+              className="flex flex-row gap-4"
             >
-              <Button
-                type="button"
-                variant={
-                  directoryMode === DirectoryMode.workingDirectory
-                    ? "default"
-                    : "outline"
-                }
-                aria-checked={directoryMode === DirectoryMode.workingDirectory}
-                role="radio"
-                onClick={() => setDirectoryMode(DirectoryMode.workingDirectory)}
-              >
-                Working Directory
-              </Button>
-              <Button
-                type="button"
-                variant={
-                  directoryMode === DirectoryMode.gitAddress
-                    ? "default"
-                    : "outline"
-                }
-                aria-checked={directoryMode === DirectoryMode.gitAddress}
-                role="radio"
-                onClick={() => setDirectoryMode(DirectoryMode.gitAddress)}
-              >
-                Git Address
-              </Button>
-            </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value={DirectoryMode.workingDirectory} id="working-dir" />
+                <Label htmlFor="working-dir" className="font-normal cursor-pointer">
+                  Working Directory
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value={DirectoryMode.gitAddress} id="git-addr" />
+                <Label htmlFor="git-addr" className="font-normal cursor-pointer">
+                  Git Address
+                </Label>
+              </div>
+            </RadioGroup>
           </div>
 
           {directoryMode === DirectoryMode.workingDirectory ? (
@@ -212,10 +202,6 @@ export function SettingsDialog({
                 placeholder="e.g., /path/to/project"
                 options={workingDirHistory}
               />
-              <p className="text-xs text-muted-foreground">
-                Directory where Claude Code will execute. Leave empty for current
-                directory.
-              </p>
             </div>
           ) : (
             <div className="grid gap-2">
@@ -227,10 +213,6 @@ export function SettingsDialog({
                 placeholder="e.g., https://github.com/org/repo.git"
                 options={gitAddressHistory}
               />
-              <p className="text-xs text-muted-foreground">
-                Working directory will be resolved as ./&lt;repo&gt;/&lt;session
-                id&gt; (e.g., ./dir1/abc-123).
-              </p>
             </div>
           )}
 

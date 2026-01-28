@@ -15,7 +15,6 @@ import {
   ChevronRight,
   LucideIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 import { Separator } from "@/components/ui/separator";
 import {
@@ -86,10 +85,10 @@ export function AppSidebar( props: AppSidebarProps) {
         <SidebarHeader className="border-b border-slate-200">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton className="flex-row-reverse justify-between">
+              <div className="flex items-center flex-row-reverse justify-between">
                 <SidebarTrigger className="-ml-1" />
                 <span>DSystem Admin</span>
-              </SidebarMenuButton>
+              </div>
              
             </SidebarMenuItem>
           </SidebarMenu>

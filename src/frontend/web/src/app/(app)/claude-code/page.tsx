@@ -13,7 +13,7 @@ import {
 
 import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
 
-import { Ulid } from "id128";
+import { Ulid, Uuid4 } from "id128";
 import { FileExplorer } from "./components/file-explorer";
 import { Chat } from "./components/chat/chat";
 import { InputArea } from "./components/user-input/input-area";
@@ -55,6 +55,7 @@ export default function ClaudeCodePage() {
     if(newThreadId){
       console.debug("Set threadId:", newThreadId);
     }
+    console.log("handleThreadId", Uuid4.generate().toCanonical());
     setThreadId(newThreadId);
   };
 
@@ -405,7 +406,8 @@ export default function ClaudeCodePage() {
         if (threadId) {
           tid = threadId;
         } else {
-          tid = Ulid.generate().toCanonical();
+          tid = Uuid4.generate().toCanonical();
+          console.log("Uuid4 tid", tid)
           handleThreadId(tid);        
         }
 

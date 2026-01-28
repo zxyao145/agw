@@ -113,11 +113,6 @@ namespace DSystem.Infrastructure.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("enable");
 
-                    b.Property<string>("ExtraSetting")
-                        .HasMaxLength(16000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("extra_setting");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -430,6 +425,11 @@ namespace DSystem.Infrastructure.Migrations
                     b.Property<bool>("Enable")
                         .HasColumnType("INTEGER")
                         .HasColumnName("enable");
+
+                    b.Property<string>("ExtraSetting")
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("extra_setting");
 
                     b.Property<string>("Name")
                         .IsRequired()

@@ -11,9 +11,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(LlmDbContext))]
-    [Migration("20260127090000_AddProjectExtraSetting")]
-    partial class AddProjectExtraSetting
+    [Migration("20260128141154_AddSettingForProject")]
+    partial class AddSettingForProject
     {
+        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
@@ -114,11 +115,6 @@ namespace DSystem.Infrastructure.Migrations
                     b.Property<bool>("Enable")
                         .HasColumnType("INTEGER")
                         .HasColumnName("enable");
-
-                    b.Property<string>("ExtraSetting")
-                        .HasMaxLength(16000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("extra_setting");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -432,6 +428,11 @@ namespace DSystem.Infrastructure.Migrations
                     b.Property<bool>("Enable")
                         .HasColumnType("INTEGER")
                         .HasColumnName("enable");
+
+                    b.Property<string>("ExtraSetting")
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("extra_setting");
 
                     b.Property<string>("Name")
                         .IsRequired()

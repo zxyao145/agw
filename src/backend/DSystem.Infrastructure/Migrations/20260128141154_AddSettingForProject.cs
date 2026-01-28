@@ -1,11 +1,11 @@
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace DSystem.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class AddProjectExtraSetting : Migration
+    public partial class AddSettingForProject : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
