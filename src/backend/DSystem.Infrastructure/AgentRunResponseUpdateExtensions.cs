@@ -46,7 +46,9 @@ public static class AgentRunResponseUpdateExtensions
     private static AiMessageContent CreateFunctionCallContent(FunctionCallContent call, AdditionalPropertiesDictionary props)
     {
         props["callId"] = call.CallId;
-        return new(call.GetType().Name, call.Name, props);
+        props["toolName"] = call.Name;
+        var content = call.Arguments == null ? "" : JsonUtil.Serialize(call.Arguments);
+        return new(call.GetType().Name, content, props);
     }
 
     private static AiMessageContent CreateFunctionResultContent(FunctionResultContent result, AdditionalPropertiesDictionary props)

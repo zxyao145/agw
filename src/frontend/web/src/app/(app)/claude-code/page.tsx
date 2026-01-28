@@ -583,7 +583,7 @@ export default function ClaudeCodePage() {
 
           // If we found matching results, create an accordion group
           if (matchingResults.length > 0) {
-            const toolName = currentMsg.contents[0].content;
+            const toolName = currentMsg.contents[0].additionalProperties?.toolName as string ?? "";
             const groupedMessages = [
               currentMsg,
               ...matchingResults.map((r) => r.msg),
