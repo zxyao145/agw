@@ -43,7 +43,8 @@ export default function ClaudeCodePage() {
   const [comments, setComments] = React.useState<LineComment[]>([]);
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [showCommentDialog, setShowCommentDialog] = React.useState(false);
-
+  const statusRequestPendingRef = React.useRef(false);
+  const statusRequestSentRef = React.useRef(false);
 
   const handleThreadId = (newThreadId: string | null) => {
     if(newThreadId){
@@ -96,6 +97,64 @@ export default function ClaudeCodePage() {
     };
   }, []);
 
+  const buildEnvironmentVariables = () => {
+    const envObj: Record<string, string> = {};
+    if (Array.isArray(envVars)) {
+      envVars.forEach((item: { key: string; value: string }) => {
+        if (item.key) envObj[item.key] = item.value || "";
+      });
+    }
+    return envObj;
+  };
+
+  const sendStatusRequest = (ws: WebSocket) => {
+    statusRequestPendingRef.current = true;
+    const request = {
+      input: "/status",
+      workingDirectory: workingDirectory.trim() || null,
+      apiKey: apiKey.trim() || null,
+      apiBaseUrl: apiBaseUrl.trim() || null,
+      systemPrompt: null,
+      maxTurns: null,
+      threadId: threadId ?? "",
+      permissionMode: permissionMode,
+      environmentVariables: buildEnvironmentVariables(),
+    };
+    ws.send(JSON.stringify(request));
+  };
+
+  // Initialize WebSocket and fetch status on mount
+  React.useEffect(() => {
+    if (statusRequestSentRef.current) {
+      return;
+    }
+    statusRequestSentRef.current = true;
+
+    const initStatus = async () => {
+      try {
+        let ws = wsRef.current;
+        if (
+          !ws ||
+          ws.readyState === WebSocket.CLOSED ||
+          ws.readyState === WebSocket.CLOSING
+        ) {
+          ws = setupWebSocket();
+          await waitForWebSocketOpen(ws);
+        } else if (ws.readyState === WebSocket.CONNECTING) {
+          await waitForWebSocketOpen(ws);
+        }
+
+        if (ws.readyState === WebSocket.OPEN) {
+          sendStatusRequest(ws);
+        }
+      } catch (error) {
+        console.error("Failed to initialize status request:", error);
+      }
+    };
+
+    void initStatus();
+  }, []);
+
   const setupWebSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/api/external-agents/claude-code/ws`;
@@ -111,6 +170,31 @@ export default function ClaudeCodePage() {
       try {
         const data: AiMessage = JSON.parse(event.data);
         console.debug("onmessage", data);
+
+        if (statusRequestPendingRef.current) {
+          if (
+            data.role === "system" &&
+            data.additionalProperties?.type === "system" &&
+            data.additionalProperties?.subtype === "init"
+          ) {
+            const content = JSON.parse(data.contents[0].content);
+            const initContent: InitMessageContent = {
+              claudeCodeVersion: content.claude_code_version,
+              permissionMode: content.permissionMode,
+              model: content.model,
+              tools: content.tools,
+              slashCommands: content.slash_commands,
+              agents: content.agents,
+              skills: content.skills,
+              plugins: content.plugins,
+              mcpServers: content.mcp_servers,
+            };
+
+            setInitContent(initContent);
+            statusRequestPendingRef.current = false;
+          }
+          return;
+        }
 
         if (data.role === "system") {
           var author = data.author;
@@ -236,6 +320,7 @@ export default function ClaudeCodePage() {
 
   const sendInputToClaudeCode = async (inputMsg: string) => {
     setIsExecuting(true);
+    statusRequestPendingRef.current = false;
 
     try {
       let ws = wsRef.current;
@@ -274,14 +359,7 @@ export default function ClaudeCodePage() {
           handleThreadId(tid);        
         }
 
-        // Convert array format [{key, value}] to object {key: value}
-        const envObj: Record<string, string> = {};
-        if (Array.isArray(envVars)) {
-          envVars.forEach((item: { key: string; value: string }) => {
-            if (item.key) envObj[item.key] = item.value || "";
-          });
-        }
-
+        const environmentVariables = buildEnvironmentVariables();
         const request = {
           input: inputMsg,
           workingDirectory: workingDirectory.trim() || null,
@@ -291,9 +369,9 @@ export default function ClaudeCodePage() {
           maxTurns: null,
           threadId: tid,
           permissionMode: permissionMode,
-          environmentVariables: envObj,
+          environmentVariables: environmentVariables,
         };
-        console.log("Sending request:", request, envObj);
+        console.log("Sending request:", request, environmentVariables);
         ws.send(JSON.stringify(request));
       }
     } catch (error) {
