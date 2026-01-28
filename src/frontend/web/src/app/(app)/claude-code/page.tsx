@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   InitMessageContent,
+  DirectoryMode,
   PermissionMode,
   LineComment,
   EnvVar,
@@ -31,6 +32,10 @@ import "./page.css";
 
 export default function ClaudeCodePage() {
   const [workingDirectory, setWorkingDirectory] = React.useState("");
+  const [gitAddress, setGitAddress] = React.useState("");
+  const [directoryMode, setDirectoryMode] = React.useState<DirectoryMode>(
+    DirectoryMode.workingDirectory,
+  );
   const [apiKey, setApiKey] = React.useState("");
   const [apiBaseUrl, setApiBaseUrl] = React.useState("");
   const [permissionMode, setPermissionMode] = React.useState<string>(
@@ -67,6 +72,10 @@ export default function ClaudeCodePage() {
   // Load settings from localStorage on mount
   React.useEffect(() => {
     const savedWorkingDir = localStorage.getItem("claudecode_workingDir");
+    const savedGitAddress = localStorage.getItem("claudecode_gitAddress");
+    const savedDirectoryMode = localStorage.getItem(
+      "claudecode_directoryMode",
+    );
     const savedApiKey = localStorage.getItem("claudecode_apiKey");
     const savedApiBaseUrl = localStorage.getItem("claudecode_apiBaseUrl");
     const savedPermissionMode = localStorage.getItem(
@@ -75,6 +84,13 @@ export default function ClaudeCodePage() {
     const savedEnvVars = localStorage.getItem("claudecode_envVars");
 
     if (savedWorkingDir) setWorkingDirectory(savedWorkingDir);
+    if (savedGitAddress) setGitAddress(savedGitAddress);
+    if (
+      savedDirectoryMode === DirectoryMode.gitAddress ||
+      savedDirectoryMode === DirectoryMode.workingDirectory
+    ) {
+      setDirectoryMode(savedDirectoryMode);
+    }
     if (savedApiKey) setApiKey(savedApiKey);
     if (savedApiBaseUrl) setApiBaseUrl(savedApiBaseUrl);
     if (savedPermissionMode) setPermissionMode(savedPermissionMode);
@@ -87,6 +103,40 @@ export default function ClaudeCodePage() {
       }
     }
   }, []);
+
+  const getRepositoryName = React.useCallback((address: string) => {
+    const trimmed = address.trim().replace(/\/$/, "");
+    if (!trimmed) {
+      return "";
+    }
+    const match = trimmed.match(/([^/:]+?)(?:\.git)?$/);
+    return match?.[1] ?? "";
+  }, []);
+
+  const getResolvedWorkingDirectory = React.useCallback(
+    (sessionId: string | null) => {
+      if (directoryMode === DirectoryMode.gitAddress) {
+        const repoName = getRepositoryName(gitAddress);
+        if (!repoName || !sessionId) {
+          return null;
+        }
+        return `./${repoName}/${sessionId}`;
+      }
+      return workingDirectory.trim() || null;
+    },
+    [directoryMode, gitAddress, getRepositoryName, workingDirectory],
+  );
+
+  const resolvedWorkingDirectory = React.useMemo(() => {
+    if (directoryMode === DirectoryMode.gitAddress) {
+      if (!threadId) {
+        return "";
+      }
+      const repoName = getRepositoryName(gitAddress);
+      return repoName ? `./${repoName}/${threadId}` : "";
+    }
+    return workingDirectory;
+  }, [directoryMode, getRepositoryName, gitAddress, threadId, workingDirectory]);
 
   // Cleanup WebSocket on unmount
   React.useEffect(() => {
@@ -111,7 +161,7 @@ export default function ClaudeCodePage() {
     statusRequestPendingRef.current = true;
     const request = {
       input: "/status",
-      workingDirectory: workingDirectory.trim() || null,
+      workingDirectory: getResolvedWorkingDirectory(threadId),
       apiKey: apiKey.trim() || null,
       apiBaseUrl: apiBaseUrl.trim() || null,
       systemPrompt: null,
@@ -362,7 +412,7 @@ export default function ClaudeCodePage() {
         const environmentVariables = buildEnvironmentVariables();
         const request = {
           input: inputMsg,
-          workingDirectory: workingDirectory.trim() || null,
+          workingDirectory: getResolvedWorkingDirectory(tid),
           apiKey: apiKey.trim() || null,
           apiBaseUrl: apiBaseUrl.trim() || null,
           systemPrompt: null,
@@ -609,7 +659,7 @@ export default function ClaudeCodePage() {
 
           <TabsContent value="files" className="flex h-full">
             <FileExplorer
-              rootDirectory={workingDirectory}
+              rootDirectory={resolvedWorkingDirectory}
               comments={comments}
               setComments={setComments}
             />
@@ -626,6 +676,10 @@ export default function ClaudeCodePage() {
           onClearSession={handleClearSession}
           workingDirectory={workingDirectory}
           setWorkingDirectory={setWorkingDirectory}
+          gitAddress={gitAddress}
+          setGitAddress={setGitAddress}
+          directoryMode={directoryMode}
+          setDirectoryMode={setDirectoryMode}
           apiKey={apiKey}
           setApiKey={setApiKey}
           apiBaseUrl={apiBaseUrl}
