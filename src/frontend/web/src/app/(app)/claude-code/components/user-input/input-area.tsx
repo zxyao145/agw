@@ -9,6 +9,7 @@ import { QuickTextDialog, type QuickTextOption } from "./quick-text-dialog";
 import { searchCommand } from "../../lib/search_command";
 import { searchFile } from "../../lib/search_file";
 import { useRef, useMemo } from "react";
+import { Separator } from "@/components/ui/separator";
 
 
 
@@ -159,6 +160,7 @@ export function InputArea({
           envVars={envVars}
           setEnvVars={setEnvVars}
         />
+        <Separator orientation="vertical" />
         <ChatInfoPopover initContent={initContent} createArr={createArr} />
       </UserInput.TopLeft>
 
@@ -167,6 +169,7 @@ export function InputArea({
           quickCommands={quickCommands}
           onCommandSelect={handleQuickCommand}
         />
+        <Separator orientation="vertical" />
         <Button
           onClick={onClearSession}
           disabled={isExecuting}
