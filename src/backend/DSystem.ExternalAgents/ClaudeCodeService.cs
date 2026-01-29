@@ -6,6 +6,9 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -34,6 +37,8 @@ public class ClaudeCodeService
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(initRequest.SessionId);
+
+        await EnsureGitRepositoryAsync(initRequest, cancellationToken);
 
         var options = BuildAgentOptions(initRequest);
         var agent = new ClaudeCodeAIAgent(options, _logger);
@@ -143,6 +148,87 @@ public class ClaudeCodeService
         if (!string.IsNullOrEmpty(request.ApiBaseUrl)) options.BaseUrl = request.ApiBaseUrl;
 
         return options;
+    }
+
+    private async Task EnsureGitRepositoryAsync(ClaudeCodeSettingRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.GitAddress))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(request.WorkingDirectory))
+        {
+            throw new InvalidOperationException("Working directory is required when Git address is provided.");
+        }
+
+        var resolvedWorkingDirectory = Path.GetFullPath(request.WorkingDirectory);
+        var gitMetadataPath = Path.Combine(resolvedWorkingDirectory, ".git");
+        if (Directory.Exists(gitMetadataPath))
+        {
+            return;
+        }
+
+        var createdDirectory = false;
+        if (!Directory.Exists(resolvedWorkingDirectory))
+        {
+            Directory.CreateDirectory(resolvedWorkingDirectory);
+            createdDirectory = true;
+        }
+        else if (Directory.EnumerateFileSystemEntries(resolvedWorkingDirectory).Any())
+        {
+            throw new InvalidOperationException(
+                $"Working directory '{resolvedWorkingDirectory}' already exists and is not empty, but no git repository was found.");
+        }
+
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = $"clone {request.GitAddress} .",
+                WorkingDirectory = resolvedWorkingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+        var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0)
+        {
+            _logger.LogError(
+                "Failed to clone git repository {GitAddress} into {WorkingDirectory}. Stdout: {Stdout}. Stderr: {Stderr}",
+                request.GitAddress,
+                resolvedWorkingDirectory,
+                stdout,
+                stderr);
+            if (createdDirectory)
+            {
+                try
+                {
+                    Directory.Delete(resolvedWorkingDirectory, recursive: true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to clean up working directory {WorkingDirectory} after clone failure.",
+                        resolvedWorkingDirectory);
+                }
+            }
+            throw new InvalidOperationException("Failed to clone git repository. See logs for details.");
+        }
+
+        _logger.LogInformation(
+            "Cloned git repository {GitAddress} into {WorkingDirectory}",
+            request.GitAddress,
+            resolvedWorkingDirectory);
     }
 
     private async Task SaveThreadStateAsync(ClaudeCodeSession session, CancellationToken cancellationToken)
