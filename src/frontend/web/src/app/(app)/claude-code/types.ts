@@ -1,5 +1,6 @@
 import { FileItem, GitDiffResponse } from "@/api/files";
 import { AiMessage } from "@/types";
+import type { UserInputRef } from "@/components/message/user-input";
 
 export type AdditionalProperties = Record<string, unknown>;
 
@@ -69,6 +70,7 @@ export interface ChatInputAreaProps {
 
   currentTab: string;
   comments: LineComment[];
+  userInputRef?: React.RefObject<UserInputRef | null>;
 }
 
 // ============================================================================

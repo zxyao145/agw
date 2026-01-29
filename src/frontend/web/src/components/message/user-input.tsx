@@ -3,7 +3,7 @@
 import { Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { KeyboardEvent, ReactNode, useRef } from "react";
+import { KeyboardEvent, ReactNode, useRef, useImperativeHandle, forwardRef } from "react";
 import React from "react";
 import {
   Item,
@@ -113,7 +113,7 @@ function UserInputRoot({
         </div>
       </div>
       {/* Helper text */}
-      <div className="text-xs text-muted-foreground mt-2">
+      <div className="text-xs text-muted-foreground mt-2 bg-background ">
         {help.length > 0 ? (
           <>{help}</>
         ) : (
@@ -217,6 +217,12 @@ function UserInputSuggestions({
   );
 }
 
+export interface UserInputRef {
+  value: string;
+  setInput: (value: string) => void;
+  insertText: (text: string) => void;
+}
+
 function UserInputContainer({
   isExecuting = false,
   onExecute,
@@ -225,11 +231,36 @@ function UserInputContainer({
   maxHeight = "max-h-50",
   children,
   onSuggestion,
-}: UserInputProps) {
+  inputRef,
+}: UserInputProps & { inputRef: React.RefObject<UserInputRef | null> }) {
   const [input, setInput] = React.useState("");
   const [suggestions, setSuggestions] = React.useState<SuggestionItem[]>([]);
   const slots = getUserInputSlots(children);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useImperativeHandle(
+    inputRef,
+    () => ({
+      get value() {
+        return input;
+      },
+      setInput: (value: string) => {
+        setInput(value);
+      },
+      insertText: (text: string) => {
+        const newValue = text + " ";
+        setInput(newValue);
+        setTimeout(() => {
+          const textarea = textareaRef.current;
+          if (textarea) {
+            textarea.focus();
+            textarea.setSelectionRange(newValue.length, newValue.length);
+          }
+        }, 0);
+      },
+    }),
+    [input],
+  );
 
   const handleSuggestionClick = (suggestion: SuggestionItem) => {
     const nextValue = `${suggestion.text} `;
@@ -345,7 +376,18 @@ function Sender({ children }: SenderProps) {
 Sender.displayName = "UserInput.Sender";
 
 // Export compound component
-export const UserInput = Object.assign(UserInputContainer, {
+const UserInputWithRef = forwardRef<UserInputRef, UserInputProps>((props, ref) => {
+  const internalRef = useRef<UserInputRef | null>(null);
+
+  // Forward the internal ref to the parent ref
+  useImperativeHandle(ref, () => internalRef.current!);
+
+  return <UserInputContainer {...props} inputRef={internalRef} />;
+});
+
+UserInputWithRef.displayName = "UserInput";
+
+export const UserInput = Object.assign(UserInputWithRef, {
   TopLeft: TopLeft,
   TopRight: TopRight,
   Help: Help,

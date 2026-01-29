@@ -17,6 +17,7 @@ import { Ulid, Uuid4 } from "id128";
 import { FileExplorer } from "./components/file-explorer";
 import { Chat } from "./components/chat/chat";
 import { InputArea } from "./components/user-input/input-area";
+import type { UserInputRef } from "@/components/message/user-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -67,6 +68,7 @@ export default function ClaudeCodePage() {
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const wsRef = React.useRef<WebSocket | null>(null);
+  const userInputRef = React.useRef<UserInputRef | null>(null);
 
   // Auto-scroll to bottom when new messages arrive
   React.useEffect(() => {
@@ -656,7 +658,9 @@ export default function ClaudeCodePage() {
 
   const handleConfirmSend = async () => {
     setShowCommentDialog(false);
-    await executeClaudeCodeWithComment();
+    const inputValue = userInputRef.current?.value ?? "";
+    await executeClaudeCodeWithComment(inputValue);
+    userInputRef.current?.setInput("");
     // Tab will switch after comments are sent
     setCurrentTab("chat");
   };
@@ -735,6 +739,7 @@ export default function ClaudeCodePage() {
           createArr={createArr}
           currentTab={currentTab}
           comments={comments}
+          userInputRef={userInputRef}
         />
       </div>
 
