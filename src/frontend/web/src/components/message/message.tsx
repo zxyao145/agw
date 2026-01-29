@@ -19,14 +19,14 @@ const getNodePrefix = (type: string): string =>
   type === MessageContentType.UsageContent ? "Usage:" :
   "";
 
-const isTextNode = (type: string) => [
+const isTextNode = (type: string) => ([
   MessageContentType.DataContent,
   MessageContentType.ErrorContent,
   MessageContentType.FunctionCallContent,
   MessageContentType.FunctionResultContent,
   MessageContentType.TextContent,
   MessageContentType.TextReasoningContent,
-].includes(type);
+] as string[]).includes(type);
 
 const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
   if (isTextNode(node.type)) {

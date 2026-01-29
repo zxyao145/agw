@@ -258,7 +258,7 @@ function SidebarTrigger({
   onClick,
 }: {
   className: string;
-  onClick: () => void;
+  onClick?: () => void;
 }) {
   const { toggleSidebar } = useSidebar();
 
