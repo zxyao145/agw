@@ -49,7 +49,6 @@ export default function ClaudeCodePage() {
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [showCommentDialog, setShowCommentDialog] = React.useState(false);
   const statusRequestPendingRef = React.useRef(false);
-  const statusRequestSentRef = React.useRef(false);
   const settingsRequestSessionRef = React.useRef<string | null>(null);
 
   const handleThreadId = (newThreadId: string | null) => {
@@ -222,38 +221,6 @@ export default function ClaudeCodePage() {
     sendSettingIfNeeded(ws, sessionId);
     ws.send(JSON.stringify(buildInputRequest("/status")));
   };
-
-  // Initialize WebSocket and fetch status on mount
-  React.useEffect(() => {
-    if (statusRequestSentRef.current) {
-      return;
-    }
-    statusRequestSentRef.current = true;
-
-    const initStatus = async () => {
-      try {
-        let ws = wsRef.current;
-        if (
-          !ws ||
-          ws.readyState === WebSocket.CLOSED ||
-          ws.readyState === WebSocket.CLOSING
-        ) {
-          ws = setupWebSocket();
-          await waitForWebSocketOpen(ws);
-        } else if (ws.readyState === WebSocket.CONNECTING) {
-          await waitForWebSocketOpen(ws);
-        }
-
-        if (ws.readyState === WebSocket.OPEN) {
-          sendStatusRequest(ws);
-        }
-      } catch (error) {
-        console.error("Failed to initialize status request:", error);
-      }
-    };
-
-    void initStatus();
-  }, []);
 
   const setupWebSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -494,7 +461,25 @@ export default function ClaudeCodePage() {
   };
 
   const handleNewChat = () => {
+    void initializeNewChat();
+  };
+
+  const initializeNewChat = async () => {
     handleClearSession();
+
+    const newThreadId = Uuid4.generate().toCanonical();
+    handleThreadId(newThreadId);
+
+    try {
+      const ws = setupWebSocket();
+      await waitForWebSocketOpen(ws);
+
+      if (ws.readyState === WebSocket.OPEN) {
+        sendStatusRequest(ws);
+      }
+    } catch (error) {
+      console.error("Failed to initialize status request:", error);
+    }
   };
 
   // Auto-save messages to database when they change
