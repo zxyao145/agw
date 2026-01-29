@@ -180,6 +180,10 @@ export default function ClaudeCodePage() {
       type: 0,
       setting: {
         workingDirectory: getResolvedWorkingDirectory(sessionId),
+        gitAddress:
+          directoryMode === DirectoryMode.gitAddress
+            ? gitAddress.trim() || null
+            : null,
         apiKey: apiKey.trim() || null,
         apiBaseUrl: apiBaseUrl.trim() || null,
         systemPrompt: null,

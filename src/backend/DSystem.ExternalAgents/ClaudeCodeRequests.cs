@@ -51,6 +51,12 @@ public record ClaudeCodeSettingRequest
     public string? WorkingDirectory { get; init; }
 
     /// <summary>
+    /// Git repository address (optional).
+    /// When provided, the working directory will be initialized from this repo.
+    /// </summary>
+    public string? GitAddress { get; init; }
+
+    /// <summary>
     /// Anthropic API key (optional).
     /// If not specified, uses ANTHROPIC_AUTH_TOKEN environment variable.
     /// </summary>
