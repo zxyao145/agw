@@ -31,6 +31,8 @@ import {
 import { Button } from "@/components/ui/button";
 import "./page.css";
 
+const gitCodeSource = "./code-work"
+
 export default function ClaudeCodePage() {
   const [workingDirectory, setWorkingDirectory] = React.useState("");
   const [gitAddress, setGitAddress] = React.useState("");
@@ -138,7 +140,7 @@ export default function ClaudeCodePage() {
         if (!repoName || !sessionId) {
           return null;
         }
-        return `./${repoName}/${sessionId}`;
+        return `${gitCodeSource}/${repoName}/${sessionId}`;
       }
       return workingDirectory.trim() || null;
     },
@@ -151,7 +153,7 @@ export default function ClaudeCodePage() {
         return "";
       }
       const repoName = getRepositoryName(gitAddress);
-      return repoName ? `./${repoName}/${threadId}` : "";
+      return repoName ? `${gitCodeSource}/${repoName}/${threadId}` : "";
     }
     return workingDirectory;
   }, [directoryMode, getRepositoryName, gitAddress, threadId, workingDirectory]);

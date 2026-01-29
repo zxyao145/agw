@@ -5,6 +5,7 @@ using DSystem.Infrastructure;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.IO;
@@ -20,13 +21,21 @@ namespace DSystem.ExternalAgents;
 /// </summary>
 public class ClaudeCodeService
 {
+    private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<ClaudeCodeService> _logger;
     private readonly HybridCache _cache;
+    private readonly string _rootPath;
 
-    public ClaudeCodeService(ILogger<ClaudeCodeService> logger, HybridCache cache)
+    public ClaudeCodeService(ILogger<ClaudeCodeService> logger, HybridCache cache, IHostEnvironment hostEnvironment)
     {
         _logger = logger;
         _cache = cache;
+        _hostEnvironment = hostEnvironment;
+        _rootPath = Path.Combine(_hostEnvironment.ContentRootPath);
+        if (!Directory.Exists(_rootPath))
+        {
+            Directory.CreateDirectory(_rootPath);
+        }
     }
 
     /// <summary>
@@ -162,7 +171,7 @@ public class ClaudeCodeService
             throw new InvalidOperationException("Working directory is required when Git address is provided.");
         }
 
-        var resolvedWorkingDirectory = Path.GetFullPath(request.WorkingDirectory);
+        var resolvedWorkingDirectory = Path.Combine(_rootPath, request.WorkingDirectory);
         var gitMetadataPath = Path.Combine(resolvedWorkingDirectory, ".git");
         if (Directory.Exists(gitMetadataPath))
         {

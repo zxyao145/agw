@@ -108,7 +108,7 @@ export const searchCommand = (keyword: string, allCommands: string[]): Promise<S
   // Search and limit results to 5
   const results = fuse.search(keyword, { limit: 5 });
   const suggestions = results.map((result) => ({
-    text: `/${result.item.text}`,
+    text: `${result.item.text}`,
     description: result.item.description,
   }));
 

@@ -167,14 +167,14 @@ export function InputArea({
           quickCommands={quickCommands}
           onCommandSelect={handleQuickCommand}
         />
-        {/* <Button
+        <Button
           onClick={onClearSession}
           disabled={isExecuting}
           variant="ghost"
           size="sm"
         >
           Clear Chat
-        </Button> */}
+        </Button>
       </UserInput.TopRight>
       {isCommentMode && comments.length > 0 && (
         <UserInput.Sender>
