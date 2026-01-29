@@ -60,7 +60,10 @@ export function InputArea({
     const query = value.slice(1).trim();
 
     if (value.startsWith("/")) {
-      return searchCommand(query, initContent?.slashCommands ?? []);
+
+      let allCmds = initContent?.slashCommands ?? [];
+      allCmds = allCmds.map(x=> "/" + x);
+      return searchCommand(query, allCmds);
     }
     if (value.startsWith("@")) {
       return searchFile(workingDirectory, query);

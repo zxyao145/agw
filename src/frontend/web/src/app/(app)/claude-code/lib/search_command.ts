@@ -6,61 +6,62 @@ import Fuse from "fuse.js";
 
 // Commands to ignore/filter out
 export const IGNORED_COMMANDS = [
-  "add-dir",
-  "agents",
-  "config",
-  "statusline",
-  "bashes",
-  "settings",
-  "cost",
-  "doctor",
-  "exit",
-  "help",
-  "ide",
-  "init",
-  "install-github-app",
-  "mcp",
-  "memory",
-  "migrate-installer",
-  "model",
-  "pr-comments",
-  "release-notes",
-  "resume",
-  "status",
-  "bug",
-  "review",
-  "security-review",
-  "terminal-setup",
-  "upgrade",
-  "vim",
-  "permissions",
-  "hooks",
-  "export",
-  "logout",
-  "login",
+  "/add-dir",
+  "/agents",
+  "/config",
+  "/statusline",
+  "/bashes",
+  "/settings",
+  "/cost",
+  "/doctor",
+  "/exit",
+  "/help",
+  "/ide",
+  "/init",
+  "/install-github-app",
+  "/mcp",
+  "/memory",
+  "/migrate-installer",
+  "/model",
+  "/pr-comments",
+  "/release-notes",
+  "/resume",
+  "/status",
+  "/bug",
+  "/review",
+  "/security-review",
+  "/terminal-setup",
+  "/upgrade",
+  "/vim",
+  "/permissions",
+  "/hooks",
+  "/export",
+  "/logout",
+  "/login",
 ];
 
 // Default commands always available
 const DEFAULT_COMMANDS: SuggestionItem[] = [
-  { text: "compact", description: "Compact the conversation history" },
-  { text: "clear", description: "Clear the conversation" },
+  { text: "/compact", description: "Compact the conversation history" },
+  { text: "/clear", description: "Clear the conversation" },
+  { text: "/status", description: "Show Claude Code status including version, model, account, API connectivity, and tool statuses" },
 ];
 
 // Command descriptions for known tools/commands
 const COMMAND_DESCRIPTIONS: Record<string, string> = {
   // Default commands
-  compact: "Compact the conversation history",
+  "/compact": "Compact the conversation history",
 
   // Common tool commands
-  help: "Show available commands",
-  clear: "Clear the conversation",
-  reset: "Reset the session",
-  export: "Export conversation",
-  debug: "Show debug information",
-  status: "Show connection status",
-  stop: "Stop current operation",
-  abort: "Abort current operation",
-  cancel: "Cancel current operation",
+  "/help": "Show available commands",
+  "/clear": "Clear the conversation",
+  "/reset": "Reset the session",
+  "/export": "Export conversation",
+  "/debug": "Show debug information",
+  "/status": "Show connection status",
+  "/stop": "Stop current operation",
+  "/abort": "Abort current operation",
+  "/cancel": "Cancel current operation",
 
   // Add more descriptions as needed
 };
@@ -85,6 +86,11 @@ export const searchCommand = (keyword: string, allCommands: string[]): Promise<S
         description: COMMAND_DESCRIPTIONS[cmd], // Optional description
       });
     }
+  }
+
+  if (!keyword) {
+    console.log("commands.splice(5", commands.splice(5))
+    return Promise.resolve(commands.slice(0, 5));
   }
 
   // Use Fuse.js for fuzzy search

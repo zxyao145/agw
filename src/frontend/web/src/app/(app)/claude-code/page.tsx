@@ -48,7 +48,8 @@ export default function ClaudeCodePage() {
   const [comments, setComments] = React.useState<LineComment[]>([]);
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [showCommentDialog, setShowCommentDialog] = React.useState(false);
-  const statusRequestPendingRef = React.useRef(false);
+  const [isInitStatus, setIsInitStatus] = React.useState(false);
+  // const statusRequestPendingRef = React.useRef(false);
   const settingsRequestSessionRef = React.useRef<string | null>(null);
 
   const handleThreadId = (newThreadId: string | null) => {
@@ -216,9 +217,10 @@ export default function ClaudeCodePage() {
   };
 
   const sendStatusRequest = (ws: WebSocket) => {
-    statusRequestPendingRef.current = true;
+    // statusRequestPendingRef.current = true;
     const sessionId = ensureThreadId();
     sendSettingIfNeeded(ws, sessionId);
+    setIsInitStatus(true);
     ws.send(JSON.stringify(buildInputRequest("/status")));
   };
 
@@ -238,30 +240,26 @@ export default function ClaudeCodePage() {
         const data: AiMessage = JSON.parse(event.data);
         console.debug("onmessage", data);
 
-        if (statusRequestPendingRef.current) {
-          if (
-            data.role === "system" &&
-            data.additionalProperties?.type === "system" &&
-            data.additionalProperties?.subtype === "init"
-          ) {
-            const content = JSON.parse(data.contents[0].content);
-            const initContent: InitMessageContent = {
-              claudeCodeVersion: content.claude_code_version,
-              permissionMode: content.permissionMode,
-              model: content.model,
-              tools: content.tools,
-              slashCommands: content.slash_commands,
-              agents: content.agents,
-              skills: content.skills,
-              plugins: content.plugins,
-              mcpServers: content.mcp_servers,
-            };
+        // if (statusRequestPendingRef.current) {
+        //   if (msgType === "init") {
+        //     const content = JSON.parse(data.contents[0].content);
+        //     const initContent: InitMessageContent = {
+        //       claudeCodeVersion: content.claude_code_version,
+        //       permissionMode: content.permissionMode,
+        //       model: content.model,
+        //       tools: content.tools,
+        //       slashCommands: content.slash_commands,
+        //       agents: content.agents,
+        //       skills: content.skills,
+        //       plugins: content.plugins,
+        //       mcpServers: content.mcp_servers,
+        //     };
 
-            setInitContent(initContent);
-            statusRequestPendingRef.current = false;
-          }
-          return;
-        }
+        //     setInitContent(initContent);
+        //     statusRequestPendingRef.current = false;
+        //   }
+        //   return;
+        // }
 
         if (data.role === "system") {
           var author = data.author;
@@ -275,15 +273,24 @@ export default function ClaudeCodePage() {
             }
           }
 
-          if (!data.additionalProperties) {
+          if (!data.additionalProperties && !isInitStatus) {            
             setMessages((prev) => [...prev, data]);
             return;
           }
 
-          if (
-            data.additionalProperties.type === "system" &&
-            data.additionalProperties.subtype === "init"
-          ) {
+          let msgType = "";
+          if (data.role === "system") {
+            if (
+              data.additionalProperties?.type === "system" &&
+              data.additionalProperties?.subtype === "init"
+            ) {
+              msgType = "init";
+            } else if (data.additionalProperties?.type === "result") {
+              msgType = "result";
+            }
+          }
+
+          if (msgType === "init") {
             const content = JSON.parse(data.contents[0].content);
             const initContent: InitMessageContent = {
               claudeCodeVersion: content.claude_code_version,
@@ -299,16 +306,26 @@ export default function ClaudeCodePage() {
             };
 
             setInitContent(initContent);
-          } else if (data.additionalProperties.type === "result") {
+          } else if (msgType === "result") {
             setIsExecuting(false);
-            setMessages((prev) => [...prev, data]);
+            if (isInitStatus) {
+              setIsInitStatus(false);
+            } else {
+              setMessages((prev) => [...prev, data]);
+            }
           } else {
-            setMessages((prev) => [...prev, data]);
+            if (!isInitStatus) {
+              setMessages((prev) => [...prev, data]);
+            }
           }
         } else if (data.role === "assistant") {
-          setMessages((prev) => [...prev, data]);
+          if (!isInitStatus) {
+            setMessages((prev) => [...prev, data]);
+          }
         } else if (data.role === "user") {
-          setMessages((prev) => [...prev, data]);
+          if (!isInitStatus) {
+            setMessages((prev) => [...prev, data]);
+          }
         }
       } catch (e) {
         console.error("Parse error:", e);
@@ -393,7 +410,7 @@ export default function ClaudeCodePage() {
 
   const sendInputToClaudeCode = async (inputMsg: string) => {
     setIsExecuting(true);
-    statusRequestPendingRef.current = false;
+    // statusRequestPendingRef.current = false;
 
     try {
       let ws = wsRef.current;
