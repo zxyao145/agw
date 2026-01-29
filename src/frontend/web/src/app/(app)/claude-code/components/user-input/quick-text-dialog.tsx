@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Flashlight } from "lucide-react";
+import { useState } from "react";
 
 export interface QuickTextOption {
   id: string;
@@ -25,8 +26,15 @@ interface QuickTextDialogProps {
 }
 
 export function QuickTextDialog({ quickCommands, onCommandSelect }: QuickTextDialogProps) {
+  const [open, setOpen] = useState(false);
+
+  const handleSelect = (text: string) => {
+    onCommandSelect(text);
+    setOpen(false);
+  };
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="flex justify-center items-center">
           <Flashlight className="w-4 h-4" />
@@ -36,7 +44,7 @@ export function QuickTextDialog({ quickCommands, onCommandSelect }: QuickTextDia
         <DialogHeader>
           <DialogTitle>Quick Text Insert</DialogTitle>
           <DialogDescription>
-            Select a predefined text template to insert into the input field
+            {/* Select a predefined text template to insert into the input field */}
           </DialogDescription>
         </DialogHeader>
         <ScrollArea className="max-h-[400px] pr-4">
@@ -44,18 +52,18 @@ export function QuickTextDialog({ quickCommands, onCommandSelect }: QuickTextDia
             {quickCommands.map((option) => (
               <button
                 key={option.id}
-                onClick={() => onCommandSelect(option.text)}
-                className="text-left p-3 rounded-lg border hover:bg-accent/50 transition-colors"
+                onClick={() => handleSelect(option.text)}
+                className="text-left p-2 rounded-md border hover:bg-accent/50 transition-colors"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="font-medium text-sm mb-1">{option.label}</div>
-                    <div className="text-xs text-muted-foreground mb-2">
+                    <div className="text-xs text-muted-foreground mb-0">
                       {option.description}
                     </div>
-                    <div className="text-xs bg-muted p-2 rounded font-mono">
+                    {/* <div className="text-xs bg-muted p-2 rounded font-mono">
                       {option.text}
-                    </div>
+                    </div> */}
                   </div>
                 </div>
               </button>
