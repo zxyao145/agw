@@ -8,6 +8,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -162,12 +163,23 @@ public class ClaudeCodeService
         }
 
         var resolvedWorkingDirectory = Path.GetFullPath(request.WorkingDirectory);
-        if (Directory.Exists(resolvedWorkingDirectory))
+        var gitMetadataPath = Path.Combine(resolvedWorkingDirectory, ".git");
+        if (Directory.Exists(gitMetadataPath))
         {
             return;
         }
 
-        Directory.CreateDirectory(resolvedWorkingDirectory);
+        var createdDirectory = false;
+        if (!Directory.Exists(resolvedWorkingDirectory))
+        {
+            Directory.CreateDirectory(resolvedWorkingDirectory);
+            createdDirectory = true;
+        }
+        else if (Directory.EnumerateFileSystemEntries(resolvedWorkingDirectory).Any())
+        {
+            throw new InvalidOperationException(
+                $"Working directory '{resolvedWorkingDirectory}' already exists and is not empty, but no git repository was found.");
+        }
 
         var process = new Process
         {
@@ -196,6 +208,20 @@ public class ClaudeCodeService
                 resolvedWorkingDirectory,
                 stdout,
                 stderr);
+            if (createdDirectory)
+            {
+                try
+                {
+                    Directory.Delete(resolvedWorkingDirectory, recursive: true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to clean up working directory {WorkingDirectory} after clone failure.",
+                        resolvedWorkingDirectory);
+                }
+            }
             throw new InvalidOperationException("Failed to clone git repository. See logs for details.");
         }
 
