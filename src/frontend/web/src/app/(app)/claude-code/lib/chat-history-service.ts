@@ -65,7 +65,7 @@ export async function saveSession(
       size: 0, // Will be calculated below
     };
 
-    console.debug('Saving session:', sessionData);
+    // console.debug('Saving session:', sessionData);
     sessionData.size = calculateSessionSize(sessionData);
 
     // Put will insert or update based on _id
@@ -74,7 +74,7 @@ export async function saveSession(
       // doc.updatedAt = Date.now();
       // doc.messages = messages;
 
-      console.debug('Upsert session data:', doc);
+      // console.debug('Upsert session data:', doc);
       return sessionData;
     });
     // Cleanup after save
@@ -82,7 +82,7 @@ export async function saveSession(
 
     // Get the updated document
     const savedDoc = await db.get(response.id);
-    console.debug('savedDoc:', savedDoc);
+    // console.debug('savedDoc:', savedDoc);
 
     return savedDoc;
   } catch (error) {

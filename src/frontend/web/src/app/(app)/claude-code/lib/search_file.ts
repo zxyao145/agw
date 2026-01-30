@@ -9,7 +9,7 @@ export async function searchFile(rootDirectory: string, keyword: string): Promis
   if (!rootDirectory) {
     return [];
   }
-  console.debug("searchFile", rootDirectory, keyword)
+  // console.debug("searchFile", rootDirectory, keyword)
 
   try {
     const response = await searchFiles(rootDirectory, keyword, true);

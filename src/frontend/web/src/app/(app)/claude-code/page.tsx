@@ -64,11 +64,9 @@ export default function ClaudeCodePage() {
   const handleThreadId = (newThreadId: string | null) => {
     if (newThreadId !== threadId) {
       settingsRequestSessionRef.current = null;
+      setThreadId(newThreadId);
     }
-    if (newThreadId) {
-      console.debug("Set threadId:", newThreadId);
-    }
-    setThreadId(newThreadId);
+
   };
 
   const [initContent, setInitContent] =
@@ -310,13 +308,13 @@ export default function ClaudeCodePage() {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.debug("WebSocket connected");
+      // console.debug("WebSocket connected");
     };
 
     ws.onmessage = (event) => {
       try {
         const data: AiMessage = JSON.parse(event.data);
-        console.info("onmessage", data);
+        console.debug("onmessage", data);
 
         if (data.role === "system") {
           handleSystem(data);
@@ -337,7 +335,7 @@ export default function ClaudeCodePage() {
     };
 
     ws.onclose = (event) => {
-      console.debug("WebSocket closed:", event.code, event.reason);
+      // console.debug("WebSocket closed:", event.code, event.reason);
       wsRef.current = null;
       settingsRequestSessionRef.current = null;
       setIsExecuting(false);
@@ -373,7 +371,7 @@ export default function ClaudeCodePage() {
       toast.error("Please add comments first");
       return;
     }
-    console.debug("comments", comments);
+    // console.debug("comments", comments);
 
     let prompt = value.trim()
       ? value.trim()
@@ -384,7 +382,7 @@ export default function ClaudeCodePage() {
       prompt += `file ${comment.filePath}, ${comment.isAfter ? "after" : "before"} the modification, the ${comment.lineIndex}th line: `;
       prompt += comment.content + "\n\n";
     });
-    console.debug("Final input with comments:", prompt);
+    // console.debug("Final input with comments:", prompt);
     await sendInputToClaudeCode(prompt);
     setComments([]);
   };
@@ -442,7 +440,7 @@ export default function ClaudeCodePage() {
         const tid = ensureThreadId();
         sendSettingIfNeeded(ws, tid);
         const request = buildInputRequest(inputMsg);
-        console.debug("Sending request:", request);
+        // console.debug("Sending request:", request);
         ws.send(JSON.stringify(request));
       }
     } catch (error) {
@@ -530,7 +528,7 @@ export default function ClaudeCodePage() {
   // Auto-save messages to database when they change
   React.useEffect(() => {
     const msgLength = messages?.length ?? 0;
-    console.debug("Messages changed, auto-saving...", threadId, msgLength);
+    // console.debug("Messages changed, auto-saving...", threadId, msgLength);
     if (threadId && msgLength > 0) {
       // Debounce saves to avoid too frequent writes
       const timeoutId = setTimeout(async () => {
@@ -541,7 +539,7 @@ export default function ClaudeCodePage() {
         } catch (error) {
           console.error("Failed to save session:", error);
         }
-      }, 1000);
+      }, 2000);
 
       return () => clearTimeout(timeoutId);
     }
