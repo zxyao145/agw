@@ -18,6 +18,7 @@ import { FileExplorer } from "./components/file-explorer";
 import { Chat } from "./components/chat/chat";
 import { InputArea } from "./components/user-input/input-area";
 import type { UserInputRef } from "@/components/message/user-input";
+import { deleteSessionByThreadId } from "./lib/chat-history-service";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -463,7 +464,8 @@ export default function ClaudeCodePage() {
     }
   };
 
-  const handleClearSession = () => {
+  const handleClearSession = async () => {
+    const activeThreadId = threadId;
     setMessages([]);
     handleThreadId(null);
     // Close WebSocket to start fresh session on next message
@@ -472,6 +474,9 @@ export default function ClaudeCodePage() {
       wsRef.current = null;
     }
     settingsRequestSessionRef.current = null;
+    if (activeThreadId) {
+      await deleteSessionByThreadId(activeThreadId);
+    }
   };
 
   const handleSessionSelect = (newMessages: AiMessage[], newThreadId: string) => {
