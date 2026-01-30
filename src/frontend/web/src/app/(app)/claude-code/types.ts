@@ -50,6 +50,7 @@ export interface ChatInputAreaProps {
   onExecute: (value: string) => void;
   onExecuteWithComment: (value: string) => void;
   onClearSession: () => void;
+  onScrollToTop: () => void;
   workingDirectory: string;
   setWorkingDirectory: (value: string) => void;
   gitAddress: string;

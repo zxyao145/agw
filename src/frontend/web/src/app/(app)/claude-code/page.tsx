@@ -71,6 +71,7 @@ export default function ClaudeCodePage() {
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const wsRef = React.useRef<WebSocket | null>(null);
   const userInputRef = React.useRef<UserInputRef | null>(null);
+  const topAnchorRef = React.useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   React.useEffect(() => {
@@ -686,9 +687,14 @@ export default function ClaudeCodePage() {
     setShowCommentDialog(open);
   };
 
+  const handleScrollToTop = () => {
+    topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <div className="relative flex flex-col h-[calc(100vh-58px)] w-full max-w-8xl mx-auto mr-2">
       <div className="flex-1 overflow-y-auto">
+        <div ref={topAnchorRef} />
         <Tabs
           value={currentTab}
           onValueChange={handleTabChange}
@@ -727,6 +733,7 @@ export default function ClaudeCodePage() {
           onExecute={executeClaudeCode}
           onExecuteWithComment={executeClaudeCodeWithComment}
           onClearSession={handleClearSession}
+          onScrollToTop={handleScrollToTop}
           workingDirectory={workingDirectory}
           setWorkingDirectory={setWorkingDirectory}
           gitAddress={gitAddress}
