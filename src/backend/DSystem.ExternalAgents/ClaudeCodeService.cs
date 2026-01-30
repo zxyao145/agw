@@ -7,7 +7,6 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -24,13 +23,19 @@ public class ClaudeCodeService
     private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<ClaudeCodeService> _logger;
     private readonly HybridCache _cache;
+    private readonly IGitCommandService _gitCommandService;
     private readonly string _rootPath;
 
-    public ClaudeCodeService(ILogger<ClaudeCodeService> logger, HybridCache cache, IHostEnvironment hostEnvironment)
+    public ClaudeCodeService(
+        ILogger<ClaudeCodeService> logger,
+        HybridCache cache,
+        IHostEnvironment hostEnvironment,
+        IGitCommandService gitCommandService)
     {
         _logger = logger;
         _cache = cache;
         _hostEnvironment = hostEnvironment;
+        _gitCommandService = gitCommandService;
         _rootPath = Path.Combine(_hostEnvironment.ContentRootPath);
         if (!Directory.Exists(_rootPath))
         {
@@ -190,33 +195,19 @@ public class ClaudeCodeService
                 $"Working directory '{resolvedWorkingDirectory}' already exists and is not empty, but no git repository was found.");
         }
 
-        var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "git",
-                Arguments = $"clone {request.GitAddress} .",
-                WorkingDirectory = resolvedWorkingDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
+        var cloneResult = await _gitCommandService.CloneRepositoryAsync(
+            request.GitAddress,
+            resolvedWorkingDirectory,
+            cancellationToken);
 
-        process.Start();
-        var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-
-        if (process.ExitCode != 0)
+        if (!cloneResult.Success)
         {
             _logger.LogError(
                 "Failed to clone git repository {GitAddress} into {WorkingDirectory}. Stdout: {Stdout}. Stderr: {Stderr}",
                 request.GitAddress,
                 resolvedWorkingDirectory,
-                stdout,
-                stderr);
+                cloneResult.Stdout,
+                cloneResult.Stderr);
             if (createdDirectory)
             {
                 try

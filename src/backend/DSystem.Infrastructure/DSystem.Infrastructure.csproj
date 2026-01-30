@@ -5,6 +5,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="CliWrap" Version="3.10.0" />
 		<PackageReference Include="EFCore.NamingConventions" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design">

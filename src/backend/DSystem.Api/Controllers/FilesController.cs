@@ -1,4 +1,5 @@
 using DSystem.Api.Contracts;
+using DSystem.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System.IO;
@@ -10,10 +11,12 @@ namespace DSystem.Api.Controllers;
 public class FilesController : ControllerBase
 {
     private readonly ILogger<FilesController> _logger;
+    private readonly IGitCommandService _gitCommandService;
 
-    public FilesController(ILogger<FilesController> logger)
+    public FilesController(ILogger<FilesController> logger, IGitCommandService gitCommandService)
     {
         _logger = logger;
+        _gitCommandService = gitCommandService;
     }
 
     [HttpGet("list")]
@@ -52,7 +55,7 @@ public class FilesController : ControllerBase
             GitChangedFiles? changedFiles = null;
             if (diff)
             {
-                changedFiles = await GetChangedFilesAsync(normalizedPath);
+                changedFiles = await _gitCommandService.GetChangedFilesAsync(normalizedPath);
                 if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
                 {
                     // No git repository or no changed files
@@ -144,7 +147,7 @@ public class FilesController : ControllerBase
 
     private async Task<IActionResult> GetAllChangedFilesAsync(string directoryPath)
     {
-        var changedFiles = await GetChangedFilesAsync(directoryPath);
+        var changedFiles = await _gitCommandService.GetChangedFilesAsync(directoryPath);
         if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
         {
             // No git repository or no changed files
@@ -201,91 +204,6 @@ public class FilesController : ControllerBase
             .ToList();
 
         return Ok(new FileListResponse { Items = items });
-    }
-
-    private record GitChangedFiles(
-        Dictionary<string, string> FileStatuses, // path -> status ("added", "modified", "deleted", "untracked")
-        HashSet<string> DeletedFiles
-    );
-
-    private async Task<GitChangedFiles?> GetChangedFilesAsync(string directory)
-    {
-        var gitDirectory = FindGitDirectory(directory);
-        if (gitDirectory == null)
-        {
-            return null;
-        }
-
-        try
-        {
-            var process = new System.Diagnostics.Process
-            {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "git",
-                    Arguments = "status --porcelain",
-                    WorkingDirectory = gitDirectory,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync();
-
-            if (process.ExitCode != 0)
-            {
-                return null;
-            }
-
-            var fileStatuses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var deletedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var line in lines)
-            {
-                if (line.Length < 3) continue;
-
-                // Git status format: XY filename
-                // X = index status, Y = working tree status
-                var statusCode = line.Substring(0, 2);
-                var filename = line.Substring(3).Trim().Trim('"');
-
-                var fullPath = Path.GetFullPath(Path.Combine(gitDirectory, filename));
-
-                // Determine git status
-                string status;
-                if (statusCode == "??")
-                {
-                    status = "untracked";
-                }
-                else if (statusCode.Contains('D'))
-                {
-                    status = "deleted";
-                    deletedFiles.Add(fullPath);
-                }
-                else if (statusCode.Contains('A'))
-                {
-                    status = "added";
-                }
-                else
-                {
-                    status = "modified";
-                }
-
-                fileStatuses[fullPath] = status;
-            }
-
-            return new GitChangedFiles(fileStatuses, deletedFiles);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get changed files from git");
-            return null;
-        }
     }
 
     [HttpGet("read")]
@@ -347,94 +265,27 @@ public class FilesController : ControllerBase
                 return NotFound(new { error = "File not found" });
             }
 
-            // Get git diff for the file
-            var gitDirectory = FindGitDirectory(normalizedPath);
-            if (gitDirectory == null)
+            var result = await _gitCommandService.GetDiffAsync(normalizedPath);
+            if (!result.Success)
             {
-                return BadRequest(new { error = "File is not in a git repository" });
+                _logger.LogWarning("Git diff failed: {Error}", result.Error);
+                return BadRequest(new { error = "Git diff failed", details = result.Error });
             }
 
-            var process = new System.Diagnostics.Process
+            if (result.Unchanged)
             {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
+                return Ok(new
                 {
-                    FileName = "git",
-                    Arguments = $"diff HEAD \"{normalizedPath}\"",
-                    WorkingDirectory = gitDirectory,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync();
-            var error = await process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
-
-            if (process.ExitCode != 0 && !string.IsNullOrEmpty(error))
-            {
-                _logger.LogWarning("Git diff failed: {Error}", error);
-                return BadRequest(new { error = "Git diff failed", details = error });
-            }
-
-            // If no diff (file unchanged), try to get the file from git
-            if (string.IsNullOrWhiteSpace(output))
-            {
-                var gitRootProcess = new System.Diagnostics.Process
-                {
-                    StartInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "git",
-                        Arguments = "rev-parse --show-toplevel",
-                        WorkingDirectory = gitDirectory,
-                        RedirectStandardOutput = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    }
-                };
-
-                gitRootProcess.Start();
-                var gitRoot = (await gitRootProcess.StandardOutput.ReadToEndAsync()).Trim();
-                await gitRootProcess.WaitForExitAsync();
-
-                var relativePath = Path.GetRelativePath(gitRoot, normalizedPath).Replace("\\", "/");
-
-                var showProcess = new System.Diagnostics.Process
-                {
-                    StartInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "git",
-                        Arguments = $"show HEAD:\"{relativePath}\"",
-                        WorkingDirectory = gitDirectory,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    }
-                };
-
-                showProcess.Start();
-                var originalContent = await showProcess.StandardOutput.ReadToEndAsync();
-                var showError = await showProcess.StandardError.ReadToEndAsync();
-                await showProcess.WaitForExitAsync();
-
-                if (showProcess.ExitCode == 0)
-                {
-                    return Ok(new
-                    {
-                        diff = "",
-                        message = "No changes detected",
-                        unchanged = true,
-                        originalContent
-                    });
-                }
+                    diff = "",
+                    message = "No changes detected",
+                    unchanged = true,
+                    originalContent = result.OriginalContent
+                });
             }
 
             return Ok(new
             {
-                diff = output,
+                diff = result.Diff,
                 unchanged = false
             });
         }
@@ -513,95 +364,25 @@ public class FilesController : ControllerBase
                 return NotFound(new { error = "File not found" });
             }
 
-            // Check if file is in a git repository
-            var gitDirectory = FindGitDirectory(normalizedPath);
-            if (gitDirectory == null)
+            var result = await _gitCommandService.ResetFileAsync(normalizedPath);
+            if (!result.Success && result.IsClientError)
             {
-                return BadRequest(new { error = "File is not in a git repository" });
+                return BadRequest(new { error = result.Message });
             }
 
-            // Get git root to construct relative path
-            var gitRootProcess = new System.Diagnostics.Process
+            if (!result.Success && !string.IsNullOrEmpty(result.Error))
             {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "git",
-                    Arguments = "rev-parse --show-toplevel",
-                    WorkingDirectory = gitDirectory,
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            gitRootProcess.Start();
-            var gitRoot = (await gitRootProcess.StandardOutput.ReadToEndAsync()).Trim();
-            await gitRootProcess.WaitForExitAsync();
-
-            if (gitRootProcess.ExitCode != 0)
-            {
-                return BadRequest(new { error = "Failed to get git root directory" });
+                _logger.LogError("Git reset failed: {Error}", result.Error);
+                return StatusCode(500, new { error = "Git reset failed", details = result.Error });
             }
 
-            var relativePath = Path.GetRelativePath(gitRoot, normalizedPath).Replace("\\", "/");
-
-            // Check if file has modifications
-            var statusProcess = new System.Diagnostics.Process
+            if (!result.Success)
             {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "git",
-                    Arguments = $"status --porcelain \"{relativePath}\"",
-                    WorkingDirectory = gitDirectory,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            statusProcess.Start();
-            var statusOutput = await statusProcess.StandardOutput.ReadToEndAsync();
-            await statusProcess.WaitForExitAsync();
-
-            if (statusProcess.ExitCode != 0)
-            {
-                return BadRequest(new { error = "Failed to check git status" });
-            }
-
-            if (string.IsNullOrWhiteSpace(statusOutput))
-            {
-                return Ok(new { success = false, message = "File has no modifications to reset" });
-            }
-
-            // Reset the file using git checkout
-            var resetProcess = new System.Diagnostics.Process
-            {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "git",
-                    Arguments = $"checkout HEAD -- \"{relativePath}\"",
-                    WorkingDirectory = gitDirectory,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            resetProcess.Start();
-            var resetOutput = await resetProcess.StandardOutput.ReadToEndAsync();
-            var resetError = await resetProcess.StandardError.ReadToEndAsync();
-            await resetProcess.WaitForExitAsync();
-
-            if (resetProcess.ExitCode != 0)
-            {
-                _logger.LogError("Git reset failed: {Error}", resetError);
-                return StatusCode(500, new { error = "Git reset failed", details = resetError });
+                return Ok(new { success = false, message = result.Message });
             }
 
             _logger.LogInformation("Reset file to HEAD: {Path}", normalizedPath);
-            return Ok(new { success = true, message = "File reset successfully" });
+            return Ok(new { success = true, message = result.Message });
         }
         catch (Exception ex)
         {
@@ -730,30 +511,6 @@ public class FilesController : ControllerBase
         {
             // Skip directories we can't access
         }
-    }
-
-    private string? FindGitDirectory(string filePath)
-    {
-        string? directory;
-        if (Directory.Exists(filePath))
-        {
-            directory = filePath;
-        }
-        else
-        {
-            directory = Path.GetDirectoryName(filePath);
-        }
-
-
-        while (directory != null)
-        {
-            if (Directory.Exists(Path.Combine(directory, ".git")))
-            {
-                return directory;
-            }
-            directory = Directory.GetParent(directory)?.FullName;
-        }
-        return null;
     }
 
     [HttpGet("search")]
