@@ -206,6 +206,7 @@ public class GitCommandService : IGitCommandService
         return await Cli.Wrap("git")
             .WithArguments(arguments)
             .WithWorkingDirectory(workingDirectory)
+            .WithValidation(CommandResultValidation.None)
             .ExecuteBufferedAsync(cancellationToken);
     }
 
