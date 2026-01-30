@@ -19,6 +19,7 @@ export function InputArea({
   onExecute,
   onExecuteWithComment,
   onClearSession,
+  onScrollToTop,
   workingDirectory,
   setWorkingDirectory,
   gitAddress,
@@ -177,6 +178,10 @@ export function InputArea({
           size="sm"
         >
           Clear Chat
+        </Button>
+        <Separator orientation="vertical" />
+        <Button onClick={onScrollToTop} variant="ghost" size="sm">
+          Top
         </Button>
       </UserInput.TopRight>
       {isCommentMode && comments.length > 0 && (
