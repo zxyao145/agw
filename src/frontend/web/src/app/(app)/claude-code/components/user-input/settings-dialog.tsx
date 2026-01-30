@@ -39,11 +39,10 @@ import {
   PermissionMode,
   SettingsDialogProps,
 } from "../../types";
-
-const WORKING_DIR_HISTORY_KEY = "claudecode_workingDirHistory";
-const GIT_ADDRESS_HISTORY_KEY = "claudecode_gitAddressHistory";
-
-
+import {
+  claudeSettingsStorage,
+  ClaudeSettingsStorageValues,
+} from "../../lib/settings-storage";
 
 export function SettingsDialog({
   workingDirectory,
@@ -76,33 +75,28 @@ export function SettingsDialog({
   // Load env vars on mount
   React.useEffect(() => {
     if (open) {
-      try {
-        const saved = localStorage.getItem("claudecode_envVars");
-        if (saved) {
-          setEnvVars(JSON.parse(saved));
-        }
-        const savedWorkingDirHistory = localStorage.getItem(
-          WORKING_DIR_HISTORY_KEY,
-        );
-        if (savedWorkingDirHistory) {
-          setWorkingDirHistory(JSON.parse(savedWorkingDirHistory));
-        }
-        const savedGitAddressHistory = localStorage.getItem(
-          GIT_ADDRESS_HISTORY_KEY,
-        );
-        if (savedGitAddressHistory) {
-          setGitAddressHistory(JSON.parse(savedGitAddressHistory));
-        }
-      } catch (e) {
-        console.error("Failed to load env vars:", e);
+      const { envVars: savedEnvVars, workingDirHistory, gitAddressHistory } =
+        claudeSettingsStorage.get();
+      if (savedEnvVars) {
+        setEnvVars(savedEnvVars);
+      }
+      if (workingDirHistory) {
+        setWorkingDirHistory(workingDirHistory);
+      }
+      if (gitAddressHistory) {
+        setGitAddressHistory(gitAddressHistory);
       }
     }
   }, [open]);
 
+  // Persist a recent history list (working dir or git address) while de-duplicating and capping entries.
   const updateHistory = React.useCallback(
     (
       value: string,
-      storageKey: string,
+      storageKey: keyof Pick<
+        ClaudeSettingsStorageValues,
+        "workingDirHistory" | "gitAddressHistory"
+      >,
       setHistory: React.Dispatch<React.SetStateAction<string[]>>,
     ) => {
       const trimmed = value.trim();
@@ -114,7 +108,11 @@ export function SettingsDialog({
           0,
           20,
         );
-        localStorage.setItem(storageKey, JSON.stringify(next));
+        const storageUpdate: ClaudeSettingsStorageValues =
+          storageKey === "workingDirHistory"
+            ? { workingDirHistory: next }
+            : { gitAddressHistory: next };
+        claudeSettingsStorage.set(storageUpdate);
         return next;
       });
     },
@@ -122,19 +120,17 @@ export function SettingsDialog({
   );
 
   const saveSettings = () => {
-    localStorage.setItem("claudecode_workingDir", workingDirectory);
-    localStorage.setItem("claudecode_gitAddress", gitAddress);
-    localStorage.setItem("claudecode_directoryMode", directoryMode);
-    localStorage.setItem("claudecode_apiKey", apiKey);
-    localStorage.setItem("claudecode_apiBaseUrl", apiBaseUrl);
-    localStorage.setItem("claudecode_permissionMode", permissionMode);
-    localStorage.setItem("claudecode_envVars", JSON.stringify(envVars));
-    updateHistory(
+    claudeSettingsStorage.set({
       workingDirectory,
-      WORKING_DIR_HISTORY_KEY,
-      setWorkingDirHistory,
-    );
-    updateHistory(gitAddress, GIT_ADDRESS_HISTORY_KEY, setGitAddressHistory);
+      gitAddress,
+      directoryMode,
+      apiKey,
+      apiBaseUrl,
+      permissionMode,
+      envVars,
+    });
+    updateHistory(workingDirectory, "workingDirHistory", setWorkingDirHistory);
+    updateHistory(gitAddress, "gitAddressHistory", setGitAddressHistory);
     setOpen(false);
     toast.success("Settings saved");
   };
