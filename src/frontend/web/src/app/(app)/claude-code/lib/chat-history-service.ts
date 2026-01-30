@@ -92,6 +92,54 @@ export async function saveSession(
 }
 
 /**
+ * Create an empty session so it shows in history immediately.
+ */
+export async function createSession(
+  threadId: string,
+  title?: string
+): Promise<ChatSessionDocument | null> {
+  if (!threadId) {
+    return null;
+  }
+
+  try {
+    const db = await getChatHistoryDatabase();
+
+    // Avoid creating duplicates for the same threadId.
+    const existingResult = await db.find({
+      selector: { threadId },
+      limit: 1
+    });
+    if (existingResult.docs.length > 0) {
+      return existingResult.docs[0];
+    }
+
+    const now = Date.now();
+    const sessionTitle = title?.trim() || generateTitle([]);
+    const sessionData: ChatSessionDocument = {
+      _id: Ulid.generate().toCanonical(),
+      threadId,
+      title: sessionTitle,
+      messages: [],
+      createdAt: now,
+      updatedAt: now,
+      size: 0, // Will be calculated below
+    };
+
+    sessionData.size = calculateSessionSize(sessionData);
+
+    const response = await db.put(sessionData);
+    await cleanupOldSessions(db);
+    const savedDoc = await db.get(response.id);
+
+    return savedDoc;
+  } catch (error) {
+    console.error("Failed to create session:", error);
+    return null;
+  }
+}
+
+/**
  * Get a session by threadId
  */
 export async function getSessionByThreadId(
@@ -123,7 +171,7 @@ export async function getAllSessions(): Promise<ChatSessionDocument[]> {
     const db = await getChatHistoryDatabase();
     const result = await db.find({
       selector: {},
-      sort: [{ updatedAt: 'desc' }]
+      sort: [{ createdAt: 'desc' }]
     });
 
     return result.docs;

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Flashlight } from "lucide-react";
+import { Flashlight, Zap } from "lucide-react";
 import { useState } from "react";
 
 export interface QuickTextOption {
@@ -37,17 +37,17 @@ export function QuickTextDialog({ quickCommands, onCommandSelect }: QuickTextDia
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="flex justify-center items-center">
-          <Flashlight className="w-4 h-4" />
+          <Zap className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-125">
         <DialogHeader>
           <DialogTitle>Quick Text Insert</DialogTitle>
           <DialogDescription>
             {/* Select a predefined text template to insert into the input field */}
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="max-h-[400px] pr-4">
+        <ScrollArea className="max-h-100 pr-4">
           <div className="grid gap-2">
             {quickCommands.map((option) => (
               <button

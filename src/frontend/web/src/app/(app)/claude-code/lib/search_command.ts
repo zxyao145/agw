@@ -89,7 +89,6 @@ export const searchCommand = (keyword: string, allCommands: string[]): Promise<S
   }
 
   if (!keyword) {
-    console.log("commands.splice(5", commands.splice(5))
     return Promise.resolve(commands.slice(0, 5));
   }
 

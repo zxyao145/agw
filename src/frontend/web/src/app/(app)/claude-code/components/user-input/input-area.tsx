@@ -10,6 +10,7 @@ import { searchCommand } from "../../lib/search_command";
 import { searchFile } from "../../lib/search_file";
 import { useRef, useMemo } from "react";
 import { Separator } from "@/components/ui/separator";
+import { ArrowUp, Eraser } from "lucide-react";
 
 
 
@@ -177,11 +178,11 @@ export function InputArea({
           variant="ghost"
           size="sm"
         >
-          Clear Chat
+          <Eraser width={16} />
         </Button>
         <Separator orientation="vertical" />
         <Button onClick={onScrollToTop} variant="ghost" size="sm">
-          Top
+          <ArrowUp width={16} />
         </Button>
       </UserInput.TopRight>
       {isCommentMode && comments.length > 0 && (

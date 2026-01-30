@@ -18,7 +18,11 @@ import { FileExplorer } from "./components/file-explorer";
 import { Chat } from "./components/chat/chat";
 import { InputArea } from "./components/user-input/input-area";
 import type { UserInputRef } from "@/components/message/user-input";
-import { deleteSessionByThreadId } from "./lib/chat-history-service";
+import {
+  createSession,
+  deleteSessionByThreadId,
+  saveSession,
+} from "./lib/chat-history-service";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -33,7 +37,7 @@ import { Button } from "@/components/ui/button";
 import "./page.css";
 import { claudeSettingsStorage } from "./lib/settings-storage";
 
-const gitCodeSource = "./code-work"
+const gitCodeSource = "./code-work";
 
 export default function ClaudeCodePage() {
   const [workingDirectory, setWorkingDirectory] = React.useState("");
@@ -150,7 +154,13 @@ export default function ClaudeCodePage() {
       return repoName ? `${gitCodeSource}/${repoName}/${threadId}` : "";
     }
     return workingDirectory;
-  }, [directoryMode, getRepositoryName, gitAddress, threadId, workingDirectory]);
+  }, [
+    directoryMode,
+    getRepositoryName,
+    gitAddress,
+    threadId,
+    workingDirectory,
+  ]);
 
   // Cleanup WebSocket on unmount
   React.useEffect(() => {
@@ -240,28 +250,7 @@ export default function ClaudeCodePage() {
     ws.onmessage = (event) => {
       try {
         const data: AiMessage = JSON.parse(event.data);
-        console.debug("onmessage", data);
-
-        // if (statusRequestPendingRef.current) {
-        //   if (msgType === "init") {
-        //     const content = JSON.parse(data.contents[0].content);
-        //     const initContent: InitMessageContent = {
-        //       claudeCodeVersion: content.claude_code_version,
-        //       permissionMode: content.permissionMode,
-        //       model: content.model,
-        //       tools: content.tools,
-        //       slashCommands: content.slash_commands,
-        //       agents: content.agents,
-        //       skills: content.skills,
-        //       plugins: content.plugins,
-        //       mcpServers: content.mcp_servers,
-        //     };
-
-        //     setInitContent(initContent);
-        //     statusRequestPendingRef.current = false;
-        //   }
-        //   return;
-        // }
+        console.info("onmessage", data);
 
         if (data.role === "system") {
           var author = data.author;
@@ -275,7 +264,7 @@ export default function ClaudeCodePage() {
             }
           }
 
-          if (!data.additionalProperties && !isInitStatus) {            
+          if (!data.additionalProperties && !isInitStatus) {
             setMessages((prev) => [...prev, data]);
             return;
           }
@@ -289,9 +278,11 @@ export default function ClaudeCodePage() {
               msgType = "init";
             } else if (data.additionalProperties?.type === "result") {
               msgType = "result";
+            } else if (data.additionalProperties?.subtype === "hint") {
+              console.log("hint", data);
+              return;
             }
           }
-
           if (msgType === "init") {
             const content = JSON.parse(data.contents[0].content);
             const initContent: InitMessageContent = {
@@ -309,11 +300,12 @@ export default function ClaudeCodePage() {
 
             setInitContent(initContent);
           } else if (msgType === "result") {
+            toast.info("Execution completed");
             setIsExecuting(false);
             if (isInitStatus) {
               setIsInitStatus(false);
             } else {
-              setMessages((prev) => [...prev, data]);
+              // setMessages((prev) => [...prev, data]);
             }
           } else {
             if (!isInitStatus) {
@@ -460,19 +452,25 @@ export default function ClaudeCodePage() {
   const handleClearSession = async () => {
     const activeThreadId = threadId;
     setMessages([]);
+    if (activeThreadId) {
+      await saveSession(activeThreadId, []);
+    }
+  };
+
+  const clearActiveSessionState = () => {
+    setMessages([]);
     handleThreadId(null);
-    // Close WebSocket to start fresh session on next message
     if (wsRef.current) {
       wsRef.current.close(1000, "Session cleared");
       wsRef.current = null;
     }
     settingsRequestSessionRef.current = null;
-    if (activeThreadId) {
-      await deleteSessionByThreadId(activeThreadId);
-    }
   };
 
-  const handleSessionSelect = (newMessages: AiMessage[], newThreadId: string) => {
+  const handleSessionSelect = (
+    newMessages: AiMessage[],
+    newThreadId: string,
+  ) => {
     setMessages(newMessages);
     handleThreadId(newThreadId);
     // Close existing WebSocket to start fresh with loaded session
@@ -481,6 +479,20 @@ export default function ClaudeCodePage() {
       wsRef.current = null;
     }
     settingsRequestSessionRef.current = null;
+  };
+
+  const handleSessionDeleted = (deletedThreadId: string) => {
+    if (deletedThreadId !== threadId) {
+      return;
+    }
+    clearActiveSessionState();
+  };
+
+  const handleAllSessionsCleared = () => {
+    if (!threadId) {
+      return;
+    }
+    clearActiveSessionState();
   };
 
   const handleNewChat = () => {
@@ -492,6 +504,12 @@ export default function ClaudeCodePage() {
 
     const newThreadId = Uuid4.generate().toCanonical();
     handleThreadId(newThreadId);
+
+    try {
+      await createSession(newThreadId);
+    } catch (error) {
+      console.error("Failed to create new session:", error);
+    }
 
     try {
       const ws = setupWebSocket();
@@ -508,7 +526,7 @@ export default function ClaudeCodePage() {
   // Auto-save messages to database when they change
   React.useEffect(() => {
     const msgLength = messages?.length ?? 0;
-    console.debug("Messages changed, auto-saving...", threadId,  msgLength);
+    console.debug("Messages changed, auto-saving...", threadId, msgLength);
     if (threadId && msgLength > 0) {
       // Debounce saves to avoid too frequent writes
       const timeoutId = setTimeout(async () => {
@@ -525,7 +543,6 @@ export default function ClaudeCodePage() {
     }
   }, [messages, threadId]);
 
-
   const createArr = (key: string, value: string[] | undefined) => {
     return (
       <div className="grid grid-cols-3 items-center py-2 border-b">
@@ -535,10 +552,15 @@ export default function ClaudeCodePage() {
             ? "-"
             : value.map((item, i) => {
                 // Handle objects with name/path structure
-                const displayValue = typeof item === 'object'
-                  ? (item as any)?.name || JSON.stringify(item)
-                  : item;
-                return <Badge key={i} variant="outline">{displayValue}</Badge>;
+                const displayValue =
+                  typeof item === "object"
+                    ? (item as any)?.name || JSON.stringify(item)
+                    : item;
+                return (
+                  <Badge key={i} variant="outline">
+                    {displayValue}
+                  </Badge>
+                );
               })}
         </div>
       </div>
@@ -591,7 +613,9 @@ export default function ClaudeCodePage() {
 
           // If we found matching results, create an accordion group
           if (matchingResults.length > 0) {
-            const toolName = currentMsg.contents[0].additionalProperties?.toolName as string ?? "";
+            const toolName =
+              (currentMsg.contents[0].additionalProperties
+                ?.toolName as string) ?? "";
             const groupedMessages = [
               currentMsg,
               ...matchingResults.map((r) => r.msg),
@@ -685,7 +709,10 @@ export default function ClaudeCodePage() {
   };
 
   const handleScrollToTop = () => {
-    topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    topAnchorRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   };
 
   return (
@@ -710,6 +737,8 @@ export default function ClaudeCodePage() {
               currentThreadId={threadId}
               onSessionSelect={handleSessionSelect}
               onNewChat={handleNewChat}
+              onSessionDeleted={handleSessionDeleted}
+              onAllSessionsCleared={handleAllSessionsCleared}
             />
           </TabsContent>
 
@@ -758,17 +787,15 @@ export default function ClaudeCodePage() {
           <DialogHeader>
             <DialogTitle>Unsent Comments</DialogTitle>
             <DialogDescription>
-              You have {comments.length} unsent comment(s). These will be cleared if you don't send them.
-              Would you like to send them now?
+              You have {comments.length} unsent comment(s). These will be
+              cleared if you don't send them. Would you like to send them now?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={handleCancelSend}>
               Clear Comments
             </Button>
-            <Button onClick={handleConfirmSend}>
-              Send Comments
-            </Button>
+            <Button onClick={handleConfirmSend}>Send Comments</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

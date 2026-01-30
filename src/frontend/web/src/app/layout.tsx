@@ -29,7 +29,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -38,10 +40,21 @@ export default function RootLayout({
         >
           <QueryProvider>
             {children}
-            <Toaster richColors closeButton />
+            <Toaster
+              position="top-center"
+              richColors
+              closeButton
+              style={
+                {
+                  "--toast-close-button-start": "unset",
+                  "--toast-close-button-end": "0",
+                  "--toast-close-button-transform": "translate(35%, -35%)"
+                } as React.CSSProperties
+              }
+            />
           </QueryProvider>
         </ThemeProvider>
       </body>
     </html>
-  )
+  );
 }

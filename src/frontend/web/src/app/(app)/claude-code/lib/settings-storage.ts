@@ -12,19 +12,9 @@ export type ClaudeSettingsStorageValues = {
   gitAddressHistory?: string[];
 };
 
-const STORAGE_KEYS = {
-  workingDirectory: "claudecode_workingDir",
-  gitAddress: "claudecode_gitAddress",
-  directoryMode: "claudecode_directoryMode",
-  apiKey: "claudecode_apiKey",
-  apiBaseUrl: "claudecode_apiBaseUrl",
-  permissionMode: "claudecode_permissionMode",
-  envVars: "claudecode_envVars",
-  workingDirHistory: "claudecode_workingDirHistory",
-  gitAddressHistory: "claudecode_gitAddressHistory",
-} as const;
+const STORAGE_KEY = "claudecode_settings";
 
-const parseJson = <T,>(value: string | null, label: string): T | undefined => {
+const parseJson = <T>(value: string | null, label: string): T | undefined => {
   if (!value) {
     return undefined;
   }
@@ -36,7 +26,81 @@ const parseJson = <T,>(value: string | null, label: string): T | undefined => {
   }
 };
 
-const canUseStorage = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+const canUseStorage = () =>
+  typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+
+const readStoredSettings = (): ClaudeSettingsStorageValues => {
+  const stored = parseJson<unknown>(
+    localStorage.getItem(STORAGE_KEY),
+    "settings",
+  );
+  if (!stored) {
+    return {};
+  }
+  return stored as ClaudeSettingsStorageValues;
+};
+
+const mergeSettings = (
+  current: ClaudeSettingsStorageValues,
+  updates: ClaudeSettingsStorageValues,
+): ClaudeSettingsStorageValues => {
+  const next: ClaudeSettingsStorageValues = { ...current };
+
+  const res: ClaudeSettingsStorageValues = {
+    ...next,
+    ...pickDefined(updates),
+
+    // 特殊字段合并
+    envVars: mergeEnvVars(next.envVars, updates.envVars),
+    workingDirHistory: mergeUnique(
+      next.workingDirHistory,
+      updates.workingDirHistory,
+    ),
+    gitAddressHistory: mergeUnique(
+      next.gitAddressHistory,
+      updates.gitAddressHistory,
+    ),
+  };
+
+  return res;
+};
+
+function pickDefined<T extends object>(obj: T): Partial<T> {
+  const result: Partial<T> = {};
+
+  for (const key in obj) {
+    const value = obj[key];
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+function mergeUnique(a?: string[], b?: string[]): string[] | undefined {
+  if (!a && !b) return undefined;
+  if (!a) return b;
+  if (!b) return a;
+
+  return Array.from(new Set([...a, ...b]));
+}
+function mergeEnvVars(a?: EnvVar[], b?: EnvVar[]): EnvVar[] | undefined {
+  if (!a && !b) return undefined;
+  if (!a) return b;
+  if (!b) return a;
+
+  const map = new Map<string, EnvVar>();
+
+  for (const env of a) {
+    map.set(env.key, env);
+  }
+
+  for (const env of b) {
+    map.set(env.key, env); // override wins
+  }
+
+  return Array.from(map.values());
+}
 
 export const claudeSettingsStorage = {
   get(): ClaudeSettingsStorageValues {
@@ -45,23 +109,8 @@ export const claudeSettingsStorage = {
     }
 
     try {
-      return {
-        workingDirectory: localStorage.getItem(STORAGE_KEYS.workingDirectory) ?? undefined,
-        gitAddress: localStorage.getItem(STORAGE_KEYS.gitAddress) ?? undefined,
-        directoryMode: (localStorage.getItem(STORAGE_KEYS.directoryMode) as DirectoryMode | null) ?? undefined,
-        apiKey: localStorage.getItem(STORAGE_KEYS.apiKey) ?? undefined,
-        apiBaseUrl: localStorage.getItem(STORAGE_KEYS.apiBaseUrl) ?? undefined,
-        permissionMode: localStorage.getItem(STORAGE_KEYS.permissionMode) ?? undefined,
-        envVars: parseJson<EnvVar[]>(localStorage.getItem(STORAGE_KEYS.envVars), "env vars"),
-        workingDirHistory: parseJson<string[]>(
-          localStorage.getItem(STORAGE_KEYS.workingDirHistory),
-          "working dir history",
-        ),
-        gitAddressHistory: parseJson<string[]>(
-          localStorage.getItem(STORAGE_KEYS.gitAddressHistory),
-          "git address history",
-        ),
-      };
+      const stored = readStoredSettings();
+      return stored;
     } catch (error) {
       console.warn("Storage access failed while reading settings.", error);
       return {};
@@ -73,42 +122,9 @@ export const claudeSettingsStorage = {
     }
 
     try {
-      if (values.workingDirectory !== undefined) {
-        localStorage.setItem(
-          STORAGE_KEYS.workingDirectory,
-          values.workingDirectory,
-        );
-      }
-      if (values.gitAddress !== undefined) {
-        localStorage.setItem(STORAGE_KEYS.gitAddress, values.gitAddress);
-      }
-      if (values.directoryMode !== undefined) {
-        localStorage.setItem(STORAGE_KEYS.directoryMode, values.directoryMode);
-      }
-      if (values.apiKey !== undefined) {
-        localStorage.setItem(STORAGE_KEYS.apiKey, values.apiKey);
-      }
-      if (values.apiBaseUrl !== undefined) {
-        localStorage.setItem(STORAGE_KEYS.apiBaseUrl, values.apiBaseUrl);
-      }
-      if (values.permissionMode !== undefined) {
-        localStorage.setItem(STORAGE_KEYS.permissionMode, values.permissionMode);
-      }
-      if (values.envVars !== undefined) {
-        localStorage.setItem(STORAGE_KEYS.envVars, JSON.stringify(values.envVars));
-      }
-      if (values.workingDirHistory !== undefined) {
-        localStorage.setItem(
-          STORAGE_KEYS.workingDirHistory,
-          JSON.stringify(values.workingDirHistory),
-        );
-      }
-      if (values.gitAddressHistory !== undefined) {
-        localStorage.setItem(
-          STORAGE_KEYS.gitAddressHistory,
-          JSON.stringify(values.gitAddressHistory),
-        );
-      }
+      const current = readStoredSettings();
+      const next = mergeSettings(current, values);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     } catch (error) {
       console.warn("Storage access failed while writing settings.", error);
     }

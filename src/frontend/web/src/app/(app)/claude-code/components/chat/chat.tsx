@@ -16,12 +16,16 @@ export interface ChatProps extends ChatSessionProps {
   currentThreadId: string | null;
   onSessionSelect: (messages: AiMessage[], threadId: string) => void;
   onNewChat: () => void;
+  onSessionDeleted: (threadId: string) => void;
+  onAllSessionsCleared: () => void;
 }
 
 export function Chat({
   currentThreadId,
   onSessionSelect,
   onNewChat,
+  onSessionDeleted,
+  onAllSessionsCleared,
   ...messageAreaProps
 }: ChatProps) {
   const handleSessionSelect = (session: ChatSessionDocument) => {
@@ -36,6 +40,8 @@ export function Chat({
             currentThreadId={currentThreadId}
             onSessionSelect={handleSessionSelect}
             onNewChat={onNewChat}
+            onSessionDeleted={onSessionDeleted}
+            onAllSessionsCleared={onAllSessionsCleared}
           />
         </ColResizeSplit.Left>
 

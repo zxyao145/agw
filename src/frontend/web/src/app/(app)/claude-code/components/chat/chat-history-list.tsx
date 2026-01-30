@@ -25,12 +25,16 @@ interface ChatHistoryListProps {
   currentThreadId: string | null;
   onSessionSelect: (session: ChatSessionDocument) => void;
   onNewChat: () => void;
+  onSessionDeleted: (threadId: string) => void;
+  onAllSessionsCleared: () => void;
 }
 
 export function ChatHistoryList({
   currentThreadId,
   onSessionSelect,
   onNewChat,
+  onSessionDeleted,
+  onAllSessionsCleared,
 }: ChatHistoryListProps) {
   const [sessions, setSessions] = React.useState<ChatSessionDocument[]>([]);
   const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
@@ -68,7 +72,10 @@ export function ChatHistoryList({
     };
   }, []);
 
-  const handleDelete = async (sessionId: string, e: React.MouseEvent) => {
+  const handleDelete = async (
+    session: ChatSessionDocument,
+    e: React.MouseEvent
+  ) => {
     e.stopPropagation();
 
     if (!confirm("Are you sure you want to delete this chat?")) {
@@ -76,9 +83,12 @@ export function ChatHistoryList({
     }
 
     try {
-      const success = await deleteSession(sessionId);
+      const success = await deleteSession(session._id);
       if (success) {
         toast.success("Chat deleted successfully");
+        if (session.threadId === currentThreadId) {
+          onSessionDeleted(session.threadId);
+        }
       } else {
         toast.error("Failed to delete chat");
       }
@@ -96,6 +106,7 @@ export function ChatHistoryList({
     try {
       await clearAllSessions();
       toast.success("All chats cleared");
+      onAllSessionsCleared();
     } catch (error) {
       console.error("Clear all error:", error);
       toast.error("Error clearing chats");
@@ -179,6 +190,7 @@ export function ChatHistoryList({
             variant="ghost"
             onClick={onNewChat}
           >
+            {/* NewChat */}
             <Plus className="h-4 w-4" />
           </Button>
           <Button
@@ -281,7 +293,7 @@ export function ChatHistoryList({
                         size="sm"
                         variant="ghost"
                         className="h-6 w-6 p-0 text-destructive"
-                        onClick={(e) => handleDelete(session._id, e)}
+                        onClick={(e) => handleDelete(session, e)}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>

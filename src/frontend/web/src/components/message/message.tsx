@@ -123,7 +123,8 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
   const contentNodes = React.useMemo(() => groupContentsByType(message.contents, message), [message]);
 
   if (isResult) {
-    return <div className="flex justify-center">{contentNodes.map((n, i) => <React.Fragment key={i}>{renderNode(n, message)}</React.Fragment>)}</div>;
+    return null;
+    // return <div className="flex justify-center">{contentNodes.map((n, i) => <React.Fragment key={i}>{renderNode(n, message)}</React.Fragment>)}</div>;
   }
 
   return (

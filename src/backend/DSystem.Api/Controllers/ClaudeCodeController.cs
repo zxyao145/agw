@@ -191,12 +191,20 @@ public class ClaudeCodeController(
         return webSocket.CloseAsync(status, reason, CancellationToken.None);
     }
 
-    private static AgentResponseUpdate CreateSystemMessage(string message) => new()
+    private static AgentResponseUpdate CreateSystemMessage(string message)
     {
-        Role = ChatRole.System,
-        AuthorName = "d-system",
-        Contents = [new TextContent(message)]
-    };
+        var d = new Dictionary<string, object?>() 
+        {
+            { "subtype", "hint" }
+        };
+        return new()
+        {
+            Role = ChatRole.System,
+            AuthorName = "d-system",
+            AdditionalProperties = new AdditionalPropertiesDictionary(d),
+            Contents = [new TextContent(message)]
+        };
+    }
 
     private static AgentResponseUpdate CreateErrorMessage(string errorMessage) => new()
     {

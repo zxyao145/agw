@@ -132,7 +132,7 @@ export async function cleanupOldSessions(db: PouchDB.Database<ChatSessionDocumen
       // Get all sessions sorted by updatedAt
       const result = await db.find({
         selector: {},
-        sort: [{ updatedAt: 'asc' }],
+        sort: [{ createdAt: 'desc' }],
         limit: excess
       });
 
@@ -149,7 +149,7 @@ export async function cleanupOldSessions(db: PouchDB.Database<ChatSessionDocumen
       // Get oldest session
       const result = await db.find({
         selector: {},
-        sort: [{ updatedAt: 'asc' }],
+        sort: [{ createdAt: 'desc' }],
         limit: 1
       });
 
