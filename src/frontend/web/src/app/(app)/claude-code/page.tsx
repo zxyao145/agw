@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import "./page.css";
+import { claudeSettingsStorage } from "./lib/settings-storage";
 
 const gitCodeSource = "./code-work"
 
@@ -79,19 +80,17 @@ export default function ClaudeCodePage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Load settings from localStorage on mount
+  // Load settings from storage on mount
   React.useEffect(() => {
-    const savedWorkingDir = localStorage.getItem("claudecode_workingDir");
-    const savedGitAddress = localStorage.getItem("claudecode_gitAddress");
-    const savedDirectoryMode = localStorage.getItem(
-      "claudecode_directoryMode",
-    );
-    const savedApiKey = localStorage.getItem("claudecode_apiKey");
-    const savedApiBaseUrl = localStorage.getItem("claudecode_apiBaseUrl");
-    const savedPermissionMode = localStorage.getItem(
-      "claudecode_permissionMode",
-    );
-    const savedEnvVars = localStorage.getItem("claudecode_envVars");
+    const {
+      workingDirectory: savedWorkingDir,
+      gitAddress: savedGitAddress,
+      directoryMode: savedDirectoryMode,
+      apiKey: savedApiKey,
+      apiBaseUrl: savedApiBaseUrl,
+      permissionMode: savedPermissionMode,
+      envVars: savedEnvVars,
+    } = claudeSettingsStorage.get();
 
     if (savedWorkingDir) setWorkingDirectory(savedWorkingDir);
     if (savedGitAddress) setGitAddress(savedGitAddress);
@@ -104,14 +103,7 @@ export default function ClaudeCodePage() {
     if (savedApiKey) setApiKey(savedApiKey);
     if (savedApiBaseUrl) setApiBaseUrl(savedApiBaseUrl);
     if (savedPermissionMode) setPermissionMode(savedPermissionMode);
-    if (savedEnvVars) {
-      try {
-        const parsed = JSON.parse(savedEnvVars);
-        setEnvVars(parsed);
-      } catch (e) {
-        console.error("Failed to parse env vars:", e);
-      }
-    }
+    if (savedEnvVars) setEnvVars(savedEnvVars);
   }, []);
 
   React.useEffect(() => {
