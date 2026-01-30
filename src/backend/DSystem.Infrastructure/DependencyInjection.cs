@@ -39,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<DbContext, LlmDbContext>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IGitCommandService, GitCommandService>();
 
         return services;
     }
