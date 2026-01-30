@@ -36,7 +36,7 @@ const parseJson = <T,>(value: string | null, label: string): T | undefined => {
   }
 };
 
-const canUseStorage = () => typeof window !== "undefined";
+const canUseStorage = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 
 export const claudeSettingsStorage = {
   get(): ClaudeSettingsStorageValues {
@@ -44,58 +44,73 @@ export const claudeSettingsStorage = {
       return {};
     }
 
-    return {
-      workingDirectory: localStorage.getItem(STORAGE_KEYS.workingDirectory) ?? undefined,
-      gitAddress: localStorage.getItem(STORAGE_KEYS.gitAddress) ?? undefined,
-      directoryMode: (localStorage.getItem(STORAGE_KEYS.directoryMode) as DirectoryMode | null) ?? undefined,
-      apiKey: localStorage.getItem(STORAGE_KEYS.apiKey) ?? undefined,
-      apiBaseUrl: localStorage.getItem(STORAGE_KEYS.apiBaseUrl) ?? undefined,
-      permissionMode: localStorage.getItem(STORAGE_KEYS.permissionMode) ?? undefined,
-      envVars: parseJson<EnvVar[]>(localStorage.getItem(STORAGE_KEYS.envVars), "env vars"),
-      workingDirHistory: parseJson<string[]>(localStorage.getItem(STORAGE_KEYS.workingDirHistory), "working dir history"),
-      gitAddressHistory: parseJson<string[]>(localStorage.getItem(STORAGE_KEYS.gitAddressHistory), "git address history"),
-    };
+    try {
+      return {
+        workingDirectory: localStorage.getItem(STORAGE_KEYS.workingDirectory) ?? undefined,
+        gitAddress: localStorage.getItem(STORAGE_KEYS.gitAddress) ?? undefined,
+        directoryMode: (localStorage.getItem(STORAGE_KEYS.directoryMode) as DirectoryMode | null) ?? undefined,
+        apiKey: localStorage.getItem(STORAGE_KEYS.apiKey) ?? undefined,
+        apiBaseUrl: localStorage.getItem(STORAGE_KEYS.apiBaseUrl) ?? undefined,
+        permissionMode: localStorage.getItem(STORAGE_KEYS.permissionMode) ?? undefined,
+        envVars: parseJson<EnvVar[]>(localStorage.getItem(STORAGE_KEYS.envVars), "env vars"),
+        workingDirHistory: parseJson<string[]>(
+          localStorage.getItem(STORAGE_KEYS.workingDirHistory),
+          "working dir history",
+        ),
+        gitAddressHistory: parseJson<string[]>(
+          localStorage.getItem(STORAGE_KEYS.gitAddressHistory),
+          "git address history",
+        ),
+      };
+    } catch (error) {
+      console.warn("Storage access failed while reading settings.", error);
+      return {};
+    }
   },
   set(values: ClaudeSettingsStorageValues): void {
     if (!canUseStorage()) {
       return;
     }
 
-    if (values.workingDirectory !== undefined) {
-      localStorage.setItem(
-        STORAGE_KEYS.workingDirectory,
-        values.workingDirectory,
-      );
-    }
-    if (values.gitAddress !== undefined) {
-      localStorage.setItem(STORAGE_KEYS.gitAddress, values.gitAddress);
-    }
-    if (values.directoryMode !== undefined) {
-      localStorage.setItem(STORAGE_KEYS.directoryMode, values.directoryMode);
-    }
-    if (values.apiKey !== undefined) {
-      localStorage.setItem(STORAGE_KEYS.apiKey, values.apiKey);
-    }
-    if (values.apiBaseUrl !== undefined) {
-      localStorage.setItem(STORAGE_KEYS.apiBaseUrl, values.apiBaseUrl);
-    }
-    if (values.permissionMode !== undefined) {
-      localStorage.setItem(STORAGE_KEYS.permissionMode, values.permissionMode);
-    }
-    if (values.envVars !== undefined) {
-      localStorage.setItem(STORAGE_KEYS.envVars, JSON.stringify(values.envVars));
-    }
-    if (values.workingDirHistory !== undefined) {
-      localStorage.setItem(
-        STORAGE_KEYS.workingDirHistory,
-        JSON.stringify(values.workingDirHistory),
-      );
-    }
-    if (values.gitAddressHistory !== undefined) {
-      localStorage.setItem(
-        STORAGE_KEYS.gitAddressHistory,
-        JSON.stringify(values.gitAddressHistory),
-      );
+    try {
+      if (values.workingDirectory !== undefined) {
+        localStorage.setItem(
+          STORAGE_KEYS.workingDirectory,
+          values.workingDirectory,
+        );
+      }
+      if (values.gitAddress !== undefined) {
+        localStorage.setItem(STORAGE_KEYS.gitAddress, values.gitAddress);
+      }
+      if (values.directoryMode !== undefined) {
+        localStorage.setItem(STORAGE_KEYS.directoryMode, values.directoryMode);
+      }
+      if (values.apiKey !== undefined) {
+        localStorage.setItem(STORAGE_KEYS.apiKey, values.apiKey);
+      }
+      if (values.apiBaseUrl !== undefined) {
+        localStorage.setItem(STORAGE_KEYS.apiBaseUrl, values.apiBaseUrl);
+      }
+      if (values.permissionMode !== undefined) {
+        localStorage.setItem(STORAGE_KEYS.permissionMode, values.permissionMode);
+      }
+      if (values.envVars !== undefined) {
+        localStorage.setItem(STORAGE_KEYS.envVars, JSON.stringify(values.envVars));
+      }
+      if (values.workingDirHistory !== undefined) {
+        localStorage.setItem(
+          STORAGE_KEYS.workingDirHistory,
+          JSON.stringify(values.workingDirHistory),
+        );
+      }
+      if (values.gitAddressHistory !== undefined) {
+        localStorage.setItem(
+          STORAGE_KEYS.gitAddressHistory,
+          JSON.stringify(values.gitAddressHistory),
+        );
+      }
+    } catch (error) {
+      console.warn("Storage access failed while writing settings.", error);
     }
   },
 };
