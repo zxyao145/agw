@@ -236,6 +236,72 @@ export default function ClaudeCodePage() {
     ws.send(JSON.stringify(buildInputRequest("/status")));
   };
 
+  function handleSystem(data: AiMessage) {
+    console.log("handleSystem", data);
+
+    var author = data.author;
+    if (author === "d-system") {
+      var firstContent = data.contents[0];
+      if (firstContent.type === MessageContentType.ErrorContent) {
+        console.error("something error:", firstContent.content);
+        setIsExecuting(false);
+        setMessages((prev) => [...prev, data]);
+        return;
+      }
+    }
+
+    if (!data.additionalProperties && !isInitStatus) {
+      setMessages((prev) => [...prev, data]);
+      return;
+    }
+
+    let msgType = "";
+    if (data.additionalProperties?.subtype === "init") {
+      msgType = "init";
+    } else if (data.additionalProperties?.type === "result") {
+      msgType = "result";
+    } else if (data.additionalProperties?.subtype === "hint") {
+      console.log("hint", data);
+      return;
+    }
+
+    if (msgType === "init") {
+      const content = JSON.parse(data.contents[0].content);
+      const initContent: InitMessageContent = {
+        claudeCodeVersion: content.claude_code_version,
+        permissionMode: content.permissionMode,
+        model: content.model,
+
+        tools: content.tools,
+        slashCommands: content.slash_commands,
+        agents: content.agents,
+        skills: content.skills,
+        plugins: content.plugins,
+        mcpServers: content.mcp_servers,
+      };
+
+      setInitContent(initContent);
+    } else if (msgType === "result") {
+      toast.info("Execution completed");
+      setIsExecuting(false);
+      if (isInitStatus) {
+        setIsInitStatus(false);
+      } else {
+        // setMessages((prev) => [...prev, data]);
+      }
+    } else {
+      setMessages((prev) => [...prev, data]);
+    }
+  }
+
+  function handleUser(data: AiMessage) {
+    setMessages((prev) => [...prev, data]);
+  }
+
+  function handleAssistant(data: AiMessage) {
+    setMessages((prev) => [...prev, data]);
+  }
+
   const setupWebSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/api/external-agents/claude-code/ws`;
@@ -253,73 +319,11 @@ export default function ClaudeCodePage() {
         console.info("onmessage", data);
 
         if (data.role === "system") {
-          var author = data.author;
-          if (author === "d-system") {
-            var firstContent = data.contents[0];
-            if (firstContent.type === MessageContentType.ErrorContent) {
-              console.error("something error:", firstContent.content);
-              setIsExecuting(false);
-              setMessages((prev) => [...prev, data]);
-              return;
-            }
-          }
-
-          if (!data.additionalProperties && !isInitStatus) {
-            setMessages((prev) => [...prev, data]);
-            return;
-          }
-
-          let msgType = "";
-          if (data.role === "system") {
-            if (
-              data.additionalProperties?.type === "system" &&
-              data.additionalProperties?.subtype === "init"
-            ) {
-              msgType = "init";
-            } else if (data.additionalProperties?.type === "result") {
-              msgType = "result";
-            } else if (data.additionalProperties?.subtype === "hint") {
-              console.log("hint", data);
-              return;
-            }
-          }
-          if (msgType === "init") {
-            const content = JSON.parse(data.contents[0].content);
-            const initContent: InitMessageContent = {
-              claudeCodeVersion: content.claude_code_version,
-              permissionMode: content.permissionMode,
-              model: content.model,
-
-              tools: content.tools,
-              slashCommands: content.slash_commands,
-              agents: content.agents,
-              skills: content.skills,
-              plugins: content.plugins,
-              mcpServers: content.mcp_servers,
-            };
-
-            setInitContent(initContent);
-          } else if (msgType === "result") {
-            toast.info("Execution completed");
-            setIsExecuting(false);
-            if (isInitStatus) {
-              setIsInitStatus(false);
-            } else {
-              // setMessages((prev) => [...prev, data]);
-            }
-          } else {
-            if (!isInitStatus) {
-              setMessages((prev) => [...prev, data]);
-            }
-          }
+          handleSystem(data);
         } else if (data.role === "assistant") {
-          if (!isInitStatus) {
-            setMessages((prev) => [...prev, data]);
-          }
+          handleAssistant(data);
         } else if (data.role === "user") {
-          if (!isInitStatus) {
-            setMessages((prev) => [...prev, data]);
-          }
+          handleUser(data);
         }
       } catch (e) {
         console.error("Parse error:", e);
