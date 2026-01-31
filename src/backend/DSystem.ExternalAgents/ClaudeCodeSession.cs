@@ -1,11 +1,17 @@
 using ClaudeCodeSdk.MAF;
+using DSystem.Domain.Models;
+using DSystem.Infrastructure;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 namespace DSystem.ExternalAgents;
 
 /// <summary>
-/// Manages a ClaudeCode session with agent and thread state.
+/// Wraps a ClaudeCode agent to execute WebSocket inputs and build streaming outputs.
 /// </summary>
 public sealed class ClaudeCodeSession : IAsyncDisposable
 {
@@ -33,6 +39,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
     private readonly ILogger _logger;
+    private readonly HybridCache _cache;
 
     /// <summary>
     /// Initializes a new instance of the ClaudeCodeSession class.
@@ -41,12 +48,52 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         ClaudeCodeAIAgent agent,
         AgentThread thread,
         ClaudeCodeSettingRequest configuration,
-        ILogger logger)
+        ILogger logger,
+        HybridCache cache)
     {
         Agent = agent ?? throw new ArgumentNullException(nameof(agent));
         Thread = thread ?? throw new ArgumentNullException(nameof(thread));
         Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+    }
+
+    /// <summary>
+    /// Executes a text input with streaming responses.
+    /// </summary>
+    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+        string input,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(input);
+
+        var content = new AiMessageInputContent(
+            AiMessageContentType.TextContent,
+            JsonSerializer.SerializeToElement(input));
+
+        await foreach (var message in ExecuteStreamingAsync([content], cancellationToken))
+        {
+            yield return message;
+        }
+    }
+
+    /// <summary>
+    /// Executes a list of input contents with streaming responses.
+    /// </summary>
+    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+        List<AiMessageInputContent> contents,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var aiContents = ConvertToAIContents(contents);
+        var message = new ChatMessage(ChatRole.User, aiContents);
+
+        await foreach (var update in Agent.RunStreamingAsync(message, Thread, cancellationToken: cancellationToken))
+        {
+            var aiMessage = update.ToAiMessage();
+            if (aiMessage != null) yield return aiMessage;
+        }
+
+        await SaveThreadStateAsync(cancellationToken);
     }
 
     /// <summary>
@@ -90,5 +137,40 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         {
             _disposed = true;
         }
+    }
+
+    private static List<AIContent> ConvertToAIContents(List<AiMessageInputContent> contents)
+    {
+        var aiContents = new List<AIContent>();
+
+        foreach (var item in contents)
+        {
+            if (item.Type == AiMessageContentType.TextContent)
+            {
+                aiContents.Add(new TextContent(item.Content.GetString()));
+                continue;
+            }
+            if (item.Type == AiMessageContentType.UriContent)
+            {
+                var uri = item.Content.GetProperty("uri").GetString() ?? "";
+                var mediaType = item.Content.GetProperty("mediaType").GetString() ?? "";
+                aiContents.Add(new UriContent(uri, mediaType));
+            }
+        }
+
+        return aiContents;
+    }
+
+    private async Task SaveThreadStateAsync(CancellationToken cancellationToken)
+    {
+        var serialized = Thread.Serialize();
+        if (serialized.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return;
+
+        await _cache.SetAsync(
+            Configuration.SessionId,
+            JsonSerializer.Serialize(serialized),
+            cancellationToken: cancellationToken);
+
+        _logger.LogDebug("Saved thread state for session: {ThreadId}", Configuration.SessionId);
     }
 }

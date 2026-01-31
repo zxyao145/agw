@@ -1,4 +1,3 @@
-using DSystem.Domain.Models;
 using DSystem.ExternalAgents;
 using DSystem.Infrastructure;
 using Microsoft.Agents.AI;
@@ -210,8 +209,8 @@ public class ClaudeCodeController(
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                 HttpContext.RequestAborted,
                 session.CancellationToken);
-            await foreach (var message in claudeCodeService.ExecuteSessionStreamingAsync(
-                session, input, linkedCts.Token))
+            await foreach (var message in session.ExecuteStreamingAsync(
+                input, linkedCts.Token))
             {
                 if (webSocket.State != WebSocketState.Open) break;
                 await SendJsonAsync(webSocket, JsonUtil.Serialize(message));
