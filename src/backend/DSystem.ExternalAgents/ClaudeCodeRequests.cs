@@ -15,7 +15,12 @@ public enum ClaudeCodeMessageType
     /// <summary>
     /// Execute input with existing session.
     /// </summary>
-    Input = 1
+    Input = 1,
+
+    /// <summary>
+    /// Interrupt an in-flight request.
+    /// </summary>
+    Interrupt = 2
 }
 
 /// <summary>
@@ -37,6 +42,11 @@ public record ClaudeCodeWsRequest
     /// Input request (present when Type is Input).
     /// </summary>
     public ClaudeCodeInputRequest? Input { get; init; }
+
+    /// <summary>
+    /// Interrupt request (present when Type is Interrupt).
+    /// </summary>
+    public ClaudeCodeInterruptRequest? Interrupt { get; init; }
 }
 
 /// <summary>
@@ -103,4 +113,15 @@ public record ClaudeCodeInputRequest
     /// User prompt to send to ClaudeCode.
     /// </summary>
     public required string Input { get; init; }
+}
+
+/// <summary>
+/// Request for interrupting an in-flight execution.
+/// </summary>
+public record ClaudeCodeInterruptRequest
+{
+    /// <summary>
+    /// Optional reason for interrupting the session.
+    /// </summary>
+    public string? Reason { get; init; }
 }

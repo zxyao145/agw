@@ -10,6 +10,7 @@ namespace DSystem.ExternalAgents;
 public sealed class ClaudeCodeSession : IAsyncDisposable
 {
     private bool _disposed;
+    private CancellationTokenSource _cancellationTokenSource = new();
 
     /// <summary>
     /// Gets the ClaudeCode AI Agent.
@@ -26,8 +27,10 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     /// </summary>
     public ClaudeCodeSettingRequest Configuration { get; }
 
-
-
+    /// <summary>
+    /// Gets the cancellation token for in-flight requests.
+    /// </summary>
+    public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
     private readonly ILogger _logger;
 
@@ -51,6 +54,24 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     /// </summary>
     public void UpdateThread(AgentThread newThread) => Thread = newThread;
 
+    /// <summary>
+    /// Cancels any in-flight request.
+    /// </summary>
+    public void CancelActiveRequest()
+    {
+        if (_cancellationTokenSource.IsCancellationRequested) return;
+        _cancellationTokenSource.Cancel();
+    }
+
+    /// <summary>
+    /// Prepares a new cancellation token for a subsequent request.
+    /// </summary>
+    public void ResetCancellationToken()
+    {
+        _cancellationTokenSource.Dispose();
+        _cancellationTokenSource = new CancellationTokenSource();
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
@@ -58,6 +79,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         try
         {
             await Agent.DisposeAsync();
+            _cancellationTokenSource.Dispose();
             _logger.LogDebug("ClaudeCodeSession disposed");
         }
         catch (Exception ex)

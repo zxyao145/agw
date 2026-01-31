@@ -100,6 +100,9 @@ public class ClaudeCodeController(
         if (request.Type == ClaudeCodeMessageType.Input)
             await HandleInputRequestAsync(webSocket, currentSession, request.Input);
 
+        if (request.Type == ClaudeCodeMessageType.Interrupt)
+            await HandleInterruptRequestAsync(webSocket, currentSession, request.Interrupt);
+
         return currentSession;
     }
 
@@ -150,16 +153,40 @@ public class ClaudeCodeController(
         await ProcessInputAsync(webSocket, session, input.Input);
     }
 
+    private async Task HandleInterruptRequestAsync(
+        WebSocket webSocket,
+        ClaudeCodeSession? session,
+        ClaudeCodeInterruptRequest? interrupt)
+    {
+        if (session == null)
+        {
+            await SendErrorAsync(webSocket, "No active session. Please initialize first.");
+            return;
+        }
+
+        session.CancelActiveRequest();
+        var reason = string.IsNullOrWhiteSpace(interrupt?.Reason) ? "Request interrupted." : interrupt.Reason;
+        await SendMessageAsync(webSocket, reason);
+    }
+
     private async Task ProcessInputAsync(WebSocket webSocket, ClaudeCodeSession session, string input)
     {
         try
         {
+            session.ResetCancellationToken();
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                HttpContext.RequestAborted,
+                session.CancellationToken);
             await foreach (var message in claudeCodeService.ExecuteSessionStreamingAsync(
-                session, input, HttpContext.RequestAborted))
+                session, input, linkedCts.Token))
             {
                 if (webSocket.State != WebSocketState.Open) break;
                 await SendJsonAsync(webSocket, JsonUtil.Serialize(message));
             }
+        }
+        catch (OperationCanceledException)
+        {
+            await SendMessageAsync(webSocket, "Request interrupted.");
         }
         catch (Exception ex)
         {
