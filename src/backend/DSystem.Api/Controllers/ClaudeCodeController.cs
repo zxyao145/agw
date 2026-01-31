@@ -34,6 +34,7 @@ public class ClaudeCodeController(
 
         using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
         ClaudeCodeSession? session = null;
+        Task? activeInputTask = null;
 
         try
         {
@@ -43,7 +44,7 @@ public class ClaudeCodeController(
                 if (closeReceived) break;
                 if (request == null) continue;
 
-                session = await ProcessRequestAsync(webSocket, session, request);
+                (session, activeInputTask) = await ProcessRequestAsync(webSocket, session, request, activeInputTask);
             }
         }
         catch (OperationCanceledException)
@@ -62,6 +63,16 @@ public class ClaudeCodeController(
         }
         finally
         {
+            if (session != null) session.CancelActiveRequest();
+            if (activeInputTask != null)
+            {
+                try { await activeInputTask; }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error while awaiting ClaudeCode input task");
+                }
+            }
             if (session != null) await session.DisposeAsync();
             logger.LogDebug("ClaudeCode WebSocket connection closed");
         }
@@ -89,21 +100,43 @@ public class ClaudeCodeController(
         catch (JsonException) { return null; }
     }
 
-    private async Task<ClaudeCodeSession?> ProcessRequestAsync(
+    private async Task<(ClaudeCodeSession? session, Task? activeInputTask)> ProcessRequestAsync(
         WebSocket webSocket,
         ClaudeCodeSession? currentSession,
-        ClaudeCodeWsRequest request)
+        ClaudeCodeWsRequest request,
+        Task? activeInputTask)
     {
         if (request.Type == ClaudeCodeMessageType.Setting)
-            return await HandleSettingRequestAsync(webSocket, request.Setting, currentSession);
+        {
+            if (activeInputTask is { IsCompleted: false })
+            {
+                currentSession?.CancelActiveRequest();
+                try { await activeInputTask; }
+                catch (OperationCanceledException) { }
+            }
+            var session = await HandleSettingRequestAsync(webSocket, request.Setting, currentSession);
+            return (session, null);
+        }
 
         if (request.Type == ClaudeCodeMessageType.Input)
-            await HandleInputRequestAsync(webSocket, currentSession, request.Input);
+        {
+            if (activeInputTask is { IsCompleted: false })
+            {
+                await SendErrorAsync(webSocket, "A request is already in progress. Interrupt it before starting a new one.");
+                return (currentSession, activeInputTask);
+            }
+
+            var inputTask = HandleInputRequestAsync(webSocket, currentSession, request.Input);
+            ObserveInputTask(inputTask);
+            return (currentSession, inputTask);
+        }
 
         if (request.Type == ClaudeCodeMessageType.Interrupt)
+        {
             await HandleInterruptRequestAsync(webSocket, currentSession, request.Interrupt);
+        }
 
-        return currentSession;
+        return (currentSession, activeInputTask);
     }
 
     private async Task<ClaudeCodeSession> HandleSettingRequestAsync(
@@ -192,6 +225,20 @@ public class ClaudeCodeController(
         {
             await SendErrorAsync(webSocket, $"Execution error: {ex.Message}");
         }
+    }
+
+    private void ObserveInputTask(Task inputTask)
+    {
+        _ = inputTask.ContinueWith(
+            task =>
+            {
+                if (task.IsCanceled) return;
+                if (task.Exception != null)
+                {
+                    logger.LogError(task.Exception, "Unhandled error while processing ClaudeCode input");
+                }
+            },
+            TaskScheduler.Default);
     }
 
     private Task SendMessageAsync(WebSocket webSocket, string message) =>
