@@ -78,6 +78,26 @@ public class ClaudeCodeController(
         }
     }
 
+    [HttpDelete("sessions/{sessionId}")]
+    public async Task<IActionResult> DeleteSessionAsync(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return BadRequest("Session ID is required.");
+        }
+
+        try
+        {
+            await claudeCodeService.DeleteSessionResourcesAsync(sessionId, HttpContext.RequestAborted);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to delete ClaudeCode session resources for {SessionId}", sessionId);
+            return StatusCode(StatusCodes.Status500InternalServerError, "Failed to delete session resources.");
+        }
+    }
+
     private async Task<(ClaudeCodeWsRequest? request, bool closeReceived)> ReceiveRequestAsync(WebSocket webSocket)
     {
         var buffer = new byte[BufferSize];

@@ -14,6 +14,7 @@ import {
 import {
   subscribeToSessions,
   deleteSession,
+  deleteRemoteSessionResources,
   updateSessionTitle,
   clearAllSessions,
   getAllSessions,
@@ -83,6 +84,11 @@ export function ChatHistoryList({
     }
 
     try {
+      const remoteDeleted = await deleteRemoteSessionResources(session.threadId);
+      if (!remoteDeleted) {
+        toast.error("Failed to delete working directory");
+        return;
+      }
       const success = await deleteSession(session._id);
       if (success) {
         toast.success("Chat deleted successfully");
@@ -104,6 +110,16 @@ export function ChatHistoryList({
     }
 
     try {
+      const results = await Promise.allSettled(
+        sessions.map((session) => deleteRemoteSessionResources(session.threadId)),
+      );
+      const failed = results.filter(
+        (result) => result.status === "rejected" || result.value === false,
+      );
+      if (failed.length > 0) {
+        toast.error("Failed to delete one or more working directories");
+        return;
+      }
       await clearAllSessions();
       toast.success("All chats cleared");
       onAllSessionsCleared();

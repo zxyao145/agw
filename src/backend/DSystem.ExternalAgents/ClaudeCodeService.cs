@@ -20,6 +20,7 @@ namespace DSystem.ExternalAgents;
 /// </summary>
 public class ClaudeCodeService
 {
+    private const string WorkingDirectoryCachePrefix = "claude-code-workdir:";
     private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<ClaudeCodeService> _logger;
     private readonly HybridCache _cache;
@@ -53,12 +54,27 @@ public class ClaudeCodeService
         ArgumentException.ThrowIfNullOrWhiteSpace(initRequest.SessionId);
 
         await EnsureGitRepositoryAsync(initRequest, cancellationToken);
+        await SaveWorkingDirectoryAsync(initRequest.SessionId, initRequest.WorkingDirectory, cancellationToken);
 
         var options = BuildAgentOptions(initRequest);
         var agent = new ClaudeCodeAIAgent(options, _logger);
         var thread = await GetOrLoadThreadAsync(agent, initRequest.SessionId, cancellationToken);
 
         return new ClaudeCodeSession(agent, thread, initRequest, _logger);
+    }
+
+    public async Task DeleteSessionResourcesAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+
+        var workingDirectory = await GetWorkingDirectoryAsync(sessionId, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            await TryDeleteWorkingDirectoryAsync(workingDirectory);
+        }
+
+        await _cache.RemoveAsync(sessionId, cancellationToken);
+        await _cache.RemoveAsync(GetWorkingDirectoryCacheKey(sessionId), cancellationToken);
     }
 
     /// <summary>
@@ -141,6 +157,68 @@ public class ClaudeCodeService
         _logger.LogDebug("Loaded existing thread for session: {ThreadId}", sessionId);
         var serialized = JsonSerializer.Deserialize<JsonElement>(cachedThread);
         return await agent.DeserializeThreadAsync(serialized);
+    }
+
+    private async Task SaveWorkingDirectoryAsync(
+        string sessionId,
+        string? workingDirectory,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            await _cache.RemoveAsync(GetWorkingDirectoryCacheKey(sessionId), cancellationToken);
+            return;
+        }
+
+        var resolved = ResolveWorkingDirectory(workingDirectory);
+        await _cache.SetAsync(GetWorkingDirectoryCacheKey(sessionId), resolved, cancellationToken: cancellationToken);
+    }
+
+    private async Task<string?> GetWorkingDirectoryAsync(string sessionId, CancellationToken cancellationToken)
+    {
+        var cached = await _cache.GetOrCreateAsync(
+            GetWorkingDirectoryCacheKey(sessionId),
+            _ => ValueTask.FromResult(string.Empty),
+            cancellationToken: cancellationToken);
+
+        return string.IsNullOrWhiteSpace(cached) ? null : cached;
+    }
+
+    private string ResolveWorkingDirectory(string workingDirectory)
+    {
+        var combined = Path.Combine(_rootPath, workingDirectory);
+        return Path.GetFullPath(combined);
+    }
+
+    private async Task TryDeleteWorkingDirectoryAsync(string workingDirectory)
+    {
+        try
+        {
+            var rootFullPath = Path.GetFullPath(_rootPath);
+            var resolved = Path.GetFullPath(workingDirectory);
+            var rootWithSeparator = Path.EndsInDirectorySeparator(rootFullPath)
+                ? rootFullPath
+                : rootFullPath + Path.DirectorySeparatorChar;
+
+            if (!resolved.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Skipping deletion of working directory {WorkingDirectory} because it is outside root {RootPath}",
+                    resolved,
+                    rootFullPath);
+                return;
+            }
+
+            if (Directory.Exists(resolved))
+            {
+                Directory.Delete(resolved, recursive: true);
+                _logger.LogInformation("Deleted ClaudeCode working directory {WorkingDirectory}", resolved);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete ClaudeCode working directory {WorkingDirectory}", workingDirectory);
+        }
     }
 
     private static ClaudeCodeAIAgentOptions BuildAgentOptions(ClaudeCodeSettingRequest request)
@@ -243,4 +321,6 @@ public class ClaudeCodeService
 
         _logger.LogDebug("Saved thread state for session: {ThreadId}", session.Configuration.SessionId);
     }
+
+    private static string GetWorkingDirectoryCacheKey(string sessionId) => $"{WorkingDirectoryCachePrefix}{sessionId}";
 }

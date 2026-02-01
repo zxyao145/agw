@@ -223,6 +223,36 @@ export async function deleteSessionByThreadId(threadId: string): Promise<boolean
   }
 }
 
+export async function deleteRemoteSessionResources(threadId: string): Promise<boolean> {
+  if (!threadId) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      `/api/external-agents/claude-code/sessions/${encodeURIComponent(threadId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+
+    if (response.status === 404) {
+      return false;
+    }
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("Failed to delete remote session resources:", text);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Failed to delete remote session resources:", error);
+    return false;
+  }
+}
+
 /**
  * Update session title
  */
