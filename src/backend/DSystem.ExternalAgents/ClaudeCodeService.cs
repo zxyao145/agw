@@ -57,7 +57,7 @@ public class ClaudeCodeService
         return new ClaudeCodeSession(agent, thread, initRequest, _logger, _cache);
     }
 
-    private async Task<AgentThread> GetOrLoadThreadAsync(
+    private async Task<AgentSession> GetOrLoadThreadAsync(
         ClaudeCodeAIAgent agent,
         string sessionId,
         CancellationToken cancellationToken)
@@ -69,12 +69,12 @@ public class ClaudeCodeService
         if (string.IsNullOrWhiteSpace(cachedThread))
         {
             _logger.LogDebug("Created new thread for session: {ThreadId}", sessionId);
-            return await agent.GetNewThreadAsync(cancellationToken);
+            return await agent.GetNewSessionAsync(cancellationToken);
         }
 
         _logger.LogDebug("Loaded existing thread for session: {ThreadId}", sessionId);
         var serialized = JsonSerializer.Deserialize<JsonElement>(cachedThread);
-        return await agent.DeserializeThreadAsync(serialized);
+        return await agent.DeserializeSessionAsync(serialized);
     }
 
     private static ClaudeCodeAIAgentOptions BuildAgentOptions(ClaudeCodeSettingRequest request)

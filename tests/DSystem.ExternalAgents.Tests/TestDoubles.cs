@@ -12,6 +12,6 @@ internal sealed class TestClaudeCodeAIAgent : ClaudeCodeAIAgent
     }
 }
 
-internal sealed class TestAgentThread : AgentThread
+internal sealed class TestAgentThread : AgentSession
 {
 }

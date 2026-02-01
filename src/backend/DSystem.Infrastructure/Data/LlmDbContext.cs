@@ -23,6 +23,7 @@ public class LlmDbContext : DbContext
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
     public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
+    public DbSet<AgentSessionRecord> AgentSessionRecords => Set<AgentSessionRecord>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -158,6 +159,16 @@ public class LlmDbContext : DbContext
                 .WithOne()
                 .HasForeignKey<ProjectLease>(e => e.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AgentSessionRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.ProjectId, e.SessionId }).IsUnique();
+            entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ProjectId);
+            entity.Property(e => e.AgentName).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Messages).HasColumnType("text");
         });
     }
 }

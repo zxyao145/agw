@@ -26,7 +26,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     /// <summary>
     /// Gets the agent thread for conversation context.
     /// </summary>
-    public AgentThread Thread { get; private set; } 
+    public AgentSession Thread { get; private set; } 
 
     /// <summary>
     /// Gets the session configuration.
@@ -46,7 +46,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     /// </summary>
     public ClaudeCodeSession(
         ClaudeCodeAIAgent agent,
-        AgentThread thread,
+        AgentSession thread,
         ClaudeCodeSettingRequest configuration,
         ILogger logger,
         HybridCache cache)
@@ -99,7 +99,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     /// <summary>
     /// Updates the thread state (useful for thread deserialization).
     /// </summary>
-    public void UpdateThread(AgentThread newThread) => Thread = newThread;
+    public void UpdateThread(AgentSession newThread) => Thread = newThread;
 
     /// <summary>
     /// Cancels any in-flight request.

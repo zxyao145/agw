@@ -3,6 +3,7 @@ using System;
 using DSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(LlmDbContext))]
-    partial class LlmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260201133205_AddSessionRecordTable")]
+    partial class AddSessionRecordTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.2");
@@ -129,13 +132,13 @@ namespace DSystem.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_agent_session_records");
+                        .HasName("pk_agent_sessions");
 
                     b.HasIndex("ProjectId", "SessionId")
                         .IsUnique()
-                        .HasDatabaseName("ix_agent_session_records_project_id_session_id");
+                        .HasDatabaseName("ix_agent_sessions_project_id_session_id");
 
-                    b.ToTable("agent_session_records", (string)null);
+                    b.ToTable("agent_sessions", (string)null);
                 });
 
             modelBuilder.Entity("DSystem.Domain.Entities.Agentflow", b =>
