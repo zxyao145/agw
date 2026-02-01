@@ -3,6 +3,34 @@ using System.Text.Json;
 
 namespace DSystem.Domain.Models;
 
+
+/// <summary>
+/// AI message with role, author, and content blocks.
+/// </summary>
+public record AiMessage
+{
+    public string MessageId { get; init; }
+    public string? Author { get; init; }
+    public string? Role { get; init; }
+    public List<AiMessageContent> Contents { get; init; }
+    public AdditionalPropertiesDictionary? AdditionalProperties { get; init; }
+
+    public AiMessage(
+        string messageId,
+        string? author,
+        string? role,
+        List<AiMessageContent> contents,
+        AdditionalPropertiesDictionary? additionalProperties = null)
+    {
+        MessageId = messageId;
+        Author = author;
+        Role = role;
+        Contents = contents;
+        AdditionalProperties = additionalProperties;
+    }
+}
+
+
 /// <summary>
 /// Content type names matching Microsoft.Extensions.AI content types.
 /// </summary>
@@ -31,16 +59,5 @@ public record AiMessageInputContent(string Type, JsonElement Content);
 public record AiMessageContent(
     string Type,
     object? Content,
-    AdditionalPropertiesDictionary? AdditionalProperties = null
-);
-
-/// <summary>
-/// AI message with role, author, and content blocks.
-/// </summary>
-public record AiMessage(
-    string MessageId,
-    string? Author,
-    string? Role,
-    List<AiMessageContent> Contents,
     AdditionalPropertiesDictionary? AdditionalProperties = null
 );
