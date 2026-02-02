@@ -1,10 +1,10 @@
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
-using DSystem.Infrastructure;
+using DSystem.Infrastructure.Data;
 using Microsoft.Agents.AI;
-using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -18,18 +18,18 @@ public class ClaudeCodeService
 {
     private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<ClaudeCodeService> _logger;
-    private readonly HybridCache _cache;
+    private readonly LlmDbContext _context;
     private readonly IGitCommandService _gitCommandService;
     private readonly string _rootPath;
 
     public ClaudeCodeService(
         ILogger<ClaudeCodeService> logger,
-        HybridCache cache,
+        LlmDbContext context,
         IHostEnvironment hostEnvironment,
         IGitCommandService gitCommandService)
     {
         _logger = logger;
-        _cache = cache;
+        _context = context;
         _hostEnvironment = hostEnvironment;
         _gitCommandService = gitCommandService;
         _rootPath = Path.Combine(_hostEnvironment.ContentRootPath);
@@ -52,29 +52,73 @@ public class ClaudeCodeService
 
         var options = BuildAgentOptions(initRequest);
         var agent = new ClaudeCodeAIAgent(options, _logger);
-        var thread = await GetOrLoadThreadAsync(agent, initRequest.SessionId, cancellationToken);
+        var thread = await GetOrLoadThreadAsync(
+            agent,
+            initRequest.SessionId,
+            initRequest.ProjectId,
+            cancellationToken);
 
-        return new ClaudeCodeSession(agent, thread, initRequest, _logger, _cache);
+        return new ClaudeCodeSession(agent, thread, initRequest, _logger, _context);
     }
 
     private async Task<AgentSession> GetOrLoadThreadAsync(
         ClaudeCodeAIAgent agent,
         string sessionId,
+        Guid projectId,
         CancellationToken cancellationToken)
     {
-        var cachedThread = await _cache.GetOrCreateAsync(
-            sessionId,
-            _ => ValueTask.FromResult<string>(""));
+        var record = await _context.AgentSessionRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                session => session.SessionId == sessionId && session.ProjectId == projectId,
+                cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(cachedThread))
+        if (record == null || string.IsNullOrWhiteSpace(record.Messages))
         {
             _logger.LogDebug("Created new thread for session: {ThreadId}", sessionId);
             return await agent.GetNewSessionAsync(cancellationToken);
         }
 
         _logger.LogDebug("Loaded existing thread for session: {ThreadId}", sessionId);
-        var serialized = JsonSerializer.Deserialize<JsonElement>(cachedThread);
-        return await agent.DeserializeSessionAsync(serialized);
+        if (!TryGetThreadState(record.Messages, out var threadState))
+        {
+            return await agent.GetNewSessionAsync(cancellationToken);
+        }
+
+        return await agent.DeserializeSessionAsync(threadState);
+    }
+
+    /// <summary>
+    /// Tries to extract serialized thread state from stored session payload.
+    /// </summary>
+    private static bool TryGetThreadState(string messages, out JsonElement threadState)
+    {
+        threadState = default;
+        if (string.IsNullOrWhiteSpace(messages))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(messages);
+            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                if (document.RootElement.TryGetProperty("Thread", out var threadElement)
+                    || document.RootElement.TryGetProperty("thread", out threadElement))
+                {
+                    threadState = threadElement.Clone();
+                    return threadState.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null;
+                }
+            }
+
+            threadState = document.RootElement.Clone();
+            return threadState.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static ClaudeCodeAIAgentOptions BuildAgentOptions(ClaudeCodeSettingRequest request)

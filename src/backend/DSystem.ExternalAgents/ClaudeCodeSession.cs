@@ -1,10 +1,12 @@
 using ClaudeCodeSdk.MAF;
+using DSystem.Domain.Entities;
 using DSystem.Domain.Models;
 using DSystem.Infrastructure;
+using DSystem.Infrastructure.Data;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
@@ -39,7 +41,9 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
     private readonly ILogger _logger;
-    private readonly HybridCache _cache;
+    private readonly LlmDbContext _context;
+
+    private const string ClaudeCodeAgentName = "ClaudeCode";
 
     /// <summary>
     /// Initializes a new instance of the ClaudeCodeSession class.
@@ -49,13 +53,13 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         AgentSession thread,
         ClaudeCodeSettingRequest configuration,
         ILogger logger,
-        HybridCache cache)
+        LlmDbContext context)
     {
         Agent = agent ?? throw new ArgumentNullException(nameof(agent));
         Thread = thread ?? throw new ArgumentNullException(nameof(thread));
         Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+        _context = context ?? throw new ArgumentNullException(nameof(context));
     }
 
     /// <summary>
@@ -86,14 +90,16 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     {
         var aiContents = ConvertToAIContents(contents);
         var message = new ChatMessage(ChatRole.User, aiContents);
+        var responseUpdates = new List<AgentResponseUpdate>();
 
         await foreach (var update in Agent.RunStreamingAsync(message, Thread, cancellationToken: cancellationToken))
         {
+            responseUpdates.Add(update);
             var aiMessage = update.ToAiMessage();
             if (aiMessage != null) yield return aiMessage;
         }
 
-        await SaveThreadStateAsync(cancellationToken);
+        await SaveThreadStateAsync(responseUpdates, cancellationToken);
     }
 
     /// <summary>
@@ -161,16 +167,95 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         return aiContents;
     }
 
-    private async Task SaveThreadStateAsync(CancellationToken cancellationToken)
+    private async Task SaveThreadStateAsync(
+        IReadOnlyCollection<AgentResponseUpdate> updates,
+        CancellationToken cancellationToken)
     {
         var serialized = Thread.Serialize();
         if (serialized.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return;
 
-        await _cache.SetAsync(
-            Configuration.SessionId,
-            JsonSerializer.Serialize(serialized),
-            cancellationToken: cancellationToken);
+        var record = await _context.AgentSessionRecords
+            .FirstOrDefaultAsync(
+                session => session.SessionId == Configuration.SessionId && session.ProjectId == Configuration.ProjectId,
+                cancellationToken);
+
+        if (record == null)
+        {
+            record = new AgentSessionRecord
+            {
+                SessionId = Configuration.SessionId,
+                ProjectId = Configuration.ProjectId,
+                AgentName = ClaudeCodeAgentName,
+                CreateTime = DateTime.UtcNow
+            };
+            _context.AgentSessionRecords.Add(record);
+        }
+
+        var payload = DeserializePayload(record.Messages);
+        payload.Thread = serialized;
+        if (updates.Count > 0)
+        {
+            payload.Updates.AddRange(updates);
+        }
+
+        record.Messages = JsonSerializer.Serialize(payload);
+        record.UpdateTime = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug("Saved thread state for session: {ThreadId}", Configuration.SessionId);
+    }
+
+    private static SessionRecordPayload DeserializePayload(string messages)
+    {
+        if (string.IsNullOrWhiteSpace(messages))
+        {
+            return new SessionRecordPayload();
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(messages);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return new SessionRecordPayload { Thread = document.RootElement.Clone() };
+            }
+
+            if (!TryGetThreadState(document.RootElement, out var threadState))
+            {
+                return new SessionRecordPayload { Thread = document.RootElement.Clone() };
+            }
+
+            var payload = new SessionRecordPayload { Thread = threadState };
+            if (document.RootElement.TryGetProperty("Updates", out var updatesElement)
+                && updatesElement.ValueKind == JsonValueKind.Array)
+            {
+                payload.Updates = JsonSerializer.Deserialize<List<AgentResponseUpdate>>(updatesElement.GetRawText()) ?? [];
+            }
+
+            return payload;
+        }
+        catch (JsonException)
+        {
+            return new SessionRecordPayload();
+        }
+    }
+
+    private static bool TryGetThreadState(JsonElement root, out JsonElement threadState)
+    {
+        if (root.TryGetProperty("Thread", out threadState) || root.TryGetProperty("thread", out threadState))
+        {
+            threadState = threadState.Clone();
+            return threadState.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null;
+        }
+
+        threadState = default;
+        return false;
+    }
+
+    private sealed class SessionRecordPayload
+    {
+        public JsonElement Thread { get; set; }
+        public List<AgentResponseUpdate> Updates { get; set; } = [];
     }
 }

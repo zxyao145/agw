@@ -94,6 +94,11 @@ public record ClaudeCodeSettingRequest
     public string SessionId { get; init; } = "";
 
     /// <summary>
+    /// Project Id for session grouping.
+    /// </summary>
+    public Guid ProjectId { get; init; } = Guid.Empty;
+
+    /// <summary>
     /// Permission mode for tool execution.
     /// </summary>
     public string? PermissionMode { get; init; }
