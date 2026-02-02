@@ -1,0 +1,56 @@
+"use client";
+
+import * as React from "react";
+import dynamic from "next/dynamic";
+import { ChatSession, ChatSessionProps } from "@/components/message/chat-session";
+import type { ChatSessionDocument } from "../../lib/chat-history-db";
+import type { AiMessage } from "@/types";
+import ColResizeSplit from "../split-layout";
+
+// Dynamically import ChatHistoryList to avoid SSR issues with PouchDB
+const ChatHistoryList = dynamic(
+  () => import("./chat-history-list").then(mod => ({ default: mod.ChatHistoryList })),
+  { ssr: false }
+);
+export interface ChatProps extends ChatSessionProps {
+  currentThreadId: string | null;
+  onSessionSelect: (messages: AiMessage[], threadId: string) => void;
+  onNewChat: () => void;
+  onSessionDeleted: (threadId: string) => void;
+  onAllSessionsCleared: () => void;
+}
+
+export function Chat({
+  currentThreadId,
+  onSessionSelect,
+  onNewChat,
+  onSessionDeleted,
+  onAllSessionsCleared,
+  ...messageAreaProps
+}: ChatProps) {
+  const handleSessionSelect = (session: ChatSessionDocument) => {
+    onSessionSelect(session.messages, session.threadId);
+  };
+
+  return (
+    <>
+      <ColResizeSplit>
+        <ColResizeSplit.Left>
+          <ChatHistoryList
+            currentThreadId={currentThreadId}
+            onSessionSelect={handleSessionSelect}
+            onNewChat={onNewChat}
+            onSessionDeleted={onSessionDeleted}
+            onAllSessionsCleared={onAllSessionsCleared}
+          />
+        </ColResizeSplit.Left>
+
+        <ColResizeSplit.Right>
+          <div className="flex flex-col flex-1 px-2">
+            <ChatSession {...messageAreaProps} />
+          </div>
+        </ColResizeSplit.Right>
+      </ColResizeSplit>
+    </>
+  );
+}
