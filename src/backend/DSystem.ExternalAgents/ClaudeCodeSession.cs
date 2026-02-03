@@ -187,7 +187,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
                 ProjectId = Configuration.ProjectId,
                 CreateTime = DateTime.UtcNow
             };
-            _context.AgentSessionRecords.Add(record);
+            await _context.AgentSessionRecords.AddAsync(record);
         }
 
         var payload = DeserializePayload(record.Messages);

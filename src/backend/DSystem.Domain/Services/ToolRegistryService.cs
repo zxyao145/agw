@@ -44,7 +44,7 @@ public class ToolRegistryService
     private void DiscoverAttributedMethods(Assembly assembly)
     {
         var toolTypes = assembly.GetTypes()
-            .Where(t => t.Namespace != null && t.Namespace.StartsWith("DSystem.Domain.Tools"));
+            .Where(t => t.Namespace != null && t.Namespace.StartsWith("DSystem."));
 
         foreach (var type in toolTypes)
         {
