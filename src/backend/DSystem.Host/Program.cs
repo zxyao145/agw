@@ -101,6 +101,7 @@ try
     builder.Services.AddScoped<AgentDomainService>();
     builder.Services.AddScoped<AgentRuntimeService>();
     builder.Services.AddScoped<A2AAgentService>();
+    builder.Services.AddScoped<SessionRecordDomainService>();
 
     // External Agents
     builder.Services.AddScoped<ClaudeCodeService>();

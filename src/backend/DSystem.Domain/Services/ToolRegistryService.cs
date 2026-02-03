@@ -20,7 +20,7 @@ public class ToolRegistryService
     public ToolRegistryService(IServiceProvider? serviceProvider = null)
     {
         _toolFactory = new AiToolFactory(serviceProvider);
-        DiscoverTools();
+        //DiscoverTools();
     }
 
     /// <summary>

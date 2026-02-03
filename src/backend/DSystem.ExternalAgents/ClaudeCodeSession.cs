@@ -75,7 +75,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
             AiMessageContentType.TextContent,
             JsonSerializer.SerializeToElement(input));
 
-        await foreach (var message in ExecuteStreamingAsync([content], cancellationToken))
+        await foreach (var message in ExecuteStreamingAsync([content], input, cancellationToken))
         {
             yield return message;
         }
@@ -86,6 +86,20 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     /// </summary>
     public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
         List<AiMessageInputContent> contents,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var message in ExecuteStreamingAsync(contents, null, cancellationToken))
+        {
+            yield return message;
+        }
+    }
+
+    /// <summary>
+    /// Executes a list of input contents with streaming responses.
+    /// </summary>
+    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+        List<AiMessageInputContent> contents,
+        string? input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var aiContents = ConvertToAIContents(contents);
@@ -99,7 +113,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
             if (aiMessage != null) yield return aiMessage;
         }
 
-        await SaveThreadStateAsync(responseUpdates, cancellationToken);
+        await SaveThreadStateAsync(responseUpdates, input, cancellationToken);
     }
 
     /// <summary>
@@ -169,6 +183,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
 
     private async Task SaveThreadStateAsync(
         IReadOnlyCollection<AgentResponseUpdate> updates,
+        string? input,
         CancellationToken cancellationToken)
     {
         var serialized = Thread.Serialize();
@@ -190,8 +205,18 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
             await _context.AgentSessionRecords.AddAsync(record);
         }
 
+        if (string.IsNullOrWhiteSpace(record.Title))
+        {
+            var title = GenerateTitleFromInput(input);
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                record.Title = title;
+            }
+        }
+
         var payload = DeserializePayload(record.Messages);
         payload.Thread = serialized;
+        AppendUserInput(payload, input);
         if (updates.Count > 0)
         {
             payload.Updates.AddRange(updates);
@@ -203,6 +228,28 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug("Saved thread state for session: {ThreadId}", Configuration.SessionId);
+    }
+
+    /// <summary>
+    /// TODO: use llm to summary the input
+    /// 
+    /// </summary>
+    /// <param name="input"></param>
+    /// <returns></returns>
+    private static string? GenerateTitleFromInput(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return "";
+        }
+
+        var trimmed = input.Trim();
+
+        var firstLine = trimmed.Split('\n', '\r', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(firstLine)) return null;
+
+        const int maxLength = 20;
+        return firstLine.Length > maxLength ? $"{firstLine[..maxLength]}..." : firstLine;
     }
 
     private static SessionRecordPayload DeserializePayload(string messages)
@@ -256,5 +303,19 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     {
         public JsonElement Thread { get; set; }
         public List<AgentResponseUpdate> Updates { get; set; } = [];
+    }
+
+    private static void AppendUserInput(SessionRecordPayload payload, string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return;
+
+        var trimmed = input.Trim();
+
+        payload.Updates.Add(new AgentResponseUpdate
+        {
+            Role = ChatRole.User,
+            AuthorName = "user",
+            Contents = [new TextContent(trimmed)]
+        });
     }
 }
