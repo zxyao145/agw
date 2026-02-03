@@ -117,7 +117,7 @@ function UserInputRoot({
         {help.length > 0 ? (
           <>{help}</>
         ) : (
-          "Press Enter for new line • Enter/Shift+Enter to send"
+          "Press Enter for new line • Ctrl/Shift+Enter to send"
         )}
       </div>
     </div>
