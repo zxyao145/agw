@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using DSystem.Infrastructure;
 
 namespace DSystem.ExternalAgents;
 

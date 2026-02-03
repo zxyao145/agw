@@ -185,7 +185,6 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
             {
                 SessionId = Configuration.SessionId,
                 ProjectId = Configuration.ProjectId,
-                AgentName = ClaudeCodeAgentName,
                 CreateTime = DateTime.UtcNow
             };
             _context.AgentSessionRecords.Add(record);
