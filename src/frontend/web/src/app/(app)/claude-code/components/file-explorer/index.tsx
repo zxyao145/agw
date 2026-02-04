@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { FolderOutput, FolderInput } from "lucide-react";
+import { FolderOutput, FolderInput, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import {
   listFiles,
   readFile,
@@ -126,9 +126,9 @@ export function FileExplorer({
           title={showFileExplorer ? "Hide file explorer" : "Show file explorer"}
         >
           {showFileExplorer ? (
-            <FolderOutput className="h-4 w-4" />
+            <PanelLeftClose className="h-4 w-4" />
           ) : (
-            <FolderInput className="h-4 w-4" />
+            <PanelLeftOpen className="h-4 w-4" />
           )}
         </Button>
         <div className="flex items-center gap-2">

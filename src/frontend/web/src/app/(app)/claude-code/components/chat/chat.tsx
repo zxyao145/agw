@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { PanelLeft } from "lucide-react";
+import { PanelLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { ChatSession, ChatSessionProps } from "../../../../../components/message/chat-session";
 import type { AiMessage } from "@/types";
 import ColResizeSplit from "../split-layout";
@@ -40,6 +40,7 @@ export function Chat({
 }: ChatProps) {
   const [isMobile, setIsMobile] = React.useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+  const [showChatHistory, setShowChatHistory] = React.useState(true);
 
   React.useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 768px)");
@@ -70,6 +71,23 @@ export function Chat({
   return (
     <>
       <div className="flex flex-1 flex-col">
+        {!isMobile && (
+          <div className="flex items-center gap-4 pb-2">
+            <Button
+              variant="ghost"
+              className="cursor-pointer"
+              size="sm"
+              onClick={() => setShowChatHistory(!showChatHistory)}
+              title={showChatHistory ? "Hide chat history" : "Show chat history"}
+            >
+              {showChatHistory ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeftOpen className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        )}
         {isMobile && (
           <Drawer direction="left" open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
               <DrawerTrigger asChild>
@@ -96,7 +114,7 @@ export function Chat({
         )}
 
         <ColResizeSplit>
-          {!isMobile && (
+          {!isMobile && showChatHistory && (
             <ColResizeSplit.Left>
               <ChatHistoryList
                 currentThreadId={currentThreadId}
