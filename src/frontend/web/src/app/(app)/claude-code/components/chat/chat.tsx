@@ -71,15 +71,14 @@ export function Chat({
     <>
       <div className="flex flex-1 flex-col">
         {isMobile && (
-          <div className="flex items-center justify-between border-b px-2 py-2">
-            <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+          <Drawer direction="left" open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
               <DrawerTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-2">
                   <PanelLeft className="h-4 w-4" />
                   Chat History
                 </Button>
               </DrawerTrigger>
-              <DrawerContent className="max-h-[80vh]">
+              <DrawerContent className="h-screen max-h-screen">
                 <DrawerHeader>
                   <DrawerTitle>Chat History</DrawerTitle>
                 </DrawerHeader>
@@ -94,7 +93,6 @@ export function Chat({
                 </div>
               </DrawerContent>
             </Drawer>
-          </div>
         )}
 
         <ColResizeSplit>
