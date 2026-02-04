@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 
+
 // Dynamically import ChatHistoryList to keep the chat shell lightweight
 const ChatHistoryList = dynamic(
   () => import("./chat-history-list").then(mod => ({ default: mod.ChatHistoryList })),
