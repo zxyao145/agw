@@ -696,7 +696,7 @@ export default function ClaudeCodePage() {
   };
 
   return (
-    <div className="relative flex flex-col h-[calc(100vh-58px)] w-full max-w-8xl mx-auto mr-2">
+    <div className="relative flex flex-col h-[calc(100vh-58px)] w-full max-w-8xl mx-auto px-2 md:px-0 md:mr-2">
       <div className="flex-1 overflow-y-auto">
         <div ref={topAnchorRef} />
         <Tabs
@@ -704,7 +704,7 @@ export default function ClaudeCodePage() {
           onValueChange={handleTabChange}
           className="w-full h-full"
         >
-          <TabsList className="w-fit">
+          <TabsList className="w-full md:w-fit">
             <TabsTrigger value="chat">Chat</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
           </TabsList>
@@ -732,7 +732,7 @@ export default function ClaudeCodePage() {
         </Tabs>
       </div>
 
-      <div className="absolute bottom-0 z-10 left-0 right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
+      <div className="absolute bottom-0 z-10 left-0 right-0 md:right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
         <InputArea
           isExecuting={isExecuting}
           hasMessages={(messages?.length ?? 0) > 0}
