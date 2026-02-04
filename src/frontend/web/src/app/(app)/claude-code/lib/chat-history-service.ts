@@ -109,28 +109,3 @@ export async function clearAllSessions(projectId?: string): Promise<void> {
     sessions.map((session) => deleteSessionByThreadId(session.sessionId, projectId)),
   );
 }
-
-export function subscribeToSessions(
-  callback: (sessions: ChatSessionRecordSummary[]) => void,
-  projectId?: string,
-): () => void {
-  let active = true;
-  const poll = async () => {
-    try {
-      const sessions = await getAllSessions(projectId);
-      if (active) {
-        callback(sessions);
-      }
-    } catch (error) {
-      console.error("Failed to refresh chat history:", error);
-    }
-  };
-
-  void poll();
-  const intervalId = window.setInterval(poll, 200000);
-
-  return () => {
-    active = false;
-    window.clearInterval(intervalId);
-  };
-}
