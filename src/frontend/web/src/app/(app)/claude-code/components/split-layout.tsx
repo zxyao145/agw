@@ -85,12 +85,12 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => 
   }, [isResizing]);
 
   return (
-    <div className="flex flex-col flex-1">
-      <div className="w-full flex flex-1 flex-row">
+    <div className="flex flex-col flex-1 min-h-0 h-full">
+      <div className="w-full flex flex-1 flex-row min-h-0 h-full">
         {left && (
           <>
             <div
-              className="flex overflow-auto"
+              className="flex flex-col min-h-0 overflow-hidden h-full"
               ref={resizeRef}
               style={{ width: panelWidth }}
             >
@@ -112,7 +112,7 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => 
           </>
         )}
 
-        <div className="flex flex-1">{right}</div>
+        <div className="flex flex-1 min-h-0 overflow-hidden h-full">{right}</div>
       </div>
     </div>
   );

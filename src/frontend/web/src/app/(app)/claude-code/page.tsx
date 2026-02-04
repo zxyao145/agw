@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -14,10 +15,10 @@ import {
 import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
 
 import { Uuid4 } from "id128";
-import { FileExplorer } from "./components/file-explorer";
-import { Chat } from "./components/chat/chat";
 import { InputArea } from "./components/user-input/input-area";
 import type { UserInputRef } from "@/components/message/user-input";
+import { ChatSession } from "@/components/message/chat-session";
+import { getSessionByThreadId, type ChatSessionRecordDetails } from "./lib/chat-history-service";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,6 +30,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
+import ColResizeSplit from "./components/split-layout";
+import Export from "./components/file-explorer/explorer";
+import NoSelectedFile from "./components/file-explorer/no-selected-file";
+import FileHeader from "./components/file-explorer/file-header";
+import FileLoading from "./components/file-explorer/file-loading";
+import FileError from "./components/file-explorer/file-error";
+import FileViewer from "./components/file-explorer/file-viewer";
+import UnChangedFile from "./components/file-explorer/unchanged-file";
+import { DiffViewer } from "./components/file-explorer/diff-viewer";
 import "./page.css";
 import { claudeSettingsStorage } from "./lib/settings-storage";
 
@@ -49,6 +67,14 @@ const handleAiMessage = (
   }
 };
 
+const ChatHistoryList = dynamic(
+  () =>
+    import("./components/chat/chat-history-list").then((mod) => ({
+      default: mod.ChatHistoryList,
+    })),
+  { ssr: false },
+);
+
 export default function ClaudeCodePage() {
   const [workingDirectory, setWorkingDirectory] = React.useState("");
   const [gitAddress, setGitAddress] = React.useState("");
@@ -68,6 +94,19 @@ export default function ClaudeCodePage() {
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [showCommentDialog, setShowCommentDialog] = React.useState(false);
   const [isInitStatus, setIsInitStatus] = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+  const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
+  const [showChatHistory, setShowChatHistory] = React.useState(true);
+  const [showFileExplorer, setShowFileExplorer] = React.useState(true);
+  const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
+  const [fileContent, setFileContent] = React.useState<string>("");
+  const [isLoadingContent, setIsLoadingContent] = React.useState(false);
+  const [contentError, setContentError] = React.useState<string | null>(null);
+  const [onlyDiff, setOnlyDiff] = React.useState(true);
+  const [recursiveMode, setRecursiveMode] = React.useState(true);
+  const [diffContentData, setDiffContentData] =
+    React.useState<GitDiffResponse | null>(null);
   // const statusRequestPendingRef = React.useRef(false);
   const settingsRequestSessionRef = React.useRef<string | null>(null);
 
@@ -86,6 +125,17 @@ export default function ClaudeCodePage() {
   const wsRef = React.useRef<WebSocket | null>(null);
   const userInputRef = React.useRef<UserInputRef | null>(null);
   const topAnchorRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const handleMediaChange = (event: MediaQueryListEvent) => {
+      setIsMobile(event.matches);
+    };
+
+    setIsMobile(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleMediaChange);
+    return () => mediaQuery.removeEventListener("change", handleMediaChange);
+  }, []);
 
   // Auto-scroll to bottom when new messages arrive
   React.useEffect(() => {
@@ -169,6 +219,100 @@ export default function ClaudeCodePage() {
     threadId,
     workingDirectory,
   ]);
+
+  const openDrawer = (type: "chat" | "files") => {
+    setDrawerContent(type);
+    setIsDrawerOpen(true);
+  };
+
+  const handleSidebarToggle = (type: "chat" | "files") => {
+    if (isMobile) {
+      openDrawer(type);
+      return;
+    }
+
+    //  if (type === "chat") {
+    //     setShowChatHistory((prev) => !prev);
+    //     return;
+    //   }
+    setShowChatHistory((prev) => !prev);
+    setShowFileExplorer((prev) => !prev);
+  };
+
+  const loadFileContent = React.useCallback(
+    async (filePath: string) => {
+      setIsLoadingContent(true);
+      setContentError(null);
+      setDiffContentData(null);
+
+      try {
+        if (onlyDiff) {
+          const diff = await getFileDiff(filePath);
+          setDiffContentData(diff);
+          setFileContent("");
+          setSelectedFile(filePath);
+        } else {
+          const content = await readFile(filePath);
+          setFileContent(content);
+          setDiffContentData(null);
+          setSelectedFile(filePath);
+        }
+      } catch (err) {
+        console.error("Error loading file:", err);
+        setContentError((err as Error).message);
+        setFileContent("");
+        setDiffContentData(null);
+      } finally {
+        setIsLoadingContent(false);
+      }
+    },
+    [onlyDiff],
+  );
+
+  const handleOnFileDeleted = React.useCallback(
+    (filePath: string) => {
+      if (filePath === selectedFile) {
+        setFileContent("");
+        setDiffContentData(null);
+      }
+    },
+    [selectedFile],
+  );
+
+  const handleOnLoadFileContent = React.useCallback(
+    (filePath: string) => {
+      loadFileContent(filePath);
+    },
+    [loadFileContent],
+  );
+
+  const handleOnFileReseted = React.useCallback(
+    (filePath: string | null) => {
+      if (selectedFile && selectedFile === filePath) {
+        loadFileContent(selectedFile);
+      }
+    },
+    [loadFileContent, selectedFile],
+  );
+
+  const handleOnFileSelected = React.useCallback(
+    (filePath: string | null) => {
+      if (filePath && filePath !== selectedFile) {
+        setSelectedFile(filePath);
+        loadFileContent(filePath);
+        if (isMobile) {
+          setIsDrawerOpen(false);
+        }
+      }
+    },
+    [isMobile, loadFileContent, selectedFile],
+  );
+
+  React.useEffect(() => {
+    if (selectedFile) {
+      loadFileContent(selectedFile);
+    }
+  }, [onlyDiff]);
 
   // Cleanup WebSocket on unmount
   React.useEffect(() => {
@@ -469,6 +613,21 @@ export default function ClaudeCodePage() {
     settingsRequestSessionRef.current = null;
   };
 
+  const handleHistorySelect = async (sessionId: string) => {
+    try {
+      const details: ChatSessionRecordDetails | null =
+        await getSessionByThreadId(sessionId);
+      if (!details) {
+        return;
+      }
+      handleSessionSelect(details.messages ?? [], details.sessionId);
+    } catch (error) {
+      console.error("Failed to load session:", error);
+    } finally {
+      setIsDrawerOpen(false);
+    }
+  };
+
   const handleSessionSelect = (
     newMessages: AiMessage[],
     newThreadId: string,
@@ -502,6 +661,7 @@ export default function ClaudeCodePage() {
 
   const handleNewChat = () => {
     void initializeNewChat();
+    setIsDrawerOpen(false);
   };
 
   const initializeNewChat = async () => {
@@ -662,6 +822,7 @@ export default function ClaudeCodePage() {
       // No unsent comments or switching to files, allow tab change
       setCurrentTab(value);
     }
+    setIsDrawerOpen(false);
   };
 
   const handleConfirmSend = async () => {
@@ -695,72 +856,197 @@ export default function ClaudeCodePage() {
     });
   };
 
+  const isChatTab = currentTab === "chat";
+  const isFilesTab = currentTab === "files";
+  const activeSidebarVisible = isChatTab ? showChatHistory : showFileExplorer;
+  const activeSidebarTitle = isChatTab ? "chat history" : "file explorer";
+
   return (
     <div className="relative flex flex-col h-[calc(100vh-58px)] w-full max-w-8xl mx-auto px-2 md:px-0 md:mr-2">
-      <div className="flex-1 overflow-y-auto">
-        <div ref={topAnchorRef} />
-        <Tabs
-          value={currentTab}
-          onValueChange={handleTabChange}
-          className="w-full h-full"
-        >
-          <TabsList className="w-full md:w-fit">
+      <div ref={topAnchorRef} />
+      <Tabs
+        value={currentTab}
+        onValueChange={handleTabChange}
+        className="flex flex-col h-full"
+      >
+        <div className="flex items-center gap-2">
+          <TabsList className="w-fit">
             <TabsTrigger value="chat">Chat</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
           </TabsList>
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              className="cursor-pointer"
+              size="sm"
+              onClick={() => handleSidebarToggle(isChatTab ? "chat" : "files")}
+              title={
+                activeSidebarVisible
+                  ? `Hide ${activeSidebarTitle}`
+                  : `Show ${activeSidebarTitle}`
+              }
+            >
+              {activeSidebarVisible ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeftOpen className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </div>
 
-          <TabsContent value="chat" className="flex h-full">
-            <Chat
-              messages={messages}
-              messagesEndRef={messagesEndRef}
-              processMessages={processMessages}
-              currentThreadId={threadId}
-              onSessionSelect={handleSessionSelect}
-              onNewChat={handleNewChat}
-              onSessionDeleted={handleSessionDeleted}
-              onAllSessionsCleared={handleAllSessionsCleared}
-            />
-          </TabsContent>
+        <div className="mt-2 flex-1 min-h-0">
+          <ColResizeSplit>
+            {!isMobile && isChatTab && showChatHistory && (
+              <ColResizeSplit.Left minWidth={200} maxWidth={600}>
+                <ChatHistoryList
+                  currentThreadId={threadId}
+                  onSessionSelect={handleHistorySelect}
+                  onNewChat={handleNewChat}
+                  onSessionDeleted={handleSessionDeleted}
+                  onAllSessionsCleared={handleAllSessionsCleared}
+                />
+              </ColResizeSplit.Left>
+            )}
+            {!isMobile && isFilesTab && showFileExplorer && (
+              <ColResizeSplit.Left minWidth={200} maxWidth={600}>
+                <Export
+                  rootDirectory={resolvedWorkingDirectory}
+                  onlyDiff={onlyDiff}
+                  recursiveMode={recursiveMode}
+                  onOnlyDiffChange={setOnlyDiff}
+                  onFileDeleted={handleOnFileDeleted}
+                  onFileSelected={handleOnFileSelected}
+                  onFileReseted={handleOnFileReseted}
+                  onLoadFileContent={handleOnLoadFileContent}
+                />
+              </ColResizeSplit.Left>
+            )}
+            <ColResizeSplit.Right>
+              <div className="relative flex flex-1 min-h-0 overflow-hidden">
+                <TabsContent value="chat" className="mt-0 h-full w-full">
+                  <div className="flex flex-col h-full px-2 w-full">
+                    <ChatSession
+                      messages={messages}
+                      messagesEndRef={messagesEndRef}
+                      processMessages={processMessages}
+                    />
+                  </div>
+                </TabsContent>
 
-          <TabsContent value="files" className="flex h-full">
-            <FileExplorer
-              rootDirectory={resolvedWorkingDirectory}
-              comments={comments}
-              setComments={setComments}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
+                <TabsContent value="files" className="mt-0 h-full">
+                  <div className="flex flex-col h-full px-2">
+                    <div className="flex-1 min-h-0 pb-36">
+                      {!selectedFile ? (
+                        NoSelectedFile()
+                      ) : (
+                        <div className="flex flex-col h-full min-h-0">
+                          <FileHeader file={selectedFile} />
+                          <div className="flex-1 min-h-0 overflow-y-auto">
+                            {isLoadingContent ? (
+                              <FileLoading />
+                            ) : contentError ? (
+                              <FileError message={contentError} />
+                            ) : onlyDiff && diffContentData ? (
+                              diffContentData.unchanged ? (
+                                <UnChangedFile
+                                  diffContentData={diffContentData}
+                                  selectedFile={selectedFile}
+                                  comments={comments}
+                                  setComments={setComments}
+                                />
+                              ) : (
+                                <DiffViewer
+                                  diff={diffContentData.diff}
+                                  filePath={selectedFile}
+                                  comments={comments}
+                                  setComments={setComments}
+                                />
+                              )
+                            ) : (
+                              <FileViewer
+                                content={fileContent}
+                                filePath={selectedFile}
+                                comments={comments}
+                                setComments={setComments}
+                                isDiffView={false}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
 
-      <div className="absolute bottom-0 z-10 left-0 right-0 md:right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
-        <InputArea
-          isExecuting={isExecuting}
-          hasMessages={(messages?.length ?? 0) > 0}
-          onExecute={executeClaudeCode}
-          onExecuteWithComment={executeClaudeCodeWithComment}
-          onClearSession={handleClearSession}
-          onScrollToTop={handleScrollToTop}
-          workingDirectory={workingDirectory}
-          setWorkingDirectory={setWorkingDirectory}
-          gitAddress={gitAddress}
-          setGitAddress={setGitAddress}
-          directoryMode={directoryMode}
-          setDirectoryMode={setDirectoryMode}
-          apiKey={apiKey}
-          setApiKey={setApiKey}
-          apiBaseUrl={apiBaseUrl}
-          setApiBaseUrl={setApiBaseUrl}
-          permissionMode={permissionMode}
-          setPermissionMode={setPermissionMode}
-          envVars={envVars}
-          setEnvVars={setEnvVars}
-          initContent={initContent}
-          createArr={createArr}
-          currentTab={currentTab}
-          comments={comments}
-          userInputRef={userInputRef}
-        />
-      </div>
+                <div className="absolute bottom-0 z-10 left-0 right-0 h-30 px-2 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
+                  <InputArea
+                    isExecuting={isExecuting}
+                    hasMessages={(messages?.length ?? 0) > 0}
+                    onExecute={executeClaudeCode}
+                    onExecuteWithComment={executeClaudeCodeWithComment}
+                    onClearSession={handleClearSession}
+                    onScrollToTop={handleScrollToTop}
+                    workingDirectory={workingDirectory}
+                    setWorkingDirectory={setWorkingDirectory}
+                    gitAddress={gitAddress}
+                    setGitAddress={setGitAddress}
+                    directoryMode={directoryMode}
+                    setDirectoryMode={setDirectoryMode}
+                    apiKey={apiKey}
+                    setApiKey={setApiKey}
+                    apiBaseUrl={apiBaseUrl}
+                    setApiBaseUrl={setApiBaseUrl}
+                    permissionMode={permissionMode}
+                    setPermissionMode={setPermissionMode}
+                    envVars={envVars}
+                    setEnvVars={setEnvVars}
+                    initContent={initContent}
+                    createArr={createArr}
+                    currentTab={currentTab}
+                    comments={comments}
+                    userInputRef={userInputRef}
+                  />
+                </div>
+              </div>
+            </ColResizeSplit.Right>
+          </ColResizeSplit>
+        </div>
+      </Tabs>
+
+      <Drawer direction="left" open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+        <DrawerContent className="h-screen max-h-screen">
+          <DrawerHeader>
+            <DrawerTitle>
+              {drawerContent === "files" ? "File Explorer" : "Chat History"}
+            </DrawerTitle>
+          </DrawerHeader>
+          <div className="px-4 pb-6 h-full min-h-0 overflow-hidden">
+            {drawerContent === "chat" && (
+              <ChatHistoryList
+                currentThreadId={threadId}
+                onSessionSelect={handleHistorySelect}
+                onNewChat={handleNewChat}
+                onSessionDeleted={handleSessionDeleted}
+                onAllSessionsCleared={handleAllSessionsCleared}
+              />
+            )}
+            {drawerContent === "files" && (
+              <Export
+                rootDirectory={resolvedWorkingDirectory}
+                onlyDiff={onlyDiff}
+                recursiveMode={recursiveMode}
+                onOnlyDiffChange={setOnlyDiff}
+                onFileDeleted={handleOnFileDeleted}
+                onFileSelected={handleOnFileSelected}
+                onFileReseted={handleOnFileReseted}
+                onLoadFileContent={handleOnLoadFileContent}
+              />
+            )}
+          </div>
+        </DrawerContent>
+      </Drawer>
 
       <Dialog open={showCommentDialog} onOpenChange={handleDialogClose}>
         <DialogContent showCloseButton={true}>

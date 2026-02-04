@@ -16,6 +16,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { cn } from "@/lib/utils";
 
 export interface ChatSessionProps {
   messages: AiMessage[];
@@ -33,12 +34,9 @@ export function ChatSession({
       <Empty>
         <EmptyHeader>
           <EmptyTitle>No Message Yet</EmptyTitle>
-          <EmptyDescription>
-            There are currently no messages.
-          </EmptyDescription>
+          <EmptyDescription>There are currently no messages.</EmptyDescription>
         </EmptyHeader>
-        <EmptyContent className="flex-row justify-center gap-2">
-        </EmptyContent>
+        <EmptyContent className="flex-row justify-center gap-2"></EmptyContent>
       </Empty>
     );
   }
@@ -60,7 +58,7 @@ export function ChatSession({
         {processMessages(messages).map((item, index) => {
           if (item.type === "accordion") {
             return (
-              <div className="max-w-[80%]" key={index}>
+              <div className="mx-4 max-w-[80%]" key={index}>
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem
                     value="item-1"
@@ -85,8 +83,12 @@ export function ChatSession({
               </div>
             );
           } else {
+            const isUser =
+              item.message.role === "user" &&
+              item.message.author === "user" &&
+              !item.message.additionalProperties;
             return (
-              <div className="max-w-[80%]" key={index}>
+              <div className={ cn("mx-4", isUser ? "max-w-full": "max-w-[80%]") } key={index}>
                 <AiMessageComponent message={item.message} />
               </div>
             );

@@ -180,6 +180,7 @@ export default function Export({
   rootDirectory,
   onlyDiff,
   recursiveMode,
+  onOnlyDiffChange,
   onFileDeleted,
   onLoadFileContent,
   onFileSelected,
@@ -188,6 +189,7 @@ export default function Export({
   rootDirectory: string;
   onlyDiff: boolean;
   recursiveMode: boolean;
+  onOnlyDiffChange?: (value: boolean) => void;
 
   onFileDeleted: (filePath: string) => void;
   onLoadFileContent: (filePath: string) => void;
@@ -252,17 +254,19 @@ export default function Export({
   return (
     <div
       className={cn(
-        "border rounded-lg flex flex-col flex-1 ",
-        "h-full border-0 rounded-none",
+        "border rounded-lg flex flex-col flex-1 h-full min-h-0",
+        "border-0 rounded-none",
       )}
     >
       <ExplorerHeader
         isLoading={isLoading}
         loadRootDirectory={loadRootDirectory}
         rootDirectory={rootDirectory}
+        onlyDiff={onlyDiff}
+        onOnlyDiffChange={onOnlyDiffChange}
       />
 
-      <div className="flex-1 h-100">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-2">
           {error && <ExplorerFileError message={error} />}
 

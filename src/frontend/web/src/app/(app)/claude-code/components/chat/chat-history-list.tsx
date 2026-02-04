@@ -168,7 +168,7 @@ export function ChatHistoryList({
   };
 
   return (
-    <div className="flex flex-col bg-muted/30 w-full">
+    <div className="flex flex-col bg-muted/30 w-full h-full min-h-0">
       {/* Header */}
       <div className="p-4 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">Chat History</h2>

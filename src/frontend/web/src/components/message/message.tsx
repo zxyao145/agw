@@ -130,9 +130,9 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className={`rounded-lg px-4 py-3 ${isUser ? "bg-primary text-primary-foreground ml-12" : "bg-secondary mr-12"}`}>
-        <div className="flex items-center gap-2 mb-1">
+        <div className={`flex items-center gap-2 mb-1 ${isUser ? "justify-end" : ""}`}>
           <span className="text-xs font-semibold opacity-70">
-            {isUser ? "You" : message.role || message.author}
+            {isUser ? "You" : `${message.author} (${message.role})`}
           </span>
         </div>
         <div className="text-sm whitespace-pre-wrap wrap-break-word">
