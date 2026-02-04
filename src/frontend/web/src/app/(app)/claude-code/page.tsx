@@ -13,16 +13,11 @@ import {
 
 import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
 
-import { Ulid, Uuid4 } from "id128";
+import { Uuid4 } from "id128";
 import { FileExplorer } from "./components/file-explorer";
 import { Chat } from "./components/chat/chat";
 import { InputArea } from "./components/user-input/input-area";
 import type { UserInputRef } from "@/components/message/user-input";
-import {
-  createSession,
-  deleteSessionByThreadId,
-  saveSession,
-} from "./lib/chat-history-service";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -38,6 +33,21 @@ import "./page.css";
 import { claudeSettingsStorage } from "./lib/settings-storage";
 
 const gitCodeSource = "./code-work";
+
+const handleAiMessage = (
+  data: AiMessage,
+  handleSystem: (data: AiMessage) => void,
+  handleAssistant: (data: AiMessage) => void,
+  handleUser: (data: AiMessage) => void,
+) => {
+  if (data.role === "system") {
+    handleSystem(data);
+  } else if (data.role === "assistant") {
+    handleAssistant(data);
+  } else if (data.role === "user") {
+    handleUser(data);
+  }
+};
 
 export default function ClaudeCodePage() {
   const [workingDirectory, setWorkingDirectory] = React.useState("");
@@ -316,13 +326,7 @@ export default function ClaudeCodePage() {
         const data: AiMessage = JSON.parse(event.data);
         console.debug("onmessage", data);
 
-        if (data.role === "system") {
-          handleSystem(data);
-        } else if (data.role === "assistant") {
-          handleAssistant(data);
-        } else if (data.role === "user") {
-          handleUser(data);
-        }
+        handleAiMessage(data, handleSystem, handleAssistant, handleUser);
       } catch (e) {
         console.error("Parse error:", e);
       }
@@ -451,12 +455,8 @@ export default function ClaudeCodePage() {
     }
   };
 
-  const handleClearSession = async () => {
-    const activeThreadId = threadId;
+  const handleClearSession = () => {
     setMessages([]);
-    if (activeThreadId) {
-      await saveSession(activeThreadId, []);
-    }
   };
 
   const clearActiveSessionState = () => {
@@ -473,8 +473,11 @@ export default function ClaudeCodePage() {
     newMessages: AiMessage[],
     newThreadId: string,
   ) => {
-    setMessages(newMessages);
     handleThreadId(newThreadId);
+    for (let index = 0; index < newMessages.length; index++) {
+      const aiMessage = newMessages[index];
+      handleAiMessage(aiMessage, handleSystem, handleAssistant, handleUser);
+    }
     // Close existing WebSocket to start fresh with loaded session
     if (wsRef.current) {
       wsRef.current.close(1000, "Session switched");
@@ -508,12 +511,6 @@ export default function ClaudeCodePage() {
     handleThreadId(newThreadId);
 
     try {
-      await createSession(newThreadId);
-    } catch (error) {
-      console.error("Failed to create new session:", error);
-    }
-
-    try {
       const ws = setupWebSocket();
       await waitForWebSocketOpen(ws);
 
@@ -526,25 +523,6 @@ export default function ClaudeCodePage() {
   };
 
   // Auto-save messages to database when they change
-  React.useEffect(() => {
-    const msgLength = messages?.length ?? 0;
-    // console.debug("Messages changed, auto-saving...", threadId, msgLength);
-    if (threadId && msgLength > 0) {
-      // Debounce saves to avoid too frequent writes
-      const timeoutId = setTimeout(async () => {
-        // Dynamically import saveSession to avoid SSR issues
-        try {
-          const { saveSession } = await import("./lib/chat-history-service");
-          await saveSession(threadId, messages);
-        } catch (error) {
-          console.error("Failed to save session:", error);
-        }
-      }, 2000);
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [messages, threadId]);
-
   const createArr = (key: string, value: string[] | undefined) => {
     return (
       <div className="grid grid-cols-3 items-center py-2 border-b">

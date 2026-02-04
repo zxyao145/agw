@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { MessageSquare, Trash2, Plus, Edit2, Check, X, Info } from "lucide-react";
+import { Trash2, Plus, Edit2, Check, X, Info } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,17 +13,17 @@ import {
 } from "@/components/ui/dialog";
 import {
   subscribeToSessions,
-  deleteSession,
+  deleteSessionByThreadId,
   updateSessionTitle,
   clearAllSessions,
   getAllSessions,
+  type ChatSessionRecordSummary,
 } from "../../lib/chat-history-service";
-import type { ChatSessionDocument } from "../../lib/chat-history-db";
 import { cn } from "@/lib/utils";
 
 interface ChatHistoryListProps {
   currentThreadId: string | null;
-  onSessionSelect: (session: ChatSessionDocument) => void;
+  onSessionSelect: (sessionId: string) => void;
   onNewChat: () => void;
   onSessionDeleted: (threadId: string) => void;
   onAllSessionsCleared: () => void;
@@ -36,7 +36,7 @@ export function ChatHistoryList({
   onSessionDeleted,
   onAllSessionsCleared,
 }: ChatHistoryListProps) {
-  const [sessions, setSessions] = React.useState<ChatSessionDocument[]>([]);
+  const [sessions, setSessions] = React.useState<ChatSessionRecordSummary[]>([]);
   const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState("");
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
@@ -73,7 +73,7 @@ export function ChatHistoryList({
   }, []);
 
   const handleDelete = async (
-    session: ChatSessionDocument,
+    session: ChatSessionRecordSummary,
     e: React.MouseEvent
   ) => {
     e.stopPropagation();
@@ -83,11 +83,11 @@ export function ChatHistoryList({
     }
 
     try {
-      const success = await deleteSession(session._id);
+      const success = await deleteSessionByThreadId(session.sessionId);
       if (success) {
         toast.success("Chat deleted successfully");
-        if (session.threadId === currentThreadId) {
-          onSessionDeleted(session.threadId);
+        if (session.sessionId === currentThreadId) {
+          onSessionDeleted(session.sessionId);
         }
       } else {
         toast.error("Failed to delete chat");
@@ -113,9 +113,9 @@ export function ChatHistoryList({
     }
   };
 
-  const startEditing = (session: ChatSessionDocument, e: React.MouseEvent) => {
+  const startEditing = (session: ChatSessionRecordSummary, e: React.MouseEvent) => {
     e.stopPropagation();
-    setEditingSessionId(session._id);
+    setEditingSessionId(session.sessionId);
     setEditTitle(session.title);
   };
 
@@ -148,7 +148,7 @@ export function ChatHistoryList({
     }
   };
 
-  const formatDate = (timestamp: number) => {
+  const formatDate = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -166,17 +166,6 @@ export function ChatHistoryList({
       day: "numeric",
     });
   };
-
-  const formatSize = (bytes: number) => {
-    if(!bytes){
-      return "0 B";
-    }
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const totalSize = sessions.reduce((sum, s) => sum + s.size, 0);
 
   return (
     <div className="flex flex-col bg-muted/30 w-full">
@@ -212,13 +201,13 @@ export function ChatHistoryList({
           </div>
         ) : (
           sessions.map((session) => {
-            const isActive = session.threadId === currentThreadId;
-            const isEditing = editingSessionId === session._id;
+            const isActive = session.sessionId === currentThreadId;
+            const isEditing = editingSessionId === session.sessionId;
 
             return (
               <div
-                key={session._id}
-                onClick={() => !isEditing && onSessionSelect(session)}
+                key={session.sessionId}
+                onClick={() => !isEditing && onSessionSelect(session.sessionId)}
                 className={cn(
                   "group p-3 rounded-md cursor-pointer transition-colors border",
                   isActive
@@ -241,7 +230,7 @@ export function ChatHistoryList({
                           autoFocus
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
-                              saveEdit(session._id, e as any);
+                              saveEdit(session.sessionId, e as any);
                             } else if (e.key === "Escape") {
                               cancelEditing(e as any);
                             }
@@ -251,7 +240,7 @@ export function ChatHistoryList({
                           size="sm"
                           variant="ghost"
                           className="h-6 w-6 p-0"
-                          onClick={(e) => saveEdit(session._id, e)}
+                          onClick={(e) => saveEdit(session.sessionId, e)}
                         >
                           <Check className="h-3 w-3" />
                         </Button>
@@ -270,11 +259,9 @@ export function ChatHistoryList({
                           {session.title}
                         </div>
                         <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                          <span>{formatDate(session.createdAt)}</span>
+                          <span>{formatDate(session.createTime)}</span>
                           <span>•</span>
-                          <span>{session.messages?.length ?? 0} msgs</span>
-                          <span>•</span>
-                          <span>{formatSize(session.size)}</span>
+                          <span>{session.messageCount ?? 0} msgs</span>
                         </div>
                       </>
                     )}
@@ -320,13 +307,7 @@ export function ChatHistoryList({
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total sessions:</span>
                 <span className="font-mono font-medium">
-                  {sessions.length} / 1000
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Storage used:</span>
-                <span className="font-mono font-medium">
-                  {formatSize(totalSize)} / 200 MB
+                  {sessions.length}
                 </span>
               </div>
             </div>
@@ -345,12 +326,7 @@ export function ChatHistoryList({
             )}
 
             <div className="text-xs text-muted-foreground border-t pt-4">
-              <p className="mb-2">Storage limits:</p>
-              <ul className="space-y-1 list-disc list-inside">
-                <li>Maximum 1000 chat sessions</li>
-                <li>Maximum 200 MB total storage</li>
-                <li>Oldest sessions are automatically deleted when limits are exceeded</li>
-              </ul>
+              <p className="mb-2">Chat history is stored on the server.</p>
             </div>
           </div>
         </DialogContent>

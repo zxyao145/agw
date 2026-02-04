@@ -1,7 +1,8 @@
 using DSystem.ExternalAgents;
+using DSystem.Infrastructure.Data;
 using Microsoft.Agents.AI;
-using Microsoft.Extensions.Caching.Hybrid;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -80,9 +81,9 @@ public class ClaudeCodeSessionTests
         var thread = new TestAgentThread();
         var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
         var logger = NullLogger.Instance;
-        var cache = CreateCache();
+        var context = CreateContext();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(null!, thread, configuration, logger, cache));
+        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(null!, thread, configuration, logger, context));
     }
 
     [Fact]
@@ -91,9 +92,9 @@ public class ClaudeCodeSessionTests
         var agent = new TestClaudeCodeAIAgent();
         var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
         var logger = NullLogger.Instance;
-        var cache = CreateCache();
+        var context = CreateContext();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, null!, configuration, logger, cache));
+        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, null!, configuration, logger, context));
     }
 
     [Fact]
@@ -102,9 +103,9 @@ public class ClaudeCodeSessionTests
         var agent = new TestClaudeCodeAIAgent();
         var thread = new TestAgentThread();
         var logger = NullLogger.Instance;
-        var cache = CreateCache();
+        var context = CreateContext();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, null!, logger, cache));
+        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, null!, logger, context));
     }
 
     [Fact]
@@ -113,9 +114,9 @@ public class ClaudeCodeSessionTests
         var agent = new TestClaudeCodeAIAgent();
         var thread = new TestAgentThread();
         var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
-        var cache = CreateCache();
+        var context = CreateContext();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, configuration, null!, cache));
+        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, configuration, null!, context));
     }
 
     [Fact]
@@ -135,16 +136,22 @@ public class ClaudeCodeSessionTests
         var thread = new TestAgentThread();
         var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
         var logger = NullLogger.Instance;
-        var cache = CreateCache();
+        var context = CreateContext();
 
-        return new ClaudeCodeSession(agent, thread, configuration, logger, cache);
+        return new ClaudeCodeSession(agent, thread, configuration, logger, context);
     }
 
-    private static HybridCache CreateCache()
+    private static LlmDbContext CreateContext()
     {
-        var services = new ServiceCollection();
-        services.AddHybridCache();
-        var provider = services.BuildServiceProvider();
-        return provider.GetRequiredService<HybridCache>();
+        var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<LlmDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var context = new LlmDbContext(options);
+        context.Database.EnsureCreated();
+        return context;
     }
 }
