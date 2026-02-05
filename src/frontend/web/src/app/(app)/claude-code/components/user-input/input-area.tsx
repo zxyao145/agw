@@ -10,7 +10,7 @@ import { searchCommand } from "../../lib/search_command";
 import { searchFile } from "../../lib/search_file";
 import { useRef, useMemo } from "react";
 import { Separator } from "@/components/ui/separator";
-import { ArrowUp, Eraser } from "lucide-react";
+import { ArrowUp, CirclePause, Eraser, Square } from "lucide-react";
 
 
 
@@ -189,10 +189,7 @@ export function InputArea({
       </UserInput.TopRight>
       {isExecuting ? (
         <UserInput.Sender>
-          <>
-            Stop
-            <span className="ml-2 text-xs opacity-80">Interrupt</span>
-          </>
+          <Square size={20} />
         </UserInput.Sender>
       ) : (
         isCommentMode &&
