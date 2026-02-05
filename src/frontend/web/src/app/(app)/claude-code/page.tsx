@@ -49,23 +49,12 @@ import UnChangedFile from "./components/file-explorer/unchanged-file";
 import { DiffViewer } from "./components/file-explorer/diff-viewer";
 import "./page.css";
 import { claudeSettingsStorage } from "./lib/settings-storage";
+import {
+  type AiMessageAction,
+  handleAiMessage,
+} from "./lib/ai-message-handlers";
 
 const gitCodeSource = "./code-work";
-
-const handleAiMessage = (
-  data: AiMessage,
-  handleSystem: (data: AiMessage) => void,
-  handleAssistant: (data: AiMessage) => void,
-  handleUser: (data: AiMessage) => void,
-) => {
-  if (data.role === "system") {
-    handleSystem(data);
-  } else if (data.role === "assistant") {
-    handleAssistant(data);
-  } else if (data.role === "user") {
-    handleUser(data);
-  }
-};
 
 const ChatHistoryList = dynamic(
   () =>
@@ -109,6 +98,43 @@ export default function ClaudeCodePage() {
     React.useState<GitDiffResponse | null>(null);
   // const statusRequestPendingRef = React.useRef(false);
   const settingsRequestSessionRef = React.useRef<string | null>(null);
+
+  const applyAiMessageActions = React.useCallback(
+    (actions: AiMessageAction[]) => {
+      const pendingMessages: AiMessage[] = [];
+
+      actions.forEach((action) => {
+        switch (action.type) {
+          case "append":
+            pendingMessages.push(action.message);
+            break;
+          case "setInitContent":
+            setInitContent(action.content);
+            break;
+          case "setIsExecuting":
+            setIsExecuting(action.value);
+            break;
+          case "setIsInitStatus":
+            setIsInitStatus(action.value);
+            break;
+          case "notify":
+            if (action.variant === "info") {
+              toast.info(action.message);
+            } else {
+              toast.error(action.message);
+            }
+            break;
+          default:
+            break;
+        }
+      });
+
+      if (pendingMessages.length > 0) {
+        setMessages((prev) => [...prev, ...pendingMessages]);
+      }
+    },
+    [],
+  );
 
   const handleThreadId = (newThreadId: string | null) => {
     if (newThreadId !== threadId) {
@@ -397,79 +423,6 @@ export default function ClaudeCodePage() {
     ws.send(JSON.stringify(buildInputRequest("/status")));
   };
 
-  function handleSystem(data: AiMessage) {
-    console.log("handleSystem", data);
-
-    var author = data.author;
-    if (author === "d-system") {
-      var firstContent = data.contents[0];
-      if (firstContent.type === MessageContentType.ErrorContent) {
-        console.error("something error:", firstContent.content);
-        setIsExecuting(false);
-        setMessages((prev) => [...prev, data]);
-        return;
-      }
-    }
-
-    if (!data.additionalProperties && !isInitStatus) {
-      setMessages((prev) => [...prev, data]);
-      return;
-    }
-
-    let msgType = "";
-    if (data.additionalProperties?.subtype === "init") {
-      msgType = "init";
-    } else if (data.additionalProperties?.type === "result") {
-      msgType = "result";
-    } else if (data.additionalProperties?.subtype === "hint") {
-      const hintContent = data.contents[0];
-      if (
-        hintContent?.type === MessageContentType.TextContent &&
-        hintContent.content.toLowerCase().includes("interrupted")
-      ) {
-        setIsExecuting(false);
-      }
-      console.log("hint", data);
-      return;
-    }
-
-    if (msgType === "init") {
-      const content = JSON.parse(data.contents[0].content);
-      const initContent: InitMessageContent = {
-        claudeCodeVersion: content.claude_code_version,
-        permissionMode: content.permissionMode,
-        model: content.model,
-
-        tools: content.tools,
-        slashCommands: content.slash_commands,
-        agents: content.agents,
-        skills: content.skills,
-        plugins: content.plugins,
-        mcpServers: content.mcp_servers,
-      };
-
-      setInitContent(initContent);
-    } else if (msgType === "result") {
-      toast.info("Execution completed");
-      setIsExecuting(false);
-      if (isInitStatus) {
-        setIsInitStatus(false);
-      } else {
-        // setMessages((prev) => [...prev, data]);
-      }
-    } else {
-      setMessages((prev) => [...prev, data]);
-    }
-  }
-
-  function handleUser(data: AiMessage) {
-    setMessages((prev) => [...prev, data]);
-  }
-
-  function handleAssistant(data: AiMessage) {
-    setMessages((prev) => [...prev, data]);
-  }
-
   const setupWebSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/api/external-agents/claude-code/ws`;
@@ -486,7 +439,9 @@ export default function ClaudeCodePage() {
         const data: AiMessage = JSON.parse(event.data);
         console.debug("onmessage", data);
 
-        handleAiMessage(data, handleSystem, handleAssistant, handleUser);
+        applyAiMessageActions(
+          handleAiMessage(data, { isInitStatus }),
+        );
       } catch (e) {
         console.error("Parse error:", e);
       }
@@ -670,8 +625,11 @@ export default function ClaudeCodePage() {
     handleThreadId(newThreadId);
     for (let index = 0; index < newMessages.length; index++) {
       const aiMessage = newMessages[index];
-      handleAiMessage(aiMessage, handleSystem, handleAssistant, handleUser);
+      applyAiMessageActions(
+        handleAiMessage(aiMessage, { isInitStatus }),
+      );
     }
+    toast.info("load completed");
     // Close existing WebSocket to start fresh with loaded session
     if (wsRef.current) {
       wsRef.current.close(1000, "Session switched");
