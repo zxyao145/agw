@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Trash2, Plus, Edit2, Check, X, Info } from "lucide-react";
+import { Trash2, Plus, Edit2, Check, X, Info, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,13 +39,17 @@ export function ChatHistoryList({
   const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState("");
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const refreshSessions = React.useCallback(async () => {
+    setIsRefreshing(true);
     try {
       const latestSessions = await getAllSessions();
       setSessions(latestSessions);
     } catch (error) {
       console.error("Failed to load chat history:", error);
+    } finally {
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -157,6 +161,21 @@ export function ChatHistoryList({
       <div className="p-4 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">Chat History</h2>
         <div>
+          <Button
+            className="cursor-pointer"
+            size="sm"
+            variant="ghost"
+            onClick={refreshSessions}
+            disabled={isRefreshing}
+            aria-label="Refresh chat history"
+          >
+            <RotateCw
+              className={cn(
+                "h-4 w-4",
+                isRefreshing && "animate-spin text-muted-foreground",
+              )}
+            />
+          </Button>
           <Button
             className="cursor-pointer"
             size="sm"
