@@ -63,9 +63,9 @@ export function ChatHistoryList({
   ) => {
     e.stopPropagation();
 
-    if (!confirm("Are you sure you want to delete this chat?")) {
-      return;
-    }
+    // if (!confirm("Are you sure you want to delete this chat?")) {
+    //   return;
+    // }
 
     try {
       const success = await deleteSessionByThreadId(session.sessionId);

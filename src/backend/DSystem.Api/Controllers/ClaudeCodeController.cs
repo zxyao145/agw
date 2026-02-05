@@ -216,12 +216,14 @@ public class ClaudeCodeController(
                 await SendJsonAsync(webSocket, JsonUtil.Serialize(message));
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException e)
         {
+            logger.LogWarning(e, "OperationCanceled");
             await SendMessageAsync(webSocket, "Request interrupted.");
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "some thing error");
             await SendErrorAsync(webSocket, $"Execution error: {ex.Message}");
         }
     }
