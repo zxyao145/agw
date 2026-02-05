@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Trash2, Plus, Edit2, Check, X, Info } from "lucide-react";
+import { Trash2, Plus, Edit2, Check, X, Info, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  subscribeToSessions,
   deleteSessionByThreadId,
   updateSessionTitle,
   clearAllSessions,
@@ -40,37 +39,23 @@ export function ChatHistoryList({
   const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState("");
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
 
-  // Subscribe to session changes
-  React.useEffect(() => {
-    let isMounted = true;
-
-    // Load initial sessions immediately
-    const loadInitialSessions = async () => {
-      try {
-        const initialSessions = await getAllSessions();
-        if (isMounted) {
-          setSessions(initialSessions);
-        }
-      } catch (error) {
-        console.error('Failed to load chat history:', error);
-      }
-    };
-
-    loadInitialSessions();
-
-    // Subscribe to subsequent changes
-    const unsubscribe = subscribeToSessions((newSessions) => {
-      if (isMounted) {
-        setSessions(newSessions);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
+  const refreshSessions = React.useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const latestSessions = await getAllSessions();
+      setSessions(latestSessions);
+    } catch (error) {
+      console.error("Failed to load chat history:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
   }, []);
+
+  React.useEffect(() => {
+    void refreshSessions();
+  }, [refreshSessions]);
 
   const handleDelete = async (
     session: ChatSessionRecordSummary,
@@ -89,6 +74,7 @@ export function ChatHistoryList({
         if (session.sessionId === currentThreadId) {
           onSessionDeleted(session.sessionId);
         }
+        await refreshSessions();
       } else {
         toast.error("Failed to delete chat");
       }
@@ -107,6 +93,7 @@ export function ChatHistoryList({
       await clearAllSessions();
       toast.success("All chats cleared");
       onAllSessionsCleared();
+      await refreshSessions();
     } catch (error) {
       console.error("Clear all error:", error);
       toast.error("Error clearing chats");
@@ -139,6 +126,7 @@ export function ChatHistoryList({
         toast.success("Title updated");
         setEditingSessionId(null);
         setEditTitle("");
+        await refreshSessions();
       } else {
         toast.error("Failed to update title");
       }
@@ -177,7 +165,25 @@ export function ChatHistoryList({
             className="cursor-pointer"
             size="sm"
             variant="ghost"
-            onClick={onNewChat}
+            onClick={refreshSessions}
+            disabled={isRefreshing}
+            aria-label="Refresh chat history"
+          >
+            <RotateCw
+              className={cn(
+                "h-4 w-4",
+                isRefreshing && "animate-spin text-muted-foreground",
+              )}
+            />
+          </Button>
+          <Button
+            className="cursor-pointer"
+            size="sm"
+            variant="ghost"
+            onClick={async () => {
+              await Promise.resolve(onNewChat());
+              await refreshSessions();
+            }}
           >
             {/* NewChat */}
             <Plus className="h-4 w-4" />
