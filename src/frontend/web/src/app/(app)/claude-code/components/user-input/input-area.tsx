@@ -19,6 +19,7 @@ export function InputArea({
   hasMessages,
   onExecute,
   onExecuteWithComment,
+  onInterrupt,
   onClearSession,
   onScrollToTop,
   workingDirectory,
@@ -144,6 +145,7 @@ export function InputArea({
       onSuggestion={handleSuggestion}
       isExecuting={isExecuting}
       onExecute={handleOnExecute}
+      onStop={onInterrupt}
     >
       <UserInput.TopLeft>
         <SettingsDialog
@@ -185,13 +187,23 @@ export function InputArea({
           <ArrowUp width={16} />
         </Button>
       </UserInput.TopRight>
-      {isCommentMode && comments.length > 0 && (
+      {isExecuting ? (
         <UserInput.Sender>
           <>
-            Send {comments.length} comment{comments.length !== 1 ? "s" : ""}
-            <span className="ml-2 text-xs opacity-80">Ctrl Enter</span>
+            Stop
+            <span className="ml-2 text-xs opacity-80">Interrupt</span>
           </>
         </UserInput.Sender>
+      ) : (
+        isCommentMode &&
+        comments.length > 0 && (
+          <UserInput.Sender>
+            <>
+              Send {comments.length} comment{comments.length !== 1 ? "s" : ""}
+              <span className="ml-2 text-xs opacity-80">Ctrl Enter</span>
+            </>
+          </UserInput.Sender>
+        )
       )}
     </UserInput>
   );

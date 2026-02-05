@@ -49,6 +49,7 @@ export interface ChatInputAreaProps {
   hasMessages: boolean;
   onExecute: (value: string) => void;
   onExecuteWithComment: (value: string) => void;
+  onInterrupt: () => void;
   onClearSession: () => void;
   onScrollToTop: () => void;
   workingDirectory: string;

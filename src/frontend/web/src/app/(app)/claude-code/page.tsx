@@ -362,6 +362,15 @@ export default function ClaudeCodePage() {
     };
   };
 
+  const buildInterruptRequest = (reason: string) => {
+    return {
+      type: 2,
+      interrupt: {
+        reason,
+      },
+    };
+  };
+
   const sendSettingIfNeeded = (ws: WebSocket, sessionId: string) => {
     if (settingsRequestSessionRef.current === sessionId) {
       return;
@@ -413,6 +422,13 @@ export default function ClaudeCodePage() {
     } else if (data.additionalProperties?.type === "result") {
       msgType = "result";
     } else if (data.additionalProperties?.subtype === "hint") {
+      const hintContent = data.contents[0];
+      if (
+        hintContent?.type === MessageContentType.TextContent &&
+        hintContent.content.toLowerCase().includes("interrupted")
+      ) {
+        setIsExecuting(false);
+      }
       console.log("hint", data);
       return;
     }
@@ -595,6 +611,25 @@ export default function ClaudeCodePage() {
       toast.error(
         `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
+      setIsExecuting(false);
+    }
+  };
+
+  const sendInterruptToClaudeCode = () => {
+    const ws = wsRef.current;
+
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      toast.error("No active session to interrupt");
+      setIsExecuting(false);
+      return;
+    }
+
+    try {
+      ws.send(JSON.stringify(buildInterruptRequest("Interrupted by user.")));
+    } catch (error) {
+      console.error("Failed to send interrupt request:", error);
+      toast.error("Failed to interrupt execution");
+    } finally {
       setIsExecuting(false);
     }
   };
@@ -986,6 +1021,7 @@ export default function ClaudeCodePage() {
                     hasMessages={(messages?.length ?? 0) > 0}
                     onExecute={executeClaudeCode}
                     onExecuteWithComment={executeClaudeCodeWithComment}
+                    onInterrupt={sendInterruptToClaudeCode}
                     onClearSession={handleClearSession}
                     onScrollToTop={handleScrollToTop}
                     workingDirectory={workingDirectory}

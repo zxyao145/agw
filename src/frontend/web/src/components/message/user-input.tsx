@@ -28,6 +28,7 @@ export interface UserInputProps {
 
   // Actions
   onExecute?: (value: string) => void;
+  onStop?: () => void;
 
   // Textarea configuration
   placeholder?: string;
@@ -56,6 +57,7 @@ interface UserInputRootProps {
   onInputChange: (value: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onSend: () => void;
+  onStop?: () => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
@@ -70,9 +72,19 @@ function UserInputRoot({
   onInputChange,
   onKeyDown,
   onSend,
+  onStop,
   textareaRef,
 }: UserInputRootProps) {
   const { topLeft, topRight, help, sender } = slots;
+  const canStop = isExecuting && Boolean(onStop);
+  const isDisabled = isExecuting ? !canStop : !input.trim();
+  const handleClick = () => {
+    if (canStop) {
+      onStop?.();
+      return;
+    }
+    onSend();
+  };
 
   return (
     <div className="relative">
@@ -105,8 +117,8 @@ function UserInputRoot({
           {/* Action button - comment mode or regular send */}
           <Button
             className="cursor-pointer m-2"
-            onClick={onSend}
-            disabled={!input.trim() || isExecuting}
+            onClick={handleClick}
+            disabled={isDisabled}
           >
             {sender.length > 0 ? <>{sender}</> : <Send className="w-5 h-5" />}
           </Button>
@@ -226,6 +238,7 @@ export interface UserInputRef {
 function UserInputContainer({
   isExecuting = false,
   onExecute,
+  onStop,
   placeholder = "Type your message...",
   rows = 1,
   maxHeight = "max-h-50",
@@ -330,6 +343,7 @@ function UserInputContainer({
       onInputChange={handleInputChange}
       onKeyDown={handleKeyDown}
       onSend={handleSend}
+      onStop={onStop}
       textareaRef={textareaRef}
     />
   );
