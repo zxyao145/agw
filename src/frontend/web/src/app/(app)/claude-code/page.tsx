@@ -580,12 +580,10 @@ export default function ClaudeCodePage() {
     }
 
     try {
-      ws.send(JSON.stringify(buildInterruptRequest("Interrupted by user.")));
+      ws.send(JSON.stringify(buildInterruptRequest("Stop requested by user.")));
     } catch (error) {
       console.error("Failed to send interrupt request:", error);
       toast.error("Failed to interrupt execution");
-    } finally {
-      setIsExecuting(false);
     }
   };
 
