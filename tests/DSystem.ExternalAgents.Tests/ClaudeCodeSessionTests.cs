@@ -2,7 +2,7 @@ using DSystem.ExternalAgents;
 using DSystem.Infrastructure.Data;
 using DSystem.Infrastructure.Repositories;
 using DSystem.SessionRecords.Entities;
-using DSystem.Shared.Repositories;
+using DSystem.SessionRecords.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -84,9 +84,9 @@ public class ClaudeCodeSessionTests
         var thread = new TestAgentThread();
         var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
         var logger = NullLogger.Instance;
-        var context = CreateContext();
+        var deps = CreateDependencies();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(null!, thread, configuration, logger, context));
+        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(null!, thread, configuration, logger, deps.Repository, deps.UnitOfWork));
     }
 
     [Fact]
@@ -95,9 +95,9 @@ public class ClaudeCodeSessionTests
         var agent = new TestClaudeCodeAIAgent();
         var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
         var logger = NullLogger.Instance;
-        var context = CreateContext();
+        var deps = CreateDependencies();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, null!, configuration, logger, context));
+        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, null!, configuration, logger, deps.Repository, deps.UnitOfWork));
     }
 
     [Fact]
@@ -106,9 +106,9 @@ public class ClaudeCodeSessionTests
         var agent = new TestClaudeCodeAIAgent();
         var thread = new TestAgentThread();
         var logger = NullLogger.Instance;
-        var context = CreateContext();
+        var deps = CreateDependencies();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, null!, logger, context));
+        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, null!, logger, deps.Repository, deps.UnitOfWork));
     }
 
     [Fact]
@@ -117,20 +117,33 @@ public class ClaudeCodeSessionTests
         var agent = new TestClaudeCodeAIAgent();
         var thread = new TestAgentThread();
         var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
-        var context = CreateContext();
+        var deps = CreateDependencies();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, configuration, null!, context));
+        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, configuration, null!, deps.Repository, deps.UnitOfWork));
     }
 
     [Fact]
-    public void Constructor_NullCache_ThrowsArgumentNullException()
+    public void Constructor_NullRepository_ThrowsArgumentNullException()
     {
         var agent = new TestClaudeCodeAIAgent();
         var thread = new TestAgentThread();
         var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
         var logger = NullLogger.Instance;
+        var deps = CreateDependencies();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, configuration, logger, null!));
+        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, configuration, logger, null!, deps.UnitOfWork));
+    }
+
+    [Fact]
+    public void Constructor_NullUnitOfWork_ThrowsArgumentNullException()
+    {
+        var agent = new TestClaudeCodeAIAgent();
+        var thread = new TestAgentThread();
+        var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
+        var logger = NullLogger.Instance;
+        var deps = CreateDependencies();
+
+        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, configuration, logger, deps.Repository, null!));
     }
 
     private static ClaudeCodeSession CreateSession()
@@ -139,12 +152,12 @@ public class ClaudeCodeSessionTests
         var thread = new TestAgentThread();
         var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
         var logger = NullLogger.Instance;
-        var context = CreateContext();
+        var deps = CreateDependencies();
 
-        return new ClaudeCodeSession(agent, thread, configuration, logger, context);
+        return new ClaudeCodeSession(agent, thread, configuration, logger, deps.Repository, deps.UnitOfWork);
     }
 
-    private static IRepository<AgentSessionRecord> CreateContext()
+    private static (IAgentSessionRecordRepository Repository, ISessionRecordsUnitOfWork UnitOfWork) CreateDependencies()
     {
         var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
@@ -155,7 +168,8 @@ public class ClaudeCodeSessionTests
 
         var context = new LlmDbContext(options);
         context.Database.EnsureCreated();
-        IRepository<AgentSessionRecord> repo = new EfRepository<AgentSessionRecord>(context);
-        return repo;
+        IAgentSessionRecordRepository repo = new AgentSessionRecordRepository(context);
+        ISessionRecordsUnitOfWork unitOfWork = new SessionRecordsUnitOfWork(context);
+        return (repo, unitOfWork);
     }
 }

@@ -1,4 +1,4 @@
-using DSystem.Appliaction;
+using DSystem.Appliaction.Services;
 using DSystem.Shared.Models;
 using Microsoft.Extensions.AI;
 
@@ -35,3 +35,4 @@ public record AgentExecuteResponse(
     public static AgentExecuteResponse FromDomain(AgentExecutionResult result) =>
         new(result.ThreadId, result.Messages);
 }
+

@@ -1,17 +1,17 @@
 using DSystem.SessionRecords.Entities;
-using DSystem.Shared.Repositories;
+using DSystem.SessionRecords.Repositories;
 using System.Linq.Expressions;
 
 namespace DSystem.SessionRecords.Domain;
 
 public class SessionRecordDomainService
 {
-    private readonly IRepository<AgentSessionRecord> _repository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IAgentSessionRecordRepository _repository;
+    private readonly ISessionRecordsUnitOfWork _unitOfWork;
 
     public SessionRecordDomainService(
-        IRepository<AgentSessionRecord> repository,
-        IUnitOfWork unitOfWork)
+        IAgentSessionRecordRepository repository,
+        ISessionRecordsUnitOfWork unitOfWork)
     {
         _repository = repository;
         _unitOfWork = unitOfWork;

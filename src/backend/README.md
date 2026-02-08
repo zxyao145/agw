@@ -1,78 +1,72 @@
 # Project dependencies
 
-- Layer API: 
-  - project Api: 对外统一入口项目，负责承载 HTTP / RPC 等对外接口。
-  - project Manager.Api：用于后台管理系统的 API
-- Layer Protocol : 通信协议的转换与定义层。
-  - project A2A: A2A 通信协议的**实现与适配层**。
-- Layer Core:
-  - project Appliaction: 系统的**用例层 / 应用服务层**。
-  - project Domain：系统的**核心业务模型层**。
-- Layer External:
-  - project ExternalAgents：对外部 Agent / 第三方系统的扩展适配层。
-
-- Layer Support:
-  - project SessionRecords：系统运行期的**支撑型能力项目**。
-- project Infrastructure：基础设施实现层。
-- project Shared: 全局共享基础项目。
-
-
-
 
 
 ```mermaid
 flowchart BT
 
-%% standalone
+%% ========= Nodes (shared foundations) =========
 infra[Infrastructure]
 shared[Shared]
 
-%% groups
-subgraph API[" "]
+%% ========= API Layer =========
+subgraph API["API"]
   direction LR
-  api[Api]
-  mgr[Manager.Api]
+  api[API]
+  mgr[Manager.API]
 end
 
-subgraph A2ABox[" "]
+%% ========= A2A Gateway =========
+subgraph A2ABox["A2A Protocol"]
   direction TB
   a2a[A2A]
 end
 
+%% ========= Core =========
 subgraph Core["Core"]
   direction TB
-  app[Application]
   dom[Domain]
+  app[Application]
   dom --> app
 end
 
+%% ========= External =========
 subgraph External["External"]
   direction TB
-  extAgents[ExternalAgents]
+  extAgents[External Agents]
 end
 
-subgraph Support["Support"]
+%% ========= Session Records =========
+subgraph SessionRecords["Session Records"]
   direction TB
-  sess[SessionRecords]
+  sessDom[Domain]
+  sessApp[Application]
+  sessDom --> sessApp
 end
 
-%% dashed dependencies
+%% ========= Relationships =========
+
+%% A2A talks to API (integration / boundary dependency)
 a2a -.-> api
 a2a -.-> mgr
 
-app -.-> A2ABox
-External -.-> A2ABox
+%% Core uses A2A
+app -.-> a2a
 
-infra -.-> Core
-infra -.-> Support
+%% External agents connect via A2A
+extAgents -.-> a2a
 
-shared -.-> Support
-shared -.-> infra
+%% Infrastructure dependencies
+app -.-> infra
+sessApp -.-> infra
+
+%% Shared components reused by modules
+shared -.-> SessionRecords
 shared -.-> External
 
-Support -.-> Core
-Support -.-> External
-
+%% SessionRecords supports Core and External
+SessionRecords -.-> Core
+SessionRecords -.-> External
 
 ```
 

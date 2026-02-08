@@ -1,4 +1,4 @@
-﻿using DSystem.Appliaction;
+using DSystem.Appliaction.Services;
 using DSystem.Shared;
 using DSystem.Shared.Contracts;
 using Microsoft.AspNetCore.Mvc;
@@ -492,3 +492,4 @@ public class OpenAIController : ControllerBase
         await Response.Body.FlushAsync(cancellationToken);
     }
 }
+

@@ -1,6 +1,6 @@
 using DSystem.Domain.Entities;
 using DSystem.Shared.Enums;
-using DSystem.Shared.Repositories;
+using DSystem.Domain.Repositories;
 using System.Linq.Expressions;
 
 namespace DSystem.Domain.Services;
@@ -141,3 +141,4 @@ public class AgentDomainService
 
     public Task<Agent?> GetAsync(Guid id) => _repository.GetByIdAsync(id);
 }
+

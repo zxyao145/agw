@@ -1,5 +1,5 @@
 using DSystem.Domain.Entities;
-using DSystem.Shared.Repositories;
+using DSystem.Domain.Repositories;
 
 namespace DSystem.Domain.Services;
 
@@ -57,3 +57,4 @@ public class ProviderDomainService
 
     public Task<Provider?> GetAsync(Guid id) => _providerRepository.GetByIdAsync(id);
 }
+

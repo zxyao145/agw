@@ -1,5 +1,5 @@
 using DSystem.Domain.Entities;
-using DSystem.Shared.Repositories;
+using DSystem.Domain.Repositories;
 using System.Linq.Expressions;
 
 namespace DSystem.Domain.Services;
@@ -66,3 +66,4 @@ public class ModelProviderDomainService
         return results.Count > 0 ? results[0] : null;
     }
 }
+

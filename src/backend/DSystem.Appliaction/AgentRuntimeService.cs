@@ -3,7 +3,7 @@ using DSystem.Domain.Services;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
-using DSystem.Shared.Repositories;
+using DSystem.Domain.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -14,7 +14,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
-namespace DSystem.Appliaction;
+namespace DSystem.Appliaction.Services;
 
 /// <summary>
 /// Result of a single agent execution.
@@ -278,3 +278,4 @@ public class AgentRuntimeService
             );
     }
 }
+

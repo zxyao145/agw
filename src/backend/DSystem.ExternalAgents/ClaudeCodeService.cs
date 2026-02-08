@@ -1,10 +1,9 @@
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
 using DSystem.SessionRecords.Entities;
-using DSystem.Shared.Repositories;
+using DSystem.SessionRecords.Repositories;
 using DSystem.Shared.Services;
 using Microsoft.Agents.AI;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -18,20 +17,21 @@ public class ClaudeCodeService
 {
     private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<ClaudeCodeService> _logger;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly IRepository<AgentSessionRecord> _repository;
+    private readonly IAgentSessionRecordRepository _repository;
+    private readonly ISessionRecordsUnitOfWork _unitOfWork;
     private readonly IGitCommandService _gitCommandService;
     private readonly string _rootPath;
 
     public ClaudeCodeService(
         ILogger<ClaudeCodeService> logger,
-        IRepository<AgentSessionRecord> repository,
+        IAgentSessionRecordRepository repository,
         IHostEnvironment hostEnvironment,
         IGitCommandService gitCommandService,
-        IUnitOfWork unitOfWork)
+        ISessionRecordsUnitOfWork unitOfWork)
     {
         _logger = logger;
         _repository = repository;
+        _unitOfWork = unitOfWork;
         _hostEnvironment = hostEnvironment;
         _gitCommandService = gitCommandService;
         _rootPath = Path.Combine(_hostEnvironment.ContentRootPath);
@@ -39,8 +39,6 @@ public class ClaudeCodeService
         {
             Directory.CreateDirectory(_rootPath);
         }
-
-        _unitOfWork = unitOfWork;
     }
 
     /// <summary>
@@ -62,7 +60,7 @@ public class ClaudeCodeService
             initRequest.ProjectId,
             cancellationToken);
 
-        return new ClaudeCodeSession(agent, thread, initRequest, _logger, _repository);
+        return new ClaudeCodeSession(agent, thread, initRequest, _logger, _repository, _unitOfWork);
     }
 
     private async Task<AgentSession> GetOrLoadThreadAsync(
@@ -71,11 +69,8 @@ public class ClaudeCodeService
         Guid projectId,
         CancellationToken cancellationToken)
     {
-        var record = await _repository.Queryable
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                session => session.SessionId == sessionId && session.ProjectId == projectId,
-                cancellationToken);
+        var records = await _repository.ListAsync(session => session.SessionId == sessionId && session.ProjectId == projectId);
+        var record = records.FirstOrDefault();
 
         if (record == null || string.IsNullOrWhiteSpace(record.Messages))
         {
@@ -213,3 +208,5 @@ public class ClaudeCodeService
             resolvedWorkingDirectory);
     }
 }
+
+

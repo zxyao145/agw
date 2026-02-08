@@ -2,7 +2,7 @@ using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
-using DSystem.Shared.Repositories;
+using DSystem.Domain.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -10,7 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using MsAgentWorkflowBuilder = Microsoft.Agents.AI.Workflows.AgentWorkflowBuilder;
 
-namespace DSystem.Appliaction;
+namespace DSystem.Appliaction.Services;
 
 public interface IAgentflowAgentExecutor
 {
@@ -403,3 +403,4 @@ public class AgentflowRuntimeService
     }
 
 }
+

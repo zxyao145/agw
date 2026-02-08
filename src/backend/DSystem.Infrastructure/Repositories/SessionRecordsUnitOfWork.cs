@@ -1,17 +1,16 @@
-using DSystem.Domain.Repositories;
+using DSystem.SessionRecords.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace DSystem.Infrastructure.Repositories;
 
-public class UnitOfWork : IUnitOfWork
+public class SessionRecordsUnitOfWork : ISessionRecordsUnitOfWork
 {
     private readonly DbContext _dbContext;
 
-    public UnitOfWork(DbContext dbContext)
+    public SessionRecordsUnitOfWork(DbContext dbContext)
     {
         _dbContext = dbContext;
     }
 
     public Task<int> SaveChangesAsync() => _dbContext.SaveChangesAsync();
 }
-

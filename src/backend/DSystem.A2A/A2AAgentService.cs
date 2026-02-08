@@ -1,7 +1,7 @@
-﻿using A2A;
-using DSystem.Appliaction;
+using A2A;
+using DSystem.Appliaction.Services;
 using DSystem.Domain.Entities;
-using DSystem.Shared.Repositories;
+using DSystem.Domain.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Options;
 
@@ -90,3 +90,5 @@ public class A2AAgentService
         return card;
     }
 }
+
+

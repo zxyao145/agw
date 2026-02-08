@@ -1,6 +1,6 @@
 using DSystem.Domain.Entities;
 using DSystem.Shared.Models;
-using DSystem.Shared.Repositories;
+using DSystem.Domain.Repositories;
 using System.Linq.Expressions;
 
 namespace DSystem.Domain.Services;
@@ -101,3 +101,4 @@ public class ModelProviderApiKeyDomainService
 
     public Task<ModelProviderApiKey?> GetAsync(Guid id) => _repository.GetByIdAsync(id);
 }
+

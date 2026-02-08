@@ -1,4 +1,4 @@
-using DSystem.Shared.Repositories;
+using DSystem.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
@@ -75,3 +75,4 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }
+

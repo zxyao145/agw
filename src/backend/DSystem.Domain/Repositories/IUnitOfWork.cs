@@ -1,4 +1,4 @@
-namespace DSystem.Shared.Repositories;
+namespace DSystem.Domain.Repositories;
 
 public interface IUnitOfWork
 {
