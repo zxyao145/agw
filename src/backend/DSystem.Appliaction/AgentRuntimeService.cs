@@ -11,8 +11,10 @@ using Microsoft.Extensions.Caching.Hybrid;
 using OpenAI;
 using OpenAI.Chat;
 using System.ClientModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Extensions.Logging;
@@ -34,6 +36,7 @@ public class AgentRuntimeService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;
+    private readonly IRepository<Project> _projectRepository;
     private readonly IRepository<ModelProviderApiKey> _apiKeyRepository;
     private readonly IRepository<ModelProvider> _modelProviderRepository;
     private readonly IRepository<LlmModel> _modelRepository;
@@ -45,6 +48,7 @@ public class AgentRuntimeService
 
     public AgentRuntimeService(
         IRepository<Agent> agentRepository,
+        IRepository<Project> projectRepository,
         IRepository<ModelProviderApiKey> apiKeyRepository,
         IRepository<ModelProvider> modelProviderRepository,
         IRepository<LlmModel> modelRepository,
@@ -55,6 +59,7 @@ public class AgentRuntimeService
         ILogger<AgentRuntimeService> logger)
     {
         _agentRepository = agentRepository;
+        _projectRepository = projectRepository;
         _apiKeyRepository = apiKeyRepository;
         _modelProviderRepository = modelProviderRepository;
         _modelRepository = modelRepository;
@@ -65,21 +70,21 @@ public class AgentRuntimeService
         _logger = logger;
     }
 
-    public async Task<AIAgent?> CreateAiAgentAsync(Guid agentId, string? systemPrompt = null)
+    public async Task<AIAgent?> CreateAiAgentAsync(Guid agentId, string? systemPrompt = null, string? extraOverride = null)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
         if (agent == null)
         {
             return null;
         }
-        return await CreateAiAgentAsync(agent);
+        return await CreateAiAgentAsync(agent, extraOverride);
     }
 
-    public async Task<AIAgent?> CreateAiAgentAsync(Agent agent)
+    public async Task<AIAgent?> CreateAiAgentAsync(Agent agent, string? extraOverride = null)
     {
         if (agent.Type == AgentType.External)
         {
-            var extra = agent.Extra;
+            var extra = extraOverride ?? agent.Extra;
 
             if (agent.Name == "ClaudeCode")
             {
@@ -173,7 +178,15 @@ public class AgentRuntimeService
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
         Guid? projectId = null)
     {
-        var aiAgent = await CreateAiAgentAsync(agentId);
+        var agent = await _agentRepository.GetByIdAsync(agentId);
+        if (agent == null)
+        {
+            yield break;
+        }
+
+        var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
+        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
+        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);
         if (aiAgent == null)
         {
             yield break;
@@ -214,20 +227,10 @@ public class AgentRuntimeService
         await foreach (var update in stream.ConfigureAwait(false))
         {
             responseUpdates.Add(update);
-            foreach (var content in update.Contents)
+            var msg = update.ToAiMessage();
+            if (msg != null)
             {
-                if (content is TextContent text)
-                {
-                    var contentText = text.Text;
-                    var contentObj = new AiMessageContent("text", contentText);
-                    var msg = new AiMessage(
-                        update.MessageId ?? "",
-                        update.AuthorName,
-                        update.Role?.Value,
-                        [contentObj]
-                        );
                     yield return msg;
-                }
             }
         }
 
@@ -259,7 +262,9 @@ public class AgentRuntimeService
             return null;
         }
 
-        var aiAgent = await CreateAiAgentAsync(agent);
+        var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
+        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
+        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);
         if (aiAgent == null)
         {
             throw new Exception("aiAgent not found");
@@ -332,6 +337,64 @@ public class AgentRuntimeService
             {
                 disable.Dispose();
             }
+        }
+    }
+
+    private string? MergeExtraSettings(string? agentExtra, string? projectExtraSetting)
+    {
+        if (string.IsNullOrWhiteSpace(projectExtraSetting))
+        {
+            return agentExtra;
+        }
+
+        if (string.IsNullOrWhiteSpace(agentExtra))
+        {
+            return projectExtraSetting;
+        }
+
+        if (!TryParseJsonObject(agentExtra, out var merged))
+        {
+            _logger.LogWarning("Agent.Extra is not a valid JSON object. Using Project.ExtraSetting instead.");
+            return projectExtraSetting;
+        }
+
+        if (!TryParseJsonObject(projectExtraSetting, out var projectExtra))
+        {
+            _logger.LogWarning("Project.ExtraSetting is not a valid JSON object. Keeping Agent.Extra.");
+            return agentExtra;
+        }
+
+        foreach (var pair in projectExtra)
+        {
+            merged[pair.Key] = pair.Value?.DeepClone();
+        }
+
+        return merged.ToJsonString();
+    }
+
+    private async Task<string?> GetProjectExtraSettingAsync(Guid? projectId)
+    {
+        if (!projectId.HasValue || projectId.Value == Guid.Empty)
+        {
+            return null;
+        }
+
+        var project = await _projectRepository.GetByIdAsync(projectId.Value);
+        return project?.ExtraSetting;
+    }
+
+    private static bool TryParseJsonObject(string json, [NotNullWhen(true)] out JsonObject? jsonObject)
+    {
+        jsonObject = null;
+
+        try
+        {
+            jsonObject = JsonNode.Parse(json) as JsonObject;
+            return jsonObject != null;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 }
