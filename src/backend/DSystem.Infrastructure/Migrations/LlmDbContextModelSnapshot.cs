@@ -557,7 +557,15 @@ namespace DSystem.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
-                    b.Property<Guid>("AgentflowId")
+                    b.Property<Guid?>("AgentId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_id");
+
+                    b.Property<int>("AgentType")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("agent_type");
+
+                    b.Property<Guid?>("AgentflowId")
                         .HasColumnType("TEXT")
                         .HasColumnName("agentflow_id");
 

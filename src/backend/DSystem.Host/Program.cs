@@ -6,6 +6,7 @@ using DSystem.ExternalAgents;
 using DSystem.Host;
 using DSystem.Infrastructure;
 using DSystem.Manager.Api.Controllers;
+using DSystem.SessionRecords.Domain;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;

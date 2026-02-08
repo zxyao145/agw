@@ -1,6 +1,6 @@
 using DSystem.Domain.Entities;
-using DSystem.Domain.Enums;
 using DSystem.Domain.Repositories;
+using DSystem.Shared.Enums;
 using System.Linq.Expressions;
 
 namespace DSystem.Domain.Services;
@@ -10,17 +10,20 @@ public class ProjectTaskDomainService
     private readonly IRepository<ProjectTask> _taskRepository;
     private readonly IRepository<Project> _projectRepository;
     private readonly IRepository<Agentflow> _agentflowRepository;
+    private readonly IRepository<Agent> _agentRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public ProjectTaskDomainService(
         IRepository<ProjectTask> taskRepository,
         IRepository<Project> projectRepository,
         IRepository<Agentflow> agentflowRepository,
+        IRepository<Agent> agentRepository,
         IUnitOfWork unitOfWork)
     {
         _taskRepository = taskRepository;
         _projectRepository = projectRepository;
         _agentflowRepository = agentflowRepository;
+        _agentRepository = agentRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -42,8 +45,33 @@ public class ProjectTaskDomainService
             return null;
         }
 
-        var agentflow = await _agentflowRepository.GetByIdAsync(task.AgentflowId);
-        if (agentflow == null || !agentflow.Enable)
+        if (task.AgentType == ProjectTaskAgentType.Agentflow)
+        {
+            if (!task.AgentflowId.HasValue || task.AgentId.HasValue)
+            {
+                return null;
+            }
+
+            var agentflow = await _agentflowRepository.GetByIdAsync(task.AgentflowId.Value);
+            if (agentflow == null || !agentflow.Enable)
+            {
+                return null;
+            }
+        }
+        else if (task.AgentType == ProjectTaskAgentType.Agent)
+        {
+            if (!task.AgentId.HasValue || task.AgentflowId.HasValue)
+            {
+                return null;
+            }
+
+            var agent = await _agentRepository.GetByIdAsync(task.AgentId.Value);
+            if (agent == null)
+            {
+                return null;
+            }
+        }
+        else
         {
             return null;
         }

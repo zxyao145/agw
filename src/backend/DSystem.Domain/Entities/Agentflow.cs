@@ -1,4 +1,4 @@
-using DSystem.Domain.Enums;
+using DSystem.Shared.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DSystem.Domain.Entities;

@@ -1,7 +1,7 @@
 using DSystem.Domain.Entities;
-using DSystem.Domain.Enums;
 using DSystem.ExternalAgents;
 using DSystem.Infrastructure.Data;
+using DSystem.Shared.Enums;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;

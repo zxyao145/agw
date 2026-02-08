@@ -1,4 +1,4 @@
-using DSystem.Domain.Enums;
+using DSystem.Shared.Enums;
 
 namespace DSystem.Domain.Entities;
 
@@ -6,7 +6,9 @@ public class ProjectTask : BaseEntity
 {
     public Guid Id { get; set; }
     public Guid ProjectId { get; set; }
-    public Guid AgentflowId { get; set; }
+    public ProjectTaskAgentType AgentType { get; set; } = ProjectTaskAgentType.Agentflow;
+    public Guid? AgentflowId { get; set; }
+    public Guid? AgentId { get; set; }
 
     public string Description { get; set; } = string.Empty;
 
@@ -16,7 +18,7 @@ public class ProjectTask : BaseEntity
     public ProjectTaskStatus Status { get; set; } = ProjectTaskStatus.Pending;
 
     /// <summary>
-    /// User input to be executed by the associated agentflow.
+    /// User input to be executed by the associated target.
     /// </summary>
     public string Input { get; set; } = string.Empty;
 

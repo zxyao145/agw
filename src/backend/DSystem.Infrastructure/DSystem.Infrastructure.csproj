@@ -1,11 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<ItemGroup>
+		<ProjectReference Include="..\..\..\..\claude-code-sdk-csharp\src\ClaudeCodeSdk.MAF\ClaudeCodeSdk.MAF.csproj" />
 		<ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
+		<ProjectReference Include="..\DSystem.SessionRecords\DSystem.SessionRecords.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="CliWrap" />
 		<PackageReference Include="EFCore.NamingConventions" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design">

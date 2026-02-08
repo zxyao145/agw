@@ -1,5 +1,5 @@
-using DSystem.Domain.Models;
 using DSystem.Domain.Tools;
+using DSystem.Shared.Models;
 using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using System.Reflection;

@@ -10,7 +10,13 @@ export interface AgentDto extends BaseDto {
   name: string;
   systemPrompt: string;
   modelProviderApiKeyId: string;
+
+  description: string;
+  tools?: string | null;
+  type: number; // 0 = System, 1 = External
+  extra?: string | null;
 }
+
 
 export const AgentflowNodeType = {
   AgentNode: 0,

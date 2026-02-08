@@ -1,5 +1,8 @@
+using DSystem.Domain.Repositories;
 using DSystem.ExternalAgents;
 using DSystem.Infrastructure.Data;
+using DSystem.Infrastructure.Repositories;
+using DSystem.SessionRecords.Entities;
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -66,13 +69,13 @@ public class ClaudeCodeSessionTests
     public void UpdateThread_ReplacesThreadInstance()
     {
         var session = CreateSession();
-        var originalThread = session.Thread;
+        var originalThread = session.Session;
         var newThread = new TestAgentThread();
 
         session.UpdateThread(newThread);
 
-        Assert.Same(newThread, session.Thread);
-        Assert.NotSame(originalThread, session.Thread);
+        Assert.Same(newThread, session.Session);
+        Assert.NotSame(originalThread, session.Session);
     }
 
     [Fact]
@@ -141,7 +144,7 @@ public class ClaudeCodeSessionTests
         return new ClaudeCodeSession(agent, thread, configuration, logger, context);
     }
 
-    private static LlmDbContext CreateContext()
+    private static IRepository<AgentSessionRecord> CreateContext()
     {
         var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
@@ -152,6 +155,7 @@ public class ClaudeCodeSessionTests
 
         var context = new LlmDbContext(options);
         context.Database.EnsureCreated();
-        return context;
+        IRepository<AgentSessionRecord> repo = new EfRepository<AgentSessionRecord>(context);
+        return repo;
     }
 }

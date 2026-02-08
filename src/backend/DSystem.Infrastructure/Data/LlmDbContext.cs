@@ -1,4 +1,5 @@
 using DSystem.Domain.Entities;
+using DSystem.SessionRecords.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -135,6 +136,7 @@ public class LlmDbContext : DbContext
         modelBuilder.Entity<ProjectTask>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.AgentType).HasConversion<int>();
             entity.Property(e => e.Description).IsRequired().HasMaxLength(4000);
             entity.Property(e => e.Input).IsRequired().HasMaxLength(4000);
             entity.Property(e => e.OutputJson).HasMaxLength(16000);

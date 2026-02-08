@@ -15,6 +15,8 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
         _dbSet = dbContext.Set<TEntity>();
     }
 
+    public IQueryable<TEntity> Queryable => _dbSet.AsQueryable();
+
     public Task<TEntity?> GetByIdAsync(object id)
     {
         if (id is object[] composite)
@@ -66,5 +68,10 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
     public void Remove(TEntity entity)
     {
         _dbSet.Remove(entity);
+    }
+
+    public async Task SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }

@@ -5,8 +5,11 @@
   </Folder>
   <Folder Name="/Core/">
     <Project Path="src/backend/DSystem.A2A/DSystem.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
+    <Project Path="src/backend/DSystem.Appliaction/DSystem.Appliaction.csproj" Id="4eec0e3e-d979-4709-b21e-668972c0376c" />
     <Project Path="src/backend/DSystem.Domain/DSystem.Domain.csproj" />
     <Project Path="src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
+    <Project Path="src/backend/DSystem.SessionRecords/DSystem.SessionRecords.csproj" Id="530ba901-9b98-4fab-a6c8-d4ad38e194bd" />
+    <Project Path="src/backend/DSystem.Shared/DSystem.Shared.csproj" />
   </Folder>
   <Folder Name="/External/">
     <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk.MAF/ClaudeCodeSdk.MAF.csproj" />

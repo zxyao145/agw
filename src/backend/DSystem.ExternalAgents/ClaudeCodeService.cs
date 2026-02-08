@@ -1,14 +1,13 @@
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
-using DSystem.Infrastructure.Data;
+using DSystem.Domain.Repositories;
+using DSystem.SessionRecords.Entities;
+using DSystem.Shared.Services;
 using Microsoft.Agents.AI;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.EntityFrameworkCore;
-using System.IO;
-using System.Linq;
 using System.Text.Json;
-using DSystem.Infrastructure;
 
 namespace DSystem.ExternalAgents;
 
@@ -19,18 +18,20 @@ public class ClaudeCodeService
 {
     private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<ClaudeCodeService> _logger;
-    private readonly LlmDbContext _context;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IRepository<AgentSessionRecord> _repository;
     private readonly IGitCommandService _gitCommandService;
     private readonly string _rootPath;
 
     public ClaudeCodeService(
         ILogger<ClaudeCodeService> logger,
-        LlmDbContext context,
+        IRepository<AgentSessionRecord> repository,
         IHostEnvironment hostEnvironment,
-        IGitCommandService gitCommandService)
+        IGitCommandService gitCommandService,
+        IUnitOfWork unitOfWork)
     {
         _logger = logger;
-        _context = context;
+        _repository = repository;
         _hostEnvironment = hostEnvironment;
         _gitCommandService = gitCommandService;
         _rootPath = Path.Combine(_hostEnvironment.ContentRootPath);
@@ -38,6 +39,8 @@ public class ClaudeCodeService
         {
             Directory.CreateDirectory(_rootPath);
         }
+
+        _unitOfWork = unitOfWork;
     }
 
     /// <summary>
@@ -59,7 +62,7 @@ public class ClaudeCodeService
             initRequest.ProjectId,
             cancellationToken);
 
-        return new ClaudeCodeSession(agent, thread, initRequest, _logger, _context);
+        return new ClaudeCodeSession(agent, thread, initRequest, _logger, _repository);
     }
 
     private async Task<AgentSession> GetOrLoadThreadAsync(
@@ -68,7 +71,7 @@ public class ClaudeCodeService
         Guid projectId,
         CancellationToken cancellationToken)
     {
-        var record = await _context.AgentSessionRecords
+        var record = await _repository.Queryable
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 session => session.SessionId == sessionId && session.ProjectId == projectId,

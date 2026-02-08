@@ -182,9 +182,12 @@ export default function TaskDetailsPage() {
   });
 
   const task = taskQuery.data;
+  const targetType = task?.agentType === 1 ? "agent" : "agentflow";
+  const targetId =
+    targetType === "agent" ? (task?.agentId ?? null) : (task?.agentflowId ?? null);
 
   const handleOnExecute = React.useCallback(async (value: string) => {
-    if (!task?.agentflowId || !value.trim()) return;
+    if (!targetId || !value.trim()) return;
 
     setIsExecuting(true);
 
@@ -198,7 +201,12 @@ export default function TaskDetailsPage() {
     setStreamingMessages((prev) => [...prev, userMessage]);
 
     try {
-      const response = await fetch(`/api/agentflows/${task.agentflowId}/execute-sse`, {
+      const executeUrl =
+        targetType === "agent"
+          ? `/api/agents/${targetId}/execute-sse`
+          : `/api/agentflows/${targetId}/execute-sse`;
+
+      const response = await fetch(executeUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -280,7 +288,7 @@ export default function TaskDetailsPage() {
     } finally {
       setIsExecuting(false);
     }
-  }, [task?.agentflowId, threadId]);
+  }, [targetId, targetType, threadId]);
 
   return (
     <div className="space-y-3 w-full flex flex-col">
@@ -321,9 +329,17 @@ export default function TaskDetailsPage() {
             <Button asChild variant="outline" size="sm">
               <Link href={`/projects/${projectId}`}>Back</Link>
             </Button>
-            {task && (
+            {task && targetId && (
               <Button asChild variant="outline" size="sm">
-                <Link href={`/agentflows/${task?.agentflowId}`}>Agentflow</Link>
+                <Link
+                  href={
+                    task.agentType === 1
+                      ? `/agents/${targetId}`
+                      : `/agentflows/${targetId}`
+                  }
+                >
+                  {task.agentType === 1 ? "Agent" : "Agentflow"}
+                </Link>
               </Button>
             )}
           </ButtonGroup>

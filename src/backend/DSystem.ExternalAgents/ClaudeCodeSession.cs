@@ -1,12 +1,12 @@
 using ClaudeCodeSdk.MAF;
-using DSystem.Domain.Entities;
-using DSystem.Domain.Models;
-using DSystem.Infrastructure;
-using DSystem.Infrastructure.Data;
+using DSystem.Domain.Repositories;
+using DSystem.SessionRecords.Entities;
+using DSystem.Shared;
+using DSystem.Shared.Models;
 using Microsoft.Agents.AI;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.EntityFrameworkCore;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
@@ -28,7 +28,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     /// <summary>
     /// Gets the agent thread for conversation context.
     /// </summary>
-    public AgentSession Thread { get; private set; } 
+    public AgentSession Session { get; private set; } 
 
     /// <summary>
     /// Gets the session configuration.
@@ -41,7 +41,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
     private readonly ILogger _logger;
-    private readonly LlmDbContext _context;
+    private readonly IRepository<AgentSessionRecord> _repository;
 
     private const string ClaudeCodeAgentName = "ClaudeCode";
 
@@ -53,13 +53,13 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         AgentSession thread,
         ClaudeCodeSettingRequest configuration,
         ILogger logger,
-        LlmDbContext context)
+        IRepository<AgentSessionRecord> repository)
     {
         Agent = agent ?? throw new ArgumentNullException(nameof(agent));
-        Thread = thread ?? throw new ArgumentNullException(nameof(thread));
+        Session = thread ?? throw new ArgumentNullException(nameof(thread));
         Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _context = context ?? throw new ArgumentNullException(nameof(context));
+        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     }
 
     /// <summary>
@@ -106,7 +106,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         var message = new ChatMessage(ChatRole.User, aiContents);
         var responseUpdates = new List<AgentResponseUpdate>();
 
-        await foreach (var update in Agent.RunStreamingAsync(message, Thread, cancellationToken: cancellationToken))
+        await foreach (var update in Agent.RunStreamingAsync(message, Session, cancellationToken: cancellationToken))
         {
             responseUpdates.Add(update);
             var aiMessage = update.ToAiMessage();
@@ -119,7 +119,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     /// <summary>
     /// Updates the thread state (useful for thread deserialization).
     /// </summary>
-    public void UpdateThread(AgentSession newThread) => Thread = newThread;
+    public void UpdateThread(AgentSession newThread) => Session = newThread;
 
     /// <summary>
     /// Cancels any in-flight request.
@@ -186,10 +186,11 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         string? input,
         CancellationToken cancellationToken)
     {
-        var serialized = Thread.Serialize();
+        var serialized = Session.Serialize();
         if (serialized.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return;
 
-        var record = await _context.AgentSessionRecords
+        var record = await _repository
+            .Queryable
             .FirstOrDefaultAsync(
                 session => session.SessionId == Configuration.SessionId && session.ProjectId == Configuration.ProjectId,
                 cancellationToken);
@@ -202,7 +203,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
                 ProjectId = Configuration.ProjectId,
                 CreateTime = DateTime.UtcNow
             };
-            await _context.AgentSessionRecords.AddAsync(record);
+            await _repository.AddAsync(record);
         }
 
         if (string.IsNullOrWhiteSpace(record.Title))
@@ -225,7 +226,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         record.Messages = JsonSerializer.Serialize(payload);
         record.UpdateTime = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug("Saved thread state for session: {ThreadId}", Configuration.SessionId);
     }

@@ -1,5 +1,5 @@
-using DSystem.Domain.Models;
 using DSystem.Domain.Services;
+using DSystem.Shared.Models;
 using Microsoft.Extensions.AI;
 
 namespace DSystem.Manager.Api.Contracts;

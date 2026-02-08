@@ -1,7 +1,7 @@
-using DSystem.Api.Contracts;
 using DSystem.Domain.Entities;
-using DSystem.Domain.Enums;
 using DSystem.Domain.Services;
+using DSystem.Shared.Contracts;
+using DSystem.Shared.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DSystem.Api.Controllers;
@@ -44,7 +44,9 @@ public class ProjectTasksController : ControllerBase
         var task = new ProjectTask
         {
             ProjectId = projectId,
+            AgentType = request.AgentType,
             AgentflowId = request.AgentflowId,
+            AgentId = request.AgentId,
             Description = request.Description,
             Input = request.Input,
             Status = ProjectTaskStatus.Pending
@@ -53,7 +55,7 @@ public class ProjectTasksController : ControllerBase
         var created = await _taskService.CreateAsync(task, user);
         if (created == null)
         {
-            return BadRequest("Failed to create task (project/agentflow invalid or input missing).");
+            return BadRequest("Failed to create task (project/target invalid, target mismatch, or input missing).");
         }
 
         // Asynchronous execution: scheduler will pick it up.
@@ -119,7 +121,9 @@ public class ProjectTasksController : ControllerBase
         new(
             task.Id,
             task.ProjectId,
+            task.AgentType,
             task.AgentflowId,
+            task.AgentId,
             task.Status,
             task.Description,
             task.Input,

@@ -1,6 +1,6 @@
-using DSystem.Domain.Enums;
-using DSystem.Domain.Models;
 using DSystem.Domain.Services;
+using DSystem.Shared.Enums;
+using DSystem.Shared.Models;
 
 namespace DSystem.Manager.Api.Contracts;
 

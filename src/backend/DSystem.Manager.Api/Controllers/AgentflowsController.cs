@@ -1,7 +1,7 @@
 using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
-using DSystem.Infrastructure;
 using DSystem.Manager.Api.Contracts;
+using DSystem.Shared;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 using System.Runtime.Serialization;

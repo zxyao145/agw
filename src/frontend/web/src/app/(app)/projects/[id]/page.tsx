@@ -30,6 +30,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { CreateTaskDialog } from "./components/create-task-dialog";
+import { AgentflowDto, AgentDto } from "@/types/agentflow";
 
 type ProjectUpdateRequest = components["schemas"]["ProjectUpdateRequest"];
 type ProjectTaskCreateRequest =
@@ -50,21 +52,13 @@ type ProjectDto = {
   updateTime?: string | null;
 };
 
-type AgentflowDto = {
-  id: string;
-  name: string;
-  description: string | null;
-  enable: boolean;
-  createBy?: string | null;
-  createTime?: string | null;
-  updateBy?: string | null;
-  updateTime?: string | null;
-};
 
 type ProjectTaskDto = {
   id: string;
   projectId: string;
-  agentflowId: string;
+  agentType?: number;
+  agentflowId?: string | null;
+  agentId?: string | null;
   status: number;
   description: string;
   input: string;
@@ -166,6 +160,12 @@ export default function ProjectDetailsPage() {
       return (await apiGet("/api/agentflows")) as unknown as AgentflowDto[];
     },
   });
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    queryFn: async () => {
+      return (await apiGet("/api/agents")) as unknown as AgentDto[];
+    },
+  });
 
   const [editOpen, setEditOpen] = React.useState(false);
   const [editName, setEditName] = React.useState("");
@@ -173,7 +173,7 @@ export default function ProjectDetailsPage() {
   const [editEnable, setEditEnable] = React.useState(true);
 
   const [createTaskOpen, setCreateTaskOpen] = React.useState(false);
-  const [createTaskAgentflowId, setCreateTaskAgentflowId] = React.useState("");
+  const [createTaskTarget, setCreateTaskTarget] = React.useState("");
   const [createTaskDescription, setCreateTaskDescription] = React.useState("");
   const [createTaskInput, setCreateTaskInput] = React.useState("");
 
@@ -227,7 +227,11 @@ export default function ProjectDetailsPage() {
   });
 
   const createTaskMutation = useMutation({
-    mutationFn: async (body: ProjectTaskCreateRequest) => {
+    mutationFn: async (
+      body: ProjectTaskCreateRequest & {
+        agentId?: string;
+      }
+    ) => {
       return await apiPost("/api/projects/{projectId}/tasks", {
         params: { path: { projectId } },
         body,
@@ -236,7 +240,7 @@ export default function ProjectDetailsPage() {
     onSuccess: async () => {
       toast.success("Task created");
       setCreateTaskOpen(false);
-      setCreateTaskAgentflowId("");
+      setCreateTaskTarget("");
       setCreateTaskDescription("");
       setCreateTaskInput("");
       await queryClient.invalidateQueries({
@@ -458,115 +462,66 @@ export default function ProjectDetailsPage() {
               </CardDescription>
             </div>
 
-            <Dialog open={createTaskOpen} onOpenChange={setCreateTaskOpen}>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setCreateTaskOpen(true);
-                }}
-              >
-                Create task
-              </Button>
-              <DialogContent>
-                <DialogHeader>
-                  <UiDialogTitle>Create task</UiDialogTitle>
-                  <UiDialogDescription>
-                    Create a task under this project. Tasks execute
-                    asynchronously (scheduler will pick it up).
-                  </UiDialogDescription>
-                </DialogHeader>
+            <CreateTaskDialog
+              open={createTaskOpen}
+              onOpenChange={setCreateTaskOpen}
+              targets={[
+                ...(agentflowsQuery.data ?? []).map((w) => ({
+                  id: w.id,
+                  name: w.name,
+                  enable: w.enable,
+                  type: "agentflow" as const,
+                })),
+                ...(agentsQuery.data ?? []).map((a) => ({
+                  id: a.id,
+                  name: a.name,
+                  enable: true,
+                  type: "agent" as const,
+                })),
+              ]}
+              isTargetsLoading={agentflowsQuery.isLoading || agentsQuery.isLoading}
+              targetsErrorMessage={
+                [agentflowsQuery, agentsQuery]
+                  .filter((q) => q.isError)
+                  .map((q) => getApiErrorMessage(q.error))
+                  .join("; ") || null
+              }
+              values={{
+                target: createTaskTarget,
+                description: createTaskDescription,
+                input: createTaskInput,
+              }}
+              onChange={(values) => {
+                setCreateTaskTarget(values.target);
+                setCreateTaskDescription(values.description);
+                setCreateTaskInput(values.input);
+              }}
+              onCreate={(values) => {
+                const [targetType, targetId] = values.target.split(":");
+                if (!targetType || !targetId) return;
 
-                {agentflowsQuery.isLoading ? (
-                  <div className="text-sm text-muted-foreground">
-                    Loading agentflows...
-                  </div>
-                ) : agentflowsQuery.isError ? (
-                  <div className="text-sm text-destructive">
-                    Failed to load agentflows:{" "}
-                    {getApiErrorMessage(agentflowsQuery.error)}
-                  </div>
-                ) : (
-                  <div className="grid gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="task-agentflow">Agentflow</Label>
-                      <select
-                        id="task-agentflow"
-                        value={createTaskAgentflowId}
-                        onChange={(e) =>
-                          setCreateTaskAgentflowId(e.target.value)
-                        }
-                        className="h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-sm"
-                      >
-                        <option value="" disabled>
-                          Select an agentflow...
-                        </option>
-                        {(agentflowsQuery.data ?? [])
-                          .filter((w) => w.enable)
-                          .map((w) => (
-                            <option key={w.id} value={w.id}>
-                              {w.name}
-                            </option>
-                          ))}
-                      </select>
-                      <div className="text-xs text-muted-foreground">
-                        Only enabled agentflows are shown.
-                      </div>
-                    </div>
+                const baseBody = {
+                  description: values.description,
+                  input: values.input,
+                };
 
-                    <div className="grid gap-2">
-                      <Label htmlFor="task-description">Description</Label>
-                      <Input
-                        id="task-description"
-                        value={createTaskDescription}
-                        onChange={(e) =>
-                          setCreateTaskDescription(e.target.value)
-                        }
-                        placeholder="What to do"
-                      />
-                    </div>
+                if (targetType === "agent") {
+                  createTaskMutation.mutate({
+                    ...baseBody,
+                    agentType: 1,
+                    agentId: targetId,
+                  } as ProjectTaskCreateRequest & { agentId: string });
+                  return;
+                }
 
-                    <div className="grid gap-2">
-                      <Label htmlFor="task-input">Input</Label>
-                      <Textarea
-                        id="task-input"
-                        value={createTaskInput}
-                        onChange={(e) => setCreateTaskInput(e.target.value)}
-                        placeholder="Task input"
-                        rows={6}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <DialogFooter>
-                  <DialogClose asChild>
-                    <Button type="button" variant="outline">
-                      Cancel
-                    </Button>
-                  </DialogClose>
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      createTaskMutation.mutate({
-                        agentflowId: createTaskAgentflowId,
-                        description: createTaskDescription,
-                        input: createTaskInput,
-                      })
-                    }
-                    disabled={
-                      agentflowsQuery.isLoading ||
-                      agentflowsQuery.isError ||
-                      !createTaskAgentflowId ||
-                      !createTaskDescription.trim() ||
-                      !createTaskInput.trim() ||
-                      createTaskMutation.isPending
-                    }
-                  >
-                    {createTaskMutation.isPending ? "Creating..." : "Create"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                createTaskMutation.mutate({
+                  ...baseBody,
+                  agentType: 0,
+                  agentflowId: targetId,
+                } as ProjectTaskCreateRequest);
+              }}
+              isCreating={createTaskMutation.isPending}
+            />
           </div>
         </CardHeader>
 
@@ -604,7 +559,11 @@ export default function ProjectDetailsPage() {
                           <span className="font-mono">{t.id}</span>
                           <span className="mx-2">·</span>
                           Agentflow:{" "}
-                          <span className="font-mono">{t.agentflowId}</span>
+                          <span className="font-mono">
+                            {t.agentType === 1
+                              ? `agent:${t.agentId ?? "-"}`
+                              : `agentflow:${t.agentflowId ?? "-"}`}
+                          </span>
                         </div>
 
                         <div className="text-xs text-muted-foreground">

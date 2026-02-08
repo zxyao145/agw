@@ -1,21 +1,9 @@
 import type { components } from "@/api/openapi";
 
-export type AgentCreateRequest = components["schemas"]["AgentCreateRequest"];
+export type {AgentDto} from  "@/types/agentflow";
 
-export type AgentDto = {
-  id: string;
-  name: string;
-  description: string;
-  systemPrompt: string;
-  modelProviderApiKeyId: string;
-  tools?: string | null;
-  type: number; // 0 = System, 1 = External
-  extra?: string | null;
-  createBy?: string | null;
-  createTime?: string | null;
-  updateBy?: string | null;
-  updateTime?: string | null;
-};
+
+export type AgentCreateRequest = components["schemas"]["AgentCreateRequest"];
 
 export type ToolInfo = {
   name: string;

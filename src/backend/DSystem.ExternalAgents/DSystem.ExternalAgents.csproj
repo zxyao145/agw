@@ -14,8 +14,8 @@
 
 	<ItemGroup>
     <!--<ProjectReference Include="..\..\..\..\claude-code-sdk-csharp\src\ClaudeCodeSdk.MAF\ClaudeCodeSdk.MAF.csproj" />-->
-    <ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
-    <ProjectReference Include="..\DSystem.Infrastructure\DSystem.Infrastructure.csproj" />
+    <ProjectReference Include="..\DSystem.SessionRecords\DSystem.SessionRecords.csproj" />
+    <ProjectReference Include="..\DSystem.Shared\DSystem.Shared.csproj" />
   </ItemGroup>
 
 </Project>

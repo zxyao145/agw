@@ -1,5 +1,5 @@
-using DSystem.Api.Contracts;
-using DSystem.Infrastructure;
+using DSystem.Shared.Contracts;
+using DSystem.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System.IO;

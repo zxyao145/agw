@@ -612,8 +612,8 @@ const ws = new WebSocket(`ws://localhost:5000/api/external-agents/claude-code/ws
 ### Thread State Management
 
 - Thread state persisted in `HybridCache` using `ThreadId` as key
-- `AgentThread.Serialize()` → JSON → cache storage
-- `AgentThread.Deserialize()` → restore conversation context
+- `AgentSession.Serialize()` → JSON → cache storage
+- `AgentSession.Deserialize()` → restore conversation context
 - Enables multi-turn conversations with full context preservation
 
 ### Configuration

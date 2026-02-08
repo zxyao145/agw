@@ -1,7 +1,7 @@
-using DSystem.Api.Contracts;
-using DSystem.Domain.Models;
-using DSystem.Domain.Services;
-using DSystem.Infrastructure;
+using DSystem.SessionRecords.Domain;
+using DSystem.Shared;
+using DSystem.Shared.Contracts;
+using DSystem.Shared.Models;
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;

@@ -1,5 +1,5 @@
 using DSystem.ExternalAgents;
-using DSystem.Infrastructure;
+using DSystem.Shared;
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
