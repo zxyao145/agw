@@ -5,9 +5,10 @@
 ```mermaid
 flowchart BT
 
-%% ========= Nodes (shared foundations) =========
+%% ========= Foundations =========
 infra[Infrastructure]
 shared[Shared]
+host[Host]
 
 %% ========= API Layer =========
 subgraph API["API"]
@@ -16,7 +17,7 @@ subgraph API["API"]
   mgr[Manager.API]
 end
 
-%% ========= A2A Gateway =========
+%% ========= A2A Protocol =========
 subgraph A2ABox["A2A Protocol"]
   direction TB
   a2a[A2A]
@@ -25,9 +26,9 @@ end
 %% ========= Core =========
 subgraph Core["Core"]
   direction TB
-  dom[Domain]
-  app[Application]
-  dom --> app
+  coreDom[Domain]
+  coreApp[Application]
+  coreDom --> coreApp
 end
 
 %% ========= External =========
@@ -46,27 +47,29 @@ end
 
 %% ========= Relationships =========
 
-%% A2A talks to API (integration / boundary dependency)
-a2a -.-> api
-a2a -.-> mgr
+%% --- Protocol / Integration ---
+A2ABox --> API
+coreApp --> A2ABox
 
-%% Core uses A2A
-app -.-> a2a
+%% --- API Usage ---
+coreApp --> API
+extAgents --> coreApp
 
-%% External agents connect via A2A
-extAgents -.-> a2a
+%% --- Infrastructure ---
+coreApp --> infra
+sessApp --> infra
 
-%% Infrastructure dependencies
-app -.-> infra
-sessApp -.-> infra
+%% --- Shared ---
+shared --> Core
+shared --> SessionRecords
+shared --> External
 
-%% Shared components reused by modules
-shared -.-> SessionRecords
-shared -.-> External
+%% --- Session support ---
+sessApp --> coreApp
+sessApp --> extAgents
 
-%% SessionRecords supports Core and External
-SessionRecords -.-> Core
-SessionRecords -.-> External
+%% --- Host ---
+API --> host
 
 ```
 

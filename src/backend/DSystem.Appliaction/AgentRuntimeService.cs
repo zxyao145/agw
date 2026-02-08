@@ -13,6 +13,8 @@ using System.ClientModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using ClaudeCodeSdk.MAF;
+using Microsoft.Extensions.Logging;
 
 namespace DSystem.Appliaction.Services;
 
@@ -29,6 +31,7 @@ public record AgentExecutionResult(
 /// </summary>
 public class AgentRuntimeService
 {
+    private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;
     private readonly IRepository<ModelProviderApiKey> _apiKeyRepository;
     private readonly IRepository<ModelProvider> _modelProviderRepository;
@@ -45,7 +48,8 @@ public class AgentRuntimeService
         IRepository<LlmModel> modelRepository,
         IRepository<Provider> providerRepository,
         ToolRegistryService toolRegistry,
-        HybridCache cache)
+        HybridCache cache,
+        ILogger<AgentRuntimeService> logger)
     {
         _agentRepository = agentRepository;
         _apiKeyRepository = apiKeyRepository;
@@ -54,6 +58,7 @@ public class AgentRuntimeService
         _providerRepository = providerRepository;
         _toolRegistry = toolRegistry;
         _cache = cache;
+        _logger = logger;
     }
 
     public async Task<AIAgent?> CreateAiAgentAsync(Guid agentId, string? systemPrompt = null)
@@ -70,9 +75,24 @@ public class AgentRuntimeService
     {
         if (agent.Type == AgentType.External)
         {
+            var extra = agent.Extra;
+
             if (agent.Name == "ClaudeCode")
             {
+                if (string.IsNullOrWhiteSpace(extra))
+                {
+                    _logger.LogError("agent.Extra is null or whitespace");
+                    return null;
+                }
 
+                var ccOptions = JsonUtil.Deserialize<ClaudeCodeAIAgentOptions>(extra);
+                if (ccOptions == null)
+                {
+                    _logger.LogError("agent.Extra Deserialize to options error");
+                    return null;
+                }
+                var ccAgent = new ClaudeCodeAIAgent(ccOptions, _logger);
+                return ccAgent;
             }
         }
         // External agents may not have a ModelProviderApiKeyId
@@ -225,57 +245,69 @@ public class AgentRuntimeService
         }
 
         var aiAgent = await CreateAiAgentAsync(agent);
-        if(aiAgent == null)
+        if (aiAgent == null)
         {
             throw new Exception("aiAgent not found");
         }
-
-
-
-        AgentSession thread;
-        if (string.IsNullOrWhiteSpace(threadId))
+        try
         {
-            threadId = Guid.NewGuid().ToString();
-            thread = await aiAgent.GetNewSessionAsync();
-        }
-        else
-        {
-            var value = await _cache.GetOrCreateAsync<string>(threadId, (c) =>
+
+            AgentSession thread;
+            if (string.IsNullOrWhiteSpace(threadId))
             {
-                return ValueTask.FromResult("");
-            });
-            if (string.IsNullOrWhiteSpace(value))
-            {
+                threadId = Guid.NewGuid().ToString();
                 thread = await aiAgent.GetNewSessionAsync();
             }
             else
             {
-                var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
-                thread = await aiAgent.DeserializeSessionAsync(serializedThread);
+                var value = await _cache.GetOrCreateAsync<string>(threadId, (c) =>
+                {
+                    return ValueTask.FromResult("");
+                });
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    thread = await aiAgent.GetNewSessionAsync();
+                }
+                else
+                {
+                    var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
+                    thread = await aiAgent.DeserializeSessionAsync(serializedThread);
+                }
             }
-        }
 
-        ChatMessage? system = null;
-        var chatMsg = new ChatMessage(ChatRole.User, input);
-        IEnumerable<ChatMessage> msgs = system == null
-            ? [chatMsg]
-            : [system, chatMsg];
-        var stream = aiAgent.RunStreamingAsync(msgs, thread);
+            ChatMessage? system = null;
+            var chatMsg = new ChatMessage(ChatRole.User, input);
+            IEnumerable<ChatMessage> msgs = system == null
+                ? [chatMsg]
+                : [system, chatMsg];
+            var stream = aiAgent.RunStreamingAsync(msgs, thread);
 
-        List<AiMessage> messages = new();
-        await foreach (var update in stream)
-        {
-            if(update != null)
+            List<AiMessage> messages = new();
+            await foreach (var update in stream)
             {
-               var msg = update.ToAiMessage();
+                var msg = update.ToAiMessage();
+                if (msg != null)
+                {
+                    messages.Add(msg);
+                }
+            }
 
+            return new AgentExecutionResult(
+                threadId,
+                messages
+                );
+        }
+        finally
+        {
+            if (aiAgent is IAsyncDisposable asyncDisable)
+            {
+                await asyncDisable.DisposeAsync();
+            }
+            else if (aiAgent is IDisposable disable)
+            {
+                disable.Dispose();
             }
         }
-
-        return new AgentExecutionResult(
-            threadId,
-            messages
-            );
     }
 }
 
