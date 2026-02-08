@@ -1,5 +1,5 @@
 using DSystem.Domain.Entities;
-using DSystem.Domain.Repositories;
+using DSystem.Shared.Repositories;
 
 namespace DSystem.Domain.Services;
 

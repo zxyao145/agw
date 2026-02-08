@@ -1,5 +1,5 @@
-using DSystem.Domain.Repositories;
 using DSystem.SessionRecords.Entities;
+using DSystem.Shared.Repositories;
 using System.Linq.Expressions;
 
 namespace DSystem.SessionRecords.Domain;

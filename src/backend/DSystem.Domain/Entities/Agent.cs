@@ -1,3 +1,4 @@
+using DSystem.Shared;
 using DSystem.Shared.Enums;
 
 namespace DSystem.Domain.Entities;

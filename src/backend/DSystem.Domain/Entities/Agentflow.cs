@@ -1,3 +1,4 @@
+using DSystem.Shared;
 using DSystem.Shared.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
 

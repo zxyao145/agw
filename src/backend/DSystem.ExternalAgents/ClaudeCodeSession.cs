@@ -1,8 +1,8 @@
 using ClaudeCodeSdk.MAF;
-using DSystem.Domain.Repositories;
 using DSystem.SessionRecords.Entities;
 using DSystem.Shared;
 using DSystem.Shared.Models;
+using DSystem.Shared.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;

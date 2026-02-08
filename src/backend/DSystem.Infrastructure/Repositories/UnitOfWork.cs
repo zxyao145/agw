@@ -1,4 +1,4 @@
-using DSystem.Domain.Repositories;
+using DSystem.Shared.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace DSystem.Infrastructure.Repositories;

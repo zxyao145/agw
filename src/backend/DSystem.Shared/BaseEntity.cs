@@ -1,4 +1,4 @@
-namespace DSystem.Domain.Entities;
+namespace DSystem.Shared;
 
 public abstract class BaseEntity
 {

@@ -1,5 +1,4 @@
 using DSystem.Domain.Entities;
-using DSystem.ExternalAgents;
 using DSystem.Infrastructure.Data;
 using DSystem.Shared.Enums;
 using Microsoft.Data.Sqlite;

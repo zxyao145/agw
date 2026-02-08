@@ -1,3 +1,5 @@
+using DSystem.Shared;
+
 namespace DSystem.Domain.Entities;
 
 /// <summary>

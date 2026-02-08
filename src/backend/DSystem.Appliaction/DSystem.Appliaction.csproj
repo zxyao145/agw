@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
-    <ProjectReference Include="..\DSystem.ExternalAgents\DSystem.ExternalAgents.csproj" />
   </ItemGroup>
 
 </Project>

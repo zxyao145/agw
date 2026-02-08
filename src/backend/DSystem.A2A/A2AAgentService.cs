@@ -1,11 +1,11 @@
 ﻿using A2A;
-using DSystem.A2A;
+using DSystem.Appliaction;
 using DSystem.Domain.Entities;
-using DSystem.Domain.Repositories;
+using DSystem.Shared.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Options;
 
-namespace DSystem.Domain.Services;
+namespace DSystem.A2A;
 
 /// <summary>
 /// Service for exposing agents via A2A protocol.

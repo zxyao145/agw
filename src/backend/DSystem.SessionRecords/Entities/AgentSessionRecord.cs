@@ -1,4 +1,4 @@
-using DSystem.Domain.Entities;
+using DSystem.Shared;
 
 namespace DSystem.SessionRecords.Entities;
 

@@ -1,12 +1,11 @@
 using ClaudeCodeSdk.MAF;
 using DSystem.Domain.Entities;
-using DSystem.Infrastructure.Data;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace DSystem.ExternalAgents;
+namespace DSystem.Infrastructure.Data;
 
 /// <summary>
 /// Database seeder for initializing default data on application startup.

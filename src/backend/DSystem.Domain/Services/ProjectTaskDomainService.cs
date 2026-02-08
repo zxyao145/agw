@@ -1,6 +1,6 @@
 using DSystem.Domain.Entities;
-using DSystem.Domain.Repositories;
 using DSystem.Shared.Enums;
+using DSystem.Shared.Repositories;
 using System.Linq.Expressions;
 
 namespace DSystem.Domain.Services;
