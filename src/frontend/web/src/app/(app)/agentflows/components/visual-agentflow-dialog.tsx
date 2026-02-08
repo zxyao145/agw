@@ -12,23 +12,14 @@ import {
 } from "@/components/ui/dialog"
 import { VisualAgentflowBuilder } from "./visual-agentflow-builder"
 import { X } from "lucide-react"
-import { AgentDto, AgentflowDto } from "@/types/agentflow";
+import { AgentDto, AgentflowDetailDto, AgentflowDto } from "@/types/agentflow";
 
 type VisualAgentflowDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   agents: AgentDto[]
   agentflows: AgentflowDto[]
-  editingAgentflow?: {
-    id: string
-    name: string
-    description: string | null
-    pattern: number
-    configurationJson: string | null
-    enable: boolean
-    nodes: any[]
-    edges: any[]
-  } | null
+  editingAgentflow?: AgentflowDetailDto | null
   onAgentflowCreated?: () => void
 }
 

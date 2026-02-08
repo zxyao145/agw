@@ -22,8 +22,8 @@ const elkArg: ELKConstructorArguments = {
 const elk = new ELK();
 
 export const createGraphLayout = async (
-  orginNodes: Node<any, string | undefined>[],
-  orginEdges: Edge<any>[]
+  orginNodes: Node<unknown, string | undefined>[],
+  orginEdges: Edge<unknown>[]
 ) => {
   const nodes: ElkNode[] = [];
   const edges: ElkExtendedEdge[] = [];
@@ -40,9 +40,9 @@ export const createGraphLayout = async (
   });
   orginEdges.forEach((el) => {
     edges.push({
-      id: (el as any).id,
-      targets: [(el as any).target],
-      sources: [(el as any).source],
+      id: el.id,
+      targets: [el.target],
+      sources: [el.source],
     });
   });
 
@@ -59,13 +59,13 @@ export const createGraphLayout = async (
         return {
           ...n,
           position: { x: node.x, y: node.y },
-        } as Node<any, string | undefined>;
+        } as Node<unknown, string | undefined>;
       }),
       edges: (layoutedGraph.edges ?? []).map((edge) => {
         const e = orginEdges.find((n) => n.id === edge.id);
         return {
           ...e,
-        } as Edge<any>;
+        } as Edge<unknown>;
       }),
     }));
   return result;

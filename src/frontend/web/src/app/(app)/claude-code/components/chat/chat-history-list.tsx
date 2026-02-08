@@ -106,13 +106,13 @@ export function ChatHistoryList({
     setEditTitle(session.title);
   };
 
-  const cancelEditing = (e: React.MouseEvent) => {
+  const cancelEditing = (e: React.SyntheticEvent<HTMLElement>) => {
     e.stopPropagation();
     setEditingSessionId(null);
     setEditTitle("");
   };
 
-  const saveEdit = async (sessionId: string, e: React.MouseEvent) => {
+  const saveEdit = async (sessionId: string, e: React.SyntheticEvent<HTMLElement>) => {
     e.stopPropagation();
 
     if (!editTitle.trim()) {
@@ -236,9 +236,9 @@ export function ChatHistoryList({
                           autoFocus
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
-                              saveEdit(session.sessionId, e as any);
+                              saveEdit(session.sessionId, e);
                             } else if (e.key === "Escape") {
-                              cancelEditing(e as any);
+                              cancelEditing(e);
                             }
                           }}
                         />

@@ -7,6 +7,7 @@ import { Ulid } from "id128";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import type { AiMessageContent } from "@/types";
 
 import type {
   AgentDto,
@@ -211,10 +212,10 @@ export default function AgentsPage() {
                   const updated = [...messages];
                   const existingMsg = updated[existingIndex];
                   const existingTextContent = existingMsg.contents.find(
-                    (c: any) => c.type === "text"
+                    (c: AiMessageContent) => c.type === "text"
                   );
                   const newTextContent = message.contents.find(
-                    (c: any) => c.type === "text"
+                    (c: AiMessageContent) => c.type === "text"
                   );
 
                   if (existingTextContent && newTextContent) {

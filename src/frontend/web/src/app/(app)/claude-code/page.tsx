@@ -682,14 +682,9 @@ export default function ClaudeCodePage() {
           {!value || value.length === 0
             ? "-"
             : value.map((item, i) => {
-                // Handle objects with name/path structure
-                const displayValue =
-                  typeof item === "object"
-                    ? (item as any)?.name || JSON.stringify(item)
-                    : item;
                 return (
                   <Badge key={i} variant="outline">
-                    {displayValue}
+                    {item}
                   </Badge>
                 );
               })}
@@ -1046,7 +1041,7 @@ export default function ClaudeCodePage() {
             <DialogTitle>Unsent Comments</DialogTitle>
             <DialogDescription>
               You have {comments.length} unsent comment(s). These will be
-              cleared if you don't send them. Would you like to send them now?
+              cleared if you don&apos;t send them. Would you like to send them now?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

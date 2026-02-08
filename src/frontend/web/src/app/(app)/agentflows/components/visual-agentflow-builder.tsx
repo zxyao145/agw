@@ -31,13 +31,19 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Info, Workflow, Bot, Grid, Maximize2 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import { AgentDto, AgentflowDto, AgentflowNodeType } from "@/types/agentflow"
+import {
+  AgentDto,
+  AgentflowDetailDto,
+  AgentflowDto,
+  AgentflowEdgeDto,
+  AgentflowNodeDto,
+  AgentflowNodeType,
+} from "@/types/agentflow"
 import { toast } from "sonner"
 import { apiPost, apiPut } from "@/api/client"
 import { createGraphLayout } from "./autoLayout"
@@ -187,16 +193,7 @@ function FlowControls({ pattern, onAutoLayout }: { pattern: number; onAutoLayout
 type VisualAgentflowBuilderProps = {
   agents: AgentDto[]
   agentflows?: AgentflowDto[]
-  editingAgentflow?: {
-    id: string
-    name: string
-    description: string | null
-    pattern: number
-    configurationJson: string | null
-    enable: boolean
-    nodes: any[]
-    edges: any[]
-  } | null
+  editingAgentflow?: AgentflowDetailDto | null
   onAgentflowCreated?: () => void
 }
 
@@ -286,7 +283,7 @@ export function VisualAgentflowBuilder({
       }
 
       // Convert nodes to React Flow format
-      const loadedNodes: Node[] = editingAgentflow.nodes.map((node: any) => {
+      const loadedNodes: Node[] = editingAgentflow.nodes.map((node: AgentflowNodeDto) => {
         if (node.type === AgentflowNodeType.AgentNode) {
           const agent = agents.find(a => a.id === node.relateId)
           return {
@@ -321,7 +318,7 @@ export function VisualAgentflowBuilder({
       })
 
       // Convert edges to React Flow format
-      const loadedEdges: Edge[] = editingAgentflow.edges.map((edge: any) => ({
+      const loadedEdges: Edge[] = editingAgentflow.edges.map((edge: AgentflowEdgeDto) => ({
         id: edge.edgeId,
         source: edge.sourceNodeId,
         target: edge.targetNodeId,
@@ -657,7 +654,7 @@ export function VisualAgentflowBuilder({
     try {
       if (editingAgentflow) {
         // Update existing agentflow
-        // @ts-ignore - Dynamic path not supported by apiPut types
+        // @ts-expect-error - Dynamic path not supported by apiPut types
         await apiPut(`/api/agentflows/${editingAgentflow.id}`, { body: requestBody })
         toast.success(`Agentflow "${agentflowName}" updated successfully!`)
       } else {
