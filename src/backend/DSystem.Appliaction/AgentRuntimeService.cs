@@ -4,6 +4,7 @@ using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using DSystem.Domain.Repositories;
+using DSystem.SessionRecords.Application;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -39,6 +40,7 @@ public class AgentRuntimeService
     private readonly IRepository<Provider> _providerRepository;
     private readonly ToolRegistryService _toolRegistry;
     private readonly HybridCache _cache;
+    private readonly SessionRecordApplication _sessionRecordApplication;
 
 
     public AgentRuntimeService(
@@ -49,6 +51,7 @@ public class AgentRuntimeService
         IRepository<Provider> providerRepository,
         ToolRegistryService toolRegistry,
         HybridCache cache,
+        SessionRecordApplication sessionRecordApplication,
         ILogger<AgentRuntimeService> logger)
     {
         _agentRepository = agentRepository;
@@ -58,6 +61,7 @@ public class AgentRuntimeService
         _providerRepository = providerRepository;
         _toolRegistry = toolRegistry;
         _cache = cache;
+        _sessionRecordApplication = sessionRecordApplication;
         _logger = logger;
     }
 
@@ -166,7 +170,8 @@ public class AgentRuntimeService
         Guid agentId,
         string threadId,
         string input,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default,
+        Guid? projectId = null)
     {
         var aiAgent = await CreateAiAgentAsync(agentId);
         if (aiAgent == null)
@@ -204,9 +209,11 @@ public class AgentRuntimeService
             : [system, chatMsg];
 
         var stream = aiAgent.RunStreamingAsync(msgs, agentSession);
+        var responseUpdates = new List<AgentResponseUpdate>();
 
         await foreach (var update in stream.ConfigureAwait(false))
         {
+            responseUpdates.Add(update);
             foreach (var content in update.Contents)
             {
                 if (content is TextContent text)
@@ -227,6 +234,13 @@ public class AgentRuntimeService
         // Save thread state to cache after execution
         var serialized = JsonSerializer.Serialize(agentSession.Serialize());
         await _cache.SetAsync(threadId, serialized, cancellationToken: cancellationToken);
+        await _sessionRecordApplication.SaveThreadStateAsync(
+            threadId,
+            projectId ?? Guid.Empty,
+            agentSession.Serialize(),
+            responseUpdates,
+            input,
+            cancellationToken);
     }
 
     /// <summary>
@@ -236,7 +250,8 @@ public class AgentRuntimeService
         Guid agentId,
         string threadId,
         string input,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? projectId = null)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
         if (agent == null)
@@ -283,14 +298,24 @@ public class AgentRuntimeService
             var stream = aiAgent.RunStreamingAsync(msgs, thread);
 
             List<AiMessage> messages = new();
+            var responseUpdates = new List<AgentResponseUpdate>();
             await foreach (var update in stream)
             {
+                responseUpdates.Add(update);
                 var msg = update.ToAiMessage();
                 if (msg != null)
                 {
                     messages.Add(msg);
                 }
             }
+
+            await _sessionRecordApplication.SaveThreadStateAsync(
+                threadId,
+                projectId ?? Guid.Empty,
+                thread.Serialize(),
+                responseUpdates,
+                input,
+                cancellationToken);
 
             return new AgentExecutionResult(
                 threadId,

@@ -127,7 +127,6 @@ public class ProjectTasksController : ControllerBase
             task.Status,
             task.Description,
             task.Input,
-            task.OutputJson,
             task.ErrorMessage,
             task.CreateTime,
             task.UpdateTime,

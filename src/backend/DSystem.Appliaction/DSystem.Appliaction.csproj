@@ -9,6 +9,7 @@
   <ItemGroup>
 	  <PackageReference Include="ClaudeCodeSdk.MAF" />
     <ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
+    <ProjectReference Include="..\DSystem.SessionRecords\DSystem.SessionRecords.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,5 +1,6 @@
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
+using DSystem.SessionRecords.Application;
 using DSystem.SessionRecords.Entities;
 using DSystem.SessionRecords.Repositories;
 using DSystem.Shared.Services;
@@ -18,7 +19,7 @@ public class ClaudeCodeService
     private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<ClaudeCodeService> _logger;
     private readonly IAgentSessionRecordRepository _repository;
-    private readonly ISessionRecordsUnitOfWork _unitOfWork;
+    private readonly SessionRecordApplication _sessionRecordApplication;
     private readonly IGitCommandService _gitCommandService;
     private readonly string _rootPath;
 
@@ -27,11 +28,11 @@ public class ClaudeCodeService
         IAgentSessionRecordRepository repository,
         IHostEnvironment hostEnvironment,
         IGitCommandService gitCommandService,
-        ISessionRecordsUnitOfWork unitOfWork)
+        SessionRecordApplication sessionRecordApplication)
     {
         _logger = logger;
         _repository = repository;
-        _unitOfWork = unitOfWork;
+        _sessionRecordApplication = sessionRecordApplication;
         _hostEnvironment = hostEnvironment;
         _gitCommandService = gitCommandService;
         _rootPath = Path.Combine(_hostEnvironment.ContentRootPath);
@@ -60,7 +61,7 @@ public class ClaudeCodeService
             initRequest.ProjectId,
             cancellationToken);
 
-        return new ClaudeCodeSession(agent, thread, initRequest, _logger, _repository, _unitOfWork);
+        return new ClaudeCodeSession(agent, thread, initRequest, _logger, _sessionRecordApplication);
     }
 
     private async Task<AgentSession> GetOrLoadThreadAsync(

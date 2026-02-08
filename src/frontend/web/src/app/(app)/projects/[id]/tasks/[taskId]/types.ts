@@ -8,7 +8,6 @@ export type ProjectTaskDto = {
   status: number;
   description: string;
   input: string;
-  outputJson?: string | null;
   errorMessage?: string | null;
   createTime?: string | null;
   updateTime?: string | null;

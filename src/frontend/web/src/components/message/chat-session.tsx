@@ -42,7 +42,7 @@ export function ChatSession({
   }
 
   return (
-    <div className="flex-1 flex min-h-full pb-36">
+    <div className="flex-1 flex min-h-full pb-36 max-w-full">
       <div className="flex-1 overflow-y-auto space-y-4">
         {(messages?.length ?? 0) === 0 && (
           <div className="flex items-center justify-center h-40">
@@ -87,8 +87,12 @@ export function ChatSession({
               item.message.role === "user" &&
               item.message.author === "user" &&
               !item.message.additionalProperties;
+            console.info("isUser", isUser,  item.message);
             return (
-              <div className={ cn("mx-4", isUser ? "max-w-full": "max-w-[80%]") } key={index}>
+              <div
+                className={cn("mx-4", isUser ? "max-w-full" : "max-w-[80%]")}
+                key={index}
+              >
                 <AiMessageComponent message={item.message} />
               </div>
             );

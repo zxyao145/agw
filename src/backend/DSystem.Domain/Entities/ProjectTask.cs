@@ -23,11 +23,6 @@ public class ProjectTask : BaseEntity
     /// </summary>
     public string Input { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Serialized execution result (placeholder; can evolve to strong types later).
-    /// </summary>
-    public string? OutputJson { get; set; }
-
     public string? ErrorMessage { get; set; }
 
     public DateTime? StartedTime { get; set; }

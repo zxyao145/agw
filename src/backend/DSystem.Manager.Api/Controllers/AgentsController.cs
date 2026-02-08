@@ -108,7 +108,12 @@ public class AgentsController : ControllerBase
     [HttpPost("{id:guid}/execute")]
     public async Task<IActionResult> ExecuteAsync(Guid id, [FromBody] AgentExecuteRequest request, CancellationToken cancellationToken)
     {
-        var result = await _agentRuntimeService.ExecuteAsync(id, "", request.Input, cancellationToken);
+        var result = await _agentRuntimeService.ExecuteAsync(
+            id,
+            request.ThreadId ?? "",
+            request.Input,
+            cancellationToken,
+            request.ProjectId);
         if (result == null)
         {
             return NotFound();
@@ -125,7 +130,12 @@ public class AgentsController : ControllerBase
         Response.Headers["Cache-Control"] = "no-cache";
         Response.Headers["Connection"] = "keep-alive";
 
-        await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(id, request.ThreadId ?? "", request.Input, cancellationToken))
+        await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(
+            id,
+            request.ThreadId ?? "",
+            request.Input,
+            cancellationToken,
+            request.ProjectId))
         {
             var json = JsonUtil.Serialize(message);
             var data = Encoding.UTF8.GetBytes($"data: {json}\n\n");

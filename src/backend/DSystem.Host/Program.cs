@@ -8,6 +8,7 @@ using DSystem.Host;
 using DSystem.Infrastructure;
 using DSystem.Infrastructure.Data;
 using DSystem.Manager.Api.Controllers;
+using DSystem.SessionRecords.Application;
 using DSystem.SessionRecords.Domain;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
@@ -104,6 +105,7 @@ try
     builder.Services.AddScoped<AgentDomainService>();
     builder.Services.AddScoped<AgentRuntimeService>();
     builder.Services.AddScoped<A2AAgentService>();
+    builder.Services.AddScoped<SessionRecordApplication>();
     builder.Services.AddScoped<SessionRecordDomainService>();
 
     // External Agents

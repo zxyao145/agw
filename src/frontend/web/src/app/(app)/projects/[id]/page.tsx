@@ -34,12 +34,17 @@ import { CreateTaskDialog } from "./components/create-task-dialog";
 import { AgentflowDto, AgentDto } from "@/types/agentflow";
 
 type ProjectUpdateRequest = components["schemas"]["ProjectUpdateRequest"];
-type ProjectTaskCreateRequest =
-  components["schemas"]["ProjectTaskCreateRequest"];
 type ProjectTaskUpdateRequest =
   components["schemas"]["ProjectTaskUpdateRequest"];
 type ProjectTaskReorderRequest =
   components["schemas"]["ProjectTaskReorderRequest"];
+type CreateProjectTaskPayload = {
+  agentType: number;
+  agentflowId?: string | null;
+  agentId?: string | null;
+  description: string;
+  input: string;
+};
 
 type ProjectDto = {
   id: string;
@@ -62,7 +67,6 @@ type ProjectTaskDto = {
   status: number;
   description: string;
   input: string;
-  outputJson?: string | null;
   errorMessage?: string | null;
   createTime?: string | null;
   updateTime?: string | null;
@@ -227,11 +231,7 @@ export default function ProjectDetailsPage() {
   });
 
   const createTaskMutation = useMutation({
-    mutationFn: async (
-      body: ProjectTaskCreateRequest & {
-        agentId?: string;
-      }
-    ) => {
+    mutationFn: async (body: CreateProjectTaskPayload) => {
       return await apiPost("/api/projects/{projectId}/tasks", {
         params: { path: { projectId } },
         body,
@@ -510,7 +510,7 @@ export default function ProjectDetailsPage() {
                     ...baseBody,
                     agentType: 1,
                     agentId: targetId,
-                  } as ProjectTaskCreateRequest & { agentId: string });
+                  });
                   return;
                 }
 
@@ -518,7 +518,7 @@ export default function ProjectDetailsPage() {
                   ...baseBody,
                   agentType: 0,
                   agentflowId: targetId,
-                } as ProjectTaskCreateRequest);
+                });
               }}
               isCreating={createTaskMutation.isPending}
             />

@@ -8,9 +8,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Unicode;
 
 namespace DSystem.Host;
 
@@ -198,7 +195,12 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                         ProjectTaskAgentType.Agentflow when marked.AgentflowId.HasValue =>
                             await agentflowRuntime.ExecuteAsync(marked.AgentflowId.Value, marked.Input, stoppingToken),
                         ProjectTaskAgentType.Agent when marked.AgentId.HasValue =>
-                            await agentRuntime.ExecuteAsync(marked.AgentId.Value, "", marked.Input, stoppingToken),
+                            await agentRuntime.ExecuteAsync(
+                                marked.AgentId.Value,
+                                marked.Id.ToString("D"),
+                                marked.Input,
+                                stoppingToken,
+                                marked.ProjectId),
                         _ => null
                     };
                     stopwatch.Stop();
@@ -216,13 +218,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                         return;
                     }
 
-                    var options1 = new JsonSerializerOptions
-                    {
-                        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-                        WriteIndented = false
-                    };
-                    var json = JsonSerializer.Serialize(execution, options1);
-                    await taskService.MarkSucceededAsync(marked.Id, json, "scheduler");
+                    await taskService.MarkSucceededAsync(marked.Id, "scheduler");
 
                     _tasksExecutedCounter.Add(1,
                         new KeyValuePair<string, object?>("task.id", marked.Id),

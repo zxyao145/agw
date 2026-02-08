@@ -24,7 +24,7 @@ public record AiAgentResponse(Guid Id, string Name, string SystemPrompt, string 
         new(agent.Id, agent.Name, agent.SystemPrompt, agent.ProviderName, agent.ModelName, agent.Endpoint, agent.ApiKey);
 }
 
-public record AgentExecuteRequest(string Input, string? ThreadId = null);
+public record AgentExecuteRequest(string Input, string? ThreadId = null, Guid? ProjectId = null);
 
 public record ChatMessageResponse(string Role, string Content);
 

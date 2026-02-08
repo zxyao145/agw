@@ -22,7 +22,6 @@ public record ProjectTaskResponse(
     ProjectTaskStatus Status,
     string Description,
     string Input,
-    string? OutputJson,
     string? ErrorMessage,
     DateTime CreateTime,
     DateTime? UpdateTime,

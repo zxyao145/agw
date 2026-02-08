@@ -179,7 +179,7 @@ public class ProjectTaskDomainService
         return existing;
     }
 
-    public async Task<ProjectTask?> MarkSucceededAsync(Guid id, string outputJson, string user)
+    public async Task<ProjectTask?> MarkSucceededAsync(Guid id, string user)
     {
         var existing = await _taskRepository.GetByIdAsync(id);
         if (existing == null)
@@ -193,7 +193,6 @@ public class ProjectTaskDomainService
         }
 
         existing.Status = ProjectTaskStatus.Succeeded;
-        existing.OutputJson = outputJson;
         existing.ErrorMessage = null;
         existing.FinishedTime = DateTime.UtcNow;
         existing.UpdateBy = user;

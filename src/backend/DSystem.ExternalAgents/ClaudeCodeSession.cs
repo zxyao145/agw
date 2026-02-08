@@ -1,8 +1,7 @@
 using ClaudeCodeSdk.MAF;
-using DSystem.SessionRecords.Entities;
+using DSystem.SessionRecords.Application;
 using DSystem.Shared;
 using DSystem.Shared.Models;
-using DSystem.SessionRecords.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -40,8 +39,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
     private readonly ILogger _logger;
-    private readonly IAgentSessionRecordRepository _repository;
-    private readonly ISessionRecordsUnitOfWork _unitOfWork;
+    private readonly SessionRecordApplication _sessionRecordApplication;
 
     private const string ClaudeCodeAgentName = "ClaudeCode";
 
@@ -53,15 +51,13 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         AgentSession thread,
         ClaudeCodeSettingRequest configuration,
         ILogger logger,
-        IAgentSessionRecordRepository repository,
-        ISessionRecordsUnitOfWork unitOfWork)
+        SessionRecordApplication sessionRecordApplication)
     {
         Agent = agent ?? throw new ArgumentNullException(nameof(agent));
         Session = thread ?? throw new ArgumentNullException(nameof(thread));
         Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-        _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
+        _sessionRecordApplication = sessionRecordApplication ?? throw new ArgumentNullException(nameof(sessionRecordApplication));
     }
 
     /// <summary>
@@ -115,7 +111,14 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
             if (aiMessage != null) yield return aiMessage;
         }
 
-        await SaveThreadStateAsync(responseUpdates, input, cancellationToken);
+        await _sessionRecordApplication.SaveThreadStateAsync(
+            Configuration.SessionId,
+            Configuration.ProjectId,
+            Session.Serialize(),
+            responseUpdates,
+            input,
+            cancellationToken);
+        _logger.LogDebug("Saved thread state for session: {ThreadId}", Configuration.SessionId);
     }
 
     /// <summary>
@@ -183,142 +186,6 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         return aiContents;
     }
 
-    private async Task SaveThreadStateAsync(
-        IReadOnlyCollection<AgentResponseUpdate> updates,
-        string? input,
-        CancellationToken cancellationToken)
-    {
-        var serialized = Session.Serialize();
-        if (serialized.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return;
-
-        var records = await _repository.ListAsync(session =>
-            session.SessionId == Configuration.SessionId && session.ProjectId == Configuration.ProjectId);
-        var record = records.FirstOrDefault();
-
-        if (record == null)
-        {
-            record = new AgentSessionRecord
-            {
-                SessionId = Configuration.SessionId,
-                ProjectId = Configuration.ProjectId,
-                CreateTime = DateTime.UtcNow
-            };
-            await _repository.AddAsync(record);
-        }
-
-        if (string.IsNullOrWhiteSpace(record.Title))
-        {
-            var title = GenerateTitleFromInput(input);
-            if (!string.IsNullOrWhiteSpace(title))
-            {
-                record.Title = title;
-            }
-        }
-
-        var payload = DeserializePayload(record.Messages);
-        payload.Thread = serialized;
-        AppendUserInput(payload, input);
-        if (updates.Count > 0)
-        {
-            payload.Updates.AddRange(updates);
-        }
-
-        record.Messages = JsonSerializer.Serialize(payload);
-        record.UpdateTime = DateTime.UtcNow;
-
-        await _unitOfWork.SaveChangesAsync();
-
-        _logger.LogDebug("Saved thread state for session: {ThreadId}", Configuration.SessionId);
-    }
-
-    /// <summary>
-    /// TODO: use llm to summary the input
-    /// 
-    /// </summary>
-    /// <param name="input"></param>
-    /// <returns></returns>
-    private static string? GenerateTitleFromInput(string? input)
-    {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            return "";
-        }
-
-        var trimmed = input.Trim();
-
-        var firstLine = trimmed.Split('\n', '\r', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(firstLine)) return null;
-
-        const int maxLength = 20;
-        return firstLine.Length > maxLength ? $"{firstLine[..maxLength]}..." : firstLine;
-    }
-
-    private static SessionRecordPayload DeserializePayload(string messages)
-    {
-        if (string.IsNullOrWhiteSpace(messages))
-        {
-            return new SessionRecordPayload();
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(messages);
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                return new SessionRecordPayload { Thread = document.RootElement.Clone() };
-            }
-
-            if (!TryGetThreadState(document.RootElement, out var threadState))
-            {
-                return new SessionRecordPayload { Thread = document.RootElement.Clone() };
-            }
-
-            var payload = new SessionRecordPayload { Thread = threadState };
-            if (document.RootElement.TryGetProperty("Updates", out var updatesElement)
-                && updatesElement.ValueKind == JsonValueKind.Array)
-            {
-                payload.Updates = JsonSerializer.Deserialize<List<AgentResponseUpdate>>(updatesElement.GetRawText()) ?? [];
-            }
-
-            return payload;
-        }
-        catch (JsonException)
-        {
-            return new SessionRecordPayload();
-        }
-    }
-
-    private static bool TryGetThreadState(JsonElement root, out JsonElement threadState)
-    {
-        if (root.TryGetProperty("Thread", out threadState) || root.TryGetProperty("thread", out threadState))
-        {
-            threadState = threadState.Clone();
-            return threadState.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null;
-        }
-
-        threadState = default;
-        return false;
-    }
-
-    private sealed class SessionRecordPayload
-    {
-        public JsonElement Thread { get; set; }
-        public List<AgentResponseUpdate> Updates { get; set; } = [];
-    }
-
-    private static void AppendUserInput(SessionRecordPayload payload, string? input)
-    {
-        if (string.IsNullOrWhiteSpace(input)) return;
-
-        var trimmed = input.Trim();
-
-        payload.Updates.Add(new AgentResponseUpdate
-        {
-            Role = ChatRole.User,
-            AuthorName = "user",
-            Contents = [new TextContent(trimmed)]
-        });
-    }
 }
 
 

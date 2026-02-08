@@ -139,7 +139,6 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.AgentType).HasConversion<int>();
             entity.Property(e => e.Description).IsRequired().HasMaxLength(4000);
             entity.Property(e => e.Input).IsRequired().HasMaxLength(4000);
-            entity.Property(e => e.OutputJson).HasMaxLength(16000);
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
 
             entity.HasIndex(e => new { e.ProjectId, e.Status, e.UpdateTime });
