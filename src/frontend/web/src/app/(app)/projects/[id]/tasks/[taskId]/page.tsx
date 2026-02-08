@@ -4,8 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { Ulid } from "id128";
 
@@ -18,20 +16,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { ButtonGroup } from "@/components/ui/button-group";
 import type { AiMessage, ProcessedMessageItem } from "@/types/message";
 import { ChatSession } from "@/components/message/chat-session";
 import { ProjectTaskDto } from "./types";
-import { Conversation } from "./components/conversation";
 import { UserInput } from "@/components/message/user-input";
-
-function formatDate(value?: string | null): string {
-  if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString();
-}
+import { getSessionByThreadId } from "../../../../claude-code/lib/chat-history-service";
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -72,13 +62,13 @@ function statusClassName(status: number): string {
   }
 }
 
-type ChatMessage = {
-  AuthorName: string;
-  Role: string;
-  Content: string;
-};
-
-function StreamingChatSession({ messages }: { messages: AiMessage[] }) {
+function ChatMessageSession({
+  title,
+  messages,
+}: {
+  title: string;
+  messages: AiMessage[];
+}) {
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
 
   const processMessages = React.useCallback(
@@ -95,7 +85,7 @@ function StreamingChatSession({ messages }: { messages: AiMessage[] }) {
   return (
     <div className="border-t pt-4">
       <div className="text-sm font-medium text-muted-foreground mb-2">
-        Live Conversation
+        {title}
       </div>
       <ChatSession
         messages={messages}
@@ -106,63 +96,6 @@ function StreamingChatSession({ messages }: { messages: AiMessage[] }) {
   );
 }
 
-function OutputChatSession({ outputJson }: { outputJson: string }) {
-  const messagesEndRef = React.useRef<HTMLDivElement>(null!);
-
-  const messages = React.useMemo<AiMessage[]>(() => {
-    try {
-      const parsed = JSON.parse(outputJson);
-
-      if (parsed.Outputs && Array.isArray(parsed.Outputs)) {
-        return parsed.Outputs.filter(
-          (msg: ChatMessage) => msg.Role && msg.Content,
-        ).map((msg: ChatMessage, index: number) => ({
-          messageId: `msg-${index}`,
-          author: msg.AuthorName,
-          role: msg.Role,
-          contents: [
-            {
-              type: "TextContent",
-              content: msg.Content,
-            },
-          ],
-        }));
-      }
-
-      return [];
-    } catch {
-      return [];
-    }
-  }, [outputJson]);
-
-  const processMessages = React.useCallback(
-    (msgs: AiMessage[]): ProcessedMessageItem[] => {
-      return msgs.map((msg) => ({ type: "normal", message: msg }));
-    },
-    [],
-  );
-
-  // If no valid messages, show raw JSON
-  if (messages.length === 0) {
-    return (
-      <Textarea
-        value={outputJson}
-        readOnly
-        rows={12}
-        className="font-mono text-xs"
-      />
-    );
-  }
-
-  return (
-    <ChatSession
-      messages={messages}
-      messagesEndRef={messagesEndRef}
-      processMessages={processMessages}
-    />
-  );
-}
-
 export default function TaskDetailsPage() {
   const params = useParams<{ id: string; taskId: string }>();
   const projectId = params.id;
@@ -170,7 +103,7 @@ export default function TaskDetailsPage() {
 
   const [isExecuting, setIsExecuting] = React.useState<boolean>(false);
   const [streamingMessages, setStreamingMessages] = React.useState<AiMessage[]>([]);
-  const [threadId, setThreadId] = React.useState<string>(() => Ulid.generate().toCanonical());
+  const threadId = taskId;
 
   const taskQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", taskId],
@@ -182,6 +115,19 @@ export default function TaskDetailsPage() {
   });
 
   const task = taskQuery.data;
+  const sessionQuery = useQuery({
+    queryKey: ["projects", projectId, "tasks", taskId, "session-record"],
+    queryFn: async () => {
+      const sessionByProject = await getSessionByThreadId(taskId, projectId);
+      if (sessionByProject) {
+        return sessionByProject;
+      }
+      return await getSessionByThreadId(taskId);
+    },
+    enabled: Boolean(taskId),
+    refetchInterval: task?.status === 1 ? 2000 : false,
+  });
+  const sessionMessages = sessionQuery.data?.messages ?? [];
   const targetType = task?.agentType === 1 ? "agent" : "agentflow";
   const targetId =
     targetType === "agent" ? (task?.agentId ?? null) : (task?.agentflowId ?? null);
@@ -211,6 +157,7 @@ export default function TaskDetailsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           threadId,
+          projectId,
           input: value,
         }),
       });
@@ -287,11 +234,12 @@ export default function TaskDetailsPage() {
       );
     } finally {
       setIsExecuting(false);
+      await sessionQuery.refetch();
     }
-  }, [targetId, targetType, threadId]);
+  }, [targetId, targetType, threadId, sessionQuery]);
 
   return (
-    <div className="space-y-3 w-full flex flex-col">
+    <div className="space-y-3 w-full min-w-0 max-w-full overflow-x-hidden flex flex-col">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -355,15 +303,21 @@ export default function TaskDetailsPage() {
           Failed to load task: {getApiErrorMessage(taskQuery.error)}
         </div>
       ) : task ? (
-        <div className="space-y-6 flex-1 relative">
+        <div className="space-y-6 flex-1 min-w-0 relative">
           {/* <Conversation task={task} /> */}
 
-          {task.outputJson ? (
-            <OutputChatSession outputJson={task.outputJson} />
+          {sessionMessages.length > 0 ? (
+            <ChatMessageSession
+              title="Conversation"
+              messages={sessionMessages}
+            />
           ) : null}
 
           {streamingMessages.length > 0 ? (
-            <StreamingChatSession messages={streamingMessages} />
+            <ChatMessageSession
+              title="Live Conversation"
+              messages={streamingMessages}
+            />
           ) : null}
 
           {task.errorMessage ? (
