@@ -3,8 +3,12 @@ using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
 using DSystem.Manager.Api.Contracts;
 using DSystem.Shared;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.IO;
+using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
 
 namespace DSystem.Manager.Api.Controllers;
 
@@ -12,6 +16,8 @@ namespace DSystem.Manager.Api.Controllers;
 [Route("api/agents")]
 public class AgentsController : ControllerBase
 {
+    private const int BufferSize = 1024 * 4;
+    private const int MaxRequestBytes = 1024 * 64;
     private readonly AgentDomainService _agentService;
     private readonly AgentRuntimeService _agentRuntimeService;
     private readonly ModelProviderApiKeyDomainService _apiKeyService;
@@ -124,24 +130,97 @@ public class AgentsController : ControllerBase
 
 
     [HttpPost("{id:guid}/execute-sse")]
-    public async Task ExecuteSseAsync(Guid id, [FromBody] AgentExecuteRequest request, CancellationToken cancellationToken)
+    public async Task ExecuteSseAsync(Guid id, CancellationToken cancellationToken)
     {
-        Response.Headers["Content-Type"] = "text/event-stream";
-        Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Connection"] = "keep-alive";
-
-        await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(
-            id,
-            request.ThreadId ?? "",
-            request.Input,
-            cancellationToken,
-            request.ProjectId))
+        if (!HttpContext.WebSockets.IsWebSocketRequest)
         {
-            var json = JsonUtil.Serialize(message);
-            var data = Encoding.UTF8.GetBytes($"data: {json}\n\n");
-            await Response.Body.WriteAsync(data, cancellationToken);
-            await Response.Body.FlushAsync(cancellationToken);
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+        try
+        {
+            var request = await ReceiveRequestAsync<AgentExecuteRequest>(webSocket, cancellationToken);
+            if (request == null)
+            {
+                await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Invalid request payload");
+                return;
+            }
+
+            await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(
+                id,
+                request.ThreadId ?? "",
+                request.Input,
+                cancellationToken,
+                request.ProjectId))
+            {
+                var json = JsonUtil.Serialize(message);
+                await SendJsonAsync(webSocket, json, cancellationToken);
+            }
+
+            await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Completed");
+        }
+        catch (OperationCanceledException)
+        {
+            await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Request cancelled");
+        }
+        catch (WebSocketException)
+        {
+            // Connection closed by client.
         }
     }
-}
 
+    private async Task<T?> ReceiveRequestAsync<T>(WebSocket webSocket, CancellationToken cancellationToken)
+    {
+        var buffer = new byte[BufferSize];
+        using var stream = new MemoryStream();
+        WebSocketReceiveResult? result;
+
+        do
+        {
+            result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Connection closed by client");
+                return default;
+            }
+
+            if (result.MessageType != WebSocketMessageType.Text)
+            {
+                await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidMessageType, "Invalid request payload");
+                return default;
+            }
+
+            if (stream.Length + result.Count > MaxRequestBytes)
+            {
+                await TryCloseAsync(webSocket, WebSocketCloseStatus.MessageTooBig, "Request payload too large");
+                return default;
+            }
+
+            stream.Write(buffer, 0, result.Count);
+        } while (!result.EndOfMessage);
+
+        var json = Encoding.UTF8.GetString(stream.ToArray());
+        try { return JsonUtil.Deserialize<T>(json); }
+        catch (JsonException) { return default; }
+    }
+
+    private static Task SendJsonAsync(WebSocket webSocket, string json, CancellationToken cancellationToken)
+    {
+        if (webSocket.State != WebSocketState.Open) return Task.CompletedTask;
+        var data = Encoding.UTF8.GetBytes(json);
+        return webSocket.SendAsync(
+            new ArraySegment<byte>(data),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            cancellationToken);
+    }
+
+    private static Task TryCloseAsync(WebSocket webSocket, WebSocketCloseStatus status, string reason)
+    {
+        if (webSocket.State != WebSocketState.Open) return Task.CompletedTask;
+        return webSocket.CloseAsync(status, reason, CancellationToken.None);
+    }
+}
