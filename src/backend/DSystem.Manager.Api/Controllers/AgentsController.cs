@@ -5,6 +5,7 @@ using DSystem.Manager.Api.Contracts;
 using DSystem.Shared;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.IO;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -16,6 +17,7 @@ namespace DSystem.Manager.Api.Controllers;
 public class AgentsController : ControllerBase
 {
     private const int BufferSize = 1024 * 4;
+    private const int MaxRequestBytes = 1024 * 64;
     private readonly AgentDomainService _agentService;
     private readonly AgentRuntimeService _agentRuntimeService;
     private readonly ModelProviderApiKeyDomainService _apiKeyService;
@@ -172,15 +174,35 @@ public class AgentsController : ControllerBase
     private async Task<T?> ReceiveRequestAsync<T>(WebSocket webSocket, CancellationToken cancellationToken)
     {
         var buffer = new byte[BufferSize];
-        var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+        using var stream = new MemoryStream();
+        WebSocketReceiveResult? result;
 
-        if (result.MessageType == WebSocketMessageType.Close)
+        do
         {
-            await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Connection closed by client");
-            return default;
-        }
+            result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
 
-        var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Connection closed by client");
+                return default;
+            }
+
+            if (result.MessageType != WebSocketMessageType.Text)
+            {
+                await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidMessageType, "Invalid request payload");
+                return default;
+            }
+
+            if (stream.Length + result.Count > MaxRequestBytes)
+            {
+                await TryCloseAsync(webSocket, WebSocketCloseStatus.MessageTooBig, "Request payload too large");
+                return default;
+            }
+
+            stream.Write(buffer, 0, result.Count);
+        } while (!result.EndOfMessage);
+
+        var json = Encoding.UTF8.GetString(stream.ToArray());
         try { return JsonUtil.Deserialize<T>(json); }
         catch (JsonException) { return default; }
     }
