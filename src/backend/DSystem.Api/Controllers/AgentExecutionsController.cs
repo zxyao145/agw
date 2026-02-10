@@ -117,15 +117,27 @@ public class AgentExecutionsController : ControllerBase
         switch (request.AgentType)
         {
             case ProjectTaskAgentType.Agent:
-                await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(
-                                   id,
-                                   request.ThreadId ?? string.Empty,
-                                   request.Input,
-                                   cancellationToken,
-                                   request.ProjectId))
+                var session = await _agentRuntimeService.CreateSessionAsync(
+                    id,
+                    request.ThreadId ?? string.Empty,
+                    request.ProjectId,
+                    cancellationToken);
+                if (session == null)
                 {
-                    var json = JsonUtil.Serialize(message);
-                    await SendJsonAsync(webSocket, json, cancellationToken);
+                    await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Agent not found.");
+                    break;
+                }
+
+                await using (session)
+                {
+                    await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(
+                                       session,
+                                       request.Input,
+                                       cancellationToken))
+                    {
+                        var json = JsonUtil.Serialize(message);
+                        await SendJsonAsync(webSocket, json, cancellationToken);
+                    }
                 }
 
                 break;
