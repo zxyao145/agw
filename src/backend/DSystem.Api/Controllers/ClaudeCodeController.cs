@@ -1,3 +1,4 @@
+using DSystem.Appliaction;
 using DSystem.Appliaction.ExternalAgents;
 using DSystem.Shared;
 using Microsoft.Agents.AI;
@@ -33,7 +34,7 @@ public class ClaudeCodeController(
         }
 
         using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
-        ClaudeCodeSession? session = null;
+        AiAgentSession? session = null;
         Task? activeInputTask = null;
 
         try
@@ -96,9 +97,9 @@ public class ClaudeCodeController(
         catch (JsonException) { return null; }
     }
 
-    private async Task<(ClaudeCodeSession? session, Task? activeInputTask)> ProcessRequestAsync(
+    private async Task<(AiAgentSession? session, Task? activeInputTask)> ProcessRequestAsync(
         WebSocket webSocket,
-        ClaudeCodeSession? currentSession,
+        AiAgentSession? currentSession,
         ClaudeCodeWsRequest request,
         Task? activeInputTask)
     {
@@ -139,10 +140,10 @@ public class ClaudeCodeController(
         return (currentSession, activeInputTask);
     }
 
-    private async Task<ClaudeCodeSession> HandleSettingRequestAsync(
+    private async Task<AiAgentSession> HandleSettingRequestAsync(
         WebSocket webSocket,
         ClaudeCodeSettingRequest? setting,
-        ClaudeCodeSession? currentSession)
+        AiAgentSession? currentSession)
     {
         if (setting == null)
         {
@@ -168,7 +169,7 @@ public class ClaudeCodeController(
 
     private async Task HandleInputRequestAsync(
         WebSocket webSocket,
-        ClaudeCodeSession? session,
+        AiAgentSession? session,
         ClaudeCodeInputRequest? input)
     {
         if (session == null)
@@ -188,7 +189,7 @@ public class ClaudeCodeController(
 
     private async Task<Task?> HandleInterruptRequestAsync(
         WebSocket webSocket,
-        ClaudeCodeSession? session,
+        AiAgentSession? session,
         ClaudeCodeInterruptRequest? interrupt,
         Task? activeInputTask)
     {
@@ -213,7 +214,7 @@ public class ClaudeCodeController(
         return activeInputTask;
     }
 
-    private async Task ProcessInputAsync(WebSocket webSocket, ClaudeCodeSession session, string input)
+    private async Task ProcessInputAsync(WebSocket webSocket, AiAgentSession session, string input)
     {
         try
         {

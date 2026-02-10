@@ -45,7 +45,7 @@ public class ClaudeCodeService
     /// <summary>
     /// Initialize a new ClaudeCode session with the specified configuration.
     /// </summary>
-    public async Task<ClaudeCodeSession> InitializeSessionAsync(
+    public async Task<AiAgentSession> InitializeSessionAsync(
         ClaudeCodeSettingRequest initRequest,
         CancellationToken cancellationToken = default)
     {
@@ -61,7 +61,14 @@ public class ClaudeCodeService
             initRequest.ProjectId,
             cancellationToken);
 
-        return new ClaudeCodeSession(agent, thread, initRequest, _logger, _sessionRecordApplication);
+        return new AiAgentSession(
+            agent,
+            thread,
+            initRequest.ProjectId,
+            initRequest.SessionId,
+            _logger,
+            _sessionRecordApplication
+            );
     }
 
     private async Task<AgentSession> GetOrLoadThreadAsync(

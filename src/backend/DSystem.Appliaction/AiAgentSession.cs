@@ -7,12 +7,12 @@ using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
-namespace DSystem.Appliaction.ExternalAgents;
+namespace DSystem.Appliaction;
 
 /// <summary>
 /// Wraps an AI agent to execute WebSocket inputs and build streaming outputs.
 /// </summary>
-public sealed class ClaudeCodeSession : IAsyncDisposable
+public sealed class AiAgentSession : IAsyncDisposable
 {
     private bool _disposed;
     private CancellationTokenSource _cancellationTokenSource = new();
@@ -28,33 +28,31 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     public AgentSession Session { get; private set; } 
 
     /// <summary>
-    /// Gets the session configuration.
-    /// </summary>
-    public ClaudeCodeSettingRequest Configuration { get; }
-
-    /// <summary>
     /// Gets the cancellation token for in-flight requests.
     /// </summary>
     public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
     private readonly ILogger _logger;
+    public readonly string _sessionId;
+    public readonly Guid _projectId;
+
     private readonly SessionRecordApplication _sessionRecordApplication;
 
-    private const string ClaudeCodeAgentName = "ClaudeCode";
-
     /// <summary>
-    /// Initializes a new instance of the ClaudeCodeSession class.
+    /// Initializes a new instance of the AiAgentSession class.
     /// </summary>
-    public ClaudeCodeSession(
+    public AiAgentSession(
         AIAgent agent,
         AgentSession thread,
-        ClaudeCodeSettingRequest configuration,
+        Guid projectId,
+        string? sessionId,
         ILogger logger,
         SessionRecordApplication sessionRecordApplication)
     {
         Agent = agent ?? throw new ArgumentNullException(nameof(agent));
         Session = thread ?? throw new ArgumentNullException(nameof(thread));
-        Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _projectId = projectId;
+        _sessionId = sessionId ?? Guid.NewGuid().ToString();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _sessionRecordApplication = sessionRecordApplication ?? throw new ArgumentNullException(nameof(sessionRecordApplication));
     }
@@ -111,13 +109,13 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
         }
 
         await _sessionRecordApplication.SaveThreadStateAsync(
-            Configuration.SessionId,
-            Configuration.ProjectId,
+            _sessionId,
+            _projectId,
             Session.Serialize(),
             responseUpdates,
             input,
             cancellationToken);
-        _logger.LogDebug("Saved thread state for session: {ThreadId}", Configuration.SessionId);
+        _logger.LogDebug("Saved thread state for session: {ThreadId}", _sessionId);
     }
 
     /// <summary>
@@ -149,13 +147,20 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
 
         try
         {
-            await Agent.DisposeAsync();
+            if (Agent is IAsyncDisposable asyncDisposable)
+            {
+                await asyncDisposable.DisposeAsync();
+            }
+            else if (Agent is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
             _cancellationTokenSource.Dispose();
-            _logger.LogDebug("ClaudeCodeSession disposed");
+            _logger.LogDebug("AiAgentSession disposed");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error disposing ClaudeCodeSession");
+            _logger.LogError(ex, "Error disposing AiAgentSession");
         }
         finally
         {

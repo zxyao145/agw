@@ -1,3 +1,4 @@
+using DSystem.Appliaction;
 using DSystem.Appliaction.ExternalAgents;
 using DSystem.Infrastructure.Data;
 using DSystem.Infrastructure.Repositories;
@@ -87,7 +88,7 @@ public class ClaudeCodeSessionTests
         var logger = NullLogger.Instance;
         var deps = CreateDependencies();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(null!, thread, configuration, logger, deps.SessionRecordApplication));
+        Assert.Throws<ArgumentNullException>(() => new AiAgentSession(null!, thread, configuration.ProjectId, configuration.SessionId, logger, deps.SessionRecordApplication));
     }
 
     [Fact]
@@ -98,18 +99,7 @@ public class ClaudeCodeSessionTests
         var logger = NullLogger.Instance;
         var deps = CreateDependencies();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, null!, configuration, logger, deps.SessionRecordApplication));
-    }
-
-    [Fact]
-    public void Constructor_NullConfiguration_ThrowsArgumentNullException()
-    {
-        var agent = new TestClaudeCodeAIAgent();
-        var thread = new TestAgentThread();
-        var logger = NullLogger.Instance;
-        var deps = CreateDependencies();
-
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, null!, logger, deps.SessionRecordApplication));
+        Assert.Throws<ArgumentNullException>(() => new AiAgentSession(agent, null!, configuration.ProjectId, configuration.SessionId, logger, deps.SessionRecordApplication));
     }
 
     [Fact]
@@ -120,7 +110,7 @@ public class ClaudeCodeSessionTests
         var configuration = new ClaudeCodeSettingRequest { SessionId = "session" };
         var deps = CreateDependencies();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, configuration, null!, deps.SessionRecordApplication));
+        Assert.Throws<ArgumentNullException>(() => new AiAgentSession(agent, thread, configuration.ProjectId, configuration.SessionId, null!, deps.SessionRecordApplication));
     }
 
     [Fact]
@@ -132,10 +122,10 @@ public class ClaudeCodeSessionTests
         var logger = NullLogger.Instance;
         var deps = CreateDependencies();
 
-        Assert.Throws<ArgumentNullException>(() => new ClaudeCodeSession(agent, thread, configuration, logger, null!));
+        Assert.Throws<ArgumentNullException>(() => new AiAgentSession(agent, thread, configuration.ProjectId, configuration.SessionId, logger, null!));
     }
 
-    private static ClaudeCodeSession CreateSession()
+    private static AiAgentSession CreateSession()
     {
         var agent = new TestClaudeCodeAIAgent();
         var thread = new TestAgentThread();
@@ -143,7 +133,7 @@ public class ClaudeCodeSessionTests
         var logger = NullLogger.Instance;
         var deps = CreateDependencies();
 
-        return new ClaudeCodeSession(agent, thread, configuration, logger, deps.SessionRecordApplication);
+        return new AiAgentSession(agent, thread, configuration.ProjectId, configuration.SessionId, logger, deps.SessionRecordApplication);
     }
 
     private static (IAgentSessionRecordRepository Repository, ISessionRecordsUnitOfWork UnitOfWork, SessionRecordApplication SessionRecordApplication) CreateDependencies()
