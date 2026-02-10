@@ -1,4 +1,3 @@
-using ClaudeCodeSdk.MAF;
 using DSystem.SessionRecords.Application;
 using DSystem.Shared;
 using DSystem.Shared.Models;
@@ -11,7 +10,7 @@ using System.Text.Json;
 namespace DSystem.Appliaction.ExternalAgents;
 
 /// <summary>
-/// Wraps a ClaudeCode agent to execute WebSocket inputs and build streaming outputs.
+/// Wraps an AI agent to execute WebSocket inputs and build streaming outputs.
 /// </summary>
 public sealed class ClaudeCodeSession : IAsyncDisposable
 {
@@ -19,9 +18,9 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     private CancellationTokenSource _cancellationTokenSource = new();
 
     /// <summary>
-    /// Gets the ClaudeCode AI Agent.
+    /// Gets the AI agent.
     /// </summary>
-    public ClaudeCodeAIAgent Agent { get; }
+    public AIAgent Agent { get; }
 
     /// <summary>
     /// Gets the agent thread for conversation context.
@@ -47,7 +46,7 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     /// Initializes a new instance of the ClaudeCodeSession class.
     /// </summary>
     public ClaudeCodeSession(
-        ClaudeCodeAIAgent agent,
+        AIAgent agent,
         AgentSession thread,
         ClaudeCodeSettingRequest configuration,
         ILogger logger,
@@ -187,4 +186,3 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     }
 
 }
-
