@@ -1,6 +1,6 @@
 using ClaudeCodeSdk.Types;
 
-namespace DSystem.ExternalAgents;
+namespace DSystem.Appliaction.ExternalAgents;
 
 /// <summary>
 /// Message type for WebSocket communication.

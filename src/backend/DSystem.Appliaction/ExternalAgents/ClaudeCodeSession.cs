@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
-namespace DSystem.ExternalAgents;
+namespace DSystem.Appliaction.ExternalAgents;
 
 /// <summary>
 /// Wraps a ClaudeCode agent to execute WebSocket inputs and build streaming outputs.
@@ -187,5 +187,4 @@ public sealed class ClaudeCodeSession : IAsyncDisposable
     }
 
 }
-
 
