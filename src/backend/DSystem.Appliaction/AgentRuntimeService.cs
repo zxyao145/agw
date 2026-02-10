@@ -5,6 +5,7 @@ using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using DSystem.Domain.Repositories;
 using DSystem.SessionRecords.Application;
+using DSystem.Appliaction;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -169,6 +170,67 @@ public class AgentRuntimeService
     }
 
     /// <summary>
+    /// Creates an AI agent session for the provided thread.
+    /// </summary>
+    public async Task<AiAgentSession?> CreateSessionAsync(
+        Guid agentId,
+        string threadId,
+        Guid? projectId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = await _agentRepository.GetByIdAsync(agentId);
+        if (agent == null)
+        {
+            return null;
+        }
+
+        var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
+        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
+        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);
+        if (aiAgent == null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(threadId))
+        {
+            threadId = Guid.NewGuid().ToString();
+        }
+
+        var agentSession = await GetOrCreateThreadAsync(aiAgent, threadId, cancellationToken);
+        return new AiAgentSession(
+            aiAgent,
+            agentSession,
+            projectId ?? Guid.Empty,
+            threadId,
+            _logger,
+            _sessionRecordApplication);
+    }
+
+    /// <summary>
+    /// Executes an existing AI agent session with streaming response.
+    /// </summary>
+    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+        AiAgentSession session,
+        string input,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        try
+        {
+            await foreach (var message in session.ExecuteStreamingAsync(input, cancellationToken).ConfigureAwait(false))
+            {
+                yield return message;
+            }
+        }
+        finally
+        {
+            await SaveSessionThreadStateAsync(session._sessionId, session.Session, cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// Executes an agent with streaming response.
     /// </summary>
     public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
@@ -178,72 +240,48 @@ public class AgentRuntimeService
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
         Guid? projectId = null)
     {
-        var agent = await _agentRepository.GetByIdAsync(agentId);
-        if (agent == null)
+        var session = await CreateSessionAsync(agentId, threadId, projectId, cancellationToken);
+        if (session == null)
         {
             yield break;
         }
 
-        var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
-        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
-        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);
-        if (aiAgent == null)
+        await using (session)
         {
-            yield break;
-        }
-
-        AgentSession agentSession;
-        if (string.IsNullOrWhiteSpace(threadId))
-        {
-            threadId = Guid.NewGuid().ToString();
-            agentSession = await aiAgent.GetNewSessionAsync();
-        }
-        else
-        {
-            var value = await _cache.GetOrCreateAsync<string>(threadId, (c) =>
+            await foreach (var message in ExecuteStreamingAsync(session, input, cancellationToken).ConfigureAwait(false))
             {
-                return ValueTask.FromResult("");
-            });
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                agentSession = await aiAgent.GetNewSessionAsync();
-            }
-            else
-            {
-                var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
-                agentSession = await aiAgent.DeserializeSessionAsync(serializedThread);
+                yield return message;
             }
         }
+    }
 
-        ChatMessage? system = null;
-        var chatMsg = new ChatMessage(ChatRole.User, input);
-        IEnumerable<ChatMessage> msgs = system == null
-            ? [chatMsg]
-            : [system, chatMsg];
-
-        var stream = aiAgent.RunStreamingAsync(msgs, agentSession);
-        var responseUpdates = new List<AgentResponseUpdate>();
-
-        await foreach (var update in stream.ConfigureAwait(false))
+    private async Task<AgentSession> GetOrCreateThreadAsync(
+        AIAgent aiAgent,
+        string threadId,
+        CancellationToken cancellationToken)
+    {
+        var value = await _cache.GetOrCreateAsync<string>(threadId, _ => ValueTask.FromResult(""), cancellationToken: cancellationToken);
+        if (string.IsNullOrWhiteSpace(value))
         {
-            responseUpdates.Add(update);
-            var msg = update.ToAiMessage();
-            if (msg != null)
-            {
-                    yield return msg;
-            }
+            return await aiAgent.GetNewSessionAsync();
         }
 
-        // Save thread state to cache after execution
-        var serialized = JsonSerializer.Serialize(agentSession.Serialize());
-        await _cache.SetAsync(threadId, serialized, cancellationToken: cancellationToken);
-        await _sessionRecordApplication.SaveThreadStateAsync(
-            threadId,
-            projectId ?? Guid.Empty,
-            agentSession.Serialize(),
-            responseUpdates,
-            input,
-            cancellationToken);
+        try
+        {
+            var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
+            return await aiAgent.DeserializeSessionAsync(serializedThread);
+        }
+        catch (JsonException)
+        {
+            _logger.LogWarning("Thread cache deserialization failed for threadId: {ThreadId}. A new thread will be created.", threadId);
+            return await aiAgent.GetNewSessionAsync();
+        }
+    }
+
+    private Task SaveSessionThreadStateAsync(string threadId, AgentSession session, CancellationToken cancellationToken)
+    {
+        var serialized = JsonSerializer.Serialize(session.Serialize());
+        return _cache.SetAsync(threadId, serialized, cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -398,4 +436,3 @@ public class AgentRuntimeService
         }
     }
 }
-
