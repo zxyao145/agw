@@ -11,7 +11,6 @@
   <Folder Name="/External/">
     <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk.MAF/ClaudeCodeSdk.MAF.csproj" />
     <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk/ClaudeCodeSdk.csproj" />
-    <Project Path="src/backend/DSystem.ExternalAgents/DSystem.ExternalAgents.csproj" />
     <Project Path="tests/DSystem.ExternalAgents.Tests/DSystem.ExternalAgents.Tests.csproj" />
   </Folder>
   <Folder Name="/Host/">

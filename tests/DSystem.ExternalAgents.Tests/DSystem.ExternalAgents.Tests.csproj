@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/backend/DSystem.ExternalAgents/DSystem.ExternalAgents.csproj" />
+    <ProjectReference Include="../../src/backend/DSystem.Appliaction/DSystem.Appliaction.csproj" />
     <ProjectReference Include="../../src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
     <ProjectReference Include="../../src/backend/DSystem.Domain/DSystem.Domain.csproj" />
   </ItemGroup>

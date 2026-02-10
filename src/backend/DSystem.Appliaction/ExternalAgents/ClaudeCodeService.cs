@@ -9,7 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
-namespace DSystem.ExternalAgents;
+namespace DSystem.Appliaction.ExternalAgents;
 
 /// <summary>
 /// Factory for creating ClaudeCode sessions.
@@ -209,5 +209,4 @@ public class ClaudeCodeService
             resolvedWorkingDirectory);
     }
 }
-
 
