@@ -1,4 +1,3 @@
-using DSystem.Appliaction.Services;
 using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
 using DSystem.Manager.Api.Contracts;
@@ -116,7 +115,7 @@ public class AgentsController : ControllerBase
     {
         var result = await _agentRuntimeService.ExecuteAsync(
             id,
-            request.ThreadId ?? "",
+            request.ThreadId ?? string.Empty,
             request.Input,
             cancellationToken,
             request.ProjectId);
@@ -127,7 +126,6 @@ public class AgentsController : ControllerBase
 
         return Ok(AgentExecuteResponse.FromDomain(result));
     }
-
 
     [HttpPost("{id:guid}/execute-sse")]
     public async Task ExecuteSseAsync(Guid id, CancellationToken cancellationToken)
@@ -150,7 +148,7 @@ public class AgentsController : ControllerBase
 
             await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(
                 id,
-                request.ThreadId ?? "",
+                request.ThreadId ?? string.Empty,
                 request.Input,
                 cancellationToken,
                 request.ProjectId))
