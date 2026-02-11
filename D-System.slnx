@@ -9,6 +9,7 @@
     <Project Path="src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/External/">
+    <Project Path="src/CodexSdk/CodexSdk.csproj" />
     <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk.MAF/ClaudeCodeSdk.MAF.csproj" />
     <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk/ClaudeCodeSdk.csproj" />
     <Project Path="tests/DSystem.ExternalAgents.Tests/DSystem.ExternalAgents.Tests.csproj" />
