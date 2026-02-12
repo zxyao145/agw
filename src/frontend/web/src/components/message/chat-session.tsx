@@ -87,7 +87,7 @@ export function ChatSession({
               item.message.role === "user" &&
               item.message.author === "user" &&
               !item.message.additionalProperties;
-            console.info("isUser", isUser,  item.message);
+            console.debug("isUser", isUser,  item.message);
             return (
               <div
                 className={cn("mx-4", isUser ? "max-w-full" : "max-w-[80%]")}

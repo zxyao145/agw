@@ -139,13 +139,13 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
     // return <div className="flex justify-center">{contentNodes.map((n, i) => <React.Fragment key={i}>{renderNode(n, message)}</React.Fragment>)}</div>;
   }
 
-  console.log("AiMessageComponent isUser", isUser, message)
+  console.debug("AiMessageComponent isUser", isUser, message)
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className={`min-w-0 max-w-full rounded-lg px-4 py-3 ${isUser ? "bg-primary text-primary-foreground ml-12" : "bg-secondary mr-12"}`}>
         <div className={`flex items-center gap-2 mb-1 ${isUser ? "justify-end" : ""}`}>
           <span className="text-xs font-semibold opacity-70">
-            {isUser ? "You" : `${message.author} (${message.role})`}
+            {isUser ? "You" : `${message.author ?? "-"} (${message.role})`}
           </span>
         </div>
         <div className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">

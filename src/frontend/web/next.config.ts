@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+const { codeInspectorPlugin } = require('code-inspector-plugin');
 
 const backendBaseUrl =
   process.env.BACKEND_API_BASE_URL ??
@@ -6,6 +7,11 @@ const backendBaseUrl =
   "http://localhost:5015";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    rules: codeInspectorPlugin({
+      bundler: 'turbopack',
+    }),
+  },
   async rewrites() {
     return [
       // Proxy backend APIs to avoid CORS in local dev.

@@ -42,7 +42,7 @@ public class AgentExecutionsController : ControllerBase
         };
     }
 
-    [HttpPost("{id:guid}/execute-sse")]
+    [HttpGet("{id:guid}/execute-sse")]
     public async Task ExecuteSseAsync(Guid id, CancellationToken cancellationToken)
     {
         if (!HttpContext.WebSockets.IsWebSocketRequest)
@@ -99,7 +99,12 @@ public class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await _agentflowRuntimeService.ExecuteAsync(id, request.Input, cancellationToken);
+        var result = await _agentflowRuntimeService.ExecuteAsync(
+            id,
+            request.ThreadId ?? string.Empty,
+            request.Input,
+            cancellationToken,
+            request.ProjectId);
         if (result == null)
         {
             return NotFound();
@@ -144,8 +149,10 @@ public class AgentExecutionsController : ControllerBase
             case ProjectTaskAgentType.Agentflow:
                 await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
                                    id,
+                                   request.ThreadId ?? string.Empty,
                                    request.Input,
-                                   cancellationToken))
+                                   cancellationToken,
+                                   request.ProjectId))
                 {
                     var json = JsonUtil.Serialize(message);
                     await SendJsonAsync(webSocket, json, cancellationToken);

@@ -16,12 +16,19 @@ export interface ChatSessionRecordDetails extends ChatSessionRecordSummary {
   messages: AiMessage[];
 }
 
-const DEFAULT_PROJECT_ID = "00000000-0000-0000-0000-000000000000";
 const LIST_ENDPOINT = "/api/session-records";
 
 function buildProjectQuery(projectId?: string) {
-  const value = projectId?.trim() || DEFAULT_PROJECT_ID;
+  const value = projectId?.trim();
+  if (!value) {
+    return "";
+  }
   return `projectId=${encodeURIComponent(value)}`;
+}
+
+function appendProjectQuery(url: string, projectId?: string): string {
+  const query = buildProjectQuery(projectId);
+  return query ? `${url}?${query}` : url;
 }
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -36,7 +43,7 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
 export async function getAllSessions(
   projectId?: string,
 ): Promise<ChatSessionRecordSummary[]> {
-  const url = `${LIST_ENDPOINT}?${buildProjectQuery(projectId)}`;
+  const url = appendProjectQuery(LIST_ENDPOINT, projectId);
   return await fetchJson<ChatSessionRecordSummary[]>(url);
 }
 
@@ -48,7 +55,10 @@ export async function getSessionByThreadId(
     return null;
   }
 
-  const url = `${LIST_ENDPOINT}/${encodeURIComponent(sessionId)}?${buildProjectQuery(projectId)}`;
+  const url = appendProjectQuery(
+    `${LIST_ENDPOINT}/${encodeURIComponent(sessionId)}`,
+    projectId,
+  );
   const response = await fetch(url);
   if (response.status === 404) {
     return null;
@@ -67,7 +77,10 @@ export async function deleteSessionByThreadId(
   if (!sessionId) {
     return false;
   }
-  const url = `${LIST_ENDPOINT}/${encodeURIComponent(sessionId)}?${buildProjectQuery(projectId)}`;
+  const url = appendProjectQuery(
+    `${LIST_ENDPOINT}/${encodeURIComponent(sessionId)}`,
+    projectId,
+  );
   const response = await fetch(url, { method: "DELETE" });
   if (response.status === 404) {
     return false;
@@ -87,7 +100,10 @@ export async function updateSessionTitle(
   if (!sessionId || !newTitle.trim()) {
     return false;
   }
-  const url = `${LIST_ENDPOINT}/${encodeURIComponent(sessionId)}/title?${buildProjectQuery(projectId)}`;
+  const url = appendProjectQuery(
+    `${LIST_ENDPOINT}/${encodeURIComponent(sessionId)}/title`,
+    projectId,
+  );
   const response = await fetch(url, {
     method: "PUT",
     headers: { "content-type": "application/json" },

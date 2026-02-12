@@ -193,7 +193,12 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                     object? execution = marked.AgentType switch
                     {
                         ProjectTaskAgentType.Agentflow when marked.AgentflowId.HasValue =>
-                            await agentflowRuntime.ExecuteAsync(marked.AgentflowId.Value, marked.Input, stoppingToken),
+                            await agentflowRuntime.ExecuteAsync(
+                                marked.AgentflowId.Value,
+                                marked.Id.ToString("D"),
+                                marked.Input,
+                                stoppingToken,
+                                marked.ProjectId),
                         ProjectTaskAgentType.Agent when marked.AgentId.HasValue =>
                             await agentRuntime.ExecuteAsync(
                                 marked.AgentId.Value,

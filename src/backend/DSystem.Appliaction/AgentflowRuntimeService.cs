@@ -3,6 +3,7 @@ using DSystem.Domain.Services;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using DSystem.Domain.Repositories;
+using DSystem.SessionRecords.Application;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -40,30 +41,39 @@ public class AgentflowRuntimeService
     private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
     private readonly AgentRuntimeService _agentRuntimeService;
     private readonly IAgentflowAgentExecutor _executor;
+    private readonly SessionRecordApplication _sessionRecordApplication;
 
     public AgentflowRuntimeService(
         IRepository<Agentflow> agentflowRepository,
         IRepository<AgentflowNode> agentflowAgentRepository,
         IRepository<AgentflowEdge> agentflowEdgeRepository,
         AgentRuntimeService agentRuntimeService,
-        IAgentflowAgentExecutor executor)
+        IAgentflowAgentExecutor executor,
+        SessionRecordApplication sessionRecordApplication)
     {
         _agentflowRepository = agentflowRepository;
         _agentflowNodeRepository = agentflowAgentRepository;
         _agentRuntimeService = agentRuntimeService;
         _executor = executor;
         _agentflowEdgeRepository = agentflowEdgeRepository;
+        _sessionRecordApplication = sessionRecordApplication;
     }
 
     public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
         Guid agentflowId,
+        string threadId,
         string input,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default,
+        Guid? projectId = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
         {
             yield break;
+        }
+        if (string.IsNullOrWhiteSpace(threadId))
+        {
+            threadId = Guid.NewGuid().ToString("D");
         }
 
         var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
@@ -79,6 +89,7 @@ public class AgentflowRuntimeService
 
         StreamingRun run = await InProcessExecution.StreamAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        var responseUpdates = new List<AgentResponseUpdate>();
 
         await foreach (WorkflowEvent evt in run.WatchStreamAsync().ConfigureAwait(false))
         {
@@ -100,6 +111,7 @@ public class AgentflowRuntimeService
                 var result = (List<ChatMessage>)outputEvt.Data!;
                 foreach (var msg in result)
                 {
+                    responseUpdates.Add(ToResponseUpdate(msg));
                     var contentObj = new AiMessageContent("text", msg.Text);
                     var chatMsg = new AiMessage(
                         msg.MessageId ?? "",
@@ -109,20 +121,34 @@ public class AgentflowRuntimeService
                     );
                     yield return chatMsg;
                 }
-                yield break;
+                break;
             }
         }
+
+        await _sessionRecordApplication.SaveThreadStateAsync(
+            threadId,
+            projectId ?? Guid.Empty,
+            JsonSerializer.SerializeToElement(new { agentflowId }),
+            responseUpdates,
+            input,
+            CancellationToken.None);
     }
 
     public async Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
+        string threadId,
         string input,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? projectId = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
         {
             return null;
+        }
+        if (string.IsNullOrWhiteSpace(threadId))
+        {
+            threadId = Guid.NewGuid().ToString("D");
         }
 
         var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
@@ -155,19 +181,28 @@ public class AgentflowRuntimeService
         }
 
         var outputs = new List<AiMessage>();
+        var responseUpdates = new List<AgentResponseUpdate>();
 
         // Display aggregated results from all agents
         Console.WriteLine("===== Final Aggregated Results =====");
         foreach (var message in result)
         {
+            responseUpdates.Add(ToResponseUpdate(message));
             var contentObj = new AiMessageContent("text", message.Text);
             var chatMsg =
                 new AiMessage(message.MessageId ?? "", message.AuthorName, message.Role.Value, [contentObj]);
             outputs.Add(chatMsg);
         }
 
+        await _sessionRecordApplication.SaveThreadStateAsync(
+            threadId,
+            projectId ?? Guid.Empty,
+            JsonSerializer.SerializeToElement(new { agentflowId }),
+            responseUpdates,
+            input,
+            CancellationToken.None);
 
-        return new AgentflowExecutionResult("", Messages: outputs);
+        return new AgentflowExecutionResult(threadId, Messages: outputs);
     }
 
 
@@ -402,5 +437,13 @@ public class AgentflowRuntimeService
         return sorted;
     }
 
+    private static AgentResponseUpdate ToResponseUpdate(ChatMessage message) =>
+        new()
+        {
+            MessageId = message.MessageId ?? Guid.NewGuid().ToString("N"),
+            AuthorName = message.AuthorName,
+            Role = message.Role,
+            Contents = [new TextContent(message.Text ?? string.Empty)]
+        };
 }
 

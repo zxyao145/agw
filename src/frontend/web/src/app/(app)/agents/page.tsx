@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Ulid } from "id128";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
+import { executeWithWebSocket } from "@/api/execution-ws";
 import { Button } from "@/components/ui/button";
 import type { AiMessageContent } from "@/types";
 
@@ -167,84 +168,60 @@ export default function AgentsPage() {
     setIsExecuting(true);
 
     try {
-      const response = await fetch(`/api/agents/${id}/execute-sse`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      await executeWithWebSocket(
+        id,
+        {
+          agentType: 1,
+          threadId: body.threadId,
+          input: body.input,
+        },
+        (json) => {
+          try {
+            const message = JSON.parse(json);
 
-      if (!response.ok) {
-        throw new Error(
-          `Execute failed: ${response.status} ${response.statusText}`
-        );
-      }
+            setExecuteResult((prev) => {
+              const messages = prev?.messages || [];
+              const existingIndex = messages.findIndex(
+                (m) => m.messageId === message.messageId
+              );
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("No response body");
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        console.debug("Received lines:", lines);
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const json = line.substring(6);
-            try {
-              const message = JSON.parse(json);
-
-              setExecuteResult((prev) => {
-                const messages = prev?.messages || [];
-                const existingIndex = messages.findIndex(
-                  (m) => m.messageId === message.messageId
+              if (existingIndex >= 0) {
+                const updated = [...messages];
+                const existingMsg = updated[existingIndex];
+                const existingTextContent = existingMsg.contents.find(
+                  (c: AiMessageContent) => c.type === "text"
+                );
+                const newTextContent = message.contents.find(
+                  (c: AiMessageContent) => c.type === "text"
                 );
 
-                if (existingIndex >= 0) {
-                  const updated = [...messages];
-                  const existingMsg = updated[existingIndex];
-                  const existingTextContent = existingMsg.contents.find(
-                    (c: AiMessageContent) => c.type === "text"
-                  );
-                  const newTextContent = message.contents.find(
-                    (c: AiMessageContent) => c.type === "text"
-                  );
-
-                  if (existingTextContent && newTextContent) {
-                    existingTextContent.content =
-                      (existingTextContent.content || "") +
-                      (newTextContent.content || "");
-                  }
-
-                  updated[existingIndex] = existingMsg;
-                  console.debug(
-                    "Updated message:",
-                    prev?.threadId,
-                    updated[existingIndex]
-                  );
-                  return { threadId: prev?.threadId || "", messages: updated };
-                } else {
-                  return {
-                    threadId: prev?.threadId || "",
-                    messages: [...messages, message],
-                  };
+                if (existingTextContent && newTextContent) {
+                  existingTextContent.content =
+                    (existingTextContent.content || "") +
+                    (newTextContent.content || "");
                 }
-              });
-            } catch (e) {
-              console.error("Parse error:", e);
-            }
+
+                updated[existingIndex] = existingMsg;
+                console.debug(
+                  "Updated message:",
+                  prev?.threadId,
+                  updated[existingIndex]
+                );
+                return { threadId: prev?.threadId || "", messages: updated };
+              } else {
+                return {
+                  threadId: prev?.threadId || "",
+                  messages: [...messages, message],
+                };
+              }
+            });
+          } catch (e) {
+            console.error("Parse error:", e);
           }
         }
-      }
+      );
     } catch (error) {
+      console.error("Execute failed:", error);
       toast.error(
         `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`
       );

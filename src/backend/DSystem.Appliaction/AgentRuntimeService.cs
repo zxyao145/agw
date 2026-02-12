@@ -358,7 +358,7 @@ public class AgentRuntimeService
                 thread.Serialize(),
                 responseUpdates,
                 input,
-                cancellationToken);
+                CancellationToken.None);
 
             return new AgentExecutionResult(
                 threadId,

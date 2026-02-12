@@ -37,13 +37,12 @@ public class SessionRecordApplication
             return;
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-
         var records = await _repository.ListAsync(session =>
             session.SessionId == sessionId && session.ProjectId == projectId);
         var record = records.FirstOrDefault();
 
-        if (record == null)
+        bool isNew = record == null;
+        if (isNew)
         {
             record = new AgentSessionRecord
             {
@@ -51,7 +50,6 @@ public class SessionRecordApplication
                 ProjectId = projectId,
                 CreateTime = DateTime.UtcNow
             };
-            await _repository.AddAsync(record);
         }
 
         if (string.IsNullOrWhiteSpace(record.Title))
@@ -74,6 +72,14 @@ public class SessionRecordApplication
         record.Messages = JsonSerializer.Serialize(payload);
         record.UpdateTime = DateTime.UtcNow;
 
+        if (isNew)
+        {
+            await _repository.AddAsync(record);
+        }
+        else
+        {
+           _repository.Update(record);
+        }
         await _unitOfWork.SaveChangesAsync();
     }
 

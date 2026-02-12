@@ -563,6 +563,7 @@ export default function ClaudeCodePage() {
         ws.send(JSON.stringify(request));
       }
     } catch (error) {
+      console.error("Execute failed:", error);
       toast.error(
         `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       );

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Ulid } from "id128";
 
 import { apiGet } from "@/api/client";
+import { executeWithWebSocket } from "@/api/execution-ws";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -147,88 +148,55 @@ export default function TaskDetailsPage() {
     setStreamingMessages((prev) => [...prev, userMessage]);
 
     try {
-      const executeUrl =
-        targetType === "agent"
-          ? `/api/agents/${targetId}/execute-sse`
-          : `/api/agentflows/${targetId}/execute-sse`;
-
-      const response = await fetch(executeUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await executeWithWebSocket(
+        targetId,
+        {
+          agentType: targetType === "agent" ? 1 : 0,
           threadId,
           projectId,
           input: value,
-        }),
-      });
+        },
+        (json) => {
+          try {
+            const message: AiMessage = JSON.parse(json);
+            // Skip user messages from the stream (we already added it)
+            if (message.role === "user") return;
 
-      if (!response.ok) {
-        throw new Error(
-          `Execute failed: ${response.status} ${response.statusText}`
-        );
-      }
+            setStreamingMessages((prev) => {
+              const existingIndex = prev.findIndex(
+                (m) => m.messageId === message.messageId
+              );
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("No response body");
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value: chunk } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(chunk, { stream: true });
-        const lines = buffer.split("\n\n");
-
-        // Keep the last incomplete line in buffer
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const json = line.substring(6);
-            try {
-              const message: AiMessage = JSON.parse(json);
-              // Skip user messages from the stream (we already added it)
-              if (message.role === "user") continue;
-
-              setStreamingMessages((prev) => {
-                const existingIndex = prev.findIndex(
-                  (m) => m.messageId === message.messageId
+              if (existingIndex >= 0) {
+                // Merge content for same messageId
+                const updated = [...prev];
+                const existingMsg = updated[existingIndex];
+                const existingTextContent = existingMsg.contents.find(
+                  (c) => c.type === "TextContent" || c.type === "text"
+                );
+                const newTextContent = message.contents.find(
+                  (c) => c.type === "TextContent" || c.type === "text"
                 );
 
-                if (existingIndex >= 0) {
-                  // Merge content for same messageId
-                  const updated = [...prev];
-                  const existingMsg = updated[existingIndex];
-                  const existingTextContent = existingMsg.contents.find(
-                    (c) => c.type === "TextContent" || c.type === "text"
-                  );
-                  const newTextContent = message.contents.find(
-                    (c) => c.type === "TextContent" || c.type === "text"
-                  );
-
-                  if (existingTextContent && newTextContent) {
-                    existingTextContent.content =
-                      (existingTextContent.content || "") +
-                      (newTextContent.content || "");
-                  }
-
-                  return updated;
-                } else {
-                  // New message
-                  return [...prev, message];
+                if (existingTextContent && newTextContent) {
+                  existingTextContent.content =
+                    (existingTextContent.content || "") +
+                    (newTextContent.content || "");
                 }
-              });
-            } catch (e) {
-              console.error("Parse error:", e);
-            }
+
+                return updated;
+              } else {
+                // New message
+                return [...prev, message];
+              }
+            });
+          } catch (e) {
+            console.error("Parse error:", e);
           }
         }
-      }
+      );
     } catch (error) {
+      console.error("Execute failed:", error);
       toast.error(
         `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`
       );
@@ -236,7 +204,7 @@ export default function TaskDetailsPage() {
       setIsExecuting(false);
       await sessionQuery.refetch();
     }
-  }, [targetId, targetType, threadId, sessionQuery]);
+  }, [targetId, targetType, threadId, projectId, sessionQuery]);
 
   return (
     <div className="space-y-3 w-full min-w-0 max-w-full overflow-x-hidden flex flex-col">

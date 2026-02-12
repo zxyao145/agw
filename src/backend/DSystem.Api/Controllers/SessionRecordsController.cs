@@ -42,8 +42,7 @@ public class SessionRecordsController : ControllerBase
     [HttpGet("{sessionId}")]
     public async Task<IActionResult> GetAsync(string sessionId, [FromQuery] Guid? projectId)
     {
-        var resolvedProjectId = projectId ?? Guid.Empty;
-        var record = await _service.GetBySessionIdAsync(sessionId, resolvedProjectId);
+        var record = await _service.GetBySessionIdAsync(sessionId, projectId);
         if (record == null)
         {
             return NotFound();
@@ -65,8 +64,7 @@ public class SessionRecordsController : ControllerBase
     [HttpDelete("{sessionId}")]
     public async Task<IActionResult> DeleteAsync(string sessionId, [FromQuery] Guid? projectId)
     {
-        var resolvedProjectId = projectId ?? Guid.Empty;
-        var deleted = await _service.DeleteBySessionIdAsync(sessionId, resolvedProjectId);
+        var deleted = await _service.DeleteBySessionIdAsync(sessionId, projectId);
         return deleted ? NoContent() : NotFound();
     }
 
@@ -81,9 +79,8 @@ public class SessionRecordsController : ControllerBase
             return BadRequest("Title is required.");
         }
 
-        var resolvedProjectId = projectId ?? Guid.Empty;
         var user = User?.Identity?.Name ?? "system";
-        var updated = await _service.UpdateTitleAsync(sessionId, resolvedProjectId, request.Title, user);
+        var updated = await _service.UpdateTitleAsync(sessionId, projectId, request.Title, user);
         return updated ? NoContent() : NotFound();
     }
 
