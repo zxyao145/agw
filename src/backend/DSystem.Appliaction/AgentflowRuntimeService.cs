@@ -87,7 +87,7 @@ public class AgentflowRuntimeService
             new(ChatRole.User, input)
         };
 
-        StreamingRun run = await InProcessExecution.StreamAsync(workflow, messages);
+        StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         var responseUpdates = new List<AgentResponseUpdate>();
 
@@ -163,7 +163,7 @@ public class AgentflowRuntimeService
             new(ChatRole.User, input)
         };
 
-        StreamingRun run = await InProcessExecution.StreamAsync(workflow, messages);
+        StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         List<ChatMessage> result = new();
@@ -253,7 +253,7 @@ public class AgentflowRuntimeService
             else
             {
                 var flowNode = await this.CreateAiWorkflow(node.RelateId, cancellationToken);
-                aiAgent = flowNode?.AsAgent() ?? null;
+                aiAgent = flowNode?.AsAIAgent() ?? null;
             }
 
             if (aiAgent == null)

@@ -146,7 +146,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/executions/{id}/execute-sse": {
+    "/api/executions/{id}/execute-ws": {
         parameters: {
             query?: never;
             header?: never;

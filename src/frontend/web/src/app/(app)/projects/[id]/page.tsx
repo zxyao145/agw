@@ -312,6 +312,30 @@ export default function ProjectDetailsPage() {
       toast.error(`Cancel failed: ${getApiErrorMessage(error)}`);
     },
   });
+  const [deletingTaskId, setDeletingTaskId] = React.useState<string | null>(
+    null
+  );
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      setDeletingTaskId(taskId);
+      return await apiDelete("/api/projects/{projectId}/tasks/{taskId}", {
+        params: { path: { projectId, taskId } },
+      } as never);
+    },
+    onSuccess: async () => {
+      toast.success("Task deleted");
+      await queryClient.invalidateQueries({
+        queryKey: ["projects", projectId, "tasks"],
+      });
+    },
+    onError: (error) => {
+      toast.error(`Delete task failed: ${getApiErrorMessage(error)}`);
+    },
+    onSettled: () => {
+      setDeletingTaskId(null);
+    },
+  });
 
   const project = projectQuery.data;
 
@@ -642,6 +666,19 @@ export default function ProjectDetailsPage() {
                             {cancelTaskMutation.isPending
                               ? "Canceling..."
                               : "Cancel"}
+                          </Button>
+
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => deleteTaskMutation.mutate(t.id)}
+                            disabled={deleteTaskMutation.isPending}
+                            title="Delete task"
+                          >
+                            {deleteTaskMutation.isPending &&
+                            deletingTaskId === t.id
+                              ? "Deleting..."
+                              : "Delete"}
                           </Button>
                         </ButtonGroup>
                       </div>

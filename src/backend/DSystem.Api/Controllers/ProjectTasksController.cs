@@ -117,6 +117,23 @@ public class ProjectTasksController : ControllerBase
         return canceled == null ? BadRequest("Task cannot be canceled in its current state.") : Ok(ToResponse(canceled));
     }
 
+
+    [HttpDelete("{taskId:guid}")]
+    public async Task<IActionResult> DeleteAsync(Guid projectId, Guid taskId)
+    {
+        var user = User?.Identity?.Name ?? "system";
+
+        var existing = await _taskService.GetAsync(taskId);
+        if (existing == null || existing.ProjectId != projectId)
+        {
+            return NotFound();
+        }
+
+        await _taskService.DeleteAsync(taskId, user);
+        return Ok();
+    }
+
+
     private static ProjectTaskResponse ToResponse(ProjectTask task) =>
         new(
             task.Id,

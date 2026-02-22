@@ -12,7 +12,7 @@ namespace DSystem.Appliaction;
 /// <summary>
 /// Wraps an AI agent to execute WebSocket inputs and build streaming outputs.
 /// </summary>
-public sealed class AiAgentSession : IAsyncDisposable
+public sealed class AgentExecSession : IAsyncDisposable
 {
     private bool _disposed;
     private CancellationTokenSource _cancellationTokenSource = new();
@@ -41,7 +41,7 @@ public sealed class AiAgentSession : IAsyncDisposable
     /// <summary>
     /// Initializes a new instance of the AiAgentSession class.
     /// </summary>
-    public AiAgentSession(
+    public AgentExecSession(
         AIAgent agent,
         AgentSession thread,
         Guid projectId,
@@ -111,7 +111,7 @@ public sealed class AiAgentSession : IAsyncDisposable
         await _sessionRecordApplication.SaveThreadStateAsync(
             _sessionId,
             _projectId,
-            Session.Serialize(),
+            await SerializeSession(),
             responseUpdates,
             input,
             cancellationToken);
@@ -190,4 +190,9 @@ public sealed class AiAgentSession : IAsyncDisposable
         return aiContents;
     }
 
+
+    private ValueTask<JsonElement> SerializeSession()
+    {
+        return Agent.SerializeSessionAsync(Session);
+    }
 }

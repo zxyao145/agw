@@ -452,7 +452,7 @@ The workflow system uses an explicit graph structure matching the React Flow vis
 - Hydrates workflow nodes via `AgentRuntimeService`
 - Resolves node types (AgentNode → Agent, WorkflowNode → Workflow)
 - Uses `AgentWorkflowBuilder` from Microsoft.Agents.AI.Workflows
-- Executes via `InProcessExecution.StreamAsync()`
+- Executes via `InProcessExecution.RunStreamingAsync()`
 - Returns `WorkflowExecutionResult` with chat messages and status
 
 **MagenticOrchestrationManager** (`DSystem.Domain/Services/MagenticOrchestrationManager.cs`):

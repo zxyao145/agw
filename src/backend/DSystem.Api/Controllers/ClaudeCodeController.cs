@@ -34,7 +34,7 @@ public class ClaudeCodeController(
         }
 
         using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
-        AiAgentSession? session = null;
+        AgentExecSession? session = null;
         Task? activeInputTask = null;
 
         try
@@ -97,9 +97,9 @@ public class ClaudeCodeController(
         catch (JsonException) { return null; }
     }
 
-    private async Task<(AiAgentSession? session, Task? activeInputTask)> ProcessRequestAsync(
+    private async Task<(AgentExecSession? session, Task? activeInputTask)> ProcessRequestAsync(
         WebSocket webSocket,
-        AiAgentSession? currentSession,
+        AgentExecSession? currentSession,
         ClaudeCodeWsRequest request,
         Task? activeInputTask)
     {
@@ -140,10 +140,10 @@ public class ClaudeCodeController(
         return (currentSession, activeInputTask);
     }
 
-    private async Task<AiAgentSession> HandleSettingRequestAsync(
+    private async Task<AgentExecSession> HandleSettingRequestAsync(
         WebSocket webSocket,
         ClaudeCodeSettingRequest? setting,
-        AiAgentSession? currentSession)
+        AgentExecSession? currentSession)
     {
         if (setting == null)
         {
@@ -169,7 +169,7 @@ public class ClaudeCodeController(
 
     private async Task HandleInputRequestAsync(
         WebSocket webSocket,
-        AiAgentSession? session,
+        AgentExecSession? session,
         ClaudeCodeInputRequest? input)
     {
         if (session == null)
@@ -189,7 +189,7 @@ public class ClaudeCodeController(
 
     private async Task<Task?> HandleInterruptRequestAsync(
         WebSocket webSocket,
-        AiAgentSession? session,
+        AgentExecSession? session,
         ClaudeCodeInterruptRequest? interrupt,
         Task? activeInputTask)
     {
@@ -214,7 +214,7 @@ public class ClaudeCodeController(
         return activeInputTask;
     }
 
-    private async Task ProcessInputAsync(WebSocket webSocket, AiAgentSession session, string input)
+    private async Task ProcessInputAsync(WebSocket webSocket, AgentExecSession session, string input)
     {
         try
         {

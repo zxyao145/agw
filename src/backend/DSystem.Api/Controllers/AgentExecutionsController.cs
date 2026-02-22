@@ -42,8 +42,8 @@ public class AgentExecutionsController : ControllerBase
         };
     }
 
-    [HttpGet("{id:guid}/execute-sse")]
-    public async Task ExecuteSseAsync(Guid id, CancellationToken cancellationToken)
+    [HttpGet("{id:guid}/execute-ws")]
+    public async Task ExecuteWsAsync(Guid id, CancellationToken cancellationToken)
     {
         if (!HttpContext.WebSockets.IsWebSocketRequest)
         {

@@ -156,6 +156,18 @@ public class ProjectTaskDomainService
         return existing;
     }
 
+    public async Task DeleteAsync(Guid id, string user)
+    {
+        var existing = await _taskRepository.GetByIdAsync(id);
+        if (existing == null)
+        {
+            return ;
+        }
+
+        _taskRepository.Remove(existing);
+        await _unitOfWork.SaveChangesAsync();
+    }
+
     public async Task<ProjectTask?> TryMarkRunningAsync(Guid id, string user)
     {
         var existing = await _taskRepository.GetByIdAsync(id);

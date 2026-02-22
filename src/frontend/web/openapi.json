@@ -99,7 +99,7 @@
         }
       }
     },
-    "/api/executions/{id}/execute-sse": {
+    "/api/executions/{id}/execute-ws": {
       "post": {
         "tags": [
           "AgentExecutions"

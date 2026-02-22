@@ -1,14 +1,16 @@
+using ClaudeCodeSdk.MAF;
+using DSystem.Appliaction;
 using DSystem.Domain.Entities;
+using DSystem.Domain.Repositories;
 using DSystem.Domain.Services;
+using DSystem.SessionRecords.Application;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
-using DSystem.Domain.Repositories;
-using DSystem.SessionRecords.Application;
-using DSystem.Appliaction;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
 using System.ClientModel;
@@ -16,9 +18,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using static System.Collections.Specialized.BitVector32;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
-using ClaudeCodeSdk.MAF;
-using Microsoft.Extensions.Logging;
 
 namespace DSystem.Appliaction.Services;
 
@@ -81,7 +82,7 @@ public class AgentRuntimeService
         return await CreateAiAgentAsync(agent, extraOverride);
     }
 
-    public async Task<AIAgent?> CreateAiAgentAsync(Agent agent, string? extraOverride = null)
+    public async Task<AIAgent?> CreateAiAgentAsync(Agent agent, string? extraOverride = null, string? sessionId = null)
     {
         if (agent.Type == AgentType.External)
         {
@@ -101,6 +102,16 @@ public class AgentRuntimeService
                     _logger.LogError("agent.Extra Deserialize to options error");
                     return null;
                 }
+
+                if (!string.IsNullOrWhiteSpace(sessionId))
+                {
+                    var sessionGuid = Guid.Parse(sessionId);
+                    ccOptions = ccOptions with
+                    {
+                        SessionId = sessionGuid
+                    };
+                }
+
                 var ccAgent = new ClaudeCodeAIAgent(ccOptions, _logger);
                 return ccAgent;
             }
@@ -172,9 +183,9 @@ public class AgentRuntimeService
     /// <summary>
     /// Creates an AI agent session for the provided thread.
     /// </summary>
-    public async Task<AiAgentSession?> CreateSessionAsync(
+    public async Task<AgentExecSession?> CreateSessionAsync(
         Guid agentId,
-        string threadId,
+        string sessionId,
         Guid? projectId = null,
         CancellationToken cancellationToken = default)
     {
@@ -186,23 +197,23 @@ public class AgentRuntimeService
 
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
-        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);
+        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, sessionId);
         if (aiAgent == null)
         {
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(threadId))
+        if (string.IsNullOrWhiteSpace(sessionId))
         {
-            threadId = Guid.NewGuid().ToString();
+            sessionId = Guid.NewGuid().ToString();
         }
 
-        var agentSession = await GetOrCreateThreadAsync(aiAgent, threadId, cancellationToken);
-        return new AiAgentSession(
+        var agentSession = await GetOrCreateThreadAsync(aiAgent, sessionId, cancellationToken);
+        return new AgentExecSession(
             aiAgent,
             agentSession,
             projectId ?? Guid.Empty,
-            threadId,
+            sessionId,
             _logger,
             _sessionRecordApplication);
     }
@@ -211,7 +222,7 @@ public class AgentRuntimeService
     /// Executes an existing AI agent session with streaming response.
     /// </summary>
     public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
-        AiAgentSession session,
+        AgentExecSession session,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -226,7 +237,7 @@ public class AgentRuntimeService
         }
         finally
         {
-            await SaveSessionThreadStateAsync(session._sessionId, session.Session, cancellationToken);
+            await SaveSessionThreadStateAsync(session._sessionId, session.Agent, session.Session, cancellationToken);
         }
     }
 
@@ -263,7 +274,7 @@ public class AgentRuntimeService
         var value = await _cache.GetOrCreateAsync<string>(threadId, _ => ValueTask.FromResult(""), cancellationToken: cancellationToken);
         if (string.IsNullOrWhiteSpace(value))
         {
-            return await aiAgent.GetNewSessionAsync();
+            return await aiAgent.CreateSessionAsync();
         }
 
         try
@@ -274,14 +285,15 @@ public class AgentRuntimeService
         catch (JsonException)
         {
             _logger.LogWarning("Thread cache deserialization failed for threadId: {ThreadId}. A new thread will be created.", threadId);
-            return await aiAgent.GetNewSessionAsync();
+            return await aiAgent.CreateSessionAsync();
         }
     }
 
-    private Task SaveSessionThreadStateAsync(string threadId, AgentSession session, CancellationToken cancellationToken)
+    private async Task SaveSessionThreadStateAsync(string threadId, AIAgent aiAgent, AgentSession session, CancellationToken cancellationToken)
     {
-        var serialized = JsonSerializer.Serialize(session.Serialize());
-        return _cache.SetAsync(threadId, serialized, cancellationToken: cancellationToken);
+        var ele = await aiAgent.SerializeSessionAsync(session);
+        var serialized = JsonSerializer.Serialize(ele);
+        await _cache.SetAsync(threadId, serialized, cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -310,11 +322,11 @@ public class AgentRuntimeService
         try
         {
 
-            AgentSession thread;
+            AgentSession session;
             if (string.IsNullOrWhiteSpace(threadId))
             {
                 threadId = Guid.NewGuid().ToString();
-                thread = await aiAgent.GetNewSessionAsync();
+                session = await aiAgent.CreateSessionAsync();
             }
             else
             {
@@ -324,12 +336,12 @@ public class AgentRuntimeService
                 });
                 if (string.IsNullOrWhiteSpace(value))
                 {
-                    thread = await aiAgent.GetNewSessionAsync();
+                    session = await aiAgent.CreateSessionAsync();
                 }
                 else
                 {
                     var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
-                    thread = await aiAgent.DeserializeSessionAsync(serializedThread);
+                    session = await aiAgent.DeserializeSessionAsync(serializedThread);
                 }
             }
 
@@ -338,7 +350,7 @@ public class AgentRuntimeService
             IEnumerable<ChatMessage> msgs = system == null
                 ? [chatMsg]
                 : [system, chatMsg];
-            var stream = aiAgent.RunStreamingAsync(msgs, thread);
+            var stream = aiAgent.RunStreamingAsync(msgs, session);
 
             List<AiMessage> messages = new();
             var responseUpdates = new List<AgentResponseUpdate>();
@@ -355,7 +367,7 @@ public class AgentRuntimeService
             await _sessionRecordApplication.SaveThreadStateAsync(
                 threadId,
                 projectId ?? Guid.Empty,
-                thread.Serialize(),
+                await aiAgent.SerializeSessionAsync(session),
                 responseUpdates,
                 input,
                 CancellationToken.None);

@@ -18,17 +18,17 @@ function toWsOrigin(baseUrl: string): string {
 function buildExecutionWsUrls(id: string): string[] {
   
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const url = `${protocol}//${window.location.host}/api/executions/${id}/execute-sse`;
+  const url = `${protocol}//${window.location.host}/api/executions/${id}/execute-ws`;
   const urls: string[] = [];
   urls.push(url);
   return urls;
 
-  const sameOriginWs = `${toWsOrigin(window.location.origin)}/api/executions/${id}/execute-sse`;
+  const sameOriginWs = `${toWsOrigin(window.location.origin)}/api/executions/${id}/execute-ws`;
   urls.push(sameOriginWs);
 
   const publicApiBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (publicApiBase) {
-    const fromEnv = `${toWsOrigin(publicApiBase)}/api/executions/${id}/execute-sse`;
+    const fromEnv = `${toWsOrigin(publicApiBase)}/api/executions/${id}/execute-ws`;
     if (!urls.includes(fromEnv)) {
       urls.push(fromEnv);
     }
@@ -36,7 +36,7 @@ function buildExecutionWsUrls(id: string): string[] {
 
   // Local dev fallback: Next dev server often runs on 3000 while backend runs on 5015.
   if (window.location.hostname === "localhost" && window.location.port === "3000") {
-    const localBackend = `ws://localhost:5015/api/executions/${id}/execute-sse`;
+    const localBackend = `ws://localhost:5015/api/executions/${id}/execute-ws`;
     if (!urls.includes(localBackend)) {
       urls.push(localBackend);
     }

@@ -45,7 +45,7 @@ public class ClaudeCodeService
     /// <summary>
     /// Initialize a new ClaudeCode session with the specified configuration.
     /// </summary>
-    public async Task<AiAgentSession> InitializeSessionAsync(
+    public async Task<AgentExecSession> InitializeSessionAsync(
         ClaudeCodeSettingRequest initRequest,
         CancellationToken cancellationToken = default)
     {
@@ -61,7 +61,7 @@ public class ClaudeCodeService
             initRequest.ProjectId,
             cancellationToken);
 
-        return new AiAgentSession(
+        return new AgentExecSession(
             agent,
             thread,
             initRequest.ProjectId,
@@ -83,13 +83,13 @@ public class ClaudeCodeService
         if (record == null || string.IsNullOrWhiteSpace(record.Messages))
         {
             _logger.LogDebug("Created new thread for session: {ThreadId}", sessionId);
-            return await agent.GetNewSessionAsync(cancellationToken);
+            return await agent.CreateSessionAsync(cancellationToken);
         }
 
         _logger.LogDebug("Loaded existing thread for session: {ThreadId}", sessionId);
         if (!TryGetThreadState(record.Messages, out var threadState))
         {
-            return await agent.GetNewSessionAsync(cancellationToken);
+            return await agent.CreateSessionAsync(cancellationToken);
         }
 
         return await agent.DeserializeSessionAsync(threadState);
