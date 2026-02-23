@@ -80,11 +80,11 @@ public class ClaudeCodeService
     {
         if (record == null || string.IsNullOrWhiteSpace(record.Messages))
         {
-            _logger.LogDebug("Created new thread for session: {ThreadId}", sessionId);
+            _logger.LogDebug("Created new thread for session: {SessionId}", sessionId);
             return await agent.CreateSessionAsync(cancellationToken);
         }
 
-        _logger.LogDebug("Loaded existing thread for session: {ThreadId}", sessionId);
+        _logger.LogDebug("Loaded existing thread for session: {SessionId}", sessionId);
         if (!TryGetThreadState(record.Messages, out var threadState))
         {
             return await agent.CreateSessionAsync(cancellationToken);

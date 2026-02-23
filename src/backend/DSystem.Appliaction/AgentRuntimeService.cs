@@ -28,7 +28,7 @@ namespace DSystem.Appliaction.Services;
 /// Result of a single agent execution.
 /// </summary>
 public record AgentExecutionResult(
-    string ThreadId,
+    string SessionId,
     IReadOnlyList<AiMessage> Messages);
 
 /// <summary>
@@ -282,12 +282,12 @@ public class AgentRuntimeService
     /// </summary>
     public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
         Guid agentId,
-        string threadId,
+        string sessionId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
         Guid? projectId = null)
     {
-        var session = await CreateSessionAsync(agentId, threadId, projectId, cancellationToken);
+        var session = await CreateSessionAsync(agentId, sessionId, projectId, cancellationToken);
         if (session == null)
         {
             yield break;
@@ -304,10 +304,10 @@ public class AgentRuntimeService
 
     private async Task<AgentSession> GetOrCreateThreadAsync(
         AIAgent aiAgent,
-        string threadId,
+        string sessionId,
         CancellationToken cancellationToken)
     {
-        var value = await _cache.GetOrCreateAsync<string>(threadId, _ => ValueTask.FromResult(""), cancellationToken: cancellationToken);
+        var value = await _cache.GetOrCreateAsync<string>(sessionId, _ => ValueTask.FromResult(""), cancellationToken: cancellationToken);
         if (string.IsNullOrWhiteSpace(value))
         {
             return await aiAgent.CreateSessionAsync();
@@ -320,16 +320,16 @@ public class AgentRuntimeService
         }
         catch (JsonException)
         {
-            _logger.LogWarning("Thread cache deserialization failed for threadId: {ThreadId}. A new thread will be created.", threadId);
+            _logger.LogWarning("Thread cache deserialization failed for sessionId: {SessionId}. A new thread will be created.", sessionId);
             return await aiAgent.CreateSessionAsync();
         }
     }
 
-    private async Task SaveSessionThreadStateAsync(string threadId, AIAgent aiAgent, AgentSession session, CancellationToken cancellationToken)
+    private async Task SaveSessionThreadStateAsync(string sessionId, AIAgent aiAgent, AgentSession session, CancellationToken cancellationToken)
     {
         var ele = await aiAgent.SerializeSessionAsync(session);
         var serialized = JsonSerializer.Serialize(ele);
-        await _cache.SetAsync(threadId, serialized, cancellationToken: cancellationToken);
+        await _cache.SetAsync(sessionId, serialized, cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -337,7 +337,7 @@ public class AgentRuntimeService
     /// </summary>
     public async Task<AgentExecutionResult?> ExecuteAsync(
         Guid agentId,
-        string threadId,
+        string sessionId,
         string input,
         CancellationToken cancellationToken = default,
         Guid? projectId = null)
@@ -359,14 +359,14 @@ public class AgentRuntimeService
         {
 
             AgentSession session;
-            if (string.IsNullOrWhiteSpace(threadId))
+            if (string.IsNullOrWhiteSpace(sessionId))
             {
-                threadId = Guid.NewGuid().ToString();
+                sessionId = Guid.NewGuid().ToString();
                 session = await aiAgent.CreateSessionAsync();
             }
             else
             {
-                var value = await _cache.GetOrCreateAsync<string>(threadId, (c) =>
+                var value = await _cache.GetOrCreateAsync<string>(sessionId, (c) =>
                 {
                     return ValueTask.FromResult("");
                 });
@@ -401,7 +401,7 @@ public class AgentRuntimeService
             }
 
             await _sessionRecordApplication.SaveThreadStateAsync(
-                threadId,
+                sessionId,
                 projectId ?? Guid.Empty,
                 await aiAgent.SerializeSessionAsync(session),
                 responseUpdates,
@@ -409,7 +409,7 @@ public class AgentRuntimeService
                 CancellationToken.None);
 
             return new AgentExecutionResult(
-                threadId,
+                sessionId,
                 messages
                 );
         }

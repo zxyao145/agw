@@ -1,7 +1,7 @@
 export type ExecutionWsRequest = {
   agentType: number;
   input: string;
-  threadId?: string | null;
+  sessionId?: string | null;
   projectId?: string | null;
 };
 

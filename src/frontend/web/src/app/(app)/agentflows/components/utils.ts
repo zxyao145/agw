@@ -2,6 +2,11 @@ import { ApiError } from "@/api/client";
 import type { AiMessage } from "@/types";
 import type { AgentflowDetailDto, AgentflowNodeDto, AgentflowEdgeDto } from "@/types/agentflow";
 import { apiGet } from "@/api/client";
+import {
+  getMessageTextContent,
+  mergeStreamingMessage,
+  mergeStreamingMessagesById,
+} from "@/lib/execution-stream";
 
 export function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -26,31 +31,18 @@ export function getPatternName(pattern: number): string {
 }
 
 export function getTextContent(message: AiMessage): string {
-  return message.contents.find((c) => c.type === "TextContent")?.content || "";
+  return getMessageTextContent(message);
 }
 
 export function mergeTextContent(existing: AiMessage, incoming: AiMessage): void {
-  const existingText = existing.contents.find((c) => c.type === "text");
-  const incomingText = incoming.contents.find((c) => c.type === "text");
-
-  if (existingText && incomingText) {
-    existingText.content = (existingText.content || "") + (incomingText.content || "");
+  const merged = mergeStreamingMessage([existing], incoming);
+  if (merged.length > 0) {
+    existing.contents = merged[0].contents;
   }
 }
 
 export function mergeMessages(messages: AiMessage[]): AiMessage[] {
-  const messageMap = new Map<string, AiMessage>();
-
-  messages.forEach((msg) => {
-    const existing = messageMap.get(msg.messageId);
-    if (existing) {
-      mergeTextContent(existing, msg);
-    } else {
-      messageMap.set(msg.messageId, { ...msg });
-    }
-  });
-
-  return Array.from(messageMap.values());
+  return mergeStreamingMessagesById(messages);
 }
 
 export async function fetchAgentflowDetails(id: string): Promise<AgentflowDetailDto> {

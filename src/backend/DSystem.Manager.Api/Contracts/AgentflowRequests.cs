@@ -42,11 +42,11 @@ public record AgentflowExecutionAgentResultResponse(Guid AgentId, string AgentNa
 }
 
 public record AgentflowExecuteResponse(
-    string? ThreadId,
+    string? SessionId,
     IReadOnlyList<AiMessage> Messages)
 {
     public static AgentflowExecuteResponse FromDomain(AgentflowExecutionResult result) =>
         new(
-            result.ThreadId,
+            result.SessionId,
             result.Messages);
 }

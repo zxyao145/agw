@@ -82,7 +82,7 @@ public class AgentExecutionsController : ControllerBase
     {
         var result = await _agentRuntimeService.ExecuteAsync(
             id,
-            request.ThreadId ?? string.Empty,
+            request.SessionId ?? string.Empty,
             request.Input,
             cancellationToken,
             request.ProjectId);
@@ -101,7 +101,7 @@ public class AgentExecutionsController : ControllerBase
     {
         var result = await _agentflowRuntimeService.ExecuteAsync(
             id,
-            request.ThreadId ?? string.Empty,
+            request.SessionId ?? string.Empty,
             request.Input,
             cancellationToken,
             request.ProjectId);
@@ -124,7 +124,7 @@ public class AgentExecutionsController : ControllerBase
             case ProjectTaskAgentType.Agent:
                 var session = await _agentRuntimeService.CreateSessionAsync(
                     id,
-                    request.ThreadId ?? string.Empty,
+                    request.SessionId ?? string.Empty,
                     request.ProjectId,
                     cancellationToken);
                 if (session == null)
@@ -149,7 +149,7 @@ public class AgentExecutionsController : ControllerBase
             case ProjectTaskAgentType.Agentflow:
                 await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
                                    id,
-                                   request.ThreadId ?? string.Empty,
+                                   request.SessionId ?? string.Empty,
                                    request.Input,
                                    cancellationToken,
                                    request.ProjectId))

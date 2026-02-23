@@ -28,12 +28,3 @@ export type ModelProviderApiKeyDto = {
   modelName: string;
 };
 
-export type AgentExecuteRequest = {
-  threadId: string | null;
-  input: string;
-};
-
-export type AgentExecuteResponse = {
-  threadId: string;
-  messages: import("@/types").AiMessage[];
-};

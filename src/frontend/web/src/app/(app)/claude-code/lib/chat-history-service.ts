@@ -47,7 +47,7 @@ export async function getAllSessions(
   return await fetchJson<ChatSessionRecordSummary[]>(url);
 }
 
-export async function getSessionByThreadId(
+export async function getSessionBySessionId(
   sessionId: string,
   projectId?: string,
 ): Promise<ChatSessionRecordDetails | null> {
@@ -70,7 +70,7 @@ export async function getSessionByThreadId(
   return (await response.json()) as ChatSessionRecordDetails;
 }
 
-export async function deleteSessionByThreadId(
+export async function deleteSessionBySessionId(
   sessionId: string,
   projectId?: string,
 ): Promise<boolean> {
@@ -122,6 +122,6 @@ export async function updateSessionTitle(
 export async function clearAllSessions(projectId?: string): Promise<void> {
   const sessions = await getAllSessions(projectId);
   await Promise.all(
-    sessions.map((session) => deleteSessionByThreadId(session.sessionId, projectId)),
+    sessions.map((session) => deleteSessionBySessionId(session.sessionId, projectId)),
   );
 }

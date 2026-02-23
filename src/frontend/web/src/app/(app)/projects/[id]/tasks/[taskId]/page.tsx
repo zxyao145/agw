@@ -4,11 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Ulid } from "id128";
 
 import { apiGet } from "@/api/client";
-import { executeWithWebSocket } from "@/api/execution-ws";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,8 +18,8 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import type { AiMessage, ProcessedMessageItem } from "@/types/message";
 import { ChatSession } from "@/components/message/chat-session";
 import { ProjectTaskDto } from "./types";
-import { UserInput } from "@/components/message/user-input";
-import { getSessionByThreadId } from "../../../../claude-code/lib/chat-history-service";
+import { Conversation } from "@/components/message/conversation";
+import { getSessionBySessionId } from "../../../../claude-code/lib/chat-history-service";
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -102,9 +99,7 @@ export default function TaskDetailsPage() {
   const projectId = params.id;
   const taskId = params.taskId;
 
-  const [isExecuting, setIsExecuting] = React.useState<boolean>(false);
-  const [streamingMessages, setStreamingMessages] = React.useState<AiMessage[]>([]);
-  const threadId = taskId;
+  const sessionId = taskId;
 
   const taskQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", taskId],
@@ -119,11 +114,11 @@ export default function TaskDetailsPage() {
   const sessionQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", taskId, "session-record"],
     queryFn: async () => {
-      const sessionByProject = await getSessionByThreadId(taskId, projectId);
+      const sessionByProject = await getSessionBySessionId(taskId, projectId);
       if (sessionByProject) {
         return sessionByProject;
       }
-      return await getSessionByThreadId(taskId);
+      return await getSessionBySessionId(taskId);
     },
     enabled: Boolean(taskId),
     refetchInterval: task?.status === 1 ? 2000 : false,
@@ -132,79 +127,6 @@ export default function TaskDetailsPage() {
   const targetType = task?.agentType === 1 ? "agent" : "agentflow";
   const targetId =
     targetType === "agent" ? (task?.agentId ?? null) : (task?.agentflowId ?? null);
-
-  const handleOnExecute = React.useCallback(async (value: string) => {
-    if (!targetId || !value.trim()) return;
-
-    setIsExecuting(true);
-
-    // Add user message to streaming messages
-    const userMessage: AiMessage = {
-      messageId: Ulid.generate().toCanonical(),
-      author: "user",
-      role: "user",
-      contents: [{ type: "TextContent", content: value }],
-    };
-    setStreamingMessages((prev) => [...prev, userMessage]);
-
-    try {
-      await executeWithWebSocket(
-        targetId,
-        {
-          agentType: targetType === "agent" ? 1 : 0,
-          threadId,
-          projectId,
-          input: value,
-        },
-        (json) => {
-          try {
-            const message: AiMessage = JSON.parse(json);
-            // Skip user messages from the stream (we already added it)
-            if (message.role === "user") return;
-
-            setStreamingMessages((prev) => {
-              const existingIndex = prev.findIndex(
-                (m) => m.messageId === message.messageId
-              );
-
-              if (existingIndex >= 0) {
-                // Merge content for same messageId
-                const updated = [...prev];
-                const existingMsg = updated[existingIndex];
-                const existingTextContent = existingMsg.contents.find(
-                  (c) => c.type === "TextContent" || c.type === "text"
-                );
-                const newTextContent = message.contents.find(
-                  (c) => c.type === "TextContent" || c.type === "text"
-                );
-
-                if (existingTextContent && newTextContent) {
-                  existingTextContent.content =
-                    (existingTextContent.content || "") +
-                    (newTextContent.content || "");
-                }
-
-                return updated;
-              } else {
-                // New message
-                return [...prev, message];
-              }
-            });
-          } catch (e) {
-            console.error("Parse error:", e);
-          }
-        }
-      );
-    } catch (error) {
-      console.error("Execute failed:", error);
-      toast.error(
-        `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`
-      );
-    } finally {
-      setIsExecuting(false);
-      await sessionQuery.refetch();
-    }
-  }, [targetId, targetType, threadId, projectId, sessionQuery]);
 
   return (
     <div className="space-y-3 w-full min-w-0 max-w-full overflow-x-hidden flex flex-col">
@@ -271,7 +193,7 @@ export default function TaskDetailsPage() {
           Failed to load task: {getApiErrorMessage(taskQuery.error)}
         </div>
       ) : task ? (
-        <div className="space-y-6 flex-1 min-w-0 relative">
+        <div className="space-y-6 flex-1 min-w-0">
           {/* <Conversation task={task} /> */}
 
           {sessionMessages.length > 0 ? (
@@ -281,12 +203,17 @@ export default function TaskDetailsPage() {
             />
           ) : null}
 
-          {streamingMessages.length > 0 ? (
-            <ChatMessageSession
-              title="Live Conversation"
-              messages={streamingMessages}
-            />
-          ) : null}
+          <Conversation
+            executionId={targetId}
+            agentType={targetType === "agent" ? 1 : 0}
+            projectId={projectId}
+            sessionId={sessionId}
+            resetSignal={`${taskId}:${targetId ?? "none"}`}
+            placeholder="请输入要发送给任务执行器的内容..."
+            onExecutionComplete={async () => {
+              await sessionQuery.refetch();
+            }}
+          />
 
           {task.errorMessage ? (
             <Card className="border-destructive/50">
@@ -302,12 +229,6 @@ export default function TaskDetailsPage() {
             </Card>
           ) : null}
 
-          <div className="absolute bottom-0 z-10 left-0 right-4 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
-            <UserInput
-              isExecuting={isExecuting}
-              onExecute={handleOnExecute}
-            ></UserInput>
-          </div>
         </div>
       ) : null}
     </div>

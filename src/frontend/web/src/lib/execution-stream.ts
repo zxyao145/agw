@@ -1,0 +1,112 @@
+import {
+  executeWithWebSocket,
+  type ExecutionWsRequest,
+} from "@/api/execution-ws";
+import { Ulid } from "id128";
+import type { AiMessage, AiMessageContent } from "@/types";
+
+const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
+
+function isTextContent(content: AiMessageContent): boolean {
+  return TEXT_CONTENT_TYPES.has(content.type);
+}
+
+function cloneMessageContent(content: AiMessageContent): AiMessageContent {
+  return {
+    ...content,
+    additionalProperties: content.additionalProperties
+      ? { ...content.additionalProperties }
+      : undefined,
+  };
+}
+
+function cloneMessage(message: AiMessage): AiMessage {
+  return {
+    ...message,
+    contents: message.contents.map(cloneMessageContent),
+    additionalProperties: message.additionalProperties
+      ? { ...message.additionalProperties }
+      : undefined,
+  };
+}
+
+export function createUserTextMessage(input: string): AiMessage {
+  return {
+    messageId: Ulid.generate().toCanonical(),
+    author: "user",
+    role: "user",
+    contents: [{ type: "TextContent", content: input }],
+  };
+}
+
+export function getMessageTextContent(message: AiMessage): string {
+  return message.contents.find(isTextContent)?.content ?? "";
+}
+
+export function mergeStreamingMessage(
+  messages: AiMessage[],
+  incoming: AiMessage
+): AiMessage[] {
+  const existingIndex = messages.findIndex(
+    (message) => message.messageId === incoming.messageId
+  );
+  if (existingIndex < 0) {
+    return [...messages, cloneMessage(incoming)];
+  }
+
+  const updated = [...messages];
+  const existing = cloneMessage(updated[existingIndex]);
+  const existingText = existing.contents.find(isTextContent);
+  const incomingText = incoming.contents.find(isTextContent);
+
+  if (incomingText) {
+    if (existingText) {
+      existingText.content =
+        (existingText.content || "") + (incomingText.content || "");
+    } else {
+      existing.contents.push(cloneMessageContent(incomingText));
+    }
+  }
+
+  const incomingNonTextContents = incoming.contents
+    .filter((content) => !isTextContent(content))
+    .map(cloneMessageContent);
+  if (incomingNonTextContents.length > 0) {
+    existing.contents = [...existing.contents, ...incomingNonTextContents];
+  }
+
+  updated[existingIndex] = existing;
+  return updated;
+}
+
+export function mergeStreamingMessagesById(messages: AiMessage[]): AiMessage[] {
+  return messages.reduce<AiMessage[]>(
+    (accumulator, message) => mergeStreamingMessage(accumulator, message),
+    []
+  );
+}
+
+export function parseExecutionWsMessage(payload: string): AiMessage | null {
+  try {
+    return JSON.parse(payload) as AiMessage;
+  } catch (error) {
+    console.error("Parse error:", error);
+    return null;
+  }
+}
+
+export async function executeWithWebSocketStream(params: {
+  id: string;
+  request: ExecutionWsRequest;
+  onMessage: (message: AiMessage) => void;
+  skipUserMessages?: boolean;
+}): Promise<void> {
+  const { id, request, onMessage, skipUserMessages = true } = params;
+
+  await executeWithWebSocket(id, request, (payload) => {
+    const message = parseExecutionWsMessage(payload);
+    if (!message) return;
+    if (skipUserMessages && message.role === "user") return;
+    onMessage(message);
+  });
+}

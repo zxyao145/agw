@@ -3,20 +3,15 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ulid } from "id128";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
-import { executeWithWebSocket } from "@/api/execution-ws";
 import { Button } from "@/components/ui/button";
-import type { AiMessageContent } from "@/types";
 
 import type {
   AgentDto,
   AgentCreateRequest,
   ToolInfo,
   ModelProviderApiKeyDto,
-  AgentExecuteRequest,
-  AgentExecuteResponse,
 } from "./components/types";
 import { getApiErrorMessage } from "./components/utils";
 import { CreateAgentDialog } from "./components/create-agent-dialog";
@@ -88,13 +83,6 @@ export default function AgentsPage() {
   const [executingAgent, setExecutingAgent] = React.useState<AgentDto | null>(
     null
   );
-  const [executeInput, setExecuteInput] = React.useState("");
-  const [executeThreadId, setExecuteThreadId] = React.useState<string | null>(
-    Ulid.generate().toCanonical()
-  );
-  const [executeResult, setExecuteResult] =
-    React.useState<AgentExecuteResponse | null>(null);
-  const [isExecuting, setIsExecuting] = React.useState(false);
 
   const createAgentMutation = useMutation({
     mutationFn: async (body: AgentCreateRequest) => {
@@ -160,77 +148,6 @@ export default function AgentsPage() {
     },
   });
 
-  // SSE-based execution function
-  const executeAgentSSE = async (
-    id: string,
-    body: AgentExecuteRequest
-  ): Promise<void> => {
-    setIsExecuting(true);
-
-    try {
-      await executeWithWebSocket(
-        id,
-        {
-          agentType: 1,
-          threadId: body.threadId,
-          input: body.input,
-        },
-        (json) => {
-          try {
-            const message = JSON.parse(json);
-
-            setExecuteResult((prev) => {
-              const messages = prev?.messages || [];
-              const existingIndex = messages.findIndex(
-                (m) => m.messageId === message.messageId
-              );
-
-              if (existingIndex >= 0) {
-                const updated = [...messages];
-                const existingMsg = updated[existingIndex];
-                const existingTextContent = existingMsg.contents.find(
-                  (c: AiMessageContent) => c.type === "text"
-                );
-                const newTextContent = message.contents.find(
-                  (c: AiMessageContent) => c.type === "text"
-                );
-
-                if (existingTextContent && newTextContent) {
-                  existingTextContent.content =
-                    (existingTextContent.content || "") +
-                    (newTextContent.content || "");
-                }
-
-                updated[existingIndex] = existingMsg;
-                console.debug(
-                  "Updated message:",
-                  prev?.threadId,
-                  updated[existingIndex]
-                );
-                return { threadId: prev?.threadId || "", messages: updated };
-              } else {
-                return {
-                  threadId: prev?.threadId || "",
-                  messages: [...messages, message],
-                };
-              }
-            });
-          } catch (e) {
-            console.error("Parse error:", e);
-          }
-        }
-      );
-    } catch (error) {
-      console.error("Execute failed:", error);
-      toast.error(
-        `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`
-      );
-      throw error;
-    } finally {
-      setIsExecuting(false);
-    }
-  };
-
   const handleEdit = (agent: AgentDto) => {
     setEditingAgent(agent);
     setEditName(agent.name);
@@ -256,21 +173,7 @@ export default function AgentsPage() {
 
   const handleExecute = (agent: AgentDto) => {
     setExecutingAgent(agent);
-    setExecuteInput("");
-    setExecuteResult(null);
     setExecuteOpen(true);
-    setExecuteThreadId(Ulid.generate().toCanonical());
-  };
-
-  const handleSendExecute = async () => {
-    if (!executingAgent || !executeInput.trim()) return;
-
-    await executeAgentSSE(executingAgent.id, {
-      threadId: executeThreadId,
-      input: executeInput,
-    });
-
-    setExecuteInput("");
   };
 
   const toggleTool = (toolName: string, isEdit: boolean = false) => {
@@ -403,14 +306,6 @@ export default function AgentsPage() {
         open={executeOpen}
         setOpen={setExecuteOpen}
         executingAgent={executingAgent}
-        executeInput={executeInput}
-        setExecuteInput={setExecuteInput}
-        executeThreadId={executeThreadId}
-        setExecuteThreadId={setExecuteThreadId}
-        executeResult={executeResult}
-        setExecuteResult={setExecuteResult}
-        isExecuting={isExecuting}
-        handleSendExecute={handleSendExecute}
       />
     </div>
   );

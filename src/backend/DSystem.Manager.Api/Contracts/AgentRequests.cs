@@ -24,15 +24,15 @@ public record AiAgentResponse(Guid Id, string Name, string SystemPrompt, string 
         new(agent.Id, agent.Name, agent.SystemPrompt, agent.ProviderName, agent.ModelName, agent.Endpoint, agent.ApiKey);
 }
 
-public record AgentExecuteRequest(string Input, string? ThreadId = null, Guid? ProjectId = null);
+public record AgentExecuteRequest(string Input, string? SessionId = null, Guid? ProjectId = null);
 
 public record ChatMessageResponse(string Role, string Content);
 
 public record AgentExecuteResponse(
-    string ThreadId,
+    string SessionId,
     IReadOnlyList<AiMessage> Messages)
 {
     public static AgentExecuteResponse FromDomain(AgentExecutionResult result) =>
-        new(result.ThreadId, result.Messages);
+        new(result.SessionId, result.Messages);
 }
 

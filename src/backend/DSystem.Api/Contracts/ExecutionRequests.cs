@@ -7,16 +7,16 @@ namespace DSystem.Api.Contracts;
 public record AgentExecutionRequest(
     ProjectTaskAgentType AgentType,
     string Input,
-    string? ThreadId = null,
+    string? SessionId = null,
     Guid? ProjectId = null);
 
 public record AgentExecutionResponse(
-    string? ThreadId,
+    string? SessionId,
     IReadOnlyList<AiMessage> Messages)
 {
     public static AgentExecutionResponse FromAgentResult(AgentExecutionResult result) =>
-        new(result.ThreadId, result.Messages);
+        new(result.SessionId, result.Messages);
 
     public static AgentExecutionResponse FromAgentflowResult(AgentflowExecutionResult result) =>
-        new(result.ThreadId, result.Messages);
+        new(result.SessionId, result.Messages);
 }

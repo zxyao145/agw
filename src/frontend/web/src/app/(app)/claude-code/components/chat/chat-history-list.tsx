@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  deleteSessionByThreadId,
+  deleteSessionBySessionId,
   updateSessionTitle,
   clearAllSessions,
   getAllSessions,
@@ -21,15 +21,15 @@ import {
 import { cn } from "@/lib/utils";
 
 interface ChatHistoryListProps {
-  currentThreadId: string | null;
+  currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onNewChat: () => void;
-  onSessionDeleted: (threadId: string) => void;
+  onSessionDeleted: (sessionId: string) => void;
   onAllSessionsCleared: () => void;
 }
 
 export function ChatHistoryList({
-  currentThreadId,
+  currentSessionId,
   onSessionSelect,
   onNewChat,
   onSessionDeleted,
@@ -68,10 +68,10 @@ export function ChatHistoryList({
     // }
 
     try {
-      const success = await deleteSessionByThreadId(session.sessionId);
+      const success = await deleteSessionBySessionId(session.sessionId);
       if (success) {
         toast.success("Chat deleted successfully");
-        if (session.sessionId === currentThreadId) {
+        if (session.sessionId === currentSessionId) {
           onSessionDeleted(session.sessionId);
         }
         await refreshSessions();
@@ -207,7 +207,7 @@ export function ChatHistoryList({
           </div>
         ) : (
           sessions.map((session) => {
-            const isActive = session.sessionId === currentThreadId;
+            const isActive = session.sessionId === currentSessionId;
             const isEditing = editingSessionId === session.sessionId;
 
             return (

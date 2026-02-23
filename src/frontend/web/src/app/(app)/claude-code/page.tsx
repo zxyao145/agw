@@ -18,7 +18,7 @@ import { Uuid4 } from "id128";
 import { InputArea } from "./components/user-input/input-area";
 import type { UserInputRef } from "@/components/message/user-input";
 import { ChatSession } from "@/components/message/chat-session";
-import { getSessionByThreadId, type ChatSessionRecordDetails } from "./lib/chat-history-service";
+import { getSessionBySessionId, type ChatSessionRecordDetails } from "./lib/chat-history-service";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -78,7 +78,7 @@ export default function ClaudeCodePage() {
   const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
-  const [threadId, setThreadId] = React.useState<string | null>(null);
+  const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [showCommentDialog, setShowCommentDialog] = React.useState(false);
@@ -136,12 +136,11 @@ export default function ClaudeCodePage() {
     [],
   );
 
-  const handleThreadId = (newThreadId: string | null) => {
-    if (newThreadId !== threadId) {
+  const handleSessionId = (newSessionId: string | null) => {
+    if (newSessionId !== sessionId) {
       settingsRequestSessionRef.current = null;
-      setThreadId(newThreadId);
+      setSessionId(newSessionId);
     }
-
   };
 
   const [initContent, setInitContent] =
@@ -231,18 +230,18 @@ export default function ClaudeCodePage() {
 
   const resolvedWorkingDirectory = React.useMemo(() => {
     if (directoryMode === DirectoryMode.gitAddress) {
-      if (!threadId) {
+      if (!sessionId) {
         return "";
       }
       const repoName = getRepositoryName(gitAddress);
-      return repoName ? `${gitCodeSource}/${repoName}/${threadId}` : "";
+      return repoName ? `${gitCodeSource}/${repoName}/${sessionId}` : "";
     }
     return workingDirectory;
   }, [
     directoryMode,
     getRepositoryName,
     gitAddress,
-    threadId,
+    sessionId,
     workingDirectory,
   ]);
 
@@ -406,18 +405,18 @@ export default function ClaudeCodePage() {
     settingsRequestSessionRef.current = sessionId;
   };
 
-  const ensureThreadId = () => {
-    if (threadId) {
-      return threadId;
+  const ensureSessionId = () => {
+    if (sessionId) {
+      return sessionId;
     }
-    const newThreadId = Uuid4.generate().toCanonical();
-    handleThreadId(newThreadId);
-    return newThreadId;
+    const newSessionId = Uuid4.generate().toCanonical();
+    handleSessionId(newSessionId);
+    return newSessionId;
   };
 
   const sendStatusRequest = (ws: WebSocket) => {
     // statusRequestPendingRef.current = true;
-    const sessionId = ensureThreadId();
+    const sessionId = ensureSessionId();
     sendSettingIfNeeded(ws, sessionId);
     setIsInitStatus(true);
     ws.send(JSON.stringify(buildInputRequest("/status")));
@@ -556,7 +555,7 @@ export default function ClaudeCodePage() {
         // Add user message to chat immediately
         setMessages((prev) => [...prev, userMsg]);
 
-        const tid = ensureThreadId();
+        const tid = ensureSessionId();
         sendSettingIfNeeded(ws, tid);
         const request = buildInputRequest(inputMsg);
         // console.debug("Sending request:", request);
@@ -594,7 +593,7 @@ export default function ClaudeCodePage() {
 
   const clearActiveSessionState = () => {
     setMessages([]);
-    handleThreadId(null);
+    handleSessionId(null);
     if (wsRef.current) {
       wsRef.current.close(1000, "Session cleared");
       wsRef.current = null;
@@ -605,7 +604,7 @@ export default function ClaudeCodePage() {
   const handleHistorySelect = async (sessionId: string) => {
     try {
       const details: ChatSessionRecordDetails | null =
-        await getSessionByThreadId(sessionId);
+        await getSessionBySessionId(sessionId);
       if (!details) {
         return;
       }
@@ -619,9 +618,9 @@ export default function ClaudeCodePage() {
 
   const handleSessionSelect = (
     newMessages: AiMessage[],
-    newThreadId: string,
+    newSessionId: string,
   ) => {
-    handleThreadId(newThreadId);
+    handleSessionId(newSessionId);
     for (let index = 0; index < newMessages.length; index++) {
       const aiMessage = newMessages[index];
       applyAiMessageActions(
@@ -637,15 +636,15 @@ export default function ClaudeCodePage() {
     settingsRequestSessionRef.current = null;
   };
 
-  const handleSessionDeleted = (deletedThreadId: string) => {
-    if (deletedThreadId !== threadId) {
+  const handleSessionDeleted = (deletedSessionId: string) => {
+    if (deletedSessionId !== sessionId) {
       return;
     }
     clearActiveSessionState();
   };
 
   const handleAllSessionsCleared = () => {
-    if (!threadId) {
+    if (!sessionId) {
       return;
     }
     clearActiveSessionState();
@@ -659,8 +658,8 @@ export default function ClaudeCodePage() {
   const initializeNewChat = async () => {
     handleClearSession();
 
-    const newThreadId = Uuid4.generate().toCanonical();
-    handleThreadId(newThreadId);
+    const newSessionId = Uuid4.generate().toCanonical();
+    handleSessionId(newSessionId);
 
     try {
       const ws = setupWebSocket();
@@ -888,7 +887,7 @@ export default function ClaudeCodePage() {
             {!isMobile && isChatTab && showChatHistory && (
               <ColResizeSplit.Left minWidth={200} maxWidth={600}>
                 <ChatHistoryList
-                  currentThreadId={threadId}
+                  currentSessionId={sessionId}
                   onSessionSelect={handleHistorySelect}
                   onNewChat={handleNewChat}
                   onSessionDeleted={handleSessionDeleted}
@@ -1013,7 +1012,7 @@ export default function ClaudeCodePage() {
           <div className="px-4 pb-6 h-full min-h-0 overflow-hidden">
             {drawerContent === "chat" && (
               <ChatHistoryList
-                currentThreadId={threadId}
+                currentSessionId={sessionId}
                 onSessionSelect={handleHistorySelect}
                 onNewChat={handleNewChat}
                 onSessionDeleted={handleSessionDeleted}

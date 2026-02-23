@@ -33,7 +33,7 @@ public class PlaceholderAgentflowAgentExecutor : IAgentflowAgentExecutor
 
 public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
 
-public record AgentflowExecutionResult(string ThreadId, IReadOnlyList<AiMessage> Messages);
+public record AgentflowExecutionResult(string SessionId, IReadOnlyList<AiMessage> Messages);
 
 public class AgentflowRuntimeService
 {
@@ -62,7 +62,7 @@ public class AgentflowRuntimeService
 
     public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
         Guid agentflowId,
-        string threadId,
+        string sessionId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
         Guid? projectId = null)
@@ -72,9 +72,9 @@ public class AgentflowRuntimeService
         {
             yield break;
         }
-        if (string.IsNullOrWhiteSpace(threadId))
+        if (string.IsNullOrWhiteSpace(sessionId))
         {
-            threadId = Guid.NewGuid().ToString("D");
+            sessionId = Guid.NewGuid().ToString("D");
         }
 
         var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
@@ -134,7 +134,7 @@ public class AgentflowRuntimeService
         }
 
         await _sessionRecordApplication.SaveThreadStateAsync(
-            threadId,
+            sessionId,
             projectId ?? Guid.Empty,
             JsonSerializer.SerializeToElement(new { agentflowId }),
             responseUpdates,
@@ -144,7 +144,7 @@ public class AgentflowRuntimeService
 
     public async Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
-        string threadId,
+        string sessionId,
         string input,
         CancellationToken cancellationToken = default,
         Guid? projectId = null)
@@ -154,9 +154,9 @@ public class AgentflowRuntimeService
         {
             return null;
         }
-        if (string.IsNullOrWhiteSpace(threadId))
+        if (string.IsNullOrWhiteSpace(sessionId))
         {
-            threadId = Guid.NewGuid().ToString("D");
+            sessionId = Guid.NewGuid().ToString("D");
         }
 
         var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
@@ -203,14 +203,14 @@ public class AgentflowRuntimeService
         }
 
         await _sessionRecordApplication.SaveThreadStateAsync(
-            threadId,
+            sessionId,
             projectId ?? Guid.Empty,
             JsonSerializer.SerializeToElement(new { agentflowId }),
             responseUpdates,
             input,
             CancellationToken.None);
 
-        return new AgentflowExecutionResult(threadId, Messages: outputs);
+        return new AgentflowExecutionResult(sessionId, Messages: outputs);
     }
 
 

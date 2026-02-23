@@ -37,4 +37,8 @@
 	  <ProjectReference Include="..\DSystem.Manager.Api\DSystem.Manager.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="logs\" />
+  </ItemGroup>
+
 </Project>

@@ -266,16 +266,16 @@ Request Body:
     }
   ],
   "context": {
-    "threadId": "optional-thread-id-for-multi-turn"
+    "sessionId": "optional-thread-id-for-multi-turn"
   }
 }
 ```
 
 Response: Server-Sent Events stream
 ```
-data: {"messageId":"123","role":"assistant","content":"Hello","threadId":"xyz"}
+data: {"messageId":"123","role":"assistant","content":"Hello","sessionId":"xyz"}
 
-data: {"messageId":"123","role":"assistant","content":" there!","threadId":"xyz"}
+data: {"messageId":"123","role":"assistant","content":" there!","sessionId":"xyz"}
 
 data: [DONE]
 ```
@@ -320,7 +320,7 @@ print(f"Agent: {card['name']} - {card['description']}")
 # Send message (streaming)
 payload = {
     "messages": [{"role": "user", "content": "Hello!"}],
-    "context": {"threadId": None}
+    "context": {"sessionId": None}
 }
 
 response = requests.post(
@@ -352,25 +352,25 @@ curl -X POST http://localhost:5000/a2a/my-agent/v1/message:stream \
   -H "Accept: text/event-stream" \
   -d '{
     "messages": [{"role": "user", "content": "Hello!"}],
-    "context": {"threadId": null}
+    "context": {"sessionId": null}
   }'
 ```
 
 ### Multi-Turn Conversations
 
 The A2A implementation uses `HybridCache` for thread state persistence:
-1. Client provides a `threadId` in the `context` object
+1. Client provides a `sessionId` in the `context` object
 2. First message creates a new thread state
-3. Subsequent messages with the same `threadId` preserve conversation history
+3. Subsequent messages with the same `sessionId` preserve conversation history
 4. Thread state is automatically serialized and cached
 
 Example:
 ```json
 // First turn
-{"messages": [{"role": "user", "content": "My name is Alice"}], "context": {"threadId": "thread-123"}}
+{"messages": [{"role": "user", "content": "My name is Alice"}], "context": {"sessionId": "thread-123"}}
 
 // Second turn (remembers context)
-{"messages": [{"role": "user", "content": "What is my name?"}], "context": {"threadId": "thread-123"}}
+{"messages": [{"role": "user", "content": "What is my name?"}], "context": {"sessionId": "thread-123"}}
 ```
 
 ### AgentCard Schema
@@ -539,7 +539,7 @@ D-System integrates with Claude Code SDK (via local project reference) to provid
   - Graceful shutdown and connection lifecycle management
 
 - **ClaudeCodeRequests** (`DSystem.ExternalAgents/ClaudeCodeRequests.cs`):
-  - `ClaudeCodeExecuteRequest` record with Input, WorkingDirectory, ApiKey, ApiBaseUrl, SystemPrompt, MaxTurns, ThreadId, PermissionMode
+  - `ClaudeCodeExecuteRequest` record with Input, WorkingDirectory, ApiKey, ApiBaseUrl, SystemPrompt, MaxTurns, SessionId, PermissionMode
 
 **Frontend Components** (`src/frontend/web/src/app/(app)/claude-code/`):
 - **page.tsx**: Main chat interface with tabbed layout (Chat/FileExplorer)
@@ -570,7 +570,7 @@ const ws = new WebSocket(`ws://localhost:5000/api/external-agents/claude-code/ws
   "apiBaseUrl": "https://api.anthropic.com",
   "systemPrompt": "Custom system prompt",
   "maxTurns": 10,
-  "threadId": "unique-thread-id",
+  "sessionId": "unique-thread-id",
   "permissionMode": "default"
 }
 ```
@@ -611,7 +611,7 @@ const ws = new WebSocket(`ws://localhost:5000/api/external-agents/claude-code/ws
 
 ### Thread State Management
 
-- Thread state persisted in `HybridCache` using `ThreadId` as key
+- Thread state persisted in `HybridCache` using `SessionId` as key
 - `AgentSession.Serialize()` → JSON → cache storage
 - `AgentSession.Deserialize()` → restore conversation context
 - Enables multi-turn conversations with full context preservation
@@ -742,7 +742,7 @@ Backend uses Serilog for structured logging with OpenTelemetry correlation:
                 "path": "logs/dsystem-.log",
                 "rollingInterval": "Day",
                 "retainedFileCountLimit": 30,
-                "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] [TraceId:{TraceId}] [SpanId:{SpanId}] [MachineName:{MachineName}] [ThreadId:{ThreadId}] {Message:lj}{NewLine}{Exception}"
+                "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] [TraceId:{TraceId}] [SpanId:{SpanId}] [MachineName:{MachineName}] [SessionId:{SessionId}] {Message:lj}{NewLine}{Exception}"
               }
             }
           ]

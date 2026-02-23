@@ -46,16 +46,16 @@ public class OpenAIController : ControllerBase
             return BadRequest(new { error = new { message = "No user message found in request.", type = "invalid_request_error" } });
         }
 
-        var threadId = request.PreviousResponseId ?? string.Empty;
+        var sessionId = request.PreviousResponseId ?? string.Empty;
 
         // Handle streaming vs non-streaming
         if (request.Stream)
         {
-            return await StreamChatCompletionAsync(agentId, threadId, userMessage.Content, request.Model, cancellationToken);
+            return await StreamChatCompletionAsync(agentId, sessionId, userMessage.Content, request.Model, cancellationToken);
         }
         else
         {
-            return await CompleteChatAsync(agentId, threadId, userMessage.Content, request.Model, cancellationToken);
+            return await CompleteChatAsync(agentId, sessionId, userMessage.Content, request.Model, cancellationToken);
         }
     }
 
@@ -66,12 +66,12 @@ public class OpenAIController : ControllerBase
     /// </summary>
     private async Task<IActionResult> CompleteChatAsync(
         Guid agentId,
-        string threadId,
+        string sessionId,
         string input,
         string model,
         CancellationToken cancellationToken)
     {
-        var result = await _agentRuntimeService.ExecuteAsync(agentId, threadId, input, cancellationToken);
+        var result = await _agentRuntimeService.ExecuteAsync(agentId, sessionId, input, cancellationToken);
         if (result == null)
         {
             return NotFound(new { error = new { message = "Agent not found or execution failed.", type = "invalid_request_error" } });
@@ -111,7 +111,7 @@ public class OpenAIController : ControllerBase
             Id = completionId,
             Created = created,
             Model = model,
-            ThreadId = result.ThreadId,
+            SessionId = result.SessionId,
             Choices = new List<OpenAIChatChoice>
             {
                 new OpenAIChatChoice
@@ -142,7 +142,7 @@ public class OpenAIController : ControllerBase
     /// </summary>
     private async Task<IActionResult> StreamChatCompletionAsync(
         Guid agentId,
-        string threadId,
+        string sessionId,
         string input,
         string model,
         CancellationToken cancellationToken)
@@ -154,11 +154,11 @@ public class OpenAIController : ControllerBase
         var completionId = $"chatcmpl-{Guid.NewGuid():N}";
         var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var isFirstChunk = true;
-        var currentThreadId = threadId;
+        var currentSessionId = sessionId;
 
         try
         {
-            await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(agentId, threadId, input, cancellationToken))
+            await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(agentId, sessionId, input, cancellationToken))
             {
                 // First chunk includes role
                 if (isFirstChunk)
@@ -168,7 +168,7 @@ public class OpenAIController : ControllerBase
                         Id = completionId,
                         Created = created,
                         Model = model,
-                        ThreadId = currentThreadId,
+                        SessionId = currentSessionId,
                         Choices = new List<OpenAIChatChunkChoice>
                         {
                             new OpenAIChatChunkChoice
@@ -192,10 +192,10 @@ public class OpenAIController : ControllerBase
                 // Content chunks
                 var chunk = new OpenAIChatCompletionChunk
                 {
-                    Id = threadId,
+                    Id = sessionId,
                     Created = created,
                     Model = model,
-                    ThreadId = currentThreadId,
+                    SessionId = currentSessionId,
                     Choices = new List<OpenAIChatChunkChoice>
                     {
                         new OpenAIChatChunkChoice
@@ -220,7 +220,7 @@ public class OpenAIController : ControllerBase
                 Id = completionId,
                 Created = created,
                 Model = model,
-                ThreadId = currentThreadId,
+                SessionId = currentSessionId,
                 Choices = new List<OpenAIChatChunkChoice>
                 {
                     new OpenAIChatChunkChoice
@@ -296,17 +296,17 @@ public class OpenAIController : ControllerBase
         }
 
 
-        var threadId = string.IsNullOrWhiteSpace(request.PreviousResponseId)
+        var sessionId = string.IsNullOrWhiteSpace(request.PreviousResponseId)
             ? Guid.NewGuid().ToString() : request.PreviousResponseId;
 
         // Handle streaming vs non-streaming
         if (request.Stream == true)
         {
-            return await StreamResponseAsync(agentId, threadId, inputText, request.Model, cancellationToken);
+            return await StreamResponseAsync(agentId, sessionId, inputText, request.Model, cancellationToken);
         }
         else
         {
-            return await CompleteResponseAsync(agentId, threadId, inputText, request.Model, cancellationToken);
+            return await CompleteResponseAsync(agentId, sessionId, inputText, request.Model, cancellationToken);
         }
     }
 
@@ -315,12 +315,12 @@ public class OpenAIController : ControllerBase
     /// </summary>
     private async Task<IActionResult> CompleteResponseAsync(
         Guid agentId,
-        string threadId,
+        string sessionId,
         string input,
         string model,
         CancellationToken cancellationToken)
     {
-        var result = await _agentRuntimeService.ExecuteAsync(agentId, threadId, input, cancellationToken);
+        var result = await _agentRuntimeService.ExecuteAsync(agentId, sessionId, input, cancellationToken);
         if (result == null)
         {
             return NotFound(new { error = new { message = "Agent not found or execution failed.", type = "invalid_request_error" } });
@@ -359,7 +359,7 @@ public class OpenAIController : ControllerBase
             Id = responseId,
             CreatedAt = created,
             Model = model,
-            PreviousResponseId = result.ThreadId,
+            PreviousResponseId = result.SessionId,
             Output = new List<ResponsesOutputItem>
             {
                 new ResponsesOutputItem
@@ -389,7 +389,7 @@ public class OpenAIController : ControllerBase
     /// </summary>
     private async Task<IActionResult> StreamResponseAsync(
         Guid agentId,
-        string threadId,
+        string sessionId,
         string input,
         string model,
         CancellationToken cancellationToken)
@@ -403,7 +403,7 @@ public class OpenAIController : ControllerBase
 
         try
         {
-            await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(agentId, threadId, input, cancellationToken))
+            await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(agentId, sessionId, input, cancellationToken))
             {
                 #region first chunk
                 //if (isFirstEvent)
@@ -448,7 +448,7 @@ public class OpenAIController : ControllerBase
                 // Send content delta event
                 var deltaEvent = new ResponsesStreamEvent
                 {
-                    Id = threadId,
+                    Id = sessionId,
                     Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                     Model = model,
                     Output = new List<OutputItem>

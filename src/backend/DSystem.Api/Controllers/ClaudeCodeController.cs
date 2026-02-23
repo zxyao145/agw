@@ -156,7 +156,7 @@ public class ClaudeCodeController(
         try
         {
             var session = await claudeCodeService.InitializeSessionAsync(setting, HttpContext.RequestAborted);
-            logger.LogInformation("ClaudeCode session initialized: {ThreadId}", setting.SessionId);
+            logger.LogInformation("ClaudeCode session initialized: {SessionId}", setting.SessionId);
             await SendMessageAsync(webSocket, "Session initialized successfully");
             return session;
         }

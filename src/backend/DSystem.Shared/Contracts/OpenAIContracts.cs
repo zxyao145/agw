@@ -113,7 +113,7 @@ public record OpenAIChatCompletionResponse
     /// Thread ID for conversation continuation (custom extension)
     /// </summary>
     [JsonPropertyName("thread_id")]
-    public string? ThreadId { get; init; }
+    public string? SessionId { get; init; }
 }
 
 /// <summary>
@@ -179,7 +179,7 @@ public record OpenAIChatCompletionChunk
     /// Thread ID for conversation continuation (custom extension)
     /// </summary>
     [JsonPropertyName("thread_id")]
-    public string? ThreadId { get; init; }
+    public string? SessionId { get; init; }
 }
 
 /// <summary>

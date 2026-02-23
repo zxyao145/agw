@@ -6,7 +6,7 @@ import { PanelLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { ChatSession, ChatSessionProps } from "../../../../../components/message/chat-session";
 import type { AiMessage } from "@/types";
 import ColResizeSplit from "../split-layout";
-import { getSessionByThreadId, type ChatSessionRecordDetails } from "../../lib/chat-history-service";
+import { getSessionBySessionId, type ChatSessionRecordDetails } from "../../lib/chat-history-service";
 import {
   Drawer,
   DrawerContent,
@@ -23,15 +23,15 @@ const ChatHistoryList = dynamic(
   { ssr: false }
 );
 export interface ChatProps extends ChatSessionProps {
-  currentThreadId: string | null;
-  onSessionSelect: (messages: AiMessage[], threadId: string) => void;
+  currentSessionId: string | null;
+  onSessionSelect: (messages: AiMessage[], sessionId: string) => void;
   onNewChat: () => void;
-  onSessionDeleted: (threadId: string) => void;
+  onSessionDeleted: (sessionId: string) => void;
   onAllSessionsCleared: () => void;
 }
 
 export function Chat({
-  currentThreadId,
+  currentSessionId,
   onSessionSelect,
   onNewChat,
   onSessionDeleted,
@@ -56,7 +56,7 @@ export function Chat({
   const handleSessionSelect = async (sessionId: string) => {
     try {
       const details: ChatSessionRecordDetails | null =
-        await getSessionByThreadId(sessionId);
+        await getSessionBySessionId(sessionId);
       if (!details) {
         return;
       }
@@ -102,7 +102,7 @@ export function Chat({
                 </DrawerHeader>
                 <div className="px-4 pb-6">
                   <ChatHistoryList
-                    currentThreadId={currentThreadId}
+                    currentSessionId={currentSessionId}
                     onSessionSelect={handleSessionSelect}
                     onNewChat={onNewChat}
                     onSessionDeleted={onSessionDeleted}
@@ -117,7 +117,7 @@ export function Chat({
           {!isMobile && showChatHistory && (
             <ColResizeSplit.Left>
               <ChatHistoryList
-                currentThreadId={currentThreadId}
+                currentSessionId={currentSessionId}
                 onSessionSelect={handleSessionSelect}
                 onNewChat={onNewChat}
                 onSessionDeleted={onSessionDeleted}

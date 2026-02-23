@@ -115,7 +115,7 @@ public sealed class AgentExecSession : IAsyncDisposable
             responseUpdates,
             input,
             cancellationToken);
-        _logger.LogDebug("Saved thread state for session: {ThreadId}", _sessionId);
+        _logger.LogDebug("Saved thread state for session: {SessionId}", _sessionId);
     }
 
     /// <summary>
