@@ -173,6 +173,10 @@ try
     Log.Information("D-System Host configured successfully");
     app.Run();
 }
+catch (HostAbortedException hae)
+{
+    Log.Warning(hae, "HostAbortedException");
+}
 catch (Exception ex)
 {
     Log.Fatal(ex, "D-System Host terminated unexpectedly");

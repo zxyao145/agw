@@ -17,18 +17,19 @@ export interface ChatSessionRecordDetails extends ChatSessionRecordSummary {
 }
 
 const LIST_ENDPOINT = "/api/session-records";
+export const CLAUDE_CODE_PROJECT_ID = "claude-code";
 
-function buildProjectQuery(projectId?: string) {
-  const value = projectId?.trim();
+function buildProjectQuery(projectId: string) {
+  const value = projectId.trim();
   if (!value) {
-    return "";
+    throw new Error("projectId is required");
   }
   return `projectId=${encodeURIComponent(value)}`;
 }
 
-function appendProjectQuery(url: string, projectId?: string): string {
+function appendProjectQuery(url: string, projectId: string): string {
   const query = buildProjectQuery(projectId);
-  return query ? `${url}?${query}` : url;
+  return `${url}?${query}`;
 }
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -41,7 +42,7 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
 }
 
 export async function getAllSessions(
-  projectId?: string,
+  projectId: string,
 ): Promise<ChatSessionRecordSummary[]> {
   const url = appendProjectQuery(LIST_ENDPOINT, projectId);
   return await fetchJson<ChatSessionRecordSummary[]>(url);
@@ -49,7 +50,7 @@ export async function getAllSessions(
 
 export async function getSessionBySessionId(
   sessionId: string,
-  projectId?: string,
+  projectId: string,
 ): Promise<ChatSessionRecordDetails | null> {
   if (!sessionId) {
     return null;
@@ -72,7 +73,7 @@ export async function getSessionBySessionId(
 
 export async function deleteSessionBySessionId(
   sessionId: string,
-  projectId?: string,
+  projectId: string,
 ): Promise<boolean> {
   if (!sessionId) {
     return false;
@@ -95,7 +96,7 @@ export async function deleteSessionBySessionId(
 export async function updateSessionTitle(
   sessionId: string,
   newTitle: string,
-  projectId?: string,
+  projectId: string,
 ): Promise<boolean> {
   if (!sessionId || !newTitle.trim()) {
     return false;
@@ -119,7 +120,7 @@ export async function updateSessionTitle(
   return true;
 }
 
-export async function clearAllSessions(projectId?: string): Promise<void> {
+export async function clearAllSessions(projectId: string): Promise<void> {
   const sessions = await getAllSessions(projectId);
   await Promise.all(
     sessions.map((session) => deleteSessionBySessionId(session.sessionId, projectId)),

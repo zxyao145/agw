@@ -90,7 +90,7 @@ public class AgentRuntimeService
         Agent agent,
         string? extraOverride = null,
         string? sessionId = null,
-        Guid? projectId = null)
+        string? projectId = null)
     {
         if (agent.Type == AgentType.External)
         {
@@ -206,7 +206,7 @@ public class AgentRuntimeService
     public async Task<AgentExecSession?> CreateSessionAsync(
         Guid agentId,
         string sessionId,
-        Guid? projectId = null,
+        string? projectId = null,
         CancellationToken cancellationToken = default)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
@@ -232,19 +232,19 @@ public class AgentRuntimeService
         return new AgentExecSession(
             aiAgent,
             agentSession,
-            projectId ?? Guid.Empty,
+            projectId ?? string.Empty,
             sessionId,
             _logger,
             _sessionRecordApplication);
     }
 
-    private async Task<bool> HasSessionRecordAsync(string sessionId, Guid? projectId)
+    private async Task<bool> HasSessionRecordAsync(string sessionId, string? projectId)
     {
         IReadOnlyList<DSystem.SessionRecords.Entities.AgentSessionRecord> records;
-        if (projectId.HasValue && projectId.Value != Guid.Empty)
+        if (!string.IsNullOrWhiteSpace(projectId))
         {
             records = await _agentSessionRecordRepository.ListAsync(r =>
-                r.SessionId == sessionId && r.ProjectId == projectId.Value);
+                r.SessionId == sessionId && r.ProjectId == projectId);
         }
         else
         {
@@ -285,7 +285,7 @@ public class AgentRuntimeService
         string sessionId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
-        Guid? projectId = null)
+        string? projectId = null)
     {
         var session = await CreateSessionAsync(agentId, sessionId, projectId, cancellationToken);
         if (session == null)
@@ -340,7 +340,7 @@ public class AgentRuntimeService
         string sessionId,
         string input,
         CancellationToken cancellationToken = default,
-        Guid? projectId = null)
+        string? projectId = null)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
         if (agent == null)
@@ -402,7 +402,7 @@ public class AgentRuntimeService
 
             await _sessionRecordApplication.SaveThreadStateAsync(
                 sessionId,
-                projectId ?? Guid.Empty,
+                projectId ?? string.Empty,
                 await aiAgent.SerializeSessionAsync(session),
                 responseUpdates,
                 input,
@@ -458,14 +458,19 @@ public class AgentRuntimeService
         return merged.ToJsonString();
     }
 
-    private async Task<string?> GetProjectExtraSettingAsync(Guid? projectId)
+    private async Task<string?> GetProjectExtraSettingAsync(string? projectId)
     {
-        if (!projectId.HasValue || projectId.Value == Guid.Empty)
+        if (string.IsNullOrWhiteSpace(projectId))
         {
             return null;
         }
 
-        var project = await _projectRepository.GetByIdAsync(projectId.Value);
+        if (!Guid.TryParse(projectId, out var projectGuid))
+        {
+            return null;
+        }
+
+        var project = await _projectRepository.GetByIdAsync(projectGuid);
         return project?.ExtraSetting;
     }
 

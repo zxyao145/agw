@@ -21,13 +21,18 @@ public class SessionRecordApplication
 
     public async Task SaveThreadStateAsync(
         string sessionId,
-        Guid projectId,
+        string projectId,
         JsonElement serializedThread,
         IReadOnlyCollection<AgentResponseUpdate> updates,
         string? input,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(projectId))
         {
             return;
         }

@@ -34,7 +34,7 @@ public sealed class AgentExecSession : IAsyncDisposable
 
     private readonly ILogger _logger;
     public readonly string _sessionId;
-    public readonly Guid _projectId;
+    public readonly string _projectId;
 
     private readonly SessionRecordApplication _sessionRecordApplication;
 
@@ -44,7 +44,7 @@ public sealed class AgentExecSession : IAsyncDisposable
     public AgentExecSession(
         AIAgent agent,
         AgentSession thread,
-        Guid projectId,
+        string projectId,
         string? sessionId,
         ILogger logger,
         SessionRecordApplication sessionRecordApplication)

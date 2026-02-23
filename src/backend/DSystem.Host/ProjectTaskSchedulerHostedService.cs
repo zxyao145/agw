@@ -198,14 +198,14 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                                 marked.Id.ToString("D"),
                                 marked.Input,
                                 stoppingToken,
-                                marked.ProjectId),
+                                marked.ProjectId.ToString("D")),
                         ProjectTaskAgentType.Agent when marked.AgentId.HasValue =>
                             await agentRuntime.ExecuteAsync(
                                 marked.AgentId.Value,
                                 marked.Id.ToString("D"),
                                 marked.Input,
                                 stoppingToken,
-                                marked.ProjectId),
+                                marked.ProjectId.ToString("D")),
                         _ => null
                     };
                     stopwatch.Stop();

@@ -65,7 +65,7 @@ public class AgentflowRuntimeService
         string sessionId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
-        Guid? projectId = null)
+        string? projectId = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
@@ -135,7 +135,7 @@ public class AgentflowRuntimeService
 
         await _sessionRecordApplication.SaveThreadStateAsync(
             sessionId,
-            projectId ?? Guid.Empty,
+            projectId ?? string.Empty,
             JsonSerializer.SerializeToElement(new { agentflowId }),
             responseUpdates,
             input,
@@ -147,7 +147,7 @@ public class AgentflowRuntimeService
         string sessionId,
         string input,
         CancellationToken cancellationToken = default,
-        Guid? projectId = null)
+        string? projectId = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
@@ -204,7 +204,7 @@ public class AgentflowRuntimeService
 
         await _sessionRecordApplication.SaveThreadStateAsync(
             sessionId,
-            projectId ?? Guid.Empty,
+            projectId ?? string.Empty,
             JsonSerializer.SerializeToElement(new { agentflowId }),
             responseUpdates,
             input,

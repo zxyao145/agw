@@ -166,8 +166,8 @@ public class LlmDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.ProjectId, e.SessionId }).IsUnique();
+            entity.Property(e => e.ProjectId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.ProjectId).HasDefaultValue(Guid.Empty);
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue(string.Empty);
             entity.Property(e => e.Messages).HasColumnType("text");
         });

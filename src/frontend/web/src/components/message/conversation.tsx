@@ -23,7 +23,7 @@ import { deleteSessionBySessionId, getSessionBySessionId } from "@/app/(app)/cla
 export interface ConversationProps {
   executionId: string | null | undefined;
   agentType: number;
-  projectId?: string | null;
+  projectId: string;
   sessionId?: string | null;
   resetSignal?: string | number | boolean;
   placeholder?: string;
@@ -68,14 +68,7 @@ export function Conversation({
   const sessionQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", curSessionId, "session-record"],
     queryFn: async () => {
-      const sessionByProject = await getSessionBySessionId(
-        curSessionId,
-        projectId ?? "",
-      );
-      if (sessionByProject) {
-        return sessionByProject;
-      }
-      return await getSessionBySessionId(curSessionId);
+      return await getSessionBySessionId(curSessionId, projectId);
     },
     enabled: Boolean(curSessionId),
     refetchInterval: false,
@@ -147,11 +140,11 @@ export function Conversation({
   );
 
   const handleClear = React.useCallback(async () => {
-    const success = await deleteSessionBySessionId(curSessionId, projectId ?? "");
+    const success = await deleteSessionBySessionId(curSessionId, projectId);
     if(success){
       setMessages([]);
     }
-  }, []);
+  }, [curSessionId, projectId]);
 
   const handleScrollToTop = () => {
     messagesStartRef.current?.scrollIntoView({

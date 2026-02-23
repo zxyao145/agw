@@ -18,7 +18,11 @@ import { Uuid4 } from "id128";
 import { InputArea } from "./components/user-input/input-area";
 import type { UserInputRef } from "@/components/message/user-input";
 import { ChatSession } from "@/components/message/chat-session";
-import { getSessionBySessionId, type ChatSessionRecordDetails } from "./lib/chat-history-service";
+import {
+  CLAUDE_CODE_PROJECT_ID,
+  getSessionBySessionId,
+  type ChatSessionRecordDetails,
+} from "./lib/chat-history-service";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -372,6 +376,7 @@ export default function ClaudeCodePage() {
         systemPrompt: null,
         maxTurns: null,
         sessionId: sessionId,
+        projectId: CLAUDE_CODE_PROJECT_ID,
         permissionMode: permissionMode,
         environmentVariables: buildEnvironmentVariables(),
       },
@@ -604,7 +609,7 @@ export default function ClaudeCodePage() {
   const handleHistorySelect = async (sessionId: string) => {
     try {
       const details: ChatSessionRecordDetails | null =
-        await getSessionBySessionId(sessionId);
+        await getSessionBySessionId(sessionId, CLAUDE_CODE_PROJECT_ID);
       if (!details) {
         return;
       }

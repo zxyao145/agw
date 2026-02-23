@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  CLAUDE_CODE_PROJECT_ID,
   deleteSessionBySessionId,
   updateSessionTitle,
   clearAllSessions,
@@ -44,7 +45,7 @@ export function ChatHistoryList({
   const refreshSessions = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const latestSessions = await getAllSessions();
+      const latestSessions = await getAllSessions(CLAUDE_CODE_PROJECT_ID);
       setSessions(latestSessions);
     } catch (error) {
       console.error("Failed to load chat history:", error);
@@ -68,7 +69,10 @@ export function ChatHistoryList({
     // }
 
     try {
-      const success = await deleteSessionBySessionId(session.sessionId);
+      const success = await deleteSessionBySessionId(
+        session.sessionId,
+        CLAUDE_CODE_PROJECT_ID,
+      );
       if (success) {
         toast.success("Chat deleted successfully");
         if (session.sessionId === currentSessionId) {
@@ -90,7 +94,7 @@ export function ChatHistoryList({
     }
 
     try {
-      await clearAllSessions();
+      await clearAllSessions(CLAUDE_CODE_PROJECT_ID);
       toast.success("All chats cleared");
       onAllSessionsCleared();
       await refreshSessions();
@@ -121,7 +125,11 @@ export function ChatHistoryList({
     }
 
     try {
-      const success = await updateSessionTitle(sessionId, editTitle.trim());
+      const success = await updateSessionTitle(
+        sessionId,
+        editTitle.trim(),
+        CLAUDE_CODE_PROJECT_ID,
+      );
       if (success) {
         toast.success("Title updated");
         setEditingSessionId(null);

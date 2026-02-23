@@ -6,7 +6,11 @@ import { PanelLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { ChatSession, ChatSessionProps } from "../../../../../components/message/chat-session";
 import type { AiMessage } from "@/types";
 import ColResizeSplit from "../split-layout";
-import { getSessionBySessionId, type ChatSessionRecordDetails } from "../../lib/chat-history-service";
+import {
+  CLAUDE_CODE_PROJECT_ID,
+  getSessionBySessionId,
+  type ChatSessionRecordDetails,
+} from "../../lib/chat-history-service";
 import {
   Drawer,
   DrawerContent,
@@ -56,7 +60,7 @@ export function Chat({
   const handleSessionSelect = async (sessionId: string) => {
     try {
       const details: ChatSessionRecordDetails | null =
-        await getSessionBySessionId(sessionId);
+        await getSessionBySessionId(sessionId, CLAUDE_CODE_PROJECT_ID);
       if (!details) {
         return;
       }

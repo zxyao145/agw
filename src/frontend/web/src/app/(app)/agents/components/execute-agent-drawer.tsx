@@ -30,6 +30,9 @@ export function ExecuteAgentDrawer({
     }
   }, [open, executingAgent]);
 
+  if (!executingAgent) return null;
+  const projectId = `agent-${executingAgent.id}`;
+
   return (
     <Drawer direction="right" open={open} onOpenChange={setOpen} modal={true}>
       <DrawerContent
@@ -52,9 +55,10 @@ export function ExecuteAgentDrawer({
 
         <Conversation
           className="px-4 pb-4 h-[calc(100vh-62px)]"
-          executionId={executingAgent?.id}
+          executionId={executingAgent.id}
           agentType={1}
-          resetSignal={`${executingAgent?.id ?? "none"}:${resetSignal}`}
+          projectId={projectId}
+          resetSignal={`${executingAgent.id}:${resetSignal}`}
           placeholder="请输入要发送给 agent 的内容..."
         />
       </DrawerContent>

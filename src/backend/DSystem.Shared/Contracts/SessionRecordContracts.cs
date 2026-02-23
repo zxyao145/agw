@@ -4,7 +4,7 @@ namespace DSystem.Shared.Contracts;
 
 public record SessionRecordSummary(
     long Id,
-    Guid ProjectId,
+    string ProjectId,
     string SessionId,
     string Title,
     int MessageCount,
@@ -13,7 +13,7 @@ public record SessionRecordSummary(
 
 public record SessionRecordDetails(
     long Id,
-    Guid ProjectId,
+    string ProjectId,
     string SessionId,
     string Title,
     IReadOnlyList<AiMessage> Messages,

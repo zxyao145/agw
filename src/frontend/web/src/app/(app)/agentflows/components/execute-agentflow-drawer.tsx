@@ -31,6 +31,7 @@ export function ExecuteAgentflowDrawer({
   }, [open, agentflow]);
 
   if (!agentflow) return null;
+  const projectId = `agentflow-${agentflow.id}`;
 
   return (
     <Drawer
@@ -61,6 +62,7 @@ export function ExecuteAgentflowDrawer({
           className="px-4 pb-4 h-[calc(100vh-62px)]"
           executionId={agentflow.id}
           agentType={0}
+          projectId={projectId}
           resetSignal={`${agentflow?.id ?? "none"}:${resetSignal}`}
           placeholder="请输入要发送给 agentflow 的内容..."
         />

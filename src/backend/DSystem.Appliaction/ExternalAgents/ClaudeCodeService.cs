@@ -151,7 +151,7 @@ public class ClaudeCodeService
         return options;
     }
 
-    private async Task<AgentSessionRecord?> FindSessionRecordAsync(string sessionId, Guid projectId)
+    private async Task<AgentSessionRecord?> FindSessionRecordAsync(string sessionId, string projectId)
     {
         var records = await _repository.ListAsync(session => session.SessionId == sessionId && session.ProjectId == projectId);
         return records.FirstOrDefault();

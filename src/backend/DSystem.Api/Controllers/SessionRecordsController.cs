@@ -20,10 +20,14 @@ public class SessionRecordsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> ListAsync([FromQuery] Guid? projectId)
+    public async Task<IActionResult> ListAsync([FromQuery] string projectId)
     {
-        var resolvedProjectId = projectId ?? Guid.Empty;
-        var records = await _service.ListAsync(r => r.ProjectId == resolvedProjectId);
+        if (string.IsNullOrWhiteSpace(projectId))
+        {
+            return BadRequest("projectId is required.");
+        }
+
+        var records = await _service.ListAsync(r => r.ProjectId == projectId);
         var summaries = records
             .OrderByDescending(r => r.UpdateTime ?? r.CreateTime)
             .Select(r => new SessionRecordSummary(
@@ -40,8 +44,13 @@ public class SessionRecordsController : ControllerBase
     }
 
     [HttpGet("{sessionId}")]
-    public async Task<IActionResult> GetAsync(string sessionId, [FromQuery] Guid? projectId)
+    public async Task<IActionResult> GetAsync(string sessionId, [FromQuery] string projectId)
     {
+        if (string.IsNullOrWhiteSpace(projectId))
+        {
+            return BadRequest("projectId is required.");
+        }
+
         var record = await _service.GetBySessionIdAsync(sessionId, projectId);
         if (record == null)
         {
@@ -62,8 +71,13 @@ public class SessionRecordsController : ControllerBase
     }
 
     [HttpDelete("{sessionId}")]
-    public async Task<IActionResult> DeleteAsync(string sessionId, [FromQuery] Guid? projectId)
+    public async Task<IActionResult> DeleteAsync(string sessionId, [FromQuery] string projectId)
     {
+        if (string.IsNullOrWhiteSpace(projectId))
+        {
+            return BadRequest("projectId is required.");
+        }
+
         var deleted = await _service.DeleteBySessionIdAsync(sessionId, projectId);
         return deleted ? NoContent() : NotFound();
     }
@@ -71,9 +85,14 @@ public class SessionRecordsController : ControllerBase
     [HttpPut("{sessionId}/title")]
     public async Task<IActionResult> UpdateTitleAsync(
         string sessionId,
-        [FromQuery] Guid? projectId,
+        [FromQuery] string projectId,
         [FromBody] SessionRecordTitleUpdateRequest request)
     {
+        if (string.IsNullOrWhiteSpace(projectId))
+        {
+            return BadRequest("projectId is required.");
+        }
+
         if (request == null || string.IsNullOrWhiteSpace(request.Title))
         {
             return BadRequest("Title is required.");
