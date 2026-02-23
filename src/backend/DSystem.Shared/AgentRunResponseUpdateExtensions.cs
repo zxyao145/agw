@@ -9,6 +9,28 @@ public static class AgentRunResponseUpdateExtensions
     /// <summary>
     /// Convert AgentResponseUpdate to AiMessage DTO.
     /// </summary>
+    public static AiMessage? ToAiMessage(this ChatMessage? chatMessage)
+    {
+        if (chatMessage == null) return null;
+
+        var contents = chatMessage.Contents
+            .Select(ConvertContent)
+            .OfType<AiMessageContent>()
+            .ToList();
+
+        return new AiMessage(
+            chatMessage.MessageId ?? "",
+            chatMessage.AuthorName,
+            chatMessage.Role.Value,
+            contents,
+            chatMessage.AdditionalProperties
+        );
+    }
+
+
+    /// <summary>
+    /// Convert AgentResponseUpdate to AiMessage DTO.
+    /// </summary>
     public static AiMessage? ToAiMessage(this AgentResponseUpdate? update)
     {
         if (update == null) return null;

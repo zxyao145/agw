@@ -39,7 +39,7 @@ export function VisualAgentflowDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="fixed inset-0 w-screen h-screen max-w-none sm:max-w-none max-h-none m-0 p-6 flex flex-col translate-x-0 translate-y-0 rounded-none border-0"
+        className="fixed inset-0 w-screen h-screen max-w-none sm:max-w-none max-h-none m-0 p-4 flex flex-col translate-x-0 translate-y-0 rounded-none border-0"
         onInteractOutside={(e) => e.preventDefault()}
         onPointerDownOutside={(e) => e.preventDefault()}
         showCloseButton={false}
@@ -63,7 +63,7 @@ export function VisualAgentflowDialog({
             </DialogClose>
           </div>
         </DialogHeader>
-        <div className="flex-1 min-h-0 mt-4">
+        <div className="flex-1 min-h-0">
           <VisualAgentflowBuilder
             agents={agents}
             agentflows={agentflows}

@@ -1,16 +1,20 @@
 using DSystem.Domain.Entities;
+using DSystem.Domain.Repositories;
 using DSystem.Domain.Services;
+using DSystem.SessionRecords.Application;
+using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
-using DSystem.Domain.Repositories;
-using DSystem.SessionRecords.Application;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 using MsAgentWorkflowBuilder = Microsoft.Agents.AI.Workflows.AgentWorkflowBuilder;
-using DSystem.Shared;
 
 namespace DSystem.Appliaction.Services;
 
@@ -37,6 +41,7 @@ public record AgentflowExecutionResult(string SessionId, IReadOnlyList<AiMessage
 
 public class AgentflowRuntimeService
 {
+    private readonly ILogger<AgentflowRuntimeService> _logger;
     private readonly IRepository<Agentflow> _agentflowRepository;
     private readonly IRepository<AgentflowNode> _agentflowNodeRepository;
     private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
@@ -45,6 +50,7 @@ public class AgentflowRuntimeService
     private readonly SessionRecordApplication _sessionRecordApplication;
 
     public AgentflowRuntimeService(
+        ILogger<AgentflowRuntimeService> logger,
         IRepository<Agentflow> agentflowRepository,
         IRepository<AgentflowNode> agentflowAgentRepository,
         IRepository<AgentflowEdge> agentflowEdgeRepository,
@@ -52,6 +58,7 @@ public class AgentflowRuntimeService
         IAgentflowAgentExecutor executor,
         SessionRecordApplication sessionRecordApplication)
     {
+        _logger = logger;
         _agentflowRepository = agentflowRepository;
         _agentflowNodeRepository = agentflowAgentRepository;
         _agentRuntimeService = agentRuntimeService;
@@ -82,6 +89,8 @@ public class AgentflowRuntimeService
         {
             yield break;
         }
+        var mermaidString = workflow.ToMermaidString();
+        _logger.LogInformation("Constructed workflow: {Workflow}", mermaidString);
 
         var messages = new List<ChatMessage>
         {
@@ -94,42 +103,51 @@ public class AgentflowRuntimeService
 
         await foreach (WorkflowEvent evt in run.WatchStreamAsync().ConfigureAwait(false))
         {
-            //if (evt is AgentRunUpdateEvent e)
-            //{
-            //    // Stream intermediate updates
-            //    var message = new AiMessage(
-            //        Guid.NewGuid().ToString(),
-            //        e.ExecutorId,
-            //        "assistant",
-            //        e.Data?.ToString() ?? ""
-            //    );
-            //    yield return message;
-            //}
-            //else 
-            if (evt is WorkflowOutputEvent outputEvt)
+            _logger.LogInformation("WorkflowEvent Type {Type}", evt.GetType().Name);
+            switch (evt)
             {
-                if(outputEvt.Data is AgentResponseUpdate update)
-                {
-                    var chatMsg = update.ToAiMessage();
-                    if(chatMsg != null)
+                case ExecutorInvokedEvent invoke:
+                    _logger.LogInformation("Starting {ExecutorId}", invoke.ExecutorId);
+                    break;
+
+                case ExecutorCompletedEvent complete:
+                    _logger.LogInformation("Completed {ExecutorId}, {Data}", complete.ExecutorId, complete.Data);
+                    break;
+
+                case AgentResponseUpdateEvent updateEvt:
                     {
-                        yield return chatMsg;
+                        _logger.LogInformation("AgentResponseUpdateEvent {ExecutorId}, {Data}", updateEvt.ExecutorId, updateEvt.Data);
+                        if (updateEvt.Data is AgentResponseUpdate update)
+                        {
+                            var chatMsg = update.ToAiMessage();
+                            if (chatMsg != null)
+                            {
+                                yield return chatMsg;
+                            }
+                        }
                     }
-                    //var result = (List<ChatMessage>)outputEvt.Data!;
-                    //foreach (var msg in result)
-                    //{
-                    //    responseUpdates.Add(ToResponseUpdate(msg));
-                    //    var contentObj = new AiMessageContent("text", msg.Text);
-                    //    var chatMsg = new AiMessage(
-                    //        msg.MessageId ?? "",
-                    //        msg.AuthorName,
-                    //        msg.Role.Value,
-                    //        [contentObj]
-                    //    );
-                    //    yield return chatMsg;
-                    //}
-                    //break;
-                }
+                    break;
+
+                case WorkflowOutputEvent output:
+                    {
+                        _logger.LogInformation("Workflow output: {Data}", output.Data);
+                        //if(output.Data is List<Microsoft.Extensions.AI.ChatMessage> outputMessages)
+                        //{
+                        //    foreach (var item in outputMessages)
+                        //    {
+                        //        var chatMsg = item.ToAiMessage();
+                        //        if (chatMsg != null)
+                        //        {
+                        //            yield return chatMsg;
+                        //        }
+                        //    }
+                        //}
+                    }
+                    break;
+
+                case WorkflowErrorEvent error:
+                    _logger.LogError(error.Exception, "Workflow error");
+                    break;
             }
         }
 
@@ -300,12 +318,13 @@ public class AgentflowRuntimeService
                 break;
 
             case AgentflowOrchestrationPattern.Magentic:
-                aiFlow = DxAgentWorkflowBuilder.BuildMagentic(
-                    aiAgents,
-                    maxRounds: GetConfigInt(config, "maxRounds", 10),
-                    maxStallCount: GetConfigInt(config, "maxStallCount", 3),
-                    maxResetCount: GetConfigInt(config, "maxResetCount", 2));
-                break;
+                throw new NotSupportedException("Magentic not supported now");
+                //aiFlow = DxAgentWorkflowBuilder.BuildMagentic(
+                //    aiAgents,
+                //    maxRounds: GetConfigInt(config, "maxRounds", 10),
+                //    maxStallCount: GetConfigInt(config, "maxStallCount", 3),
+                //    maxResetCount: GetConfigInt(config, "maxResetCount", 2));
+                //break;
 
             default:
                 aiFlow = null;
