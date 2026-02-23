@@ -58,7 +58,7 @@ export function ExecuteAgentflowDrawer({
         </DrawerHeader>
 
         <Conversation
-          className="px-4 pb-4"
+          className="px-4 pb-4 h-[calc(100vh-62px)]"
           executionId={agentflow.id}
           agentType={0}
           resetSignal={`${agentflow?.id ?? "none"}:${resetSignal}`}

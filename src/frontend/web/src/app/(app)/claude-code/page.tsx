@@ -146,10 +146,10 @@ export default function ClaudeCodePage() {
   const [initContent, setInitContent] =
     React.useState<InitMessageContent | null>(null);
 
+  const messagesStartRef = React.useRef<HTMLDivElement>(null!);
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const wsRef = React.useRef<WebSocket | null>(null);
   const userInputRef = React.useRef<UserInputRef | null>(null);
-  const topAnchorRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 768px)");
@@ -836,7 +836,7 @@ export default function ClaudeCodePage() {
   };
 
   const handleScrollToTop = () => {
-    topAnchorRef.current?.scrollIntoView({
+    messagesStartRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "start",
     });
@@ -849,7 +849,6 @@ export default function ClaudeCodePage() {
 
   return (
     <div className="relative flex flex-col h-[calc(100vh-58px)] w-full max-w-8xl mx-auto px-2 md:px-0 md:mr-2">
-      <div ref={topAnchorRef} />
       <Tabs
         value={currentTab}
         onValueChange={handleTabChange}
@@ -915,6 +914,7 @@ export default function ClaudeCodePage() {
                   <div className="flex flex-col h-full px-2 w-full">
                     <ChatSession
                       messages={messages}
+                      messagesStartRef={messagesStartRef}
                       messagesEndRef={messagesEndRef}
                       processMessages={processMessages}
                     />

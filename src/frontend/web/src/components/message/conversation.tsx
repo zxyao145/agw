@@ -17,6 +17,8 @@ import {
 import { UserInput } from "./user-input";
 import { ArrowUp, Eraser, Square } from "lucide-react";
 import { Separator } from "../ui/separator";
+import { useQuery } from "@tanstack/react-query";
+import { deleteSessionBySessionId, getSessionBySessionId } from "@/app/(app)/claude-code/lib/chat-history-service";
 
 export interface ConversationProps {
   executionId: string | null | undefined;
@@ -47,109 +49,133 @@ export function Conversation({
 }: ConversationProps) {
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
-  const [curSessionId, setSessionId] = React.useState<string | null>(sessionId ?? nextSessionId());
+  const [curSessionId, setSessionId] = React.useState<string>(
+    sessionId ?? nextSessionId(),
+  );
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
-  const topAnchorRef = React.useRef<HTMLDivElement>(null);
+  const messagesStartRef = React.useRef<HTMLDivElement>(null!);
 
   const processMessages = React.useCallback(
     (items: AiMessage[]): ProcessedMessageItem[] =>
       items.map((message) => ({ type: "normal", message })),
-    []
+    [],
   );
 
-  const updateSessionId = React.useCallback(
-    (value: string | null) => {
-      setSessionId(value);
+  const updateSessionId = React.useCallback((value: string | null) => {
+    setSessionId(value);
+  }, []);
+
+  const sessionQuery = useQuery({
+    queryKey: ["projects", projectId, "tasks", curSessionId, "session-record"],
+    queryFn: async () => {
+      const sessionByProject = await getSessionBySessionId(
+        curSessionId,
+        projectId ?? "",
+      );
+      if (sessionByProject) {
+        return sessionByProject;
+      }
+      return await getSessionBySessionId(curSessionId);
     },
-    []
-  );
+    enabled: Boolean(curSessionId),
+    refetchInterval: false,
+  });
 
   React.useEffect(() => {
-    const startSessionId = sessionId ?? nextSessionId();
-    updateSessionId(startSessionId);
-    setMessages([]);
-  }, [curSessionId, resetSignal, updateSessionId]);
+    const sessionMessages = sessionQuery.data?.messages ?? [];
+    if(sessionMessages.length > 0){ 
+      setMessages(sessionMessages);
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = React.useCallback(async (value: string) => {
-    if (!executionId) {
-      toast.error("Please enter executionId", );
-      return;
-    }
-    if (!value.trim()) {
-      toast.error("Please enter a prompt");
-      return;
-    }
-
-    setMessages((prev) => [...prev, createUserTextMessage(value)]);
-    setIsExecuting(true);
-
-    try {
-      await executeWithWebSocketStream({
-        id: executionId,
-        request: {
-          agentType,
-          sessionId: curSessionId,
-          projectId,
-          input: value,
-        },
-        onMessage: (message) => {
-          setMessages((prev) => mergeStreamingMessage(prev, message));
-        },
-      });
-      await onExecutionComplete?.();
-    } catch (error) {
-      console.error("Execute failed:", error);
-      if (onExecutionError) {
-        onExecutionError(error);
-      } else {
-        toast.error(
-          `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
+  const handleSend = React.useCallback(
+    async (value: string) => {
+      if (!executionId) {
+        toast.error("Please enter executionId");
+        return;
       }
-    } finally {
-      setIsExecuting(false);
-    }
-  }, [
-    agentType,
-    executionId,
-    onExecutionComplete,
-    onExecutionError,
-    projectId,
-    curSessionId,
-    updateSessionId,
-  ]);
+      if (!value.trim()) {
+        toast.error("Please enter a prompt");
+        return;
+      }
 
-  const handleClear = React.useCallback(() => {
-    setMessages([]);
+      setMessages((prev) => [...prev, createUserTextMessage(value)]);
+      setIsExecuting(true);
+
+      try {
+        await executeWithWebSocketStream({
+          id: executionId,
+          request: {
+            agentType,
+            sessionId: curSessionId,
+            projectId,
+            input: value,
+          },
+          onMessage: (message) => {
+            setMessages((prev) => mergeStreamingMessage(prev, message));
+          },
+        });
+        // await sessionQuery.refetch();
+        await onExecutionComplete?.();
+      } catch (error) {
+        console.error("Execute failed:", error);
+        if (onExecutionError) {
+          onExecutionError(error);
+        } else {
+          toast.error(
+            `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+          );
+        }
+      } finally {
+        setIsExecuting(false);
+      }
+    },
+    [
+      agentType,
+      executionId,
+      onExecutionComplete,
+      onExecutionError,
+      projectId,
+      curSessionId,
+      updateSessionId,
+    ],
+  );
+
+  const handleClear = React.useCallback(async () => {
+    const success = await deleteSessionBySessionId(curSessionId, projectId ?? "");
+    if(success){
+      setMessages([]);
+    }
   }, []);
 
   const handleScrollToTop = () => {
-    topAnchorRef.current?.scrollIntoView({
+    messagesStartRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "start",
     });
   };
 
   return (
-    <div className={cn("grid gap-4 py-4", className)}>
-      <div ref={topAnchorRef} />
+    <div className={cn("flex h-full relative", className)}>
 
       <ChatSession
         messages={messages}
+        messagesStartRef={messagesStartRef}
         messagesEndRef={messagesEndRef}
         processMessages={processMessages}
       />
 
       <div className="absolute bottom-0 z-10 left-0 right-0 h-30 px-2 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
         <UserInput
-        isExecuting={isExecuting}
-         onExecute={handleSend}
-         placeholder={placeholder}
-         >
+          isExecuting={isExecuting}
+          onExecute={handleSend}
+          placeholder={placeholder}
+        >
           {/* <UserInput.TopLeft></UserInput.TopLeft> */}
 
           <UserInput.TopRight>

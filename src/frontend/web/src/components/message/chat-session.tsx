@@ -20,12 +20,14 @@ import { cn } from "@/lib/utils";
 
 export interface ChatSessionProps {
   messages: AiMessage[];
+  messagesStartRef?: React.RefObject<HTMLDivElement>;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   processMessages: (msgs: AiMessage[]) => ProcessedMessageItem[];
 }
 
 export function ChatSession({
   messages,
+  messagesStartRef,
   messagesEndRef,
   processMessages,
 }: ChatSessionProps) {
@@ -44,6 +46,8 @@ export function ChatSession({
   return (
     <div className="flex-1 flex min-h-full pb-36 max-w-full">
       <div className="flex-1 overflow-y-auto space-y-4">
+        {messagesStartRef ? <div ref={messagesStartRef} /> : null}
+
         {(messages?.length ?? 0) === 0 && (
           <div className="flex items-center justify-center h-40">
             <div className="text-center text-muted-foreground ">
@@ -87,7 +91,7 @@ export function ChatSession({
               item.message.role === "user" &&
               item.message.author === "user" &&
               !item.message.additionalProperties;
-            console.debug("isUser", isUser,  item.message);
+            console.debug("isUser", isUser, item.message);
             return (
               <div
                 className={cn("mx-4", isUser ? "max-w-full" : "max-w-[80%]")}

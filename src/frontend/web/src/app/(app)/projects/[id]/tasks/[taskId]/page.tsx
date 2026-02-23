@@ -60,40 +60,6 @@ function statusClassName(status: number): string {
   }
 }
 
-function ChatMessageSession({
-  title,
-  messages,
-}: {
-  title: string;
-  messages: AiMessage[];
-}) {
-  const messagesEndRef = React.useRef<HTMLDivElement>(null!);
-
-  const processMessages = React.useCallback(
-    (msgs: AiMessage[]): ProcessedMessageItem[] => {
-      return msgs.map((msg) => ({ type: "normal", message: msg }));
-    },
-    []
-  );
-
-  if (messages.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="border-t pt-4">
-      <div className="text-sm font-medium text-muted-foreground mb-2">
-        {title}
-      </div>
-      <ChatSession
-        messages={messages}
-        messagesEndRef={messagesEndRef}
-        processMessages={processMessages}
-      />
-    </div>
-  );
-}
-
 export default function TaskDetailsPage() {
   const params = useParams<{ id: string; taskId: string }>();
   const projectId = params.id;
@@ -111,19 +77,6 @@ export default function TaskDetailsPage() {
   });
 
   const task = taskQuery.data;
-  const sessionQuery = useQuery({
-    queryKey: ["projects", projectId, "tasks", taskId, "session-record"],
-    queryFn: async () => {
-      const sessionByProject = await getSessionBySessionId(taskId, projectId);
-      if (sessionByProject) {
-        return sessionByProject;
-      }
-      return await getSessionBySessionId(taskId);
-    },
-    enabled: Boolean(taskId),
-    refetchInterval: task?.status === 1 ? 2000 : false,
-  });
-  const sessionMessages = sessionQuery.data?.messages ?? [];
   const targetType = task?.agentType === 1 ? "agent" : "agentflow";
   const targetId =
     targetType === "agent" ? (task?.agentId ?? null) : (task?.agentflowId ?? null);
@@ -196,23 +149,14 @@ export default function TaskDetailsPage() {
         <div className="space-y-6 flex-1 min-w-0">
           {/* <Conversation task={task} /> */}
 
-          {sessionMessages.length > 0 ? (
-            <ChatMessageSession
-              title="Conversation"
-              messages={sessionMessages}
-            />
-          ) : null}
-
           <Conversation
+            className="h-[calc(100vh-100px)]"
             executionId={targetId}
             agentType={targetType === "agent" ? 1 : 0}
             projectId={projectId}
             sessionId={sessionId}
             resetSignal={`${taskId}:${targetId ?? "none"}`}
             placeholder="请输入要发送给任务执行器的内容..."
-            onExecutionComplete={async () => {
-              await sessionQuery.refetch();
-            }}
           />
 
           {task.errorMessage ? (

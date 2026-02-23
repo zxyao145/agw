@@ -51,7 +51,7 @@ export function ExecuteAgentDrawer({
         </DrawerHeader>
 
         <Conversation
-          className="px-4 pb-4"
+          className="px-4 pb-4 h-[calc(100vh-62px)]"
           executionId={executingAgent?.id}
           agentType={1}
           resetSignal={`${executingAgent?.id ?? "none"}:${resetSignal}`}
