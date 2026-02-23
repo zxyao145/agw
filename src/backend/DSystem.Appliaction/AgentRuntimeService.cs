@@ -4,6 +4,7 @@ using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
 using DSystem.Domain.Services;
 using DSystem.SessionRecords.Application;
+using DSystem.SessionRecords.Repositories;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
@@ -46,6 +47,7 @@ public class AgentRuntimeService
     private readonly ToolRegistryService _toolRegistry;
     private readonly HybridCache _cache;
     private readonly SessionRecordApplication _sessionRecordApplication;
+    private readonly IAgentSessionRecordRepository _agentSessionRecordRepository;
 
 
     public AgentRuntimeService(
@@ -58,6 +60,7 @@ public class AgentRuntimeService
         ToolRegistryService toolRegistry,
         HybridCache cache,
         SessionRecordApplication sessionRecordApplication,
+        IAgentSessionRecordRepository agentSessionRecordRepository,
         ILogger<AgentRuntimeService> logger)
     {
         _agentRepository = agentRepository;
@@ -69,6 +72,7 @@ public class AgentRuntimeService
         _toolRegistry = toolRegistry;
         _cache = cache;
         _sessionRecordApplication = sessionRecordApplication;
+        _agentSessionRecordRepository = agentSessionRecordRepository;
         _logger = logger;
     }
 
@@ -82,7 +86,11 @@ public class AgentRuntimeService
         return await CreateAiAgentAsync(agent, extraOverride);
     }
 
-    public async Task<AIAgent?> CreateAiAgentAsync(Agent agent, string? extraOverride = null, string? sessionId = null)
+    public async Task<AIAgent?> CreateAiAgentAsync(
+        Agent agent,
+        string? extraOverride = null,
+        string? sessionId = null,
+        Guid? projectId = null)
     {
         if (agent.Type == AgentType.External)
         {
@@ -105,11 +113,23 @@ public class AgentRuntimeService
 
                 if (!string.IsNullOrWhiteSpace(sessionId))
                 {
-                    var sessionGuid = Guid.Parse(sessionId);
-                    ccOptions = ccOptions with
+                    if (await HasSessionRecordAsync(sessionId, projectId))
                     {
-                        SessionId = sessionGuid
-                    };
+                        ccOptions = ccOptions with
+                        {
+                            Resume = sessionId,
+                            SessionId = null
+                        };
+                    }
+                    else
+                    {
+                        var sessionGuid = Guid.Parse(sessionId);
+                        ccOptions = ccOptions with
+                        {
+                            Resume = null,
+                            SessionId = sessionGuid
+                        };
+                    }
                 }
 
                 var ccAgent = new ClaudeCodeAIAgent(ccOptions, _logger);
@@ -197,15 +217,15 @@ public class AgentRuntimeService
 
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
-        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, sessionId);
-        if (aiAgent == null)
-        {
-            return null;
-        }
-
         if (string.IsNullOrWhiteSpace(sessionId))
         {
             sessionId = Guid.NewGuid().ToString();
+        }
+
+        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, sessionId, projectId);
+        if (aiAgent == null)
+        {
+            return null;
         }
 
         var agentSession = await GetOrCreateThreadAsync(aiAgent, sessionId, cancellationToken);
@@ -216,6 +236,22 @@ public class AgentRuntimeService
             sessionId,
             _logger,
             _sessionRecordApplication);
+    }
+
+    private async Task<bool> HasSessionRecordAsync(string sessionId, Guid? projectId)
+    {
+        IReadOnlyList<DSystem.SessionRecords.Entities.AgentSessionRecord> records;
+        if (projectId.HasValue && projectId.Value != Guid.Empty)
+        {
+            records = await _agentSessionRecordRepository.ListAsync(r =>
+                r.SessionId == sessionId && r.ProjectId == projectId.Value);
+        }
+        else
+        {
+            records = await _agentSessionRecordRepository.ListAsync(r => r.SessionId == sessionId);
+        }
+
+        return records.Count > 0;
     }
 
     /// <summary>

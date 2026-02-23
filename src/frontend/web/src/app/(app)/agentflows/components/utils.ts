@@ -26,7 +26,7 @@ export function getPatternName(pattern: number): string {
 }
 
 export function getTextContent(message: AiMessage): string {
-  return message.contents.find((c) => c.type === "text")?.content || "";
+  return message.contents.find((c) => c.type === "TextContent")?.content || "";
 }
 
 export function mergeTextContent(existing: AiMessage, incoming: AiMessage): void {

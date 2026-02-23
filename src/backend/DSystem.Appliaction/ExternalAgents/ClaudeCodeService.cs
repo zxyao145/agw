@@ -53,12 +53,13 @@ public class ClaudeCodeService
 
         await EnsureGitRepositoryAsync(initRequest, cancellationToken);
 
-        var options = BuildAgentOptions(initRequest);
+        var record = await FindSessionRecordAsync(initRequest.SessionId, initRequest.ProjectId);
+        var options = BuildAgentOptions(initRequest, hasSessionRecord: record != null);
         var agent = new ClaudeCodeAIAgent(options, _logger);
         var thread = await GetOrLoadThreadAsync(
             agent,
             initRequest.SessionId,
-            initRequest.ProjectId,
+            record,
             cancellationToken);
 
         return new AgentExecSession(
@@ -74,12 +75,9 @@ public class ClaudeCodeService
     private async Task<AgentSession> GetOrLoadThreadAsync(
         ClaudeCodeAIAgent agent,
         string sessionId,
-        Guid projectId,
+        AgentSessionRecord? record,
         CancellationToken cancellationToken)
     {
-        var records = await _repository.ListAsync(session => session.SessionId == sessionId && session.ProjectId == projectId);
-        var record = records.FirstOrDefault();
-
         if (record == null || string.IsNullOrWhiteSpace(record.Messages))
         {
             _logger.LogDebug("Created new thread for session: {ThreadId}", sessionId);
@@ -128,11 +126,13 @@ public class ClaudeCodeService
         }
     }
 
-    private static ClaudeCodeAIAgentOptions BuildAgentOptions(ClaudeCodeSettingRequest request)
+    private static ClaudeCodeAIAgentOptions BuildAgentOptions(ClaudeCodeSettingRequest request, bool hasSessionRecord)
     {
         PermissionMode? permissionMode = null;
         if (!string.IsNullOrWhiteSpace(request.PermissionMode))
             permissionMode = Enum.Parse<PermissionMode>(request.PermissionMode);
+        var resume = hasSessionRecord ? request.SessionId : null;
+        var optionSessionId = hasSessionRecord ? (Guid?)null : Guid.Parse(request.SessionId);
 
         var options = new ClaudeCodeAIAgentOptions
         {
@@ -140,13 +140,21 @@ public class ClaudeCodeService
             SystemPrompt = request.SystemPrompt,
             MaxTurns = request.MaxTurns,
             EnvironmentVariables = request.EnvironmentVariables,
-            PermissionMode = permissionMode
+            PermissionMode = permissionMode,
+            Resume = resume,
+            SessionId = optionSessionId
         };
 
         if (!string.IsNullOrEmpty(request.ApiKey)) options.ApiKey = request.ApiKey;
         if (!string.IsNullOrEmpty(request.ApiBaseUrl)) options.BaseUrl = request.ApiBaseUrl;
 
         return options;
+    }
+
+    private async Task<AgentSessionRecord?> FindSessionRecordAsync(string sessionId, Guid projectId)
+    {
+        var records = await _repository.ListAsync(session => session.SessionId == sessionId && session.ProjectId == projectId);
+        return records.FirstOrDefault();
     }
 
     private async Task EnsureGitRepositoryAsync(ClaudeCodeSettingRequest request, CancellationToken cancellationToken)

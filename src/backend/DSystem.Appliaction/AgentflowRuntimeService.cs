@@ -10,6 +10,7 @@ using Microsoft.Extensions.AI;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using MsAgentWorkflowBuilder = Microsoft.Agents.AI.Workflows.AgentWorkflowBuilder;
+using DSystem.Shared;
 
 namespace DSystem.Appliaction.Services;
 
@@ -107,21 +108,28 @@ public class AgentflowRuntimeService
             //else 
             if (evt is WorkflowOutputEvent outputEvt)
             {
-                // Stream final results
-                var result = (List<ChatMessage>)outputEvt.Data!;
-                foreach (var msg in result)
+                if(outputEvt.Data is AgentResponseUpdate update)
                 {
-                    responseUpdates.Add(ToResponseUpdate(msg));
-                    var contentObj = new AiMessageContent("text", msg.Text);
-                    var chatMsg = new AiMessage(
-                        msg.MessageId ?? "",
-                        msg.AuthorName,
-                        msg.Role.Value,
-                        [contentObj]
-                    );
-                    yield return chatMsg;
+                    var chatMsg = update.ToAiMessage();
+                    if(chatMsg != null)
+                    {
+                        yield return chatMsg;
+                    }
+                    //var result = (List<ChatMessage>)outputEvt.Data!;
+                    //foreach (var msg in result)
+                    //{
+                    //    responseUpdates.Add(ToResponseUpdate(msg));
+                    //    var contentObj = new AiMessageContent("text", msg.Text);
+                    //    var chatMsg = new AiMessage(
+                    //        msg.MessageId ?? "",
+                    //        msg.AuthorName,
+                    //        msg.Role.Value,
+                    //        [contentObj]
+                    //    );
+                    //    yield return chatMsg;
+                    //}
+                    //break;
                 }
-                break;
             }
         }
 

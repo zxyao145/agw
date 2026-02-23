@@ -7,7 +7,7 @@
     <PackageVersion Include="A2A" Version="0.3.3-preview" />
     <PackageVersion Include="A2A.AspNetCore" Version="0.3.3-preview" />
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
-    <PackageVersion Include="ClaudeCodeSdk.MAF" Version="0.10.3-preview1" />
+    <PackageVersion Include="ClaudeCodeSdk.MAF" Version="0.10.3-preview2" />
     <PackageVersion Include="CliWrap" Version="3.10.0" />
     <PackageVersion Include="CSRedisCore" Version="3.8.807" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
