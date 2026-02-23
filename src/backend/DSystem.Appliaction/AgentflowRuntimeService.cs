@@ -67,6 +67,29 @@ public class AgentflowRuntimeService
         _sessionRecordApplication = sessionRecordApplication;
     }
 
+    public async Task<string?> GetMermaidAsync(
+        Guid agentflowId,
+        CancellationToken cancellationToken = default)
+    {
+        var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
+        if (agentflow == null || !agentflow.Enable)
+        {
+            return null;
+        }
+
+        var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
+        if (workflow == null)
+        {
+            return null;
+        }
+
+        var mermaidString = workflow.ToMermaidString();
+        _logger.LogInformation("Constructed workflow: {Workflow}", mermaidString);
+        return mermaidString;
+    }
+
+
+
     public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
         Guid agentflowId,
         string sessionId,

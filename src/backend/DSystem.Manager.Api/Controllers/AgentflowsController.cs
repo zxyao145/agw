@@ -1,3 +1,4 @@
+using DSystem.Appliaction.Services;
 using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
 using DSystem.Manager.Api.Contracts;
@@ -10,10 +11,12 @@ namespace DSystem.Manager.Api.Controllers;
 public class AgentflowsController : ControllerBase
 {
     private readonly AgentflowDomainService _agentflowService;
+    private readonly AgentflowRuntimeService _agentflowRuntimeService;
 
-    public AgentflowsController(AgentflowDomainService agentflowService)
+    public AgentflowsController(AgentflowDomainService agentflowService, AgentflowRuntimeService agentflowRuntimeService)
     {
         _agentflowService = agentflowService;
+        _agentflowRuntimeService = agentflowRuntimeService;
     }
 
     [HttpGet]
@@ -28,6 +31,13 @@ public class AgentflowsController : ControllerBase
     {
         var agentflow = await _agentflowService.GetAsync(id);
         return agentflow == null ? NotFound() : Ok(agentflow);
+    }
+
+    [HttpGet("mermaid/{id:guid}")]
+    public async Task<IActionResult> GetMermaidAsync(Guid id)
+    {
+        var text = await _agentflowRuntimeService.GetMermaidAsync(id);
+        return text == null ? NotFound() : Ok(text);
     }
 
     [HttpGet("{id:guid}/nodes")]

@@ -765,8 +765,7 @@
             "name": "projectId",
             "in": "query",
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -795,8 +794,7 @@
             "name": "projectId",
             "in": "query",
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -823,8 +821,7 @@
             "name": "projectId",
             "in": "query",
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -853,8 +850,7 @@
             "name": "projectId",
             "in": "query",
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
@@ -991,6 +987,29 @@
         }
       },
       "delete": {
+        "tags": [
+          "Agentflows"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/agentflows/mermaid/{id}": {
+      "get": {
         "tags": [
           "Agentflows"
         ],
@@ -1833,8 +1852,7 @@
             "type": [
               "null",
               "string"
-            ],
-            "format": "uuid"
+            ]
           }
         }
       },
