@@ -31,22 +31,18 @@ public class SessionRecordsController : ControllerBase
         }
 
         var records = await _service.ListAsync(r => r.ProjectId == projectId);
-        var messageCounts = records
+        var recordsBySession = records
             .GroupBy(r => r.SessionId)
-            .ToDictionary(g => g.Key, g => g.Count());
+            .ToDictionary(g => g.Key, g => g.ToList());
 
-        var tasks = await GetTasksByProjectIdAsync(projectId);
+        var taskBySession = (await GetTasksByProjectIdAsync(projectId))
+            .GroupBy(t => t.SessionId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.UpdateTime ?? t.CreateTime).First());
 
-        var summaries = tasks
-            .OrderByDescending(t => t.UpdateTime ?? t.CreateTime)
-            .Select(t => new SessionRecordSummary(
-                t.Id,
-                projectId,
-                t.SessionId,
-                NormalizeTitle(t.Title),
-                messageCounts.GetValueOrDefault(t.SessionId),
-                t.CreateTime,
-                t.UpdateTime))
+        var sessionIds = recordsBySession.Keys.Union(taskBySession.Keys).ToList();
+        var summaries = sessionIds
+            .Select(sessionId => CreateSummary(projectId, sessionId, recordsBySession.GetValueOrDefault(sessionId), taskBySession.GetValueOrDefault(sessionId)))
+            .OrderByDescending(s => s.UpdateTime ?? s.CreateTime)
             .ToList();
 
         return Ok(summaries);
@@ -67,20 +63,22 @@ public class SessionRecordsController : ControllerBase
         }
 
         var task = (await GetTasksByProjectIdAsync(projectId)).FirstOrDefault(t => t.SessionId == sessionId);
-        if (task == null)
-        {
-            return NotFound();
-        }
+        var orderedRecords = records
+            .OrderBy(r => r.CreateTime)
+            .ThenBy(r => r.UpdateTime ?? r.CreateTime)
+            .ToList();
+        var messages = orderedRecords.Select(ToAiMessage).ToList();
 
-        var messages = records.Select(ToAiMessage).ToList();
+        var createTime = task?.CreateTime ?? orderedRecords.First().CreateTime;
+        var updateTime = task?.UpdateTime ?? orderedRecords.Last().UpdateTime ?? orderedRecords.Last().CreateTime;
         var response = new SessionRecordDetails(
-            task.Id,
+            task?.Id ?? TryParseSessionIdAsGuid(sessionId),
             projectId,
-            task.SessionId,
-            NormalizeTitle(task.Title),
+            task?.SessionId ?? sessionId,
+            NormalizeTitle(task?.Title),
             messages,
-            task.CreateTime,
-            task.UpdateTime ?? task.CreateTime);
+            createTime,
+            updateTime);
 
         return Ok(response);
     }
@@ -112,4 +110,37 @@ public class SessionRecordsController : ControllerBase
 
     private static string NormalizeTitle(string? title) =>
         string.IsNullOrWhiteSpace(title) ? "New Chat" : title;
+
+    private static SessionRecordSummary CreateSummary(
+        string projectId,
+        string sessionId,
+        List<AgentSessionRecord>? records,
+        ProjectTask? task)
+    {
+        var sessionRecords = records ?? [];
+        var orderedRecords = sessionRecords
+            .OrderBy(r => r.CreateTime)
+            .ThenBy(r => r.UpdateTime ?? r.CreateTime)
+            .ToList();
+
+        var createTime = task?.CreateTime
+            ?? orderedRecords.FirstOrDefault()?.CreateTime
+            ?? DateTime.UtcNow;
+
+        var updateTime = task?.UpdateTime
+            ?? orderedRecords.LastOrDefault()?.UpdateTime
+            ?? orderedRecords.LastOrDefault()?.CreateTime;
+
+        return new SessionRecordSummary(
+            task?.Id ?? TryParseSessionIdAsGuid(sessionId),
+            projectId,
+            task?.SessionId ?? sessionId,
+            NormalizeTitle(task?.Title),
+            sessionRecords.Count,
+            createTime,
+            updateTime);
+    }
+
+    private static Guid TryParseSessionIdAsGuid(string sessionId) =>
+        Guid.TryParse(sessionId, out var parsed) ? parsed : Guid.Empty;
 }
