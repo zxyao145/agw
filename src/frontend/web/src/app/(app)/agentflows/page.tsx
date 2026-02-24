@@ -64,6 +64,7 @@ export default function AgentflowsPage() {
     React.useState<AgentflowDto | null>(null);
   const [mermaidText, setMermaidText] = React.useState("");
   const [isMermaidLoading, setIsMermaidLoading] = React.useState(false);
+  const mermaidRequestIdRef = React.useRef(0);
 
   const updateAgentflowMutation = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: AgentflowDetailDto }) => {
@@ -161,6 +162,9 @@ export default function AgentflowsPage() {
   }, []);
 
   const handleViewMermaid = React.useCallback(async (agentflow: AgentflowDto) => {
+    const requestId = mermaidRequestIdRef.current + 1;
+    mermaidRequestIdRef.current = requestId;
+
     setMermaidAgentflow(agentflow);
     setMermaidText("");
     setMermaidOpen(true);
@@ -172,12 +176,22 @@ export default function AgentflowsPage() {
         params: { path: { id: agentflow.id } },
       });
 
+      if (mermaidRequestIdRef.current !== requestId) {
+        return;
+      }
+
       setMermaidText(typeof result === "string" ? result : JSON.stringify(result, null, 2));
     } catch {
+      if (mermaidRequestIdRef.current !== requestId) {
+        return;
+      }
+
       toast.error("Failed to load Mermaid chart text");
       setMermaidText("");
     } finally {
-      setIsMermaidLoading(false);
+      if (mermaidRequestIdRef.current === requestId) {
+        setIsMermaidLoading(false);
+      }
     }
   }, []);
 
