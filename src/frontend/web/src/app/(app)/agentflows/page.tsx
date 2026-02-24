@@ -13,6 +13,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { VisualAgentflowDialog } from "./components/visual-agentflow-dialog";
 import {
   AgentDto,
@@ -51,6 +58,13 @@ export default function AgentflowsPage() {
   const [executeOpen, setExecuteOpen] = React.useState(false);
   const [executingAgentflow, setExecutingAgentflow] =
     React.useState<AgentflowDto | null>(null);
+
+  const [mermaidOpen, setMermaidOpen] = React.useState(false);
+  const [mermaidAgentflow, setMermaidAgentflow] =
+    React.useState<AgentflowDto | null>(null);
+  const [mermaidText, setMermaidText] = React.useState("");
+  const [isMermaidLoading, setIsMermaidLoading] = React.useState(false);
+  const mermaidRequestIdRef = React.useRef(0);
 
   const updateAgentflowMutation = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: AgentflowDetailDto }) => {
@@ -97,7 +111,7 @@ export default function AgentflowsPage() {
             enable: !agentflow.enable,
           },
         });
-      } catch (error) {
+      } catch {
         toast.error("Failed to fetch agentflow details");
       }
     },
@@ -145,6 +159,40 @@ export default function AgentflowsPage() {
   const handleExecute = React.useCallback((agentflow: AgentflowDto) => {
     setExecutingAgentflow(agentflow);
     setExecuteOpen(true);
+  }, []);
+
+  const handleViewMermaid = React.useCallback(async (agentflow: AgentflowDto) => {
+    const requestId = mermaidRequestIdRef.current + 1;
+    mermaidRequestIdRef.current = requestId;
+
+    setMermaidAgentflow(agentflow);
+    setMermaidText("");
+    setMermaidOpen(true);
+    setIsMermaidLoading(true);
+
+    try {
+      // OpenAPI currently doesn't declare response schemas.
+      const result = await apiGet("/api/agentflows/mermaid/{id}", {
+        params: { path: { id: agentflow.id } },
+      });
+
+      if (mermaidRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setMermaidText(typeof result === "string" ? result : JSON.stringify(result, null, 2));
+    } catch {
+      if (mermaidRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      toast.error("Failed to load Mermaid chart text");
+      setMermaidText("");
+    } finally {
+      if (mermaidRequestIdRef.current === requestId) {
+        setIsMermaidLoading(false);
+      }
+    }
   }, []);
 
   return (
@@ -204,6 +252,7 @@ export default function AgentflowsPage() {
             onEdit={handleEdit}
             onDelete={handleDelete}
             onExecute={handleExecute}
+            onViewMermaid={handleViewMermaid}
           />
         </CardContent>
       </Card>
@@ -213,6 +262,23 @@ export default function AgentflowsPage() {
         onOpenChange={setExecuteOpen}
         agentflow={executingAgentflow}
       />
+
+      <Dialog open={mermaidOpen} onOpenChange={setMermaidOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              Mermaid Chart{mermaidAgentflow ? ` - ${mermaidAgentflow.name}` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Fetched from <code>/api/agentflows/mermaid/{"{id}"}</code>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <pre className="max-h-[60vh] overflow-auto rounded-md border bg-muted/30 p-4 text-xs whitespace-pre-wrap">
+            {isMermaidLoading ? "Loading Mermaid text..." : mermaidText || "No Mermaid content returned."}
+          </pre>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
