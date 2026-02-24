@@ -34,16 +34,14 @@ public class ProjectTaskDomainService
 
     public async Task<ProjectTask?> CreateAsync(ProjectTask task, string user)
     {
-        if (string.IsNullOrWhiteSpace(task.Description) || string.IsNullOrWhiteSpace(task.Input))
+        if (string.IsNullOrWhiteSpace(task.Description)
+            || string.IsNullOrWhiteSpace(task.Input)
+            || string.IsNullOrWhiteSpace(task.SessionId))
         {
             return null;
         }
 
-        var project = await _projectRepository.GetByIdAsync(task.ProjectId);
-        if (project == null || !project.Enable)
-        {
-            return null;
-        }
+        task.Title = task.Title?.Trim() ?? string.Empty;
 
         if (task.AgentType == ProjectTaskAgentType.Agentflow)
         {
@@ -241,10 +239,11 @@ public class ProjectTaskDomainService
 
     public async Task<ProjectTask?> GetNextPendingAsync(Guid projectId)
     {
+        var projectIdText = projectId.ToString("D");
         // NOTE: Generic repository doesn't support ordering; we do in-memory ordering for now.
         // This is acceptable for initial skeleton and can be optimized later with a specialized repository.
         var pending = await _taskRepository.ListAsync(t =>
-            t.ProjectId == projectId && t.Status == ProjectTaskStatus.Pending);
+            t.ProjectId == projectIdText && t.Status == ProjectTaskStatus.Pending);
 
         return pending
             .OrderBy(t => t.UpdateTime ?? t.CreateTime)
@@ -252,4 +251,3 @@ public class ProjectTaskDomainService
             .FirstOrDefault();
     }
 }
-

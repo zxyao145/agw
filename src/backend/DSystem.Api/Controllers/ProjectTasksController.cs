@@ -20,7 +20,8 @@ public class ProjectTasksController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> ListAsync(Guid projectId)
     {
-        var tasks = await _taskService.ListAsync(t => t.ProjectId == projectId);
+        var projectIdText = projectId.ToString("D");
+        var tasks = await _taskService.ListAsync(t => t.ProjectId == projectIdText);
         return Ok(tasks.OrderByDescending(t => t.CreateTime).ToList());
     }
 
@@ -28,7 +29,7 @@ public class ProjectTasksController : ControllerBase
     public async Task<IActionResult> GetAsync(Guid projectId, Guid taskId)
     {
         var task = await _taskService.GetAsync(taskId);
-        if (task == null || task.ProjectId != projectId)
+        if (task == null || task.ProjectId != projectId.ToString("D"))
         {
             return NotFound();
         }
@@ -43,10 +44,12 @@ public class ProjectTasksController : ControllerBase
 
         var task = new ProjectTask
         {
-            ProjectId = projectId,
+            ProjectId = projectId.ToString("D"),
             AgentType = request.AgentType,
             AgentflowId = request.AgentflowId,
             AgentId = request.AgentId,
+            SessionId = request.SessionId,
+            Title = request.Title,
             Description = request.Description,
             Input = request.Input,
             Status = ProjectTaskStatus.Pending
@@ -68,7 +71,7 @@ public class ProjectTasksController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
 
         var existing = await _taskService.GetAsync(taskId);
-        if (existing == null || existing.ProjectId != projectId)
+        if (existing == null || existing.ProjectId != projectId.ToString("D"))
         {
             return NotFound();
         }
@@ -93,7 +96,7 @@ public class ProjectTasksController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
 
         var existing = await _taskService.GetAsync(taskId);
-        if (existing == null || existing.ProjectId != projectId)
+        if (existing == null || existing.ProjectId != projectId.ToString("D"))
         {
             return NotFound();
         }
@@ -108,7 +111,7 @@ public class ProjectTasksController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
 
         var existing = await _taskService.GetAsync(taskId);
-        if (existing == null || existing.ProjectId != projectId)
+        if (existing == null || existing.ProjectId != projectId.ToString("D"))
         {
             return NotFound();
         }
@@ -124,7 +127,7 @@ public class ProjectTasksController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
 
         var existing = await _taskService.GetAsync(taskId);
-        if (existing == null || existing.ProjectId != projectId)
+        if (existing == null || existing.ProjectId != projectId.ToString("D"))
         {
             return NotFound();
         }
@@ -142,6 +145,8 @@ public class ProjectTasksController : ControllerBase
             task.AgentflowId,
             task.AgentId,
             task.Status,
+            task.SessionId,
+            task.Title,
             task.Description,
             task.Input,
             task.ErrorMessage,

@@ -1,5 +1,6 @@
 using DSystem.SessionRecords.Entities;
 using DSystem.SessionRecords.Repositories;
+using DSystem.Shared;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
@@ -27,153 +28,95 @@ public class SessionRecordApplication
         string? input,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            return;
-        }
-
-        if (serializedThread.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(projectId))
         {
             return;
         }
 
         var records = await _repository.ListAsync(session =>
             session.SessionId == sessionId && session.ProjectId == projectId);
-        var record = records.FirstOrDefault();
 
-        bool isNew = record == null;
-        if (isNew)
-        {
-            record = new AgentSessionRecord
-            {
-                SessionId = sessionId,
-                ProjectId = projectId,
-                CreateTime = DateTime.UtcNow
-            };
-        }
+        var byMessageId = records
+            .Where(r => !string.IsNullOrWhiteSpace(r.MessageId))
+            .ToDictionary(r => r.MessageId, StringComparer.Ordinal);
 
-        if (string.IsNullOrWhiteSpace(record.Title))
+        var updatesToSave = new List<AgentResponseUpdate>(updates);
+        AppendUserInput(updatesToSave, input);
+
+        foreach (var update in updatesToSave)
         {
-            var title = GenerateTitleFromInput(input);
-            if (!string.IsNullOrWhiteSpace(title))
+            var message = update.ToAiMessage();
+            if (message == null)
             {
-                record.Title = title;
+                continue;
             }
+
+            var messageId = string.IsNullOrWhiteSpace(message.MessageId)
+                ? $"msg_{Guid.NewGuid():N}"
+                : message.MessageId;
+
+            if (!byMessageId.TryGetValue(messageId, out var record))
+            {
+                record = new AgentSessionRecord
+                {
+                    ProjectId = projectId,
+                    SessionId = sessionId,
+                    MessageId = messageId,
+                    CreateTime = DateTime.UtcNow
+                };
+
+                await _repository.AddAsync(record);
+                byMessageId[messageId] = record;
+            }
+
+            record.Author = message.Author;
+            record.Role = message.Role ?? string.Empty;
+            record.Metadata = ToMetadata(message.AdditionalProperties);
+            record.Contents = message.Contents;
+            record.Error = ExtractError(message);
+            record.UpdateTime = DateTime.UtcNow;
         }
 
-        var payload = DeserializePayload(record.Messages);
-        payload.Thread = serializedThread.Clone();
-        AppendUserInput(payload, input);
-        if (updates.Count > 0)
-        {
-            payload.Updates.AddRange(updates);
-        }
-
-        record.Messages = JsonSerializer.Serialize(payload);
-        record.UpdateTime = DateTime.UtcNow;
-
-        if (isNew)
-        {
-            await _repository.AddAsync(record);
-        }
-        else
-        {
-           _repository.Update(record);
-        }
         await _unitOfWork.SaveChangesAsync();
     }
 
-    private static string? GenerateTitleFromInput(string? input)
+    private static Dictionary<string, JsonElement>? ToMetadata(AdditionalPropertiesDictionary? additionalProperties)
     {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            return string.Empty;
-        }
-
-        var trimmed = input.Trim();
-
-        var firstLine = trimmed.Split('\n', '\r', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(firstLine))
+        if (additionalProperties == null || additionalProperties.Count == 0)
         {
             return null;
         }
 
-        const int maxLength = 20;
-        return firstLine.Length > maxLength ? $"{firstLine[..maxLength]}..." : firstLine;
+        var metadata = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in additionalProperties)
+        {
+            metadata[key] = JsonSerializer.SerializeToElement(value);
+        }
+
+        return metadata;
     }
 
-    private static SessionRecordPayload DeserializePayload(string messages)
+    private static string? ExtractError(DSystem.Shared.Models.AiMessage message)
     {
-        if (string.IsNullOrWhiteSpace(messages))
-        {
-            return new SessionRecordPayload();
-        }
+        var errorContent = message.Contents
+            .FirstOrDefault(content => content.Type == nameof(ErrorContent));
 
-        try
-        {
-            using var document = JsonDocument.Parse(messages);
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                return new SessionRecordPayload { Thread = document.RootElement.Clone() };
-            }
-
-            if (!TryGetThreadState(document.RootElement, out var threadState))
-            {
-                return new SessionRecordPayload { Thread = document.RootElement.Clone() };
-            }
-
-            var payload = new SessionRecordPayload { Thread = threadState };
-            if (document.RootElement.TryGetProperty("Updates", out var updatesElement)
-                && updatesElement.ValueKind == JsonValueKind.Array)
-            {
-                payload.Updates = JsonSerializer.Deserialize<List<AgentResponseUpdate>>(updatesElement.GetRawText()) ?? [];
-            }
-
-            return payload;
-        }
-        catch (JsonException)
-        {
-            return new SessionRecordPayload();
-        }
+        return errorContent?.Content?.ToString();
     }
 
-    private static bool TryGetThreadState(JsonElement root, out JsonElement threadState)
-    {
-        if (root.TryGetProperty("Thread", out threadState) || root.TryGetProperty("thread", out threadState))
-        {
-            threadState = threadState.Clone();
-            return threadState.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null;
-        }
-
-        threadState = default;
-        return false;
-    }
-
-    private static void AppendUserInput(SessionRecordPayload payload, string? input)
+    private static void AppendUserInput(List<AgentResponseUpdate> updates, string? input)
     {
         if (string.IsNullOrWhiteSpace(input))
         {
             return;
         }
 
-        var trimmed = input.Trim();
-        payload.Updates.Add(new AgentResponseUpdate
+        updates.Add(new AgentResponseUpdate
         {
+            MessageId = $"user_{Guid.NewGuid():N}",
             Role = ChatRole.User,
             AuthorName = "user",
-            Contents = [new TextContent(trimmed)]
+            Contents = [new TextContent(input.Trim())]
         });
-    }
-
-    private sealed class SessionRecordPayload
-    {
-        public JsonElement Thread { get; set; }
-
-        public List<AgentResponseUpdate> Updates { get; set; } = [];
     }
 }

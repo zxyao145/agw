@@ -3,7 +3,7 @@ using DSystem.Shared.Models;
 namespace DSystem.Shared.Contracts;
 
 public record SessionRecordSummary(
-    long Id,
+    Guid Id,
     string ProjectId,
     string SessionId,
     string Title,
@@ -12,7 +12,7 @@ public record SessionRecordSummary(
     DateTime? UpdateTime);
 
 public record SessionRecordDetails(
-    long Id,
+    Guid Id,
     string ProjectId,
     string SessionId,
     string Title,

@@ -137,7 +137,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
             try
             {
                 // If there is a running task, we do not start another one for this project.
-                var running = await taskService.ListAsync(t => t.ProjectId == projectId && t.Status == ProjectTaskStatus.Running);
+                var running = await taskService.ListAsync(t => t.ProjectId == projectId.ToString("D") && t.Status == ProjectTaskStatus.Running);
                 if (running.Count > 0)
                 {
                     activity?.SetTag("skip.reason", "task_already_running");
@@ -198,14 +198,14 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                                 marked.Id.ToString("D"),
                                 marked.Input,
                                 stoppingToken,
-                                marked.ProjectId.ToString("D")),
+                                marked.ProjectId),
                         ProjectTaskAgentType.Agent when marked.AgentId.HasValue =>
                             await agentRuntime.ExecuteAsync(
                                 marked.AgentId.Value,
                                 marked.Id.ToString("D"),
                                 marked.Input,
                                 stoppingToken,
-                                marked.ProjectId.ToString("D")),
+                                marked.ProjectId),
                         _ => null
                     };
                     stopwatch.Stop();
@@ -291,7 +291,7 @@ WHERE project_id = {projectId}
         {
             await dbContext.ProjectLeases.AddAsync(new ProjectLease
             {
-                ProjectId = projectId,
+                ProjectId = projectId.ToString("D"),
                 LockedBy = _instanceId,
                 LockedUntilUtc = until,
                 CreateBy = _instanceId,
@@ -341,4 +341,3 @@ WHERE project_id = {projectId}
 ", cancellationToken);
     }
 }
-

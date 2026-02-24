@@ -6,12 +6,14 @@ namespace DSystem.Domain.Entities;
 public class ProjectTask : BaseEntity
 {
     public Guid Id { get; set; }
-    public Guid ProjectId { get; set; }
+    public string ProjectId { get; set; } = string.Empty;
     public ProjectTaskAgentType AgentType { get; set; } = ProjectTaskAgentType.Agentflow;
     public Guid? AgentflowId { get; set; }
     public Guid? AgentId { get; set; }
 
     public string Description { get; set; } = string.Empty;
+    public string SessionId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
 
     /// <summary>
     /// Task execution status.
@@ -28,5 +30,4 @@ public class ProjectTask : BaseEntity
     public DateTime? StartedTime { get; set; }
     public DateTime? FinishedTime { get; set; }
 
-    public Project? Project { get; set; }
 }

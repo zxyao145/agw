@@ -20,47 +20,30 @@ public class SessionRecordDomainService
     public Task<IReadOnlyList<AgentSessionRecord>> ListAsync(Expression<Func<AgentSessionRecord, bool>>? predicate = null) =>
         _repository.ListAsync(predicate);
 
-    public async Task<AgentSessionRecord?> GetBySessionIdAsync(string sessionId, string projectId)
+    public async Task<IReadOnlyList<AgentSessionRecord>> GetBySessionIdAsync(string sessionId, string projectId)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            return null;
+            return [];
         }
 
         var byProject = await _repository.ListAsync(r => r.SessionId == sessionId && r.ProjectId == projectId);
-        return byProject.OrderByDescending(r => r.UpdateTime ?? r.CreateTime).FirstOrDefault();
+        return byProject.OrderByDescending(r => r.UpdateTime ?? r.CreateTime).ToList();
     }
 
     public async Task<bool> DeleteBySessionIdAsync(string sessionId, string projectId)
     {
-        var record = await GetBySessionIdAsync(sessionId, projectId);
-        if (record == null)
+        var records = await GetBySessionIdAsync(sessionId, projectId);
+        if (records.Count == 0)
         {
             return false;
         }
 
-        _repository.Remove(record);
-        await _unitOfWork.SaveChangesAsync();
-        return true;
-    }
-
-    public async Task<bool> UpdateTitleAsync(string sessionId, string projectId, string title, string user)
-    {
-        if (string.IsNullOrWhiteSpace(title))
+        foreach (var record in records)
         {
-            return false;
+            _repository.Remove(record);
         }
 
-        var record = await GetBySessionIdAsync(sessionId, projectId);
-        if (record == null)
-        {
-            return false;
-        }
-
-        record.Title = title.Trim();
-        record.UpdateBy = user;
-        record.UpdateTime = DateTime.UtcNow;
-        _repository.Update(record);
         await _unitOfWork.SaveChangesAsync();
         return true;
     }
