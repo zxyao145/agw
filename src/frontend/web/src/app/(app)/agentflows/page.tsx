@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import mermaid from "mermaid";
 import { toast } from "sonner";
 
 import { apiGet, apiPut, apiDelete } from "@/api/client";
@@ -15,22 +16,20 @@ import {
 } from "@/components/ui/card";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { VisualAgentflowDialog } from "./components/visual-agentflow-dialog";
-import {
-  AgentDto,
-  AgentflowDto,
-  AgentflowDetailDto
-} from "@/types/agentflow";
+import { AgentDto, AgentflowDto, AgentflowDetailDto } from "@/types/agentflow";
 import {
   AgentflowsTable,
   ExecuteAgentflowDrawer,
   fetchAgentflowDetails,
 } from "./components";
+import { Copy, X } from "lucide-react";
 
 export default function AgentflowsPage() {
   const queryClient = useQueryClient();
@@ -52,7 +51,8 @@ export default function AgentflowsPage() {
   });
 
   const [visualOpen, setVisualOpen] = React.useState(false);
-  const [editingAgentflow, setEditingAgentflow] = React.useState<AgentflowDetailDto | null>(null);
+  const [editingAgentflow, setEditingAgentflow] =
+    React.useState<AgentflowDetailDto | null>(null);
 
   // Execute drawer state
   const [executeOpen, setExecuteOpen] = React.useState(false);
@@ -63,11 +63,101 @@ export default function AgentflowsPage() {
   const [mermaidAgentflow, setMermaidAgentflow] =
     React.useState<AgentflowDto | null>(null);
   const [mermaidText, setMermaidText] = React.useState("");
+  const [mermaidRenderError, setMermaidRenderError] = React.useState<
+    string | null
+  >(null);
   const [isMermaidLoading, setIsMermaidLoading] = React.useState(false);
+  const mermaidContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const mermaidInitializedRef = React.useRef(false);
   const mermaidRequestIdRef = React.useRef(0);
 
+  const normalizedMermaidText = React.useMemo(() => {
+    const trimmed = mermaidText.trim();
+    const lines = trimmed.split("\n");
+
+    if (
+      lines.length >= 2 &&
+      lines[0].trim().startsWith("```") &&
+      lines[lines.length - 1].trim() === "```"
+    ) {
+      return lines.slice(1, -1).join("\n").trim();
+    }
+
+    return trimmed;
+  }, [mermaidText]);
+
+  React.useEffect(() => {
+    if (mermaidInitializedRef.current) {
+      return;
+    }
+
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "loose",
+    });
+    mermaidInitializedRef.current = true;
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const renderMermaid = async () => {
+      if (
+        isMermaidLoading ||
+        !mermaidOpen ||
+        !normalizedMermaidText ||
+        !mermaidContainerRef.current
+      ) {
+        if (mermaidContainerRef.current) {
+          mermaidContainerRef.current.innerHTML = "";
+        }
+        return;
+      }
+
+      try {
+        const container = mermaidContainerRef.current;
+        setMermaidRenderError(null);
+        const renderId = `agentflow-mermaid-${crypto.randomUUID()}`;
+        const { svg, bindFunctions } = await mermaid.render(
+          renderId,
+          normalizedMermaidText,
+        );
+
+        if (cancelled || !container) {
+          return;
+        }
+
+        container.innerHTML = svg;
+        bindFunctions?.(container);
+      } catch (error) {
+        if (!cancelled) {
+          setMermaidRenderError(
+            error instanceof Error
+              ? error.message
+              : "Failed to render Mermaid chart",
+          );
+          if (mermaidContainerRef.current) {
+            mermaidContainerRef.current.innerHTML = "";
+          }
+        }
+      }
+    };
+
+    void renderMermaid();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isMermaidLoading, mermaidOpen, normalizedMermaidText]);
+
   const updateAgentflowMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: string; body: AgentflowDetailDto }) => {
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: AgentflowDetailDto;
+    }) => {
       return await apiPut("/api/agentflows/{id}", {
         params: { path: { id } },
         body,
@@ -115,7 +205,7 @@ export default function AgentflowsPage() {
         toast.error("Failed to fetch agentflow details");
       }
     },
-    [updateAgentflowMutation]
+    [updateAgentflowMutation],
   );
 
   const handleDelete = React.useCallback(
@@ -126,7 +216,7 @@ export default function AgentflowsPage() {
         deleteAgentflowMutation.mutate(agentflow.id);
       }
     },
-    [deleteAgentflowMutation]
+    [deleteAgentflowMutation],
   );
 
   const handleEdit = React.useCallback(async (agentflow: AgentflowDto) => {
@@ -161,39 +251,61 @@ export default function AgentflowsPage() {
     setExecuteOpen(true);
   }, []);
 
-  const handleViewMermaid = React.useCallback(async (agentflow: AgentflowDto) => {
-    const requestId = mermaidRequestIdRef.current + 1;
-    mermaidRequestIdRef.current = requestId;
+  const handleViewMermaid = React.useCallback(
+    async (agentflow: AgentflowDto) => {
+      const requestId = mermaidRequestIdRef.current + 1;
+      mermaidRequestIdRef.current = requestId;
 
-    setMermaidAgentflow(agentflow);
-    setMermaidText("");
-    setMermaidOpen(true);
-    setIsMermaidLoading(true);
+      setMermaidAgentflow(agentflow);
+      setMermaidText("");
+      setMermaidRenderError(null);
+      setMermaidOpen(true);
+      setIsMermaidLoading(true);
+
+      try {
+        // OpenAPI currently doesn't declare response schemas.
+        const result = await apiGet("/api/agentflows/mermaid/{id}", {
+          params: { path: { id: agentflow.id } },
+        });
+
+        if (mermaidRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setMermaidText(
+          typeof result === "string" ? result : JSON.stringify(result, null, 2),
+        );
+      } catch {
+        if (mermaidRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        toast.error("Failed to load Mermaid chart text");
+        setMermaidText("");
+      } finally {
+        if (mermaidRequestIdRef.current === requestId) {
+          setIsMermaidLoading(false);
+        }
+      }
+    },
+    [],
+  );
+
+  const handleCopyMermaid = React.useCallback(async () => {
+    const textToCopy = mermaidText.trim();
+
+    if (!textToCopy) {
+      toast.error("No Mermaid text to copy");
+      return;
+    }
 
     try {
-      // OpenAPI currently doesn't declare response schemas.
-      const result = await apiGet("/api/agentflows/mermaid/{id}", {
-        params: { path: { id: agentflow.id } },
-      });
-
-      if (mermaidRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      setMermaidText(typeof result === "string" ? result : JSON.stringify(result, null, 2));
+      await navigator.clipboard.writeText(textToCopy);
+      toast.success("Mermaid text copied");
     } catch {
-      if (mermaidRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      toast.error("Failed to load Mermaid chart text");
-      setMermaidText("");
-    } finally {
-      if (mermaidRequestIdRef.current === requestId) {
-        setIsMermaidLoading(false);
-      }
+      toast.error("Failed to copy Mermaid text");
     }
-  }, []);
+  }, [mermaidText]);
 
   return (
     <div className="space-y-6 w-full">
@@ -264,19 +376,55 @@ export default function AgentflowsPage() {
       />
 
       <Dialog open={mermaidOpen} onOpenChange={setMermaidOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>
-              Mermaid Chart{mermaidAgentflow ? ` - ${mermaidAgentflow.name}` : ""}
+        <DialogContent
+         className="p-4 gap-4 w-[70vw] sm:max-w-[70vw] h-[70vh] sm:max-h-[80vh] flex flex-col"
+         showCloseButton={false}
+         >
+          <DialogHeader className="gap-0 flex flex-row align-center justify-between">
+            <DialogTitle className="flex items-center">
+              Mermaid Chart
+              {mermaidAgentflow ? ` - ${mermaidAgentflow.name}` : ""}
             </DialogTitle>
-            <DialogDescription>
-              Fetched from <code>/api/agentflows/mermaid/{"{id}"}</code>.
-            </DialogDescription>
+            <DialogClose asChild>
+              <Button variant="outline" size="sm" className="cursor-pointer">
+                <X />
+              </Button>
+            </DialogClose>
           </DialogHeader>
 
-          <pre className="max-h-[60vh] overflow-auto rounded-md border bg-muted/30 p-4 text-xs whitespace-pre-wrap">
-            {isMermaidLoading ? "Loading Mermaid text..." : mermaidText || "No Mermaid content returned."}
-          </pre>
+          <div className="relative overflow-auto rounded-md border bg-muted/30 p-4 h-full">
+            {isMermaidLoading ? (
+              <p className="text-sm text-muted-foreground">
+                Loading Mermaid text...
+              </p>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="absolute top-3 right-3"
+                  onClick={handleCopyMermaid}
+                  disabled={isMermaidLoading || !mermaidText.trim()}
+                >
+                  <Copy />
+                </Button>
+                {normalizedMermaidText ? (
+                  <div className="px-4 flex justify-center items-center h-full" ref={mermaidContainerRef} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No Mermaid content returned.
+                  </p>
+                )}
+              </>
+            )}
+
+            {mermaidRenderError ? (
+              <pre className="mt-3 rounded-md border bg-background/80 p-3 text-xs whitespace-pre-wrap">
+                Failed to render Mermaid: {mermaidRenderError}
+              </pre>
+            ) : null}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
