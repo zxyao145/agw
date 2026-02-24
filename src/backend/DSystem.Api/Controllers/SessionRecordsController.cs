@@ -1,10 +1,11 @@
 using DSystem.SessionRecords.Domain;
+using DSystem.SessionRecords.Entities;
+using DSystem.Domain.Entities;
+using DSystem.Domain.Repositories;
 using DSystem.Shared;
 using DSystem.Shared.Contracts;
 using DSystem.Shared.Models;
-using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Mvc;
-using System.Text.Json;
 
 namespace DSystem.Api.Controllers;
 
@@ -13,10 +14,12 @@ namespace DSystem.Api.Controllers;
 public class SessionRecordsController : ControllerBase
 {
     private readonly SessionRecordDomainService _service;
+    private readonly IRepository<ProjectTask> _taskRepository;
 
-    public SessionRecordsController(SessionRecordDomainService service)
+    public SessionRecordsController(SessionRecordDomainService service, IRepository<ProjectTask> taskRepository)
     {
         _service = service;
+        _taskRepository = taskRepository;
     }
 
     [HttpGet]
@@ -28,16 +31,18 @@ public class SessionRecordsController : ControllerBase
         }
 
         var records = await _service.ListAsync(r => r.ProjectId == projectId);
-        var summaries = records
-            .OrderByDescending(r => r.UpdateTime ?? r.CreateTime)
-            .Select(r => new SessionRecordSummary(
-                r.Id,
-                r.ProjectId,
-                r.SessionId,
-                NormalizeTitle(r.Title),
-                ExtractMessageCount(r.Messages),
-                r.CreateTime,
-                r.UpdateTime))
+        var recordsBySession = records
+            .GroupBy(r => r.SessionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var taskBySession = (await GetTasksByProjectIdAsync(projectId))
+            .GroupBy(t => t.SessionId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.UpdateTime ?? t.CreateTime).First());
+
+        var sessionIds = recordsBySession.Keys.Union(taskBySession.Keys).ToList();
+        var summaries = sessionIds
+            .Select(sessionId => CreateSummary(projectId, sessionId, recordsBySession.GetValueOrDefault(sessionId), taskBySession.GetValueOrDefault(sessionId)))
+            .OrderByDescending(s => s.UpdateTime ?? s.CreateTime)
             .ToList();
 
         return Ok(summaries);
@@ -51,21 +56,29 @@ public class SessionRecordsController : ControllerBase
             return BadRequest("projectId is required.");
         }
 
-        var record = await _service.GetBySessionIdAsync(sessionId, projectId);
-        if (record == null)
+        var records = await _service.GetBySessionIdAsync(sessionId, projectId);
+        if (records.Count == 0)
         {
             return NotFound();
         }
 
-        var messages = ExtractMessages(record.Messages);
+        var task = (await GetTasksByProjectIdAsync(projectId)).FirstOrDefault(t => t.SessionId == sessionId);
+        var orderedRecords = records
+            .OrderBy(r => r.CreateTime)
+            .ThenBy(r => r.UpdateTime ?? r.CreateTime)
+            .ToList();
+        var messages = orderedRecords.Select(ToAiMessage).ToList();
+
+        var createTime = task?.CreateTime ?? orderedRecords.First().CreateTime;
+        var updateTime = task?.UpdateTime ?? orderedRecords.Last().UpdateTime ?? orderedRecords.Last().CreateTime;
         var response = new SessionRecordDetails(
-            record.Id,
-            record.ProjectId,
-            record.SessionId,
-            NormalizeTitle(record.Title),
+            task?.Id ?? TryParseSessionIdAsGuid(sessionId),
+            projectId,
+            task?.SessionId ?? sessionId,
+            NormalizeTitle(task?.Title),
             messages,
-            record.CreateTime,
-            record.UpdateTime);
+            createTime,
+            updateTime);
 
         return Ok(response);
     }
@@ -82,81 +95,52 @@ public class SessionRecordsController : ControllerBase
         return deleted ? NoContent() : NotFound();
     }
 
-    [HttpPut("{sessionId}/title")]
-    public async Task<IActionResult> UpdateTitleAsync(
-        string sessionId,
-        [FromQuery] string projectId,
-        [FromBody] SessionRecordTitleUpdateRequest request)
+    private async Task<IReadOnlyList<ProjectTask>> GetTasksByProjectIdAsync(string projectId)
     {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            return BadRequest("projectId is required.");
-        }
-
-        if (request == null || string.IsNullOrWhiteSpace(request.Title))
-        {
-            return BadRequest("Title is required.");
-        }
-
-        var user = User?.Identity?.Name ?? "system";
-        var updated = await _service.UpdateTitleAsync(sessionId, projectId, request.Title, user);
-        return updated ? NoContent() : NotFound();
+        return await _taskRepository.ListAsync(t => t.ProjectId == projectId);
     }
 
-    private static int ExtractMessageCount(string? messagesPayload) =>
-        ExtractUpdates(messagesPayload).Count;
-
-    private static List<AiMessage> ExtractMessages(string? messagesPayload)
-    {
-        var updates = ExtractUpdates(messagesPayload);
-        return updates
-            .Select(update => update.ToAiMessage())
-            .Where(message => message != null)
-            .Select(message => message!)
-            .ToList();
-    }
-
-    private static List<AgentResponseUpdate> ExtractUpdates(string? messagesPayload)
-    {
-        if (string.IsNullOrWhiteSpace(messagesPayload))
-        {
-            return [];
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(messagesPayload);
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                return [];
-            }
-
-            if (!TryGetUpdates(document.RootElement, out var updatesElement))
-            {
-                return [];
-            }
-
-            return JsonSerializer.Deserialize<List<AgentResponseUpdate>>(updatesElement.GetRawText())
-                ?? [];
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
-    }
-
-    private static bool TryGetUpdates(JsonElement root, out JsonElement updatesElement)
-    {
-        if (root.TryGetProperty("Updates", out updatesElement)
-            || root.TryGetProperty("updates", out updatesElement))
-        {
-            return updatesElement.ValueKind == JsonValueKind.Array;
-        }
-
-        updatesElement = default;
-        return false;
-    }
+    private static AiMessage ToAiMessage(AgentSessionRecord record) =>
+        new(
+            record.MessageId,
+            record.Author,
+            record.Role,
+            record.Contents,
+            record.Metadata?.ToDictionary(x => x.Key, x => (object?)x.Value));
 
     private static string NormalizeTitle(string? title) =>
         string.IsNullOrWhiteSpace(title) ? "New Chat" : title;
+
+    private static SessionRecordSummary CreateSummary(
+        string projectId,
+        string sessionId,
+        List<AgentSessionRecord>? records,
+        ProjectTask? task)
+    {
+        var sessionRecords = records ?? [];
+        var orderedRecords = sessionRecords
+            .OrderBy(r => r.CreateTime)
+            .ThenBy(r => r.UpdateTime ?? r.CreateTime)
+            .ToList();
+
+        var createTime = task?.CreateTime
+            ?? orderedRecords.FirstOrDefault()?.CreateTime
+            ?? DateTime.UtcNow;
+
+        var updateTime = task?.UpdateTime
+            ?? orderedRecords.LastOrDefault()?.UpdateTime
+            ?? orderedRecords.LastOrDefault()?.CreateTime;
+
+        return new SessionRecordSummary(
+            task?.Id ?? TryParseSessionIdAsGuid(sessionId),
+            projectId,
+            task?.SessionId ?? sessionId,
+            NormalizeTitle(task?.Title),
+            sessionRecords.Count,
+            createTime,
+            updateTime);
+    }
+
+    private static Guid TryParseSessionIdAsGuid(string sessionId) =>
+        Guid.TryParse(sessionId, out var parsed) ? parsed : Guid.Empty;
 }

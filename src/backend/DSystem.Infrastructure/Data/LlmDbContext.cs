@@ -2,6 +2,7 @@ using DSystem.Domain.Entities;
 using DSystem.SessionRecords.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
+using System.Text.Json;
 
 namespace DSystem.Infrastructure.Data;
 
@@ -137,17 +138,16 @@ public class LlmDbContext : DbContext
         modelBuilder.Entity<ProjectTask>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.ProjectId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.AgentType).HasConversion<int>();
             entity.Property(e => e.Description).IsRequired().HasMaxLength(4000);
+            entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue(string.Empty);
             entity.Property(e => e.Input).IsRequired().HasMaxLength(4000);
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
 
             entity.HasIndex(e => new { e.ProjectId, e.Status, e.UpdateTime });
-
-            entity.HasOne(e => e.Project)
-                .WithMany(p => p.Tasks)
-                .HasForeignKey(e => e.ProjectId)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.ProjectId, e.SessionId }).IsUnique();
 
         });
 
@@ -166,11 +166,30 @@ public class LlmDbContext : DbContext
         modelBuilder.Entity<AgentSessionRecord>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.ProjectId, e.SessionId }).IsUnique();
+            entity.HasIndex(e => new { e.ProjectId, e.SessionId, e.MessageId }).IsUnique();
             entity.Property(e => e.ProjectId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue(string.Empty);
-            entity.Property(e => e.Messages).HasColumnType("text");
+            entity.Property(e => e.MessageId).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.Author).HasMaxLength(200);
+            entity.Property(e => e.Role).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Error).HasColumnType("text");
+
+            entity.Property(e => e.Metadata)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => string.IsNullOrWhiteSpace(v)
+                        ? null
+                        : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null));
+
+            entity.Property(e => e.Contents)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => string.IsNullOrWhiteSpace(v)
+                        ? []
+                        : JsonSerializer.Deserialize<List<DSystem.Shared.Models.AiMessageContent>>(v, (JsonSerializerOptions?)null) ?? []);
+
         });
 
 
