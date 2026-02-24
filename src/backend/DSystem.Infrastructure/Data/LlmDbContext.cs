@@ -25,6 +25,7 @@ public class LlmDbContext : DbContext
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
     public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
     public DbSet<AgentSessionRecord> AgentSessionRecords => Set<AgentSessionRecord>();
+    public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -170,6 +171,33 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue(string.Empty);
             entity.Property(e => e.Messages).HasColumnType("text");
+        });
+
+
+        modelBuilder.Entity<McpToolServer>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.TransportType).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Command).HasMaxLength(200);
+            entity.Property(e => e.WorkingDirectory).HasMaxLength(500);
+            entity.Property(e => e.Url).HasMaxLength(1000);
+            entity.Property(e => e.Arguments).HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? []
+                    : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? []);
+            entity.Property(e => e.EnvironmentVariables).HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? new Dictionary<string, string>()
+                    : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new Dictionary<string, string>());
+            entity.Property(e => e.Headers).HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? new Dictionary<string, string>()
+                    : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new Dictionary<string, string>());
         });
     }
 }
