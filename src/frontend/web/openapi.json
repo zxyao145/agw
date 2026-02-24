@@ -1204,6 +1204,133 @@
         }
       }
     },
+    "/api/mcp-tool-servers": {
+      "get": {
+        "tags": [
+          "McpToolServers"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "McpToolServers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolServerCreateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolServerCreateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolServerCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mcp-tool-servers/{id}": {
+      "get": {
+        "tags": [
+          "McpToolServers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "McpToolServers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolServerUpdateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolServerUpdateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolServerUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "McpToolServers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/model-provider-keys": {
       "get": {
         "tags": [
@@ -2067,6 +2194,160 @@
           }
         }
       },
+      "McpToolServerCreateRequest": {
+        "required": [
+          "name",
+          "description",
+          "transportType",
+          "command",
+          "arguments",
+          "workingDirectory",
+          "environmentVariables",
+          "url",
+          "headers"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "transportType": {
+            "type": "string"
+          },
+          "command": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "arguments": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "workingDirectory": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "environmentVariables": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "headers": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "McpToolServerUpdateRequest": {
+        "required": [
+          "name",
+          "description",
+          "transportType",
+          "command",
+          "arguments",
+          "workingDirectory",
+          "environmentVariables",
+          "url",
+          "headers"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "transportType": {
+            "type": "string"
+          },
+          "command": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "arguments": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "workingDirectory": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "environmentVariables": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "headers": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
       "ModelCreateRequest": {
         "required": [
           "name",
@@ -2717,6 +2998,9 @@
     },
     {
       "name": "Agents"
+    },
+    {
+      "name": "McpToolServers"
     },
     {
       "name": "ModelProviderApiKeys"

@@ -1373,6 +1373,141 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mcp-tool-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["McpToolServerCreateRequest"];
+                    "text/json": components["schemas"]["McpToolServerCreateRequest"];
+                    "application/*+json": components["schemas"]["McpToolServerCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-tool-servers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["McpToolServerUpdateRequest"];
+                    "text/json": components["schemas"]["McpToolServerUpdateRequest"];
+                    "application/*+json": components["schemas"]["McpToolServerUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/model-provider-keys": {
         parameters: {
             query?: never;
@@ -2088,6 +2223,40 @@ export interface components {
         ApiKeyUpdateRequest: {
             apiKey: string;
             enable: boolean;
+        };
+        McpToolServerCreateRequest: {
+            name: string;
+            description: null | string;
+            transportType: string;
+            command: null | string;
+            arguments: null | string[];
+            workingDirectory: null | string;
+            environmentVariables: null | {
+                [key: string]: string;
+            };
+            url: null | string;
+            headers: null | {
+                [key: string]: string;
+            };
+            /** @default true */
+            enabled: boolean;
+        };
+        McpToolServerUpdateRequest: {
+            name: string;
+            description: null | string;
+            transportType: string;
+            command: null | string;
+            arguments: null | string[];
+            workingDirectory: null | string;
+            environmentVariables: null | {
+                [key: string]: string;
+            };
+            url: null | string;
+            headers: null | {
+                [key: string]: string;
+            };
+            /** @default true */
+            enabled: boolean;
         };
         ModelCreateRequest: {
             name: string;
