@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { Pencil, Trash2, Play } from "lucide-react";
+import { Pencil, Trash2, Play, Waypoints } from "lucide-react";
 import type { AgentflowDto, AgentflowDetailDto } from "@/types/agentflow";
 import { getPatternName, getApiErrorMessage } from "./utils";
 
@@ -25,6 +25,7 @@ interface AgentflowsTableProps {
   onEdit: (agentflow: AgentflowDto) => void;
   onDelete: (agentflow: AgentflowDto) => void;
   onExecute: (agentflow: AgentflowDto) => void;
+  onViewMermaid: (agentflow: AgentflowDto) => void;
 }
 
 export function AgentflowsTable({
@@ -38,6 +39,7 @@ export function AgentflowsTable({
   onEdit,
   onDelete,
   onExecute,
+  onViewMermaid,
 }: AgentflowsTableProps) {
   if (isLoading) {
     return <div className="text-sm text-muted-foreground">Loading...</div>;
@@ -116,6 +118,15 @@ export function AgentflowsTable({
                     title="Edit agentflow"
                   >
                     <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="cursor-pointer"
+                    size="icon-sm"
+                    onClick={() => onViewMermaid(agentflow)}
+                    title="View Mermaid chart"
+                  >
+                    <Waypoints className="w-4 h-4" />
                   </Button>
                   <Button
                     variant="ghost"
