@@ -183,11 +183,14 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.Command).HasMaxLength(200);
             entity.Property(e => e.WorkingDirectory).HasMaxLength(500);
             entity.Property(e => e.Url).HasMaxLength(1000);
-            entity.Property(e => e.Arguments).HasConversion(
+            entity.Property(e => e.Arguments)
+            .HasConversion(
                 v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
                 v => string.IsNullOrWhiteSpace(v)
-                    ? []
-                    : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? []);
+                    ? new List<string>()
+                    : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null)
+                    ?? new List<string>()
+                    );
             entity.Property(e => e.EnvironmentVariables).HasConversion(
                 v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
                 v => string.IsNullOrWhiteSpace(v)
