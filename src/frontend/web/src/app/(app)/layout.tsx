@@ -3,7 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MenuIcon, LayoutDashboard, Workflow, Bot, Cog, Package, Blocks, Terminal } from "lucide-react";
+import {
+  MenuIcon,
+  LayoutDashboard,
+  Workflow,
+  Bot,
+  Cog,
+  Package,
+  Blocks,
+  Terminal,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -37,7 +46,7 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/claude-code",
         title: "ClaudeCode",
         isActive: true,
-        icon: <Terminal />
+        icon: <Terminal />,
       },
     ],
   },
@@ -53,7 +62,7 @@ const navItems: SidebarMenuGroupProps[] = [
       },
     ],
   },
-  
+
   {
     groupLable: "Agent & Flow",
     menus: [
@@ -61,13 +70,19 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/agentflows",
         title: "Agentflows",
         isActive: true,
-        icon: <Workflow />
+        icon: <Workflow />,
       },
       {
         url: "/agents",
         title: "Agents",
         isActive: true,
-        icon: <Bot />
+        icon: <Bot />,
+      },
+      {
+        url: "/mcp-tool-servers",
+        title: "MCP Tool Servers",
+        isActive: true,
+        icon: <Package />,
       },
     ],
   },
@@ -79,19 +94,19 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/providers",
         title: "Providers",
         isActive: true,
-        icon: <Cog />
+        icon: <Cog />,
       },
       {
         url: "/models",
         title: "Models",
         isActive: true,
-        icon: <Blocks />
+        icon: <Blocks />,
       },
       {
         url: "/model-providers",
         title: "Model Providers",
         isActive: true,
-        icon: <Package />
+        icon: <Package />,
       },
     ],
   },
@@ -100,7 +115,7 @@ const navItems: SidebarMenuGroupProps[] = [
 function getActiveNavLabel(pathname: string): MenuItem | undefined {
   const allNavItems = navItems.flatMap((group) => group.menus);
   const match = allNavItems.find(
-    (x) => pathname === x.url || pathname.startsWith(`${x.url}/`)
+    (x) => pathname === x.url || pathname.startsWith(`${x.url}/`),
   );
   return match;
 }
@@ -108,7 +123,9 @@ function getActiveNavLabel(pathname: string): MenuItem | undefined {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeMenu = getActiveNavLabel(pathname);
-  const [sidebarOpen, setSidebarOpen] = React.useState(pathname !== "/claude-code");
+  const [sidebarOpen, setSidebarOpen] = React.useState(
+    pathname !== "/claude-code",
+  );
 
   React.useEffect(() => {
     if (pathname === "/claude-code") {
@@ -121,10 +138,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       open={sidebarOpen}
       onOpenChange={setSidebarOpen}
       style={
-                {
-                  "--sidebar-width": "14rem",
-                } as React.CSSProperties
-              }>
+        {
+          "--sidebar-width": "14rem",
+        } as React.CSSProperties
+      }
+    >
       <div className="min-h-screen bg-background text-foreground w-full">
         {/* <header className="flex h-16 border-b ">
           <div className="flex items-center px-6 w-64">
