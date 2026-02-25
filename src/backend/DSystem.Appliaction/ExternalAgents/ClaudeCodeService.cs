@@ -78,17 +78,18 @@ public class ClaudeCodeService
         AgentSessionRecord? record,
         CancellationToken cancellationToken)
     {
-        if (record == null || string.IsNullOrWhiteSpace(record.Messages))
+        if (record == null)
         {
             _logger.LogDebug("Created new thread for session: {SessionId}", sessionId);
             return await agent.CreateSessionAsync(cancellationToken);
         }
-
         _logger.LogDebug("Loaded existing thread for session: {SessionId}", sessionId);
-        if (!TryGetThreadState(record.Messages, out var threadState))
-        {
-            return await agent.CreateSessionAsync(cancellationToken);
-        }
+        //if (!TryGetThreadState(record.Contents, out var threadState))
+        //{
+        //    return await agent.CreateSessionAsync(cancellationToken);
+        //}
+
+        JsonElement threadState = JsonElement.Parse($"\"sessionId\": {sessionId}");
 
         return await agent.DeserializeSessionAsync(threadState);
     }

@@ -291,7 +291,7 @@ WHERE project_id = {projectId}
         {
             await dbContext.ProjectLeases.AddAsync(new ProjectLease
             {
-                ProjectId = projectId.ToString("D"),
+                ProjectId = projectId,
                 LockedBy = _instanceId,
                 LockedUntilUtc = until,
                 CreateBy = _instanceId,

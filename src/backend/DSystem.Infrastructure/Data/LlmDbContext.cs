@@ -1,5 +1,6 @@
 using DSystem.Domain.Entities;
 using DSystem.SessionRecords.Entities;
+using DSystem.Shared.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 using System.Text.Json;
@@ -187,8 +188,8 @@ public class LlmDbContext : DbContext
                 .HasConversion(
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => string.IsNullOrWhiteSpace(v)
-                        ? []
-                        : JsonSerializer.Deserialize<List<DSystem.Shared.Models.AiMessageContent>>(v, (JsonSerializerOptions?)null) ?? []);
+                        ? new List<AiMessageContent>()
+                        : JsonSerializer.Deserialize<List<DSystem.Shared.Models.AiMessageContent>>(v, (JsonSerializerOptions?)null) ?? new List<AiMessageContent>());
 
         });
 

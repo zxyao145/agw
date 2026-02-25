@@ -106,7 +106,8 @@ public class SessionRecordsController : ControllerBase
             record.Author,
             record.Role,
             record.Contents,
-            record.Metadata?.ToDictionary(x => x.Key, x => (object?)x.Value));
+            record.Metadata?.ToDictionary(x => x.Key, x => (object?)x.Value)
+            );
 
     private static string NormalizeTitle(string? title) =>
         string.IsNullOrWhiteSpace(title) ? "New Chat" : title;

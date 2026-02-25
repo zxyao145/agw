@@ -28,6 +28,23 @@ public record AiMessage
         Contents = contents;
         AdditionalProperties = additionalProperties;
     }
+
+    public AiMessage(
+        string messageId,
+        string? author,
+        string? role,
+        List<AiMessageContent> contents,
+        Dictionary<string, object?>? additionalProperties)
+    {
+        MessageId = messageId;
+        Author = author;
+        Role = role;
+        Contents = contents;
+        if(additionalProperties != null)
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary(additionalProperties);
+        }
+    }
 }
 
 
