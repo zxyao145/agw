@@ -100,7 +100,7 @@ export function CreateModelProviderDialog({
         <Button>Create model provider</Button>
       </DialogTrigger>
 
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <UiDialogTitle>Create model provider</UiDialogTitle>
           <UiDialogDescription>
