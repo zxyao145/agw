@@ -259,6 +259,23 @@ export default function McpToolServersPage() {
     deleteMutation.mutate(server.id);
   };
 
+  const onToggleEnabled = (server: McpToolServerDto, checked: boolean) => {
+    const body: McpToolServerRequest = {
+      name: server.name,
+      description: server.description ?? null,
+      transportType: server.transportType,
+      command: server.command ?? null,
+      arguments: server.arguments ?? [],
+      workingDirectory: server.workingDirectory ?? null,
+      environmentVariables: server.environmentVariables ?? {},
+      url: server.url ?? null,
+      headers: server.headers ?? {},
+      enabled: checked,
+    };
+
+    updateMutation.mutate({ id: server.id, body });
+  };
+
   return (
     <div className="space-y-6 w-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -327,7 +344,18 @@ export default function McpToolServersPage() {
                         ? server.command || "-"
                         : server.url || "-"}
                     </TableCell>
-                    <TableCell>{server.enabled ? "Yes" : "No"}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center">
+                        <Switch
+                          checked={server.enabled}
+                          onCheckedChange={(checked) =>
+                            onToggleEnabled(server, checked)
+                          }
+                          disabled={updateMutation.isPending}
+                          aria-label={`${server.name} enabled`}
+                        />
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
