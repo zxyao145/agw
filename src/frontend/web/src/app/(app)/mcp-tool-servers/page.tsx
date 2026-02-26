@@ -24,6 +24,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -105,6 +112,9 @@ function parseJsonMap(label: string, value: string): Record<string, string> {
 }
 
 function toRequest(form: FormState): McpToolServerRequest {
+  const transportType = form.transportType.trim().toLowerCase() || "stdio";
+  const isStdio = transportType === "stdio";
+
   const argumentsList = form.argumentsText
     .split("\n")
     .map((value) => value.trim())
@@ -113,16 +123,15 @@ function toRequest(form: FormState): McpToolServerRequest {
   return {
     name: form.name.trim(),
     description: form.description.trim() || null,
-    transportType: form.transportType.trim() || "stdio",
-    command: form.command.trim() || null,
-    arguments: argumentsList.length > 0 ? argumentsList : [],
-    workingDirectory: form.workingDirectory.trim() || null,
-    environmentVariables: parseJsonMap(
-      "Environment variables",
-      form.environmentVariablesText,
-    ),
-    url: form.url.trim() || null,
-    headers: parseJsonMap("Headers", form.headersText),
+    transportType,
+    command: isStdio ? form.command.trim() || null : null,
+    arguments: isStdio ? (argumentsList.length > 0 ? argumentsList : []) : [],
+    workingDirectory: isStdio ? form.workingDirectory.trim() || null : null,
+    environmentVariables: isStdio
+      ? parseJsonMap("Environment variables", form.environmentVariablesText)
+      : {},
+    url: isStdio ? null : form.url.trim() || null,
+    headers: isStdio ? {} : parseJsonMap("Headers", form.headersText),
     enabled: form.enabled,
   };
 }
@@ -403,6 +412,7 @@ function McpToolServerDialog({
 }) {
   const title =
     mode === "create" ? "Create MCP Tool Server" : "Edit MCP Tool Server";
+  const isStdio = form.transportType === "stdio";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -444,17 +454,23 @@ function McpToolServerDialog({
 
           <div className="space-y-2">
             <Label htmlFor={`${mode}-transportType`}>Transport Type</Label>
-            <Input
-              id={`${mode}-transportType`}
+            <Select
               value={form.transportType}
-              onChange={(event) =>
+              onValueChange={(value) =>
                 setForm((prev) => ({
                   ...prev,
-                  transportType: event.target.value,
+                  transportType: value,
                 }))
               }
-              placeholder="stdio or http"
-            />
+            >
+              <SelectTrigger id={`${mode}-transportType`}>
+                <SelectValue placeholder="Select transport type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="stdio">stdio</SelectItem>
+                <SelectItem value="http">http</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex items-end gap-3">
@@ -468,96 +484,102 @@ function McpToolServerDialog({
             <Label htmlFor={`${mode}-enabled`}>Enabled</Label>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-command`}>Command</Label>
-            <Input
-              id={`${mode}-command`}
-              value={form.command}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, command: event.target.value }))
-              }
-              placeholder="npx"
-            />
-          </div>
+          {isStdio ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor={`${mode}-command`}>Command</Label>
+                <Input
+                  id={`${mode}-command`}
+                  value={form.command}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, command: event.target.value }))
+                  }
+                  placeholder="npx"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-workingDirectory`}>
-              Working Directory
-            </Label>
-            <Input
-              id={`${mode}-workingDirectory`}
-              value={form.workingDirectory}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  workingDirectory: event.target.value,
-                }))
-              }
-              placeholder="/workspace"
-            />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${mode}-workingDirectory`}>
+                  Working Directory
+                </Label>
+                <Input
+                  id={`${mode}-workingDirectory`}
+                  value={form.workingDirectory}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      workingDirectory: event.target.value,
+                    }))
+                  }
+                  placeholder="/workspace"
+                />
+              </div>
 
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor={`${mode}-arguments`}>
-              Arguments (one per line)
-            </Label>
-            <Textarea
-              id={`${mode}-arguments`}
-              value={form.argumentsText}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  argumentsText: event.target.value,
-                }))
-              }
-              rows={4}
-              placeholder="-y\n@modelcontextprotocol/server-github"
-            />
-          </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${mode}-arguments`}>
+                  Arguments (one per line)
+                </Label>
+                <Textarea
+                  id={`${mode}-arguments`}
+                  value={form.argumentsText}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      argumentsText: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                  placeholder="-y\n@modelcontextprotocol/server-github"
+                />
+              </div>
 
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor={`${mode}-url`}>URL</Label>
-            <Input
-              id={`${mode}-url`}
-              value={form.url}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, url: event.target.value }))
-              }
-              placeholder="http://localhost:3001/sse"
-            />
-          </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${mode}-env`}>
+                  Environment Variables (JSON object)
+                </Label>
+                <Textarea
+                  id={`${mode}-env`}
+                  value={form.environmentVariablesText}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      environmentVariablesText: event.target.value,
+                    }))
+                  }
+                  rows={5}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${mode}-url`}>URL</Label>
+                <Input
+                  id={`${mode}-url`}
+                  value={form.url}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, url: event.target.value }))
+                  }
+                  placeholder="http://localhost:3001/sse"
+                />
+              </div>
 
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor={`${mode}-env`}>
-              Environment Variables (JSON object)
-            </Label>
-            <Textarea
-              id={`${mode}-env`}
-              value={form.environmentVariablesText}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  environmentVariablesText: event.target.value,
-                }))
-              }
-              rows={5}
-            />
-          </div>
-
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor={`${mode}-headers`}>Headers (JSON object)</Label>
-            <Textarea
-              id={`${mode}-headers`}
-              value={form.headersText}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  headersText: event.target.value,
-                }))
-              }
-              rows={5}
-            />
-          </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${mode}-headers`}>Headers (JSON object)</Label>
+                <Textarea
+                  id={`${mode}-headers`}
+                  value={form.headersText}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      headersText: event.target.value,
+                    }))
+                  }
+                  rows={5}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         <DialogFooter>
