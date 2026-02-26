@@ -61,4 +61,6 @@ public sealed class McpToolServer : BaseEntity
     /// Whether this server is enabled for tool discovery and agent use.
     /// </summary>
     public bool Enabled { get; set; } = true;
+
+    public ICollection<AgentMcpToolServer> AgentMcpToolServers { get; set; } = new List<AgentMcpToolServer>();
 }

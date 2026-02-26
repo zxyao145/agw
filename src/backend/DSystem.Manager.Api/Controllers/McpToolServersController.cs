@@ -48,7 +48,7 @@ public class McpToolServersController : ControllerBase
             Enabled = request.Enabled
         };
 
-        var created = await _service.CreateAsync(server, user);
+        var created = await _service.CreateAsync(server, request.AgentIds, user);
         return Ok(created);
     }
 
@@ -68,7 +68,7 @@ public class McpToolServersController : ControllerBase
             server.Url = request.Url;
             server.Headers = request.Headers ?? new Dictionary<string, string>();
             server.Enabled = request.Enabled;
-        }, user);
+        }, request.AgentIds, user);
 
         return updated == null ? NotFound() : Ok(updated);
     }

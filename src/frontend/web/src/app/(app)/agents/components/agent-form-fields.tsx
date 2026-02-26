@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -13,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ToolInfo, ModelProviderApiKeyDto } from "./types";
+import type { ToolInfo, ModelProviderApiKeyDto, McpToolServerDto } from "./types";
 
 interface AgentFormFieldsProps {
   name: string;
@@ -35,7 +37,13 @@ interface AgentFormFieldsProps {
   filteredTools: ToolInfo[];
   modelProviderApiKeysQuery: UseQueryResult<ModelProviderApiKeyDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
+  mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   toggleTool: (toolName: string) => void;
+  selectedMcpToolServerIds: string[];
+  mcpToolServerSearchTerm: string;
+  setMcpToolServerSearchTerm: (value: string) => void;
+  filteredMcpToolServers: McpToolServerDto[];
+  toggleMcpToolServer: (mcpToolServerId: string) => void;
   idPrefix?: string;
   disabledFields?: {
     name?: boolean;
@@ -45,6 +53,7 @@ interface AgentFormFieldsProps {
     agentType?: boolean;
     extra?: boolean;
     tools?: boolean;
+    mcpToolServers?: boolean;
   };
   hiddenFields?: {
     name?: boolean;
@@ -54,6 +63,7 @@ interface AgentFormFieldsProps {
     agentType?: boolean;
     extra?: boolean;
     tools?: boolean;
+    mcpToolServers?: boolean;
   };
 }
 
@@ -76,7 +86,13 @@ export function AgentFormFields({
   filteredTools,
   modelProviderApiKeysQuery,
   toolsQuery,
+  mcpToolServersQuery,
   toggleTool,
+  selectedMcpToolServerIds,
+  mcpToolServerSearchTerm,
+  setMcpToolServerSearchTerm,
+  filteredMcpToolServers,
+  toggleMcpToolServer,
   idPrefix = "",
   disabledFields = {},
   hiddenFields = {},
@@ -218,11 +234,10 @@ export function AgentFormFields({
             placeholder="Search tools..."
             value={toolSearchTerm}
             onChange={(e) => setToolSearchTerm(e.target.value)}
-            className="mb-2"
             disabled={disabledFields.tools}
           />
           <div
-            className={`border rounded-md p-3 max-h-48 overflow-y-auto space-y-2 ${disabledFields.tools ? "opacity-50 pointer-events-none" : ""}`}
+            className={`rounded-md px-2 max-h-48 overflow-y-auto space-y-2 ${disabledFields.tools ? "opacity-50 pointer-events-none" : ""}`}
           >
             {toolsQuery.isLoading ? (
               <div className="text-sm text-muted-foreground">
@@ -258,9 +273,85 @@ export function AgentFormFields({
               ))
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {selectedTools.length} tool(s) selected
-          </p>
+        </div>
+      )}
+
+      {!hiddenFields.mcpToolServers && (
+        <div className="grid gap-2">
+          <Label>MCP Tool Servers</Label>
+          <Input
+            placeholder="Search MCP tool servers..."
+            value={mcpToolServerSearchTerm}
+            onChange={(e) => setMcpToolServerSearchTerm(e.target.value)}
+            className="mb-2"
+            disabled={disabledFields.mcpToolServers}
+          />
+          <Select
+            onValueChange={(value) => toggleMcpToolServer(value)}
+            disabled={disabledFields.mcpToolServers}
+          >
+            <SelectTrigger
+              id={`${idPrefix}mcpToolServers`}
+              className="w-full"
+              disabled={disabledFields.mcpToolServers}
+            >
+              <SelectValue placeholder="Select MCP tool server..." />
+            </SelectTrigger>
+            <SelectContent position="popper" sideOffset={4}>
+              <SelectGroup>
+                <SelectLabel>Available MCP Tool Servers</SelectLabel>
+                {mcpToolServersQuery.isLoading ? (
+                  <SelectItem value="loading" disabled>
+                    Loading MCP tool servers...
+                  </SelectItem>
+                ) : filteredMcpToolServers.length === 0 ? (
+                  <SelectItem value="none" disabled>
+                    No MCP tool servers found
+                  </SelectItem>
+                ) : (
+                  filteredMcpToolServers.map((server) => (
+                    <SelectItem key={server.id} value={server.id}>
+                      {server.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <div className="rounded-md px-2">
+            {selectedMcpToolServerIds.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                No MCP Tool servers selected
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {selectedMcpToolServerIds.map((selectedId) => {
+                  const selectedServer = mcpToolServersQuery.data?.find(
+                    (server) => server.id === selectedId
+                  );
+                  return (
+                    <Badge
+                      key={selectedId}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
+                      <span>{selectedServer?.name ?? selectedId}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-4 w-4 p-0"
+                        onClick={() => toggleMcpToolServer(selectedId)}
+                        disabled={disabledFields.mcpToolServers}
+                      >
+                        x
+                      </Button>
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

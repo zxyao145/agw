@@ -1,9 +1,16 @@
-import type { components } from "@/api/openapi";
-
 export type {AgentDto} from  "@/types/agentflow";
 
 
-export type AgentCreateRequest = components["schemas"]["AgentCreateRequest"];
+export interface AgentCreateRequest {
+  name: string;
+  description: string;
+  systemPrompt: string;
+  modelProviderApiKeyId: string | null;
+  tools?: string | null;
+  mcpToolServerIds?: string[] | null;
+}
+
+export type AgentUpdateRequest = AgentCreateRequest;
 
 export type ToolInfo = {
   name: string;
@@ -26,5 +33,10 @@ export type ModelProviderApiKeyDto = {
   providerId: string;
   providerName: string;
   modelName: string;
+};
+
+export type McpToolServerDto = {
+  id: string;
+  name: string;
 };
 

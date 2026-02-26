@@ -69,7 +69,7 @@ public class AgentsController : ControllerBase
             Tools = request.Tools
         };
 
-        var created = await _agentService.CreateAsync(agent, user);
+        var created = await _agentService.CreateAsync(agent, request.McpToolServerIds, user);
         if (created == null)
         {
             return BadRequest("Failed to create agent.");
@@ -99,7 +99,7 @@ public class AgentsController : ControllerBase
             agent.SystemPrompt = request.SystemPrompt;
             agent.ModelProviderApiKeyId = request.ModelProviderApiKeyId;
             agent.Tools = request.Tools;
-        }, user);
+        }, request.McpToolServerIds, user);
 
         return updated == null ? NotFound() : Ok(updated);
     }

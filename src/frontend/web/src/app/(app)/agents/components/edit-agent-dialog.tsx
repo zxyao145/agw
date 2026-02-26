@@ -11,7 +11,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AgentFormFields } from "./agent-form-fields";
-import type { AgentDto, AgentCreateRequest, ToolInfo, ModelProviderApiKeyDto } from "./types";
+import type {
+  AgentDto,
+  AgentUpdateRequest,
+  ToolInfo,
+  ModelProviderApiKeyDto,
+  McpToolServerDto,
+} from "./types";
 
 interface EditAgentDialogProps {
   open: boolean;
@@ -36,13 +42,19 @@ interface EditAgentDialogProps {
   filteredTools: ToolInfo[];
   modelProviderApiKeysQuery: UseQueryResult<ModelProviderApiKeyDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
+  mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
+  selectedMcpToolServerIds: string[];
+  mcpToolServerSearchTerm: string;
+  setMcpToolServerSearchTerm: (value: string) => void;
+  filteredMcpToolServers: McpToolServerDto[];
   updateAgentMutation: UseMutationResult<
     unknown,
     Error,
-    { id: string; body: AgentCreateRequest },
+    { id: string; body: AgentUpdateRequest },
     unknown
   >;
   toggleTool: (toolName: string) => void;
+  toggleMcpToolServer: (mcpToolServerId: string) => void;
 }
 
 export function EditAgentDialog({
@@ -68,8 +80,14 @@ export function EditAgentDialog({
   filteredTools,
   modelProviderApiKeysQuery,
   toolsQuery,
+  mcpToolServersQuery,
+  selectedMcpToolServerIds,
+  mcpToolServerSearchTerm,
+  setMcpToolServerSearchTerm,
+  filteredMcpToolServers,
   updateAgentMutation,
   toggleTool,
+  toggleMcpToolServer,
 }: EditAgentDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -99,7 +117,13 @@ export function EditAgentDialog({
           filteredTools={filteredTools}
           modelProviderApiKeysQuery={modelProviderApiKeysQuery}
           toolsQuery={toolsQuery}
+          mcpToolServersQuery={mcpToolServersQuery}
           toggleTool={toggleTool}
+          selectedMcpToolServerIds={selectedMcpToolServerIds}
+          mcpToolServerSearchTerm={mcpToolServerSearchTerm}
+          setMcpToolServerSearchTerm={setMcpToolServerSearchTerm}
+          filteredMcpToolServers={filteredMcpToolServers}
+          toggleMcpToolServer={toggleMcpToolServer}
           idPrefix="edit-"
           disabledFields={
             agentType === "1"
@@ -143,6 +167,10 @@ export function EditAgentDialog({
                     tools:
                       selectedTools.length > 0
                         ? JSON.stringify(selectedTools)
+                        : null,
+                    mcpToolServerIds:
+                      selectedMcpToolServerIds.length > 0
+                        ? selectedMcpToolServerIds
                         : null,
                   },
                 });

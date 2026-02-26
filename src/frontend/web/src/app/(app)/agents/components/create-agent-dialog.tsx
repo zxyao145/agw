@@ -12,7 +12,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { AgentFormFields } from "./agent-form-fields";
-import type { AgentCreateRequest, ToolInfo, ModelProviderApiKeyDto } from "./types";
+import type {
+  AgentCreateRequest,
+  ToolInfo,
+  ModelProviderApiKeyDto,
+  McpToolServerDto,
+} from "./types";
 
 interface CreateAgentDialogProps {
   open: boolean;
@@ -36,8 +41,14 @@ interface CreateAgentDialogProps {
   filteredTools: ToolInfo[];
   modelProviderApiKeysQuery: UseQueryResult<ModelProviderApiKeyDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
+  mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
+  selectedMcpToolServerIds: string[];
+  mcpToolServerSearchTerm: string;
+  setMcpToolServerSearchTerm: (value: string) => void;
+  filteredMcpToolServers: McpToolServerDto[];
   createAgentMutation: UseMutationResult<unknown, Error, AgentCreateRequest, unknown>;
   toggleTool: (toolName: string) => void;
+  toggleMcpToolServer: (mcpToolServerId: string) => void;
 }
 
 export function CreateAgentDialog({
@@ -62,8 +73,14 @@ export function CreateAgentDialog({
   filteredTools,
   modelProviderApiKeysQuery,
   toolsQuery,
+  mcpToolServersQuery,
+  selectedMcpToolServerIds,
+  mcpToolServerSearchTerm,
+  setMcpToolServerSearchTerm,
+  filteredMcpToolServers,
   createAgentMutation,
   toggleTool,
+  toggleMcpToolServer,
 }: CreateAgentDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -99,7 +116,13 @@ export function CreateAgentDialog({
           filteredTools={filteredTools}
           modelProviderApiKeysQuery={modelProviderApiKeysQuery}
           toolsQuery={toolsQuery}
+          mcpToolServersQuery={mcpToolServersQuery}
           toggleTool={toggleTool}
+          selectedMcpToolServerIds={selectedMcpToolServerIds}
+          mcpToolServerSearchTerm={mcpToolServerSearchTerm}
+          setMcpToolServerSearchTerm={setMcpToolServerSearchTerm}
+          filteredMcpToolServers={filteredMcpToolServers}
+          toggleMcpToolServer={toggleMcpToolServer}
         />
 
         <DialogFooter>
@@ -119,6 +142,10 @@ export function CreateAgentDialog({
                 tools:
                   selectedTools.length > 0
                     ? JSON.stringify(selectedTools)
+                    : null,
+                mcpToolServerIds:
+                  selectedMcpToolServerIds.length > 0
+                    ? selectedMcpToolServerIds
                     : null,
               })
             }

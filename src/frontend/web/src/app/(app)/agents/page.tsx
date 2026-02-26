@@ -10,8 +10,10 @@ import { Button } from "@/components/ui/button";
 import type {
   AgentDto,
   AgentCreateRequest,
+  AgentUpdateRequest,
   ToolInfo,
   ModelProviderApiKeyDto,
+  McpToolServerDto,
 } from "./components/types";
 import { getApiErrorMessage } from "./components/utils";
 import { CreateAgentDialog } from "./components/create-agent-dialog";
@@ -46,6 +48,13 @@ export default function AgentsPage() {
     },
   });
 
+  const mcpToolServersQuery = useQuery({
+    queryKey: ["mcpToolServers"],
+    queryFn: async () => {
+      return (await apiGet("/api/mcp-tool-servers")) as unknown as McpToolServerDto[];
+    },
+  });
+
   // Create dialog state
   const [createOpen, setCreateOpen] = React.useState(false);
   const [name, setName] = React.useState("");
@@ -54,6 +63,8 @@ export default function AgentsPage() {
   const [modelProviderApiKeyId, setModelProviderApiKeyId] = React.useState("");
   const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
   const [toolSearchTerm, setToolSearchTerm] = React.useState("");
+  const [selectedMcpToolServerIds, setSelectedMcpToolServerIds] = React.useState<string[]>([]);
+  const [mcpToolServerSearchTerm, setMcpToolServerSearchTerm] = React.useState("");
   const [agentType, setAgentType] = React.useState<string>("0");
   const [extra, setExtra] = React.useState("");
 
@@ -69,6 +80,8 @@ export default function AgentsPage() {
     []
   );
   const [editToolSearchTerm, setEditToolSearchTerm] = React.useState("");
+  const [editSelectedMcpToolServerIds, setEditSelectedMcpToolServerIds] = React.useState<string[]>([]);
+  const [editMcpToolServerSearchTerm, setEditMcpToolServerSearchTerm] = React.useState("");
   const [editAgentType, setEditAgentType] = React.useState<string>("0");
   const [editExtra, setEditExtra] = React.useState("");
 
@@ -97,6 +110,8 @@ export default function AgentsPage() {
       setModelProviderApiKeyId("");
       setSelectedTools([]);
       setToolSearchTerm("");
+      setSelectedMcpToolServerIds([]);
+      setMcpToolServerSearchTerm("");
       setAgentType("0");
       setExtra("");
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
@@ -112,7 +127,7 @@ export default function AgentsPage() {
       body,
     }: {
       id: string;
-      body: AgentCreateRequest;
+      body: AgentUpdateRequest;
     }) => {
       return await apiPut("/api/agents/{id}", {
         params: { path: { id } },
@@ -162,7 +177,11 @@ export default function AgentsPage() {
     } catch {
       setEditSelectedTools([]);
     }
+    setEditSelectedMcpToolServerIds(
+      agent.agentMcpToolServers?.map((x) => x.mcpToolServerId) ?? []
+    );
     setEditToolSearchTerm("");
+    setEditMcpToolServerSearchTerm("");
     setEditOpen(true);
   };
 
@@ -192,6 +211,23 @@ export default function AgentsPage() {
     }
   };
 
+  const toggleMcpToolServer = (mcpToolServerId: string, isEdit: boolean = false) => {
+    if (isEdit) {
+      setEditSelectedMcpToolServerIds((prev) =>
+        prev.includes(mcpToolServerId)
+          ? prev.filter((id) => id !== mcpToolServerId)
+          : [...prev, mcpToolServerId]
+      );
+      return;
+    }
+
+    setSelectedMcpToolServerIds((prev) =>
+      prev.includes(mcpToolServerId)
+        ? prev.filter((id) => id !== mcpToolServerId)
+        : [...prev, mcpToolServerId]
+    );
+  };
+
   const filteredTools = React.useMemo(() => {
     if (!toolsQuery.data) return [];
     return toolsQuery.data.filter(
@@ -213,6 +249,22 @@ export default function AgentsPage() {
         tool.category.toLowerCase().includes(editToolSearchTerm.toLowerCase())
     );
   }, [toolsQuery.data, editToolSearchTerm]);
+
+  const filteredMcpToolServers = React.useMemo(() => {
+    if (!mcpToolServersQuery.data) return [];
+    return mcpToolServersQuery.data.filter((server) =>
+      server.name.toLowerCase().includes(mcpToolServerSearchTerm.toLowerCase())
+    );
+  }, [mcpToolServersQuery.data, mcpToolServerSearchTerm]);
+
+  const filteredEditMcpToolServers = React.useMemo(() => {
+    if (!mcpToolServersQuery.data) return [];
+    return mcpToolServersQuery.data.filter((server) =>
+      server.name
+        .toLowerCase()
+        .includes(editMcpToolServerSearchTerm.toLowerCase())
+    );
+  }, [mcpToolServersQuery.data, editMcpToolServerSearchTerm]);
 
   return (
     <div className="space-y-6 w-full">
@@ -255,8 +307,16 @@ export default function AgentsPage() {
             filteredTools={filteredTools}
             modelProviderApiKeysQuery={modelProviderApiKeysQuery}
             toolsQuery={toolsQuery}
+            mcpToolServersQuery={mcpToolServersQuery}
+            selectedMcpToolServerIds={selectedMcpToolServerIds}
+            mcpToolServerSearchTerm={mcpToolServerSearchTerm}
+            setMcpToolServerSearchTerm={setMcpToolServerSearchTerm}
+            filteredMcpToolServers={filteredMcpToolServers}
             createAgentMutation={createAgentMutation}
             toggleTool={(toolName) => toggleTool(toolName, false)}
+            toggleMcpToolServer={(mcpToolServerId) =>
+              toggleMcpToolServer(mcpToolServerId, false)
+            }
           />
         </div>
       </div>
@@ -291,8 +351,16 @@ export default function AgentsPage() {
         filteredTools={filteredEditTools}
         modelProviderApiKeysQuery={modelProviderApiKeysQuery}
         toolsQuery={toolsQuery}
+        mcpToolServersQuery={mcpToolServersQuery}
+        selectedMcpToolServerIds={editSelectedMcpToolServerIds}
+        mcpToolServerSearchTerm={editMcpToolServerSearchTerm}
+        setMcpToolServerSearchTerm={setEditMcpToolServerSearchTerm}
+        filteredMcpToolServers={filteredEditMcpToolServers}
         updateAgentMutation={updateAgentMutation}
         toggleTool={(toolName) => toggleTool(toolName, true)}
+        toggleMcpToolServer={(mcpToolServerId) =>
+          toggleMcpToolServer(mcpToolServerId, true)
+        }
       />
 
       <DeleteAgentDialog

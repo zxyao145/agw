@@ -28,6 +28,7 @@ public class LlmDbContext : DbContext
     public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
     public DbSet<AgentSessionRecord> AgentSessionRecords => Set<AgentSessionRecord>();
     public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
+    public DbSet<AgentMcpToolServer> AgentMcpToolServers => Set<AgentMcpToolServer>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -221,6 +222,25 @@ public class LlmDbContext : DbContext
                 v => string.IsNullOrWhiteSpace(v)
                     ? new Dictionary<string, string>()
                     : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new Dictionary<string, string>());
+
+        });
+
+        modelBuilder.Entity<AgentMcpToolServer>(entity =>
+        {
+            entity.ToTable("agent_mcp_tool_servers");
+            entity.HasKey(e => new { e.AgentId, e.McpToolServerId });
+
+            entity.HasOne(e => e.Agent)
+                .WithMany(a => a.AgentMcpToolServers)
+                .HasForeignKey(e => e.AgentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.McpToolServer)
+                .WithMany(s => s.AgentMcpToolServers)
+                .HasForeignKey(e => e.McpToolServerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.McpToolServerId);
         });
     }
 }
