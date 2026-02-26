@@ -70,9 +70,9 @@ export function CreateProviderDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create provider</DialogTitle>
-          <DialogDescription>
+          {/* <DialogDescription>
             Uses <code>/api/providers</code>.
-          </DialogDescription>
+          </DialogDescription> */}
         </DialogHeader>
 
         <div className="grid gap-4">

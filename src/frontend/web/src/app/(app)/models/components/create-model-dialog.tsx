@@ -10,10 +10,9 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription as UiDialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle as UiDialogTitle,
+  DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -78,11 +77,11 @@ export function CreateModelDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <UiDialogTitle>Create model</UiDialogTitle>
-          <UiDialogDescription>
+          <DialogTitle>Create model</DialogTitle>
+          {/* <UiDialogDescription>
             Uses <code>/api/models</code> with{" "}
             <code>ModelCreateRequest</code>.
-          </UiDialogDescription>
+          </UiDialogDescription> */}
         </DialogHeader>
 
         <div className="grid gap-4">
@@ -98,9 +97,9 @@ export function CreateModelDialog({
 
           <div className="grid gap-2">
             <Label>Type (Flags enum - select one or more)</Label>
-            <div className="space-y-2 rounded-md border p-3">
+            <div className="flex items-center gap-4">
               {MODEL_TYPE_OPTIONS.map((option) => (
-                <div key={option.value} className="flex items-center space-x-2">
+                <div key={option.value} className="inline-flex items-center space-x-1">
                   <Checkbox
                     id={`type-${option.value}`}
                     checked={isTypeSelected(option.value)}
@@ -110,7 +109,7 @@ export function CreateModelDialog({
                     htmlFor={`type-${option.value}`}
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                   >
-                    {option.label} ({option.value})
+                    {option.label}
                   </label>
                 </div>
               ))}
