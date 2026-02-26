@@ -98,6 +98,10 @@ const defaultForm: FormState = {
   enabled: true,
 };
 
+function normalizeTransportType(value: string | null | undefined): "stdio" | "http" {
+  return value?.trim().toLowerCase() === "http" ? "http" : "stdio";
+}
+
 function parseJsonMap(label: string, value: string): Record<string, string> {
   const trimmed = value.trim();
   if (!trimmed) return {};
@@ -112,7 +116,7 @@ function parseJsonMap(label: string, value: string): Record<string, string> {
 }
 
 function toRequest(form: FormState): McpToolServerRequest {
-  const transportType = form.transportType.trim().toLowerCase() || "stdio";
+  const transportType = normalizeTransportType(form.transportType);
   const isStdio = transportType === "stdio";
 
   const argumentsList = form.argumentsText
@@ -140,7 +144,7 @@ function fromServer(server: McpToolServerDto): FormState {
   return {
     name: server.name,
     description: server.description ?? "",
-    transportType: server.transportType,
+    transportType: normalizeTransportType(server.transportType),
     command: server.command ?? "",
     argumentsText: (server.arguments ?? []).join("\n"),
     workingDirectory: server.workingDirectory ?? "",
@@ -412,7 +416,7 @@ function McpToolServerDialog({
 }) {
   const title =
     mode === "create" ? "Create MCP Tool Server" : "Edit MCP Tool Server";
-  const isStdio = form.transportType === "stdio";
+  const isStdio = normalizeTransportType(form.transportType) === "stdio";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
