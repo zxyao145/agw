@@ -1,5 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
+	  <PackageReference Include="ModelContextProtocol" />
 	  <ProjectReference Include="..\DSystem.Shared\DSystem.Shared.csproj" />
 	</ItemGroup>
 </Project>

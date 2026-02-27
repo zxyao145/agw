@@ -48,6 +48,7 @@ public class AgentRuntimeService
     private readonly HybridCache _cache;
     private readonly SessionRecordApplication _sessionRecordApplication;
     private readonly IAgentSessionRecordRepository _agentSessionRecordRepository;
+    private readonly McpToolServerDomainService _mcpToolServerDomainService;
 
 
     public AgentRuntimeService(
@@ -61,6 +62,7 @@ public class AgentRuntimeService
         HybridCache cache,
         SessionRecordApplication sessionRecordApplication,
         IAgentSessionRecordRepository agentSessionRecordRepository,
+        McpToolServerDomainService mcpToolServerDomainService,
         ILogger<AgentRuntimeService> logger)
     {
         _agentRepository = agentRepository;
@@ -73,6 +75,7 @@ public class AgentRuntimeService
         _cache = cache;
         _sessionRecordApplication = sessionRecordApplication;
         _agentSessionRecordRepository = agentSessionRecordRepository;
+        _mcpToolServerDomainService = mcpToolServerDomainService;
         _logger = logger;
     }
 
@@ -162,7 +165,7 @@ public class AgentRuntimeService
         }
 
         // Create tools if specified using the new unified approach
-        IList<AITool>? tools = null;
+        var mergedTools = new List<AITool>();
         if (!string.IsNullOrWhiteSpace(agent.Tools))
         {
             try
@@ -173,16 +176,28 @@ public class AgentRuntimeService
                     var functions = _toolRegistry.CreateAIFunctions(toolNames);
                     if (functions.Count > 0)
                     {
-                        tools = functions.Cast<AITool>().ToList();
+                        mergedTools.AddRange(functions.Cast<AITool>());
                     }
                 }
             }
             catch (JsonException)
             {
                 // Invalid JSON, skip tools
-                tools = null;
             }
         }
+
+        if (agent.Type == AgentType.System)
+        {
+            var mcpTools = await _mcpToolServerDomainService
+                .ListToolsByAgentAsync(agent.Id)
+                .ConfigureAwait(false);
+            if (mcpTools.Count > 0)
+            {
+                mergedTools.AddRange(mcpTools.Cast<AITool>());
+            }
+        }
+
+        IList<AITool>? tools = mergedTools.Count > 0 ? mergedTools : null;
 
         ApiKeyCredential credential = new ApiKeyCredential(apiKey.ApiKey);
         OpenAIClientOptions options = new OpenAIClientOptions

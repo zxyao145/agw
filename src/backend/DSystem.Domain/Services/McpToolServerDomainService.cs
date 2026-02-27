@@ -1,5 +1,8 @@
 using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
+using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol.Transport;
 
 namespace DSystem.Domain.Services;
 
@@ -9,17 +12,20 @@ public class McpToolServerDomainService
     private readonly IRepository<Agent> _agentRepository;
     private readonly IRepository<AgentMcpToolServer> _agentMcpRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<McpToolServerDomainService> _logger;
 
     public McpToolServerDomainService(
         IRepository<McpToolServer> repository,
         IRepository<Agent> agentRepository,
         IRepository<AgentMcpToolServer> agentMcpRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<McpToolServerDomainService> logger)
     {
         _repository = repository;
         _agentRepository = agentRepository;
         _agentMcpRepository = agentMcpRepository;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     public async Task<McpToolServer> CreateAsync(McpToolServer server, IEnumerable<Guid>? agentIds, string user)
@@ -66,6 +72,110 @@ public class McpToolServerDomainService
     public Task<IReadOnlyList<McpToolServer>> ListAsync() => _repository.ListAsync();
 
     public Task<McpToolServer?> GetAsync(Guid id) => _repository.GetByIdAsync(id);
+
+    public async Task<IReadOnlyList<McpClientTool>> ListToolsByAgentAsync(Guid agentId, CancellationToken cancellationToken = default)
+    {
+        var links = await _agentMcpRepository.ListAsync(x => x.AgentId == agentId);
+        var serverIds = links
+            .Select(x => x.McpToolServerId)
+            .Distinct()
+            .ToList();
+
+        if (serverIds.Count == 0)
+        {
+            return [];
+        }
+
+        var servers = await _repository.ListAsync(x => x.Enabled && serverIds.Contains(x.Id));
+        var tools = new List<McpClientTool>();
+
+        foreach (var server in servers)
+        {
+            try
+            {
+                var serverTools = await ListToolsAsync(server, cancellationToken).ConfigureAwait(false);
+                if (serverTools.Count > 0)
+                {
+                    tools.AddRange(serverTools);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to list MCP tools from server {ServerId}", server.Id);
+            }
+        }
+
+        return tools;
+    }
+
+    public static async Task<IReadOnlyList<McpClientTool>> ListToolsAsync(
+        McpToolServer server,
+        CancellationToken cancellationToken = default)
+    {
+        var transport = CreateTransport(server);
+        var client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var tools = await client.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        return tools;
+    }
+
+    private static IClientTransport CreateTransport(McpToolServer server)
+    {
+        return server.TransportType.ToLowerInvariant() switch
+        {
+            "stdio" => CreateStdioTransport(server),
+            "http" or "sse" => CreateHttpTransport(server),
+            _ => throw new NotSupportedException($"Transport type '{server.TransportType}' is not supported")
+        };
+    }
+
+    private static StdioClientTransport CreateStdioTransport(McpToolServer server)
+    {
+        if (string.IsNullOrWhiteSpace(server.Command))
+        {
+            throw new InvalidOperationException($"MCP server '{server.Id}' uses stdio transport but has no command configured");
+        }
+
+        var options = new StdioClientTransportOptions
+        {
+            Name = server.Name,
+            Command = server.Command,
+            Arguments = [.. server.Arguments],
+        };
+
+        if (server.EnvironmentVariables.Count > 0)
+        {
+            options.EnvironmentVariables = new Dictionary<string, string?>(
+                server.EnvironmentVariables.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(server.WorkingDirectory))
+        {
+            options.WorkingDirectory = server.WorkingDirectory;
+        }
+
+        return new StdioClientTransport(options);
+    }
+
+    private static HttpClientTransport CreateHttpTransport(McpToolServer server)
+    {
+        if (string.IsNullOrWhiteSpace(server.Url))
+        {
+            throw new InvalidOperationException($"MCP server '{server.Id}' uses HTTP/SSE transport but has no URL configured");
+        }
+
+        var options = new HttpClientTransportOptions
+        {
+            Name = server.Name,
+            Endpoint = new Uri(server.Url),
+        };
+
+        if (server.Headers is { Count: > 0 })
+        {
+            options.AdditionalHeaders = new Dictionary<string, string>(server.Headers);
+        }
+
+        return new HttpClientTransport(options);
+    }
 
     private async Task SyncAgentRelationsAsync(Guid mcpToolServerId, IEnumerable<Guid>? agentIds)
     {
