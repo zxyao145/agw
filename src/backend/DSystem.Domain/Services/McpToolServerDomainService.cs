@@ -2,7 +2,6 @@ using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
-using ModelContextProtocol.Protocol.Transport;
 
 namespace DSystem.Domain.Services;
 
@@ -115,7 +114,7 @@ public class McpToolServerDomainService
         var transport = CreateTransport(server);
         var client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken).ConfigureAwait(false);
         var tools = await client.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-        return tools;
+        return tools.AsReadOnly();
     }
 
     private static IClientTransport CreateTransport(McpToolServer server)

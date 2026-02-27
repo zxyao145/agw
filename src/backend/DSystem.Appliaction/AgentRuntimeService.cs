@@ -186,15 +186,12 @@ public class AgentRuntimeService
             }
         }
 
-        if (agent.Type == AgentType.System)
-        {
-            var mcpTools = await _mcpToolServerDomainService
+        var mcpTools = await _mcpToolServerDomainService
                 .ListToolsByAgentAsync(agent.Id)
                 .ConfigureAwait(false);
-            if (mcpTools.Count > 0)
-            {
-                mergedTools.AddRange(mcpTools.Cast<AITool>());
-            }
+        if (mcpTools.Count > 0)
+        {
+            mergedTools.AddRange(mcpTools.Cast<AITool>());
         }
 
         IList<AITool>? tools = mergedTools.Count > 0 ? mergedTools : null;
