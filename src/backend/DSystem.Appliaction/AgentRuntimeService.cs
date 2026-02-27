@@ -79,21 +79,26 @@ public class AgentRuntimeService
         _logger = logger;
     }
 
-    public async Task<AIAgent?> CreateAiAgentAsync(Guid agentId, string? systemPrompt = null, string? extraOverride = null)
+    public async Task<AIAgent?> CreateAiAgentAsync(
+        Guid agentId,
+        string? systemPrompt = null,
+        string? extraOverride = null,
+        CancellationToken cancellationToken = default)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
         if (agent == null)
         {
             return null;
         }
-        return await CreateAiAgentAsync(agent, extraOverride);
+        return await CreateAiAgentAsync(agent, extraOverride, cancellationToken: cancellationToken);
     }
 
     public async Task<AIAgent?> CreateAiAgentAsync(
         Agent agent,
         string? extraOverride = null,
         string? sessionId = null,
-        string? projectId = null)
+        string? projectId = null,
+        CancellationToken cancellationToken = default)
     {
         if (agent.Type == AgentType.External)
         {
@@ -187,7 +192,7 @@ public class AgentRuntimeService
         }
 
         var mcpTools = await _mcpToolServerDomainService
-                .ListToolsByAgentAsync(agent.Id)
+                .ListToolsByAgentAsync(agent.Id, cancellationToken)
                 .ConfigureAwait(false);
         if (mcpTools.Count > 0)
         {
@@ -234,7 +239,7 @@ public class AgentRuntimeService
             sessionId = Guid.NewGuid().ToString();
         }
 
-        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, sessionId, projectId);
+        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, sessionId, projectId, cancellationToken);
         if (aiAgent == null)
         {
             return null;
