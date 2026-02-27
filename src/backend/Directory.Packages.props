@@ -97,6 +97,7 @@
   <ItemGroup>
     <PackageVersion Include="Mapster" Version="7.4.0" />
     <PackageVersion Include="Mapster.DependencyInjection" Version="1.0.1" />
+    <PackageVersion Include="ModelContextProtocol" Version="1.0.0" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.4.0" />
