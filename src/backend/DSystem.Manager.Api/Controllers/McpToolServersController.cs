@@ -91,7 +91,7 @@ public class McpToolServersController : ControllerBase
     {
         try
         {
-            var tools = await _service.ListToolsByAgentAsync(request.AgentId, cancellationToken);
+            var tools = await _service.ListToolsAsync(request.McpToolServerId, cancellationToken);
             var toolNames = tools
                 .Select(x => x.Name)
                 .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -102,7 +102,7 @@ public class McpToolServersController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to connect MCP tool servers for agent {AgentId}", request.AgentId);
+            _logger.LogWarning(ex, "Failed to connect MCP tool server {McpToolServerId}", request.McpToolServerId);
             return Ok(new McpToolServerConnectResponse("failed", []));
         }
     }

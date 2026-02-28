@@ -107,6 +107,18 @@ public class McpToolServerDomainService
         return tools;
     }
 
+
+    public async Task<IReadOnlyList<McpClientTool>> ListToolsAsync(Guid mcpToolServerId, CancellationToken cancellationToken = default)
+    {
+        var server = await _repository.GetByIdAsync(mcpToolServerId);
+        if (server == null || !server.Enabled)
+        {
+            return [];
+        }
+
+        return await ListToolsAsync(server, cancellationToken).ConfigureAwait(false);
+    }
+
     public static async Task<IReadOnlyList<McpClientTool>> ListToolsAsync(
         McpToolServer server,
         CancellationToken cancellationToken = default)

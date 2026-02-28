@@ -26,6 +26,6 @@ public record McpToolServerUpdateRequest(
     Dictionary<string, string>? Headers,
     bool Enabled = true);
 
-public record McpToolServerConnectRequest(Guid AgentId);
+public record McpToolServerConnectRequest(Guid McpToolServerId);
 
 public record McpToolServerConnectResponse(string Status, List<string> ToolNames);

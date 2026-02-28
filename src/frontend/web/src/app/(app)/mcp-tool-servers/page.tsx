@@ -236,10 +236,10 @@ export default function McpToolServersPage() {
   });
 
   const connectMutation = useMutation({
-    mutationFn: async (agentId: string) => {
+    mutationFn: async (mcpToolServerId: string) => {
       // @ts-expect-error - connect endpoint is not available in generated OpenAPI types yet
       return (await apiPost("/api/mcp-tool-servers/connect", {
-        body: { agentId },
+        body: { mcpToolServerId },
       })) as unknown as McpConnectResponse;
     },
     onSuccess: (result) => {
@@ -301,18 +301,8 @@ export default function McpToolServersPage() {
     deleteMutation.mutate(server.id);
   };
 
-
   const onConnect = (server: McpToolServerDto) => {
-    const agentId = window.prompt(
-      `Enter Agent ID to connect with MCP tool server "${server.name}":`,
-    )?.trim();
-
-    if (!agentId) {
-      toast.error("Agent ID is required");
-      return;
-    }
-
-    connectMutation.mutate(agentId);
+    connectMutation.mutate(server.id);
   };
   const onToggleEnabled = (server: McpToolServerDto, checked: boolean) => {
     const body: McpToolServerRequest = {
