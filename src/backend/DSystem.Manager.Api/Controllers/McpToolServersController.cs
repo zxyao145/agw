@@ -10,10 +10,14 @@ namespace DSystem.Manager.Api.Controllers;
 public class McpToolServersController : ControllerBase
 {
     private readonly McpToolServerDomainService _service;
+    private readonly ILogger<McpToolServersController> _logger;
 
-    public McpToolServersController(McpToolServerDomainService service)
+    public McpToolServersController(
+        McpToolServerDomainService service,
+        ILogger<McpToolServersController> logger)
     {
         _service = service;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -78,5 +82,28 @@ public class McpToolServersController : ControllerBase
     {
         var deleted = await _service.DeleteAsync(id);
         return deleted ? NoContent() : NotFound();
+    }
+
+    [HttpPost("connect")]
+    public async Task<IActionResult> ConnectAsync(
+        [FromBody] McpToolServerConnectRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var tools = await _service.ListToolsByAgentAsync(request.AgentId, cancellationToken);
+            var toolNames = tools
+                .Select(x => x.Name)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return Ok(new McpToolServerConnectResponse("success", toolNames));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to connect MCP tool servers for agent {AgentId}", request.AgentId);
+            return Ok(new McpToolServerConnectResponse("failed", []));
+        }
     }
 }
