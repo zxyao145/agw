@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Link2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
@@ -57,6 +57,11 @@ type McpToolServerDto = {
   headers?: Record<string, string> | null;
   enabled: boolean;
   createTime?: string;
+};
+
+type McpConnectResponse = {
+  status: "success" | "failed";
+  toolNames: string[];
 };
 
 type McpToolServerRequest = {
@@ -230,6 +235,30 @@ export default function McpToolServersPage() {
     },
   });
 
+  const connectMutation = useMutation({
+    mutationFn: async (mcpToolServerId: string) => {
+      // @ts-expect-error - connect endpoint is not available in generated OpenAPI types yet
+      return (await apiPost("/api/mcp-tool-servers/connect", {
+        body: { mcpToolServerId },
+      })) as unknown as McpConnectResponse;
+    },
+    onSuccess: (result) => {
+      if (result.status !== "success") {
+        toast.error("MCP connect failed");
+        return;
+      }
+
+      const toolsSummary =
+        result.toolNames.length > 0
+          ? result.toolNames.join(", ")
+          : "Connected successfully (no tools returned).";
+      toast.success(toolsSummary);
+    },
+    onError: (error) => {
+      toast.error(`Connect failed: ${getApiErrorMessage(error)}`);
+    },
+  });
+
   const submitCreate = () => {
     try {
       const body = toRequest(createForm);
@@ -272,6 +301,9 @@ export default function McpToolServersPage() {
     deleteMutation.mutate(server.id);
   };
 
+  const onConnect = (server: McpToolServerDto) => {
+    connectMutation.mutate(server.id);
+  };
   const onToggleEnabled = (server: McpToolServerDto, checked: boolean) => {
     const body: McpToolServerRequest = {
       name: server.name,
@@ -337,7 +369,7 @@ export default function McpToolServersPage() {
                   <TableHead>Transport</TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead>Enabled</TableHead>
-                  <TableHead className="w-32 text-right">Actions</TableHead>
+                  <TableHead className="w-52 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -371,6 +403,16 @@ export default function McpToolServersPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => onConnect(server)}
+                          disabled={connectMutation.isPending}
+                        >
+                          <Link2 className="h-4 w-4" />
+                          <span>Connect</span>
+                        </Button>
                         <Button
                           type="button"
                           variant="outline"
