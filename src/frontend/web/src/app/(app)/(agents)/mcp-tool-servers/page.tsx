@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Link2, Cable, Pencil, Plug, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
@@ -61,8 +61,12 @@ type McpToolServerDto = {
 
 type McpConnectResponse = {
   status: "success" | "failed";
-  toolNames: string[];
+  tools: McpToolItem[];
 };
+
+type McpToolItem ={
+  name: string;
+}
 
 type McpToolServerRequest = {
   name: string;
@@ -171,6 +175,7 @@ export default function McpToolServersPage() {
   const [createForm, setCreateForm] = React.useState<FormState>(defaultForm);
   const [editForm, setEditForm] = React.useState<FormState>(defaultForm);
   const [editing, setEditing] = React.useState<McpToolServerDto | null>(null);
+  const [toolsCount, setToolsCount] = React.useState<Record<string, number>>({});
 
   const mcpToolServersQuery = useQuery({
     queryKey: ["mcpToolServers"],
@@ -237,22 +242,24 @@ export default function McpToolServersPage() {
 
   const connectMutation = useMutation({
     mutationFn: async (mcpToolServerId: string) => {
-      // @ts-expect-error - connect endpoint is not available in generated OpenAPI types yet
+      setToolsCount((prev) => {
+        const { [mcpToolServerId]: _, ...rest } = prev;
+        return rest;
+      });
       return (await apiPost("/api/mcp-tool-servers/connect", {
         body: { mcpToolServerId },
       })) as unknown as McpConnectResponse;
     },
-    onSuccess: (result) => {
+    onSuccess: (result, id) => {
       if (result.status !== "success") {
         toast.error("MCP connect failed");
         return;
       }
 
-      const toolsSummary =
-        result.toolNames.length > 0
-          ? result.toolNames.join(", ")
-          : "Connected successfully (no tools returned).";
-      toast.success(toolsSummary);
+      const count = result.tools?.length ?? 0;
+      setToolsCount((prev) => ({ ...prev, [id]: count }));
+      toast.success(`Connected successfully`);
+      console.log("MCP Tools:", result.tools);
     },
     onError: (error) => {
       toast.error(`Connect failed: ${getApiErrorMessage(error)}`);
@@ -301,9 +308,6 @@ export default function McpToolServersPage() {
     deleteMutation.mutate(server.id);
   };
 
-  const onConnect = (server: McpToolServerDto) => {
-    connectMutation.mutate(server.id);
-  };
   const onToggleEnabled = (server: McpToolServerDto, checked: boolean) => {
     const body: McpToolServerRequest = {
       name: server.name,
@@ -380,6 +384,11 @@ export default function McpToolServersPage() {
                       <div className="text-xs text-muted-foreground truncate max-w-xs">
                         {server.description || "-"}
                       </div>
+                      {toolsCount[server.id] !== undefined && (
+                        <div className="text-xs text-green-600">
+                          {toolsCount[server.id]} tools available
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="uppercase text-xs">
                       {server.transportType}
@@ -405,13 +414,15 @@ export default function McpToolServersPage() {
                       <div className="flex justify-end gap-2">
                         <Button
                           type="button"
-                          variant="secondary"
+                          variant="outline"
                           size="sm"
-                          onClick={() => onConnect(server)}
+                          className="cursor-pointer" 
+                          onClick={() => connectMutation.mutate(server.id)}
                           disabled={connectMutation.isPending}
+                          title="Connect and list tools"
                         >
                           <Link2 className="h-4 w-4" />
-                          <span>Connect</span>
+                          {/* <Cable className="h-4 w-4" /> */}
                         </Button>
                         <Button
                           type="button"

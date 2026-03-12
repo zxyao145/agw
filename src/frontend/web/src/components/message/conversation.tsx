@@ -18,7 +18,7 @@ import { UserInput } from "./user-input";
 import { ArrowUp, Eraser, Square } from "lucide-react";
 import { Separator } from "../ui/separator";
 import { useQuery } from "@tanstack/react-query";
-import { deleteSessionBySessionId, getSessionBySessionId } from "@/app/(app)/claude-code/lib/chat-history-service";
+import { deleteSessionBySessionId, getSessionBySessionId } from "@/app/(app)/(external-agents)/claude-code/lib/chat-history-service";
 
 export interface ConversationProps {
   executionId: string | null | undefined;

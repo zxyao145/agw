@@ -402,8 +402,8 @@ public class FilesController : ControllerBase
 
     private void SearchFilesRecursive(
         string rootPath,
-        string currentPath, 
-        string keyword, 
+        string currentPath,
+        string keyword,
         int limit,
         List<FileSearchResult> results
         )
@@ -444,7 +444,7 @@ public class FilesController : ControllerBase
                         ignore = true;
                         continue;
                     }
-                    if(item == fileName)
+                    if (item == fileName)
                     {
                         ignore = true;
                         continue;
@@ -460,7 +460,7 @@ public class FilesController : ControllerBase
                     FullPath = fileInfo.FullName,
                     RelativePath = Path.GetRelativePath(rootPath, fileInfo.FullName),
                     Type = "file"
-                });                
+                });
             }
         }
         catch (UnauthorizedAccessException)

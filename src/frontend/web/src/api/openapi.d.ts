@@ -955,49 +955,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/session-records/{sessionId}/title": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: {
-            parameters: {
-                query?: {
-                    projectId?: string;
-                };
-                header?: never;
-                path: {
-                    sessionId: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["SessionRecordTitleUpdateRequest"];
-                    "text/json": components["schemas"]["SessionRecordTitleUpdateRequest"];
-                    "application/*+json": components["schemas"]["SessionRecordTitleUpdateRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/agentflows": {
         parameters: {
             query?: never;
@@ -1503,6 +1460,45 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-tool-servers/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["McpToolServerConnectRequest"];
+                    "text/json": components["schemas"]["McpToolServerConnectRequest"];
+                    "application/*+json": components["schemas"]["McpToolServerConnectRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2166,6 +2162,7 @@ export interface components {
             /** Format: uuid */
             modelProviderApiKeyId: null | string;
             tools?: null | string;
+            mcpToolServerIds?: null | string[];
         };
         AgentExecutionRequest: {
             agentType: components["schemas"]["ProjectTaskAgentType"];
@@ -2212,6 +2209,7 @@ export interface components {
             /** Format: uuid */
             modelProviderApiKeyId: null | string;
             tools?: null | string;
+            mcpToolServerIds?: null | string[];
         };
         ApiKeyCreateRequest: {
             /** Format: uuid */
@@ -2224,8 +2222,13 @@ export interface components {
             apiKey: string;
             enable: boolean;
         };
+        McpToolServerConnectRequest: {
+            /** Format: uuid */
+            mcpToolServerId: string;
+        };
         McpToolServerCreateRequest: {
             name: string;
+            agentIds: null | string[];
             description: null | string;
             transportType: string;
             command: null | string;
@@ -2243,6 +2246,7 @@ export interface components {
         };
         McpToolServerUpdateRequest: {
             name: string;
+            agentIds: null | string[];
             description: null | string;
             transportType: string;
             command: null | string;
@@ -2351,6 +2355,8 @@ export interface components {
             agentflowId: null | string;
             /** Format: uuid */
             agentId: null | string;
+            sessionId: string;
+            title: string;
             description: string;
             input: string;
         };
@@ -2392,9 +2398,6 @@ export interface components {
         ResponsesToolsInput: {
             type: string;
             function?: null | components["schemas"]["ResponsesToolFunction"];
-        };
-        SessionRecordTitleUpdateRequest: {
-            title: string;
         };
         ThorStreamOptions: {
             include_usage?: null | boolean;

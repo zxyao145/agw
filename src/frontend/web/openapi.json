@@ -832,55 +832,6 @@
         }
       }
     },
-    "/api/session-records/{sessionId}/title": {
-      "put": {
-        "tags": [
-          "SessionRecords"
-        ],
-        "parameters": [
-          {
-            "name": "sessionId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "projectId",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionRecordTitleUpdateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionRecordTitleUpdateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionRecordTitleUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/agentflows": {
       "get": {
         "tags": [
@@ -1324,6 +1275,38 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mcp-tool-servers/connect": {
+      "post": {
+        "tags": [
+          "McpToolServers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolServerConnectRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolServerConnectRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolServerConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -1953,6 +1936,16 @@
               "null",
               "string"
             ]
+          },
+          "mcpToolServerIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         }
       },
@@ -2156,6 +2149,16 @@
               "null",
               "string"
             ]
+          },
+          "mcpToolServerIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         }
       },
@@ -2194,9 +2197,22 @@
           }
         }
       },
+      "McpToolServerConnectRequest": {
+        "required": [
+          "mcpToolServerId"
+        ],
+        "type": "object",
+        "properties": {
+          "mcpToolServerId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "McpToolServerCreateRequest": {
         "required": [
           "name",
+          "agentIds",
           "description",
           "transportType",
           "command",
@@ -2210,6 +2226,16 @@
         "properties": {
           "name": {
             "type": "string"
+          },
+          "agentIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
           "description": {
             "type": [
@@ -2274,6 +2300,7 @@
       "McpToolServerUpdateRequest": {
         "required": [
           "name",
+          "agentIds",
           "description",
           "transportType",
           "command",
@@ -2287,6 +2314,16 @@
         "properties": {
           "name": {
             "type": "string"
+          },
+          "agentIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
           "description": {
             "type": [
@@ -2749,6 +2786,8 @@
           "agentType",
           "agentflowId",
           "agentId",
+          "sessionId",
+          "title",
           "description",
           "input"
         ],
@@ -2770,6 +2809,12 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
           },
           "description": {
             "type": "string"
@@ -2941,17 +2986,6 @@
                 "$ref": "#/components/schemas/ResponsesToolFunction"
               }
             ]
-          }
-        }
-      },
-      "SessionRecordTitleUpdateRequest": {
-        "required": [
-          "title"
-        ],
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string"
           }
         }
       },

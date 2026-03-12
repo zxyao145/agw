@@ -113,7 +113,7 @@ public class TaskManagerFactory
                     Role = MessageRole.Agent,
                     MessageId = Guid.NewGuid().ToString(),
                     ContextId = messageSendParams.Message.ContextId,
-                    Parts = [ new TextPart { Text = errorText }]
+                    Parts = [new TextPart { Text = errorText }]
                 };
             }
             else

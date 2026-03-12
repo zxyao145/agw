@@ -40,7 +40,7 @@ public record AiMessage
         Author = author;
         Role = role;
         Contents = contents;
-        if(additionalProperties != null)
+        if (additionalProperties != null)
         {
             AdditionalProperties = new AdditionalPropertiesDictionary(additionalProperties);
         }

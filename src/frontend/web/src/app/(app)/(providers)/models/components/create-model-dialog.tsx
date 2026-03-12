@@ -131,7 +131,7 @@ export function CreateModelDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="description">Description (nullable)</Label>
+            <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
               value={description}

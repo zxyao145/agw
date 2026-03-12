@@ -93,9 +93,9 @@ export function ModelsTable({
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">{getModelTypeLabel(model.type)}</div>
-                    <div className="text-xs text-muted-foreground font-mono">
+                    {/* <div className="text-xs text-muted-foreground font-mono">
                       {model.type}
-                    </div>
+                    </div> */}
                   </TableCell>
                   <TableCell className="text-right">
                     {model.maxTokens.toLocaleString()}

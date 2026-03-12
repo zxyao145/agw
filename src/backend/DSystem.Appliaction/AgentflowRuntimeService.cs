@@ -342,12 +342,12 @@ public class AgentflowRuntimeService
 
             case AgentflowOrchestrationPattern.Magentic:
                 throw new NotSupportedException("Magentic not supported now");
-                //aiFlow = DxAgentWorkflowBuilder.BuildMagentic(
-                //    aiAgents,
-                //    maxRounds: GetConfigInt(config, "maxRounds", 10),
-                //    maxStallCount: GetConfigInt(config, "maxStallCount", 3),
-                //    maxResetCount: GetConfigInt(config, "maxResetCount", 2));
-                //break;
+            //aiFlow = DxAgentWorkflowBuilder.BuildMagentic(
+            //    aiAgents,
+            //    maxRounds: GetConfigInt(config, "maxRounds", 10),
+            //    maxStallCount: GetConfigInt(config, "maxStallCount", 3),
+            //    maxResetCount: GetConfigInt(config, "maxResetCount", 2));
+            //break;
 
             default:
                 aiFlow = null;

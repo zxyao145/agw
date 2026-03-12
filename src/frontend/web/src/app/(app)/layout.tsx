@@ -12,6 +12,11 @@ import {
   Package,
   Blocks,
   Terminal,
+  Server,
+  Boxes,
+  Box,
+  Gauge,
+  Waypoints,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -39,6 +44,23 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { group } from "console";
 
 const navItems: SidebarMenuGroupProps[] = [
+  {
+    groupLable: "Overview",
+    menus: [
+      {
+        url: "/dashboard",
+        title: "Dashboard",
+        isActive: true,
+        icon: <Gauge />,
+      },
+      {
+        url: "/traces",
+        title: "Traces",
+        isActive: true,
+        icon: <Waypoints />,
+      },
+    ],
+  },
   {
     groupLable: "ExternalAgents",
     menus: [
@@ -82,7 +104,7 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/mcp-tool-servers",
         title: "MCP Tool Servers",
         isActive: true,
-        icon: <Package />,
+        icon: <Server />,
       },
     ],
   },
@@ -94,7 +116,7 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/providers",
         title: "Providers",
         isActive: true,
-        icon: <Cog />,
+        icon: <Boxes />,
       },
       {
         url: "/models",
@@ -106,7 +128,7 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/model-providers",
         title: "Model Providers",
         isActive: true,
-        icon: <Package />,
+        icon: <Box />,
       },
     ],
   },

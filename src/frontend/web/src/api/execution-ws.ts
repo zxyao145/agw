@@ -22,27 +22,6 @@ function buildExecutionWsUrls(id: string): string[] {
   const urls: string[] = [];
   urls.push(url);
   return urls;
-
-  const sameOriginWs = `${toWsOrigin(window.location.origin)}/api/executions/${id}/execute-ws`;
-  urls.push(sameOriginWs);
-
-  const publicApiBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-  if (publicApiBase) {
-    const fromEnv = `${toWsOrigin(publicApiBase)}/api/executions/${id}/execute-ws`;
-    if (!urls.includes(fromEnv)) {
-      urls.push(fromEnv);
-    }
-  }
-
-  // Local dev fallback: Next dev server often runs on 3000 while backend runs on 5015.
-  if (window.location.hostname === "localhost" && window.location.port === "3000") {
-    const localBackend = `ws://localhost:5015/api/executions/${id}/execute-ws`;
-    if (!urls.includes(localBackend)) {
-      urls.push(localBackend);
-    }
-  }
-
-  return urls;
 }
 
 function openExecutionWebSocket(

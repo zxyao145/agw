@@ -159,7 +159,7 @@ public class ProjectTaskDomainService
         var existing = await _taskRepository.GetByIdAsync(id);
         if (existing == null)
         {
-            return ;
+            return;
         }
 
         _taskRepository.Remove(existing);

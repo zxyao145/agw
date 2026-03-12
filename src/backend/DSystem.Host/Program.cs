@@ -120,7 +120,7 @@ try
     builder.Services.AddHostedService<ProjectTaskSchedulerHostedService>();
     builder.Services.AddHybridCache();
 
-    builder.Services.Configure<A2AServerOptions>(o=>
+    builder.Services.Configure<A2AServerOptions>(o =>
     {
 
     });

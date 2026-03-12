@@ -28,4 +28,6 @@ public record McpToolServerUpdateRequest(
 
 public record McpToolServerConnectRequest(Guid McpToolServerId);
 
-public record McpToolServerConnectResponse(string Status, List<string> ToolNames);
+public record McpToolServerConnectResponse(string Status, List<McpToolItem> Tools);
+public record McpToolItem(string Name);
+

@@ -2,6 +2,7 @@ using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
 using DSystem.Manager.Api.Contracts;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace DSystem.Manager.Api.Controllers;
 
@@ -92,13 +93,12 @@ public class McpToolServersController : ControllerBase
         try
         {
             var tools = await _service.ListToolsAsync(request.McpToolServerId, cancellationToken);
-            var toolNames = tools
-                .Select(x => x.Name)
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            var toolItems = tools
+                .Where(x => !string.IsNullOrWhiteSpace(x.Name))
+                .Select(x => new McpToolItem(x.Name))
                 .ToList();
 
-            return Ok(new McpToolServerConnectResponse("success", toolNames));
+            return Ok(new McpToolServerConnectResponse("success", toolItems));
         }
         catch (Exception ex)
         {

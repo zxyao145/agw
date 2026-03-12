@@ -301,7 +301,7 @@ public class ClaudeCodeController(
 
     private static AgentResponseUpdate CreateSystemMessage(string message)
     {
-        var d = new Dictionary<string, object?>() 
+        var d = new Dictionary<string, object?>()
         {
             { "subtype", "hint" }
         };

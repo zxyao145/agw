@@ -244,7 +244,6 @@ public class AgentRuntimeService
         {
             return null;
         }
-
         var agentSession = await GetOrCreateThreadAsync(aiAgent, sessionId, cancellationToken);
         return new AgentExecSession(
             aiAgent,

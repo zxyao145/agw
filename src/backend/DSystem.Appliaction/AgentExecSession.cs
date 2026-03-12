@@ -25,7 +25,7 @@ public sealed class AgentExecSession : IAsyncDisposable
     /// <summary>
     /// Gets the agent thread for conversation context.
     /// </summary>
-    public AgentSession Session { get; private set; } 
+    public AgentSession Session { get; private set; }
 
     /// <summary>
     /// Gets the cancellation token for in-flight requests.
