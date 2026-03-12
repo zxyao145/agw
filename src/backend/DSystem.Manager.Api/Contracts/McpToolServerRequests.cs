@@ -15,7 +15,6 @@ public record McpToolServerCreateRequest(
 
 public record McpToolServerUpdateRequest(
     string Name,
-    List<Guid>? AgentIds,
     string? Description,
     string TransportType,
     string? Command,

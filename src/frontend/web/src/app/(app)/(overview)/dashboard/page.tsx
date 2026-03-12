@@ -1,4 +1,3 @@
-export default function Page() {
   function SummaryCards({ loading }: { loading: boolean }) {
     const cards = [
       { label: "Total Requests", value: 0, color: "text-light" },
@@ -33,6 +32,7 @@ export default function Page() {
     );
   }
 
+export default function Page() {
   return (
     <div className="w-full mt-4">
       <SummaryCards loading={false} />

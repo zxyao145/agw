@@ -263,7 +263,7 @@ export default function AgentflowsPage() {
       setIsMermaidLoading(true);
 
       try {
-        // OpenAPI currently doesn't declare response schemas.
+        // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
         const result = await apiGet("/api/agentflows/mermaid/{id}", {
           params: { path: { id: agentflow.id } },
         });

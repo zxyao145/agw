@@ -3,7 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { PanelLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { ChatSession, ChatSessionProps } from "../../../../../components/message/chat-session";
+import { ChatSession, ChatSessionProps } from "@/components/message/chat-session";
 import type { AiMessage } from "@/types";
 import ColResizeSplit from "../split-layout";
 import {

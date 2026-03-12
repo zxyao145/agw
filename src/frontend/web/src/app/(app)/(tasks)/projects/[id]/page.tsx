@@ -451,6 +451,7 @@ export default function ProjectDetailsPage() {
                           ? editDescription
                           : null,
                         enable: editEnable,
+                        extraSetting: null,
                       })
                     }
                     disabled={

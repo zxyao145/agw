@@ -38,7 +38,7 @@ public class McpToolServerDomainService
         return server;
     }
 
-    public async Task<McpToolServer?> UpdateAsync(Guid id, Action<McpToolServer> updateAction, IEnumerable<Guid>? agentIds, string user)
+    public async Task<McpToolServer?> UpdateAsync(Guid id, Action<McpToolServer> updateAction, string user)
     {
         var existing = await _repository.GetByIdAsync(id);
         if (existing == null)
@@ -50,7 +50,6 @@ public class McpToolServerDomainService
         existing.UpdateBy = user;
         existing.UpdateTime = DateTime.UtcNow;
         _repository.Update(existing);
-        await SyncAgentRelationsAsync(id, agentIds);
         await _unitOfWork.SaveChangesAsync();
         return existing;
     }

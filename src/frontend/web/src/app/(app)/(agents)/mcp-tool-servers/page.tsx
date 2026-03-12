@@ -227,6 +227,7 @@ export default function McpToolServersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
       return await apiDelete("/api/mcp-tool-servers/{id}", {
         params: { path: { id } },
       });

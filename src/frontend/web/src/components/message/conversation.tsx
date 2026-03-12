@@ -1,11 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Ulid, Uuid4 } from "id128";
+import { Uuid4 } from "id128";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { ChatSession } from "@/components/message/chat-session";
 import { cn } from "@/lib/utils";
 import type { AiMessage, ProcessedMessageItem } from "@/types";
