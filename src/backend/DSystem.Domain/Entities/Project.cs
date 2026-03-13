@@ -7,6 +7,7 @@ public class Project : BaseEntity
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public string? Workspace { get; set; }
     public bool Enable { get; set; } = true;
     public string? ExtraSetting { get; set; }
 
