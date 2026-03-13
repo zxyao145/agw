@@ -9,6 +9,10 @@ public class Agent : BaseEntity
     public string DisplayName { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    /// System prompt / instructions for the agent's LLM.
+    /// </summary>
     public string SystemPrompt { get; set; } = string.Empty;
 
     /// <summary>
