@@ -86,6 +86,8 @@ public class LlmDbContext : DbContext
         modelBuilder.Entity<Agent>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Name).IsUnique();
+            entity.Property(e => e.DisplayName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Description).HasMaxLength(200);
             entity.Property(e => e.SystemPrompt).HasMaxLength(4000);

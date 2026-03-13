@@ -57,6 +57,7 @@ export default function AgentsPage() {
 
   // Create dialog state
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [displayName, setDisplayName] = React.useState("");
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [systemPrompt, setSystemPrompt] = React.useState("");
@@ -71,6 +72,7 @@ export default function AgentsPage() {
   // Edit dialog state
   const [editOpen, setEditOpen] = React.useState(false);
   const [editingAgent, setEditingAgent] = React.useState<AgentDto | null>(null);
+  const [editDisplayName, setEditDisplayName] = React.useState("");
   const [editName, setEditName] = React.useState("");
   const [editDescription, setEditDescription] = React.useState("");
   const [editSystemPrompt, setEditSystemPrompt] = React.useState("");
@@ -104,6 +106,7 @@ export default function AgentsPage() {
     onSuccess: async () => {
       toast.success("Agent created");
       setCreateOpen(false);
+      setDisplayName("");
       setName("");
       setDescription("");
       setSystemPrompt("");
@@ -165,6 +168,7 @@ export default function AgentsPage() {
 
   const handleEdit = (agent: AgentDto) => {
     setEditingAgent(agent);
+    setEditDisplayName(agent.displayName);
     setEditName(agent.name);
     setEditDescription(agent.description);
     setEditSystemPrompt(agent.systemPrompt);
@@ -288,6 +292,8 @@ export default function AgentsPage() {
           <CreateAgentDialog
             open={createOpen}
             setOpen={setCreateOpen}
+            displayName={displayName}
+            setDisplayName={setDisplayName}
             name={name}
             setName={setName}
             description={description}
@@ -332,6 +338,8 @@ export default function AgentsPage() {
         open={editOpen}
         setOpen={setEditOpen}
         editingAgent={editingAgent}
+        displayName={editDisplayName}
+        setDisplayName={setEditDisplayName}
         name={editName}
         setName={setEditName}
         description={editDescription}

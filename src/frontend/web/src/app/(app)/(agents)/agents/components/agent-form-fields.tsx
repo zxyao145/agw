@@ -18,6 +18,8 @@ import {
 import type { ToolInfo, ModelProviderApiKeyDto, McpToolServerDto } from "./types";
 
 interface AgentFormFieldsProps {
+  displayName: string;
+  setDisplayName: (value: string) => void;
   name: string;
   setName: (value: string) => void;
   description: string;
@@ -46,6 +48,7 @@ interface AgentFormFieldsProps {
   toggleMcpToolServer: (mcpToolServerId: string) => void;
   idPrefix?: string;
   disabledFields?: {
+    displayName?: boolean;
     name?: boolean;
     description?: boolean;
     systemPrompt?: boolean;
@@ -56,6 +59,7 @@ interface AgentFormFieldsProps {
     mcpToolServers?: boolean;
   };
   hiddenFields?: {
+    displayName?: boolean;
     name?: boolean;
     description?: boolean;
     systemPrompt?: boolean;
@@ -68,6 +72,8 @@ interface AgentFormFieldsProps {
 }
 
 export function AgentFormFields({
+  displayName,
+  setDisplayName,
   name,
   setName,
   description,
@@ -99,13 +105,26 @@ export function AgentFormFields({
 }: AgentFormFieldsProps) {
   return (
     <div className="grid gap-4 overflow-y-auto pr-2 -mr-2">
+      {!hiddenFields.displayName && (
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}displayName`}>Display Name</Label>
+          <Input
+            id={`${idPrefix}displayName`}
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Agent display name"
+            disabled={disabledFields.displayName}
+          />
+        </div>
+      )}
+
       <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}name`}>Name</Label>
+        <Label htmlFor={`${idPrefix}name`}>Id (Optional)</Label>
         <Input
           id={`${idPrefix}name`}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="agent name"
+          placeholder="agent id"
           disabled={disabledFields.name}
         />
       </div>

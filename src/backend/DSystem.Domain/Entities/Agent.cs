@@ -6,6 +6,7 @@ namespace DSystem.Domain.Entities;
 public class Agent : BaseEntity
 {
     public Guid Id { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string SystemPrompt { get; set; } = string.Empty;

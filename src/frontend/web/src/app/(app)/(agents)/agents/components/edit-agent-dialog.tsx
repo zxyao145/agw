@@ -23,6 +23,8 @@ interface EditAgentDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
   editingAgent: AgentDto | null;
+  displayName: string;
+  setDisplayName: (value: string) => void;
   name: string;
   setName: (value: string) => void;
   description: string;
@@ -61,6 +63,8 @@ export function EditAgentDialog({
   open,
   setOpen,
   editingAgent,
+  displayName,
+  setDisplayName,
   name,
   setName,
   description,
@@ -98,6 +102,8 @@ export function EditAgentDialog({
         </DialogHeader>
 
         <AgentFormFields
+          displayName={displayName}
+          setDisplayName={setDisplayName}
           name={name}
           setName={setName}
           description={description}
@@ -133,7 +139,9 @@ export function EditAgentDialog({
                   agentType: true,
                   tools: true,
                 }
-              : undefined
+              : {
+                  name: true,
+                }
           }
           hiddenFields={
             agentType === "1"
@@ -143,7 +151,9 @@ export function EditAgentDialog({
                   agentType: true,
                   tools: true,
                 }
-              : undefined
+              : {
+                  name: true,
+                }
           }
         />
 
@@ -160,7 +170,7 @@ export function EditAgentDialog({
                 updateAgentMutation.mutate({
                   id: editingAgent.id,
                   body: {
-                    name,
+                    displayName,
                     description,
                     systemPrompt,
                     modelProviderApiKeyId,
@@ -177,7 +187,7 @@ export function EditAgentDialog({
               }
             }}
             disabled={
-              !name.trim() ||
+              !displayName.trim() ||
               (agentType === "0" && !modelProviderApiKeyId?.trim()) ||
               updateAgentMutation.isPending
             }

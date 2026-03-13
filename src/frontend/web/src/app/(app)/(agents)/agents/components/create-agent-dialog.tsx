@@ -22,6 +22,8 @@ import type {
 interface CreateAgentDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
+  displayName: string;
+  setDisplayName: (value: string) => void;
   name: string;
   setName: (value: string) => void;
   description: string;
@@ -54,6 +56,8 @@ interface CreateAgentDialogProps {
 export function CreateAgentDialog({
   open,
   setOpen,
+  displayName,
+  setDisplayName,
   name,
   setName,
   description,
@@ -97,6 +101,8 @@ export function CreateAgentDialog({
         </DialogHeader>
 
         <AgentFormFields
+          displayName={displayName}
+          setDisplayName={setDisplayName}
           name={name}
           setName={setName}
           description={description}
@@ -135,7 +141,8 @@ export function CreateAgentDialog({
             type="button"
             onClick={() =>
               createAgentMutation.mutate({
-                name,
+                displayName,
+                name: name.trim(),
                 description,
                 systemPrompt,
                 modelProviderApiKeyId,
@@ -150,7 +157,7 @@ export function CreateAgentDialog({
               })
             }
             disabled={
-              !name.trim() ||
+              !displayName.trim() ||
               (agentType === "0" && !modelProviderApiKeyId?.trim()) ||
               createAgentMutation.isPending
             }
