@@ -31,9 +31,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
 type ProjectCreateRequest = components["schemas"]["ProjectCreateRequest"] & {
+  workspace?: string | null
   extraSetting?: string | null
 }
 type ProjectUpdateRequest = components["schemas"]["ProjectUpdateRequest"] & {
+  workspace?: string | null
   extraSetting?: string | null
 }
 
@@ -41,6 +43,7 @@ type ProjectDto = {
   id: string
   name: string
   description: string | null
+  workspace?: string | null
   enable: boolean
   extraSetting?: string | null
   createBy?: string | null
@@ -104,6 +107,7 @@ export default function ProjectsPage() {
   const [createOpen, setCreateOpen] = React.useState(false)
   const [name, setName] = React.useState("")
   const [description, setDescription] = React.useState<string>("")
+  const [workspace, setWorkspace] = React.useState<string>("")
   const [enable, setEnable] = React.useState(true)
   const [extraSetting, setExtraSetting] = React.useState("{\n  \n}")
 
@@ -117,6 +121,7 @@ export default function ProjectsPage() {
       setCreateOpen(false)
       setName("")
       setDescription("")
+      setWorkspace("")
       setEnable(true)
       setExtraSetting("{\n  \n}")
       await queryClient.invalidateQueries({ queryKey: ["projects"] })
@@ -130,6 +135,7 @@ export default function ProjectsPage() {
   const [editProjectId, setEditProjectId] = React.useState<string | null>(null)
   const [editName, setEditName] = React.useState("")
   const [editDescription, setEditDescription] = React.useState<string>("")
+  const [editWorkspace, setEditWorkspace] = React.useState<string>("")
   const [editEnable, setEditEnable] = React.useState(true)
   const [editExtraSetting, setEditExtraSetting] = React.useState("{\n  \n}")
 
@@ -137,6 +143,7 @@ export default function ProjectsPage() {
     setEditProjectId(project.id)
     setEditName(project.name ?? "")
     setEditDescription(project.description ?? "")
+    setEditWorkspace(project.workspace ?? "")
     setEditEnable(Boolean(project.enable))
     setEditExtraSetting(project.extraSetting ?? "{\n  \n}")
     setEditOpen(true)
@@ -240,6 +247,16 @@ export default function ProjectsPage() {
                 </div>
 
                 <div className="grid gap-2">
+                  <Label htmlFor="workspace">Workspace (optional)</Label>
+                  <Input
+                    id="workspace"
+                    value={workspace}
+                    onChange={(e) => setWorkspace(e.target.value)}
+                    placeholder="/path/to/workspace"
+                  />
+                </div>
+
+                <div className="grid gap-2">
                   <Label>Settings (JSON)</Label>
                   <div className="overflow-hidden rounded-md border">
                     <Editor
@@ -287,6 +304,7 @@ export default function ProjectsPage() {
                     createProjectMutation.mutate({
                       name,
                       description: description.length ? description : null,
+                      workspace: workspace.trim().length ? workspace.trim() : null,
                       enable,
                       extraSetting: normalizeJsonPayload(extraSetting),
                     })
@@ -412,6 +430,15 @@ export default function ProjectsPage() {
             </div>
 
             <div className="grid gap-2">
+              <Label htmlFor="edit-workspace">Workspace (optional)</Label>
+              <Input
+                id="edit-workspace"
+                value={editWorkspace}
+                onChange={(e) => setEditWorkspace(e.target.value)}
+              />
+            </div>
+
+            <div className="grid gap-2">
               <Label>Settings (JSON)</Label>
               <div className="overflow-hidden rounded-md border">
                 <Editor
@@ -462,6 +489,7 @@ export default function ProjectsPage() {
                   body: {
                     name: editName,
                     description: editDescription.length ? editDescription : null,
+                    workspace: editWorkspace.trim().length ? editWorkspace.trim() : null,
                     enable: editEnable,
                     extraSetting: normalizeJsonPayload(editExtraSetting),
                   },
