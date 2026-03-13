@@ -1,3 +1,4 @@
+using Anthropic;
 using ClaudeCodeSdk.MAF;
 using DSystem.Appliaction;
 using DSystem.Domain.Entities;
@@ -144,13 +145,18 @@ public class AgentRuntimeService
                 return ccAgent;
             }
         }
+        return await CreateDefinitionAgent(agent, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<AIAgent?> CreateDefinitionAgent(Agent agentDefinition, CancellationToken cancellationToken)
+    {
         // External agents may not have a ModelProviderApiKeyId
-        if (!agent.ModelProviderApiKeyId.HasValue)
+        if (!agentDefinition.ModelProviderApiKeyId.HasValue)
         {
             return null;
         }
 
-        var apiKey = await _apiKeyRepository.GetByIdAsync(agent.ModelProviderApiKeyId.Value);
+        var apiKey = await _apiKeyRepository.GetByIdAsync(agentDefinition.ModelProviderApiKeyId.Value);
         if (apiKey == null || !apiKey.Enable)
         {
             return null;
@@ -169,6 +175,59 @@ public class AgentRuntimeService
             return null;
         }
 
+        IList<AITool>? tools = await CreateAgentTools(agentDefinition, cancellationToken).ConfigureAwait(false);
+       
+        AIAgent? aIAgent = null;
+        switch (provider.ProviderType)
+        {
+            case ProviderType.OpenAI:
+                {
+                    var credential = new ApiKeyCredential(apiKey.ApiKey);
+                    var options = new OpenAIClientOptions
+                    {
+                        Endpoint = new Uri(provider.Endpoint),
+                    };
+                    OpenAIClient client = new OpenAIClient(credential, options);
+                    var chatCompletionClient = client.GetChatClient(model.Name);
+                    aIAgent = chatCompletionClient.AsAIAgent(
+                        instructions: agentDefinition.SystemPrompt,
+                        name: agentDefinition.Name,
+                        tools: tools
+                    )
+                        .AsBuilder()
+                        .UseOpenTelemetry(sourceName: provider.Name, configure: (cfg) =>
+                            cfg.EnableSensitiveData = true)
+                        .Build(); 
+                    break;
+                }
+            case ProviderType.Anthropic:
+                {
+                    var anthropicClientOptions = new Anthropic.Core.ClientOptions
+                    {
+                        ApiKey = apiKey.ApiKey,
+                        BaseUrl = provider.Endpoint
+                    };
+                    var client = new AnthropicClient(anthropicClientOptions);
+                    aIAgent = client.AsAIAgent(
+                        model: model.Name,
+                        instructions: agentDefinition.SystemPrompt,
+                        name: agentDefinition.Name,
+                        tools: tools
+                        )
+                        .AsBuilder()
+                        .UseOpenTelemetry(sourceName: provider.Name, configure: (cfg) =>
+                            cfg.EnableSensitiveData = true)
+                        .Build();
+                    break;
+                }
+            default: throw new NotSupportedException($"Provider type '{provider.ProviderType}' is not supported");
+        }
+
+        return aIAgent;
+    }
+
+    private async Task<IList<AITool>?> CreateAgentTools(Agent agent, CancellationToken cancellationToken)
+    {
         // Create tools if specified using the new unified approach
         var mergedTools = new List<AITool>();
         if (!string.IsNullOrWhiteSpace(agent.Tools))
@@ -191,6 +250,7 @@ public class AgentRuntimeService
             }
         }
 
+        // mcp tools
         var mcpTools = await _mcpToolServerDomainService
                 .ListToolsByAgentAsync(agent.Id, cancellationToken)
                 .ConfigureAwait(false);
@@ -198,24 +258,11 @@ public class AgentRuntimeService
         {
             mergedTools.AddRange(mcpTools.Cast<AITool>());
         }
-
         IList<AITool>? tools = mergedTools.Count > 0 ? mergedTools : null;
-
-        ApiKeyCredential credential = new ApiKeyCredential(apiKey.ApiKey);
-        OpenAIClientOptions options = new OpenAIClientOptions
-        {
-            Endpoint = new Uri(provider.Endpoint),
-        };
-        OpenAIClient client = new OpenAIClient(credential, options);
-        var chatCompletionClient = client.GetChatClient(model.Name);
-        AIAgent aIAgent = chatCompletionClient.AsAIAgent(
-            instructions: agent.SystemPrompt,
-            name: agent.Name,
-            tools: tools
-            );
-
-        return aIAgent;
+        return tools;
     }
+
+
 
     /// <summary>
     /// Creates an AI agent session for the provided thread.

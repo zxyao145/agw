@@ -36,12 +36,6 @@ export function AgentsTable({
 }: AgentsTableProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Agents</CardTitle>
-        <CardDescription>
-          Fetched from <code>/api/agents</code>.
-        </CardDescription>
-      </CardHeader>
       <CardContent>
         {agentsQuery.isLoading ? (
           <div className="text-sm text-muted-foreground">Loading...</div>
@@ -54,6 +48,7 @@ export function AgentsTable({
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead className="min-w-40">Display Name</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>System Prompt</TableHead>
@@ -75,6 +70,9 @@ export function AgentsTable({
                   <TableRow key={agent.id}>
                     <TableCell className="font-medium">
                       {agent.name}
+                    </TableCell>
+                     <TableCell className="font-medium">
+                      {agent.displayName}
                     </TableCell>
                     <TableCell>
                       <span

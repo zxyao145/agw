@@ -89,16 +89,16 @@ const navItems: SidebarMenuGroupProps[] = [
     groupLable: "Agent & Flow",
     menus: [
       {
-        url: "/agentflows",
-        title: "Agentflows",
-        isActive: true,
-        icon: <Workflow />,
-      },
-      {
         url: "/agents",
         title: "Agents",
         isActive: true,
         icon: <Bot />,
+      },
+      {
+        url: "/agentflows",
+        title: "Agentflows",
+        isActive: true,
+        icon: <Workflow />,
       },
       {
         url: "/mcp-tool-servers",
