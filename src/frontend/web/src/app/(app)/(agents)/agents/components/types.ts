@@ -2,6 +2,7 @@ export type {AgentDto} from  "@/types/agentflow";
 
 
 export interface AgentCreateRequest {
+  displayName: string;
   name: string;
   description: string;
   systemPrompt: string;
@@ -10,7 +11,14 @@ export interface AgentCreateRequest {
   mcpToolServerIds?: string[] | null;
 }
 
-export type AgentUpdateRequest = AgentCreateRequest;
+export interface AgentUpdateRequest {
+  displayName: string;
+  description: string;
+  systemPrompt: string;
+  modelProviderApiKeyId: string | null;
+  tools?: string | null;
+  mcpToolServerIds?: string[] | null;
+}
 
 export type ToolInfo = {
   name: string;
@@ -39,4 +47,3 @@ export type McpToolServerDto = {
   id: string;
   name: string;
 };
-

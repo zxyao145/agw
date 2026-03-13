@@ -62,6 +62,7 @@ public class AgentsController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
         var agent = new Agent
         {
+            DisplayName = request.DisplayName,
             Name = request.Name,
             Description = request.Description,
             SystemPrompt = request.SystemPrompt,
@@ -94,7 +95,7 @@ public class AgentsController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
         var updated = await _agentService.UpdateAsync(id, agent =>
         {
-            agent.Name = request.Name;
+            agent.DisplayName = request.DisplayName;
             agent.Description = request.Description;
             agent.SystemPrompt = request.SystemPrompt;
             agent.ModelProviderApiKeyId = request.ModelProviderApiKeyId;

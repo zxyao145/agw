@@ -58,6 +58,10 @@ public class AgentDomainService
         }
 
         agent.Id = agent.Id == Guid.Empty ? Guid.NewGuid() : agent.Id;
+        if (string.IsNullOrWhiteSpace(agent.Name))
+        {
+            agent.Name = agent.Id.ToString();
+        }
         agent.CreateBy = user;
         agent.CreateTime = DateTime.UtcNow;
         await _repository.AddAsync(agent);
@@ -123,6 +127,11 @@ public class AgentDomainService
             }
         }
 
+        if (string.IsNullOrWhiteSpace(existing.Name))
+        {
+            existing.Name = existing.Id.ToString();
+        }
+
         existing.UpdateBy = user;
         existing.UpdateTime = DateTime.UtcNow;
         _repository.Update(existing);
@@ -181,4 +190,3 @@ public class AgentDomainService
         }
     }
 }
-

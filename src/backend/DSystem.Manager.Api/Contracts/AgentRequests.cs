@@ -5,6 +5,7 @@ using Microsoft.Extensions.AI;
 namespace DSystem.Manager.Api.Contracts;
 
 public record AgentCreateRequest(
+    string DisplayName,
     string Name,
     string Description,
     string SystemPrompt,
@@ -13,7 +14,7 @@ public record AgentCreateRequest(
     List<Guid>? McpToolServerIds = null);
 
 public record AgentUpdateRequest(
-    string Name,
+    string DisplayName,
     string Description,
     string SystemPrompt,
     Guid? ModelProviderApiKeyId,
@@ -37,4 +38,3 @@ public record AgentExecuteResponse(
     public static AgentExecuteResponse FromDomain(AgentExecutionResult result) =>
         new(result.SessionId, result.Messages);
 }
-
