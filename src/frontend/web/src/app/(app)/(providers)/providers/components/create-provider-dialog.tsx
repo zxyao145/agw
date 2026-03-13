@@ -1,69 +1,86 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import * as React from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-import { apiPost } from "@/api/client"
-import { Button } from "@/components/ui/button"
+import { apiPost } from "@/api/client";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
-import type { ProviderCreateRequest } from "./types"
-import { getApiErrorMessage } from "./utils"
+import type { ProviderCreateRequest, ProviderType } from "./types";
+import { getApiErrorMessage } from "./utils";
+
+const providerTypeOptions: ProviderType[] = [
+  "OpenAI",
+  "Anthropic",
+  "GoogleGemini",
+  "GitHubCopilot",
+];
 
 interface CreateProviderDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 export function CreateProviderDialog({
   open,
   onOpenChange,
 }: CreateProviderDialogProps) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
-  const [name, setName] = React.useState("")
-  const [description, setDescription] = React.useState<string>("")
-  const [endpoint, setEndpoint] = React.useState("")
+  const [name, setName] = React.useState("");
+  const [providerType, setProviderType] =
+    React.useState<ProviderType>("OpenAI");
+  const [description, setDescription] = React.useState<string>("");
+  const [endpoint, setEndpoint] = React.useState("");
 
   const createProviderMutation = useMutation({
     mutationFn: async (body: ProviderCreateRequest) => {
-      return await apiPost("/api/providers", { body })
+      return await apiPost("/api/providers", { body });
     },
     onSuccess: async () => {
-      toast.success("Provider created")
-      onOpenChange(false)
-      setName("")
-      setDescription("")
-      setEndpoint("")
-      await queryClient.invalidateQueries({ queryKey: ["providers"] })
+      toast.success("Provider created");
+      onOpenChange(false);
+      setName("");
+      setProviderType("OpenAI");
+      setDescription("");
+      setEndpoint("");
+      await queryClient.invalidateQueries({ queryKey: ["providers"] });
     },
     onError: (error) => {
-      toast.error(`Create failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Create failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
 
   const handleCreate = () => {
     createProviderMutation.mutate({
       name,
+      providerType,
       endpoint,
       description: description.length ? description : null,
-    })
-  }
+    });
+  };
 
   const isDisabled =
-    !name.trim() || !endpoint.trim() || createProviderMutation.isPending
+    !name.trim() || !endpoint.trim() || createProviderMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -97,6 +114,25 @@ export function CreateProviderDialog({
           </div>
 
           <div className="grid gap-2">
+            <Label htmlFor="providerType">Provider type</Label>
+            <Select
+              value={providerType}
+              onValueChange={(value) => setProviderType(value as ProviderType)}
+            >
+              <SelectTrigger id="providerType">
+                <SelectValue placeholder="Select a provider type" />
+              </SelectTrigger>
+              <SelectContent>
+                {providerTypeOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
@@ -119,5 +155,5 @@ export function CreateProviderDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

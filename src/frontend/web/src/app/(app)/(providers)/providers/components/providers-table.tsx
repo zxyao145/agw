@@ -1,18 +1,18 @@
-"use client"
+"use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { Trash2 } from "lucide-react"
-import { toast } from "sonner"
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
-import { apiDelete } from "@/api/client"
-import { Button } from "@/components/ui/button"
+import { apiDelete } from "@/api/client";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -20,16 +20,16 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 
-import type { ProviderDto } from "./types"
-import { getApiErrorMessage } from "./utils"
+import type { ProviderDto } from "./types";
+import { getApiErrorMessage } from "./utils";
 
 interface ProvidersTableProps {
-  providers?: ProviderDto[]
-  isLoading: boolean
-  isError: boolean
-  error: unknown
+  providers?: ProviderDto[];
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
 }
 
 export function ProvidersTable({
@@ -38,31 +38,31 @@ export function ProvidersTable({
   isError,
   error,
 }: ProvidersTableProps) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   const deleteProviderMutation = useMutation({
     mutationFn: async (id: string) => {
       // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
       return await apiDelete("/api/providers/{id}", {
         params: { path: { id } },
-      })
+      });
     },
     onSuccess: async () => {
-      toast.success("Provider deleted")
-      await queryClient.invalidateQueries({ queryKey: ["providers"] })
+      toast.success("Provider deleted");
+      await queryClient.invalidateQueries({ queryKey: ["providers"] });
     },
     onError: (error) => {
-      toast.error(`Delete failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Delete failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
 
   const handleDelete = (provider: ProviderDto) => {
     const ok = window.confirm(
-      `Delete provider "${provider.name}"?\n\nThis action cannot be undone.`
-    )
-    if (!ok) return
-    deleteProviderMutation.mutate(provider.id)
-  }
+      `Delete provider "${provider.name}"?\n\nThis action cannot be undone.`,
+    );
+    if (!ok) return;
+    deleteProviderMutation.mutate(provider.id);
+  };
 
   return (
     <Card>
@@ -84,6 +84,7 @@ export function ProvidersTable({
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Provider Type</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Endpoint</TableHead>
                 <TableHead>Created</TableHead>
@@ -94,6 +95,7 @@ export function ProvidersTable({
               {providers.map((provider) => (
                 <TableRow key={provider.id}>
                   <TableCell className="font-medium">{provider.name}</TableCell>
+                  <TableCell>{provider.providerType}</TableCell>
                   <TableCell className="max-w-xs truncate">
                     {provider.description || "-"}
                   </TableCell>
@@ -127,5 +129,5 @@ export function ProvidersTable({
         )}
       </CardContent>
     </Card>
-  )
+  );
 }

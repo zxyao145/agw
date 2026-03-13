@@ -37,6 +37,7 @@ public class ProvidersController : ControllerBase
         var provider = new Provider
         {
             Name = request.Name,
+            ProviderType = request.ProviderType,
             Description = request.Description,
             Endpoint = request.Endpoint
         };
@@ -52,6 +53,7 @@ public class ProvidersController : ControllerBase
         var updated = await _service.UpdateAsync(id, p =>
         {
             p.Name = request.Name;
+            p.ProviderType = request.ProviderType;
             p.Description = request.Description;
             p.Endpoint = request.Endpoint;
         }, user);
