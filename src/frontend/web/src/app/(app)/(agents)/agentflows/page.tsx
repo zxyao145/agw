@@ -346,12 +346,6 @@ export default function AgentflowsPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Agentflows</CardTitle>
-          <CardDescription>
-            Fetched from <code>/api/agentflows</code>.
-          </CardDescription>
-        </CardHeader>
         <CardContent>
           <AgentflowsTable
             agentflows={agentflowsQuery.data || []}
