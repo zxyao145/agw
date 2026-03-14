@@ -455,7 +455,7 @@ public class AgentRuntimeService
             return null;
         }
 
-        return await ExecuteAsync(ref sessionId, input, projectId, agent);
+        return await ExecuteAsync(sessionId, input, projectId, agent);
     }
 
 
@@ -475,10 +475,10 @@ public class AgentRuntimeService
             return null;
         }
 
-        return await ExecuteAsync(ref sessionId, input, projectId, agent);
+        return await ExecuteAsync(sessionId, input, projectId, agent);
     }
 
-    private async Task<AgentExecutionResult?> ExecuteAsync(ref string sessionId, string input, string? projectId, Agent agent)
+    private async Task<AgentExecutionResult?> ExecuteAsync(string sessionId, string input, string? projectId, Agent agent)
     {
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);

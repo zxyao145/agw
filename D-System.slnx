@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Api/">
+    <Project Path="src/backend/DSystem.A2A/DSystem.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
     <Project Path="src/backend/DSystem.Api/DSystem.Api.csproj" />
     <Project Path="src/backend/DSystem.Manager.Api/DSystem.Manager.Api.csproj" />
   </Folder>
@@ -15,16 +16,14 @@
   <Folder Name="/Host/">
     <Project Path="src/backend/DSystem.Host/DSystem.Host.csproj" />
   </Folder>
-  <Folder Name="/Protocol/">
-    <Project Path="src/backend/DSystem.A2A/DSystem.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
-  </Folder>
   <Folder Name="/SessionRecords/">
     <Project Path="src/backend/DSystem.SessionRecords/DSystem.SessionRecords.csproj" Id="530ba901-9b98-4fab-a6c8-d4ad38e194bd" />
   </Folder>
   <Folder Name="/Shared/">
     <Project Path="src/backend/DSystem.Shared/DSystem.Shared.csproj" />
   </Folder>
-  <Folder Name="/解决方案项/">
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
     <File Path=".gitignore" />
     <File Path="CLAUDE.md" />
     <File Path="src/backend/Directory.Build.props" />
