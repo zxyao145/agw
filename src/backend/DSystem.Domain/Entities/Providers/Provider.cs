@@ -11,4 +11,5 @@ public class Provider : BaseEntity
     public string? Description { get; set; }
 
     public ICollection<ModelProvider> Models { get; set; } = new List<ModelProvider>();
+    public ICollection<ProviderAuthConfig> AuthConfigs { get; set; } = new List<ProviderAuthConfig>();
 }

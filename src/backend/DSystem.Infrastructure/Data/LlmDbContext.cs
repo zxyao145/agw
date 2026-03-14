@@ -17,6 +17,7 @@ public class LlmDbContext : DbContext
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ModelProvider> ModelProviders => Set<ModelProvider>();
     public DbSet<ModelProviderApiKey> ModelProviderApiKeys => Set<ModelProviderApiKey>();
+    public DbSet<ProviderAuthConfig> ProviderAuthConfigs => Set<ProviderAuthConfig>();
     public DbSet<Agent> Agents => Set<Agent>();
 
     public DbSet<Agentflow> Agentflows => Set<Agentflow>();
@@ -68,6 +69,20 @@ public class LlmDbContext : DbContext
 
             entity.HasOne(e => e.Provider)
                 .WithMany(p => p.Models)
+                .HasForeignKey(e => e.ProviderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+
+        modelBuilder.Entity<ProviderAuthConfig>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.AuthType).HasConversion<int>();
+            entity.Property(e => e.ApiKey).HasMaxLength(2000);
+            entity.Property(e => e.EnvKey).HasMaxLength(200);
+
+            entity.HasOne(e => e.Provider)
+                .WithMany(p => p.AuthConfigs)
                 .HasForeignKey(e => e.ProviderId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

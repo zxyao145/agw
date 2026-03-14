@@ -4,7 +4,7 @@ import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { apiPost } from "@/api/client";
+import { apiPut } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,9 +25,14 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-import type { ProviderAuthConfigRequest, ProviderCreateRequest, ProviderType } from "./types";
-import { getApiErrorMessage } from "./utils";
 import { ProviderAuthConfigEditor } from "./provider-auth-config-editor";
+import type {
+  ProviderAuthConfigRequest,
+  ProviderType,
+  ProviderDto,
+  ProviderUpdateRequest,
+} from "./types";
+import { getApiErrorMessage } from "./utils";
 
 const providerTypeOptions: ProviderType[] = [
   "OpenAI",
@@ -36,45 +41,71 @@ const providerTypeOptions: ProviderType[] = [
   "GitHubCopilot",
 ];
 
-interface CreateProviderDialogProps {
+interface EditProviderDialogProps {
+  provider: ProviderDto | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateProviderDialog({
+export function EditProviderDialog({
+  provider,
   open,
   onOpenChange,
-}: CreateProviderDialogProps) {
+}: EditProviderDialogProps) {
   const queryClient = useQueryClient();
 
   const [name, setName] = React.useState("");
-  const [providerType, setProviderType] =
-    React.useState<ProviderType>("OpenAI");
-  const [description, setDescription] = React.useState<string>("");
+  const [providerType, setProviderType] = React.useState<ProviderType>("OpenAI");
+  const [description, setDescription] = React.useState("");
   const [endpoint, setEndpoint] = React.useState("");
   const [authConfigs, setAuthConfigs] = React.useState<ProviderAuthConfigRequest[]>([]);
 
-  const createProviderMutation = useMutation({
-    mutationFn: async (body: ProviderCreateRequest) => {
-      return await apiPost("/api/providers", { body });
+  React.useEffect(() => {
+    if (!provider || !open) {
+      return;
+    }
+
+    setName(provider.name);
+    setProviderType(provider.providerType);
+    setDescription(provider.description ?? "");
+    setEndpoint(provider.endpoint);
+    setAuthConfigs(
+      (provider.authConfigs ?? []).map((config) => ({
+        authType: config.authType,
+        apiKey: config.apiKey,
+        envKey: config.envKey,
+        enable: config.enable,
+      })),
+    );
+  }, [provider, open]);
+
+  const updateProviderMutation = useMutation({
+    mutationFn: async (body: ProviderUpdateRequest) => {
+      if (!provider) {
+        throw new Error("Provider is required");
+      }
+      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
+      return await apiPut("/api/providers/{id}", {
+        params: { path: { id: provider.id } },
+        body,
+      });
     },
     onSuccess: async () => {
-      toast.success("Provider created");
+      toast.success("Provider updated");
       onOpenChange(false);
-      setName("");
-      setProviderType("OpenAI");
-      setDescription("");
-      setEndpoint("");
-      setAuthConfigs([]);
       await queryClient.invalidateQueries({ queryKey: ["providers"] });
     },
     onError: (error) => {
-      toast.error(`Create failed: ${getApiErrorMessage(error)}`);
+      toast.error(`Update failed: ${getApiErrorMessage(error)}`);
     },
   });
 
-  const handleCreate = () => {
-    createProviderMutation.mutate({
+  const handleUpdate = () => {
+    if (!provider) {
+      return;
+    }
+
+    updateProviderMutation.mutate({
       name,
       providerType,
       endpoint,
@@ -82,9 +113,7 @@ export function CreateProviderDialog({
       authConfigs: authConfigs.map((config) => ({
         ...config,
         apiKey:
-          config.authType === "ApiKey"
-            ? (config.apiKey?.trim() || null)
-            : null,
+          config.authType === "ApiKey" ? (config.apiKey?.trim() || null) : null,
         envKey:
           config.authType === "EnvVariable"
             ? (config.envKey?.trim() || null)
@@ -94,23 +123,20 @@ export function CreateProviderDialog({
   };
 
   const isDisabled =
-    !name.trim() || !endpoint.trim() || createProviderMutation.isPending;
+    !provider || !name.trim() || !endpoint.trim() || updateProviderMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create provider</DialogTitle>
-          {/* <DialogDescription>
-            Uses <code>/api/providers</code>.
-          </DialogDescription> */}
+          <DialogTitle>Edit provider</DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="edit-name">Name</Label>
             <Input
-              id="name"
+              id="edit-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="openai"
@@ -118,9 +144,9 @@ export function CreateProviderDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="endpoint">Endpoint</Label>
+            <Label htmlFor="edit-endpoint">Endpoint</Label>
             <Input
-              id="endpoint"
+              id="edit-endpoint"
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value)}
               placeholder="https://api.openai.com/v1"
@@ -128,12 +154,12 @@ export function CreateProviderDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="providerType">Provider type</Label>
+            <Label htmlFor="edit-providerType">Provider type</Label>
             <Select
               value={providerType}
               onValueChange={(value) => setProviderType(value as ProviderType)}
             >
-              <SelectTrigger id="providerType">
+              <SelectTrigger id="edit-providerType">
                 <SelectValue placeholder="Select a provider type" />
               </SelectTrigger>
               <SelectContent>
@@ -147,9 +173,9 @@ export function CreateProviderDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="edit-description">Description</Label>
             <Textarea
-              id="description"
+              id="edit-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
@@ -165,8 +191,8 @@ export function CreateProviderDialog({
               Cancel
             </Button>
           </DialogClose>
-          <Button type="button" onClick={handleCreate} disabled={isDisabled}>
-            {createProviderMutation.isPending ? "Creating..." : "Create"}
+          <Button type="button" onClick={handleUpdate} disabled={isDisabled}>
+            {updateProviderMutation.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
