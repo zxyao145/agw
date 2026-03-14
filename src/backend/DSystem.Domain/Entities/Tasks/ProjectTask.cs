@@ -14,6 +14,14 @@ public class ProjectTask : BaseEntity
     /// </summary>
     public string ContextId { get; set; } = string.Empty;
 
+    public ProjectTaskAgentType AgentType { get; set; } = ProjectTaskAgentType.Agent;
+
+    /// <summary>
+    /// if AgentType == Agent, AgentId == entity Agent.Id；
+    /// if AgentType == Agentflow, AgentId == entity Agentflow.Id；
+    /// </summary>
+    public Guid? AgentId { get; set; }
+
     public string Title { get; set; } = "Untitled";
 
     public string Description { get; set; } = string.Empty;

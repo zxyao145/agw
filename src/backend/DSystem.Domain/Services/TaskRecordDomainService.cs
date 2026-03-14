@@ -1,5 +1,6 @@
 using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
+using DSystem.Shared;
 using System.Linq.Expressions;
 
 namespace DSystem.Domain.Services;
@@ -86,7 +87,7 @@ public class TaskRecordDomainService
         var tasks = await _taskRepository.ListAsync(t => t.ProjectId == projectId);
         var directTask = tasks.FirstOrDefault(t =>
             t.ContextId == sessionId
-            || string.Equals(t.Id.ToString("D"), sessionId, StringComparison.OrdinalIgnoreCase));
+            || string.Equals(t.Id.Normalize(), sessionId, StringComparison.OrdinalIgnoreCase));
 
         if (directTask != null)
         {

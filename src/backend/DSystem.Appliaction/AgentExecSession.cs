@@ -40,6 +40,7 @@ public sealed class AgentExecSession : IAsyncDisposable
 
     private readonly ProjectTaskAgentType _agentType;
     private readonly Guid? _agentId;
+    private readonly string? _agentName;
     private readonly string? _taskTitle;
     private readonly string? _taskDescription;
     private readonly string? _systemPrompt;
@@ -56,6 +57,7 @@ public sealed class AgentExecSession : IAsyncDisposable
         string? sessionId,
         ProjectTaskAgentType agentType,
         Guid? agentId,
+        string? agentName,
         ILogger logger,
         TaskRecordApplication taskRecordApplication,
         string? taskTitle = null,
@@ -69,6 +71,7 @@ public sealed class AgentExecSession : IAsyncDisposable
         _sessionId = sessionId ?? Guid.NewGuid().ToString();
         _agentType = agentType;
         _agentId = agentId;
+        _agentName = agentName;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _taskRecordApplication = taskRecordApplication ?? throw new ArgumentNullException(nameof(taskRecordApplication));
         _taskTitle = taskTitle;
@@ -133,6 +136,7 @@ public sealed class AgentExecSession : IAsyncDisposable
             _projectId,
             _agentType,
             _agentId,
+            _agentName,
             responseUpdates,
             input,
             _taskTitle,

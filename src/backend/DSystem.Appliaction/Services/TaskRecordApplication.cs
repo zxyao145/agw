@@ -29,6 +29,7 @@ public class TaskRecordApplication
         string? projectId,
         ProjectTaskAgentType agentType,
         Guid? agentId,
+        string? agentName,
         IReadOnlyCollection<AgentResponseUpdate> updates,
         string? input,
         string? title = null,
@@ -66,6 +67,8 @@ public class TaskRecordApplication
                 Id = Guid.TryParse(contextId, out var taskId) ? taskId : Guid.NewGuid(),
                 ProjectId = projectId.Trim(),
                 ContextId = contextId,
+                AgentType = agentType,
+                AgentId = agentId,
                 Title = NormalizeTitle(title, input),
                 Description = NormalizeDescription(description, input),
                 SystemPrompt = NormalizeOptionalText(systemPrompt),
@@ -101,29 +104,51 @@ public class TaskRecordApplication
                 task.SystemPrompt = NormalizeOptionalText(systemPrompt);
             }
 
+            task.AgentType = agentType;
+            task.AgentId = agentId;
+
             task.UpdateBy = "system";
             task.UpdateTime = now;
             _taskRepository.Update(task);
         }
 
-        var record = new TaskRecord
-        {
-            Id = Guid.NewGuid(),
-            ContextId = contextId,
-            SessionId = sessionId,
-            AgentType = agentType,
-            AgentId = agentId,
-            Input = CreateInputMessage(input),
-            Messages = messages,
-            Metadata = [],
-            Error = ExtractError(messages),
-            CreateBy = "system",
-            CreateTime = now,
-            UpdateBy = "system",
-            UpdateTime = now
-        };
+        var existingRecords = await _recordRepository.ListAsync(
+            r => r.ContextId == contextId && r.SessionId == sessionId);
+        var placeholderRecord = existingRecords
+            .OrderByDescending(r => r.UpdateTime ?? r.CreateTime)
+            .ThenByDescending(r => r.CreateTime)
+            .FirstOrDefault(r => r.Messages.Count == 0);
 
-        await _recordRepository.AddAsync(record);
+        if (placeholderRecord != null)
+        {
+            placeholderRecord.AgentName = NormalizeOptionalText(agentName);
+            placeholderRecord.Messages = messages;
+            placeholderRecord.Error = ExtractError(messages);
+            placeholderRecord.UpdateBy = "system";
+            placeholderRecord.UpdateTime = now;
+            _recordRepository.Update(placeholderRecord);
+        }
+        else
+        {
+            var record = new TaskRecord
+            {
+                Id = Guid.NewGuid(),
+                ContextId = contextId,
+                SessionId = sessionId,
+                AgentName = NormalizeOptionalText(agentName),
+                Input = CreateInputMessage(input),
+                Messages = messages,
+                Metadata = [],
+                Error = ExtractError(messages),
+                CreateBy = "system",
+                CreateTime = now,
+                UpdateBy = "system",
+                UpdateTime = now
+            };
+
+            await _recordRepository.AddAsync(record);
+        }
+
         await _unitOfWork.SaveChangesAsync();
     }
 

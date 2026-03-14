@@ -1,5 +1,4 @@
 using DSystem.Shared;
-using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using System.Text.Json;
 
@@ -19,13 +18,7 @@ public class TaskRecord : BaseEntity
     /// </summary>
     public string SessionId { get; set; } = string.Empty;
 
-    public ProjectTaskAgentType AgentType { get; set; } = ProjectTaskAgentType.Agent;
-
-    /// <summary>
-    /// if AgentType == Agent, AgentId == entity Agent.Id；
-    /// if AgentType == Agentflow, AgentId == entity Agentflow.Id；
-    /// </summary>
-    public Guid? AgentId { get; set; }
+    public string? AgentName { get; set; }
 
     /// <summary>
     /// User input to be executed by the associated target.

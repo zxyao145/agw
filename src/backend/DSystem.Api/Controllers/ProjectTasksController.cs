@@ -1,5 +1,6 @@
 using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
+using DSystem.Shared;
 using DSystem.Shared.Contracts;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
@@ -70,7 +71,7 @@ public class ProjectTasksController : ControllerBase
         var normalizedProjectId = NormalizeProjectId(projectId);
         var taskId = Guid.NewGuid();
         var contextId = string.IsNullOrWhiteSpace(request.ContextId)
-            ? taskId.ToString("D")
+            ? taskId.Normalize()
             : request.ContextId.Trim();
         var sessionId = string.IsNullOrWhiteSpace(request.SessionId)
             ? contextId
@@ -81,6 +82,10 @@ public class ProjectTasksController : ControllerBase
             Id = taskId,
             ProjectId = normalizedProjectId,
             ContextId = contextId,
+            AgentType = request.AgentType,
+            AgentId = request.AgentType == ProjectTaskAgentType.Agentflow
+                ? request.AgentflowId
+                : request.AgentId,
             Title = request.Title ?? string.Empty,
             Description = request.Description,
             SystemPrompt = request.SystemPrompt,
@@ -92,10 +97,6 @@ public class ProjectTasksController : ControllerBase
             Id = Guid.NewGuid(),
             ContextId = contextId,
             SessionId = sessionId,
-            AgentType = request.AgentType,
-            AgentId = request.AgentType == ProjectTaskAgentType.Agentflow
-                ? request.AgentflowId
-                : request.AgentId,
             Input = CreateUserInputMessage(request.Input)
         };
 
@@ -247,19 +248,18 @@ public class ProjectTasksController : ControllerBase
         int messageCount,
         IReadOnlyList<AiMessage>? messages)
     {
-        var recordAgentType = latestRecord?.AgentType ?? ProjectTaskAgentType.Agent;
-        var responseAgentId = recordAgentType == ProjectTaskAgentType.Agent
-            ? latestRecord?.AgentId
+        var responseAgentId = task.AgentType == ProjectTaskAgentType.Agent
+            ? task.AgentId
             : null;
-        var responseAgentflowId = recordAgentType == ProjectTaskAgentType.Agentflow
-            ? latestRecord?.AgentId
+        var responseAgentflowId = task.AgentType == ProjectTaskAgentType.Agentflow
+            ? task.AgentId
             : null;
 
         return new ProjectTaskResponse(
             task.Id,
             task.ProjectId,
             task.ContextId,
-            recordAgentType,
+            task.AgentType,
             responseAgentflowId,
             responseAgentId,
             task.Status,
@@ -327,7 +327,7 @@ public class ProjectTasksController : ControllerBase
     {
         var normalizedProjectId = projectId.Trim();
         return Guid.TryParse(normalizedProjectId, out var parsedProjectId)
-            ? parsedProjectId.ToString("D").ToUpperInvariant()
+            ? parsedProjectId.Normalize()
             : normalizedProjectId;
     }
 

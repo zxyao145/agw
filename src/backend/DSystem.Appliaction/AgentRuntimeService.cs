@@ -8,6 +8,7 @@ using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using Microsoft.Agents.AI;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
@@ -154,21 +155,27 @@ public class AgentRuntimeService
         }
 
         var model = await _modelRepository.GetByIdAsync(modelProvider.ModelId);
-        var provider = await _providerRepository.GetByIdAsync(modelProvider.ProviderId);
+        var provider = await _providerRepository
+            .Queryable.Include(x => x.AuthConfigs)
+            .SingleOrDefaultAsync(x=>x.Id == modelProvider.ProviderId);
         if (model == null || provider == null)
         {
             return null;
         }
 
-        IList<AITool>? tools = await CreateAgentTools(agentDefinition, cancellationToken).ConfigureAwait(false);
-        var authConfigs = modelProvider.Provider!.AuthConfigs
+        var authConfigs = provider.AuthConfigs
             .Where(x => x.Enable)
             .ToList();
+        if(authConfigs.Count == 0)
+        {
+            _logger.LogError("no auth config for provider:{}", provider.Name);
+            return null;
+        }
         Random rand = new Random();
         int index = rand.Next(authConfigs.Count);
         var authConfig = authConfigs.ElementAt(index);
 
-
+        IList<AITool>? tools = await CreateAgentTools(agentDefinition, cancellationToken).ConfigureAwait(false);
         AIAgent? aIAgent = null;
         switch (provider.ProviderType)
         {
@@ -338,6 +345,7 @@ public class AgentRuntimeService
             sessionId,
             ProjectTaskAgentType.Agent,
             agentId,
+            agent.Name,
             _logger,
             _taskRecordApplication,
             taskTitle: agent.Name);
@@ -534,6 +542,7 @@ public class AgentRuntimeService
                 projectId ?? string.Empty,
                 ProjectTaskAgentType.Agent,
                 agent.Id,
+                agent.Name,
                 responseUpdates,
                 input,
                 cancellationToken: CancellationToken.None);

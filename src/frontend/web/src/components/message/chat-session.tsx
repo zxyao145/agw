@@ -16,6 +16,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { mergeStreamingMessagesById } from "@/lib/execution-stream";
 import { cn } from "@/lib/utils";
 
 export interface ChatSessionProps {
@@ -42,6 +43,8 @@ export function ChatSession({
       </Empty>
     );
   }
+  
+  const mergedMessages = mergeStreamingMessagesById(messages);
 
   return (
     <div className="flex-1 flex min-h-full pb-36 max-w-full">
@@ -59,7 +62,7 @@ export function ChatSession({
           </div>
         )}
 
-        {processMessages(messages).map((item, index) => {
+        {processMessages(mergedMessages).map((item, index) => {
           if (item.type === "accordion") {
             return (
               <div className="mx-4 max-w-[80%]" key={index}>

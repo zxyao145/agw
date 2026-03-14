@@ -1,5 +1,6 @@
 using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
+using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using System.Linq.Expressions;
@@ -55,7 +56,7 @@ public class ProjectTaskDomainService
             }
         }
 
-        if (!await IsTargetValidAsync(initialRecord.AgentType, initialRecord.AgentId))
+        if (!await IsTargetValidAsync(task.AgentType, task.AgentId))
         {
             return null;
         }
@@ -71,6 +72,7 @@ public class ProjectTaskDomainService
 
         initialRecord.Id = initialRecord.Id == Guid.Empty ? Guid.NewGuid() : initialRecord.Id;
         initialRecord.ContextId = task.ContextId;
+        initialRecord.AgentName = await GetTargetNameAsync(task.AgentType, task.AgentId);
         initialRecord.CreateBy = user;
         initialRecord.CreateTime = task.CreateTime;
         initialRecord.UpdateBy = user;
@@ -270,7 +272,7 @@ public class ProjectTaskDomainService
 
     public async Task<ProjectTask?> GetNextPendingAsync(Guid projectId)
     {
-        var projectIdText = projectId.ToString("D");
+        var projectIdText = projectId.Normalize();
         var pending = await _taskRepository.ListAsync(t =>
             t.ProjectId == projectIdText && t.Status == ProjectTaskStatus.Pending);
 
@@ -294,6 +296,23 @@ public class ProjectTaskDomainService
             ProjectTaskAgentType.Agent =>
                 await _agentRepository.GetByIdAsync(agentId.Value) is not null,
             _ => false
+        };
+    }
+
+    private async Task<string?> GetTargetNameAsync(ProjectTaskAgentType agentType, Guid? agentId)
+    {
+        if (!agentId.HasValue)
+        {
+            return null;
+        }
+
+        return agentType switch
+        {
+            ProjectTaskAgentType.Agentflow =>
+                (await _agentflowRepository.GetByIdAsync(agentId.Value))?.Name,
+            ProjectTaskAgentType.Agent =>
+                (await _agentRepository.GetByIdAsync(agentId.Value))?.Name,
+            _ => null
         };
     }
 

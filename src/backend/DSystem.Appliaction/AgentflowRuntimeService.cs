@@ -101,7 +101,7 @@ public class AgentflowRuntimeService
         }
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            sessionId = Guid.NewGuid().ToString("D");
+            sessionId = Guid.NewGuid().Normalize();
         }
 
         var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
@@ -178,6 +178,7 @@ public class AgentflowRuntimeService
             projectId ?? string.Empty,
             ProjectTaskAgentType.Agentflow,
             agentflowId,
+            agentflow.Name,
             responseUpdates,
             input,
             cancellationToken: CancellationToken.None);
@@ -198,7 +199,7 @@ public class AgentflowRuntimeService
         }
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            sessionId = Guid.NewGuid().ToString("D");
+            sessionId = Guid.NewGuid().Normalize();
         }
 
         var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
@@ -250,6 +251,7 @@ public class AgentflowRuntimeService
             projectId ?? string.Empty,
             ProjectTaskAgentType.Agentflow,
             agentflowId,
+            agentflow.Name,
             responseUpdates,
             input,
             cancellationToken: CancellationToken.None);

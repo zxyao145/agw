@@ -148,6 +148,7 @@ public class LlmDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ProjectId).HasMaxLength(64);
             entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.AgentType).HasConversion<int>();
             entity.Property(e => e.Description).IsRequired().HasMaxLength(1024);
             entity.Property(e => e.SystemPrompt).HasMaxLength(4000);
             entity.Property(e => e.Status).HasConversion<int>();
@@ -155,6 +156,7 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
 
             entity.HasIndex(e => e.ContextId).IsUnique();
+            entity.HasIndex(e => e.AgentId).IsUnique(false);
             entity.HasIndex(e => e.ProjectId);
             entity.HasIndex(e => new { e.ProjectId, e.Status, e.UpdateTime });
 
@@ -170,7 +172,7 @@ public class LlmDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.AgentType).HasConversion<int>();
+            entity.Property(e => e.AgentName).HasMaxLength(200);
             entity.Property(e => e.Error).HasColumnType("text");
             entity.HasIndex(e => new { e.ContextId, e.CreateTime });
             entity.HasIndex(e => new { e.ContextId, e.SessionId, e.CreateTime });
