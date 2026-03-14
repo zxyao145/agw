@@ -2,6 +2,18 @@ using DSystem.Domain.Entities;
 
 namespace DSystem.Manager.Api.Contracts;
 
-public record ProviderCreateRequest(string Name, ProviderType ProviderType, string? Description, string Endpoint);
+public record ProviderAuthConfigRequest(ProviderAuthType AuthType, string? ApiKey, string? EnvKey, bool Enable = true);
 
-public record ProviderUpdateRequest(string Name, ProviderType ProviderType, string? Description, string Endpoint);
+public record ProviderCreateRequest(
+    string Name,
+    ProviderType ProviderType,
+    string? Description,
+    string Endpoint,
+    IReadOnlyList<ProviderAuthConfigRequest>? AuthConfigs);
+
+public record ProviderUpdateRequest(
+    string Name,
+    ProviderType ProviderType,
+    string? Description,
+    string Endpoint,
+    IReadOnlyList<ProviderAuthConfigRequest>? AuthConfigs);

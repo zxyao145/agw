@@ -39,7 +39,8 @@ public class ProvidersController : ControllerBase
             Name = request.Name,
             ProviderType = request.ProviderType,
             Description = request.Description,
-            Endpoint = request.Endpoint
+            Endpoint = request.Endpoint,
+            AuthConfigs = BuildAuthConfigs(request.AuthConfigs, user)
         };
 
         var created = await _service.CreateAsync(provider, user);
@@ -56,6 +57,12 @@ public class ProvidersController : ControllerBase
             p.ProviderType = request.ProviderType;
             p.Description = request.Description;
             p.Endpoint = request.Endpoint;
+
+            p.AuthConfigs.Clear();
+            foreach (var authConfig in BuildAuthConfigs(request.AuthConfigs, user))
+            {
+                p.AuthConfigs.Add(authConfig);
+            }
         }, user);
 
         return updated == null ? NotFound() : Ok(updated);
@@ -66,5 +73,37 @@ public class ProvidersController : ControllerBase
     {
         var deleted = await _service.DeleteAsync(id);
         return deleted ? NoContent() : NotFound();
+    }
+
+    private static List<ProviderAuthConfig> BuildAuthConfigs(IReadOnlyList<ProviderAuthConfigRequest>? requests, string user)
+    {
+        if (requests == null || requests.Count == 0)
+        {
+            return [];
+        }
+
+        var now = DateTime.UtcNow;
+
+        return requests.Select(request =>
+        {
+            var (apiKey, envKey) = request.AuthType switch
+            {
+                ProviderAuthType.ApiKey => (request.ApiKey, null),
+                ProviderAuthType.EnvVariable => (null, request.EnvKey),
+                _ => (request.ApiKey, request.EnvKey)
+            };
+
+            return new ProviderAuthConfig
+            {
+                AuthType = request.AuthType,
+                ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
+                EnvKey = string.IsNullOrWhiteSpace(envKey) ? null : envKey,
+                Enable = request.Enable,
+                CreateBy = user,
+                CreateTime = now,
+                UpdateBy = user,
+                UpdateTime = now
+            };
+        }).ToList();
     }
 }
