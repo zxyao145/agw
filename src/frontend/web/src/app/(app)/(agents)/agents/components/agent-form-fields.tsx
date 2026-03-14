@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ToolInfo, ModelProviderApiKeyDto, McpToolServerDto } from "./types";
+import type { ToolInfo, ModelProviderDto, McpToolServerDto } from "./types";
 
 interface AgentFormFieldsProps {
   displayName: string;
@@ -26,8 +26,8 @@ interface AgentFormFieldsProps {
   setDescription: (value: string) => void;
   systemPrompt: string;
   setSystemPrompt: (value: string) => void;
-  modelProviderApiKeyId: string;
-  setModelProviderApiKeyId: (value: string) => void;
+  modelProviderId: string;
+  setModelProviderId: (value: string) => void;
   agentType: string;
   setAgentType: (value: string) => void;
   extra: string;
@@ -37,7 +37,7 @@ interface AgentFormFieldsProps {
   toolSearchTerm: string;
   setToolSearchTerm: (value: string) => void;
   filteredTools: ToolInfo[];
-  modelProviderApiKeysQuery: UseQueryResult<ModelProviderApiKeyDto[], Error>;
+  modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   toggleTool: (toolName: string) => void;
@@ -52,7 +52,7 @@ interface AgentFormFieldsProps {
     name?: boolean;
     description?: boolean;
     systemPrompt?: boolean;
-    modelProviderApiKeyId?: boolean;
+    modelProviderId?: boolean;
     agentType?: boolean;
     extra?: boolean;
     tools?: boolean;
@@ -63,7 +63,7 @@ interface AgentFormFieldsProps {
     name?: boolean;
     description?: boolean;
     systemPrompt?: boolean;
-    modelProviderApiKeyId?: boolean;
+    modelProviderId?: boolean;
     agentType?: boolean;
     extra?: boolean;
     tools?: boolean;
@@ -80,8 +80,8 @@ export function AgentFormFields({
   setDescription,
   systemPrompt,
   setSystemPrompt,
-  modelProviderApiKeyId,
-  setModelProviderApiKeyId,
+  modelProviderId,
+  setModelProviderId,
   agentType,
   setAgentType,
   extra,
@@ -90,7 +90,7 @@ export function AgentFormFields({
   toolSearchTerm,
   setToolSearchTerm,
   filteredTools,
-  modelProviderApiKeysQuery,
+  modelProvidersQuery,
   toolsQuery,
   mcpToolServersQuery,
   toggleTool,
@@ -167,8 +167,8 @@ export function AgentFormFields({
       )}
 
       <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}modelProviderApiKeyId`}>
-          Model Provider API Key
+        <Label htmlFor={`${idPrefix}modelProviderId`}>
+          Model Provider
           {agentType === "1" && (
             <span className="text-xs text-muted-foreground ml-2">
               (Optional)
@@ -176,41 +176,40 @@ export function AgentFormFields({
           )}
         </Label>
         <Select
-          value={modelProviderApiKeyId}
-          onValueChange={setModelProviderApiKeyId}
-          disabled={disabledFields.modelProviderApiKeyId}
+          value={modelProviderId}
+          onValueChange={setModelProviderId}
+          disabled={disabledFields.modelProviderId}
         >
           <SelectTrigger
-            id={`${idPrefix}modelProviderApiKeyId`}
+            id={`${idPrefix}modelProviderId`}
             className="w-full"
-            disabled={disabledFields.modelProviderApiKeyId}
+            disabled={disabledFields.modelProviderId}
           >
             <SelectValue
               placeholder={
                 agentType === "1"
-                  ? "Optional: Select an API key..."
-                  : "Select an API key..."
+                  ? "Optional: Select a model provider..."
+                  : "Select a model provider..."
               }
             />
           </SelectTrigger>
           <SelectContent position="popper" sideOffset={4}>
             <SelectGroup>
-              <SelectLabel>Available API Keys</SelectLabel>
-              {modelProviderApiKeysQuery.isLoading ? (
+              <SelectLabel>Available Model Providers</SelectLabel>
+              {modelProvidersQuery.isLoading ? (
                 <SelectItem value="loading" disabled>
                   Loading...
                 </SelectItem>
-              ) : modelProviderApiKeysQuery.data &&
-                modelProviderApiKeysQuery.data.length > 0 ? (
-                modelProviderApiKeysQuery.data.map((key) => (
-                  <SelectItem key={key.id} value={key.id}>
-                    {key.apiKeyName} (Model: {key.modelName}, Provider:{" "}
-                    {key.providerName})
+              ) : modelProvidersQuery.data &&
+                modelProvidersQuery.data.length > 0 ? (
+                modelProvidersQuery.data.map((mp) => (
+                  <SelectItem key={mp.id} value={mp.id}>
+                    {mp.modelName} ({mp.providerName})
                   </SelectItem>
                 ))
               ) : (
-                <SelectItem value="no-keys" disabled>
-                  No API keys available
+                <SelectItem value="no-providers" disabled>
+                  No model providers available
                 </SelectItem>
               )}
             </SelectGroup>

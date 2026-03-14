@@ -34,14 +34,7 @@ export function ModelProviderTable({
   providerNameById,
 }: ModelProviderTableProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Model Providers</CardTitle>
-        <CardDescription>
-          Fetched from <code>/api/model-providers</code>.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+      <div>
         {modelProvidersQuery.isLoading ? (
           <div className="text-sm text-muted-foreground">Loading...</div>
         ) : modelProvidersQuery.isError ? (
@@ -56,8 +49,8 @@ export function ModelProviderTable({
             <Table className="min-w-[960px]">
               <TableHeader className="bg-muted/30">
                 <TableRow>
-                  <TableHead>Model</TableHead>
                   <TableHead>Provider</TableHead>
+                  <TableHead>Model</TableHead>
                   <TableHead className="text-right">Input</TableHead>
                   <TableHead className="text-right">Output</TableHead>
                   <TableHead className="text-right">Cache read</TableHead>
@@ -76,18 +69,18 @@ export function ModelProviderTable({
                     <TableRow key={`${item.modelId}:${item.providerId}`} className="align-top">
                       <TableCell className="min-w-48">
                         <div className="min-w-0">
-                          <div className="truncate">{modelName}</div>
-                          <div className="truncate font-mono text-xs text-muted-foreground">
-                            {item.modelId}
-                          </div>
+                          <div className="truncate">{providerName}</div>
+                          {/* <div className="truncate font-mono text-xs text-muted-foreground">
+                            {item.providerId}
+                          </div> */}
                         </div>
                       </TableCell>
                       <TableCell className="min-w-48">
                         <div className="min-w-0">
-                          <div className="truncate">{providerName}</div>
-                          <div className="truncate font-mono text-xs text-muted-foreground">
-                            {item.providerId}
-                          </div>
+                          <div className="truncate">{modelName}</div>
+                          {/* <div className="truncate font-mono text-xs text-muted-foreground">
+                            {item.modelId}
+                          </div> */}
                         </div>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right font-mono text-xs">
@@ -119,7 +112,6 @@ export function ModelProviderTable({
             </Table>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
   )
 }

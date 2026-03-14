@@ -1504,144 +1504,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/model-provider-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: {
-                    modelProviderId?: string;
-                    enable?: boolean;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["ApiKeyCreateRequest"];
-                    "text/json": components["schemas"]["ApiKeyCreateRequest"];
-                    "application/*+json": components["schemas"]["ApiKeyCreateRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/model-provider-keys/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["ApiKeyUpdateRequest"];
-                    "text/json": components["schemas"]["ApiKeyUpdateRequest"];
-                    "application/*+json": components["schemas"]["ApiKeyUpdateRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        post?: never;
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/model-providers": {
         parameters: {
             query?: never;
@@ -2156,11 +2018,12 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         AgentCreateRequest: {
+            displayName: string;
             name: string;
             description: string;
             systemPrompt: string;
             /** Format: uuid */
-            modelProviderApiKeyId: null | string;
+            modelProviderId: null | string;
             tools?: null | string;
             mcpToolServerIds?: null | string[];
         };
@@ -2203,24 +2066,13 @@ export interface components {
             edges: components["schemas"]["AgentflowEdgeRequest"][];
         };
         AgentUpdateRequest: {
-            name: string;
+            displayName: string;
             description: string;
             systemPrompt: string;
             /** Format: uuid */
-            modelProviderApiKeyId: null | string;
+            modelProviderId: null | string;
             tools?: null | string;
             mcpToolServerIds?: null | string[];
-        };
-        ApiKeyCreateRequest: {
-            /** Format: uuid */
-            modelProviderId: string;
-            apiKey: string;
-            /** @default true */
-            enable: boolean;
-        };
-        ApiKeyUpdateRequest: {
-            apiKey: string;
-            enable: boolean;
         };
         McpToolServerConnectRequest: {
             /** Format: uuid */
@@ -2246,7 +2098,6 @@ export interface components {
         };
         McpToolServerUpdateRequest: {
             name: string;
-            agentIds: null | string[];
             description: null | string;
             transportType: string;
             command: null | string;
@@ -2345,6 +2196,7 @@ export interface components {
         ProjectCreateRequest: {
             name: string;
             description: null | string;
+            workspace: null | string;
             enable: boolean;
             extraSetting: null | string;
         };
@@ -2371,18 +2223,34 @@ export interface components {
         ProjectUpdateRequest: {
             name: string;
             description: null | string;
+            workspace: null | string;
             enable: boolean;
             extraSetting: null | string;
         };
+        ProviderAuthConfigRequest: {
+            authType: components["schemas"]["ProviderAuthType"];
+            apiKey: null | string;
+            envKey: null | string;
+            /** @default true */
+            enable: boolean;
+        };
+        /** @enum {unknown} */
+        ProviderAuthType: "ApiKey" | "EnvVariable";
         ProviderCreateRequest: {
             name: string;
+            providerType: components["schemas"]["ProviderType"];
             description: null | string;
             endpoint: string;
+            authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
         };
+        /** @enum {unknown} */
+        ProviderType: "OpenAI" | "Anthropic";
         ProviderUpdateRequest: {
             name: string;
+            providerType: components["schemas"]["ProviderType"];
             description: null | string;
             endpoint: string;
+            authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
         };
         ReasoningResponsesInput: {
             effort?: null | string;

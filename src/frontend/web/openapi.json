@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:5015/"
+      "url": "http://localhost:5000/"
     }
   ],
   "paths": {
@@ -1314,150 +1314,6 @@
         }
       }
     },
-    "/api/model-provider-keys": {
-      "get": {
-        "tags": [
-          "ModelProviderApiKeys"
-        ],
-        "parameters": [
-          {
-            "name": "modelProviderId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "enable",
-            "in": "query",
-            "schema": {
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "ModelProviderApiKeys"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApiKeyCreateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApiKeyCreateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApiKeyCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/model-provider-keys/{id}": {
-      "get": {
-        "tags": [
-          "ModelProviderApiKeys"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "ModelProviderApiKeys"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApiKeyUpdateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApiKeyUpdateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApiKeyUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "ModelProviderApiKeys"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/model-providers": {
       "get": {
         "tags": [
@@ -1908,13 +1764,17 @@
     "schemas": {
       "AgentCreateRequest": {
         "required": [
+          "displayName",
           "name",
           "description",
           "systemPrompt",
-          "modelProviderApiKeyId"
+          "modelProviderId"
         ],
         "type": "object",
         "properties": {
+          "displayName": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -1924,7 +1784,7 @@
           "systemPrompt": {
             "type": "string"
           },
-          "modelProviderApiKeyId": {
+          "modelProviderId": {
             "type": [
               "null",
               "string"
@@ -2121,14 +1981,14 @@
       },
       "AgentUpdateRequest": {
         "required": [
-          "name",
+          "displayName",
           "description",
           "systemPrompt",
-          "modelProviderApiKeyId"
+          "modelProviderId"
         ],
         "type": "object",
         "properties": {
-          "name": {
+          "displayName": {
             "type": "string"
           },
           "description": {
@@ -2137,7 +1997,7 @@
           "systemPrompt": {
             "type": "string"
           },
-          "modelProviderApiKeyId": {
+          "modelProviderId": {
             "type": [
               "null",
               "string"
@@ -2159,41 +2019,6 @@
               "type": "string",
               "format": "uuid"
             }
-          }
-        }
-      },
-      "ApiKeyCreateRequest": {
-        "required": [
-          "modelProviderId",
-          "apiKey"
-        ],
-        "type": "object",
-        "properties": {
-          "modelProviderId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "apiKey": {
-            "type": "string"
-          },
-          "enable": {
-            "type": "boolean",
-            "default": true
-          }
-        }
-      },
-      "ApiKeyUpdateRequest": {
-        "required": [
-          "apiKey",
-          "enable"
-        ],
-        "type": "object",
-        "properties": {
-          "apiKey": {
-            "type": "string"
-          },
-          "enable": {
-            "type": "boolean"
           }
         }
       },
@@ -2300,7 +2125,6 @@
       "McpToolServerUpdateRequest": {
         "required": [
           "name",
-          "agentIds",
           "description",
           "transportType",
           "command",
@@ -2314,16 +2138,6 @@
         "properties": {
           "name": {
             "type": "string"
-          },
-          "agentIds": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            }
           },
           "description": {
             "type": [
@@ -2753,6 +2567,7 @@
         "required": [
           "name",
           "description",
+          "workspace",
           "enable",
           "extraSetting"
         ],
@@ -2762,6 +2577,12 @@
             "type": "string"
           },
           "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workspace": {
             "type": [
               "null",
               "string"
@@ -2855,6 +2676,7 @@
         "required": [
           "name",
           "description",
+          "workspace",
           "enable",
           "extraSetting"
         ],
@@ -2864,6 +2686,12 @@
             "type": "string"
           },
           "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workspace": {
             "type": [
               "null",
               "string"
@@ -2880,16 +2708,56 @@
           }
         }
       },
+      "ProviderAuthConfigRequest": {
+        "required": [
+          "authType",
+          "apiKey",
+          "envKey"
+        ],
+        "type": "object",
+        "properties": {
+          "authType": {
+            "$ref": "#/components/schemas/ProviderAuthType"
+          },
+          "apiKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "envKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enable": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "ProviderAuthType": {
+        "enum": [
+          "ApiKey",
+          "EnvVariable"
+        ]
+      },
       "ProviderCreateRequest": {
         "required": [
           "name",
+          "providerType",
           "description",
-          "endpoint"
+          "endpoint",
+          "authConfigs"
         ],
         "type": "object",
         "properties": {
           "name": {
             "type": "string"
+          },
+          "providerType": {
+            "$ref": "#/components/schemas/ProviderType"
           },
           "description": {
             "type": [
@@ -2899,19 +2767,39 @@
           },
           "endpoint": {
             "type": "string"
+          },
+          "authConfigs": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ProviderAuthConfigRequest"
+            }
           }
         }
+      },
+      "ProviderType": {
+        "enum": [
+          "OpenAI",
+          "Anthropic"
+        ]
       },
       "ProviderUpdateRequest": {
         "required": [
           "name",
+          "providerType",
           "description",
-          "endpoint"
+          "endpoint",
+          "authConfigs"
         ],
         "type": "object",
         "properties": {
           "name": {
             "type": "string"
+          },
+          "providerType": {
+            "$ref": "#/components/schemas/ProviderType"
           },
           "description": {
             "type": [
@@ -2921,6 +2809,15 @@
           },
           "endpoint": {
             "type": "string"
+          },
+          "authConfigs": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ProviderAuthConfigRequest"
+            }
           }
         }
       },
@@ -3035,9 +2932,6 @@
     },
     {
       "name": "McpToolServers"
-    },
-    {
-      "name": "ModelProviderApiKeys"
     },
     {
       "name": "ModelProviders"

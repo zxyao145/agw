@@ -8,20 +8,20 @@ namespace DSystem.Domain.Services;
 public class AgentDomainService
 {
     private readonly IRepository<Agent> _repository;
-    private readonly IRepository<ModelProviderApiKey> _apiKeyRepository;
+    private readonly IRepository<ModelProvider> _modelProviderRepository;
     private readonly IRepository<McpToolServer> _mcpToolServerRepository;
     private readonly IRepository<AgentMcpToolServer> _agentMcpToolServerRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public AgentDomainService(
         IRepository<Agent> repository,
-        IRepository<ModelProviderApiKey> apiKeyRepository,
+        IRepository<ModelProvider> modelProviderRepository,
         IRepository<McpToolServer> mcpToolServerRepository,
         IRepository<AgentMcpToolServer> agentMcpToolServerRepository,
         IUnitOfWork unitOfWork)
     {
         _repository = repository;
-        _apiKeyRepository = apiKeyRepository;
+        _modelProviderRepository = modelProviderRepository;
         _mcpToolServerRepository = mcpToolServerRepository;
         _agentMcpToolServerRepository = agentMcpToolServerRepository;
         _unitOfWork = unitOfWork;
@@ -29,28 +29,28 @@ public class AgentDomainService
 
     public async Task<Agent?> CreateAsync(Agent agent, IEnumerable<Guid>? mcpToolServerIds, string user)
     {
-        // Validate ModelProviderApiKeyId based on AgentType
+        // Validate ModelProviderId based on AgentType
         if (agent.Type == AgentType.System)
         {
-            // System agents require a valid ModelProviderApiKeyId
-            if (!agent.ModelProviderApiKeyId.HasValue)
+            // System agents require a valid ModelProviderId
+            if (!agent.ModelProviderId.HasValue)
             {
-                throw new InvalidOperationException("System agents must have a ModelProviderApiKeyId.");
+                throw new InvalidOperationException("System agents must have a ModelProviderId.");
             }
 
-            var apiKey = await _apiKeyRepository.GetByIdAsync(agent.ModelProviderApiKeyId.Value);
-            if (apiKey == null)
+            var modelProvider = await _modelProviderRepository.GetByIdAsync(agent.ModelProviderId.Value);
+            if (modelProvider == null)
             {
                 return null;
             }
         }
         else if (agent.Type == AgentType.External)
         {
-            // External agents can have optional ModelProviderApiKeyId
-            if (agent.ModelProviderApiKeyId.HasValue)
+            // External agents can have optional ModelProviderId
+            if (agent.ModelProviderId.HasValue)
             {
-                var apiKey = await _apiKeyRepository.GetByIdAsync(agent.ModelProviderApiKeyId.Value);
-                if (apiKey == null)
+                var modelProvider = await _modelProviderRepository.GetByIdAsync(agent.ModelProviderId.Value);
+                if (modelProvider == null)
                 {
                     return null;
                 }
@@ -78,7 +78,7 @@ public class AgentDomainService
             return null;
         }
 
-        // For External agents, only allow Description, Extra, and ModelProviderApiKeyId to be modified
+        // For External agents, only allow Description, Extra, and ModelProviderId to be modified
         if (existing.Type == AgentType.External)
         {
             // Store original values of non-editable fields
@@ -97,11 +97,11 @@ public class AgentDomainService
             existing.Tools = originalTools;
             existing.Type = originalType;
 
-            // Validate ModelProviderApiKeyId if it was changed
-            if (existing.ModelProviderApiKeyId.HasValue)
+            // Validate ModelProviderId if it was changed
+            if (existing.ModelProviderId.HasValue)
             {
-                var apiKey = await _apiKeyRepository.GetByIdAsync(existing.ModelProviderApiKeyId.Value);
-                if (apiKey == null)
+                var modelProvider = await _modelProviderRepository.GetByIdAsync(existing.ModelProviderId.Value);
+                if (modelProvider == null)
                 {
                     return null;
                 }
@@ -111,16 +111,16 @@ public class AgentDomainService
         {
             updateAction(existing);
 
-            // Validate ModelProviderApiKeyId for System agents (required)
+            // Validate ModelProviderId for System agents (required)
             if (existing.Type == AgentType.System)
             {
-                if (!existing.ModelProviderApiKeyId.HasValue)
+                if (!existing.ModelProviderId.HasValue)
                 {
-                    throw new InvalidOperationException("System agents must have a ModelProviderApiKeyId.");
+                    throw new InvalidOperationException("System agents must have a ModelProviderId.");
                 }
 
-                var apiKey = await _apiKeyRepository.GetByIdAsync(existing.ModelProviderApiKeyId.Value);
-                if (apiKey == null)
+                var modelProvider = await _modelProviderRepository.GetByIdAsync(existing.ModelProviderId.Value);
+                if (modelProvider == null)
                 {
                     return null;
                 }

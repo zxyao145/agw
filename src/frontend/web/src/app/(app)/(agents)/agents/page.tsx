@@ -12,7 +12,7 @@ import type {
   AgentCreateRequest,
   AgentUpdateRequest,
   ToolInfo,
-  ModelProviderApiKeyDto,
+  ModelProviderDto,
   McpToolServerDto,
 } from "./components/types";
 import { getApiErrorMessage } from "./components/utils";
@@ -32,12 +32,12 @@ export default function AgentsPage() {
     },
   });
 
-  const modelProviderApiKeysQuery = useQuery({
-    queryKey: ["modelProviderApiKeys"],
+  const modelProvidersQuery = useQuery({
+    queryKey: ["modelProviders"],
     queryFn: async () => {
       return (await apiGet(
-        "/api/model-provider-keys"
-      )) as unknown as ModelProviderApiKeyDto[];
+        "/api/model-providers"
+      )) as unknown as ModelProviderDto[];
     },
   });
 
@@ -61,7 +61,7 @@ export default function AgentsPage() {
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [systemPrompt, setSystemPrompt] = React.useState("");
-  const [modelProviderApiKeyId, setModelProviderApiKeyId] = React.useState("");
+  const [modelProviderId, setModelProviderId] = React.useState("");
   const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
   const [toolSearchTerm, setToolSearchTerm] = React.useState("");
   const [selectedMcpToolServerIds, setSelectedMcpToolServerIds] = React.useState<string[]>([]);
@@ -76,7 +76,7 @@ export default function AgentsPage() {
   const [editName, setEditName] = React.useState("");
   const [editDescription, setEditDescription] = React.useState("");
   const [editSystemPrompt, setEditSystemPrompt] = React.useState("");
-  const [editModelProviderApiKeyId, setEditModelProviderApiKeyId] =
+  const [editModelProviderId, setEditModelProviderId] =
     React.useState("");
   const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>(
     []
@@ -110,7 +110,7 @@ export default function AgentsPage() {
       setName("");
       setDescription("");
       setSystemPrompt("");
-      setModelProviderApiKeyId("");
+      setModelProviderId("");
       setSelectedTools([]);
       setToolSearchTerm("");
       setSelectedMcpToolServerIds([]);
@@ -172,7 +172,7 @@ export default function AgentsPage() {
     setEditName(agent.name);
     setEditDescription(agent.description);
     setEditSystemPrompt(agent.systemPrompt);
-    setEditModelProviderApiKeyId(agent.modelProviderApiKeyId);
+    setEditModelProviderId(agent.modelProviderId);
     setEditAgentType(agent.type.toString());
     setEditExtra(agent.extra || "");
     try {
@@ -276,7 +276,7 @@ export default function AgentsPage() {
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">Agents</h1>
           <p className="text-sm text-muted-foreground">
-            Manage agents. Creating an agent requires a Model Provider API Key.
+            Manage agents. Creating an agent requires a Model Provider.
           </p>
         </div>
 
@@ -300,8 +300,8 @@ export default function AgentsPage() {
             setDescription={setDescription}
             systemPrompt={systemPrompt}
             setSystemPrompt={setSystemPrompt}
-            modelProviderApiKeyId={modelProviderApiKeyId}
-            setModelProviderApiKeyId={setModelProviderApiKeyId}
+            modelProviderId={modelProviderId}
+            setModelProviderId={setModelProviderId}
             agentType={agentType}
             setAgentType={setAgentType}
             extra={extra}
@@ -311,7 +311,7 @@ export default function AgentsPage() {
             toolSearchTerm={toolSearchTerm}
             setToolSearchTerm={setToolSearchTerm}
             filteredTools={filteredTools}
-            modelProviderApiKeysQuery={modelProviderApiKeysQuery}
+            modelProvidersQuery={modelProvidersQuery}
             toolsQuery={toolsQuery}
             mcpToolServersQuery={mcpToolServersQuery}
             selectedMcpToolServerIds={selectedMcpToolServerIds}
@@ -346,8 +346,8 @@ export default function AgentsPage() {
         setDescription={setEditDescription}
         systemPrompt={editSystemPrompt}
         setSystemPrompt={setEditSystemPrompt}
-        modelProviderApiKeyId={editModelProviderApiKeyId}
-        setModelProviderApiKeyId={setEditModelProviderApiKeyId}
+        modelProviderId={editModelProviderId}
+        setModelProviderId={setEditModelProviderId}
         agentType={editAgentType}
         setAgentType={setEditAgentType}
         extra={editExtra}
@@ -357,7 +357,7 @@ export default function AgentsPage() {
         toolSearchTerm={editToolSearchTerm}
         setToolSearchTerm={setEditToolSearchTerm}
         filteredTools={filteredEditTools}
-        modelProviderApiKeysQuery={modelProviderApiKeysQuery}
+        modelProvidersQuery={modelProvidersQuery}
         toolsQuery={toolsQuery}
         mcpToolServersQuery={mcpToolServersQuery}
         selectedMcpToolServerIds={editSelectedMcpToolServerIds}

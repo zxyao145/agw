@@ -10,6 +10,7 @@ using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using Microsoft.Agents.AI;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
@@ -41,7 +42,6 @@ public class AgentRuntimeService
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;
     private readonly IRepository<Project> _projectRepository;
-    private readonly IRepository<ModelProviderApiKey> _apiKeyRepository;
     private readonly IRepository<ModelProvider> _modelProviderRepository;
     private readonly IRepository<LlmModel> _modelRepository;
     private readonly IRepository<Provider> _providerRepository;
@@ -55,7 +55,6 @@ public class AgentRuntimeService
     public AgentRuntimeService(
         IRepository<Agent> agentRepository,
         IRepository<Project> projectRepository,
-        IRepository<ModelProviderApiKey> apiKeyRepository,
         IRepository<ModelProvider> modelProviderRepository,
         IRepository<LlmModel> modelRepository,
         IRepository<Provider> providerRepository,
@@ -68,7 +67,6 @@ public class AgentRuntimeService
     {
         _agentRepository = agentRepository;
         _projectRepository = projectRepository;
-        _apiKeyRepository = apiKeyRepository;
         _modelProviderRepository = modelProviderRepository;
         _modelRepository = modelRepository;
         _providerRepository = providerRepository;
@@ -150,19 +148,13 @@ public class AgentRuntimeService
 
     private async Task<AIAgent?> CreateDefinitionAgent(Agent agentDefinition, CancellationToken cancellationToken)
     {
-        // External agents may not have a ModelProviderApiKeyId
-        if (!agentDefinition.ModelProviderApiKeyId.HasValue)
+        // External agents may not have a ModelProviderId
+        if (!agentDefinition.ModelProviderId.HasValue)
         {
             return null;
         }
 
-        var apiKey = await _apiKeyRepository.GetByIdAsync(agentDefinition.ModelProviderApiKeyId.Value);
-        if (apiKey == null || !apiKey.Enable)
-        {
-            return null;
-        }
-
-        var modelProvider = await _modelProviderRepository.GetByIdAsync(apiKey.ModelProviderId);
+        var modelProvider = await _modelProviderRepository.GetByIdAsync(agentDefinition.ModelProviderId.Value);
         if (modelProvider == null)
         {
             return null;
@@ -176,18 +168,47 @@ public class AgentRuntimeService
         }
 
         IList<AITool>? tools = await CreateAgentTools(agentDefinition, cancellationToken).ConfigureAwait(false);
-       
+        var authConfigs = modelProvider.Provider!.AuthConfigs
+            .Where(x => x.Enable)
+            .ToList();
+        Random rand = new Random();
+        int index = rand.Next(authConfigs.Count);
+        var authConfig = authConfigs.ElementAt(index);
+
+
         AIAgent? aIAgent = null;
         switch (provider.ProviderType)
         {
             case ProviderType.OpenAI:
                 {
-                    var credential = new ApiKeyCredential(apiKey.ApiKey);
-                    var options = new OpenAIClientOptions
+                    OpenAIClient client;
+                    if (authConfig.AuthType == ProviderAuthType.ApiKey)
                     {
-                        Endpoint = new Uri(provider.Endpoint),
-                    };
-                    OpenAIClient client = new OpenAIClient(credential, options);
+                        var apiKey = authConfig.ApiKey!;
+                        var credential = new ApiKeyCredential(apiKey);
+                        var options = new OpenAIClientOptions
+                        {
+                            Endpoint = new Uri(provider.Endpoint),
+                        };
+                        client = new OpenAIClient(credential, options);
+                    }
+                    else
+                    {
+                        var envVariableName = authConfig.EnvName!;
+                        var apiKeyFromEnv = Environment.GetEnvironmentVariable(envVariableName);
+                        if (string.IsNullOrWhiteSpace(apiKeyFromEnv))
+                        {
+                            _logger.LogError("Environment variable '{EnvName}' is not set or empty.", envVariableName);
+                            return null;
+                        }
+                        var credential = new ApiKeyCredential(apiKeyFromEnv);
+                        var options = new OpenAIClientOptions
+                        {
+                            Endpoint = new Uri(provider.Endpoint),
+                        };
+                        client = new OpenAIClient(credential, options);
+                    }
+
                     var chatCompletionClient = client.GetChatClient(model.Name);
                     aIAgent = chatCompletionClient.AsAIAgent(
                         instructions: agentDefinition.SystemPrompt,
@@ -197,17 +218,39 @@ public class AgentRuntimeService
                         .AsBuilder()
                         .UseOpenTelemetry(sourceName: provider.Name, configure: (cfg) =>
                             cfg.EnableSensitiveData = true)
-                        .Build(); 
+                        .Build();
                     break;
                 }
             case ProviderType.Anthropic:
                 {
-                    var anthropicClientOptions = new Anthropic.Core.ClientOptions
+                    AnthropicClient client;
+                    if (authConfig.AuthType == ProviderAuthType.ApiKey)
                     {
-                        ApiKey = apiKey.ApiKey,
-                        BaseUrl = provider.Endpoint
-                    };
-                    var client = new AnthropicClient(anthropicClientOptions);
+                        var apiKey = authConfig.ApiKey!;
+                        var anthropicClientOptions = new Anthropic.Core.ClientOptions
+                        {
+                            ApiKey = apiKey,
+                            BaseUrl = provider.Endpoint
+                        };
+                        client = new AnthropicClient(anthropicClientOptions);
+                    }
+                    else
+                    {
+                        var envVariableName = authConfig.EnvName!;
+                        var apiKeyFromEnv = Environment.GetEnvironmentVariable(envVariableName);
+                        if (string.IsNullOrWhiteSpace(apiKeyFromEnv))
+                        {
+                            _logger.LogError("Environment variable '{EnvName}' is not set or empty.", envVariableName);
+                            return null;
+                        }
+                        var anthropicClientOptions = new Anthropic.Core.ClientOptions
+                        {
+                            ApiKey = apiKeyFromEnv,
+                            BaseUrl = provider.Endpoint
+                        };
+                        client = new AnthropicClient(anthropicClientOptions);
+                    }
+
                     aIAgent = client.AsAIAgent(
                         model: model.Name,
                         instructions: agentDefinition.SystemPrompt,

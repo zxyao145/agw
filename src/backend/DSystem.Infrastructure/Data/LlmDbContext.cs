@@ -16,7 +16,6 @@ public class LlmDbContext : DbContext
     public DbSet<LlmModel> Models => Set<LlmModel>();
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ModelProvider> ModelProviders => Set<ModelProvider>();
-    public DbSet<ModelProviderApiKey> ModelProviderApiKeys => Set<ModelProviderApiKey>();
     public DbSet<ProviderAuthConfig> ProviderAuthConfigs => Set<ProviderAuthConfig>();
     public DbSet<Agent> Agents => Set<Agent>();
 
@@ -79,22 +78,11 @@ public class LlmDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.AuthType).HasConversion<int>();
             entity.Property(e => e.ApiKey).HasMaxLength(2000);
-            entity.Property(e => e.EnvKey).HasMaxLength(200);
+            entity.Property(e => e.EnvName).HasMaxLength(200);
 
             entity.HasOne(e => e.Provider)
                 .WithMany(p => p.AuthConfigs)
                 .HasForeignKey(e => e.ProviderId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<ModelProviderApiKey>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.ApiKey).IsRequired().HasMaxLength(2000);
-
-            entity.HasOne(e => e.ModelProvider)
-                .WithMany(mp => mp.ApiKeys)
-                .HasForeignKey(e => e.ModelProviderId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -108,10 +96,10 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.SystemPrompt).HasMaxLength(4000);
             entity.Property(e => e.Tools).HasMaxLength(4000);  // JSON array of tool names
 
-            // ModelProviderApiKeyId is optional - required for System agents, optional for External agents
-            entity.HasOne(e => e.ModelProviderApiKey)
-                .WithMany(k => k.Agents)
-                .HasForeignKey(e => e.ModelProviderApiKeyId)
+            // ModelProviderId is optional - required for System agents, optional for External agents
+            entity.HasOne(e => e.ModelProvider)
+                .WithMany(p => p.Agents)
+                .HasForeignKey(e => e.ModelProviderId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .IsRequired(false);
         });

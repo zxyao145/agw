@@ -58,6 +58,10 @@ public class ProvidersController : ControllerBase
             p.Description = request.Description;
             p.Endpoint = request.Endpoint;
 
+            if(p.AuthConfigs == null) 
+            { 
+                p.AuthConfigs = new List<ProviderAuthConfig>();
+            }
             p.AuthConfigs.Clear();
             foreach (var authConfig in BuildAuthConfigs(request.AuthConfigs, user))
             {
@@ -97,7 +101,7 @@ public class ProvidersController : ControllerBase
             {
                 AuthType = request.AuthType,
                 ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-                EnvKey = string.IsNullOrWhiteSpace(envKey) ? null : envKey,
+                EnvName = string.IsNullOrWhiteSpace(envKey) ? null : envKey,
                 Enable = request.Enable,
                 CreateBy = user,
                 CreateTime = now,

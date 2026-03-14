@@ -10,6 +10,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -101,12 +102,12 @@ export function CreateProviderDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create provider</DialogTitle>
-          {/* <DialogDescription>
+          <DialogDescription>
             Uses <code>/api/providers</code>.
-          </DialogDescription> */}
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4">
+        <div className="grid max-h-[calc(100vh-200px)] gap-4 overflow-y-auto pr-2">
           <div className="grid gap-2">
             <Label htmlFor="name">Name</Label>
             <Input

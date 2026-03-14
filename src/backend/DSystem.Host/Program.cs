@@ -100,7 +100,6 @@ try
     builder.Services.AddScoped<ModelDomainService>();
     builder.Services.AddScoped<ProviderDomainService>();
     builder.Services.AddScoped<ModelProviderDomainService>();
-    builder.Services.AddScoped<ModelProviderApiKeyDomainService>();
     builder.Services.AddScoped<McpToolServerDomainService>();
     builder.Services.AddScoped<AgentDomainService>();
     builder.Services.AddScoped<AgentRuntimeService>();

@@ -97,7 +97,7 @@ export function CreateModelProviderDialog({
   return (
     <Dialog open={createOpen} onOpenChange={setCreateOpen}>
       <DialogTrigger asChild>
-        <Button>Create model provider</Button>
+        <Button>Create</Button>
       </DialogTrigger>
 
       <DialogContent className="max-h-[90vh] overflow-y-auto">

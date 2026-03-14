@@ -20,16 +20,13 @@ public class AgentsController : ControllerBase
     private const int MaxRequestBytes = 1024 * 64;
     private readonly AgentDomainService _agentService;
     private readonly AgentRuntimeService _agentRuntimeService;
-    private readonly ModelProviderApiKeyDomainService _apiKeyService;
 
     public AgentsController(
         AgentDomainService agentService,
-        AgentRuntimeService agentRuntimeService,
-        ModelProviderApiKeyDomainService apiKeyService)
+        AgentRuntimeService agentRuntimeService)
     {
         _agentService = agentService;
         _agentRuntimeService = agentRuntimeService;
-        _apiKeyService = apiKeyService;
     }
 
     [HttpGet]
@@ -49,16 +46,6 @@ public class AgentsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] AgentCreateRequest request)
     {
-        // Validate ModelProviderApiKeyId if provided
-        if (request.ModelProviderApiKeyId.HasValue)
-        {
-            var apiKey = await _apiKeyService.GetAsync(request.ModelProviderApiKeyId.Value);
-            if (apiKey == null || !apiKey.Enable)
-            {
-                return BadRequest("Invalid or disabled ModelProviderApiKey.");
-            }
-        }
-
         var user = User?.Identity?.Name ?? "system";
         var agent = new Agent
         {
@@ -66,7 +53,7 @@ public class AgentsController : ControllerBase
             Name = request.Name,
             Description = request.Description,
             SystemPrompt = request.SystemPrompt,
-            ModelProviderApiKeyId = request.ModelProviderApiKeyId,
+            ModelProviderId = request.ModelProviderId,
             Tools = request.Tools
         };
 
@@ -82,23 +69,14 @@ public class AgentsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
     {
-        // Validate ModelProviderApiKeyId if provided
-        if (request.ModelProviderApiKeyId.HasValue)
-        {
-            var apiKey = await _apiKeyService.GetAsync(request.ModelProviderApiKeyId.Value);
-            if (apiKey == null || !apiKey.Enable)
-            {
-                return BadRequest("Invalid or disabled ModelProviderApiKey.");
-            }
-        }
-
+        // Validate ModelProviderId if provided
         var user = User?.Identity?.Name ?? "system";
         var updated = await _agentService.UpdateAsync(id, agent =>
         {
             agent.DisplayName = request.DisplayName;
             agent.Description = request.Description;
             agent.SystemPrompt = request.SystemPrompt;
-            agent.ModelProviderApiKeyId = request.ModelProviderApiKeyId;
+            agent.ModelProviderId = request.ModelProviderId;
             agent.Tools = request.Tools;
         }, request.McpToolServerIds, user);
 

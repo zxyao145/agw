@@ -55,7 +55,6 @@ export function ProviderAuthConfigEditor({
           }
         >
           <Plus className="mr-1 h-4 w-4" />
-          Add
         </Button>
       </div>
 
@@ -115,7 +114,7 @@ export function ProviderAuthConfigEditor({
               </div>
             ) : (
               <div className="grid gap-2">
-                <Label>Environment variable key</Label>
+                <Label>Environment variable Name (get api key from this variable)</Label>
                 <Input
                   value={config.envKey ?? ""}
                   onChange={(e) => updateConfig(index, { envKey: e.target.value })}

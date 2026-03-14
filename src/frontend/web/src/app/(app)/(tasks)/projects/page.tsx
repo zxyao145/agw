@@ -1,21 +1,21 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import Editor from "@monaco-editor/react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import * as React from "react";
+import Link from "next/link";
+import Editor from "@monaco-editor/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client"
-import type { components } from "@/api/openapi"
-import { Button } from "@/components/ui/button"
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
+import type { components } from "@/api/openapi";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -25,172 +25,176 @@ import {
   DialogHeader,
   DialogTitle as UiDialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 type ProjectCreateRequest = components["schemas"]["ProjectCreateRequest"] & {
-  workspace?: string | null
-  extraSetting?: string | null
-}
+  workspace?: string | null;
+  extraSetting?: string | null;
+};
 type ProjectUpdateRequest = components["schemas"]["ProjectUpdateRequest"] & {
-  workspace?: string | null
-  extraSetting?: string | null
-}
+  workspace?: string | null;
+  extraSetting?: string | null;
+};
 
 type ProjectDto = {
-  id: string
-  name: string
-  description: string | null
-  workspace?: string | null
-  enable: boolean
-  extraSetting?: string | null
-  createBy?: string | null
-  createTime?: string | null
-  updateBy?: string | null
-  updateTime?: string | null
-}
+  id: string;
+  name: string;
+  description: string | null;
+  workspace?: string | null;
+  enable: boolean;
+  extraSetting?: string | null;
+  createBy?: string | null;
+  createTime?: string | null;
+  updateBy?: string | null;
+  updateTime?: string | null;
+};
 
 function formatDate(value?: string | null): string {
-  if (!value) return "-"
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
-  return d.toLocaleString()
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
 }
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (typeof error.body === "string" && error.body.trim().length) {
-      return error.body
+      return error.body;
     }
     if (error.body && typeof error.body === "object") {
       try {
-        return JSON.stringify(error.body)
+        return JSON.stringify(error.body);
       } catch {
         // ignore
       }
     }
-    return `${error.status} ${error.statusText}`
+    return `${error.status} ${error.statusText}`;
   }
-  if (error instanceof Error) return error.message
-  return "Unknown error"
+  if (error instanceof Error) return error.message;
+  return "Unknown error";
 }
 
 function isValidJsonPayload(value: string): boolean {
-  const trimmed = value.trim()
-  if (!trimmed.length) return true
+  const trimmed = value.trim();
+  if (!trimmed.length) return true;
   try {
-    JSON.parse(trimmed)
-    return true
+    JSON.parse(trimmed);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
 function normalizeJsonPayload(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed.length ? trimmed : null
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
 }
 
 export default function ProjectsPage() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
     queryFn: async () => {
       // Backend returns entity JSON but OpenAPI doesn't declare response schemas yet.
-      return (await apiGet("/api/projects")) as unknown as ProjectDto[]
+      return (await apiGet("/api/projects")) as unknown as ProjectDto[];
     },
-  })
+  });
 
-  const [createOpen, setCreateOpen] = React.useState(false)
-  const [name, setName] = React.useState("")
-  const [description, setDescription] = React.useState<string>("")
-  const [workspace, setWorkspace] = React.useState<string>("")
-  const [enable, setEnable] = React.useState(true)
-  const [extraSetting, setExtraSetting] = React.useState("{\n  \n}")
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [description, setDescription] = React.useState<string>("");
+  const [workspace, setWorkspace] = React.useState<string>("");
+  const [enable, setEnable] = React.useState(true);
+  const [extraSetting, setExtraSetting] = React.useState("{\n  \n}");
 
   const createProjectMutation = useMutation({
     mutationFn: async (body: ProjectCreateRequest) => {
       // Backend returns 201 Created with body, OpenAPI marks only 200. We treat it as unknown.
-      return await apiPost("/api/projects", { body })
+      return await apiPost("/api/projects", { body });
     },
     onSuccess: async () => {
-      toast.success("Project created")
-      setCreateOpen(false)
-      setName("")
-      setDescription("")
-      setWorkspace("")
-      setEnable(true)
-      setExtraSetting("{\n  \n}")
-      await queryClient.invalidateQueries({ queryKey: ["projects"] })
+      toast.success("Project created");
+      setCreateOpen(false);
+      setName("");
+      setDescription("");
+      setWorkspace("");
+      setEnable(true);
+      setExtraSetting("{\n  \n}");
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (error) => {
-      toast.error(`Create failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Create failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
 
-  const [editOpen, setEditOpen] = React.useState(false)
-  const [editProjectId, setEditProjectId] = React.useState<string | null>(null)
-  const [editName, setEditName] = React.useState("")
-  const [editDescription, setEditDescription] = React.useState<string>("")
-  const [editWorkspace, setEditWorkspace] = React.useState<string>("")
-  const [editEnable, setEditEnable] = React.useState(true)
-  const [editExtraSetting, setEditExtraSetting] = React.useState("{\n  \n}")
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [editProjectId, setEditProjectId] = React.useState<string | null>(null);
+  const [editName, setEditName] = React.useState("");
+  const [editDescription, setEditDescription] = React.useState<string>("");
+  const [editWorkspace, setEditWorkspace] = React.useState<string>("");
+  const [editEnable, setEditEnable] = React.useState(true);
+  const [editExtraSetting, setEditExtraSetting] = React.useState("{\n  \n}");
 
   const openEdit = React.useCallback((project: ProjectDto) => {
-    setEditProjectId(project.id)
-    setEditName(project.name ?? "")
-    setEditDescription(project.description ?? "")
-    setEditWorkspace(project.workspace ?? "")
-    setEditEnable(Boolean(project.enable))
-    setEditExtraSetting(project.extraSetting ?? "{\n  \n}")
-    setEditOpen(true)
-  }, [])
+    setEditProjectId(project.id);
+    setEditName(project.name ?? "");
+    setEditDescription(project.description ?? "");
+    setEditWorkspace(project.workspace ?? "");
+    setEditEnable(Boolean(project.enable));
+    setEditExtraSetting(project.extraSetting ?? "{\n  \n}");
+    setEditOpen(true);
+  }, []);
 
   const updateProjectMutation = useMutation({
     mutationFn: async (args: { id: string; body: ProjectUpdateRequest }) => {
       return await apiPut("/api/projects/{id}", {
         params: { path: { id: args.id } },
         body: args.body,
-      })
+      });
     },
     onSuccess: async () => {
-      toast.success("Project updated")
-      setEditOpen(false)
-      setEditProjectId(null)
-      await queryClient.invalidateQueries({ queryKey: ["projects"] })
+      toast.success("Project updated");
+      setEditOpen(false);
+      setEditProjectId(null);
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (error) => {
-      toast.error(`Update failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Update failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
 
-  const [deleteOpen, setDeleteOpen] = React.useState(false)
-  const [deleteProject, setDeleteProject] = React.useState<ProjectDto | null>(null)
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleteProject, setDeleteProject] = React.useState<ProjectDto | null>(
+    null,
+  );
 
   const openDelete = React.useCallback((project: ProjectDto) => {
-    setDeleteProject(project)
-    setDeleteOpen(true)
-  }, [])
+    setDeleteProject(project);
+    setDeleteOpen(true);
+  }, []);
 
   const deleteProjectMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiDelete("/api/projects/{id}", { params: { path: { id } } } as never)
+      return await apiDelete("/api/projects/{id}", {
+        params: { path: { id } },
+      } as never);
     },
     onSuccess: async () => {
-      toast.success("Project deleted")
-      setDeleteOpen(false)
-      setDeleteProject(null)
-      await queryClient.invalidateQueries({ queryKey: ["projects"] })
+      toast.success("Project deleted");
+      setDeleteOpen(false);
+      setDeleteProject(null);
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (error) => {
-      toast.error(`Delete failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Delete failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
 
-  const projects = projectsQuery.data ?? []
+  const projects = projectsQuery.data ?? [];
 
   return (
     <div className="space-y-6 w-full">
@@ -298,16 +302,18 @@ export default function ProjectsPage() {
                   type="button"
                   onClick={() => {
                     if (!isValidJsonPayload(extraSetting)) {
-                      toast.error("Settings must be valid JSON.")
-                      return
+                      toast.error("Settings must be valid JSON.");
+                      return;
                     }
                     createProjectMutation.mutate({
                       name,
                       description: description.length ? description : null,
-                      workspace: workspace.trim().length ? workspace.trim() : null,
+                      workspace: workspace.trim().length
+                        ? workspace.trim()
+                        : null,
                       enable,
                       extraSetting: normalizeJsonPayload(extraSetting),
-                    })
+                    });
                   }}
                   disabled={!name.trim() || createProjectMutation.isPending}
                 >
@@ -319,88 +325,73 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Projects</CardTitle>
-          <CardDescription>
-            Notes: backend currently filters by <code>Enable</code> in repository
-            queries, so disabled projects may not appear in this list.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {projectsQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">Loading...</div>
-          ) : projectsQuery.isError ? (
-            <div className="text-sm text-destructive">
-              Failed to load projects: {getApiErrorMessage(projectsQuery.error)}
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No projects.</div>
-          ) : (
-            <div className="space-y-3">
-              {projects.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:justify-between"
-                >
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <Link
-                        href={`/projects/${p.id}`}
-                        className="truncate font-medium underline-offset-4 hover:underline"
-                      >
-                        {p.name}
-                      </Link>
-                      <span
-                        className={
-                          p.enable
-                            ? "rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300"
-                            : "rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                        }
-                      >
-                        {p.enable ? "Enabled" : "Disabled"}
-                      </span>
-                    </div>
-
-                    {p.description ? (
-                      <div className="text-sm text-muted-foreground">
-                        {p.description}
-                      </div>
-                    ) : null}
-
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-mono">{p.id}</span>
-                      <span className="mx-2">·</span>
-                      Updated: {formatDate(p.updateTime ?? p.createTime)}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 sm:justify-end">
-                    <Button asChild variant="outline" size="sm">
-                      <Link href={`/projects/${p.id}`}>View</Link>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEdit(p)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => openDelete(p)}
-                      disabled={deleteProjectMutation.isPending}
-                    >
-                      Delete
-                    </Button>
-                  </div>
+      {projectsQuery.isLoading ? (
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      ) : projectsQuery.isError ? (
+        <div className="text-sm text-destructive">
+          Failed to load projects: {getApiErrorMessage(projectsQuery.error)}
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="text-sm text-muted-foreground">No projects.</div>
+      ) : (
+        <div className="space-y-3">
+          {projects.map((p) => (
+            <div
+              key={p.id}
+              className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div className="min-w-0 space-y-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="truncate font-medium underline-offset-4 hover:underline"
+                  >
+                    {p.name}
+                  </Link>
+                  <span
+                    className={
+                      p.enable
+                        ? "rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300"
+                        : "rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                    }
+                  >
+                    {p.enable ? "Enabled" : "Disabled"}
+                  </span>
                 </div>
-              ))}
+
+                {p.description ? (
+                  <div className="text-sm text-muted-foreground">
+                    {p.description}
+                  </div>
+                ) : null}
+
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-mono">{p.id}</span>
+                  <span className="mx-2">·</span>
+                  Updated: {formatDate(p.updateTime ?? p.createTime)}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 sm:justify-end">
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/projects/${p.id}`}>View</Link>
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => openEdit(p)}>
+                  Edit
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => openDelete(p)}
+                  disabled={deleteProjectMutation.isPending}
+                >
+                  Delete
+                </Button>
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
@@ -479,21 +470,25 @@ export default function ProjectsPage() {
             <Button
               type="button"
               onClick={() => {
-                if (!editProjectId) return
+                if (!editProjectId) return;
                 if (!isValidJsonPayload(editExtraSetting)) {
-                  toast.error("Settings must be valid JSON.")
-                  return
+                  toast.error("Settings must be valid JSON.");
+                  return;
                 }
                 updateProjectMutation.mutate({
                   id: editProjectId,
                   body: {
                     name: editName,
-                    description: editDescription.length ? editDescription : null,
-                    workspace: editWorkspace.trim().length ? editWorkspace.trim() : null,
+                    description: editDescription.length
+                      ? editDescription
+                      : null,
+                    workspace: editWorkspace.trim().length
+                      ? editWorkspace.trim()
+                      : null,
                     enable: editEnable,
                     extraSetting: normalizeJsonPayload(editExtraSetting),
                   },
-                })
+                });
               }}
               disabled={
                 !editProjectId ||
@@ -534,8 +529,8 @@ export default function ProjectsPage() {
               type="button"
               variant="destructive"
               onClick={() => {
-                if (!deleteProject) return
-                deleteProjectMutation.mutate(deleteProject.id)
+                if (!deleteProject) return;
+                deleteProjectMutation.mutate(deleteProject.id);
               }}
               disabled={!deleteProject || deleteProjectMutation.isPending}
             >
@@ -545,5 +540,5 @@ export default function ProjectsPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

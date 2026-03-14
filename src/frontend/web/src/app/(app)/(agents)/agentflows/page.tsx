@@ -331,7 +331,7 @@ export default function AgentflowsPage() {
             className="cursor-pointer"
             onClick={() => setVisualOpen(true)}
           >
-            Create Agentflow
+            Create
           </Button>
 
           <VisualAgentflowDialog
@@ -345,23 +345,19 @@ export default function AgentflowsPage() {
         </div>
       </div>
 
-      <Card>
-        <CardContent>
-          <AgentflowsTable
-            agentflows={agentflowsQuery.data || []}
-            isLoading={agentflowsQuery.isLoading}
-            isError={agentflowsQuery.isError}
-            error={agentflowsQuery.error}
-            updateMutation={updateAgentflowMutation}
-            deleteMutation={deleteAgentflowMutation}
-            onToggleEnabled={handleToggleEnabled}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onExecute={handleExecute}
-            onViewMermaid={handleViewMermaid}
-          />
-        </CardContent>
-      </Card>
+      <AgentflowsTable
+        agentflows={agentflowsQuery.data || []}
+        isLoading={agentflowsQuery.isLoading}
+        isError={agentflowsQuery.isError}
+        error={agentflowsQuery.error}
+        updateMutation={updateAgentflowMutation}
+        deleteMutation={deleteAgentflowMutation}
+        onToggleEnabled={handleToggleEnabled}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onExecute={handleExecute}
+        onViewMermaid={handleViewMermaid}
+      />
 
       <ExecuteAgentflowDrawer
         open={executeOpen}
@@ -371,9 +367,9 @@ export default function AgentflowsPage() {
 
       <Dialog open={mermaidOpen} onOpenChange={setMermaidOpen}>
         <DialogContent
-         className="p-4 gap-4 w-[70vw] sm:max-w-[70vw] h-[70vh] sm:max-h-[80vh] flex flex-col"
-         showCloseButton={false}
-         >
+          className="p-4 gap-4 w-[70vw] sm:max-w-[70vw] h-[70vh] sm:max-h-[80vh] flex flex-col"
+          showCloseButton={false}
+        >
           <DialogHeader className="gap-0 flex flex-row align-center justify-between">
             <DialogTitle className="flex items-center">
               Mermaid Chart
@@ -404,7 +400,10 @@ export default function AgentflowsPage() {
                   <Copy />
                 </Button>
                 {normalizedMermaidText ? (
-                  <div className="px-4 flex justify-center items-center h-full" ref={mermaidContainerRef} />
+                  <div
+                    className="px-4 flex justify-center items-center h-full"
+                    ref={mermaidContainerRef}
+                  />
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     No Mermaid content returned.

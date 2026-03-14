@@ -16,9 +16,9 @@ public class Agent : BaseEntity
     public string SystemPrompt { get; set; } = string.Empty;
 
     /// <summary>
-    /// Model Provider API Key ID. Required for System agents, optional for External agents.
+    /// Model Provider ID. Required for System agents, optional for External agents.
     /// </summary>
-    public Guid? ModelProviderApiKeyId { get; set; }
+    public Guid? ModelProviderId { get; set; }
 
     public string? Tools { get; set; }  // JSON array of tool method names
     public AgentType Type { get; set; } = AgentType.System;
@@ -28,7 +28,7 @@ public class Agent : BaseEntity
     /// </summary>
     public string? Extra { get; set; }
 
-    public ModelProviderApiKey? ModelProviderApiKey { get; set; }
+    public ModelProvider? ModelProvider { get; set; }
 
     public ICollection<AgentflowNode> Agentflows { get; set; } = new List<AgentflowNode>();
     public ICollection<AgentMcpToolServer> AgentMcpToolServers { get; set; } = new List<AgentMcpToolServer>();

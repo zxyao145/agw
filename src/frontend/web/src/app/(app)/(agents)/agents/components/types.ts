@@ -6,7 +6,7 @@ export interface AgentCreateRequest {
   name: string;
   description: string;
   systemPrompt: string;
-  modelProviderApiKeyId: string | null;
+  modelProviderId: string | null;
   tools?: string | null;
   mcpToolServerIds?: string[] | null;
 }
@@ -15,7 +15,7 @@ export interface AgentUpdateRequest {
   displayName: string;
   description: string;
   systemPrompt: string;
-  modelProviderApiKeyId: string | null;
+  modelProviderId: string | null;
   tools?: string | null;
   mcpToolServerIds?: string[] | null;
 }
@@ -33,10 +33,8 @@ export type ToolInfo = {
   }>;
 };
 
-export type ModelProviderApiKeyDto = {
+export type ModelProviderDto = {
   id: string;
-  apiKeyName: string;
-  modelProviderId: string;
   modelId: string;
   providerId: string;
   providerName: string;

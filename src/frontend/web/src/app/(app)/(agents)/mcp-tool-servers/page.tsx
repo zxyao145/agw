@@ -43,6 +43,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 import { getApiErrorMessage } from "../agents/components/utils";
+import { StaticTable } from "@/components/static-table";
+import { Empty } from "@/components/ui/empty";
 
 type McpToolServerDto = {
   id: string;
@@ -64,9 +66,9 @@ type McpConnectResponse = {
   tools: McpToolItem[];
 };
 
-type McpToolItem ={
+type McpToolItem = {
   name: string;
-}
+};
 
 type McpToolServerRequest = {
   name: string;
@@ -107,7 +109,9 @@ const defaultForm: FormState = {
   enabled: true,
 };
 
-function normalizeTransportType(value: string | null | undefined): "stdio" | "http" {
+function normalizeTransportType(
+  value: string | null | undefined,
+): "stdio" | "http" {
   return value?.trim().toLowerCase() === "http" ? "http" : "stdio";
 }
 
@@ -175,7 +179,9 @@ export default function McpToolServersPage() {
   const [createForm, setCreateForm] = React.useState<FormState>(defaultForm);
   const [editForm, setEditForm] = React.useState<FormState>(defaultForm);
   const [editing, setEditing] = React.useState<McpToolServerDto | null>(null);
-  const [toolsCount, setToolsCount] = React.useState<Record<string, number>>({});
+  const [toolsCount, setToolsCount] = React.useState<Record<string, number>>(
+    {},
+  );
 
   const mcpToolServersQuery = useQuery({
     queryKey: ["mcpToolServers"],
@@ -351,110 +357,105 @@ export default function McpToolServersPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>MCP Tool Servers</CardTitle>
-          <CardDescription>
-            Fetched from <code>/api/mcp-tool-servers</code>.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {mcpToolServersQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">Loading...</div>
-          ) : mcpToolServersQuery.isError ? (
-            <div className="text-sm text-destructive">
-              Failed to load servers:{" "}
-              {getApiErrorMessage(mcpToolServersQuery.error)}
-            </div>
-          ) : (mcpToolServersQuery.data?.length ?? 0) > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Transport</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Enabled</TableHead>
-                  <TableHead className="w-52 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mcpToolServersQuery.data?.map((server) => (
-                  <TableRow key={server.id}>
-                    <TableCell>
-                      <div className="font-medium">{server.name}</div>
-                      <div className="text-xs text-muted-foreground truncate max-w-xs">
-                        {server.description || "-"}
-                      </div>
-                      {toolsCount[server.id] !== undefined && (
-                        <div className="text-xs text-green-600">
-                          {toolsCount[server.id]} tools available
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="uppercase text-xs">
-                      {server.transportType}
-                    </TableCell>
-                    <TableCell className="max-w-sm truncate font-mono text-xs">
-                      {server.transportType === "stdio"
-                        ? server.command || "-"
-                        : server.url || "-"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        <Switch
-                          checked={server.enabled}
-                          onCheckedChange={(checked) =>
-                            onToggleEnabled(server, checked)
-                          }
-                          disabled={updateMutation.isPending}
-                          aria-label={`${server.name} enabled`}
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="cursor-pointer" 
-                          onClick={() => connectMutation.mutate(server.id)}
-                          disabled={connectMutation.isPending}
-                          title="Connect and list tools"
-                        >
-                          <Link2 className="h-4 w-4" />
-                          {/* <Cable className="h-4 w-4" /> */}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onEdit(server)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => onDelete(server)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
+      {mcpToolServersQuery.isLoading ? (
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      ) : mcpToolServersQuery.isError ? (
+        <div className="text-sm text-destructive">
+          Failed to load servers:{" "}
+          {getApiErrorMessage(mcpToolServersQuery.error)}
+        </div>
+      ) : (
+        <StaticTable
+          isEmpty={
+            mcpToolServersQuery.data === undefined ||
+            mcpToolServersQuery.data.length === 0
+          }
+        >
+          <Empty>
             <div className="text-sm text-muted-foreground">
               No MCP tool servers found. Create one to get started.
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </Empty>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead>Transport</TableHead>
+              <TableHead>Target</TableHead>
+              <TableHead>Enabled</TableHead>
+              <TableHead className="w-52 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {mcpToolServersQuery.data?.map((server) => (
+              <TableRow key={server.id}>
+                <TableCell>
+                  <div className="font-medium">{server.name}</div>
+                  {toolsCount[server.id] !== undefined && (
+                    <div className="text-xs text-green-600 max-w-xs">
+                      {toolsCount[server.id]} tools available
+                    </div>
+                  )}
+                </TableCell>
+                <TableCell>{server.description || "-"}</TableCell>
+                <TableCell className="uppercase text-xs">
+                  {server.transportType}
+                </TableCell>
+                <TableCell className="max-w-sm truncate font-mono text-xs">
+                  {server.transportType === "stdio"
+                    ? server.command || "-"
+                    : server.url || "-"}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center">
+                    <Switch
+                      checked={server.enabled}
+                      onCheckedChange={(checked) =>
+                        onToggleEnabled(server, checked)
+                      }
+                      disabled={updateMutation.isPending}
+                      aria-label={`${server.name} enabled`}
+                    />
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="cursor-pointer"
+                      onClick={() => connectMutation.mutate(server.id)}
+                      disabled={connectMutation.isPending}
+                      title="Connect and list tools"
+                    >
+                      <Link2 className="h-4 w-4" />
+                      {/* <Cable className="h-4 w-4" /> */}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onEdit(server)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => onDelete(server)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </StaticTable>
+      )}
 
       <McpToolServerDialog
         mode="create"
@@ -578,7 +579,10 @@ function McpToolServerDialog({
                   id={`${mode}-command`}
                   value={form.command}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, command: event.target.value }))
+                    setForm((prev) => ({
+                      ...prev,
+                      command: event.target.value,
+                    }))
                   }
                   placeholder="npx"
                 />

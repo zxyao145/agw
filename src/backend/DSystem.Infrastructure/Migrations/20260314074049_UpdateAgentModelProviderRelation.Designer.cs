@@ -3,6 +3,7 @@ using System;
 using DSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(LlmDbContext))]
-    partial class LlmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260314074049_UpdateAgentModelProviderRelation")]
+    partial class UpdateAgentModelProviderRelation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");
@@ -463,6 +466,51 @@ namespace DSystem.Infrastructure.Migrations
                         .HasDatabaseName("ix_model_providers_provider_id");
 
                     b.ToTable("model_providers", (string)null);
+                });
+
+            modelBuilder.Entity("DSystem.Domain.Entities.ModelProviderApiKey", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ApiKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("api_key");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<bool>("Enable")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enable");
+
+                    b.Property<Guid>("ModelProviderId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("model_provider_id");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTime?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_model_provider_api_keys");
+
+                    b.HasIndex("ModelProviderId")
+                        .HasDatabaseName("ix_model_provider_api_keys_model_provider_id");
+
+                    b.ToTable("model_provider_api_keys", (string)null);
                 });
 
             modelBuilder.Entity("DSystem.Domain.Entities.Project", b =>
@@ -937,6 +985,18 @@ namespace DSystem.Infrastructure.Migrations
                     b.Navigation("Model");
 
                     b.Navigation("Provider");
+                });
+
+            modelBuilder.Entity("DSystem.Domain.Entities.ModelProviderApiKey", b =>
+                {
+                    b.HasOne("DSystem.Domain.Entities.ModelProvider", "ModelProvider")
+                        .WithMany()
+                        .HasForeignKey("ModelProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_model_provider_api_keys_model_providers_model_provider_id");
+
+                    b.Navigation("ModelProvider");
                 });
 
             modelBuilder.Entity("DSystem.Domain.Entities.ProjectLease", b =>

@@ -9,7 +9,7 @@ public record AgentCreateRequest(
     string Name,
     string Description,
     string SystemPrompt,
-    Guid? ModelProviderApiKeyId,
+    Guid? ModelProviderId,
     string? Tools = null,  // JSON array of tool names
     List<Guid>? McpToolServerIds = null);
 
@@ -17,7 +17,7 @@ public record AgentUpdateRequest(
     string DisplayName,
     string Description,
     string SystemPrompt,
-    Guid? ModelProviderApiKeyId,
+    Guid? ModelProviderId,
     string? Tools = null,  // JSON array of tool names
     List<Guid>? McpToolServerIds = null);
 

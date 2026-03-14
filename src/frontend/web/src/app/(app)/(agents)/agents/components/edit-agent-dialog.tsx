@@ -15,7 +15,7 @@ import type {
   AgentDto,
   AgentUpdateRequest,
   ToolInfo,
-  ModelProviderApiKeyDto,
+  ModelProviderDto,
   McpToolServerDto,
 } from "./types";
 
@@ -31,8 +31,8 @@ interface EditAgentDialogProps {
   setDescription: (value: string) => void;
   systemPrompt: string;
   setSystemPrompt: (value: string) => void;
-  modelProviderApiKeyId: string;
-  setModelProviderApiKeyId: (value: string) => void;
+  modelProviderId: string;
+  setModelProviderId: (value: string) => void;
   agentType: string;
   setAgentType: (value: string) => void;
   extra: string;
@@ -42,7 +42,7 @@ interface EditAgentDialogProps {
   toolSearchTerm: string;
   setToolSearchTerm: (value: string) => void;
   filteredTools: ToolInfo[];
-  modelProviderApiKeysQuery: UseQueryResult<ModelProviderApiKeyDto[], Error>;
+  modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
@@ -71,8 +71,8 @@ export function EditAgentDialog({
   setDescription,
   systemPrompt,
   setSystemPrompt,
-  modelProviderApiKeyId,
-  setModelProviderApiKeyId,
+  modelProviderId,
+  setModelProviderId,
   agentType,
   setAgentType,
   extra,
@@ -82,7 +82,7 @@ export function EditAgentDialog({
   toolSearchTerm,
   setToolSearchTerm,
   filteredTools,
-  modelProviderApiKeysQuery,
+  modelProvidersQuery,
   toolsQuery,
   mcpToolServersQuery,
   selectedMcpToolServerIds,
@@ -110,8 +110,8 @@ export function EditAgentDialog({
           setDescription={setDescription}
           systemPrompt={systemPrompt}
           setSystemPrompt={setSystemPrompt}
-          modelProviderApiKeyId={modelProviderApiKeyId}
-          setModelProviderApiKeyId={setModelProviderApiKeyId}
+          modelProviderId={modelProviderId}
+          setModelProviderId={setModelProviderId}
           agentType={agentType}
           setAgentType={setAgentType}
           extra={extra}
@@ -121,7 +121,7 @@ export function EditAgentDialog({
           toolSearchTerm={toolSearchTerm}
           setToolSearchTerm={setToolSearchTerm}
           filteredTools={filteredTools}
-          modelProviderApiKeysQuery={modelProviderApiKeysQuery}
+          modelProvidersQuery={modelProvidersQuery}
           toolsQuery={toolsQuery}
           mcpToolServersQuery={mcpToolServersQuery}
           toggleTool={toggleTool}
@@ -173,7 +173,7 @@ export function EditAgentDialog({
                     displayName,
                     description,
                     systemPrompt,
-                    modelProviderApiKeyId,
+                    modelProviderId,
                     tools:
                       selectedTools.length > 0
                         ? JSON.stringify(selectedTools)
@@ -188,7 +188,7 @@ export function EditAgentDialog({
             }}
             disabled={
               !displayName.trim() ||
-              (agentType === "0" && !modelProviderApiKeyId?.trim()) ||
+              (agentType === "0" && !modelProviderId?.trim()) ||
               updateAgentMutation.isPending
             }
           >

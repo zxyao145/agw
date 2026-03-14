@@ -10,7 +10,7 @@ export interface AgentDto extends BaseDto {
   displayName: string;
   name: string;
   systemPrompt: string;
-  modelProviderApiKeyId: string;
+  modelProviderId: string;
 
   description: string;
   tools?: string | null;

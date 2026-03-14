@@ -66,7 +66,7 @@ public class ClaudeCodeAgentDbSeeder
         var claudeCodeOptions = new ClaudeCodeAIAgentOptions();
         var extraJson = JsonUtil.Serialize(claudeCodeOptions);
 
-        // External agents don't require a ModelProviderApiKey
+        // External agents don't require a ModelProvider
         var claudeCodeAgent = new Agent
         {
             Id = Guid.NewGuid(),
@@ -75,7 +75,7 @@ public class ClaudeCodeAgentDbSeeder
             SystemPrompt = string.Empty,
             Type = AgentType.External,
             Extra = extraJson,
-            ModelProviderApiKeyId = null,  // External agents can have null ModelProviderApiKeyId
+            ModelProviderId = null,  // External agents can have null ModelProviderId
             Tools = null,
             CreateTime = DateTime.UtcNow,
             UpdateTime = DateTime.UtcNow

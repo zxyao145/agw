@@ -10,6 +10,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -55,10 +56,13 @@ export function EditProviderDialog({
   const queryClient = useQueryClient();
 
   const [name, setName] = React.useState("");
-  const [providerType, setProviderType] = React.useState<ProviderType>("OpenAI");
+  const [providerType, setProviderType] =
+    React.useState<ProviderType>("OpenAI");
   const [description, setDescription] = React.useState("");
   const [endpoint, setEndpoint] = React.useState("");
-  const [authConfigs, setAuthConfigs] = React.useState<ProviderAuthConfigRequest[]>([]);
+  const [authConfigs, setAuthConfigs] = React.useState<
+    ProviderAuthConfigRequest[]
+  >([]);
 
   React.useEffect(() => {
     if (!provider || !open) {
@@ -113,26 +117,31 @@ export function EditProviderDialog({
       authConfigs: authConfigs.map((config) => ({
         ...config,
         apiKey:
-          config.authType === "ApiKey" ? (config.apiKey?.trim() || null) : null,
+          config.authType === "ApiKey" ? config.apiKey?.trim() || null : null,
         envKey:
           config.authType === "EnvVariable"
-            ? (config.envKey?.trim() || null)
+            ? config.envKey?.trim() || null
             : null,
       })),
     });
   };
 
   const isDisabled =
-    !provider || !name.trim() || !endpoint.trim() || updateProviderMutation.isPending;
+    !provider ||
+    !name.trim() ||
+    !endpoint.trim() ||
+    updateProviderMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit provider</DialogTitle>
+          <DialogDescription>
+            Uses <code>/api/providers</code>.
+          </DialogDescription>
         </DialogHeader>
-
-        <div className="grid gap-4">
+        <div className="grid max-h-[calc(100vh-200px)] gap-4 overflow-y-auto pr-2">
           <div className="grid gap-2">
             <Label htmlFor="edit-name">Name</Label>
             <Input
@@ -182,7 +191,10 @@ export function EditProviderDialog({
             />
           </div>
 
-          <ProviderAuthConfigEditor value={authConfigs} onChange={setAuthConfigs} />
+          <ProviderAuthConfigEditor
+            value={authConfigs}
+            onChange={setAuthConfigs}
+          />
         </div>
 
         <DialogFooter>

@@ -15,7 +15,7 @@ import { AgentFormFields } from "./agent-form-fields";
 import type {
   AgentCreateRequest,
   ToolInfo,
-  ModelProviderApiKeyDto,
+  ModelProviderDto,
   McpToolServerDto,
 } from "./types";
 
@@ -30,8 +30,8 @@ interface CreateAgentDialogProps {
   setDescription: (value: string) => void;
   systemPrompt: string;
   setSystemPrompt: (value: string) => void;
-  modelProviderApiKeyId: string;
-  setModelProviderApiKeyId: (value: string) => void;
+  modelProviderId: string;
+  setModelProviderId: (value: string) => void;
   agentType: string;
   setAgentType: (value: string) => void;
   extra: string;
@@ -41,7 +41,7 @@ interface CreateAgentDialogProps {
   toolSearchTerm: string;
   setToolSearchTerm: (value: string) => void;
   filteredTools: ToolInfo[];
-  modelProviderApiKeysQuery: UseQueryResult<ModelProviderApiKeyDto[], Error>;
+  modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
@@ -64,8 +64,8 @@ export function CreateAgentDialog({
   setDescription,
   systemPrompt,
   setSystemPrompt,
-  modelProviderApiKeyId,
-  setModelProviderApiKeyId,
+  modelProviderId,
+  setModelProviderId,
   agentType,
   setAgentType,
   extra,
@@ -75,7 +75,7 @@ export function CreateAgentDialog({
   toolSearchTerm,
   setToolSearchTerm,
   filteredTools,
-  modelProviderApiKeysQuery,
+  modelProvidersQuery,
   toolsQuery,
   mcpToolServersQuery,
   selectedMcpToolServerIds,
@@ -89,7 +89,7 @@ export function CreateAgentDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Create agent</Button>
+        <Button>Create</Button>
       </DialogTrigger>
 
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
@@ -109,8 +109,8 @@ export function CreateAgentDialog({
           setDescription={setDescription}
           systemPrompt={systemPrompt}
           setSystemPrompt={setSystemPrompt}
-          modelProviderApiKeyId={modelProviderApiKeyId}
-          setModelProviderApiKeyId={setModelProviderApiKeyId}
+          modelProviderId={modelProviderId}
+          setModelProviderId={setModelProviderId}
           agentType={agentType}
           setAgentType={setAgentType}
           extra={extra}
@@ -120,7 +120,7 @@ export function CreateAgentDialog({
           toolSearchTerm={toolSearchTerm}
           setToolSearchTerm={setToolSearchTerm}
           filteredTools={filteredTools}
-          modelProviderApiKeysQuery={modelProviderApiKeysQuery}
+          modelProvidersQuery={modelProvidersQuery}
           toolsQuery={toolsQuery}
           mcpToolServersQuery={mcpToolServersQuery}
           toggleTool={toggleTool}
@@ -145,7 +145,7 @@ export function CreateAgentDialog({
                 name: name.trim(),
                 description,
                 systemPrompt,
-                modelProviderApiKeyId,
+                modelProviderId,
                 tools:
                   selectedTools.length > 0
                     ? JSON.stringify(selectedTools)
@@ -158,7 +158,7 @@ export function CreateAgentDialog({
             }
             disabled={
               !displayName.trim() ||
-              (agentType === "0" && !modelProviderApiKeyId?.trim()) ||
+              (agentType === "0" && !modelProviderId?.trim()) ||
               createAgentMutation.isPending
             }
           >
