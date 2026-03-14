@@ -44,22 +44,11 @@ public class A2AAgentService
         return agentCards;
     }
 
-    public async Task<AgentCard?> GetAgentCardAsync(string agentId)
+    public async Task<AgentCard?> GetAgentCardAsync(string agentName)
     {
         // Try to parse as GUID first
-        Agent? agent;
-        if (Guid.TryParse(agentId, out var guid))
-        {
-            agent = await _agentRepository.GetByIdAsync(guid);
-        }
-        else
-        {
-            // Treat as agent name
-            agent = (await _agentRepository
-                .ListAsync(a => a.Name.Equals(agentId, StringComparison.OrdinalIgnoreCase))
-                ).FirstOrDefault();
-        }
-
+        Agent? agent = await _agentRepository
+                .SingleOrDefaultAsync(a => a.Name == agentName);
         if (agent == null)
         {
             return null;

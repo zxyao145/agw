@@ -2,18 +2,15 @@ using A2A;
 using DSystem.Appliaction.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using System;
+using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 
 namespace DSystem.A2A;
 
 public class TaskManagerFactory
 {
     private readonly IServiceProvider _sp;
-
+    private readonly ILogger<TaskManagerFactory> _logger;
     private readonly HttpClient? _callbackHttpClient = null;
     private readonly ITaskStore? _taskStore = null;
 
@@ -26,34 +23,35 @@ public class TaskManagerFactory
         this._callbackHttpClient = callbackHttpClient;
         this._taskStore = taskStore;
         this._sp = sp;
+        _logger = this._sp.GetRequiredService<ILoggerFactory>().CreateLogger<TaskManagerFactory>();
     }
 
     public async Task<ITaskManager> GetTaskManager(HttpRequest request)
     {
         //var content = request.HttpContext;
-        var id = request.RouteValues["agentId"]?.ToString() ?? null;
-        if (string.IsNullOrWhiteSpace(id))
+        var agentName = request.RouteValues["agentName"]?.ToString() ?? null;
+        if (string.IsNullOrWhiteSpace(agentName))
         {
             throw new BadHttpRequestException("agent id cannot be null or whiteSpace");
         }
 
-        var taskManager = await GetTaskManager(id);
+        var taskManager = await GetTaskManager(agentName);
         return taskManager;
     }
 
 
-    public async Task<ITaskManager> GetTaskManager(string agentId)
+    public async Task<ITaskManager> GetTaskManager(string agentName)
     {
-        if (_taskManagers.ContainsKey(agentId))
+        if (_taskManagers.ContainsKey(agentName))
         {
-            return _taskManagers[agentId];
+            return _taskManagers[agentName];
         }
         var taskManager = new TaskManager(_callbackHttpClient, _taskStore);
         taskManager.OnMessageReceived =
             async (MessageSendParams messageSendParams, CancellationToken cancellationToken)
             =>
             {
-                var msg = await ProcessMessageAsync(agentId, messageSendParams, cancellationToken)
+                var msg = await ProcessMessageAsync(agentName, messageSendParams, cancellationToken)
                 .ConfigureAwait(false);
                 return msg;
             };
@@ -63,21 +61,21 @@ public class TaskManagerFactory
                 using var scope = _sp.CreateScope();
                 var sp = scope.ServiceProvider;
                 var a2aAgentService = sp.GetRequiredService<A2AAgentService>();
-                var agentCard = await a2aAgentService.GetAgentCardAsync(agentId);
+                var agentCard = await a2aAgentService.GetAgentCardAsync(agentName);
                 if (agentCard == null)
                 {
                     throw new BadHttpRequestException("agent not found");
                 }
                 return agentCard;
             };
-        return _taskManagers.GetOrAdd(agentId, taskManager);
+        return _taskManagers.GetOrAdd(agentName, taskManager);
     }
 
     /// <summary>
     /// Processes incoming messages and executes CLI commands safely.
     /// </summary>
     private async Task<A2AResponse> ProcessMessageAsync(
-        string agentId,
+        string agentName,
         MessageSendParams messageSendParams,
         CancellationToken cancellationToken)
     {
@@ -95,13 +93,13 @@ public class TaskManagerFactory
             ?.Text
             ?? string.Empty;
 
-        Console.WriteLine($"[CLI Agent] Received command: {userText}");
+        _logger.LogInformation($"[CLI Agent] Received command: {userText}");
 
 
         try
         {
             var agentExecutionResult = await agentRunService
-                .ExecuteAsync(Guid.Parse(agentId), "", userText);
+                .ExecuteByNameAsync(agentName, "", userText);
 
             AgentMessage responseMessage;
             if (agentExecutionResult == null)
@@ -134,7 +132,8 @@ public class TaskManagerFactory
                 };
             }
 
-            Console.WriteLine($"[CLI Agent] Command executed successfully");
+            _logger.LogInformation($"[CLI Agent] Command executed successfully");
+            _logger.LogDebug($"[CLI Agent] Command executed response:{responseMessage}", responseMessage);
             return responseMessage;
         }
         catch (Exception ex)
@@ -149,7 +148,7 @@ public class TaskManagerFactory
                 Parts = [new TextPart { Text = errorText }]
             };
 
-            Console.WriteLine($"[CLI Agent] Error: {ex.Message}");
+            _logger.LogError(ex, $"[CLI Agent] Error: {errorMessage}", errorMessage);
             return errorMessage;
         }
     }

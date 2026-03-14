@@ -14,6 +14,10 @@ namespace DSystem.A2A;
 
 public static class A2ARoutesBuilderExtensions
 {
+    const string PathPlaceholder = "{agentName}";
+
+
+
     /// <summary>
     /// Activity source for tracing A2A endpoint operations.
     /// </summary>
@@ -35,13 +39,13 @@ public static class A2ARoutesBuilderExtensions
 
 
 
-        if (!agentPath.Contains("{agentId}"))
+        if (!agentPath.Contains(PathPlaceholder))
         {
             if (!agentPath.EndsWith("/"))
             {
                 agentPath += "/";
             }
-            agentPath += "{agentId}";
+            agentPath += PathPlaceholder;
         }
         var routeGroup = endpoints.MapGroup("");
         routeGroup.MapGet("/.well-known/agents.json",
@@ -52,7 +56,7 @@ public static class A2ARoutesBuilderExtensions
             });
 
         routeGroup.MapGet(agentPath + "/.well-known/agent-card.json",
-            async delegate (HttpRequest request, string agentId, CancellationToken cancellationToken)
+            async delegate (HttpRequest request, string agentName, CancellationToken cancellationToken)
         {
             ITaskManager taskManager = await GetTaskManager(request);
             var agentUrl = $"{request.Scheme}://{request.Host}{agentPath}";
@@ -95,7 +99,7 @@ public static class A2ARoutesBuilderExtensions
 
         var routeGroup = endpoints.MapGroup("");
 
-        routeGroup.MapGet(".well-known/{agentId}/agent-card.json", async (HttpRequest request, CancellationToken cancellationToken) =>
+        routeGroup.MapGet(".well-known/{agentName}/agent-card.json", async (HttpRequest request, CancellationToken cancellationToken) =>
         {
             var agentUrl = $"{request.Scheme}://{request.Host}{agentPath}";
             var agentCard = await taskManager.OnAgentCardQuery(agentUrl, cancellationToken);
@@ -124,7 +128,7 @@ public static class A2ARoutesBuilderExtensions
         var routeGroup = endpoints.MapGroup(path);
 
         // /v1/card endpoint - Agent discovery
-        routeGroup.MapGet("/v1/{agentId}/card", async (HttpRequest request, CancellationToken cancellationToken) =>
+        routeGroup.MapGet("/v1/{agentName}/card", async (HttpRequest request, CancellationToken cancellationToken) =>
         {
             ITaskManager taskManager = await GetTaskManager(request);
 
@@ -134,50 +138,50 @@ public static class A2ARoutesBuilderExtensions
         });
 
         // /v1/tasks/{id} endpoint
-        routeGroup.MapGet("/v1/{agentId}/tasks/{id}", async (
-            string agentId,
+        routeGroup.MapGet("/v1/{agentName}/tasks/{id}", async (
+            string agentName,
             string id,
             [FromQuery] int? historyLength,
             [FromQuery] string? metadata,
             [FromServices] TaskManagerFactory taskManagerFactory,
             CancellationToken cancellationToken) =>
         {
-            ITaskManager taskManager = await taskManagerFactory.GetTaskManager(agentId);
+            ITaskManager taskManager = await taskManagerFactory.GetTaskManager(agentName);
             return DA2AHttpProcessor
             .GetTaskAsync(taskManager, logger, id, historyLength, metadata, cancellationToken)
             .ConfigureAwait(false);
         });
 
         // /v1/tasks/{id}:cancel endpoint
-        routeGroup.MapPost("/v1/{agentId}/tasks/{id}:cancel", async
+        routeGroup.MapPost("/v1/{agentName}/tasks/{id}:cancel", async
             (
-                string agentId,
+                string agentName,
                 string id,
                 [FromServices] TaskManagerFactory taskManagerFactory,
                 CancellationToken cancellationToken
             ) =>
         {
-            ITaskManager taskManager = await taskManagerFactory.GetTaskManager(agentId);
+            ITaskManager taskManager = await taskManagerFactory.GetTaskManager(agentName);
             return await DA2AHttpProcessor
             .CancelTaskAsync(taskManager, logger, id, cancellationToken)
             .ConfigureAwait(false);
         });
 
         // /v1/tasks/{id}:subscribe endpoint
-        routeGroup.MapGet("/v1/{agentId}/tasks/{id}:subscribe", async
-            (string agentId, string id, [FromServices] TaskManagerFactory taskManagerFactory, CancellationToken cancellationToken)
+        routeGroup.MapGet("/v1/{agentName}/tasks/{id}:subscribe", async
+            (string agentName, string id, [FromServices] TaskManagerFactory taskManagerFactory, CancellationToken cancellationToken)
             =>
         {
-            var taskManager = await taskManagerFactory.GetTaskManager(agentId);
+            var taskManager = await taskManagerFactory.GetTaskManager(agentName);
             return DA2AHttpProcessor.SubscribeToTask(taskManager, logger, id, cancellationToken);
         }
         );
 
         // /v1/tasks/{id}/pushNotificationConfigs endpoint - POST
-        routeGroup.MapPost("/v1/{agentId}/tasks/{id}/pushNotificationConfigs",
+        routeGroup.MapPost("/v1/{agentName}/tasks/{id}/pushNotificationConfigs",
             async
             (
-                string agentId,
+                string agentName,
                 string id,
                 [FromBody] PushNotificationConfig pushNotificationConfig,
                 [FromServices] TaskManagerFactory taskManagerFactory,
@@ -185,32 +189,32 @@ public static class A2ARoutesBuilderExtensions
                 )
             =>
             {
-                var taskManager = await taskManagerFactory.GetTaskManager(agentId);
+                var taskManager = await taskManagerFactory.GetTaskManager(agentName);
                 return await DA2AHttpProcessor.SetPushNotificationAsync(taskManager, logger, id, pushNotificationConfig, cancellationToken)
                 .ConfigureAwait(false);
             });
 
         // /v1/tasks/{id}/pushNotificationConfigs endpoint - GET
-        routeGroup.MapGet("/v1/{agentId}/tasks/{id}/pushNotificationConfigs/{notificationConfigId?}",
-            async (string agentId, string id, string? notificationConfigId,
+        routeGroup.MapGet("/v1/{agentName}/tasks/{id}/pushNotificationConfigs/{notificationConfigId?}",
+            async (string agentName, string id, string? notificationConfigId,
             [FromServices] TaskManagerFactory taskManagerFactory, CancellationToken cancellationToken) =>
         {
-            var taskManager = await taskManagerFactory.GetTaskManager(agentId);
+            var taskManager = await taskManagerFactory.GetTaskManager(agentName);
             return await DA2AHttpProcessor.GetPushNotificationAsync(taskManager, logger, id, notificationConfigId, cancellationToken).ConfigureAwait(false);
         });
 
         // /v1/message:send endpoint
-        routeGroup.MapPost("/v1/{agentId}/message:send", async (string agentId, [FromBody] MessageSendParams sendParams, [FromServices] TaskManagerFactory taskManagerFactory, CancellationToken cancellationToken) =>
+        routeGroup.MapPost("/v1/{agentName}/message:send", async (string agentName, [FromBody] MessageSendParams sendParams, [FromServices] TaskManagerFactory taskManagerFactory, CancellationToken cancellationToken) =>
         {
-            var taskManager = await taskManagerFactory.GetTaskManager(agentId);
+            var taskManager = await taskManagerFactory.GetTaskManager(agentName);
             return await DA2AHttpProcessor.SendMessageAsync(taskManager, logger, sendParams, cancellationToken);
         });
 
         // /v1/message:stream endpoint
-        routeGroup.MapPost("/v1/{agentId}/message:stream",
-            async (string agentId, [FromBody] MessageSendParams sendParams, [FromServices] TaskManagerFactory taskManagerFactory, CancellationToken cancellationToken) =>
+        routeGroup.MapPost("/v1/{agentName}/message:stream",
+            async (string agentName, [FromBody] MessageSendParams sendParams, [FromServices] TaskManagerFactory taskManagerFactory, CancellationToken cancellationToken) =>
             {
-                var taskManager = await taskManagerFactory.GetTaskManager(agentId);
+                var taskManager = await taskManagerFactory.GetTaskManager(agentName);
                 return DA2AHttpProcessor.SendMessageStream(taskManager, logger, sendParams, cancellationToken);
             });
 

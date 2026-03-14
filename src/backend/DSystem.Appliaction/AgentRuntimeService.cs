@@ -439,7 +439,28 @@ public class AgentRuntimeService
     }
 
     /// <summary>
-    /// Executes an agent with the given input and returns the result.
+    /// Executes an agent with the given agentName, input and returns the result.
+    /// </summary>
+    public async Task<AgentExecutionResult?> ExecuteByNameAsync(
+        string agentName, 
+        string sessionId, 
+        string input,
+        CancellationToken cancellationToken = default,
+        string? projectId = null
+        )
+    {
+        var agent = await _agentRepository.SingleOrDefaultAsync(a=>a.Name == agentName);
+        if (agent == null)
+        {
+            return null;
+        }
+
+        return await ExecuteAsync(ref sessionId, input, projectId, agent);
+    }
+
+
+    /// <summary>
+    /// Executes an agent with the given agentId, input and returns the result.
     /// </summary>
     public async Task<AgentExecutionResult?> ExecuteAsync(
         Guid agentId,
@@ -454,6 +475,11 @@ public class AgentRuntimeService
             return null;
         }
 
+        return await ExecuteAsync(ref sessionId, input, projectId, agent);
+    }
+
+    private async Task<AgentExecutionResult?> ExecuteAsync(ref string sessionId, string input, string? projectId, Agent agent)
+    {
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
         var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);

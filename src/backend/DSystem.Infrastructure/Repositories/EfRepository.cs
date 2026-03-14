@@ -27,6 +27,11 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
         return _dbSet.FindAsync(id).AsTask();
     }
 
+    public Task<TEntity?> SingleOrDefaultAsync(Expression<Func<TEntity, bool>> predicate, CancellationToken cancellationToken = default(CancellationToken))
+    {
+        return _dbSet.SingleOrDefaultAsync(predicate);
+    }
+
     public async Task<IReadOnlyList<TEntity>> ListAsync(Expression<Func<TEntity, bool>>? predicate = null)
     {
         IQueryable<TEntity> query = _dbSet;
