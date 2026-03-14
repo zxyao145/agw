@@ -15,11 +15,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ButtonGroup } from "@/components/ui/button-group";
-import type { AiMessage, ProcessedMessageItem } from "@/types/message";
-import { ChatSession } from "@/components/message/chat-session";
 import { ProjectTaskDto } from "./types";
 import { Conversation } from "@/components/message/conversation";
-import { getSessionBySessionId } from "../../../../claude-code/lib/chat-history-service";
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -65,8 +62,6 @@ export default function TaskDetailsPage() {
   const projectId = params.id;
   const taskId = params.taskId;
 
-  const sessionId = taskId;
-
   const taskQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", taskId],
     queryFn: async () => {
@@ -77,9 +72,10 @@ export default function TaskDetailsPage() {
   });
 
   const task = taskQuery.data;
-  const targetType = task?.agentType === 1 ? "agent" : "agentflow";
+  const targetType = task?.agentType === 0 ? "agent" : "agentflow";
   const targetId =
     targetType === "agent" ? (task?.agentId ?? null) : (task?.agentflowId ?? null);
+  const sessionId = task?.contextId ?? taskId;
 
   return (
     <div className="space-y-3 w-full min-w-0 max-w-full overflow-x-hidden flex flex-col">
@@ -124,12 +120,12 @@ export default function TaskDetailsPage() {
               <Button asChild variant="outline" size="sm">
                 <Link
                   href={
-                    task.agentType === 1
+                    task.agentType === 0
                       ? `/agents/${targetId}`
                       : `/agentflows/${targetId}`
                   }
                 >
-                  {task.agentType === 1 ? "Agent" : "Agentflow"}
+                  {task.agentType === 0 ? "Agent" : "Agentflow"}
                 </Link>
               </Button>
             )}
@@ -152,8 +148,9 @@ export default function TaskDetailsPage() {
           <Conversation
             className="h-[calc(100vh-100px)]"
             executionId={targetId}
-            agentType={targetType === "agent" ? 1 : 0}
+            agentType={targetType === "agent" ? 0 : 1}
             projectId={projectId}
+            taskId={task?.id ?? taskId}
             sessionId={sessionId}
             resetSignal={`${taskId}:${targetId ?? "none"}`}
             placeholder="请输入要发送给任务执行器的内容..."

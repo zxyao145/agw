@@ -2032,6 +2032,8 @@ export interface components {
             input: string;
             sessionId?: null | string;
             projectId?: null | string;
+            /** Format: uuid */
+            taskId?: null | string;
         };
         AgentflowCreateRequest: {
             name: string;

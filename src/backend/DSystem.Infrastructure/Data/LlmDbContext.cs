@@ -1,5 +1,4 @@
 using DSystem.Domain.Entities;
-using DSystem.SessionRecords.Entities;
 using DSystem.Shared.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -25,8 +24,8 @@ public class LlmDbContext : DbContext
 
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
+    public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
     public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
-    public DbSet<AgentSessionRecord> AgentSessionRecords => Set<AgentSessionRecord>();
     public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
     public DbSet<AgentMcpToolServer> AgentMcpToolServers => Set<AgentMcpToolServer>();
 
@@ -141,22 +140,65 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.Workspace).HasMaxLength(1000);
             entity.Property(e => e.ExtraSetting).HasMaxLength(16000);
+            entity.Ignore(e => e.Tasks);
         });
 
         modelBuilder.Entity<ProjectTask>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.ProjectId).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.AgentType).HasConversion<int>();
-            entity.Property(e => e.Description).IsRequired().HasMaxLength(4000);
-            entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue(string.Empty);
-            entity.Property(e => e.Input).IsRequired().HasMaxLength(4000);
+            entity.Property(e => e.ProjectId).HasMaxLength(64);
+            entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Description).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.SystemPrompt).HasMaxLength(4000);
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue("Untitled");
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
 
+            entity.HasIndex(e => e.ContextId).IsUnique();
+            entity.HasIndex(e => e.ProjectId);
             entity.HasIndex(e => new { e.ProjectId, e.Status, e.UpdateTime });
-            entity.HasIndex(e => new { e.ProjectId, e.SessionId }).IsUnique();
 
+            entity.HasMany(e => e.ConversationList)
+                .WithOne()
+                .HasForeignKey(e => e.ContextId)
+                .HasPrincipalKey(e => e.ContextId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TaskRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.AgentType).HasConversion<int>();
+            entity.Property(e => e.Error).HasColumnType("text");
+            entity.HasIndex(e => new { e.ContextId, e.CreateTime });
+            entity.HasIndex(e => new { e.ContextId, e.SessionId, e.CreateTime });
+
+            entity.Property(e => e.Input)
+                .IsRequired()
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => string.IsNullOrWhiteSpace(v)
+                        ? new UserInputMessage(new List<AiMessageContent>())
+                        : JsonSerializer.Deserialize<UserInputMessage>(v, (JsonSerializerOptions?)null) ?? new UserInputMessage(new List<AiMessageContent>()));
+
+            entity.Property(e => e.Messages)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => string.IsNullOrWhiteSpace(v)
+                        ? new List<AiMessage>()
+                        : JsonSerializer.Deserialize<List<AiMessage>>(v, (JsonSerializerOptions?)null) ?? new List<AiMessage>());
+
+            entity.Property(e => e.Metadata)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => string.IsNullOrWhiteSpace(v)
+                        ? new Dictionary<string, JsonElement>()
+                        : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, JsonElement>());
         });
 
         modelBuilder.Entity<ProjectLease>(entity =>
@@ -170,36 +212,6 @@ public class LlmDbContext : DbContext
                 .HasForeignKey<ProjectLease>(e => e.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
-
-        modelBuilder.Entity<AgentSessionRecord>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.ProjectId, e.SessionId, e.MessageId }).IsUnique();
-            entity.Property(e => e.ProjectId).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.MessageId).IsRequired().HasMaxLength(128);
-            entity.Property(e => e.Author).HasMaxLength(200);
-            entity.Property(e => e.Role).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.Error).HasColumnType("text");
-
-            entity.Property(e => e.Metadata)
-                .HasColumnType("jsonb")
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => string.IsNullOrWhiteSpace(v)
-                        ? null
-                        : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null));
-
-            entity.Property(e => e.Contents)
-                .HasColumnType("jsonb")
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => string.IsNullOrWhiteSpace(v)
-                        ? new List<AiMessageContent>()
-                        : JsonSerializer.Deserialize<List<DSystem.Shared.Models.AiMessageContent>>(v, (JsonSerializerOptions?)null) ?? new List<AiMessageContent>());
-
-        });
-
 
         modelBuilder.Entity<McpToolServer>(entity =>
         {

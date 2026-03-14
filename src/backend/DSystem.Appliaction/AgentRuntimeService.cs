@@ -4,13 +4,10 @@ using DSystem.Appliaction;
 using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
 using DSystem.Domain.Services;
-using DSystem.SessionRecords.Application;
-using DSystem.SessionRecords.Repositories;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using Microsoft.Agents.AI;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
@@ -21,7 +18,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using static System.Collections.Specialized.BitVector32;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace DSystem.Appliaction.Services;
@@ -47,8 +43,7 @@ public class AgentRuntimeService
     private readonly IRepository<Provider> _providerRepository;
     private readonly ToolRegistryService _toolRegistry;
     private readonly HybridCache _cache;
-    private readonly SessionRecordApplication _sessionRecordApplication;
-    private readonly IAgentSessionRecordRepository _agentSessionRecordRepository;
+    private readonly TaskRecordApplication _taskRecordApplication;
     private readonly McpToolServerDomainService _mcpToolServerDomainService;
 
 
@@ -60,8 +55,7 @@ public class AgentRuntimeService
         IRepository<Provider> providerRepository,
         ToolRegistryService toolRegistry,
         HybridCache cache,
-        SessionRecordApplication sessionRecordApplication,
-        IAgentSessionRecordRepository agentSessionRecordRepository,
+        TaskRecordApplication taskRecordApplication,
         McpToolServerDomainService mcpToolServerDomainService,
         ILogger<AgentRuntimeService> logger)
     {
@@ -72,8 +66,7 @@ public class AgentRuntimeService
         _providerRepository = providerRepository;
         _toolRegistry = toolRegistry;
         _cache = cache;
-        _sessionRecordApplication = sessionRecordApplication;
-        _agentSessionRecordRepository = agentSessionRecordRepository;
+        _taskRecordApplication = taskRecordApplication;
         _mcpToolServerDomainService = mcpToolServerDomainService;
         _logger = logger;
     }
@@ -314,6 +307,7 @@ public class AgentRuntimeService
         Guid agentId,
         string sessionId,
         string? projectId = null,
+        string? contextId = null,
         CancellationToken cancellationToken = default)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
@@ -329,6 +323,7 @@ public class AgentRuntimeService
             sessionId = Guid.NewGuid().ToString();
         }
 
+        var resolvedContextId = string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId;
         var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, sessionId, projectId, cancellationToken);
         if (aiAgent == null)
         {
@@ -339,25 +334,18 @@ public class AgentRuntimeService
             aiAgent,
             agentSession,
             projectId ?? string.Empty,
+            resolvedContextId,
             sessionId,
+            ProjectTaskAgentType.Agent,
+            agentId,
             _logger,
-            _sessionRecordApplication);
+            _taskRecordApplication,
+            taskTitle: agent.Name);
     }
 
     private async Task<bool> HasSessionRecordAsync(string sessionId, string? projectId)
     {
-        IReadOnlyList<DSystem.SessionRecords.Entities.AgentSessionRecord> records;
-        if (!string.IsNullOrWhiteSpace(projectId))
-        {
-            records = await _agentSessionRecordRepository.ListAsync(r =>
-                r.SessionId == sessionId && r.ProjectId == projectId);
-        }
-        else
-        {
-            records = await _agentSessionRecordRepository.ListAsync(r => r.SessionId == sessionId);
-        }
-
-        return records.Count > 0;
+        return await _taskRecordApplication.HasSessionAsync(sessionId, projectId);
     }
 
     /// <summary>
@@ -391,9 +379,10 @@ public class AgentRuntimeService
         string sessionId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
-        string? projectId = null)
+        string? projectId = null,
+        string? contextId = null)
     {
-        var session = await CreateSessionAsync(agentId, sessionId, projectId, cancellationToken);
+        var session = await CreateSessionAsync(agentId, sessionId, projectId, contextId, cancellationToken);
         if (session == null)
         {
             yield break;
@@ -446,7 +435,8 @@ public class AgentRuntimeService
         string sessionId, 
         string input,
         CancellationToken cancellationToken = default,
-        string? projectId = null
+        string? projectId = null,
+        string? contextId = null
         )
     {
         var agent = await _agentRepository.SingleOrDefaultAsync(a=>a.Name == agentName);
@@ -455,7 +445,7 @@ public class AgentRuntimeService
             return null;
         }
 
-        return await ExecuteAsync(sessionId, input, projectId, agent);
+        return await ExecuteAsync(sessionId, input, projectId, contextId, agent);
     }
 
 
@@ -467,7 +457,8 @@ public class AgentRuntimeService
         string sessionId,
         string input,
         CancellationToken cancellationToken = default,
-        string? projectId = null)
+        string? projectId = null,
+        string? contextId = null)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
         if (agent == null)
@@ -475,10 +466,15 @@ public class AgentRuntimeService
             return null;
         }
 
-        return await ExecuteAsync(sessionId, input, projectId, agent);
+        return await ExecuteAsync(sessionId, input, projectId, contextId, agent);
     }
 
-    private async Task<AgentExecutionResult?> ExecuteAsync(string sessionId, string input, string? projectId, Agent agent)
+    private async Task<AgentExecutionResult?> ExecuteAsync(
+        string sessionId,
+        string input,
+        string? projectId,
+        string? contextId,
+        Agent agent)
     {
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
@@ -532,13 +528,15 @@ public class AgentRuntimeService
                 }
             }
 
-            await _sessionRecordApplication.SaveThreadStateAsync(
+            await _taskRecordApplication.SaveThreadStateAsync(
                 sessionId,
+                string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
                 projectId ?? string.Empty,
-                await aiAgent.SerializeSessionAsync(session),
+                ProjectTaskAgentType.Agent,
+                agent.Id,
                 responseUpdates,
                 input,
-                CancellationToken.None);
+                cancellationToken: CancellationToken.None);
 
             return new AgentExecutionResult(
                 sessionId,

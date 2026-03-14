@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DSystem.Shared.Models;
 
@@ -15,6 +16,7 @@ public record AiMessage
     public List<AiMessageContent> Contents { get; init; }
     public AdditionalPropertiesDictionary? AdditionalProperties { get; init; }
 
+    [JsonConstructor]
     public AiMessage(
         string messageId,
         string? author,
@@ -70,11 +72,18 @@ public static class AiMessageContentType
 /// </summary>
 public record AiMessageInputContent(string Type, JsonElement Content);
 
+
 /// <summary>
 /// Content within an AI message.
 /// </summary>
 public record AiMessageContent(
     string Type,
     object? Content,
+    AdditionalPropertiesDictionary? AdditionalProperties = null
+);
+
+
+public record UserInputMessage(
+    List<AiMessageContent> Contents,
     AdditionalPropertiesDictionary? AdditionalProperties = null
 );

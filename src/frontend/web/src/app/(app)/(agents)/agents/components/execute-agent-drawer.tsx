@@ -56,7 +56,7 @@ export function ExecuteAgentDrawer({
         <Conversation
           className="px-4 pb-4 h-[calc(100vh-62px)]"
           executionId={executingAgent.id}
-          agentType={1}
+          agentType={0}
           projectId={projectId}
           resetSignal={`${executingAgent.id}:${resetSignal}`}
           placeholder="请输入要发送给 agent 的内容..."

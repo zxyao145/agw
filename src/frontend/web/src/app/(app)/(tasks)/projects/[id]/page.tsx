@@ -61,6 +61,7 @@ type ProjectDto = {
 type ProjectTaskDto = {
   id: string;
   projectId: string;
+  contextId: string;
   agentType?: number;
   agentflowId?: string | null;
   agentId?: string | null;
@@ -450,6 +451,7 @@ export default function ProjectDetailsPage() {
                         description: editDescription.length
                           ? editDescription
                           : null,
+                        workspace: null,
                         enable: editEnable,
                         extraSetting: null,
                       })
@@ -533,7 +535,7 @@ export default function ProjectDetailsPage() {
                 if (targetType === "agent") {
                   createTaskMutation.mutate({
                     ...baseBody,
-                    agentType: 1,
+                    agentType: 0,
                     agentId: targetId,
                   });
                   return;
@@ -541,7 +543,7 @@ export default function ProjectDetailsPage() {
 
                 createTaskMutation.mutate({
                   ...baseBody,
-                  agentType: 0,
+                  agentType: 1,
                   agentflowId: targetId,
                 });
               }}
@@ -583,9 +585,9 @@ export default function ProjectDetailsPage() {
                         <div className="text-xs text-muted-foreground">
                           <span className="font-mono">{t.id}</span>
                           <span className="mx-2">·</span>
-                          Agentflow:{" "}
+                          Target:{" "}
                           <span className="font-mono">
-                            {t.agentType === 1
+                            {t.agentType === 0
                               ? `agent:${t.agentId ?? "-"}`
                               : `agentflow:${t.agentflowId ?? "-"}`}
                           </span>

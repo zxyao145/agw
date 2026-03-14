@@ -3,7 +3,7 @@
 import type { AiMessage } from "@/types";
 
 export interface ChatSessionRecordSummary {
-  id: number;
+  id: string;
   projectId: string;
   sessionId: string;
   title: string;
@@ -16,20 +16,25 @@ export interface ChatSessionRecordDetails extends ChatSessionRecordSummary {
   messages: AiMessage[];
 }
 
-const LIST_ENDPOINT = "/api/session-records";
 export const CLAUDE_CODE_PROJECT_ID = "claude-code";
+type ProjectTaskHistoryResponse = {
+  id: string;
+  projectId: string;
+  contextId: string;
+  sessionId: string;
+  title: string;
+  messageCount: number;
+  createTime: string;
+  updateTime?: string | null;
+  messages?: AiMessage[] | null;
+};
 
-function buildProjectQuery(projectId: string) {
+function buildTasksEndpoint(projectId: string, suffix = ""): string {
   const value = projectId.trim();
   if (!value) {
     throw new Error("projectId is required");
   }
-  return `projectId=${encodeURIComponent(value)}`;
-}
-
-function appendProjectQuery(url: string, projectId: string): string {
-  const query = buildProjectQuery(projectId);
-  return `${url}?${query}`;
+  return `/api/projects/${encodeURIComponent(value)}/tasks${suffix}`;
 }
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -41,46 +46,55 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
   return (await response.json()) as T;
 }
 
-export async function getAllSessions(
-  projectId: string,
-): Promise<ChatSessionRecordSummary[]> {
-  const url = appendProjectQuery(LIST_ENDPOINT, projectId);
-  return await fetchJson<ChatSessionRecordSummary[]>(url);
+function toChatSessionSummary(
+  task: ProjectTaskHistoryResponse,
+): ChatSessionRecordSummary {
+  return {
+    id: task.id,
+    projectId: task.projectId,
+    sessionId: task.sessionId || task.contextId,
+    title: task.title,
+    messageCount: task.messageCount ?? 0,
+    createTime: task.createTime,
+    updateTime: task.updateTime ?? null,
+  };
 }
 
-export async function getSessionBySessionId(
+function toChatSessionDetails(
+  task: ProjectTaskHistoryResponse,
+): ChatSessionRecordDetails {
+  const summary = toChatSessionSummary(task);
+  return {
+    ...summary,
+    messages: task.messages ?? [],
+  };
+}
+
+async function findTaskBySessionId(
   sessionId: string,
   projectId: string,
-): Promise<ChatSessionRecordDetails | null> {
+): Promise<ChatSessionRecordSummary | null> {
   if (!sessionId) {
     return null;
   }
 
-  const url = appendProjectQuery(
-    `${LIST_ENDPOINT}/${encodeURIComponent(sessionId)}`,
-    projectId,
+  const sessions = await getAllSessions(projectId);
+  return (
+    sessions.find(
+      (session) =>
+        session.sessionId === sessionId ||
+        session.id === sessionId,
+    ) ?? null
   );
-  const response = await fetch(url);
-  if (response.status === 404) {
-    return null;
-  }
-  if (!response.ok) {
-    const message = await response.text().catch(() => "");
-    throw new Error(message || `Request failed: ${response.status}`);
-  }
-  return (await response.json()) as ChatSessionRecordDetails;
 }
 
-export async function deleteSessionBySessionId(
-  sessionId: string,
+async function clearTaskSessionById(
+  taskId: string,
   projectId: string,
 ): Promise<boolean> {
-  if (!sessionId) {
-    return false;
-  }
-  const url = appendProjectQuery(
-    `${LIST_ENDPOINT}/${encodeURIComponent(sessionId)}`,
+  const url = buildTasksEndpoint(
     projectId,
+    `/${encodeURIComponent(taskId)}/session`,
   );
   const response = await fetch(url, { method: "DELETE" });
   if (response.status === 404) {
@@ -93,6 +107,54 @@ export async function deleteSessionBySessionId(
   return true;
 }
 
+export async function getAllSessions(
+  projectId: string,
+): Promise<ChatSessionRecordSummary[]> {
+  const url = buildTasksEndpoint(projectId);
+  const tasks = await fetchJson<ProjectTaskHistoryResponse[]>(url);
+  return tasks.map(toChatSessionSummary);
+}
+
+export async function getSessionBySessionId(
+  sessionId: string,
+  projectId: string,
+): Promise<ChatSessionRecordDetails | null> {
+  if (!sessionId) {
+    return null;
+  }
+
+  const task = await findTaskBySessionId(sessionId, projectId);
+  if (!task) {
+    return null;
+  }
+
+  const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(task.id)}`);
+  const response = await fetch(url);
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(message || `Request failed: ${response.status}`);
+  }
+  return toChatSessionDetails((await response.json()) as ProjectTaskHistoryResponse);
+}
+
+export async function deleteSessionBySessionId(
+  sessionId: string,
+  projectId: string,
+): Promise<boolean> {
+  if (!sessionId) {
+    return false;
+  }
+  const task = await findTaskBySessionId(sessionId, projectId);
+  if (!task) {
+    return false;
+  }
+
+  return await clearTaskSessionById(task.id, projectId);
+}
+
 export async function updateSessionTitle(
   sessionId: string,
   newTitle: string,
@@ -101,9 +163,14 @@ export async function updateSessionTitle(
   if (!sessionId || !newTitle.trim()) {
     return false;
   }
-  const url = appendProjectQuery(
-    `${LIST_ENDPOINT}/${encodeURIComponent(sessionId)}/title`,
+  const task = await findTaskBySessionId(sessionId, projectId);
+  if (!task) {
+    return false;
+  }
+
+  const url = buildTasksEndpoint(
     projectId,
+    `/${encodeURIComponent(task.id)}/title`,
   );
   const response = await fetch(url, {
     method: "PUT",
@@ -123,6 +190,6 @@ export async function updateSessionTitle(
 export async function clearAllSessions(projectId: string): Promise<void> {
   const sessions = await getAllSessions(projectId);
   await Promise.all(
-    sessions.map((session) => deleteSessionBySessionId(session.sessionId, projectId)),
+    sessions.map((session) => clearTaskSessionById(session.id, projectId)),
   );
 }

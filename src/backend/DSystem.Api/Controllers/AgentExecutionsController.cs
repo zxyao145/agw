@@ -1,5 +1,7 @@
 using DSystem.Appliaction.Services;
 using DSystem.Api.Contracts;
+using DSystem.Domain.Entities;
+using DSystem.Domain.Services;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using Microsoft.AspNetCore.Http;
@@ -19,13 +21,16 @@ public class AgentExecutionsController : ControllerBase
     private const int MaxRequestBytes = 1024 * 64;
     private readonly AgentRuntimeService _agentRuntimeService;
     private readonly AgentflowRuntimeService _agentflowRuntimeService;
+    private readonly ProjectTaskDomainService _projectTaskService;
 
     public AgentExecutionsController(
         AgentRuntimeService agentRuntimeService,
-        AgentflowRuntimeService agentflowRuntimeService)
+        AgentflowRuntimeService agentflowRuntimeService,
+        ProjectTaskDomainService projectTaskService)
     {
         _agentRuntimeService = agentRuntimeService;
         _agentflowRuntimeService = agentflowRuntimeService;
+        _projectTaskService = projectTaskService;
     }
 
     [HttpPost("{id:guid}/execute")]
@@ -80,12 +85,19 @@ public class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
+        var (task, contextError) = await ResolveTaskAsync(request);
+        if (contextError != null)
+        {
+            return contextError;
+        }
+
         var result = await _agentRuntimeService.ExecuteAsync(
             id,
             request.SessionId ?? string.Empty,
             request.Input,
             cancellationToken,
-            request.ProjectId);
+            request.ProjectId,
+            task?.ContextId);
         if (result == null)
         {
             return NotFound();
@@ -99,12 +111,19 @@ public class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
+        var (task, contextError) = await ResolveTaskAsync(request);
+        if (contextError != null)
+        {
+            return contextError;
+        }
+
         var result = await _agentflowRuntimeService.ExecuteAsync(
             id,
             request.SessionId ?? string.Empty,
             request.Input,
             cancellationToken,
-            request.ProjectId);
+            request.ProjectId,
+            task?.ContextId);
         if (result == null)
         {
             return NotFound();
@@ -119,6 +138,13 @@ public class AgentExecutionsController : ControllerBase
         WebSocket webSocket,
         CancellationToken cancellationToken)
     {
+        var (task, contextError) = await ResolveTaskAsync(request);
+        if (contextError != null)
+        {
+            await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, ExtractReason(contextError));
+            return;
+        }
+
         switch (request.AgentType)
         {
             case ProjectTaskAgentType.Agent:
@@ -126,6 +152,7 @@ public class AgentExecutionsController : ControllerBase
                     id,
                     request.SessionId ?? string.Empty,
                     request.ProjectId,
+                    task?.ContextId,
                     cancellationToken);
                 if (session == null)
                 {
@@ -152,7 +179,8 @@ public class AgentExecutionsController : ControllerBase
                                    request.SessionId ?? string.Empty,
                                    request.Input,
                                    cancellationToken,
-                                   request.ProjectId))
+                                   request.ProjectId,
+                                   task?.ContextId))
                 {
                     var json = JsonUtil.Serialize(message);
                     await SendJsonAsync(webSocket, json, cancellationToken);
@@ -199,6 +227,38 @@ public class AgentExecutionsController : ControllerBase
         var json = Encoding.UTF8.GetString(stream.ToArray());
         try { return JsonUtil.Deserialize<T>(json); }
         catch (JsonException) { return default; }
+    }
+
+    private async Task<(ProjectTask? task, IActionResult? error)> ResolveTaskAsync(AgentExecutionRequest request)
+    {
+        if (!request.TaskId.HasValue)
+        {
+            return (null, null);
+        }
+
+        var task = await _projectTaskService.GetAsync(request.TaskId.Value);
+        if (task == null)
+        {
+            return (null, NotFound("Task not found."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ProjectId)
+            && !string.Equals(task.ProjectId, request.ProjectId, StringComparison.OrdinalIgnoreCase))
+        {
+            return (null, BadRequest("Task does not belong to the supplied projectId."));
+        }
+
+        return (task, null);
+    }
+
+    private static string ExtractReason(IActionResult result)
+    {
+        return result switch
+        {
+            ObjectResult objectResult when objectResult.Value is string message => message,
+            StatusCodeResult statusCodeResult => $"Request failed with status {statusCodeResult.StatusCode}.",
+            _ => "Invalid request payload"
+        };
     }
 
     private static Task SendJsonAsync(WebSocket webSocket, string json, CancellationToken cancellationToken)

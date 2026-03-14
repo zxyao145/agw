@@ -1,5 +1,6 @@
-using DSystem.SessionRecords.Application;
+using DSystem.Appliaction.Services;
 using DSystem.Shared;
+using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -35,8 +36,14 @@ public sealed class AgentExecSession : IAsyncDisposable
     private readonly ILogger _logger;
     public readonly string _sessionId;
     public readonly string _projectId;
+    public readonly string _contextId;
 
-    private readonly SessionRecordApplication _sessionRecordApplication;
+    private readonly ProjectTaskAgentType _agentType;
+    private readonly Guid? _agentId;
+    private readonly string? _taskTitle;
+    private readonly string? _taskDescription;
+    private readonly string? _systemPrompt;
+    private readonly TaskRecordApplication _taskRecordApplication;
 
     /// <summary>
     /// Initializes a new instance of the AiAgentSession class.
@@ -45,16 +52,28 @@ public sealed class AgentExecSession : IAsyncDisposable
         AIAgent agent,
         AgentSession thread,
         string projectId,
+        string contextId,
         string? sessionId,
+        ProjectTaskAgentType agentType,
+        Guid? agentId,
         ILogger logger,
-        SessionRecordApplication sessionRecordApplication)
+        TaskRecordApplication taskRecordApplication,
+        string? taskTitle = null,
+        string? taskDescription = null,
+        string? systemPrompt = null)
     {
         Agent = agent ?? throw new ArgumentNullException(nameof(agent));
         Session = thread ?? throw new ArgumentNullException(nameof(thread));
         _projectId = projectId;
+        _contextId = contextId;
         _sessionId = sessionId ?? Guid.NewGuid().ToString();
+        _agentType = agentType;
+        _agentId = agentId;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _sessionRecordApplication = sessionRecordApplication ?? throw new ArgumentNullException(nameof(sessionRecordApplication));
+        _taskRecordApplication = taskRecordApplication ?? throw new ArgumentNullException(nameof(taskRecordApplication));
+        _taskTitle = taskTitle;
+        _taskDescription = taskDescription;
+        _systemPrompt = systemPrompt;
     }
 
     /// <summary>
@@ -108,12 +127,17 @@ public sealed class AgentExecSession : IAsyncDisposable
             if (aiMessage != null) yield return aiMessage;
         }
 
-        await _sessionRecordApplication.SaveThreadStateAsync(
+        await _taskRecordApplication.SaveThreadStateAsync(
             _sessionId,
+            _contextId,
             _projectId,
-            await SerializeSession(),
+            _agentType,
+            _agentId,
             responseUpdates,
             input,
+            _taskTitle,
+            _taskDescription,
+            _systemPrompt,
             cancellationToken);
         _logger.LogDebug("Saved thread state for session: {SessionId}", _sessionId);
     }
@@ -188,11 +212,5 @@ public sealed class AgentExecSession : IAsyncDisposable
         }
 
         return aiContents;
-    }
-
-
-    private ValueTask<JsonElement> SerializeSession()
-    {
-        return Agent.SerializeSessionAsync(Session);
     }
 }

@@ -3,6 +3,7 @@ export type ExecutionWsRequest = {
   input: string;
   sessionId?: string | null;
   projectId?: string | null;
+  taskId?: string | null;
 };
 
 function toWsOrigin(baseUrl: string): string {

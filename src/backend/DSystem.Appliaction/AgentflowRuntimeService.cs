@@ -1,7 +1,6 @@
 using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
 using DSystem.Domain.Services;
-using DSystem.SessionRecords.Application;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
@@ -9,11 +8,8 @@ using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 using MsAgentWorkflowBuilder = Microsoft.Agents.AI.Workflows.AgentWorkflowBuilder;
 
 namespace DSystem.Appliaction.Services;
@@ -47,7 +43,7 @@ public class AgentflowRuntimeService
     private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
     private readonly AgentRuntimeService _agentRuntimeService;
     private readonly IAgentflowAgentExecutor _executor;
-    private readonly SessionRecordApplication _sessionRecordApplication;
+    private readonly TaskRecordApplication _taskRecordApplication;
 
     public AgentflowRuntimeService(
         ILogger<AgentflowRuntimeService> logger,
@@ -56,7 +52,7 @@ public class AgentflowRuntimeService
         IRepository<AgentflowEdge> agentflowEdgeRepository,
         AgentRuntimeService agentRuntimeService,
         IAgentflowAgentExecutor executor,
-        SessionRecordApplication sessionRecordApplication)
+        TaskRecordApplication taskRecordApplication)
     {
         _logger = logger;
         _agentflowRepository = agentflowRepository;
@@ -64,7 +60,7 @@ public class AgentflowRuntimeService
         _agentRuntimeService = agentRuntimeService;
         _executor = executor;
         _agentflowEdgeRepository = agentflowEdgeRepository;
-        _sessionRecordApplication = sessionRecordApplication;
+        _taskRecordApplication = taskRecordApplication;
     }
 
     public async Task<string?> GetMermaidAsync(
@@ -95,7 +91,8 @@ public class AgentflowRuntimeService
         string sessionId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
-        string? projectId = null)
+        string? projectId = null,
+        string? contextId = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
@@ -142,6 +139,7 @@ public class AgentflowRuntimeService
                         _logger.LogInformation("AgentResponseUpdateEvent {ExecutorId}, {Data}", updateEvt.ExecutorId, updateEvt.Data);
                         if (updateEvt.Data is AgentResponseUpdate update)
                         {
+                            responseUpdates.Add(update);
                             var chatMsg = update.ToAiMessage();
                             if (chatMsg != null)
                             {
@@ -174,13 +172,15 @@ public class AgentflowRuntimeService
             }
         }
 
-        await _sessionRecordApplication.SaveThreadStateAsync(
+        await _taskRecordApplication.SaveThreadStateAsync(
             sessionId,
+            string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
             projectId ?? string.Empty,
-            JsonSerializer.SerializeToElement(new { agentflowId }),
+            ProjectTaskAgentType.Agentflow,
+            agentflowId,
             responseUpdates,
             input,
-            CancellationToken.None);
+            cancellationToken: CancellationToken.None);
     }
 
     public async Task<AgentflowExecutionResult?> ExecuteAsync(
@@ -188,7 +188,8 @@ public class AgentflowRuntimeService
         string sessionId,
         string input,
         CancellationToken cancellationToken = default,
-        string? projectId = null)
+        string? projectId = null,
+        string? contextId = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
@@ -243,13 +244,15 @@ public class AgentflowRuntimeService
             outputs.Add(chatMsg);
         }
 
-        await _sessionRecordApplication.SaveThreadStateAsync(
+        await _taskRecordApplication.SaveThreadStateAsync(
             sessionId,
+            string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
             projectId ?? string.Empty,
-            JsonSerializer.SerializeToElement(new { agentflowId }),
+            ProjectTaskAgentType.Agentflow,
+            agentflowId,
             responseUpdates,
             input,
-            CancellationToken.None);
+            cancellationToken: CancellationToken.None);
 
         return new AgentflowExecutionResult(sessionId, Messages: outputs);
     }

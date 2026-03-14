@@ -2,6 +2,7 @@
 export type ProjectTaskDto = {
   id: string;
   projectId: string;
+  contextId: string;
   agentType?: number;
   agentflowId?: string | null;
   agentId?: string | null;

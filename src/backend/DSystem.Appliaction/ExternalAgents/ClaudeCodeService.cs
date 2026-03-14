@@ -1,13 +1,11 @@
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
-using DSystem.SessionRecords.Application;
-using DSystem.SessionRecords.Entities;
-using DSystem.SessionRecords.Repositories;
+using DSystem.Appliaction.Services;
+using DSystem.Shared.Enums;
 using DSystem.Shared.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace DSystem.Appliaction.ExternalAgents;
 
@@ -18,21 +16,18 @@ public class ClaudeCodeService
 {
     private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<ClaudeCodeService> _logger;
-    private readonly IAgentSessionRecordRepository _repository;
-    private readonly SessionRecordApplication _sessionRecordApplication;
+    private readonly TaskRecordApplication _taskRecordApplication;
     private readonly IGitCommandService _gitCommandService;
     private readonly string _rootPath;
 
     public ClaudeCodeService(
         ILogger<ClaudeCodeService> logger,
-        IAgentSessionRecordRepository repository,
         IHostEnvironment hostEnvironment,
         IGitCommandService gitCommandService,
-        SessionRecordApplication sessionRecordApplication)
+        TaskRecordApplication taskRecordApplication)
     {
         _logger = logger;
-        _repository = repository;
-        _sessionRecordApplication = sessionRecordApplication;
+        _taskRecordApplication = taskRecordApplication;
         _hostEnvironment = hostEnvironment;
         _gitCommandService = gitCommandService;
         _rootPath = Path.Combine(_hostEnvironment.ContentRootPath);
@@ -53,13 +48,16 @@ public class ClaudeCodeService
 
         await EnsureGitRepositoryAsync(initRequest, cancellationToken);
 
-        var record = await FindSessionRecordAsync(initRequest.SessionId, initRequest.ProjectId);
-        var options = BuildAgentOptions(initRequest, hasSessionRecord: record != null);
+        var hasTaskRecord = await _taskRecordApplication.HasSessionAsync(
+            initRequest.SessionId,
+            initRequest.ProjectId,
+            cancellationToken);
+        var options = BuildAgentOptions(initRequest, hasTaskRecord);
         var agent = new ClaudeCodeAIAgent(options, _logger);
-        var thread = await GetOrLoadThreadAsync(
+        var thread = await GetOrCreateThreadAsync(
             agent,
             initRequest.SessionId,
-            record,
+            hasTaskRecord,
             cancellationToken);
 
         return new AgentExecSession(
@@ -67,73 +65,40 @@ public class ClaudeCodeService
             thread,
             initRequest.ProjectId,
             initRequest.SessionId,
+            initRequest.SessionId,
+            ProjectTaskAgentType.Agent,
+            agentId: null,
             _logger,
-            _sessionRecordApplication
-            );
+            _taskRecordApplication,
+            taskTitle: "New Chat",
+            systemPrompt: initRequest.SystemPrompt);
     }
 
-    private async Task<AgentSession> GetOrLoadThreadAsync(
+    private async Task<AgentSession> GetOrCreateThreadAsync(
         ClaudeCodeAIAgent agent,
         string sessionId,
-        AgentSessionRecord? record,
+        bool hasTaskRecord,
         CancellationToken cancellationToken)
     {
-        if (record == null)
-        {
-            _logger.LogDebug("Created new thread for session: {SessionId}", sessionId);
-            return await agent.CreateSessionAsync(cancellationToken);
-        }
-        _logger.LogDebug("Loaded existing thread for session: {SessionId}", sessionId);
-        //if (!TryGetThreadState(record.Contents, out var threadState))
-        //{
-        //    return await agent.CreateSessionAsync(cancellationToken);
-        //}
+        _logger.LogDebug(
+            hasTaskRecord
+                ? "Resuming thread for session: {SessionId}"
+                : "Creating new thread for session: {SessionId}",
+            sessionId);
 
-        JsonElement threadState = JsonElement.Parse($"\"sessionId\": {sessionId}");
-
-        return await agent.DeserializeSessionAsync(threadState);
+        return await agent.CreateSessionAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Tries to extract serialized thread state from stored session payload.
-    /// </summary>
-    private static bool TryGetThreadState(string messages, out JsonElement threadState)
-    {
-        threadState = default;
-        if (string.IsNullOrWhiteSpace(messages))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(messages);
-            if (document.RootElement.ValueKind == JsonValueKind.Object)
-            {
-                if (document.RootElement.TryGetProperty("Thread", out var threadElement)
-                    || document.RootElement.TryGetProperty("thread", out threadElement))
-                {
-                    threadState = threadElement.Clone();
-                    return threadState.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null;
-                }
-            }
-
-            threadState = document.RootElement.Clone();
-            return threadState.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    private static ClaudeCodeAIAgentOptions BuildAgentOptions(ClaudeCodeSettingRequest request, bool hasSessionRecord)
+    private static ClaudeCodeAIAgentOptions BuildAgentOptions(ClaudeCodeSettingRequest request, bool hasTaskRecord)
     {
         PermissionMode? permissionMode = null;
         if (!string.IsNullOrWhiteSpace(request.PermissionMode))
+        {
             permissionMode = Enum.Parse<PermissionMode>(request.PermissionMode);
-        var resume = hasSessionRecord ? request.SessionId : null;
-        var optionSessionId = hasSessionRecord ? (Guid?)null : Guid.Parse(request.SessionId);
+        }
+
+        var resume = hasTaskRecord ? request.SessionId : null;
+        var optionSessionId = hasTaskRecord ? (Guid?)null : Guid.Parse(request.SessionId);
 
         var options = new ClaudeCodeAIAgentOptions
         {
@@ -146,16 +111,17 @@ public class ClaudeCodeService
             SessionId = optionSessionId
         };
 
-        if (!string.IsNullOrEmpty(request.ApiKey)) options.ApiKey = request.ApiKey;
-        if (!string.IsNullOrEmpty(request.ApiBaseUrl)) options.BaseUrl = request.ApiBaseUrl;
+        if (!string.IsNullOrEmpty(request.ApiKey))
+        {
+            options.ApiKey = request.ApiKey;
+        }
+
+        if (!string.IsNullOrEmpty(request.ApiBaseUrl))
+        {
+            options.BaseUrl = request.ApiBaseUrl;
+        }
 
         return options;
-    }
-
-    private async Task<AgentSessionRecord?> FindSessionRecordAsync(string sessionId, string projectId)
-    {
-        var records = await _repository.ListAsync(session => session.SessionId == sessionId && session.ProjectId == projectId);
-        return records.FirstOrDefault();
     }
 
     private async Task EnsureGitRepositoryAsync(ClaudeCodeSettingRequest request, CancellationToken cancellationToken)

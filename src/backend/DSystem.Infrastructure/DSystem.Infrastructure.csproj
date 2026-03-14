@@ -2,7 +2,6 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\DSystem.Appliaction\DSystem.Appliaction.csproj" />
-		<ProjectReference Include="..\DSystem.SessionRecords\DSystem.SessionRecords.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

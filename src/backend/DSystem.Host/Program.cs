@@ -1,15 +1,13 @@
 using A2A;
 using DSystem.A2A;
-using DSystem.Api.Controllers;
 using DSystem.Appliaction.Services;
+using DSystem.Api.Controllers;
 using DSystem.Domain.Services;
 using DSystem.Appliaction.ExternalAgents;
 using DSystem.Host;
 using DSystem.Infrastructure;
 using DSystem.Infrastructure.Data;
 using DSystem.Manager.Api.Controllers;
-using DSystem.SessionRecords.Application;
-using DSystem.SessionRecords.Domain;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -104,8 +102,8 @@ try
     builder.Services.AddScoped<AgentDomainService>();
     builder.Services.AddScoped<AgentRuntimeService>();
     builder.Services.AddScoped<A2AAgentService>();
-    builder.Services.AddScoped<SessionRecordApplication>();
-    builder.Services.AddScoped<SessionRecordDomainService>();
+    builder.Services.AddScoped<TaskRecordApplication>();
+    builder.Services.AddScoped<TaskRecordDomainService>();
 
     // External Agents
     builder.Services.AddScoped<ClaudeCodeService>();

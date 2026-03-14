@@ -17,12 +17,16 @@ import { UserInput } from "./user-input";
 import { ArrowUp, Eraser, Square } from "lucide-react";
 import { Separator } from "../ui/separator";
 import { useQuery } from "@tanstack/react-query";
-import { deleteSessionBySessionId, getSessionBySessionId } from "@/app/(app)/(external-agents)/claude-code/lib/chat-history-service";
+import {
+  deleteSessionBySessionId,
+  getSessionBySessionId,
+} from "@/app/(app)/(external-agents)/claude-code/lib/chat-history-service";
 
 export interface ConversationProps {
   executionId: string | null | undefined;
   agentType: number;
   projectId: string;
+  taskId?: string | null;
   sessionId?: string | null;
   resetSignal?: string | number | boolean;
   placeholder?: string;
@@ -39,6 +43,7 @@ export function Conversation({
   executionId,
   agentType,
   projectId,
+  taskId,
   sessionId,
   resetSignal,
   placeholder = "Type your message...",
@@ -60,10 +65,6 @@ export function Conversation({
     [],
   );
 
-  const updateSessionId = React.useCallback((value: string | null) => {
-    setSessionId(value);
-  }, []);
-
   const sessionQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", curSessionId, "session-record"],
     queryFn: async () => {
@@ -74,12 +75,17 @@ export function Conversation({
   });
 
   React.useEffect(() => {
+    setSessionId(sessionId ?? nextSessionId());
+    setMessages([]);
+  }, [resetSignal, sessionId]);
+
+  React.useEffect(() => {
     const sessionMessages = sessionQuery.data?.messages ?? [];
-    if(sessionMessages.length > 0){ 
+    if (sessionMessages.length > 0) {
       setMessages(sessionMessages);
     }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
+  }, [sessionQuery.data]);
 
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -106,6 +112,7 @@ export function Conversation({
             agentType,
             sessionId: curSessionId,
             projectId,
+            taskId,
             input: value,
           },
           onMessage: (message) => {
@@ -133,14 +140,14 @@ export function Conversation({
       onExecutionComplete,
       onExecutionError,
       projectId,
+      taskId,
       curSessionId,
-      updateSessionId,
     ],
   );
 
   const handleClear = React.useCallback(async () => {
     const success = await deleteSessionBySessionId(curSessionId, projectId);
-    if(success){
+    if (success) {
       setMessages([]);
     }
   }, [curSessionId, projectId]);

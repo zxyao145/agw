@@ -1,7 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace DSystem.Shared.Enums;
 
+
+
+//[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ProjectTaskAgentType
 {
-    Agentflow = 0,
-    Agent = 1,
+    Agent = 0,
+    Agentflow = 1,
 }

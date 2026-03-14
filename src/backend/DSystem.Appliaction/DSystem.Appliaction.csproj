@@ -13,7 +13,6 @@
 	  <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
     <ProjectReference Include="..\DSystem.Shared\DSystem.Shared.csproj" />
-    <ProjectReference Include="..\DSystem.SessionRecords\DSystem.SessionRecords.csproj" />
   </ItemGroup>
 
 </Project>

@@ -8,7 +8,8 @@ public record AgentExecutionRequest(
     ProjectTaskAgentType AgentType,
     string Input,
     string? SessionId = null,
-    string? ProjectId = null);
+    string? ProjectId = null,
+    Guid? TaskId = null);
 
 public record AgentExecutionResponse(
     string? SessionId,

@@ -1,8 +1,5 @@
-using DSystem.SessionRecords.Domain;
-using DSystem.SessionRecords.Entities;
 using DSystem.Domain.Entities;
-using DSystem.Domain.Repositories;
-using DSystem.Shared;
+using DSystem.Domain.Services;
 using DSystem.Shared.Contracts;
 using DSystem.Shared.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -13,13 +10,15 @@ namespace DSystem.Api.Controllers;
 [Route("api/session-records")]
 public class SessionRecordsController : ControllerBase
 {
-    private readonly SessionRecordDomainService _service;
-    private readonly IRepository<ProjectTask> _taskRepository;
+    private readonly TaskRecordDomainService _recordService;
+    private readonly ProjectTaskDomainService _taskService;
 
-    public SessionRecordsController(SessionRecordDomainService service, IRepository<ProjectTask> taskRepository)
+    public SessionRecordsController(
+        TaskRecordDomainService recordService,
+        ProjectTaskDomainService taskService)
     {
-        _service = service;
-        _taskRepository = taskRepository;
+        _recordService = recordService;
+        _taskService = taskService;
     }
 
     [HttpGet]
@@ -30,19 +29,21 @@ public class SessionRecordsController : ControllerBase
             return BadRequest("projectId is required.");
         }
 
-        var records = await _service.ListAsync(r => r.ProjectId == projectId);
-        var recordsBySession = records
-            .GroupBy(r => r.SessionId)
-            .ToDictionary(g => g.Key, g => g.ToList());
+        var tasks = await _taskService.ListAsync(t => t.ProjectId == projectId);
+        if (tasks.Count == 0)
+        {
+            return Ok(Array.Empty<SessionRecordSummary>());
+        }
 
-        var taskBySession = (await GetTasksByProjectIdAsync(projectId))
-            .GroupBy(t => t.SessionId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.UpdateTime ?? t.CreateTime).First());
+        var records = await _recordService.GetByContextIdsAsync(tasks.Select(t => t.ContextId));
+        var recordsByContext = records
+            .GroupBy(record => record.ContextId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
 
-        var sessionIds = recordsBySession.Keys.Union(taskBySession.Keys).ToList();
-        var summaries = sessionIds
-            .Select(sessionId => CreateSummary(projectId, sessionId, recordsBySession.GetValueOrDefault(sessionId), taskBySession.GetValueOrDefault(sessionId)))
-            .OrderByDescending(s => s.UpdateTime ?? s.CreateTime)
+        var summaries = tasks
+            .Where(task => recordsByContext.ContainsKey(task.ContextId))
+            .Select(task => CreateSummary(task, recordsByContext[task.ContextId]))
+            .OrderByDescending(summary => summary.UpdateTime ?? summary.CreateTime)
             .ToList();
 
         return Ok(summaries);
@@ -56,31 +57,61 @@ public class SessionRecordsController : ControllerBase
             return BadRequest("projectId is required.");
         }
 
-        var records = await _service.GetBySessionIdAsync(sessionId, projectId);
+        var task = await _recordService.FindTaskAsync(sessionId, projectId);
+        if (task == null)
+        {
+            return NotFound();
+        }
+
+        var records = await _recordService.GetByContextIdAsync(task.ContextId);
         if (records.Count == 0)
         {
             return NotFound();
         }
 
-        var task = (await GetTasksByProjectIdAsync(projectId)).FirstOrDefault(t => t.SessionId == sessionId);
         var orderedRecords = records
-            .OrderBy(r => r.CreateTime)
-            .ThenBy(r => r.UpdateTime ?? r.CreateTime)
+            .OrderBy(record => record.CreateTime)
+            .ThenBy(record => record.UpdateTime ?? record.CreateTime)
             .ToList();
-        var messages = orderedRecords.Select(ToAiMessage).ToList();
+        var messages = orderedRecords
+            .SelectMany(ToAiMessages)
+            .ToList();
 
-        var createTime = task?.CreateTime ?? orderedRecords.First().CreateTime;
-        var updateTime = task?.UpdateTime ?? orderedRecords.Last().UpdateTime ?? orderedRecords.Last().CreateTime;
+        var updateTime = task.UpdateTime
+            ?? orderedRecords.Last().UpdateTime
+            ?? orderedRecords.Last().CreateTime;
+
         var response = new SessionRecordDetails(
-            task?.Id ?? TryParseSessionIdAsGuid(sessionId),
+            task.Id,
             projectId,
-            task?.SessionId ?? sessionId,
-            NormalizeTitle(task?.Title),
+            task.ContextId,
+            NormalizeTitle(task.Title),
             messages,
-            createTime,
+            task.CreateTime,
             updateTime);
 
         return Ok(response);
+    }
+
+    [HttpPut("{sessionId}/title")]
+    public async Task<IActionResult> UpdateTitleAsync(
+        string sessionId,
+        [FromQuery] string projectId,
+        [FromBody] SessionRecordTitleUpdateRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(projectId))
+        {
+            return BadRequest("projectId is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            return BadRequest("title is required.");
+        }
+
+        var user = User?.Identity?.Name ?? "system";
+        var task = await _recordService.UpdateTaskTitleAsync(sessionId, projectId, request.Title, user);
+        return task == null ? NotFound() : NoContent();
     }
 
     [HttpDelete("{sessionId}")]
@@ -91,57 +122,70 @@ public class SessionRecordsController : ControllerBase
             return BadRequest("projectId is required.");
         }
 
-        var deleted = await _service.DeleteBySessionIdAsync(sessionId, projectId);
+        var deleted = await _recordService.DeleteBySessionIdAsync(sessionId, projectId);
         return deleted ? NoContent() : NotFound();
     }
 
-    private async Task<IReadOnlyList<ProjectTask>> GetTasksByProjectIdAsync(string projectId)
+    private static IEnumerable<AiMessage> ToAiMessages(TaskRecord record)
     {
-        return await _taskRepository.ListAsync(t => t.ProjectId == projectId);
+        var inputMessage = ToUserMessage(record);
+        if (inputMessage != null)
+        {
+            yield return inputMessage;
+        }
+
+        foreach (var message in record.Messages)
+        {
+            yield return message;
+        }
     }
 
-    private static AiMessage ToAiMessage(AgentSessionRecord record) =>
-        new(
-            record.MessageId,
-            record.Author,
-            record.Role,
-            record.Contents,
-            record.Metadata?.ToDictionary(x => x.Key, x => (object?)x.Value)
-            );
+    private static AiMessage? ToUserMessage(TaskRecord record)
+    {
+        var contents = record.Input.Contents;
+        if (contents.Count == 0 || contents.All(content => string.IsNullOrWhiteSpace(content.Content?.ToString())))
+        {
+            return null;
+        }
+
+        return new AiMessage(
+            $"user_{record.Id:N}",
+            "user",
+            "user",
+            contents,
+            record.Input.AdditionalProperties);
+    }
 
     private static string NormalizeTitle(string? title) =>
         string.IsNullOrWhiteSpace(title) ? "New Chat" : title;
 
-    private static SessionRecordSummary CreateSummary(
-        string projectId,
-        string sessionId,
-        List<AgentSessionRecord>? records,
-        ProjectTask? task)
+    private static SessionRecordSummary CreateSummary(ProjectTask task, List<TaskRecord> records)
     {
-        var sessionRecords = records ?? [];
-        var orderedRecords = sessionRecords
-            .OrderBy(r => r.CreateTime)
-            .ThenBy(r => r.UpdateTime ?? r.CreateTime)
+        var orderedRecords = records
+            .OrderBy(record => record.CreateTime)
+            .ThenBy(record => record.UpdateTime ?? record.CreateTime)
             .ToList();
 
-        var createTime = task?.CreateTime
-            ?? orderedRecords.FirstOrDefault()?.CreateTime
-            ?? DateTime.UtcNow;
-
-        var updateTime = task?.UpdateTime
+        var updateTime = task.UpdateTime
             ?? orderedRecords.LastOrDefault()?.UpdateTime
             ?? orderedRecords.LastOrDefault()?.CreateTime;
+        var messageCount = orderedRecords.Sum(CountMessages);
 
         return new SessionRecordSummary(
-            task?.Id ?? TryParseSessionIdAsGuid(sessionId),
-            projectId,
-            task?.SessionId ?? sessionId,
-            NormalizeTitle(task?.Title),
-            sessionRecords.Count,
-            createTime,
+            task.Id,
+            task.ProjectId,
+            task.ContextId,
+            NormalizeTitle(task.Title),
+            messageCount,
+            task.CreateTime,
             updateTime);
     }
 
-    private static Guid TryParseSessionIdAsGuid(string sessionId) =>
-        Guid.TryParse(sessionId, out var parsed) ? parsed : Guid.Empty;
+    private static int CountMessages(TaskRecord record)
+    {
+        var inputCount = record.Input.Contents.Any(content => !string.IsNullOrWhiteSpace(content.Content?.ToString()))
+            ? 1
+            : 0;
+        return inputCount + record.Messages.Count;
+    }
 }

@@ -2,7 +2,6 @@ using DSystem.Infrastructure.Configuration;
 using DSystem.Infrastructure.Data;
 using DSystem.Infrastructure.Repositories;
 using DSystem.Domain.Repositories;
-using DSystem.SessionRecords.Repositories;
 using DSystem.Shared.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -41,8 +40,6 @@ public static class DependencyInjection
         services.AddScoped<DbContext, LlmDbContext>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-        services.AddScoped<IAgentSessionRecordRepository, AgentSessionRecordRepository>();
-        services.AddScoped<ISessionRecordsUnitOfWork, SessionRecordsUnitOfWork>();
         services.AddScoped<IGitCommandService, GitCommandService>();
 
         return services;
