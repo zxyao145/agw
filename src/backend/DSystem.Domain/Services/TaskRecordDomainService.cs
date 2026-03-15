@@ -33,7 +33,8 @@ public class TaskRecordDomainService
 
         var records = await _recordRepository.ListAsync(r => r.ContextId == contextId);
         return records
-            .OrderBy(r => r.CreateTime)
+            .OrderBy(r => r.ConversationSequence ?? long.MinValue)
+            .ThenBy(r => r.CreateTime)
             .ThenBy(r => r.UpdateTime ?? r.CreateTime)
             .ToList();
     }
@@ -52,7 +53,8 @@ public class TaskRecordDomainService
 
         var records = await _recordRepository.ListAsync(r => values.Contains(r.ContextId));
         return records
-            .OrderBy(r => r.CreateTime)
+            .OrderBy(r => r.ConversationSequence ?? long.MinValue)
+            .ThenBy(r => r.CreateTime)
             .ThenBy(r => r.UpdateTime ?? r.CreateTime)
             .ToList();
     }

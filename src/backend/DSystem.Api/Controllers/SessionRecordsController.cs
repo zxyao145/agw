@@ -1,5 +1,6 @@
 using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
+using DSystem.Shared;
 using DSystem.Shared.Contracts;
 using DSystem.Shared.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -128,32 +129,11 @@ public class SessionRecordsController : ControllerBase
 
     private static IEnumerable<AiMessage> ToAiMessages(TaskRecord record)
     {
-        var inputMessage = ToUserMessage(record);
-        if (inputMessage != null)
-        {
-            yield return inputMessage;
-        }
-
-        foreach (var message in record.Messages)
+        var message = record.ToChatMessage()?.ToAiMessage();
+        if (message != null)
         {
             yield return message;
         }
-    }
-
-    private static AiMessage? ToUserMessage(TaskRecord record)
-    {
-        var contents = record.Input.Contents;
-        if (contents.Count == 0 || contents.All(content => string.IsNullOrWhiteSpace(content.Content?.ToString())))
-        {
-            return null;
-        }
-
-        return new AiMessage(
-            $"user_{record.Id:N}",
-            "user",
-            "user",
-            contents,
-            record.Input.AdditionalProperties);
     }
 
     private static string NormalizeTitle(string? title) =>
@@ -181,11 +161,6 @@ public class SessionRecordsController : ControllerBase
             updateTime);
     }
 
-    private static int CountMessages(TaskRecord record)
-    {
-        var inputCount = record.Input.Contents.Any(content => !string.IsNullOrWhiteSpace(content.Content?.ToString()))
-            ? 1
-            : 0;
-        return inputCount + record.Messages.Count;
-    }
+    private static int CountMessages(TaskRecord record) =>
+        record.ToChatMessage() == null ? 0 : 1;
 }

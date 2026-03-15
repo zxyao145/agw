@@ -44,7 +44,7 @@ public sealed class AgentExecSession : IAsyncDisposable
     private readonly string? _taskTitle;
     private readonly string? _taskDescription;
     private readonly string? _systemPrompt;
-    private readonly TaskRecordApplication _taskRecordApplication;
+    //private readonly TaskRecordApplication _taskRecordApplication;
 
     /// <summary>
     /// Initializes a new instance of the AiAgentSession class.
@@ -59,7 +59,6 @@ public sealed class AgentExecSession : IAsyncDisposable
         Guid? agentId,
         string? agentName,
         ILogger logger,
-        TaskRecordApplication taskRecordApplication,
         string? taskTitle = null,
         string? taskDescription = null,
         string? systemPrompt = null)
@@ -73,7 +72,6 @@ public sealed class AgentExecSession : IAsyncDisposable
         _agentId = agentId;
         _agentName = agentName;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _taskRecordApplication = taskRecordApplication ?? throw new ArgumentNullException(nameof(taskRecordApplication));
         _taskTitle = taskTitle;
         _taskDescription = taskDescription;
         _systemPrompt = systemPrompt;
@@ -129,20 +127,19 @@ public sealed class AgentExecSession : IAsyncDisposable
             var aiMessage = update.ToAiMessage();
             if (aiMessage != null) yield return aiMessage;
         }
-
-        await _taskRecordApplication.SaveThreadStateAsync(
-            _sessionId,
-            _contextId,
-            _projectId,
-            _agentType,
-            _agentId,
-            _agentName,
-            responseUpdates,
-            input,
-            _taskTitle,
-            _taskDescription,
-            _systemPrompt,
-            cancellationToken);
+        //await _taskRecordApplication.SaveThreadStateAsync(
+        //    _sessionId,
+        //    _contextId,
+        //    _projectId,
+        //    _agentType,
+        //    _agentId,
+        //    _agentName,
+        //    responseUpdates,
+        //    input,
+        //    _taskTitle,
+        //    _taskDescription,
+        //    _systemPrompt,
+        //    cancellationToken);
         _logger.LogDebug("Saved thread state for session: {SessionId}", _sessionId);
     }
 

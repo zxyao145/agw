@@ -4,6 +4,7 @@ using DSystem.Shared;
 using DSystem.Shared.Contracts;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
+using Microsoft.Extensions.AI;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DSystem.Api.Controllers;
@@ -40,8 +41,7 @@ public class ProjectTasksController : ControllerBase
                 var taskRecords = recordsByContext.GetValueOrDefault(task.ContextId) ?? [];
                 return ToResponse(
                     task,
-                    taskRecords.LastOrDefault(),
-                    CountMessages(taskRecords),
+                    taskRecords,
                     null);
             })
             .ToList();
@@ -61,7 +61,7 @@ public class ProjectTasksController : ControllerBase
 
         var records = await _taskRecordService.GetByContextIdAsync(task.ContextId);
         var messages = records.SelectMany(ToAiMessages).ToList();
-        return Ok(ToResponse(task, records.LastOrDefault(), CountMessages(records), messages));
+        return Ok(ToResponse(task, records, messages));
     }
 
     [HttpPost]
@@ -97,7 +97,8 @@ public class ProjectTasksController : ControllerBase
             Id = Guid.NewGuid(),
             ContextId = contextId,
             SessionId = sessionId,
-            Input = CreateUserInputMessage(request.Input)
+            ConversationSequence = 0,
+            ConversationPayload = JsonUtil.Serialize(new ChatMessage(ChatRole.User, request.Input.Trim()))
         };
 
         var created = await _taskService.CreateAsync(task, initialRecord, user);
@@ -106,7 +107,7 @@ public class ProjectTasksController : ControllerBase
             return BadRequest("Failed to create task (project/target invalid, target mismatch, or input missing).");
         }
 
-        return Accepted(ToResponse(created, initialRecord, CountMessages([initialRecord]), null));
+        return Accepted(ToResponse(created, [initialRecord], null));
     }
 
     [HttpPut("{taskId:guid}")]
@@ -132,12 +133,8 @@ public class ProjectTasksController : ControllerBase
             return BadRequest("Failed to update task.");
         }
 
-        var latestRecord = await _taskRecordService.GetLatestByContextIdAsync(updated.ContextId);
-        return Ok(ToResponse(
-            updated,
-            latestRecord,
-            latestRecord == null ? 0 : CountMessages([latestRecord]),
-            null));
+        var records = await _taskRecordService.GetByContextIdAsync(updated.ContextId);
+        return Ok(ToResponse(updated, records, null));
     }
 
     [HttpPut("{taskId:guid}/title")]
@@ -192,12 +189,8 @@ public class ProjectTasksController : ControllerBase
             return BadRequest("Only pending tasks can be reordered.");
         }
 
-        var latestRecord = await _taskRecordService.GetLatestByContextIdAsync(updated.ContextId);
-        return Ok(ToResponse(
-            updated,
-            latestRecord,
-            latestRecord == null ? 0 : CountMessages([latestRecord]),
-            null));
+        var records = await _taskRecordService.GetByContextIdAsync(updated.ContextId);
+        return Ok(ToResponse(updated, records, null));
     }
 
     [HttpPost("{taskId:guid}/cancel")]
@@ -218,12 +211,8 @@ public class ProjectTasksController : ControllerBase
             return BadRequest("Task cannot be canceled in its current state.");
         }
 
-        var latestRecord = await _taskRecordService.GetLatestByContextIdAsync(canceled.ContextId);
-        return Ok(ToResponse(
-            canceled,
-            latestRecord,
-            latestRecord == null ? 0 : CountMessages([latestRecord]),
-            null));
+        var records = await _taskRecordService.GetByContextIdAsync(canceled.ContextId);
+        return Ok(ToResponse(canceled, records, null));
     }
 
     [HttpDelete("{taskId:guid}")]
@@ -244,10 +233,12 @@ public class ProjectTasksController : ControllerBase
 
     private static ProjectTaskResponse ToResponse(
         ProjectTask task,
-        TaskRecord? latestRecord,
-        int messageCount,
+        IReadOnlyList<TaskRecord> records,
         IReadOnlyList<AiMessage>? messages)
     {
+        var latestRecord = records.LastOrDefault();
+        var latestUserRecord = records
+            .LastOrDefault(record => record.ToChatMessage()?.Role == ChatRole.User);
         var responseAgentId = task.AgentType == ProjectTaskAgentType.Agent
             ? task.AgentId
             : null;
@@ -266,62 +257,30 @@ public class ProjectTasksController : ControllerBase
             latestRecord?.SessionId ?? task.ContextId,
             task.Title,
             task.Description,
-            GetInputText(latestRecord?.Input),
+            GetInputText(latestUserRecord),
             task.ErrorMessage ?? latestRecord?.Error,
             task.CreateTime,
             task.UpdateTime,
             task.Status == ProjectTaskStatus.Pending ? null : task.CreateTime,
             task.FinishedTime,
-            messageCount,
+            CountMessages(records),
             messages);
-    }
-
-    private static UserInputMessage CreateUserInputMessage(string input)
-    {
-        return new UserInputMessage(
-            [new AiMessageContent(AiMessageContentType.TextContent, input.Trim())]);
     }
 
     private static IEnumerable<AiMessage> ToAiMessages(TaskRecord record)
     {
-        var inputMessage = ToUserMessage(record);
-        if (inputMessage != null)
-        {
-            yield return inputMessage;
-        }
-
-        foreach (var message in record.Messages)
+        var message = record.ToChatMessage()?.ToAiMessage();
+        if (message != null)
         {
             yield return message;
         }
     }
 
-    private static AiMessage? ToUserMessage(TaskRecord record)
-    {
-        var contents = record.Input.Contents;
-        if (contents.Count == 0 || contents.All(content => string.IsNullOrWhiteSpace(content.Content?.ToString())))
-        {
-            return null;
-        }
-
-        return new AiMessage(
-            $"user_{record.Id:N}",
-            "user",
-            "user",
-            contents,
-            record.Input.AdditionalProperties);
-    }
-
     private static int CountMessages(IEnumerable<TaskRecord> records) =>
         records.Sum(CountMessages);
 
-    private static int CountMessages(TaskRecord record)
-    {
-        var inputCount = record.Input.Contents.Any(content => !string.IsNullOrWhiteSpace(content.Content?.ToString()))
-            ? 1
-            : 0;
-        return inputCount + record.Messages.Count;
-    }
+    private static int CountMessages(TaskRecord record) =>
+        record.ToChatMessage() == null ? 0 : 1;
 
     private static string NormalizeProjectId(string projectId)
     {
@@ -331,13 +290,13 @@ public class ProjectTasksController : ControllerBase
             : normalizedProjectId;
     }
 
-    private static string GetInputText(UserInputMessage? input)
+    private static string GetInputText(TaskRecord? record)
     {
-        if (input == null)
+        if (record?.ToChatMessage()?.Role != ChatRole.User)
         {
             return string.Empty;
         }
 
-        return string.Concat(input.Contents.Select(content => content.Content?.ToString() ?? string.Empty));
+        return record.GetText();
     }
 }

@@ -17,6 +17,7 @@ using Serilog;
 using Serilog.Enrichers.OpenTelemetry;
 using System.Configuration;
 using System.Runtime;
+using Microsoft.Agents.AI;
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()
@@ -95,6 +96,16 @@ try
 
     builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddSingleton<ToolRegistryService>();  // Singleton to cache tool discovery
+    builder.Services.AddSingleton<EfCoreChatHistoryProvider>();
+    builder.Services.AddSingleton<ChatHistoryProvider>(sp =>
+    {
+        return sp.GetRequiredService<EfCoreChatHistoryProvider>();
+    });
+    builder.Services.AddSingleton<IProviderSessionState>(sp =>
+    {
+        return sp.GetRequiredService<EfCoreChatHistoryProvider>();
+    });
+    
     builder.Services.AddScoped<ModelDomainService>();
     builder.Services.AddScoped<ProviderDomainService>();
     builder.Services.AddScoped<ModelProviderDomainService>();

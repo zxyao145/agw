@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace DSystem.Domain.Entities;
 
-public class TaskRecord : BaseEntity
+public class TaskRecord
 {
     public Guid Id { get; set; }
 
@@ -20,17 +20,19 @@ public class TaskRecord : BaseEntity
 
     public string? AgentName { get; set; }
 
-    /// <summary>
-    /// User input to be executed by the associated target.
-    /// </summary>
-    public required UserInputMessage Input { get; set; }
+    public long? ConversationSequence { get; set; }
 
-    /// <summary>
-    /// agent 的处理
-    /// </summary>
-    public List<AiMessage> Messages { get; set; } = [];
+    public string? ConversationPayload { get; set; }
 
-    public Dictionary<string, JsonElement> Metadata { get; set; } = [];
+    ///// <summary>
+    ///// User input to be executed by the associated target.
+    ///// </summary>
+    //public UserInputMessage? Input { get; set; }
+
+    public Dictionary<string, JsonElement>? Metadata { get; set; }
 
     public string? Error { get; set; }
+
+    public DateTime CreateTime { get; set; }
+    public DateTime? UpdateTime { get; set; }
 }

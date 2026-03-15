@@ -3,6 +3,7 @@ using System;
 using DSystem.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(LlmDbContext))]
-    partial class LlmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260315122220_EfCoreChatHistoryProvider")]
+    partial class EfCoreChatHistoryProvider
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.5");
@@ -787,6 +790,10 @@ namespace DSystem.Infrastructure.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("conversation_sequence");
 
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
                     b.Property<DateTime>("CreateTime")
                         .HasColumnType("TEXT")
                         .HasColumnName("create_time");
@@ -794,6 +801,14 @@ namespace DSystem.Infrastructure.Migrations
                     b.Property<string>("Error")
                         .HasColumnType("text")
                         .HasColumnName("error");
+
+                    b.Property<string>("Input")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("input");
+
+                    b.Property<string>("Messages")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("messages");
 
                     b.Property<string>("Metadata")
                         .HasColumnType("jsonb")
@@ -804,6 +819,10 @@ namespace DSystem.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT")
                         .HasColumnName("session_id");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
 
                     b.Property<DateTime?>("UpdateTime")
                         .HasColumnType("TEXT")

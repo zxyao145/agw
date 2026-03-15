@@ -130,7 +130,8 @@ const groupContentsByType = (contents: AiMessageContent[], message: AiMessage): 
 };
 
 export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
-  const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
+  // const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
+  const isUser = message.role === "user";
   const isResult = message.role === "system" && message.additionalProperties?.type === "result";
   const contentNodes = React.useMemo(() => groupContentsByType(message.contents, message), [message]);
 

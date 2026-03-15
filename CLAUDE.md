@@ -59,6 +59,9 @@ dotnet run --project src/backend/DSystem.Host
 OpenAPI endpoint available at `/openapi` when running in Development mode.
 
 ### EF Core Migrations
+
+**DO NOT** run migrate automatically!
+
 ```bash
 # Add migration
 dotnet ef migrations add <MigrationName> \

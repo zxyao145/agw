@@ -1,6 +1,8 @@
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
 using DSystem.Appliaction.Services;
+using DSystem.Domain.Entities;
+using DSystem.Domain.Services;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Services;
 using Microsoft.Agents.AI;
@@ -17,6 +19,8 @@ public class ClaudeCodeService
     private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<ClaudeCodeService> _logger;
     private readonly TaskRecordApplication _taskRecordApplication;
+    private readonly ChatHistoryProvider _chatHistoryProvider;
+    private readonly IProviderSessionState _providerSessionState;
     private readonly IGitCommandService _gitCommandService;
     private readonly string _rootPath;
 
@@ -24,17 +28,22 @@ public class ClaudeCodeService
         ILogger<ClaudeCodeService> logger,
         IHostEnvironment hostEnvironment,
         IGitCommandService gitCommandService,
+        ChatHistoryProvider chatHistoryProvider,
+        IProviderSessionState providerSessionState,
         TaskRecordApplication taskRecordApplication)
     {
         _logger = logger;
         _taskRecordApplication = taskRecordApplication;
         _hostEnvironment = hostEnvironment;
+        _chatHistoryProvider = chatHistoryProvider;
         _gitCommandService = gitCommandService;
         _rootPath = Path.Combine(_hostEnvironment.ContentRootPath);
         if (!Directory.Exists(_rootPath))
         {
             Directory.CreateDirectory(_rootPath);
         }
+
+        _providerSessionState = providerSessionState;
     }
 
     /// <summary>
@@ -52,17 +61,25 @@ public class ClaudeCodeService
             initRequest.SessionId,
             initRequest.ProjectId,
             cancellationToken);
+
         var options = BuildAgentOptions(initRequest, hasTaskRecord);
         var agent = new ClaudeCodeAIAgent(options, _logger);
-        var thread = await GetOrCreateThreadAsync(
+        var agentSession = await GetOrCreateAgentSessionAsync(
             agent,
             initRequest.SessionId,
             hasTaskRecord,
             cancellationToken);
 
+        _providerSessionState.InitializeSessionState(
+                agentSession,
+                initRequest.SessionId,
+                initRequest.SessionId,
+                initRequest.ProjectId
+        );
+
         return new AgentExecSession(
             agent,
-            thread,
+            agentSession,
             initRequest.ProjectId,
             initRequest.SessionId,
             initRequest.SessionId,
@@ -70,12 +87,11 @@ public class ClaudeCodeService
             null,
             "ClaudeCode",
             _logger,
-            _taskRecordApplication,
             taskTitle: "New Chat",
             systemPrompt: initRequest.SystemPrompt);
     }
 
-    private async Task<AgentSession> GetOrCreateThreadAsync(
+    private async Task<AgentSession> GetOrCreateAgentSessionAsync(
         ClaudeCodeAIAgent agent,
         string sessionId,
         bool hasTaskRecord,
@@ -90,7 +106,7 @@ public class ClaudeCodeService
         return await agent.CreateSessionAsync(cancellationToken);
     }
 
-    private static ClaudeCodeAIAgentOptions BuildAgentOptions(ClaudeCodeSettingRequest request, bool hasTaskRecord)
+    private ClaudeCodeAIAgentOptions BuildAgentOptions(ClaudeCodeSettingRequest request, bool hasTaskRecord)
     {
         PermissionMode? permissionMode = null;
         if (!string.IsNullOrWhiteSpace(request.PermissionMode))
@@ -109,7 +125,8 @@ public class ClaudeCodeService
             EnvironmentVariables = request.EnvironmentVariables,
             PermissionMode = permissionMode,
             Resume = resume,
-            SessionId = optionSessionId
+            SessionId = optionSessionId,
+            ChatHistoryProvider = _chatHistoryProvider
         };
 
         if (!string.IsNullOrEmpty(request.ApiKey))

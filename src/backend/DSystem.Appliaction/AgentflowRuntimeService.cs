@@ -172,16 +172,16 @@ public class AgentflowRuntimeService
             }
         }
 
-        await _taskRecordApplication.SaveThreadStateAsync(
-            sessionId,
-            string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
-            projectId ?? string.Empty,
-            ProjectTaskAgentType.Agentflow,
-            agentflowId,
-            agentflow.Name,
-            responseUpdates,
-            input,
-            cancellationToken: CancellationToken.None);
+        //await _taskRecordApplication.SaveThreadStateAsync(
+        //    sessionId,
+        //    string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
+        //    projectId ?? string.Empty,
+        //    ProjectTaskAgentType.Agentflow,
+        //    agentflowId,
+        //    agentflow.Name,
+        //    responseUpdates,
+        //    input,
+        //    cancellationToken: CancellationToken.None);
     }
 
     public async Task<AgentflowExecutionResult?> ExecuteAsync(
@@ -222,7 +222,7 @@ public class AgentflowRuntimeService
         {
             if (evt is AgentResponseUpdateEvent e)
             {
-                Console.WriteLine($"{e.ExecutorId}: {e.Data}");
+                _logger.LogDebug($"{e.ExecutorId}: {e.Data}");
             }
             else if (evt is WorkflowOutputEvent outputEvt)
             {
@@ -235,7 +235,7 @@ public class AgentflowRuntimeService
         var responseUpdates = new List<AgentResponseUpdate>();
 
         // Display aggregated results from all agents
-        Console.WriteLine("===== Final Aggregated Results =====");
+        _logger.LogInformation("===== Final Aggregated Results =====");
         foreach (var message in result)
         {
             responseUpdates.Add(ToResponseUpdate(message));
@@ -245,16 +245,16 @@ public class AgentflowRuntimeService
             outputs.Add(chatMsg);
         }
 
-        await _taskRecordApplication.SaveThreadStateAsync(
-            sessionId,
-            string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
-            projectId ?? string.Empty,
-            ProjectTaskAgentType.Agentflow,
-            agentflowId,
-            agentflow.Name,
-            responseUpdates,
-            input,
-            cancellationToken: CancellationToken.None);
+        //await _taskRecordApplication.SaveThreadStateAsync(
+        //    sessionId,
+        //    string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
+        //    projectId ?? string.Empty,
+        //    ProjectTaskAgentType.Agentflow,
+        //    agentflowId,
+        //    agentflow.Name,
+        //    responseUpdates,
+        //    input,
+        //    cancellationToken: CancellationToken.None);
 
         return new AgentflowExecutionResult(sessionId, Messages: outputs);
     }
@@ -495,7 +495,7 @@ public class AgentflowRuntimeService
     private static AgentResponseUpdate ToResponseUpdate(ChatMessage message) =>
         new()
         {
-            MessageId = message.MessageId ?? Guid.NewGuid().ToString("N"),
+            MessageId = message.MessageId ?? Guid.NewGuid().Normalize(),
             AuthorName = message.AuthorName,
             Role = message.Role,
             Contents = [new TextContent(message.Text ?? string.Empty)]

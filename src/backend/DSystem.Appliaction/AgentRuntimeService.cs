@@ -46,6 +46,8 @@ public class AgentRuntimeService
     private readonly HybridCache _cache;
     private readonly TaskRecordApplication _taskRecordApplication;
     private readonly McpToolServerDomainService _mcpToolServerDomainService;
+    private readonly ChatHistoryProvider _chatHistoryProvider;
+    private readonly IProviderSessionState _providerSessionState;
 
 
     public AgentRuntimeService(
@@ -58,6 +60,8 @@ public class AgentRuntimeService
         HybridCache cache,
         TaskRecordApplication taskRecordApplication,
         McpToolServerDomainService mcpToolServerDomainService,
+        ChatHistoryProvider chatHistoryProvider,
+        IProviderSessionState providerSessionState,
         ILogger<AgentRuntimeService> logger)
     {
         _agentRepository = agentRepository;
@@ -69,6 +73,8 @@ public class AgentRuntimeService
         _cache = cache;
         _taskRecordApplication = taskRecordApplication;
         _mcpToolServerDomainService = mcpToolServerDomainService;
+        _chatHistoryProvider = chatHistoryProvider;
+        _providerSessionState = providerSessionState;
         _logger = logger;
     }
 
@@ -210,10 +216,21 @@ public class AgentRuntimeService
                     }
 
                     var chatCompletionClient = client.GetChatClient(model.Name);
+                    var agentOptions = new ChatClientAgentOptions
+                    {
+                        Name = agentDefinition.Name,
+                        Description = agentDefinition.Description,
+                        ChatHistoryProvider = _chatHistoryProvider,
+                        ChatOptions = new ChatOptions
+                        {
+                            ModelId = model.Name,
+                            Instructions = agentDefinition.SystemPrompt,
+                            Tools = tools
+                        }
+                    };
+
                     aIAgent = chatCompletionClient.AsAIAgent(
-                        instructions: agentDefinition.SystemPrompt,
-                        name: agentDefinition.Name,
-                        tools: tools
+                        agentOptions
                     )
                         .AsBuilder()
                         .UseOpenTelemetry(sourceName: provider.Name, configure: (cfg) =>
@@ -251,11 +268,21 @@ public class AgentRuntimeService
                         client = new AnthropicClient(anthropicClientOptions);
                     }
 
+                    var agentOptions = new ChatClientAgentOptions
+                    {
+                        Name = agentDefinition.Name,
+                        Description = agentDefinition.Description,
+                        ChatHistoryProvider = _chatHistoryProvider,
+                        ChatOptions = new ChatOptions
+                        {
+                            ModelId = model.Name,
+                            Instructions = agentDefinition.SystemPrompt,
+                            Tools = tools
+                        }
+                    };
+
                     aIAgent = client.AsAIAgent(
-                        model: model.Name,
-                        instructions: agentDefinition.SystemPrompt,
-                        name: agentDefinition.Name,
-                        tools: tools
+                        agentOptions
                         )
                         .AsBuilder()
                         .UseOpenTelemetry(sourceName: provider.Name, configure: (cfg) =>
@@ -337,6 +364,11 @@ public class AgentRuntimeService
             return null;
         }
         var agentSession = await GetOrCreateThreadAsync(aiAgent, sessionId, cancellationToken);
+        _providerSessionState.InitializeSessionState(
+            agentSession,
+            resolvedContextId,
+            sessionId,
+            projectId);
         return new AgentExecSession(
             aiAgent,
             agentSession,
@@ -347,7 +379,6 @@ public class AgentRuntimeService
             agentId,
             agent.Name,
             _logger,
-            _taskRecordApplication,
             taskTitle: agent.Name);
     }
 
@@ -517,6 +548,12 @@ public class AgentRuntimeService
                 }
             }
 
+            _providerSessionState.InitializeSessionState(
+                session,
+                string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
+                sessionId,
+                projectId);
+
             ChatMessage? system = null;
             var chatMsg = new ChatMessage(ChatRole.User, input);
             IEnumerable<ChatMessage> msgs = system == null
@@ -536,16 +573,16 @@ public class AgentRuntimeService
                 }
             }
 
-            await _taskRecordApplication.SaveThreadStateAsync(
-                sessionId,
-                string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
-                projectId ?? string.Empty,
-                ProjectTaskAgentType.Agent,
-                agent.Id,
-                agent.Name,
-                responseUpdates,
-                input,
-                cancellationToken: CancellationToken.None);
+            //await _taskRecordApplication.SaveThreadStateAsync(
+            //    sessionId,
+            //    string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
+            //    projectId ?? string.Empty,
+            //    ProjectTaskAgentType.Agent,
+            //    agent.Id,
+            //    agent.Name,
+            //    responseUpdates,
+            //    input,
+            //    cancellationToken: CancellationToken.None);
 
             return new AgentExecutionResult(
                 sessionId,

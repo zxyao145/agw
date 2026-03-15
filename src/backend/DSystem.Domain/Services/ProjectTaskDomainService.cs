@@ -2,13 +2,16 @@ using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
-using DSystem.Shared.Models;
+using Microsoft.Extensions.AI;
+using System.Text.Json;
 using System.Linq.Expressions;
 
 namespace DSystem.Domain.Services;
 
 public class ProjectTaskDomainService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     private readonly IRepository<ProjectTask> _taskRepository;
     private readonly IRepository<TaskRecord> _taskRecordRepository;
     private readonly IRepository<Project> _projectRepository;
@@ -42,7 +45,7 @@ public class ProjectTaskDomainService
         if (string.IsNullOrWhiteSpace(task.Description)
             || string.IsNullOrWhiteSpace(task.ContextId)
             || string.IsNullOrWhiteSpace(initialRecord.SessionId)
-            || string.IsNullOrWhiteSpace(GetInputText(initialRecord.Input)))
+            || string.IsNullOrWhiteSpace(initialRecord.GetText()))
         {
             return null;
         }
@@ -72,10 +75,8 @@ public class ProjectTaskDomainService
 
         initialRecord.Id = initialRecord.Id == Guid.Empty ? Guid.NewGuid() : initialRecord.Id;
         initialRecord.ContextId = task.ContextId;
-        initialRecord.AgentName = await GetTargetNameAsync(task.AgentType, task.AgentId);
-        initialRecord.CreateBy = user;
+        initialRecord.AgentName = "user";
         initialRecord.CreateTime = task.CreateTime;
-        initialRecord.UpdateBy = user;
         initialRecord.UpdateTime = task.CreateTime;
 
         await _taskRepository.AddAsync(task);
@@ -104,15 +105,23 @@ public class ProjectTaskDomainService
             return null;
         }
 
-        latestRecord.Input = CreateUserInputMessage(input);
-        latestRecord.UpdateBy = user;
-        latestRecord.UpdateTime = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        var record = new TaskRecord
+        {
+            Id = Guid.NewGuid(),
+            ContextId = existing.ContextId,
+            SessionId = latestRecord.SessionId,
+            AgentName = latestRecord.AgentName,
+            ConversationSequence = (latestRecord.ConversationSequence ?? -1) + 1,
+            ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, input.Trim()), JsonOptions),
+            CreateTime = now,
+            UpdateTime = now
+        };
 
-        existing.UpdateBy = user;
-        existing.UpdateTime = latestRecord.UpdateTime;
+        existing.UpdateTime = now;
 
         _taskRepository.Update(existing);
-        _taskRecordRepository.Update(latestRecord);
+        await _taskRecordRepository.AddAsync(record);
         await _unitOfWork.SaveChangesAsync();
         return existing;
     }
@@ -320,19 +329,9 @@ public class ProjectTaskDomainService
     {
         var records = await _taskRecordRepository.ListAsync(r => r.ContextId == contextId);
         return records
-            .OrderBy(r => r.UpdateTime ?? r.CreateTime)
+            .OrderBy(r => r.ConversationSequence ?? long.MinValue)
+            .ThenBy(r => r.UpdateTime ?? r.CreateTime)
             .ThenBy(r => r.CreateTime)
             .LastOrDefault();
-    }
-
-    private static UserInputMessage CreateUserInputMessage(string input)
-    {
-        return new UserInputMessage(
-            [new AiMessageContent(AiMessageContentType.TextContent, input.Trim())]);
-    }
-
-    private static string GetInputText(UserInputMessage input)
-    {
-        return string.Concat(input.Contents.Select(content => content.Content?.ToString() ?? string.Empty));
     }
 }

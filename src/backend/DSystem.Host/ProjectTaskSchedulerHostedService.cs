@@ -6,6 +6,7 @@ using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
@@ -137,6 +138,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
             _leaseAcquiredCounter.Add(1, new KeyValuePair<string, object?>("project.id", projectId));
             activity?.SetTag("lease.acquired", true);
 
+            Activity? agentTaskRunActivity = null;
             try
             {
                 // If there is a running task, we do not start another one for this project.
@@ -203,7 +205,18 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                         taskActivity?.SetTag("agent.id", next.AgentId.Value);
                     }
 
-                    var input = GetInputText(taskRecord.Input);
+                    var input = GetInputText(taskRecord);
+                    var traceId = ActivityTraceId.CreateFromString(Guid.Parse(next.ContextId)!.Normalize().AsSpan());
+                    var spanId = ActivitySpanId.CreateRandom();
+                    var context = new ActivityContext(
+                        traceId,
+                        spanId,
+                        ActivityTraceFlags.Recorded);
+
+                    agentTaskRunActivity = new Activity("agent-task-run");
+                    agentTaskRunActivity.SetParentId(context.TraceId, context.SpanId, context.TraceFlags);
+                    agentTaskRunActivity.Start();
+
                     object? execution = next.AgentType switch
                     {
                         ProjectTaskAgentType.Agentflow when next.AgentId.HasValue =>
@@ -224,6 +237,8 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                                 marked.ContextId),
                         _ => null
                     };
+
+                    agentTaskRunActivity.Stop();
                     stopwatch.Stop();
 
                     if (execution == null)
@@ -254,6 +269,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                 }
                 catch (Exception ex)
                 {
+                    _logger.LogError(ex, "project task run failed!");
                     stopwatch.Stop();
                     await taskService.MarkFailedAsync(marked.Id, ex.Message, "scheduler");
                     _tasksFailedCounter.Add(1,
@@ -271,6 +287,11 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
             }
             finally
             {
+                if(agentTaskRunActivity != null)
+                {
+                    agentTaskRunActivity.Stop();
+                }
+
                 await ReleaseProjectLeaseAsync(dbContext, projectId, stoppingToken);
             }
         }
@@ -280,9 +301,15 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
         }
     }
 
-    private static string GetInputText(UserInputMessage input)
+    private static string GetInputText(TaskRecord record)
     {
-        return string.Concat(input.Contents.Select(content => content.Content?.ToString() ?? string.Empty));
+        var message = record.ToChatMessage();
+        if (message?.Role != ChatRole.User)
+        {
+            return string.Empty;
+        }
+
+        return record.GetText();
     }
 
     private async Task<bool> TryAcquireProjectLeaseAsync(LlmDbContext dbContext, Guid projectId, CancellationToken cancellationToken)

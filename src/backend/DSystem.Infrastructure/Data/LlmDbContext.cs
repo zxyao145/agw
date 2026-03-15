@@ -173,34 +173,19 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.AgentName).HasMaxLength(200);
+            entity.Property(e => e.ConversationPayload).HasColumnType("text");
             entity.Property(e => e.Error).HasColumnType("text");
             entity.HasIndex(e => new { e.ContextId, e.CreateTime });
             entity.HasIndex(e => new { e.ContextId, e.SessionId, e.CreateTime });
-
-            entity.Property(e => e.Input)
-                .IsRequired()
-                .HasColumnType("jsonb")
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => string.IsNullOrWhiteSpace(v)
-                        ? new UserInputMessage(new List<AiMessageContent>())
-                        : JsonSerializer.Deserialize<UserInputMessage>(v, (JsonSerializerOptions?)null) ?? new UserInputMessage(new List<AiMessageContent>()));
-
-            entity.Property(e => e.Messages)
-                .HasColumnType("jsonb")
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => string.IsNullOrWhiteSpace(v)
-                        ? new List<AiMessage>()
-                        : JsonSerializer.Deserialize<List<AiMessage>>(v, (JsonSerializerOptions?)null) ?? new List<AiMessage>());
+            entity.HasIndex(e => new { e.ContextId, e.ConversationSequence }).IsUnique(false);
 
             entity.Property(e => e.Metadata)
                 .HasColumnType("jsonb")
                 .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => string.IsNullOrWhiteSpace(v)
-                        ? new Dictionary<string, JsonElement>()
-                        : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, JsonElement>());
+                        ? null
+                        : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null));
         });
 
         modelBuilder.Entity<ProjectLease>(entity =>
