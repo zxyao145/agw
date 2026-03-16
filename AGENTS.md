@@ -1,73 +1,185 @@
-# Repository Guidelines
+# AGENTS.md
 
-## Project Structure & Module Organization
-- `src/backend/` contains the .NET 10 solution projects:
-  - `DSystem.Host` (startup host),
-  - `DSystem.Api` and `DSystem.Manager.Api` (API/controller layers),
-  - `DSystem.Domain`, `DSystem.Infrastructure`, `DSystem.A2A`, `DSystem.ExternalAgents`.
-- `src/frontend/web/` is the Next.js 16 App Router UI (`src/app`, `src/components`, `src/api`).
-- `tests/DSystem.ExternalAgents.Tests/` holds xUnit tests for backend behavior.
-- `docs/` contains project documentation; `scripts/` contains API smoke scripts (for example `scripts/test-both-apis.sh`).
-- Treat build outputs (`bin/`, `obj/`, `.next/`, `node_modules/`) as generated artifacts.
+This file provides guidance to coding agents working in this repository.
 
-## Build, Test, and Development Commands
-- Backend (run from repo root):
-  - `dotnet restore D-System.slnx` - restore NuGet packages.
-  - `dotnet build D-System.slnx` - build all backend projects.
-  - `dotnet run --project src/backend/DSystem.Host` - start local APIs and host services.
-  - `dotnet test D-System.slnx` - run all .NET tests.
-  - `dotnet ef migrations add <Name> -p src/backend/DSystem.Infrastructure -s src/backend/DSystem.Host` - add EF Core migration.
-- Frontend (run in `src/frontend/web`):
-  - `pnpm install`, `pnpm dev`, `pnpm build`
-  - `pnpm lint`, `pnpm lint:fix`, `pnpm format`
-  - `pnpm gen:openapi` - regenerate `src/api/openapi.d.ts` after backend contract changes.
+## Project Overview
 
-## Coding Style & Naming Conventions
-- C#: 4-space indentation, `PascalCase` for types/members, `camelCase` for locals/parameters, `I` prefix for interfaces.
-- Keep API request/response DTOs under each API project’s `Contracts/`; controllers end with `*Controller.cs`.
-- Prefer async methods for I/O and constructor injection for services.
-- Frontend: TypeScript + React function components; use kebab-case filenames (for example `chat-history-list.tsx`) and `useXxx` hook naming.
+D-System is an ASP.NET Core + EF Core backend with a Next.js frontend for managing LLM agents, models, providers, and multi-agent workflows. It follows a modular architecture and integrates Microsoft.Agents.AI, MCP tool servers, A2A endpoints, and external agents such as Claude Code SDK.
 
-## Testing Guidelines
-- Framework: xUnit (`Microsoft.NET.Test.Sdk`, `xunit`, `coverlet.collector`).
-- Place tests under `tests/DSystem.*.Tests/`, mirroring production namespaces.
-- Use method names like `Method_Condition_ExpectedResult`.
-- Run one test: `dotnet test --filter "FullyQualifiedName~ClaudeCodeSessionTests.CancelActiveRequest_SetsCancellationToken"`.
-- No coverage threshold is enforced in-repo; collect coverage with `dotnet test --collect:"XPlat Code Coverage"` when needed.
+## Architecture And Project Structure
 
-## Commit & Pull Request Guidelines
-- Recent history follows Conventional Commits, often with scope and issue refs:
-  - `feat(claude-code): ...`, `fix: ...`, `refactor: ...`, `chore: ...`, `docs: ...`.
-- Keep PRs focused to one change set.
-- Include: short summary, linked issue, testing notes (commands run), and migration impact if schema changed.
-- For UI changes, include screenshots; for API changes, include example request/response or endpoint notes.
-- Before review, ensure backend build/tests and frontend lint/build pass.
+### Backend Organization (`src/backend/`)
 
-## Security & Configuration Tips
-- Do not commit secrets to `appsettings*.json` or frontend env files.
-- Configure database/provider in `src/backend/DSystem.Host/appsettings.json` (`Database.Provider`, `Database.ConnectionString`) and override sensitive values via environment variables.
+```text
+DSystem.Host/              # ASP.NET Core entry point, DI registration, hosted services
+DSystem.Infrastructure/    # EF Core DbContext, repositories, migrations
+DSystem.Shared/            # Base entities, enums, shared models, repository interfaces
+DSystem.Shared.Contract/   # Interfaces for cross-module interaction
+DSystem.Agents/            # Agent definitions, workflows, MCP tools, runtime services
+DSystem.Providers/         # LLM models, providers, model-providers, auth configs
+DSystem.Tasks/             # Projects, tasks, session records, chat history
+DSystem.Jobs/              # Background jobs and project leases
+DSystem.A2A/               # A2A protocol implementation for agent discovery and messaging
+```
 
+Notes:
+- `D-System.slnx` also references sibling SDK projects in `../claude-code-sdk-csharp/`; full solution builds depend on that adjacent checkout.
+- `src/backend/DSystem.Contract/` exists in this working tree only as generated `obj/` content and is not part of the solution.
 
-## Skills
-A skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.
-### Available skills
-- skill-creator: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Codex's capabilities with specialized knowledge, workflows, or tool integrations. (file: /home/wsl/.codex/skills/.system/skill-creator/SKILL.md)
-- skill-installer: Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos). (file: /home/wsl/.codex/skills/.system/skill-installer/SKILL.md)
-### How to use skills
-- Discovery: The list above is the skills available in this session (name + description + file path). Skill bodies live on disk at the listed paths.
-- Trigger rules: If the user names a skill (with `$SkillName` or plain text) OR the task clearly matches a skill's description shown above, you must use that skill for that turn. Multiple mentions mean use them all. Do not carry skills across turns unless re-mentioned.
-- Missing/blocked: If a named skill isn't in the list or the path can't be read, say so briefly and continue with the best fallback.
-- How to use a skill (progressive disclosure):
-  1) After deciding to use a skill, open its `SKILL.md`. Read only enough to follow the workflow.
-  2) When `SKILL.md` references relative paths (e.g., `scripts/foo.py`), resolve them relative to the skill directory listed above first, and only consider other paths if needed.
-  3) If `SKILL.md` points to extra folders such as `references/`, load only the specific files needed for the request; don't bulk-load everything.
-  4) If `scripts/` exist, prefer running or patching them instead of retyping large code blocks.
-  5) If `assets/` or templates exist, reuse them instead of recreating from scratch.
-- Coordination and sequencing:
-  - If multiple skills apply, choose the minimal set that covers the request and state the order you'll use them.
-  - Announce which skill(s) you're using and why (one short line). If you skip an obvious skill, say why.
-- Context hygiene:
-  - Keep context small: summarize long sections instead of pasting them; only load extra files when needed.
-  - Avoid deep reference-chasing: prefer opening only files directly linked from `SKILL.md` unless you're blocked.
-  - When variants exist (frameworks, providers, domains), pick only the relevant reference file(s) and note that choice.
-- Safety and fallback: If a skill can't be applied cleanly (missing files, unclear instructions), state the issue, pick the next-best approach, and continue.
+### Frontend Organization (`src/frontend/web/`)
+
+```text
+src/app/(app)/
+  (agents)/agents            # Agent CRUD
+  (agents)/agentflows        # Workflow editor
+  (agents)/mcp-tool-servers  # MCP server management
+  (external-agents)/claude-code
+  (overview)/dashboard
+  (overview)/traces
+  (providers)/models
+  (providers)/providers
+  (providers)/model-providers
+  (tasks)/projects
+src/api/                     # Typed API helpers and generated OpenAPI types
+src/components/              # Shared UI components
+```
+
+### Repository Layout
+
+- `docs/` contains project documentation.
+- `scripts/` contains helper scripts such as API smoke tests.
+- Treat `bin/`, `obj/`, `.next/`, and `node_modules/` as generated artifacts.
+
+## Key Domain Concepts
+
+- `Agent`: AI agent with prompt, type, model-provider linkage, and MCP tool bindings.
+- `Agentflow`: Multi-agent workflow with nodes, edges, and orchestration pattern.
+- `McpToolServer`: MCP server configuration for stdio, HTTP, or SSE transport.
+- `LlmModel`, `Provider`, `ModelProvider`, `ProviderAuthConfig`: model and provider catalog plus auth configuration.
+- `Project`, `ProjectTask`, `TaskRecord`, `ProjectLease`: task execution, conversation persistence, and concurrency control.
+
+## Core Runtime Services
+
+- `src/backend/DSystem.Agents/Services/AgentRuntimeService.cs`: creates runtime agents, hydrates provider configuration, wires tools, and supports external agent session resumption.
+- `src/backend/DSystem.Agents/Services/AgentflowRuntimeService.cs`: executes workflows with `Concurrent`, `Sequential`, `GroupChat`, `Handoff`, and `Magentic` orchestration patterns.
+- `src/backend/DSystem.Host/ProjectTaskSchedulerHostedService.cs`: polls pending tasks, limits cross-project concurrency, and coordinates lease-based execution.
+
+## Build And Development Commands
+
+### Backend
+
+Run from the repo root:
+
+```bash
+dotnet restore D-System.slnx
+dotnet build D-System.slnx
+dotnet run --project src/backend/DSystem.Host
+dotnet watch --project src/backend/DSystem.Host
+dotnet test D-System.slnx
+dotnet format
+```
+
+Notes:
+- The development host launches on `http://localhost:5015` by default via `src/backend/DSystem.Host/Properties/launchSettings.json`.
+- Do not add or apply EF Core migrations automatically. When needed, use:
+
+```bash
+dotnet ef migrations add <MigrationName> \
+  -p src/backend/DSystem.Infrastructure \
+  -s src/backend/DSystem.Host
+
+dotnet ef database update \
+  -p src/backend/DSystem.Infrastructure \
+  -s src/backend/DSystem.Host
+```
+
+### Frontend
+
+Run from `src/frontend/web`:
+
+```bash
+pnpm install
+pnpm dev
+pnpm build
+pnpm lint
+pnpm lint:fix
+pnpm format
+pnpm gen:openapi
+```
+
+Notes:
+- The Next.js dev server runs on `http://localhost:3000` by default.
+- Regenerate `src/frontend/web/src/api/openapi.d.ts` after backend contract changes.
+
+## Configuration
+
+### Backend Configuration
+
+Primary settings live in `src/backend/DSystem.Host/appsettings.json`:
+
+```json
+{
+  "Database": {
+    "Provider": "sqlite",
+    "ConnectionString": "Data Source=d_system.db"
+  },
+  "OpenTelemetry": {
+    "ServiceName": "DSystem",
+    "ServiceVersion": "1.0.0",
+    "OtlpEndpoint": "http://localhost:4317"
+  }
+}
+```
+
+Guidance:
+- Supported database providers are `sqlite` and `postgres`.
+- Keep secrets out of `appsettings*.json` and frontend env files; prefer environment-variable overrides.
+- Register new backend services in `src/backend/DSystem.Host/Program.cs` alongside the existing DI setup.
+
+## Coding Style
+
+- Use 4-space indentation and standard C# naming: `PascalCase` for types and members, `camelCase` for locals and parameters, `I` prefix for interfaces.
+- Keep request and response DTOs in `Contracts/` folders within the relevant backend module.
+- Controllers should end with `Controller`.
+- Prefer async methods for I/O and constructor injection for dependencies.
+- Frontend code should use TypeScript, React function components, and kebab-case filenames.
+- Do not edit generated artifacts unless the task is explicitly about generated output.
+
+## Testing Guidance
+
+- Use xUnit for backend tests when adding coverage.
+- Prefer `tests/DSystem.*.Tests/` with namespaces mirroring production code.
+- Name test methods like `Method_Condition_ExpectedResult`.
+- Run `dotnet test D-System.slnx` before handing off backend changes.
+- This checkout does not currently include in-repo test projects; add focused tests with new behavior when practical.
+
+## Frontend Architecture
+
+- Stack: Next.js 16 App Router, React 19, Tailwind CSS 4, Radix UI, TanStack React Query 5, `openapi-fetch`.
+- Prefer the typed helpers in `src/frontend/web/src/api/client.ts` for HTTP calls.
+- Use `src/frontend/web/src/api/execution-ws.ts` for task execution websocket flows.
+- Keep route-specific UI inside the relevant `src/app/(app)/...` segment and shared UI in `src/components/`.
+
+## A2A Protocol
+
+D-System exposes agents over A2A endpoints:
+
+- `GET /a2a/agents`
+- `GET /a2a/{agentName}/v1/card`
+- `POST /a2a/{agentName}/v1/message:stream`
+
+Example:
+
+```bash
+curl -X POST http://localhost:5015/a2a/my-agent/v1/message:stream \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{"messages":[{"role":"user","content":"Hello!"}],"context":{"sessionId":null}}'
+```
+
+## Workflow Expectations
+
+- Follow Conventional Commits such as `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, and `test:`.
+- Keep pull requests focused and include summary, linked issue, testing notes, and migration impact when applicable.
+- Include screenshots for UI changes and example payloads or endpoint notes for API changes.
+- Preserve unrelated user changes in a dirty worktree; do not revert or rewrite them unless explicitly asked.
