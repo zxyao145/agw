@@ -6,7 +6,11 @@
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
     <PackageReference Include="Microsoft.Agents.AI.Anthropic" />
     <PackageReference Include="ModelContextProtocol" />
+    <ProjectReference Include="..\DSystem.Providers\DSystem.Providers.csproj" />
     <ProjectReference Include="..\DSystem.Shared\DSystem.Shared.csproj" />
-    <ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
+    <ProjectReference Include="..\DSystem.Tasks\DSystem.Tasks.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Infrastructure\" />
   </ItemGroup>
 </Project>

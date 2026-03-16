@@ -16,5 +16,4 @@ public class ModelProvider : BaseEntity
 
     public LlmModel? Model { get; set; }
     public Provider? Provider { get; set; }
-    public ICollection<Agent> Agents { get; set; } = new List<Agent>();
 }

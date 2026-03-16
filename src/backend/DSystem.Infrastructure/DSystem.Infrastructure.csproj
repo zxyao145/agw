@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<ItemGroup>
-		<ProjectReference Include="..\DSystem.Appliaction\DSystem.Appliaction.csproj" />
 		<ProjectReference Include="..\DSystem.Agents\DSystem.Agents.csproj" />
 		<ProjectReference Include="..\DSystem.Providers\DSystem.Providers.csproj" />
 		<ProjectReference Include="..\DSystem.Tasks\DSystem.Tasks.csproj" />

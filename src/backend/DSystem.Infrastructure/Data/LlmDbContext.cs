@@ -96,11 +96,11 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.Tools).HasMaxLength(4000);  // JSON array of tool names
 
             // ModelProviderId is optional - required for System agents, optional for External agents
-            entity.HasOne(e => e.ModelProvider)
-                .WithMany(p => p.Agents)
-                .HasForeignKey(e => e.ModelProviderId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .IsRequired(false);
+            //entity.HasOne(e => e.ModelProvider)
+            //    .WithMany(p => p.Agents)
+            //    .HasForeignKey(e => e.ModelProviderId)
+            //    .OnDelete(DeleteBehavior.Cascade)
+            //    .IsRequired(false);
         });
 
         modelBuilder.Entity<Agentflow>(entity =>
@@ -194,10 +194,10 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.LockedBy).IsRequired().HasMaxLength(200);
             entity.HasIndex(e => e.LockedUntilUtc);
 
-            entity.HasOne(e => e.Project)
-                .WithOne()
-                .HasForeignKey<ProjectLease>(e => e.ProjectId)
-                .OnDelete(DeleteBehavior.Cascade);
+            //entity.HasOne(e => e.Project)
+            //    .WithOne()
+            //    .HasForeignKey<ProjectLease>(e => e.ProjectId)
+            //    .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<McpToolServer>(entity =>

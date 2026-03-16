@@ -4,12 +4,8 @@
   </Folder>
   <Folder Name="/2Api/">
     <Project Path="src/backend/DSystem.A2A/DSystem.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
-    <Project Path="src/backend/DSystem.Api/DSystem.Api.csproj" />
-    <Project Path="src/backend/DSystem.Manager.Api/DSystem.Manager.Api.csproj" />
   </Folder>
   <Folder Name="/Core/">
-    <Project Path="src/backend/DSystem.Appliaction/DSystem.Appliaction.csproj" Id="4eec0e3e-d979-4709-b21e-668972c0376c" />
-    <Project Path="src/backend/DSystem.Domain/DSystem.Domain.csproj" />
     <Project Path="src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
     <Project Path="src/backend/DSystem.Agents/DSystem.Agents.csproj" />
     <Project Path="src/backend/DSystem.Providers/DSystem.Providers.csproj" />

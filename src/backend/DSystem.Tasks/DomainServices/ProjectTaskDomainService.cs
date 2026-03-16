@@ -15,23 +15,17 @@ public class ProjectTaskDomainService
     private readonly IRepository<ProjectTask> _taskRepository;
     private readonly IRepository<TaskRecord> _taskRecordRepository;
     private readonly IRepository<Project> _projectRepository;
-    private readonly IRepository<Agentflow> _agentflowRepository;
-    private readonly IRepository<Agent> _agentRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public ProjectTaskDomainService(
         IRepository<ProjectTask> taskRepository,
         IRepository<TaskRecord> taskRecordRepository,
         IRepository<Project> projectRepository,
-        IRepository<Agentflow> agentflowRepository,
-        IRepository<Agent> agentRepository,
         IUnitOfWork unitOfWork)
     {
         _taskRepository = taskRepository;
         _taskRecordRepository = taskRecordRepository;
         _projectRepository = projectRepository;
-        _agentflowRepository = agentflowRepository;
-        _agentRepository = agentRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -298,32 +292,17 @@ public class ProjectTaskDomainService
             return false;
         }
 
-        return agentType switch
-        {
-            ProjectTaskAgentType.Agentflow =>
-                await _agentflowRepository.GetByIdAsync(agentId.Value) is Agentflow agentflow && agentflow.Enable,
-            ProjectTaskAgentType.Agent =>
-                await _agentRepository.GetByIdAsync(agentId.Value) is not null,
-            _ => false
-        };
+        return true;
+        //return agentType switch
+        //{
+        //    ProjectTaskAgentType.Agentflow =>
+        //        await _agentflowRepository.GetByIdAsync(agentId.Value) is Agentflow agentflow && agentflow.Enable,
+        //    ProjectTaskAgentType.Agent =>
+        //        await _agentRepository.GetByIdAsync(agentId.Value) is not null,
+        //    _ => false
+        //};
     }
 
-    private async Task<string?> GetTargetNameAsync(ProjectTaskAgentType agentType, Guid? agentId)
-    {
-        if (!agentId.HasValue)
-        {
-            return null;
-        }
-
-        return agentType switch
-        {
-            ProjectTaskAgentType.Agentflow =>
-                (await _agentflowRepository.GetByIdAsync(agentId.Value))?.Name,
-            ProjectTaskAgentType.Agent =>
-                (await _agentRepository.GetByIdAsync(agentId.Value))?.Name,
-            _ => null
-        };
-    }
 
     private async Task<TaskRecord?> GetLatestTaskRecordAsync(string contextId)
     {

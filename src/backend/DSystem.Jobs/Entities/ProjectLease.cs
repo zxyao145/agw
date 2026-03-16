@@ -12,5 +12,5 @@ public class ProjectLease : BaseEntity
     public string LockedBy { get; set; } = string.Empty;
     public DateTime LockedUntilUtc { get; set; }
 
-    public Project? Project { get; set; }
+    //public Project? Project { get; set; }
 }
