@@ -1,8 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<ItemGroup>
-	  <PackageReference Include="Microsoft.Agents.AI" />
-	  <PackageReference Include="Microsoft.EntityFrameworkCore" />
-	  <PackageReference Include="ModelContextProtocol" />
 	  <ProjectReference Include="..\DSystem.Shared\DSystem.Shared.csproj" />
 	</ItemGroup>
 </Project>

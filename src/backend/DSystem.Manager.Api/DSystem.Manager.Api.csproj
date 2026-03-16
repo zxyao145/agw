@@ -3,6 +3,8 @@
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 		<ProjectReference Include="..\DSystem.Appliaction\DSystem.Appliaction.csproj" />
+		<ProjectReference Include="..\DSystem.Agents\DSystem.Agents.csproj" />
+		<ProjectReference Include="..\DSystem.Providers\DSystem.Providers.csproj" />
 	</ItemGroup>
 
 </Project>

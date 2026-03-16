@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="ClaudeCodeSdk.MAF" />
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Agents.AI.Anthropic" />
+    <PackageReference Include="ModelContextProtocol" />
+    <ProjectReference Include="..\DSystem.Shared\DSystem.Shared.csproj" />
+    <ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
+  </ItemGroup>
+</Project>
