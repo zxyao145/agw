@@ -11,6 +11,10 @@
     <Project Path="src/backend/DSystem.Appliaction/DSystem.Appliaction.csproj" Id="4eec0e3e-d979-4709-b21e-668972c0376c" />
     <Project Path="src/backend/DSystem.Domain/DSystem.Domain.csproj" />
     <Project Path="src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
+    <Project Path="src/backend/DSystem.Agents/DSystem.Agents.csproj" />
+    <Project Path="src/backend/DSystem.Providers/DSystem.Providers.csproj" />
+    <Project Path="src/backend/DSystem.Tasks/DSystem.Tasks.csproj" />
+    <Project Path="src/backend/DSystem.Jobs/DSystem.Jobs.csproj" />
   </Folder>
   <Folder Name="/External/">
     <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk.MAF/ClaudeCodeSdk.MAF.csproj" />

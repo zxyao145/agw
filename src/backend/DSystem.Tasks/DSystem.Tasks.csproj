@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <ProjectReference Include="..\DSystem.Shared\DSystem.Shared.csproj" />
+    <ProjectReference Include="..\DSystem.Domain\DSystem.Domain.csproj" />
+  </ItemGroup>
+</Project>
