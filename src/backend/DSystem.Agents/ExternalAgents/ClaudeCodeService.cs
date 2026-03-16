@@ -2,9 +2,9 @@ using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
 using DSystem.Appliaction.Services;
 using DSystem.Domain.Entities;
-using DSystem.Domain.Services;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Services;
+using DSystem.Shared.Tasks;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -18,7 +18,7 @@ public class ClaudeCodeService
 {
     private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<ClaudeCodeService> _logger;
-    private readonly TaskRecordApplication _taskRecordApplication;
+    private readonly ITaskAppService _taskRecordAppService;
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
     private readonly IGitCommandService _gitCommandService;
@@ -30,10 +30,10 @@ public class ClaudeCodeService
         IGitCommandService gitCommandService,
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
-        TaskRecordApplication taskRecordApplication)
+        ITaskAppService taskRecordAppService)
     {
         _logger = logger;
-        _taskRecordApplication = taskRecordApplication;
+        _taskRecordAppService = taskRecordAppService;
         _hostEnvironment = hostEnvironment;
         _chatHistoryProvider = chatHistoryProvider;
         _gitCommandService = gitCommandService;
@@ -57,7 +57,7 @@ public class ClaudeCodeService
 
         await EnsureGitRepositoryAsync(initRequest, cancellationToken);
 
-        var hasTaskRecord = await _taskRecordApplication.HasSessionAsync(
+        var hasTaskRecord = await _taskRecordAppService.HasSessionAsync(
             initRequest.SessionId,
             initRequest.ProjectId,
             cancellationToken);

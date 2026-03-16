@@ -4,6 +4,7 @@ using DSystem.Domain.Services;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
+using DSystem.Shared.Tasks;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -43,7 +44,6 @@ public class AgentflowRuntimeService
     private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
     private readonly AgentRuntimeService _agentRuntimeService;
     private readonly IAgentflowAgentExecutor _executor;
-    private readonly TaskRecordApplication _taskRecordApplication;
 
     public AgentflowRuntimeService(
         ILogger<AgentflowRuntimeService> logger,
@@ -51,8 +51,7 @@ public class AgentflowRuntimeService
         IRepository<AgentflowNode> agentflowAgentRepository,
         IRepository<AgentflowEdge> agentflowEdgeRepository,
         AgentRuntimeService agentRuntimeService,
-        IAgentflowAgentExecutor executor,
-        TaskRecordApplication taskRecordApplication)
+        IAgentflowAgentExecutor executor)
     {
         _logger = logger;
         _agentflowRepository = agentflowRepository;
@@ -60,7 +59,6 @@ public class AgentflowRuntimeService
         _agentRuntimeService = agentRuntimeService;
         _executor = executor;
         _agentflowEdgeRepository = agentflowEdgeRepository;
-        _taskRecordApplication = taskRecordApplication;
     }
 
     public async Task<string?> GetMermaidAsync(

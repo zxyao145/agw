@@ -1,8 +1,6 @@
-using DSystem.Shared;
-using DSystem.Shared.Models;
 using System.Text.Json;
 
-namespace DSystem.Domain.Entities;
+namespace DSystem.Shared.Tasks.Entities;
 
 public class TaskRecord
 {

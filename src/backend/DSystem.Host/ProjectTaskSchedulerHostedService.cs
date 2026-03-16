@@ -5,6 +5,7 @@ using DSystem.Infrastructure.Data;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
+using DSystem.Shared.Tasks.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Hosting;

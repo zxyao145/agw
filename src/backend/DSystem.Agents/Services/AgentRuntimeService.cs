@@ -7,6 +7,7 @@ using DSystem.Domain.Services;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
+using DSystem.Shared.Tasks;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -38,13 +39,13 @@ public class AgentRuntimeService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;
-    private readonly IRepository<Project> _projectRepository;
+    private readonly IProjectAppService _projectAppService;
     private readonly IRepository<ModelProvider> _modelProviderRepository;
     private readonly IRepository<LlmModel> _modelRepository;
     private readonly IRepository<Provider> _providerRepository;
     private readonly ToolRegistryService _toolRegistry;
     private readonly HybridCache _cache;
-    private readonly TaskRecordApplication _taskRecordApplication;
+    private readonly ITaskAppService _taskRecordApplication;
     private readonly McpToolServerDomainService _mcpToolServerDomainService;
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
@@ -52,20 +53,20 @@ public class AgentRuntimeService
 
     public AgentRuntimeService(
         IRepository<Agent> agentRepository,
-        IRepository<Project> projectRepository,
+        IProjectAppService projectAppService,
         IRepository<ModelProvider> modelProviderRepository,
         IRepository<LlmModel> modelRepository,
         IRepository<Provider> providerRepository,
         ToolRegistryService toolRegistry,
         HybridCache cache,
-        TaskRecordApplication taskRecordApplication,
+        ITaskAppService taskRecordApplication,
         McpToolServerDomainService mcpToolServerDomainService,
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
         ILogger<AgentRuntimeService> logger)
     {
         _agentRepository = agentRepository;
-        _projectRepository = projectRepository;
+        _projectAppService = projectAppService;
         _modelProviderRepository = modelProviderRepository;
         _modelRepository = modelRepository;
         _providerRepository = providerRepository;
@@ -634,20 +635,9 @@ public class AgentRuntimeService
         return merged.ToJsonString();
     }
 
-    private async Task<string?> GetProjectExtraSettingAsync(string? projectId)
+    private Task<string?> GetProjectExtraSettingAsync(string? projectId)
     {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            return null;
-        }
-
-        if (!Guid.TryParse(projectId, out var projectGuid))
-        {
-            return null;
-        }
-
-        var project = await _projectRepository.GetByIdAsync(projectGuid);
-        return project?.ExtraSetting;
+        return _projectAppService.GetProjectExtraSettingAsync(projectId);
     }
 
     private static bool TryParseJsonObject(string json, [NotNullWhen(true)] out JsonObject? jsonObject)

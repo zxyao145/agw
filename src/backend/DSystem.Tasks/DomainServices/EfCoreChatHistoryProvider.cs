@@ -1,7 +1,8 @@
-using DSystem.Domain.Entities;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
+using DSystem.Shared.Tasks;
+using DSystem.Shared.Tasks.Entities;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;

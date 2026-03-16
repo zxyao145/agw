@@ -1,7 +1,7 @@
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 
-namespace DSystem.Domain.Entities;
+namespace DSystem.Shared.Tasks.Entities;
 
 public class ProjectTask : BaseEntity
 {

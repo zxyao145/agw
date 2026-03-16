@@ -1,5 +1,5 @@
-using DSystem.Domain.Entities;
 using DSystem.Shared;
+using DSystem.Shared.Tasks.Entities;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
 

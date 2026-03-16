@@ -1,5 +1,5 @@
-using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
+using DSystem.Shared.Tasks.Entities;
 using System.Linq.Expressions;
 
 namespace DSystem.Domain.Services;

@@ -1,6 +1,6 @@
 using Microsoft.Agents.AI;
 
-namespace DSystem.Domain.Services;
+namespace DSystem.Shared.Tasks;
 
 public interface IProviderSessionState
 {

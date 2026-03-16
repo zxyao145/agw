@@ -18,6 +18,8 @@ using Serilog.Enrichers.OpenTelemetry;
 using System.Configuration;
 using System.Runtime;
 using Microsoft.Agents.AI;
+using DSystem.Tasks.Services;
+using DSystem.Shared.Tasks;
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()
@@ -113,7 +115,9 @@ try
     builder.Services.AddScoped<AgentDomainService>();
     builder.Services.AddScoped<AgentRuntimeService>();
     builder.Services.AddScoped<A2AAgentService>();
-    builder.Services.AddScoped<TaskRecordApplication>();
+    builder.Services.AddScoped<ITaskAppService, TaskAppService>();
+    builder.Services.AddScoped<IProjectAppService, ProjectAppService>();
+    
     builder.Services.AddScoped<TaskRecordDomainService>();
 
     // External Agents

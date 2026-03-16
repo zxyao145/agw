@@ -13,4 +13,8 @@
 		<PackageReference Include="Microsoft.Agents.AI.Workflows" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" />
 	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\DSystem.Shared.Contract\DSystem.Shared.Contract.csproj" />
+	</ItemGroup>
 </Project>

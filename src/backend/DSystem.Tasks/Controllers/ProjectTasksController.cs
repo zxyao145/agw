@@ -1,4 +1,3 @@
-using DSystem.Domain.Entities;
 using DSystem.Domain.Services;
 using DSystem.Shared;
 using DSystem.Shared.Contracts;
@@ -6,6 +5,7 @@ using DSystem.Shared.Enums;
 using DSystem.Shared.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.AspNetCore.Mvc;
+using DSystem.Shared.Tasks.Entities;
 
 namespace DSystem.Api.Controllers;
 

@@ -1,6 +1,6 @@
 using DSystem.Shared;
 
-namespace DSystem.Domain.Entities;
+namespace DSystem.Shared.Tasks.Entities;
 
 public class Project : BaseEntity
 {

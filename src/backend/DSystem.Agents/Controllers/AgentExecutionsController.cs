@@ -1,9 +1,10 @@
-using DSystem.Appliaction.Services;
 using DSystem.Api.Contracts;
-using DSystem.Domain.Entities;
+using DSystem.Appliaction.Services;
 using DSystem.Domain.Services;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
+using DSystem.Shared.Tasks;
+using DSystem.Shared.Tasks.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.IO;
@@ -21,16 +22,16 @@ public class AgentExecutionsController : ControllerBase
     private const int MaxRequestBytes = 1024 * 64;
     private readonly AgentRuntimeService _agentRuntimeService;
     private readonly AgentflowRuntimeService _agentflowRuntimeService;
-    private readonly ProjectTaskDomainService _projectTaskService;
+    private readonly ITaskAppService _taskAppService;
 
     public AgentExecutionsController(
         AgentRuntimeService agentRuntimeService,
         AgentflowRuntimeService agentflowRuntimeService,
-        ProjectTaskDomainService projectTaskService)
+        ITaskAppService taskAppService)
     {
         _agentRuntimeService = agentRuntimeService;
         _agentflowRuntimeService = agentflowRuntimeService;
-        _projectTaskService = projectTaskService;
+        _taskAppService = taskAppService;
     }
 
     [HttpPost("{id:guid}/execute")]
@@ -236,7 +237,7 @@ public class AgentExecutionsController : ControllerBase
             return (null, null);
         }
 
-        var task = await _projectTaskService.GetAsync(request.TaskId.Value);
+        var task = await _taskAppService.GetTaskAsync(request.TaskId.Value);
         if (task == null)
         {
             return (null, NotFound("Task not found."));

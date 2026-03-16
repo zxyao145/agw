@@ -1,5 +1,6 @@
 using DSystem.Domain.Entities;
 using DSystem.Shared.Models;
+using DSystem.Shared.Tasks.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 using System.Text.Json;

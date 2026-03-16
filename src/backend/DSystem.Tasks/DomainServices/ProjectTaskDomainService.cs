@@ -1,10 +1,10 @@
-using DSystem.Domain.Entities;
 using DSystem.Domain.Repositories;
 using DSystem.Shared;
 using DSystem.Shared.Enums;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
 using System.Linq.Expressions;
+using DSystem.Shared.Tasks.Entities;
 
 namespace DSystem.Domain.Services;
 
