@@ -12,10 +12,6 @@
     <Project Path="src/backend/DSystem.Providers/DSystem.Providers.csproj" />
     <Project Path="src/backend/DSystem.Tasks/DSystem.Tasks.csproj" />
   </Folder>
-  <Folder Name="/External/">
-    <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk.MAF/ClaudeCodeSdk.MAF.csproj" />
-    <Project Path="../claude-code-sdk-csharp/src/ClaudeCodeSdk/ClaudeCodeSdk.csproj" />
-  </Folder>
   <Folder Name="/Shared/">
     <Project Path="src/backend/DSystem.Shared.Contract/DSystem.Shared.Contract.csproj" />
     <Project Path="src/backend/DSystem.Shared/DSystem.Shared.csproj" />
