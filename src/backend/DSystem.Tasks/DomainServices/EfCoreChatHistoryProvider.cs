@@ -12,11 +12,6 @@ using System.Text.Json;
 
 namespace DSystem.Domain.Services;
 
-public interface IProviderSessionState
-{
-    public void InitializeSessionState(AgentSession session, string contextId, string? sessionId, string? projectId);
-}
-
 /// <summary>
 /// Persists agent chat history in EF Core while keeping the conversation key in session state.
 /// </summary>
