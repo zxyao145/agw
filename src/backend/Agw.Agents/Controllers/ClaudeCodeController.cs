@@ -308,7 +308,7 @@ public class ClaudeCodeController(
         return new()
         {
             Role = ChatRole.System,
-            AuthorName = "d-system",
+            AuthorName = "Agw",
             AdditionalProperties = new AdditionalPropertiesDictionary(d),
             Contents = [new TextContent(message)]
         };
@@ -317,7 +317,7 @@ public class ClaudeCodeController(
     private static AgentResponseUpdate CreateErrorMessage(string errorMessage) => new()
     {
         Role = ChatRole.System,
-        AuthorName = "d-system",
+        AuthorName = "Agw",
         Contents = [new ErrorContent(errorMessage)]
     };
 }

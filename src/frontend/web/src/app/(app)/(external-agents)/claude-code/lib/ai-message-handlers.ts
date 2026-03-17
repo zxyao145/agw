@@ -20,7 +20,7 @@ export const handleSystemMessage = (
   const actions: AiMessageAction[] = [];
 
   const author = data.author;
-  if (author === "d-system") {
+  if (author === "Agw") {
     const firstContent = data.contents[0];
     if (firstContent.type === MessageContentType.ErrorContent) {
       console.error("something error:", firstContent.content);

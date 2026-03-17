@@ -56,19 +56,19 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
         // Initialize metrics
         _tasksExecutedCounter = Meter.CreateCounter<long>(
-            "dsystem.tasks.executed",
+            "agw.tasks.executed",
             description: "Number of tasks successfully executed");
         _tasksFailedCounter = Meter.CreateCounter<long>(
-            "dsystem.tasks.failed",
+            "agw.tasks.failed",
             description: "Number of tasks that failed");
         _leaseAcquiredCounter = Meter.CreateCounter<long>(
-            "dsystem.leases.acquired",
+            "agw.leases.acquired",
             description: "Number of project leases successfully acquired");
         _leaseFailedCounter = Meter.CreateCounter<long>(
-            "dsystem.leases.failed",
+            "agw.leases.failed",
             description: "Number of project lease acquisition failures");
         _taskExecutionDuration = Meter.CreateHistogram<double>(
-            "dsystem.tasks.duration",
+            "agw.tasks.duration",
             unit: "ms",
             description: "Task execution duration in milliseconds");
     }

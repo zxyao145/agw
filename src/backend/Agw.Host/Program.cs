@@ -37,7 +37,7 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-    Log.Information("Starting D-System Host");
+    Log.Information("Starting Agw Host");
 
     var builder = WebApplication.CreateBuilder(args);
 
@@ -183,7 +183,7 @@ try
     app.MapAgwA2A(a2AServerOptions.Prefix);
     app.MapControllers();
 
-    Log.Information("D-System Host configured successfully");
+    Log.Information("Agw Host configured successfully");
     app.Run();
 }
 catch (HostAbortedException hae)
@@ -192,7 +192,7 @@ catch (HostAbortedException hae)
 }
 catch (Exception ex)
 {
-    Log.Fatal(ex, "D-System Host terminated unexpectedly");
+    Log.Fatal(ex, "Agw Host terminated unexpectedly");
 }
 finally
 {

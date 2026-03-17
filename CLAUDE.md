@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-D-System is an ASP.NET Core + EF Core backend for managing LLM agents, models, providers, and multi-agent workflows. It uses Clean Architecture with a modular project structure, built on Microsoft.Agents.AI framework. The system supports both internal agents (OpenAI, Anthropic) and external agents (Claude Code SDK) with MCP tool integration.
+Agw is an ASP.NET Core + EF Core backend for managing LLM agents, models, providers, and multi-agent workflows. It uses Clean Architecture with a modular project structure, built on Microsoft.Agents.AI framework. The system supports both internal agents (OpenAI, Anthropic) and external agents (Claude Code SDK) with MCP tool integration.
 
 ## Architecture & Project Structure
 
@@ -84,8 +84,8 @@ Project → ProjectTask → TaskRecord
 ### Backend
 ```bash
 # Restore and build
-dotnet restore D-System.slnx
-dotnet build D-System.slnx
+dotnet restore Agw.slnx
+dotnet build Agw.slnx
 
 # Run locally (default port 5000)
 dotnet run --project src/backend/Agw.Host
@@ -137,7 +137,7 @@ dotnet format
 {
   "Database": {
     "Provider": "sqlite",
-    "ConnectionString": "Data Source=d_system.db"
+    "ConnectionString": "Data Source=agw.db"
   },
   "OpenTelemetry": {
     "ServiceName": "Agw",
@@ -211,7 +211,7 @@ src/app/(app)/
 
 ## A2A Protocol
 
-D-System exposes agents via A2A protocol for standardized agent-to-agent communication.
+Agw exposes agents via A2A protocol for standardized agent-to-agent communication.
 
 **Endpoints:**
 - `GET /a2a/agents` - List available agents

@@ -4,7 +4,7 @@ This file provides guidance to coding agents working in this repository.
 
 ## Project Overview
 
-D-System is an ASP.NET Core + EF Core backend with a Next.js frontend for managing LLM agents, models, providers, and multi-agent workflows. It follows a modular architecture and integrates Microsoft.Agents.AI, MCP tool servers, A2A endpoints, and external agents such as Claude Code SDK.
+Agw is an ASP.NET Core + EF Core backend with a Next.js frontend for managing LLM agents, models, providers, and multi-agent workflows. It follows a modular architecture and integrates Microsoft.Agents.AI, MCP tool servers, A2A endpoints, and external agents such as Claude Code SDK.
 
 ## Architecture And Project Structure
 
@@ -23,7 +23,7 @@ Agw.A2A/               # A2A protocol implementation for agent discovery and mes
 ```
 
 Notes:
-- `D-System.slnx` also references sibling SDK projects in `../claude-code-sdk-csharp/`; full solution builds depend on that adjacent checkout.
+- `Agw.slnx` also references sibling SDK projects in `../claude-code-sdk-csharp/`; full solution builds depend on that adjacent checkout.
 - `src/backend/Agw.Contract/` exists in this working tree only as generated `obj/` content and is not part of the solution.
 
 ### Frontend Organization (`src/frontend/web/`)
@@ -71,11 +71,11 @@ src/components/              # Shared UI components
 Run from the repo root:
 
 ```bash
-dotnet restore D-System.slnx
-dotnet build D-System.slnx
+dotnet restore Agw.slnx
+dotnet build Agw.slnx
 dotnet run --project src/backend/Agw.Host
 dotnet watch --project src/backend/Agw.Host
-dotnet test D-System.slnx
+dotnet test Agw.slnx
 dotnet format
 ```
 
@@ -121,7 +121,7 @@ Primary settings live in `src/backend/Agw.Host/appsettings.json`:
 {
   "Database": {
     "Provider": "sqlite",
-    "ConnectionString": "Data Source=d_system.db"
+    "ConnectionString": "Data Source=agw.db"
   },
   "OpenTelemetry": {
     "ServiceName": "Agw",
@@ -150,7 +150,7 @@ Guidance:
 - Use xUnit for backend tests when adding coverage.
 - Prefer `tests/Agw.*.Tests/` with namespaces mirroring production code.
 - Name test methods like `Method_Condition_ExpectedResult`.
-- Run `dotnet test D-System.slnx` before handing off backend changes.
+- Run `dotnet test Agw.slnx` before handing off backend changes.
 - This checkout does not currently include in-repo test projects; add focused tests with new behavior when practical.
 
 ## Frontend Architecture
@@ -162,7 +162,7 @@ Guidance:
 
 ## A2A Protocol
 
-D-System exposes agents over A2A endpoints:
+Agw exposes agents over A2A endpoints:
 
 - `GET /a2a/agents`
 - `GET /a2a/{agentName}/v1/card`
