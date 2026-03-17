@@ -206,7 +206,11 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                         taskActivity?.SetTag("agent.id", next.AgentId.Value);
                     }
 
-                    var input = GetInputText(taskRecord);
+                    var chatMessage = GetInputMessage(taskRecord);
+                    if (chatMessage == null)
+                    {
+                        return;
+                    }
                     var traceId = ActivityTraceId.CreateFromString(Guid.Parse(next.ContextId)!.Normalize().AsSpan());
                     var spanId = ActivitySpanId.CreateRandom();
                     var context = new ActivityContext(
@@ -224,7 +228,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                             await agentflowRuntime.ExecuteAsync(
                                 next.AgentId.Value,
                                 taskRecord.SessionId,
-                                input,
+                                [chatMessage],
                                 stoppingToken,
                                 marked.ProjectId,
                                 marked.ContextId),
@@ -232,7 +236,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                             await agentRuntime.ExecuteAsync(
                                 next.AgentId.Value,
                                 taskRecord.SessionId,
-                                input,
+                                [chatMessage],
                                 stoppingToken,
                                 marked.ProjectId,
                                 marked.ContextId),
@@ -302,15 +306,15 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
         }
     }
 
-    private static string GetInputText(TaskRecord record)
+    private static ChatMessage? GetInputMessage(TaskRecord record)
     {
         var message = record.ToChatMessage();
         if (message?.Role != ChatRole.User)
         {
-            return string.Empty;
+            return null;
         }
 
-        return record.GetText();
+        return message;
     }
 
     private async Task<bool> TryAcquireProjectLeaseAsync(LlmDbContext dbContext, Guid projectId, CancellationToken cancellationToken)

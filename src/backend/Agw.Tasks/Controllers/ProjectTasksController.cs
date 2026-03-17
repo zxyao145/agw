@@ -92,13 +92,18 @@ public class ProjectTasksController : ControllerBase
             Status = ProjectTaskStatus.Pending
         };
 
+        var inputMsg = new ChatMessage(ChatRole.User, request.Input.Trim())
+        {
+            AuthorName = Constants.DefaultAuthor
+        };
+
         var initialRecord = new TaskRecord
         {
             Id = Guid.NewGuid(),
             ContextId = contextId,
             SessionId = sessionId,
             ConversationSequence = 0,
-            ConversationPayload = JsonUtil.Serialize(new ChatMessage(ChatRole.User, request.Input.Trim()))
+            ConversationPayload = JsonUtil.Serialize(inputMsg)
         };
 
         var created = await _taskService.CreateAsync(task, initialRecord, user);

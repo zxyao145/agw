@@ -164,7 +164,7 @@ public class AgentRuntimeService
         var model = await _modelRepository.GetByIdAsync(modelProvider.ModelId);
         var provider = await _providerRepository
             .Queryable.Include(x => x.AuthConfigs)
-            .SingleOrDefaultAsync(x=>x.Id == modelProvider.ProviderId);
+            .SingleOrDefaultAsync(x => x.Id == modelProvider.ProviderId);
         if (model == null || provider == null)
         {
             return null;
@@ -173,7 +173,7 @@ public class AgentRuntimeService
         var authConfigs = provider.AuthConfigs
             .Where(x => x.Enable)
             .ToList();
-        if(authConfigs.Count == 0)
+        if (authConfigs.Count == 0)
         {
             _logger.LogError("no auth config for provider:{}", provider.Name);
             return null;
@@ -471,21 +471,24 @@ public class AgentRuntimeService
     /// Executes an agent with the given agentName, input and returns the result.
     /// </summary>
     public async Task<AgentExecutionResult?> ExecuteByNameAsync(
-        string agentName, 
-        string sessionId, 
+        string agentName,
+        string sessionId,
         string input,
         CancellationToken cancellationToken = default,
         string? projectId = null,
         string? contextId = null
         )
     {
-        var agent = await _agentRepository.SingleOrDefaultAsync(a=>a.Name == agentName);
+        var agent = await _agentRepository.SingleOrDefaultAsync(a => a.Name == agentName);
         if (agent == null)
         {
             return null;
         }
-
-        return await ExecuteAsync(sessionId, input, projectId, contextId, agent);
+        var chatMsg = new ChatMessage(ChatRole.User, input)
+        {
+            AuthorName = Constants.DefaultAuthor
+        };
+        return await ExecuteAsync(sessionId, [chatMsg], projectId, contextId, agent);
     }
 
 
@@ -496,6 +499,26 @@ public class AgentRuntimeService
         Guid agentId,
         string sessionId,
         string input,
+        CancellationToken cancellationToken = default,
+        string? projectId = null,
+        string? contextId = null)
+    {
+        var chatMsg = new ChatMessage(ChatRole.User, input)
+        {
+            AuthorName = Constants.DefaultAuthor
+        };
+
+        return await ExecuteAsync(agentId, sessionId, [chatMsg], cancellationToken, projectId, contextId);
+    }
+
+
+    /// <summary>
+    /// Executes an agent with the given agentId, input and returns the result.
+    /// </summary>
+    public async Task<AgentExecutionResult?> ExecuteAsync(
+        Guid agentId,
+        string sessionId,
+        List<ChatMessage> input,
         CancellationToken cancellationToken = default,
         string? projectId = null,
         string? contextId = null)
@@ -511,7 +534,7 @@ public class AgentRuntimeService
 
     private async Task<AgentExecutionResult?> ExecuteAsync(
         string sessionId,
-        string input,
+        List<ChatMessage> chatMsg,
         string? projectId,
         string? contextId,
         Agent agent)
@@ -554,13 +577,14 @@ public class AgentRuntimeService
                 string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
                 sessionId,
                 projectId);
+            // in CreateAiAgentAsync, ChatOptions.Instructions is setted agent.SystemPrompt
+            // if (!string.IsNullOrWhiteSpace(agent.SystemPrompt))
+            // {
+            //     ChatMessage system = new ChatMessage(ChatRole.System, agent.SystemPrompt);
+            //    chatMsg.Insert(0, system);
+            // }
 
-            ChatMessage? system = null;
-            var chatMsg = new ChatMessage(ChatRole.User, input);
-            IEnumerable<ChatMessage> msgs = system == null
-                ? [chatMsg]
-                : [system, chatMsg];
-            var stream = aiAgent.RunStreamingAsync(msgs, session);
+            var stream = aiAgent.RunStreamingAsync(chatMsg, session);
 
             List<AiMessage> messages = new();
             var responseUpdates = new List<AgentResponseUpdate>();

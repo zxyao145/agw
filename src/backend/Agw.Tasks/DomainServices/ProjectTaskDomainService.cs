@@ -69,7 +69,7 @@ public class ProjectTaskDomainService
 
         initialRecord.Id = initialRecord.Id == Guid.Empty ? Guid.NewGuid() : initialRecord.Id;
         initialRecord.ContextId = task.ContextId;
-        initialRecord.AgentName = "user";
+        initialRecord.AgentName = Constants.DefaultAuthor;
         initialRecord.CreateTime = task.CreateTime;
         initialRecord.UpdateTime = task.CreateTime;
 

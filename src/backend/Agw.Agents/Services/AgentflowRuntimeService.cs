@@ -190,6 +190,30 @@ public class AgentflowRuntimeService
         string? projectId = null,
         string? contextId = null)
     {
+        var messages = new List<ChatMessage>
+        {
+            new(ChatRole.User, input)
+            {
+                AuthorName = Constants.DefaultAuthor
+            }
+        };
+
+        return await ExecuteAsync(agentflowId, sessionId, messages, cancellationToken, projectId, contextId).ConfigureAwait(false);
+    }
+
+    public async Task<AgentflowExecutionResult?> ExecuteAsync(
+        Guid agentflowId,
+        string sessionId,
+        List<ChatMessage> messages,
+        CancellationToken cancellationToken = default,
+        string? projectId = null,
+        string? contextId = null)
+    {
+        return await ExecuteAsync(agentflowId, sessionId, messages, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<AgentflowExecutionResult?> ExecuteAsync(Guid agentflowId, string sessionId, List<ChatMessage> messages, CancellationToken cancellationToken)
+    {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
         {
@@ -205,12 +229,6 @@ public class AgentflowRuntimeService
         {
             return null;
         }
-
-
-        var messages = new List<ChatMessage>
-        {
-            new(ChatRole.User, input)
-        };
 
         StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
@@ -256,7 +274,6 @@ public class AgentflowRuntimeService
 
         return new AgentflowExecutionResult(sessionId, Messages: outputs);
     }
-
 
     public async Task<Workflow?>
         CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken)
