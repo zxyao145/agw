@@ -169,7 +169,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* <header className="flex h-16 border-b ">
           <div className="flex items-center px-6 w-64">
             <Link href="/projects" className="font-semibold tracking-tight">
-              DSystem Admin
+              Agw Admin
             </Link>
             <SidebarTrigger className="-ml-1 md:hidden" />
           </div>

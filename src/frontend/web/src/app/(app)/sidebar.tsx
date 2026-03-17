@@ -65,7 +65,7 @@ export function AppSidebar({ menus }: AppSidebarProps) {
             <SidebarMenuItem>
               <SidebarMenuButton className="flex-row-reverse justify-between">
                 <SidebarTrigger className="-ml-1" />
-                <span>DSystem</span>
+                <span>Agw</span>
                 {/* <span>Squidward</span> */}
               </SidebarMenuButton>
             </SidebarMenuItem>

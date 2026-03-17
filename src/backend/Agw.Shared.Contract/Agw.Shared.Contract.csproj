@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+      <RootNamespace>Agw.Shared</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Mapster" />
+        <PackageReference Include="Mapster.DependencyInjection" />
+        <PackageReference Include="Mapster.EFCore" />
+        <PackageReference Include="Microsoft.Agents.AI" />
+    </ItemGroup>
+</Project>

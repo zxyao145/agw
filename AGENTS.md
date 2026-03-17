@@ -11,20 +11,20 @@ D-System is an ASP.NET Core + EF Core backend with a Next.js frontend for managi
 ### Backend Organization (`src/backend/`)
 
 ```text
-DSystem.Host/              # ASP.NET Core entry point, DI registration, hosted services
-DSystem.Infrastructure/    # EF Core DbContext, repositories, migrations
-DSystem.Shared/            # Base entities, enums, shared models, repository interfaces
-DSystem.Shared.Contract/   # Interfaces for cross-module interaction
-DSystem.Agents/            # Agent definitions, workflows, MCP tools, runtime services
-DSystem.Providers/         # LLM models, providers, model-providers, auth configs
-DSystem.Tasks/             # Projects, tasks, session records, chat history
-DSystem.Jobs/              # Background jobs and project leases
-DSystem.A2A/               # A2A protocol implementation for agent discovery and messaging
+Agw.Host/              # ASP.NET Core entry point, DI registration, hosted services
+Agw.Infrastructure/    # EF Core DbContext, repositories, migrations
+Agw.Shared/            # Base entities, enums, shared models, repository interfaces
+Agw.Shared.Contract/   # Interfaces for cross-module interaction
+Agw.Agents/            # Agent definitions, workflows, MCP tools, runtime services
+Agw.Providers/         # LLM models, providers, model-providers, auth configs
+Agw.Tasks/             # Projects, tasks, session records, chat history
+Agw.Jobs/              # Background jobs and project leases
+Agw.A2A/               # A2A protocol implementation for agent discovery and messaging
 ```
 
 Notes:
 - `D-System.slnx` also references sibling SDK projects in `../claude-code-sdk-csharp/`; full solution builds depend on that adjacent checkout.
-- `src/backend/DSystem.Contract/` exists in this working tree only as generated `obj/` content and is not part of the solution.
+- `src/backend/Agw.Contract/` exists in this working tree only as generated `obj/` content and is not part of the solution.
 
 ### Frontend Organization (`src/frontend/web/`)
 
@@ -60,9 +60,9 @@ src/components/              # Shared UI components
 
 ## Core Runtime Services
 
-- `src/backend/DSystem.Agents/Services/AgentRuntimeService.cs`: creates runtime agents, hydrates provider configuration, wires tools, and supports external agent session resumption.
-- `src/backend/DSystem.Agents/Services/AgentflowRuntimeService.cs`: executes workflows with `Concurrent`, `Sequential`, `GroupChat`, `Handoff`, and `Magentic` orchestration patterns.
-- `src/backend/DSystem.Host/ProjectTaskSchedulerHostedService.cs`: polls pending tasks, limits cross-project concurrency, and coordinates lease-based execution.
+- `src/backend/Agw.Agents/Services/AgentRuntimeService.cs`: creates runtime agents, hydrates provider configuration, wires tools, and supports external agent session resumption.
+- `src/backend/Agw.Agents/Services/AgentflowRuntimeService.cs`: executes workflows with `Concurrent`, `Sequential`, `GroupChat`, `Handoff`, and `Magentic` orchestration patterns.
+- `src/backend/Agw.Host/ProjectTaskSchedulerHostedService.cs`: polls pending tasks, limits cross-project concurrency, and coordinates lease-based execution.
 
 ## Build And Development Commands
 
@@ -73,24 +73,24 @@ Run from the repo root:
 ```bash
 dotnet restore D-System.slnx
 dotnet build D-System.slnx
-dotnet run --project src/backend/DSystem.Host
-dotnet watch --project src/backend/DSystem.Host
+dotnet run --project src/backend/Agw.Host
+dotnet watch --project src/backend/Agw.Host
 dotnet test D-System.slnx
 dotnet format
 ```
 
 Notes:
-- The development host launches on `http://localhost:5015` by default via `src/backend/DSystem.Host/Properties/launchSettings.json`.
+- The development host launches on `http://localhost:5015` by default via `src/backend/Agw.Host/Properties/launchSettings.json`.
 - Do not add or apply EF Core migrations automatically. When needed, use:
 
 ```bash
 dotnet ef migrations add <MigrationName> \
-  -p src/backend/DSystem.Infrastructure \
-  -s src/backend/DSystem.Host
+  -p src/backend/Agw.Infrastructure \
+  -s src/backend/Agw.Host
 
 dotnet ef database update \
-  -p src/backend/DSystem.Infrastructure \
-  -s src/backend/DSystem.Host
+  -p src/backend/Agw.Infrastructure \
+  -s src/backend/Agw.Host
 ```
 
 ### Frontend
@@ -115,7 +115,7 @@ Notes:
 
 ### Backend Configuration
 
-Primary settings live in `src/backend/DSystem.Host/appsettings.json`:
+Primary settings live in `src/backend/Agw.Host/appsettings.json`:
 
 ```json
 {
@@ -124,7 +124,7 @@ Primary settings live in `src/backend/DSystem.Host/appsettings.json`:
     "ConnectionString": "Data Source=d_system.db"
   },
   "OpenTelemetry": {
-    "ServiceName": "DSystem",
+    "ServiceName": "Agw",
     "ServiceVersion": "1.0.0",
     "OtlpEndpoint": "http://localhost:4317"
   }
@@ -134,7 +134,7 @@ Primary settings live in `src/backend/DSystem.Host/appsettings.json`:
 Guidance:
 - Supported database providers are `sqlite` and `postgres`.
 - Keep secrets out of `appsettings*.json` and frontend env files; prefer environment-variable overrides.
-- Register new backend services in `src/backend/DSystem.Host/Program.cs` alongside the existing DI setup.
+- Register new backend services in `src/backend/Agw.Host/Program.cs` alongside the existing DI setup.
 
 ## Coding Style
 
@@ -148,7 +148,7 @@ Guidance:
 ## Testing Guidance
 
 - Use xUnit for backend tests when adding coverage.
-- Prefer `tests/DSystem.*.Tests/` with namespaces mirroring production code.
+- Prefer `tests/Agw.*.Tests/` with namespaces mirroring production code.
 - Name test methods like `Method_Condition_ExpectedResult`.
 - Run `dotnet test D-System.slnx` before handing off backend changes.
 - This checkout does not currently include in-repo test projects; add focused tests with new behavior when practical.

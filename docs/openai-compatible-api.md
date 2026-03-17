@@ -358,7 +358,7 @@ The controller automatically merges chunked messages from the agent by `messageI
 
 ```bash
 # Start the D-System API
-dotnet run --project src/backend/DSystem.Host
+dotnet run --project src/backend/Agw.Host
 
 # Test the OpenAI-compatible endpoint
 curl -X POST http://localhost:5000/v1/chat/completions \
@@ -382,5 +382,5 @@ curl -X POST http://localhost:5000/v1/responses \
 ## Related Documentation
 
 - [Agent Management API](/api/agents)
-- [Agent Runtime Service](/src/backend/DSystem.Domain/Services/AgentRuntimeService.cs)
+- [Agent Runtime Service](/src/backend/Agw.Domain/Services/AgentRuntimeService.cs)
 - [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat)

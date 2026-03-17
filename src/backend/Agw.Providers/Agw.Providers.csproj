@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <ProjectReference Include="..\Agw.Shared.Contract\Agw.Shared.Contract.csproj" />
+    <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
+  </ItemGroup>
+</Project>

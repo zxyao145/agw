@@ -21,7 +21,7 @@ D-System 现在完整实现了两个 OpenAI 兼容的 API 端点，支持无缝�
 ## 创建的文件
 
 ### 控制器
-- **`src/backend/DSystem.Api/Controllers/OpenAIController.cs`**
+- **`src/backend/Agw.Api/Controllers/OpenAIController.cs`**
   - `CreateChatCompletionAsync` - Chat Completions API 处理
   - `CreateResponseAsync` - Responses API 处理
   - `CompleteChatAsync` - 非流式 Chat 响应
@@ -31,20 +31,20 @@ D-System 现在完整实现了两个 OpenAI 兼容的 API 端点，支持无缝�
   - `WriteSSEDataAsync` - SSE 辅助方法
 
 ### DTO 模型
-1. **`src/backend/DSystem.Api/Contracts/OpenAIContracts.cs`**
+1. **`src/backend/Agw.Api/Contracts/OpenAIContracts.cs`**
    - `OpenAIChatCompletionRequest` - Chat Completions 请求
    - `OpenAIChatCompletionResponse` - 非流式响应
    - `OpenAIChatCompletionChunk` - 流式响应块
    - `OpenAIChatMessage`, `OpenAIChatChoice`, `OpenAIUsage` 等
 
-2. **`src/backend/DSystem.Api/Contracts/ResponsesApiContracts.cs`**
+2. **`src/backend/Agw.Api/Contracts/ResponsesApiContracts.cs`**
    - `ResponsesApiResponse` - Responses API 响应
    - `ResponsesOutputItem` - 输出项
    - `ResponsesMessage` - 消息内容
    - `ResponsesUsage` - 使用统计
    - `ResponsesStreamEvent` - 流式事件
 
-3. **`src/backend/DSystem.Api/Contracts/OpenAIResponsesTypes.cs`**
+3. **`src/backend/Agw.Api/Contracts/OpenAIResponsesTypes.cs`**
    - `ThorStreamOptions` - 流选项
    - `ReasoningResponsesInput` - 推理配置
    - `ResponsesToolsInput` - 工具配置
@@ -228,7 +228,7 @@ AGENT_ID=your-agent-id ./scripts/test-both-apis.sh
 ### 手动测试
 ```bash
 # 启动服务
-dotnet run --project src/backend/DSystem.Host
+dotnet run --project src/backend/Agw.Host
 
 # 在另一个终端测试
 curl -X POST http://localhost:5000/v1/chat/completions \
@@ -282,9 +282,9 @@ curl -X POST http://localhost:5000/v1/chat/completions \
 ## 相关文件
 
 ### 核心实现
-- Controller: `src/backend/DSystem.Api/Controllers/OpenAIController.cs`
-- DTOs: `src/backend/DSystem.Api/Contracts/OpenAI*.cs`
-- Runtime: `src/backend/DSystem.Domain/Services/AgentRuntimeService.cs`
+- Controller: `src/backend/Agw.Api/Controllers/OpenAIController.cs`
+- DTOs: `src/backend/Agw.Api/Contracts/OpenAI*.cs`
+- Runtime: `src/backend/Agw.Domain/Services/AgentRuntimeService.cs`
 
 ### 文档
 - 完整文档: `docs/openai-compatible-api.md`
@@ -304,7 +304,7 @@ dotnet build D-System.slnx
 
 ### 运行
 ```bash
-dotnet run --project src/backend/DSystem.Host
+dotnet run --project src/backend/Agw.Host
 ```
 
 ### 验证
