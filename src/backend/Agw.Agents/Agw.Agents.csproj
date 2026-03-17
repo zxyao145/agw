@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Remove="Infrastructure\**" />
+    <EmbeddedResource Remove="Infrastructure\**" />
+    <None Remove="Infrastructure\**" />
+  </ItemGroup>
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="ClaudeCodeSdk.MAF" />
     <PackageReference Include="Microsoft.Agents.AI" />
@@ -9,8 +14,5 @@
     <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
     <ProjectReference Include="..\Agw.Shared.Contract\Agw.Shared.Contract.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Infrastructure\" />
   </ItemGroup>
 </Project>

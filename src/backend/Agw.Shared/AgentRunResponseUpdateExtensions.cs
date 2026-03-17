@@ -21,7 +21,7 @@ public static class AgentRunResponseUpdateExtensions
         return new AiMessage(
             chatMessage.MessageId ?? "",
             chatMessage.AuthorName,
-            chatMessage.Role.Value,
+            chatMessage.Role,
             contents,
             chatMessage.AdditionalProperties
         );
@@ -43,7 +43,7 @@ public static class AgentRunResponseUpdateExtensions
         return new AiMessage(
             update.MessageId ?? "",
             update.AuthorName,
-            update.Role.HasValue ? update.Role.Value.Value : "",
+            update.Role.HasValue ? update.Role.Value.Value : AiRole.Empty,
             contents,
             update.AdditionalProperties
         );
@@ -56,9 +56,9 @@ public static class AgentRunResponseUpdateExtensions
         return content switch
         {
             TextContent text => new(content.GetType().Name, text.Text, content.AdditionalProperties),
+            TextReasoningContent thinking => new(content.GetType().Name, thinking.Text, content.AdditionalProperties),
             FunctionCallContent call => CreateFunctionCallContent(call, additionalProps),
             FunctionResultContent result => CreateFunctionResultContent(result, additionalProps),
-            TextReasoningContent thinking => new(content.GetType().Name, thinking.Text, content.AdditionalProperties),
             ErrorContent error => new(content.GetType().Name, error.Message, content.AdditionalProperties),
             UsageContent usage => new(content.GetType().Name, usage.Details, content.AdditionalProperties),
             _ => null

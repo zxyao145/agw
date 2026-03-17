@@ -239,7 +239,7 @@ public class AgentflowRuntimeService
             responseUpdates.Add(ToResponseUpdate(message));
             var contentObj = new AiMessageContent("text", message.Text);
             var chatMsg =
-                new AiMessage(message.MessageId ?? "", message.AuthorName, message.Role.Value, [contentObj]);
+                new AiMessage(message.MessageId ?? "", message.AuthorName, message.Role, [contentObj]);
             outputs.Add(chatMsg);
         }
 
