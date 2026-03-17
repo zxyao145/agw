@@ -1,20 +1,20 @@
 <Solution>
   <Folder Name="/1Host/">
-    <Project Path="src/backend/DSystem.Host/DSystem.Host.csproj" />
+    <Project Path="src/backend/Agw.Host/Agw.Host.csproj" />
   </Folder>
   <Folder Name="/2Api/">
-    <Project Path="src/backend/DSystem.A2A/DSystem.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
+    <Project Path="src/backend/Agw.A2A/Agw.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
   </Folder>
   <Folder Name="/Core/">
-    <Project Path="src/backend/DSystem.Agents/DSystem.Agents.csproj" />
-    <Project Path="src/backend/DSystem.Infrastructure/DSystem.Infrastructure.csproj" />
-    <Project Path="src/backend/DSystem.Jobs/DSystem.Jobs.csproj" />
-    <Project Path="src/backend/DSystem.Providers/DSystem.Providers.csproj" />
-    <Project Path="src/backend/DSystem.Tasks/DSystem.Tasks.csproj" />
+    <Project Path="src/backend/Agw.Agents/Agw.Agents.csproj" />
+    <Project Path="src/backend/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <Project Path="src/backend/Agw.Jobs/Agw.Jobs.csproj" />
+    <Project Path="src/backend/Agw.Providers/Agw.Providers.csproj" />
+    <Project Path="src/backend/Agw.Tasks/Agw.Tasks.csproj" />
   </Folder>
   <Folder Name="/Shared/">
-    <Project Path="src/backend/DSystem.Shared.Contract/DSystem.Shared.Contract.csproj" />
-    <Project Path="src/backend/DSystem.Shared/DSystem.Shared.csproj" />
+    <Project Path="src/backend/Agw.Shared.Contract/Agw.Shared.Contract.csproj" />
+    <Project Path="src/backend/Agw.Shared/Agw.Shared.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />

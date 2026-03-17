@@ -114,8 +114,8 @@ curl -X POST http://localhost:5000/v1/responses -H "Content-Type: application/js
 
 ## Implementation Files
 
-- **Controller**: `src/backend/DSystem.Api/Controllers/OpenAIController.cs`
-- **DTOs**: `src/backend/DSystem.Api/Contracts/OpenAIContracts.cs`
+- **Controller**: `src/backend/Agw.Api/Controllers/OpenAIController.cs`
+- **DTOs**: `src/backend/Agw.Api/Contracts/OpenAIContracts.cs`
 - **Documentation**: `docs/openai-compatible-api.md`
 - **Test Script**: `scripts/test-openai-api.sh`
 
@@ -186,5 +186,5 @@ Request → OpenAIController
 ## See Also
 
 - [Full Documentation](../docs/openai-compatible-api.md)
-- [Agent Management API](../src/backend/DSystem.Manager.Api/Controllers/AgentsController.cs)
-- [Agent Runtime Service](../src/backend/DSystem.Domain/Services/AgentRuntimeService.cs)
+- [Agent Management API](../src/backend/Agw.Manager.Api/Controllers/AgentsController.cs)
+- [Agent Runtime Service](../src/backend/Agw.Domain/Services/AgentRuntimeService.cs)

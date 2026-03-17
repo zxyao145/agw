@@ -10,15 +10,15 @@ D-System is an ASP.NET Core + EF Core backend for managing LLM agents, models, p
 
 ### Backend Organization (`src/backend/`)
 ```
-DSystem.Host/              # ASP.NET Core entry point, DI registration, hosted services
-DSystem.Infrastructure/    # EF Core DbContext, repositories, migrations
-DSystem.Shared/            # Base entities, enums, shared models, repository interfaces
-DSystem.Shared.Contract/   # Interfaces for cross-module interaction
-DSystem.Agents/            # Agent definitions, agentflows, MCP tools, execution services
-DSystem.Providers/         # LLM models, providers, model-providers, auth configs
-DSystem.Tasks/             # Projects, tasks, session records, chat history
-DSystem.Jobs/              # Background jobs, project leases
-DSystem.A2A/               # A2A protocol implementation for agent discovery/communication
+Agw.Host/              # ASP.NET Core entry point, DI registration, hosted services
+Agw.Infrastructure/    # EF Core DbContext, repositories, migrations
+Agw.Shared/            # Base entities, enums, shared models, repository interfaces
+Agw.Shared.Contract/   # Interfaces for cross-module interaction
+Agw.Agents/            # Agent definitions, agentflows, MCP tools, execution services
+Agw.Providers/         # LLM models, providers, model-providers, auth configs
+Agw.Tasks/             # Projects, tasks, session records, chat history
+Agw.Jobs/              # Background jobs, project leases
+Agw.A2A/               # A2A protocol implementation for agent discovery/communication
 ```
 
 ### Key Domain Entities
@@ -63,18 +63,18 @@ Project → ProjectTask → TaskRecord
 
 ### Core Services
 
-**AgentRuntimeService** (`DSystem.Agents/Services/AgentRuntimeService.cs`):
+**AgentRuntimeService** (`Agw.Agents/Services/AgentRuntimeService.cs`):
 - Creates `AIAgent` instances from persisted `Agent` entities
 - Hydrates provider config, selects random enabled auth config
 - Builds tool list from registered functions + MCP tools
 - Supports OpenAI and Anthropic providers via Microsoft.Agents.AI
 - Handles Claude Code external agents with session resumption
 
-**AgentflowRuntimeService** (`DSystem.Agents/Services/AgentflowRuntimeService.cs`):
+**AgentflowRuntimeService** (`Agw.Agents/Services/AgentflowRuntimeService.cs`):
 - Executes multi-agent workflows with different orchestration patterns
 - Patterns: Concurrent, Sequential, GroupChat, Handoff, Magentic
 
-**ProjectTaskSchedulerHostedService** (`DSystem.Host/`):
+**ProjectTaskSchedulerHostedService** (`Agw.Host/`):
 - Background service polling for pending tasks every 2 seconds
 - Max 4 projects executing in parallel, one task per project at a time
 - DB-backed `ProjectLease` with 30-second TTL for distributed locking
@@ -88,19 +88,19 @@ dotnet restore D-System.slnx
 dotnet build D-System.slnx
 
 # Run locally (default port 5000)
-dotnet run --project src/backend/DSystem.Host
+dotnet run --project src/backend/Agw.Host
 
 # Run with hot reload
-dotnet watch --project src/backend/DSystem.Host
+dotnet watch --project src/backend/Agw.Host
 
 # EF Core migrations (DO NOT run automatically)
 dotnet ef migrations add <MigrationName> \
-  -p src/backend/DSystem.Infrastructure \
-  -s src/backend/DSystem.Host
+  -p src/backend/Agw.Infrastructure \
+  -s src/backend/Agw.Host
 
 dotnet ef database update \
-  -p src/backend/DSystem.Infrastructure \
-  -s src/backend/DSystem.Host
+  -p src/backend/Agw.Infrastructure \
+  -s src/backend/Agw.Host
 ```
 
 ### Frontend
@@ -140,7 +140,7 @@ dotnet format
     "ConnectionString": "Data Source=d_system.db"
   },
   "OpenTelemetry": {
-    "ServiceName": "DSystem",
+    "ServiceName": "Agw",
     "ServiceVersion": "1.0.0",
     "OtlpEndpoint": "http://localhost:4317"
   }

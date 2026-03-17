@@ -400,7 +400,7 @@ data: [DONE]
 
 ## 实现文件
 
-- **控制器**: `src/backend/DSystem.Api/Controllers/OpenAIController.cs`
-- **Chat DTOs**: `src/backend/DSystem.Api/Contracts/OpenAIContracts.cs`
-- **Responses DTOs**: `src/backend/DSystem.Api/Contracts/ResponsesApiContracts.cs`
-- **输入类型**: `src/backend/DSystem.Api/Contracts/OpenAiMessageInput.cs`
+- **控制器**: `src/backend/Agw.Api/Controllers/OpenAIController.cs`
+- **Chat DTOs**: `src/backend/Agw.Api/Contracts/OpenAIContracts.cs`
+- **Responses DTOs**: `src/backend/Agw.Api/Contracts/ResponsesApiContracts.cs`
+- **输入类型**: `src/backend/Agw.Api/Contracts/OpenAiMessageInput.cs`

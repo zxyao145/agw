@@ -101,7 +101,7 @@ function getApiErrorMessage(error: unknown): string {
 }
 
 function statusLabel(status: number): string {
-  // DSystem.Domain.Enums.ProjectTaskStatus
+  // Agw.Domain.Enums.ProjectTaskStatus
   switch (status) {
     case 0:
       return "Pending";

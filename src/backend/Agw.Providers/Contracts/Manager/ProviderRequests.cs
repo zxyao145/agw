@@ -1,0 +1,19 @@
+using Agw.Domain.Entities;
+
+namespace Agw.Manager.Api.Contracts;
+
+public record ProviderAuthConfigRequest(ProviderAuthType AuthType, string? ApiKey, string? EnvKey, bool Enable = true);
+
+public record ProviderCreateRequest(
+    string Name,
+    ProviderType ProviderType,
+    string? Description,
+    string Endpoint,
+    IReadOnlyList<ProviderAuthConfigRequest>? AuthConfigs);
+
+public record ProviderUpdateRequest(
+    string Name,
+    ProviderType ProviderType,
+    string? Description,
+    string Endpoint,
+    IReadOnlyList<ProviderAuthConfigRequest>? AuthConfigs);
