@@ -1,18 +1,4 @@
-using Microsoft.Extensions.AI;
-using System.Text.Json;
-
 namespace Agw.Shared.Models;
-
-/// <summary>
-/// Content within an AI message.
-/// </summary>
-public record AiMessageContent(
-    string Type,
-    object? Content,
-    AdditionalPropertiesDictionary? AdditionalProperties = null
-);
-
-
 
 /// <summary>
 /// Content type names matching Microsoft.Extensions.AI content types.
@@ -30,14 +16,3 @@ public static class AiMessageContentType
     public const string UriContent = nameof(UriContent);
     public const string UsageContent = nameof(UsageContent);
 }
-
-/// <summary>
-/// Input content for AI messages with typed content data.
-/// </summary>
-public record AiMessageInputContent(string Type, JsonElement Content);
-
-
-public record UserInputMessage(
-    List<AiMessageContent> Contents,
-    AdditionalPropertiesDictionary? AdditionalProperties = null
-);

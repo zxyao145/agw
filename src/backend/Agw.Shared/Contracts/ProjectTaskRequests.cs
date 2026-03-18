@@ -36,4 +36,4 @@ public record ProjectTaskResponse(
     DateTime? StartedTime,
     DateTime? FinishedTime,
     int MessageCount,
-    IReadOnlyList<AiMessage>? Messages);
+    IReadOnlyList<AgwMessage>? Messages);

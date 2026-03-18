@@ -43,7 +43,7 @@ public record AgentflowExecutionAgentResultResponse(Guid AgentId, string AgentNa
 
 public record AgentflowExecuteResponse(
     string? SessionId,
-    IReadOnlyList<AiMessage> Messages)
+    IReadOnlyList<AgwMessage> Messages)
 {
     public static AgentflowExecuteResponse FromDomain(AgentflowExecutionResult result) =>
         new(

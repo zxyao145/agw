@@ -99,7 +99,7 @@ public class OpenAIController : ControllerBase
         {
             foreach (var msg in group)
             {
-                var textContent = msg.Contents.Find(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent);
+                var textContent = msg.Contents.Find(c => c is AgwTextContent);
                 mergedContent.Append(ExtractContentText(textContent));
             }
         }
@@ -204,7 +204,7 @@ public class OpenAIController : ControllerBase
                             Index = 0,
                             Delta = new OpenAIChatDelta
                             {
-                                Content = ExtractContentText(message.Contents.Find(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent))
+                                Content = ExtractContentText(message.Contents.Find(c => c is AgwTextContent))
                             },
                             FinishReason = null
                         }
@@ -347,7 +347,7 @@ public class OpenAIController : ControllerBase
         {
             foreach (var msg in group)
             {
-                var textContent = msg.Contents.Find(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent);
+                var textContent = msg.Contents.Find(c => c is AgwTextContent);
                 mergedContent.Append(ExtractContentText(textContent));
             }
         }
@@ -443,7 +443,7 @@ public class OpenAIController : ControllerBase
                 {
                     Type = "text",
                     Annotations = new List<string>(),
-                    Text = ExtractContentText(message.Contents.Find(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent))
+                    Text = ExtractContentText(message.Contents.Find(c => c is AgwTextContent))
                 });
 
                 // Send content delta event

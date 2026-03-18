@@ -9,7 +9,7 @@ public static class AgentRunResponseUpdateExtensions
     /// <summary>
     /// Convert AgentResponseUpdate to AiMessage DTO.
     /// </summary>
-    public static AiMessage? ToAiMessage(this ChatMessage? chatMessage)
+    public static AgwMessage? ToAiMessage(this ChatMessage? chatMessage)
     {
         if (chatMessage == null) return null;
 
@@ -18,7 +18,7 @@ public static class AgentRunResponseUpdateExtensions
             .OfType<AgwContent>()
             .ToList();
 
-        return new AiMessage(
+        return new AgwMessage(
             chatMessage.MessageId ?? "",
             chatMessage.AuthorName,
             chatMessage.Role,
@@ -31,7 +31,7 @@ public static class AgentRunResponseUpdateExtensions
     /// <summary>
     /// Convert AgentResponseUpdate to AiMessage DTO.
     /// </summary>
-    public static AiMessage? ToAiMessage(this AgentResponseUpdate? update)
+    public static AgwMessage? ToAiMessage(this AgentResponseUpdate? update)
     {
         if (update == null) return null;
 
@@ -40,7 +40,7 @@ public static class AgentRunResponseUpdateExtensions
             .OfType<AgwContent>()
             .ToList();
 
-        return new AiMessage(
+        return new AgwMessage(
             update.MessageId ?? "",
             update.AuthorName,
             update.Role.HasValue ? update.Role.Value.Value : AiRole.Empty,
@@ -55,12 +55,12 @@ public static class AgentRunResponseUpdateExtensions
 
         return content switch
         {
-            TextContent text => new AgwTextContent { Type = content.GetType().Name, Content = text.Text, AdditionalProperties = content.AdditionalProperties },
-            TextReasoningContent thinking => new AgwTextReasoningContent { Type = content.GetType().Name, Content = thinking.Text, AdditionalProperties = content.AdditionalProperties },
+            TextContent text => new AgwTextContent { Content = text.Text, AdditionalProperties = content.AdditionalProperties },
+            TextReasoningContent thinking => new AgwTextReasoningContent { Content = thinking.Text, AdditionalProperties = content.AdditionalProperties },
             FunctionCallContent call => CreateFunctionCallContent(call, additionalProps),
             FunctionResultContent result => CreateFunctionResultContent(result, additionalProps),
-            ErrorContent error => new AgwErrorContent { Type = content.GetType().Name, Content = error.Message, AdditionalProperties = content.AdditionalProperties },
-            UsageContent usage => new AgwUsageContent { Type = content.GetType().Name, Content = usage.Details, AdditionalProperties = content.AdditionalProperties },
+            ErrorContent error => new AgwErrorContent { Content = error.Message, AdditionalProperties = content.AdditionalProperties },
+            UsageContent usage => new AgwUsageContent { Content = usage.Details, AdditionalProperties = content.AdditionalProperties },
             _ => null
         };
     }
@@ -70,18 +70,18 @@ public static class AgentRunResponseUpdateExtensions
         props["callId"] = call.CallId;
         props["toolName"] = call.Name;
         var content = call.Arguments == null ? "" : JsonUtil.Serialize(call.Arguments);
-        return new AgwFunctionCallContent { Type = call.GetType().Name, Content = content, AdditionalProperties = props };
+        return new AgwFunctionCallContent { Content = content, AdditionalProperties = props };
     }
 
     private static AgwContent CreateFunctionResultContent(FunctionResultContent result, AdditionalPropertiesDictionary props)
     {
         props["callId"] = result.CallId;
         var content = result.Result == null ? "" : JsonUtil.Serialize(result.Result);
-        return new AgwFunctionResultContent { Type = result.GetType().Name, Content = content, AdditionalProperties = props };
+        return new AgwFunctionResultContent { Content = content, AdditionalProperties = props };
     }
 }
 
 public static class AiMessageExtensions
 {
-    public static string Serialize(this AiMessage message) => JsonUtil.Serialize(message);
+    public static string Serialize(this AgwMessage message) => JsonUtil.Serialize(message);
 }

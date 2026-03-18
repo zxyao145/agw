@@ -127,7 +127,7 @@ public class SessionRecordsController : ControllerBase
         return deleted ? NoContent() : NotFound();
     }
 
-    private static IEnumerable<AiMessage> ToAiMessages(TaskRecord record)
+    private static IEnumerable<AgwMessage> ToAiMessages(TaskRecord record)
     {
         var message = record.ToChatMessage()?.ToAiMessage();
         if (message != null)

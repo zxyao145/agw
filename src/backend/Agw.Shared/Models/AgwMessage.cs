@@ -8,7 +8,7 @@ namespace Agw.Shared.Models;
 /// <summary>
 /// AI message with role, author, and content blocks.
 /// </summary>
-public record AiMessage
+public record AgwMessage
 {
     public string MessageId { get; init; }
     public string? Author { get; init; }
@@ -17,7 +17,7 @@ public record AiMessage
     public AdditionalPropertiesDictionary? AdditionalProperties { get; init; }
 
     [JsonConstructor]
-    public AiMessage(
+    public AgwMessage(
         string messageId,
         string? author,
         AiRole role,
@@ -31,7 +31,7 @@ public record AiMessage
         AdditionalProperties = additionalProperties;        
     }
 
-    public AiMessage(
+    public AgwMessage(
         string messageId,
         string? author,
         AiRole role,

@@ -239,7 +239,7 @@ public class ProjectTasksController : ControllerBase
     private static ProjectTaskResponse ToResponse(
         ProjectTask task,
         IReadOnlyList<TaskRecord> records,
-        IReadOnlyList<AiMessage>? messages)
+        IReadOnlyList<AgwMessage>? messages)
     {
         var latestRecord = records.LastOrDefault();
         var latestUserRecord = records
@@ -272,7 +272,7 @@ public class ProjectTasksController : ControllerBase
             messages);
     }
 
-    private static IEnumerable<AiMessage> ToAiMessages(TaskRecord record)
+    private static IEnumerable<AgwMessage> ToAiMessages(TaskRecord record)
     {
         var message = record.ToChatMessage()?.ToAiMessage();
         if (message != null)

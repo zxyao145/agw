@@ -119,7 +119,7 @@ public class TaskManagerFactory
             {
                 var parts = agentExecutionResult!.Messages.Select(x =>
                 {
-                    var textContent = x.Contents.Find(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent);
+                    var textContent = x.Contents.Find(c => c is AgwTextContent);
                     return (new TextPart { Text = ExtractContentText(textContent) }) as Part;
                 })
                      .ToList();

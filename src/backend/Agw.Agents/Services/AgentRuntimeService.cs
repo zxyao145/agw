@@ -29,7 +29,7 @@ namespace Agw.Appliaction.Services;
 /// </summary>
 public record AgentExecutionResult(
     string SessionId,
-    IReadOnlyList<AiMessage> Messages);
+    IReadOnlyList<AgwMessage> Messages);
 
 /// <summary>
 /// Shapes persisted Agent data plus its Model/Provider/API key into a runtime payload
@@ -391,7 +391,7 @@ public class AgentRuntimeService
     /// <summary>
     /// Executes an existing AI agent session with streaming response.
     /// </summary>
-    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgentExecSession session,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -414,7 +414,7 @@ public class AgentRuntimeService
     /// <summary>
     /// Executes an agent with streaming response.
     /// </summary>
-    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         Guid agentId,
         string sessionId,
         string input,
@@ -586,7 +586,7 @@ public class AgentRuntimeService
 
             var stream = aiAgent.RunStreamingAsync(chatMsg, session);
 
-            List<AiMessage> messages = new();
+            List<AgwMessage> messages = new();
             var responseUpdates = new List<AgentResponseUpdate>();
             await foreach (var update in stream)
             {

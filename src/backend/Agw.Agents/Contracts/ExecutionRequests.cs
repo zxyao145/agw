@@ -13,7 +13,7 @@ public record AgentExecutionRequest(
 
 public record AgentExecutionResponse(
     string? SessionId,
-    IReadOnlyList<AiMessage> Messages)
+    IReadOnlyList<AgwMessage> Messages)
 {
     public static AgentExecutionResponse FromAgentResult(AgentExecutionResult result) =>
         new(result.SessionId, result.Messages);

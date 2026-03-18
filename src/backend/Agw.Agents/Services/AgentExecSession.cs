@@ -80,15 +80,16 @@ public sealed class AgentExecSession : IAsyncDisposable
     /// <summary>
     /// Executes a text input with streaming responses.
     /// </summary>
-    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(input);
 
-        var content = new AiMessageInputContent(
-            AiMessageContentType.TextContent,
-            JsonSerializer.SerializeToElement(input));
+        var content = new AgwTextContent()
+        { 
+            Content = input,
+        };
 
         await foreach (var message in ExecuteStreamingAsync([content], input, cancellationToken))
         {
@@ -99,8 +100,8 @@ public sealed class AgentExecSession : IAsyncDisposable
     /// <summary>
     /// Executes a list of input contents with streaming responses.
     /// </summary>
-    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
-        List<AiMessageInputContent> contents,
+    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+        List<AgwContent> contents,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await foreach (var message in ExecuteStreamingAsync(contents, null, cancellationToken))
@@ -112,8 +113,8 @@ public sealed class AgentExecSession : IAsyncDisposable
     /// <summary>
     /// Executes a list of input contents with streaming responses.
     /// </summary>
-    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
-        List<AiMessageInputContent> contents,
+    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+        List<AgwContent> contents,
         string? input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -193,22 +194,21 @@ public sealed class AgentExecSession : IAsyncDisposable
         }
     }
 
-    private static List<AIContent> ConvertToAIContents(List<AiMessageInputContent> contents)
+    private static List<AIContent> ConvertToAIContents(List<AgwContent> contents)
     {
         var aiContents = new List<AIContent>();
 
         foreach (var item in contents)
         {
-            if (item.Type == AiMessageContentType.TextContent)
+            if (item is AgwTextContent agwTextContent)
             {
-                aiContents.Add(new TextContent(item.Content.GetString()));
+                aiContents.Add(new TextContent(agwTextContent.Content));
                 continue;
             }
-            if (item.Type == AiMessageContentType.UriContent)
+            if (item is AgwUriContent agwUriContent)
             {
-                var uri = item.Content.GetProperty("uri").GetString() ?? "";
-                var mediaType = item.Content.GetProperty("mediaType").GetString() ?? "";
-                aiContents.Add(new UriContent(uri, mediaType));
+                aiContents.Add(new UriContent(agwUriContent.Uri, agwUriContent.MediaType));
+                continue;
             }
         }
 

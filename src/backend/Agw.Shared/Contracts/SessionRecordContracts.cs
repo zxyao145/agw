@@ -16,7 +16,7 @@ public record SessionRecordDetails(
     string ProjectId,
     string SessionId,
     string Title,
-    IReadOnlyList<AiMessage> Messages,
+    IReadOnlyList<AgwMessage> Messages,
     DateTime CreateTime,
     DateTime? UpdateTime);
 

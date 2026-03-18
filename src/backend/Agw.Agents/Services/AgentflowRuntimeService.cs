@@ -34,7 +34,7 @@ public class PlaceholderAgentflowAgentExecutor : IAgentflowAgentExecutor
 
 public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
 
-public record AgentflowExecutionResult(string SessionId, IReadOnlyList<AiMessage> Messages);
+public record AgentflowExecutionResult(string SessionId, IReadOnlyList<AgwMessage> Messages);
 
 public class AgentflowRuntimeService
 {
@@ -84,7 +84,7 @@ public class AgentflowRuntimeService
 
 
 
-    public async IAsyncEnumerable<AiMessage> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         Guid agentflowId,
         string sessionId,
         string input,
@@ -247,7 +247,7 @@ public class AgentflowRuntimeService
             }
         }
 
-        var outputs = new List<AiMessage>();
+        var outputs = new List<AgwMessage>();
         var responseUpdates = new List<AgentResponseUpdate>();
 
         // Display aggregated results from all agents
@@ -255,9 +255,9 @@ public class AgentflowRuntimeService
         foreach (var message in result)
         {
             responseUpdates.Add(ToResponseUpdate(message));
-            var contentObj = new AgwTextContent { Type = AiMessageContentType.TextContent, Content = message.Text };
+            var contentObj = new AgwTextContent { Content = message.Text };
             var chatMsg =
-                new AiMessage(message.MessageId ?? "", message.AuthorName, message.Role, [contentObj]);
+                new AgwMessage(message.MessageId ?? "", message.AuthorName, message.Role, [contentObj]);
             outputs.Add(chatMsg);
         }
 
