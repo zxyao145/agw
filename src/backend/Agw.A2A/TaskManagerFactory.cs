@@ -1,5 +1,6 @@
 using A2A;
 using Agw.Appliaction.Services;
+using Agw.Shared.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -118,8 +119,8 @@ public class TaskManagerFactory
             {
                 var parts = agentExecutionResult!.Messages.Select(x =>
                 {
-                    var textContent = x.Contents.Find(c => c.Type == "text");
-                    return (new TextPart { Text = textContent?.Content?.ToString() ?? "" }) as Part;
+                    var textContent = x.Contents.Find(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent);
+                    return (new TextPart { Text = ExtractContentText(textContent) }) as Part;
                 })
                      .ToList();
 
@@ -151,5 +152,18 @@ public class TaskManagerFactory
             _logger.LogError(ex, $"[CLI Agent] Error: {errorMessage}", errorMessage);
             return errorMessage;
         }
+    }
+
+    private static string ExtractContentText(AgwContent? content)
+    {
+        return content switch
+        {
+            AgwTextContent text => text.Content ?? string.Empty,
+            AgwTextReasoningContent reasoning => reasoning.Content ?? string.Empty,
+            AgwFunctionCallContent functionCall => functionCall.Content ?? string.Empty,
+            AgwFunctionResultContent functionResult => functionResult.Content ?? string.Empty,
+            AgwErrorContent error => error.Content ?? string.Empty,
+            _ => string.Empty
+        };
     }
 }
