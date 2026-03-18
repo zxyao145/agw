@@ -15,7 +15,7 @@ public static class AgentRunResponseUpdateExtensions
 
         var contents = chatMessage.Contents
             .Select(ConvertContent)
-            .OfType<AiMessageContent>()
+            .OfType<AgwContent>()
             .ToList();
 
         return new AiMessage(
@@ -37,7 +37,7 @@ public static class AgentRunResponseUpdateExtensions
 
         var contents = update.Contents
             .Select(ConvertContent)
-            .OfType<AiMessageContent>()
+            .OfType<AgwContent>()
             .ToList();
 
         return new AiMessage(
@@ -49,35 +49,35 @@ public static class AgentRunResponseUpdateExtensions
         );
     }
 
-    private static AiMessageContent? ConvertContent(AIContent content)
+    private static AgwContent? ConvertContent(AIContent content)
     {
         var additionalProps = content.AdditionalProperties ?? [];
 
         return content switch
         {
-            TextContent text => new(content.GetType().Name, text.Text, content.AdditionalProperties),
-            TextReasoningContent thinking => new(content.GetType().Name, thinking.Text, content.AdditionalProperties),
+            TextContent text => new AgwTextContent { Type = content.GetType().Name, Content = text.Text, AdditionalProperties = content.AdditionalProperties },
+            TextReasoningContent thinking => new AgwTextReasoningContent { Type = content.GetType().Name, Content = thinking.Text, AdditionalProperties = content.AdditionalProperties },
             FunctionCallContent call => CreateFunctionCallContent(call, additionalProps),
             FunctionResultContent result => CreateFunctionResultContent(result, additionalProps),
-            ErrorContent error => new(content.GetType().Name, error.Message, content.AdditionalProperties),
-            UsageContent usage => new(content.GetType().Name, usage.Details, content.AdditionalProperties),
+            ErrorContent error => new AgwErrorContent { Type = content.GetType().Name, Content = error.Message, AdditionalProperties = content.AdditionalProperties },
+            UsageContent usage => new AgwUsageContent { Type = content.GetType().Name, Content = usage.Details, AdditionalProperties = content.AdditionalProperties },
             _ => null
         };
     }
 
-    private static AiMessageContent CreateFunctionCallContent(FunctionCallContent call, AdditionalPropertiesDictionary props)
+    private static AgwContent CreateFunctionCallContent(FunctionCallContent call, AdditionalPropertiesDictionary props)
     {
         props["callId"] = call.CallId;
         props["toolName"] = call.Name;
         var content = call.Arguments == null ? "" : JsonUtil.Serialize(call.Arguments);
-        return new(call.GetType().Name, content, props);
+        return new AgwFunctionCallContent { Type = call.GetType().Name, Content = content, AdditionalProperties = props };
     }
 
-    private static AiMessageContent CreateFunctionResultContent(FunctionResultContent result, AdditionalPropertiesDictionary props)
+    private static AgwContent CreateFunctionResultContent(FunctionResultContent result, AdditionalPropertiesDictionary props)
     {
         props["callId"] = result.CallId;
         var content = result.Result == null ? "" : JsonUtil.Serialize(result.Result);
-        return new(result.GetType().Name, content, props);
+        return new AgwFunctionResultContent { Type = result.GetType().Name, Content = content, AdditionalProperties = props };
     }
 }
 

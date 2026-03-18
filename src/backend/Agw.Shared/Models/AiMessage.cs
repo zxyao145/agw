@@ -13,7 +13,7 @@ public record AiMessage
     public string MessageId { get; init; }
     public string? Author { get; init; }
     public AiRole Role { get; init; } = AiRole.User;
-    public List<AiMessageContent> Contents { get; init; }
+    public List<AgwContent> Contents { get; init; }
     public AdditionalPropertiesDictionary? AdditionalProperties { get; init; }
 
     [JsonConstructor]
@@ -21,7 +21,7 @@ public record AiMessage
         string messageId,
         string? author,
         AiRole role,
-        List<AiMessageContent> contents,
+        List<AgwContent> contents,
         AdditionalPropertiesDictionary? additionalProperties = null)
     {
         MessageId = messageId;
@@ -35,7 +35,7 @@ public record AiMessage
         string messageId,
         string? author,
         AiRole role,
-        List<AiMessageContent> contents,
+        List<AgwContent> contents,
         Dictionary<string, object?>? additionalProperties)
     {
         MessageId = messageId;

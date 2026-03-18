@@ -1,6 +1,7 @@
 using Agw.Appliaction.Services;
 using Agw.Shared;
 using Agw.Shared.Contracts;
+using Agw.Shared.Models;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Text;
@@ -98,8 +99,8 @@ public class OpenAIController : ControllerBase
         {
             foreach (var msg in group)
             {
-                var textContent = msg.Contents.Find(c => c.Type == "text");
-                mergedContent.Append(textContent?.Content?.ToString() ?? "");
+                var textContent = msg.Contents.Find(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent);
+                mergedContent.Append(ExtractContentText(textContent));
             }
         }
 
@@ -203,7 +204,7 @@ public class OpenAIController : ControllerBase
                             Index = 0,
                             Delta = new OpenAIChatDelta
                             {
-                                Content = message.Contents.Find(c => c.Type == "text")?.Content?.ToString() ?? ""
+                                Content = ExtractContentText(message.Contents.Find(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent))
                             },
                             FinishReason = null
                         }
@@ -279,7 +280,7 @@ public class OpenAIController : ControllerBase
             var textContent = request.Inputs
                 .Where(i => i.Contents != null)
                 .SelectMany(i => i.Contents!)
-                .Where(c => c.Type == "text" && !string.IsNullOrWhiteSpace(c.Text))
+                .Where(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent && !string.IsNullOrWhiteSpace(c.Text))
                 .Select(c => c.Text)
                 .FirstOrDefault();
 
@@ -346,8 +347,8 @@ public class OpenAIController : ControllerBase
         {
             foreach (var msg in group)
             {
-                var textContent = msg.Contents.Find(c => c.Type == "text");
-                mergedContent.Append(textContent?.Content?.ToString() ?? "");
+                var textContent = msg.Contents.Find(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent);
+                mergedContent.Append(ExtractContentText(textContent));
             }
         }
 
@@ -442,7 +443,7 @@ public class OpenAIController : ControllerBase
                 {
                     Type = "text",
                     Annotations = new List<string>(),
-                    Text = message.Contents.Find(c => c.Type == "text")?.Content?.ToString() ?? ""
+                    Text = ExtractContentText(message.Contents.Find(c => c.Type == "text" || c.Type == AiMessageContentType.TextContent))
                 });
 
                 // Send content delta event
@@ -485,6 +486,19 @@ public class OpenAIController : ControllerBase
     /// <summary>
     /// Helper method to write SSE data with proper encoding
     /// </summary>
+    private static string ExtractContentText(AgwContent? content)
+    {
+        return content switch
+        {
+            AgwTextContent text => text.Content ?? string.Empty,
+            AgwTextReasoningContent reasoning => reasoning.Content ?? string.Empty,
+            AgwFunctionCallContent functionCall => functionCall.Content ?? string.Empty,
+            AgwFunctionResultContent functionResult => functionResult.Content ?? string.Empty,
+            AgwErrorContent error => error.Content ?? string.Empty,
+            _ => string.Empty
+        };
+    }
+
     private async Task WriteSSEDataAsync(string data, CancellationToken cancellationToken)
     {
         var bytes = Encoding.UTF8.GetBytes(data);

@@ -255,7 +255,7 @@ public class AgentflowRuntimeService
         foreach (var message in result)
         {
             responseUpdates.Add(ToResponseUpdate(message));
-            var contentObj = new AiMessageContent("text", message.Text);
+            var contentObj = new AgwTextContent { Type = AiMessageContentType.TextContent, Content = message.Text };
             var chatMsg =
                 new AiMessage(message.MessageId ?? "", message.AuthorName, message.Role, [contentObj]);
             outputs.Add(chatMsg);

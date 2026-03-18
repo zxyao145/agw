@@ -7,7 +7,7 @@ namespace Agw.Shared.Models;
 [JsonDerivedType(typeof(AgwTextContent), "TextContent")]
 [JsonDerivedType(typeof(AgwTextReasoningContent), "TextReasoningContent")]
 [JsonDerivedType(typeof(AgwFunctionCallContent), "FunctionCallContent")]
-[JsonDerivedType(typeof(AgwFunctionCallContent), "FunctionResultContent")]
+[JsonDerivedType(typeof(AgwFunctionResultContent), "FunctionResultContent")]
 [JsonDerivedType(typeof(AgwErrorContent), "ErrorContent")]
 [JsonDerivedType(typeof(AgwUsageContent), "UsageContent")]
 public abstract class AgwContent
