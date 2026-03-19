@@ -12,6 +12,7 @@ import {
   createUserTextMessage,
   executeWithWebSocketStream,
   mergeStreamingMessagesById,
+  toExecutionWsUserInput,
 } from "@/lib/execution-stream";
 import { UserInput } from "./user-input";
 import { ArrowUp, Eraser, Square } from "lucide-react";
@@ -102,7 +103,8 @@ export function Conversation({
         return;
       }
 
-      setMessages((prev) => [...prev, createUserTextMessage(value)]);
+      const userMessage = createUserTextMessage(value);
+      setMessages((prev) => [...prev, userMessage]);
       setIsExecuting(true);
 
       try {
@@ -113,7 +115,7 @@ export function Conversation({
             sessionId: curSessionId,
             projectId,
             taskId,
-            input: value,
+            input: toExecutionWsUserInput(userMessage),
           },
           onMessage: (message) => {
             setMessages((prev) => mergeStreamingMessagesById([...prev, message]));

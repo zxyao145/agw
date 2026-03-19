@@ -90,7 +90,33 @@ public sealed class AgentExecSession : IAsyncDisposable
             Content = input,
         };
 
-        await foreach (var message in ExecuteStreamingAsync([content], input, cancellationToken))
+        await foreach (var message in ExecuteStreamingAsync(
+                           new AgwUserInput
+                           {
+                               Author = Constants.DefaultAuthor,
+                               Contents = [content]
+                           },
+                           cancellationToken))
+        {
+            yield return message;
+        }
+    }
+
+    /// <summary>
+    /// Executes a structured user input with streaming responses.
+    /// </summary>
+    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+        AgwUserInput input,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(input.Contents);
+
+        await foreach (var message in ExecuteStreamingAsync(
+                           input.Contents,
+                           input.MessageId,
+                           input.Author,
+                           cancellationToken))
         {
             yield return message;
         }
@@ -103,7 +129,7 @@ public sealed class AgentExecSession : IAsyncDisposable
         List<AgwContent> contents,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await foreach (var message in ExecuteStreamingAsync(contents, null, cancellationToken))
+        await foreach (var message in ExecuteStreamingAsync(contents, null, null, cancellationToken))
         {
             yield return message;
         }
@@ -114,14 +140,15 @@ public sealed class AgentExecSession : IAsyncDisposable
     /// </summary>
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         List<AgwContent> contents,
-        string? input,
+        string? messageId,
+        string? author,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var aiContents = ConvertToAIContents(contents);
         var message = new ChatMessage(ChatRole.User, aiContents)
         {
-            MessageId = Guid.NewGuid().ToString(),
-            AuthorName = Constants.DefaultAuthor
+            MessageId = string.IsNullOrWhiteSpace(messageId) ? Guid.NewGuid().ToString() : messageId,
+            AuthorName = string.IsNullOrWhiteSpace(author) ? Constants.DefaultAuthor : author
         };
         var responseUpdates = new List<AgentResponseUpdate>();
 

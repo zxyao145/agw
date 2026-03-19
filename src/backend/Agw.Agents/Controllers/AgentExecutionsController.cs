@@ -3,6 +3,7 @@ using Agw.Appliaction.Services;
 using Agw.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Enums;
+using Agw.Shared.Models;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Microsoft.AspNetCore.Http;
@@ -60,7 +61,7 @@ public class AgentExecutionsController : ControllerBase
         using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
         try
         {
-            var request = await ReceiveRequestAsync<AgentExecutionRequest>(webSocket, cancellationToken);
+            var request = await ReceiveRequestAsync<AgentExecutionWsRequest>(webSocket, cancellationToken);
             if (request == null)
             {
                 await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Invalid request payload");
@@ -86,7 +87,7 @@ public class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
-        var (task, contextError) = await ResolveTaskAsync(request);
+        var (task, contextError) = await ResolveTaskAsync(request.TaskId, request.ProjectId);
         if (contextError != null)
         {
             return contextError;
@@ -112,7 +113,7 @@ public class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
-        var (task, contextError) = await ResolveTaskAsync(request);
+        var (task, contextError) = await ResolveTaskAsync(request.TaskId, request.ProjectId);
         if (contextError != null)
         {
             return contextError;
@@ -135,11 +136,11 @@ public class AgentExecutionsController : ControllerBase
 
     private async Task SendStreamingMessagesAsync(
         Guid id,
-        AgentExecutionRequest request,
+        AgentExecutionWsRequest request,
         WebSocket webSocket,
         CancellationToken cancellationToken)
     {
-        var (task, contextError) = await ResolveTaskAsync(request);
+        var (task, contextError) = await ResolveTaskAsync(request.TaskId, request.ProjectId);
         if (contextError != null)
         {
             await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, ExtractReason(contextError));
@@ -178,7 +179,7 @@ public class AgentExecutionsController : ControllerBase
                 await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
                                    id,
                                    request.SessionId ?? string.Empty,
-                                   request.Input,
+                                   ExtractAgentflowInputText(request.Input),
                                    cancellationToken,
                                    request.ProjectId,
                                    task?.ContextId))
@@ -230,31 +231,31 @@ public class AgentExecutionsController : ControllerBase
         catch (JsonException) { return default; }
     }
 
-    private async Task<(ProjectTask? task, IActionResult? error)> ResolveTaskAsync(AgentExecutionRequest request)
+    private async Task<(ProjectTask? task, IActionResult? error)> ResolveTaskAsync(Guid? taskId, string? projectId)
     {
-        if (!request.TaskId.HasValue)
+        if (!taskId.HasValue)
         {
             return (null, null);
         }
 
-        var task = await _taskAppService.GetTaskAsync(request.TaskId.Value);
+        var task = await _taskAppService.GetTaskAsync(taskId.Value);
         if (task == null)
         {
             return (null, NotFound("Task not found."));
         }
 
-        if (!string.IsNullOrWhiteSpace(request.ProjectId))
+        if (!string.IsNullOrWhiteSpace(projectId))
         {
-            if (Guid.TryParse(task.ProjectId, out var projectId))
+            if (Guid.TryParse(projectId, out var normalizedProjectId))
             {
-                if (!string.Equals(task.ProjectId, projectId.Normalize(), StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(task.ProjectId, normalizedProjectId.Normalize(), StringComparison.OrdinalIgnoreCase))
                 {
                     return (null, BadRequest("Task does not belong to the supplied projectId."));
                 }
             }
             else
             {
-                if (!string.Equals(task.ProjectId, request.ProjectId, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(task.ProjectId, projectId, StringComparison.OrdinalIgnoreCase))
                 {
                     return (null, BadRequest("Task does not belong to the supplied projectId."));
                 }
@@ -289,5 +290,30 @@ public class AgentExecutionsController : ControllerBase
     {
         if (webSocket.State != WebSocketState.Open) return Task.CompletedTask;
         return webSocket.CloseAsync(status, reason, CancellationToken.None);
+    }
+
+    private static string ExtractAgentflowInputText(AgwUserInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        return string.Join(
+            Environment.NewLine,
+            input.Contents
+                .Select(ExtractContentText)
+                .Where(static value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static string? ExtractContentText(AgwContent content)
+    {
+        return content switch
+        {
+            AgwTextContent text => text.Content,
+            AgwTextReasoningContent textReasoning => textReasoning.Content,
+            AgwErrorContent error => error.Content,
+            AgwFunctionCallContent functionCall => functionCall.Content,
+            AgwFunctionResultContent functionResult => functionResult.Content,
+            AgwUriContent uri => uri.Uri.ToString(),
+            _ => null
+        };
     }
 }

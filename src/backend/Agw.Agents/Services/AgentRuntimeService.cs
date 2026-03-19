@@ -412,6 +412,30 @@ public class AgentRuntimeService
     }
 
     /// <summary>
+    /// Executes an existing AI agent session with structured user input and streaming response.
+    /// </summary>
+    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+        AgentExecSession session,
+        AgwUserInput input,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(input);
+
+        try
+        {
+            await foreach (var message in session.ExecuteStreamingAsync(input, cancellationToken).ConfigureAwait(false))
+            {
+                yield return message;
+            }
+        }
+        finally
+        {
+            await SaveSessionThreadStateAsync(session._sessionId, session.Agent, session.Session, cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// Executes an agent with streaming response.
     /// </summary>
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(

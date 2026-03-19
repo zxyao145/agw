@@ -1,10 +1,11 @@
 import {
   executeWithWebSocket,
+  type ExecutionWsUserInput,
   type ExecutionWsRequest,
 } from "@/api/execution-ws";
 import { Ulid } from "id128";
-import type { AiMessage, AiMessageContent } from "@/types";
-
+import { MessageContentType, type AiMessage, type AiMessageContent } from "@/types";
+const default_user = "$agw";
 const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
 
 function isTextContent(content: AiMessageContent): boolean {
@@ -33,9 +34,19 @@ function cloneMessage(message: AiMessage): AiMessage {
 export function createUserTextMessage(input: string): AiMessage {
   return {
     messageId: Ulid.generate().toCanonical(),
-    author: "user",
+    author: default_user,
     role: "user",
-    contents: [{ type: "TextContent", content: input }],
+    contents: [{ type: MessageContentType.TextContent, content: input }],
+  };
+}
+
+export function toExecutionWsUserInput(
+  message: AiMessage,
+): ExecutionWsUserInput {
+  return {
+    messageId: message.messageId,
+    author: message.author,
+    contents: message.contents.map(cloneMessageContent),
   };
 }
 

@@ -11,6 +11,13 @@ public record AgentExecutionRequest(
     string? ProjectId = null,
     Guid? TaskId = null);
 
+public record AgentExecutionWsRequest(
+    ProjectTaskAgentType AgentType,
+    AgwUserInput Input,
+    string? SessionId = null,
+    string? ProjectId = null,
+    Guid? TaskId = null);
+
 public record AgentExecutionResponse(
     string? SessionId,
     IReadOnlyList<AgwMessage> Messages)

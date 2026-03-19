@@ -1,6 +1,13 @@
+import type { AiMessage } from "@/types";
+
+export type ExecutionWsUserInput = Pick<
+  AiMessage,
+  "messageId" | "author" | "contents"
+>;
+
 export type ExecutionWsRequest = {
   agentType: number;
-  input: string;
+  input: ExecutionWsUserInput;
   sessionId?: string | null;
   projectId?: string | null;
   taskId?: string | null;
