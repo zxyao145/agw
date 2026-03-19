@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="ClaudeCodeSdk.MAF" Version="0.10.4-preview3" />
+    <PackageVersion Include="ClaudeCodeSdk.MAF" Version="0.10.4-preview4" />
     <PackageVersion Include="Mapster.EFCore" Version="5.1.1" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.0.0-rc4" />
     <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-rc4" />

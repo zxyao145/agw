@@ -243,10 +243,22 @@ public class AgentExecutionsController : ControllerBase
             return (null, NotFound("Task not found."));
         }
 
-        if (!string.IsNullOrWhiteSpace(request.ProjectId)
-            && !string.Equals(task.ProjectId, request.ProjectId, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(request.ProjectId))
         {
-            return (null, BadRequest("Task does not belong to the supplied projectId."));
+            if (Guid.TryParse(task.ProjectId, out var projectId))
+            {
+                if (!string.Equals(task.ProjectId, projectId.Normalize(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return (null, BadRequest("Task does not belong to the supplied projectId."));
+                }
+            }
+            else
+            {
+                if (!string.Equals(task.ProjectId, request.ProjectId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return (null, BadRequest("Task does not belong to the supplied projectId."));
+                }
+            }
         }
 
         return (task, null);

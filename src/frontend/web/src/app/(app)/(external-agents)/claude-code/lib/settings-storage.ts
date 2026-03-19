@@ -50,8 +50,8 @@ const mergeSettings = (
     ...next,
     ...pickDefined(updates),
 
-    // 特殊字段合并
-    envVars: mergeEnvVars(next.envVars, updates.envVars),
+    // envVars 直接替换而非合并，支持删除操作
+    envVars: updates.envVars !== undefined ? updates.envVars : next.envVars,
     workingDirHistory: mergeUnique(
       next.workingDirHistory,
       updates.workingDirHistory,
@@ -83,23 +83,6 @@ function mergeUnique(a?: string[], b?: string[]): string[] | undefined {
   if (!b) return a;
 
   return Array.from(new Set([...a, ...b]));
-}
-function mergeEnvVars(a?: EnvVar[], b?: EnvVar[]): EnvVar[] | undefined {
-  if (!a && !b) return undefined;
-  if (!a) return b;
-  if (!b) return a;
-
-  const map = new Map<string, EnvVar>();
-
-  for (const env of a) {
-    map.set(env.key, env);
-  }
-
-  for (const env of b) {
-    map.set(env.key, env); // override wins
-  }
-
-  return Array.from(map.values());
 }
 
 export const claudeSettingsStorage = {

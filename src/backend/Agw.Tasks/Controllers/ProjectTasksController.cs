@@ -94,6 +94,7 @@ public class ProjectTasksController : ControllerBase
 
         var inputMsg = new ChatMessage(ChatRole.User, request.Input.Trim())
         {
+            MessageId = Guid.NewGuid().ToString(),
             AuthorName = Constants.DefaultAuthor
         };
 

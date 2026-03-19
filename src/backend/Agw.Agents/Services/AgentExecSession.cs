@@ -44,7 +44,6 @@ public sealed class AgentExecSession : IAsyncDisposable
     private readonly string? _taskTitle;
     private readonly string? _taskDescription;
     private readonly string? _systemPrompt;
-    //private readonly TaskRecordApplication _taskRecordApplication;
 
     /// <summary>
     /// Initializes a new instance of the AiAgentSession class.
@@ -119,7 +118,11 @@ public sealed class AgentExecSession : IAsyncDisposable
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var aiContents = ConvertToAIContents(contents);
-        var message = new ChatMessage(ChatRole.User, aiContents);
+        var message = new ChatMessage(ChatRole.User, aiContents)
+        {
+            MessageId = Guid.NewGuid().ToString(),
+            AuthorName = Constants.DefaultAuthor
+        };
         var responseUpdates = new List<AgentResponseUpdate>();
 
         await foreach (var update in Agent.RunStreamingAsync(message, Session, cancellationToken: cancellationToken))
@@ -128,19 +131,6 @@ public sealed class AgentExecSession : IAsyncDisposable
             var aiMessage = update.ToAiMessage();
             if (aiMessage != null) yield return aiMessage;
         }
-        //await _taskRecordApplication.SaveThreadStateAsync(
-        //    _sessionId,
-        //    _contextId,
-        //    _projectId,
-        //    _agentType,
-        //    _agentId,
-        //    _agentName,
-        //    responseUpdates,
-        //    input,
-        //    _taskTitle,
-        //    _taskDescription,
-        //    _systemPrompt,
-        //    cancellationToken);
         _logger.LogDebug("Saved thread state for session: {SessionId}", _sessionId);
     }
 

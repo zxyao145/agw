@@ -17,7 +17,7 @@ namespace Agw.Shared.Models;
 [JsonDerivedType(typeof(AgwUriContent), "UriContent")]
 public abstract class AgwContent
 {
-    public abstract string Type { get; }
+    public abstract string Kind { get; }
 
     public AdditionalPropertiesDictionary? AdditionalProperties { get; set; }
 
@@ -26,7 +26,7 @@ public abstract class AgwContent
 
 public class AgwTextContent : AgwContent
 {
-    public override string Type => AiMessageContentType.TextContent;
+    public override string Kind => AiMessageContentType.TextContent;
 
     public string? Content { get; set; }
 
@@ -34,28 +34,28 @@ public class AgwTextContent : AgwContent
 
 public class AgwTextReasoningContent : AgwContent
 {
-    public override string Type => AiMessageContentType.TextReasoningContent;
+    public override string Kind => AiMessageContentType.TextReasoningContent;
 
     public string? Content { get; set; }
 }
 
 public class AgwFunctionCallContent : AgwContent
 {
-    public override string Type => AiMessageContentType.FunctionCallContent;
+    public override string Kind => AiMessageContentType.FunctionCallContent;
 
     public string? Content { get; set; }
 }
 
 public class AgwFunctionResultContent : AgwContent
 {
-    public override string Type => AiMessageContentType.FunctionResultContent;
+    public override string Kind => AiMessageContentType.FunctionResultContent;
 
     public string? Content { get; set; }
 }
 
 public class AgwErrorContent : AgwContent
 {
-    public override string Type => AiMessageContentType.ErrorContent;
+    public override string Kind => AiMessageContentType.ErrorContent;
 
     public string? ErrorCode { get; set; }
 
@@ -67,14 +67,14 @@ public class AgwErrorContent : AgwContent
 
 public class AgwUsageContent : AgwContent
 {
-    public override string Type => AiMessageContentType.UsageContent;
+    public override string Kind => AiMessageContentType.UsageContent;
 
     public UsageDetails Content { get; set; } = default!;
 }
 
 public class AgwUriContent : AgwContent
 {
-    public override string Type => AiMessageContentType.UriContent;
+    public override string Kind => AiMessageContentType.UriContent;
 
     private Uri _uri;
 

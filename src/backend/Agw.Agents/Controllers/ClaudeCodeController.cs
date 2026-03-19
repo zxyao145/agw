@@ -308,7 +308,7 @@ public class ClaudeCodeController(
         return new()
         {
             Role = ChatRole.System,
-            AuthorName = "Agw",
+            AuthorName = "agw-server",
             AdditionalProperties = new AdditionalPropertiesDictionary(d),
             Contents = [new TextContent(message)]
         };
