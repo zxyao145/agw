@@ -1,4 +1,5 @@
 using ClaudeCodeSdk.Types;
+using Agw.Shared.Models;
 
 namespace Agw.Appliaction.ExternalAgents;
 
@@ -117,7 +118,7 @@ public record ClaudeCodeInputRequest
     /// <summary>
     /// User prompt to send to ClaudeCode.
     /// </summary>
-    public required string Input { get; init; }
+    public required AgwUserInput Input { get; init; }
 }
 
 /// <summary>

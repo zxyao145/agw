@@ -1,6 +1,7 @@
 using Agw.Appliaction;
 using Agw.Appliaction.ExternalAgents;
 using Agw.Shared;
+using Agw.Shared.Models;
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -178,7 +179,7 @@ public class ClaudeCodeController(
             return;
         }
 
-        if (input?.Input is null or { Length: 0 })
+        if (input?.Input?.Contents is null or { Count: 0 })
         {
             await SendErrorAsync(webSocket, "Invalid input request: Input is required");
             return;
@@ -214,7 +215,7 @@ public class ClaudeCodeController(
         return activeInputTask;
     }
 
-    private async Task ProcessInputAsync(WebSocket webSocket, AgentExecSession session, string input)
+    private async Task ProcessInputAsync(WebSocket webSocket, AgentExecSession session, AgwUserInput input)
     {
         try
         {
@@ -308,7 +309,7 @@ public class ClaudeCodeController(
         return new()
         {
             Role = ChatRole.System,
-            AuthorName = "agw-server",
+            AuthorName = "$agw-server",
             AdditionalProperties = new AdditionalPropertiesDictionary(d),
             Contents = [new TextContent(message)]
         };

@@ -13,6 +13,10 @@ import {
 } from "./types";
 
 import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
+import {
+  createUserTextMessage,
+  toExecutionWsUserInput,
+} from "@/lib/execution-stream";
 
 import { Uuid4 } from "id128";
 import { InputArea } from "./components/user-input/input-area";
@@ -383,11 +387,11 @@ export default function ClaudeCodePage() {
     };
   };
 
-  const buildInputRequest = (inputMsg: string) => {
+  const buildInputRequest = (message: AiMessage) => {
     return {
       type: 1,
       input: {
-        input: inputMsg,
+        input: toExecutionWsUserInput(message),
       },
     };
   };
@@ -424,7 +428,7 @@ export default function ClaudeCodePage() {
     const sessionId = ensureSessionId();
     sendSettingIfNeeded(ws, sessionId);
     setIsInitStatus(true);
-    ws.send(JSON.stringify(buildInputRequest("/status")));
+    ws.send(JSON.stringify(buildInputRequest(createUserTextMessage("/status"))));
   };
 
   const setupWebSocket = () => {
@@ -546,23 +550,13 @@ export default function ClaudeCodePage() {
       }
 
       if (ws.readyState === WebSocket.OPEN) {
-        const userMsg: AiMessage = {
-          messageId: "",
-          author: "user",
-          role: "user",
-          contents: [
-            {
-              type: MessageContentType.TextContent,
-              content: inputMsg,
-            },
-          ],
-        };
+        const userMsg = createUserTextMessage(inputMsg);
         // Add user message to chat immediately
         setMessages((prev) => [...prev, userMsg]);
 
         const tid = ensureSessionId();
         sendSettingIfNeeded(ws, tid);
-        const request = buildInputRequest(inputMsg);
+        const request = buildInputRequest(userMsg);
         // console.debug("Sending request:", request);
         ws.send(JSON.stringify(request));
       }
