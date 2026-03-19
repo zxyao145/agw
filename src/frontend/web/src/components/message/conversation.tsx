@@ -11,7 +11,7 @@ import type { AiMessage, ProcessedMessageItem } from "@/types";
 import {
   createUserTextMessage,
   executeWithWebSocketStream,
-  mergeStreamingMessage,
+  mergeStreamingMessagesById,
 } from "@/lib/execution-stream";
 import { UserInput } from "./user-input";
 import { ArrowUp, Eraser, Square } from "lucide-react";
@@ -116,7 +116,7 @@ export function Conversation({
             input: value,
           },
           onMessage: (message) => {
-            setMessages((prev) => mergeStreamingMessage(prev, message));
+            setMessages((prev) => mergeStreamingMessagesById([...prev, message]));
           },
         });
         // await sessionQuery.refetch();
@@ -161,7 +161,6 @@ export function Conversation({
 
   return (
     <div className={cn("flex h-full relative", className)}>
-
       <ChatSession
         messages={messages}
         messagesStartRef={messagesStartRef}
