@@ -1,5 +1,5 @@
+using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Entities;
-using Agw.Domain.Services;
 using Agw.Manager.Api.Contracts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -10,28 +10,28 @@ namespace Agw.Manager.Api.Controllers;
 [Route("api/mcp-tool-servers")]
 public class McpToolServersController : ControllerBase
 {
-    private readonly McpToolServerDomainService _service;
+    private readonly AgentRuntimeService _agentRuntimeService;
     private readonly ILogger<McpToolServersController> _logger;
 
     public McpToolServersController(
-        McpToolServerDomainService service,
+        AgentRuntimeService agentRuntimeService,
         ILogger<McpToolServersController> logger)
     {
-        _service = service;
+        _agentRuntimeService = agentRuntimeService;
         _logger = logger;
     }
 
     [HttpGet]
     public async Task<IActionResult> ListAsync()
     {
-        var servers = await _service.ListAsync();
+        var servers = await _agentRuntimeService.ListMcpToolServersAsync();
         return Ok(servers);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetAsync(Guid id)
     {
-        var server = await _service.GetAsync(id);
+        var server = await _agentRuntimeService.GetMcpToolServerAsync(id);
         return server == null ? NotFound() : Ok(server);
     }
 
@@ -53,7 +53,7 @@ public class McpToolServersController : ControllerBase
             Enabled = request.Enabled
         };
 
-        var created = await _service.CreateAsync(server, request.AgentIds, user);
+        var created = await _agentRuntimeService.CreateMcpToolServerAsync(server, request.AgentIds, user);
         return Ok(created);
     }
 
@@ -61,19 +61,22 @@ public class McpToolServersController : ControllerBase
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] McpToolServerUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var updated = await _service.UpdateAsync(id, server =>
-        {
-            server.Name = request.Name;
-            server.Description = request.Description;
-            server.TransportType = request.TransportType;
-            server.Command = request.Command;
-            server.Arguments = request.Arguments ?? [];
-            server.WorkingDirectory = request.WorkingDirectory;
-            server.EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>();
-            server.Url = request.Url;
-            server.Headers = request.Headers ?? new Dictionary<string, string>();
-            server.Enabled = request.Enabled;
-        }, user);
+        var updated = await _agentRuntimeService.UpdateMcpToolServerAsync(
+            id,
+            server =>
+            {
+                server.Name = request.Name;
+                server.Description = request.Description;
+                server.TransportType = request.TransportType;
+                server.Command = request.Command;
+                server.Arguments = request.Arguments ?? [];
+                server.WorkingDirectory = request.WorkingDirectory;
+                server.EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>();
+                server.Url = request.Url;
+                server.Headers = request.Headers ?? new Dictionary<string, string>();
+                server.Enabled = request.Enabled;
+            },
+            user);
 
         return updated == null ? NotFound() : Ok(updated);
     }
@@ -81,7 +84,7 @@ public class McpToolServersController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
-        var deleted = await _service.DeleteAsync(id);
+        var deleted = await _agentRuntimeService.DeleteMcpToolServerAsync(id);
         return deleted ? NoContent() : NotFound();
     }
 
@@ -92,7 +95,7 @@ public class McpToolServersController : ControllerBase
     {
         try
         {
-            var tools = await _service.ListToolsAsync(request.McpToolServerId, cancellationToken);
+            var tools = await _agentRuntimeService.ListMcpToolsAsync(request.McpToolServerId, cancellationToken);
             var toolItems = tools
                 .Where(x => !string.IsNullOrWhiteSpace(x.Name))
                 .Select(x => new McpToolItem(x.Name))

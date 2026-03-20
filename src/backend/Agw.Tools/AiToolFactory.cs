@@ -63,7 +63,7 @@ public class AiToolFactory
             Description = description
         };
 
-        return AIFunctionFactory.Create(method, null, options);
+        return AIFunctionFactory.Create(method, target: null, options);
     }
 
     /// <summary>

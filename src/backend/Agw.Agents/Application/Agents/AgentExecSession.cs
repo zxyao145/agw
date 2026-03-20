@@ -1,4 +1,3 @@
-using Agw.Appliaction.Services;
 using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
@@ -6,38 +5,22 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 
-namespace Agw.Appliaction;
+namespace Agw.Appliaction.Services.Agents;
 
-/// <summary>
-/// Wraps an AI agent to execute WebSocket inputs and build streaming outputs.
-/// </summary>
 public sealed class AgentExecSession : IAsyncDisposable
 {
     private bool _disposed;
     private CancellationTokenSource _cancellationTokenSource = new();
 
-    /// <summary>
-    /// Gets the AI agent.
-    /// </summary>
     public AIAgent Agent { get; }
-
-    /// <summary>
-    /// Gets the agent thread for conversation context.
-    /// </summary>
     public AgentSession Session { get; private set; }
-
-    /// <summary>
-    /// Gets the cancellation token for in-flight requests.
-    /// </summary>
     public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
     private readonly ILogger _logger;
     public readonly string _sessionId;
     public readonly string _projectId;
     public readonly string _contextId;
-
     private readonly ProjectTaskAgentType _agentType;
     private readonly Guid? _agentId;
     private readonly string? _agentName;
@@ -45,9 +28,6 @@ public sealed class AgentExecSession : IAsyncDisposable
     private readonly string? _taskDescription;
     private readonly string? _systemPrompt;
 
-    /// <summary>
-    /// Initializes a new instance of the AiAgentSession class.
-    /// </summary>
     public AgentExecSession(
         AIAgent agent,
         AgentSession thread,
@@ -76,17 +56,14 @@ public sealed class AgentExecSession : IAsyncDisposable
         _systemPrompt = systemPrompt;
     }
 
-    /// <summary>
-    /// Executes a text input with streaming responses.
-    /// </summary>
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(input);
 
-        var content = new AgwTextContent()
-        { 
+        var content = new AgwTextContent
+        {
             Content = input,
         };
 
@@ -102,9 +79,6 @@ public sealed class AgentExecSession : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Executes a structured user input with streaming responses.
-    /// </summary>
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgwUserInput input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -122,9 +96,6 @@ public sealed class AgentExecSession : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Executes a list of input contents with streaming responses.
-    /// </summary>
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         List<AgwContent> contents,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -135,9 +106,6 @@ public sealed class AgentExecSession : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Executes a list of input contents with streaming responses.
-    /// </summary>
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         List<AgwContent> contents,
         string? messageId,
@@ -150,34 +118,31 @@ public sealed class AgentExecSession : IAsyncDisposable
             MessageId = string.IsNullOrWhiteSpace(messageId) ? Guid.NewGuid().ToString() : messageId,
             AuthorName = string.IsNullOrWhiteSpace(author) ? Constants.DefaultAuthor : author
         };
-        var responseUpdates = new List<AgentResponseUpdate>();
 
         await foreach (var update in Agent.RunStreamingAsync(message, Session, cancellationToken: cancellationToken))
         {
-            responseUpdates.Add(update);
             var aiMessage = update.ToAiMessage();
-            if (aiMessage != null) yield return aiMessage;
+            if (aiMessage != null)
+            {
+                yield return aiMessage;
+            }
         }
+
         _logger.LogDebug("Saved thread state for session: {SessionId}", _sessionId);
     }
 
-    /// <summary>
-    /// Updates the thread state (useful for thread deserialization).
-    /// </summary>
     public void UpdateThread(AgentSession newThread) => Session = newThread;
 
-    /// <summary>
-    /// Cancels any in-flight request.
-    /// </summary>
     public void CancelActiveRequest()
     {
-        if (_cancellationTokenSource.IsCancellationRequested) return;
+        if (_cancellationTokenSource.IsCancellationRequested)
+        {
+            return;
+        }
+
         _cancellationTokenSource.Cancel();
     }
 
-    /// <summary>
-    /// Prepares a new cancellation token for a subsequent request.
-    /// </summary>
     public void ResetCancellationToken()
     {
         _cancellationTokenSource.Dispose();
@@ -186,7 +151,10 @@ public sealed class AgentExecSession : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
 
         try
         {
@@ -198,6 +166,7 @@ public sealed class AgentExecSession : IAsyncDisposable
             {
                 disposable.Dispose();
             }
+
             _cancellationTokenSource.Dispose();
             _logger.LogDebug("AiAgentSession disposed");
         }
@@ -222,10 +191,10 @@ public sealed class AgentExecSession : IAsyncDisposable
                 aiContents.Add(new TextContent(agwTextContent.Content));
                 continue;
             }
+
             if (item is AgwUriContent agwUriContent)
             {
                 aiContents.Add(new UriContent(agwUriContent.Uri, agwUriContent.MediaType));
-                continue;
             }
         }
 

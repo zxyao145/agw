@@ -1,4 +1,4 @@
-using Agw.Appliaction;
+using Agw.Appliaction.Services.Agents;
 using Agw.Appliaction.ExternalAgents;
 using Agw.Shared;
 using Agw.Shared.Models;
@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using Agw.Agents.ExternalAgents;
 
 namespace Agw.Api.Controllers;
 

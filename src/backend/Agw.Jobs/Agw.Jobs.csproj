@@ -3,4 +3,7 @@
         <ProjectReference Include="..\Agw.Shared.Contract\Agw.Shared.Contract.csproj" />
         <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
     </ItemGroup>
+    <ItemGroup>
+      <Folder Include="Services\" />
+    </ItemGroup>
 </Project>

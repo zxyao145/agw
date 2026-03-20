@@ -1,19 +1,16 @@
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
-using Agw.Appliaction.Services;
-using Agw.Domain.Entities;
+using Agw.Appliaction.ExternalAgents;
 using Agw.Shared.Enums;
 using Agw.Shared.Services;
 using Agw.Shared.Tasks;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Agw.Appliaction.Services.Agents;
 
-namespace Agw.Appliaction.ExternalAgents;
+namespace Agw.Agents.ExternalAgents;
 
-/// <summary>
-/// Factory for creating ClaudeCode sessions.
-/// </summary>
 public class ClaudeCodeService
 {
     private readonly IHostEnvironment _hostEnvironment;
@@ -46,9 +43,6 @@ public class ClaudeCodeService
         _providerSessionState = providerSessionState;
     }
 
-    /// <summary>
-    /// Initialize a new ClaudeCode session with the specified configuration.
-    /// </summary>
     public async Task<AgentExecSession> InitializeSessionAsync(
         ClaudeCodeSettingRequest initRequest,
         CancellationToken cancellationToken = default)
@@ -56,7 +50,6 @@ public class ClaudeCodeService
         ArgumentException.ThrowIfNullOrWhiteSpace(initRequest.SessionId);
 
         await EnsureGitRepositoryAsync(initRequest, cancellationToken);
-
         var hasTaskRecord = await _taskRecordAppService.HasSessionAsync(
             initRequest.SessionId,
             initRequest.ProjectId,
@@ -71,11 +64,10 @@ public class ClaudeCodeService
             cancellationToken);
 
         _providerSessionState.InitializeSessionState(
-                agentSession,
-                initRequest.SessionId,
-                initRequest.SessionId,
-                initRequest.ProjectId
-        );
+            agentSession,
+            initRequest.SessionId,
+            initRequest.SessionId,
+            initRequest.ProjectId);
 
         return new AgentExecSession(
             agent,
@@ -116,7 +108,6 @@ public class ClaudeCodeService
 
         var resume = hasTaskRecord ? request.SessionId : null;
         var optionSessionId = hasTaskRecord ? (Guid?)null : Guid.Parse(request.SessionId);
-
         var options = new ClaudeCodeAIAgentOptions
         {
             WorkingDirectory = request.WorkingDirectory,
@@ -178,34 +169,36 @@ public class ClaudeCodeService
             resolvedWorkingDirectory,
             cancellationToken);
 
-        if (!cloneResult.Success)
+        if (cloneResult.Success)
         {
-            _logger.LogError(
-                "Failed to clone git repository {GitAddress} into {WorkingDirectory}. Stdout: {Stdout}. Stderr: {Stderr}",
+            _logger.LogInformation(
+                "Cloned git repository {GitAddress} into {WorkingDirectory}",
                 request.GitAddress,
-                resolvedWorkingDirectory,
-                cloneResult.Stdout,
-                cloneResult.Stderr);
-            if (createdDirectory)
-            {
-                try
-                {
-                    Directory.Delete(resolvedWorkingDirectory, recursive: true);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to clean up working directory {WorkingDirectory} after clone failure.",
-                        resolvedWorkingDirectory);
-                }
-            }
-            throw new InvalidOperationException("Failed to clone git repository. See logs for details.");
+                resolvedWorkingDirectory);
+            return;
         }
 
-        _logger.LogInformation(
-            "Cloned git repository {GitAddress} into {WorkingDirectory}",
+        _logger.LogError(
+            "Failed to clone git repository {GitAddress} into {WorkingDirectory}. Stdout: {Stdout}. Stderr: {Stderr}",
             request.GitAddress,
-            resolvedWorkingDirectory);
+            resolvedWorkingDirectory,
+            cloneResult.Stdout,
+            cloneResult.Stderr);
+        if (createdDirectory)
+        {
+            try
+            {
+                Directory.Delete(resolvedWorkingDirectory, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to clean up working directory {WorkingDirectory} after clone failure.",
+                    resolvedWorkingDirectory);
+            }
+        }
+
+        throw new InvalidOperationException("Failed to clone git repository. See logs for details.");
     }
 }

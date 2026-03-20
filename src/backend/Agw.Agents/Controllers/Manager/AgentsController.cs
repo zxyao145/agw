@@ -1,14 +1,7 @@
-using Agw.Appliaction.Services;
+using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Entities;
-using Agw.Domain.Services;
 using Agw.Manager.Api.Contracts;
-using Agw.Shared;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using System.IO;
-using System.Net.WebSockets;
-using System.Text;
-using System.Text.Json;
 
 namespace Agw.Manager.Api.Controllers;
 
@@ -16,30 +9,24 @@ namespace Agw.Manager.Api.Controllers;
 [Route("api/agents")]
 public class AgentsController : ControllerBase
 {
-    private const int BufferSize = 1024 * 4;
-    private const int MaxRequestBytes = 1024 * 64;
-    private readonly AgentDomainService _agentService;
     private readonly AgentRuntimeService _agentRuntimeService;
 
-    public AgentsController(
-        AgentDomainService agentService,
-        AgentRuntimeService agentRuntimeService)
+    public AgentsController(AgentRuntimeService agentRuntimeService)
     {
-        _agentService = agentService;
         _agentRuntimeService = agentRuntimeService;
     }
 
     [HttpGet]
     public async Task<IActionResult> ListAsync()
     {
-        var agents = await _agentService.ListAsync();
+        var agents = await _agentRuntimeService.ListAgentsAsync();
         return Ok(agents);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetAsync(Guid id)
     {
-        var agent = await _agentService.GetAsync(id);
+        var agent = await _agentRuntimeService.GetAgentAsync(id);
         return agent == null ? NotFound() : Ok(agent);
     }
 
@@ -57,28 +44,26 @@ public class AgentsController : ControllerBase
             Tools = request.Tools
         };
 
-        var created = await _agentService.CreateAsync(agent, request.McpToolServerIds, user);
-        if (created == null)
-        {
-            return BadRequest("Failed to create agent.");
-        }
-
-        return Ok(created);
+        var created = await _agentRuntimeService.CreateAgentAsync(agent, request.McpToolServerIds, user);
+        return created == null ? BadRequest("Failed to create agent.") : Ok(created);
     }
 
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
     {
-        // Validate ModelProviderId if provided
         var user = User?.Identity?.Name ?? "system";
-        var updated = await _agentService.UpdateAsync(id, agent =>
-        {
-            agent.DisplayName = request.DisplayName;
-            agent.Description = request.Description;
-            agent.SystemPrompt = request.SystemPrompt;
-            agent.ModelProviderId = request.ModelProviderId;
-            agent.Tools = request.Tools;
-        }, request.McpToolServerIds, user);
+        var updated = await _agentRuntimeService.UpdateAgentAsync(
+            id,
+            agent =>
+            {
+                agent.DisplayName = request.DisplayName;
+                agent.Description = request.Description;
+                agent.SystemPrompt = request.SystemPrompt;
+                agent.ModelProviderId = request.ModelProviderId;
+                agent.Tools = request.Tools;
+            },
+            request.McpToolServerIds,
+            user);
 
         return updated == null ? NotFound() : Ok(updated);
     }
@@ -86,7 +71,7 @@ public class AgentsController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
-        var deleted = await _agentService.DeleteAsync(id);
+        var deleted = await _agentRuntimeService.DeleteAgentAsync(id);
         return deleted ? NoContent() : NotFound();
     }
 }

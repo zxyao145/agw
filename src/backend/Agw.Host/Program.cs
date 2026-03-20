@@ -1,9 +1,12 @@
 using A2A;
 using Agw.A2A;
 using Agw.Appliaction.Services;
+using Agw.Appliaction.Services.Agents;
+using Agw.Appliaction.Services.Agentflows;
 using Agw.Api.Controllers;
 using Agw.Domain.Services;
-using Agw.Appliaction.ExternalAgents;
+using Agw.Domain.Services.Agents;
+using Agw.Domain.Services.Agentflows;
 using Agw.Host;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
@@ -20,6 +23,7 @@ using System.Runtime;
 using Microsoft.Agents.AI;
 using Agw.Tasks.Services;
 using Agw.Shared.Tasks;
+using Agw.Agents.ExternalAgents;
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()
@@ -125,7 +129,6 @@ try
 
     builder.Services.AddScoped<AgentflowDomainService>();
     builder.Services.AddScoped<AgentflowRuntimeService>();
-    builder.Services.AddScoped<IAgentflowAgentExecutor, PlaceholderAgentflowAgentExecutor>();
 
     builder.Services.AddScoped<ProjectDomainService>();
     builder.Services.AddScoped<ProjectTaskDomainService>();

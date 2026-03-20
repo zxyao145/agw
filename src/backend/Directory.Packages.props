@@ -5,7 +5,6 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="ClaudeCodeSdk.MAF" Version="0.10.4-preview4" />
-    <PackageVersion Include="Mapster.EFCore" Version="5.1.1" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.0.0-rc4" />
     <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-rc4" />
     <PackageVersion Include="Microsoft.Agents.AI.Anthropic" Version="1.0.0-rc4" />
@@ -98,8 +97,9 @@
     <PackageVersion Include="Serilog.Enrichers.OpenTelemetry" Version="1.0.1" />
   </ItemGroup>
   <ItemGroup>
-    <PackageVersion Include="Mapster" Version="7.4.0" />
-    <PackageVersion Include="Mapster.DependencyInjection" Version="1.0.1" />
+    <PackageVersion Include="Mapster" Version="10.0.3" />
+    <PackageVersion Include="Mapster.DependencyInjection" Version="10.0.0" />
+    <PackageVersion Include="Mapster.EFCore" Version="10.0.2" />
     <PackageVersion Include="ModelContextProtocol" Version="1.1.0" />
   </ItemGroup>
   <ItemGroup>
