@@ -121,6 +121,8 @@ try
     builder.Services.AddScoped<A2AAgentService>();
     builder.Services.AddScoped<ITaskAppService, TaskAppService>();
     builder.Services.AddScoped<IProjectAppService, ProjectAppService>();
+    builder.Services.AddScoped<ProjectTaskAppService>();
+    builder.Services.AddScoped<SessionRecordAppService>();
     
     builder.Services.AddScoped<TaskRecordDomainService>();
 

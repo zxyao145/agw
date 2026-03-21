@@ -3,7 +3,7 @@ using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace Agw.Appliaction.Services;
+namespace Agw.Tasks.Services;
 
 public class TaskAppService : ITaskAppService
 {

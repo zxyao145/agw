@@ -1,6 +1,6 @@
-using Agw.Domain.Services;
 using Agw.Shared.Contracts;
 using Agw.Shared.Tasks.Entities;
+using Agw.Tasks.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Api.Controllers;
@@ -9,24 +9,24 @@ namespace Agw.Api.Controllers;
 [Route("api/projects")]
 public class ProjectsController : ControllerBase
 {
-    private readonly ProjectDomainService _projectService;
+    private readonly ProjectAppService _projectAppService;
 
-    public ProjectsController(ProjectDomainService projectService)
+    public ProjectsController(ProjectAppService projectAppService)
     {
-        _projectService = projectService;
+        _projectAppService = projectAppService;
     }
 
     [HttpGet]
     public async Task<IActionResult> ListAsync()
     {
-        var projects = await _projectService.ListAsync();
+        var projects = await _projectAppService.ListAsync();
         return Ok(projects);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetAsync(Guid id)
     {
-        var project = await _projectService.GetAsync(id);
+        var project = await _projectAppService.GetAsync(id);
         return project == null ? NotFound() : Ok(project);
     }
 
@@ -43,7 +43,7 @@ public class ProjectsController : ControllerBase
             ExtraSetting = request.ExtraSetting
         };
 
-        var created = await _projectService.CreateAsync(project, user);
+        var created = await _projectAppService.CreateAsync(project, user);
         if (created == null)
         {
             return BadRequest("Failed to create project.");
@@ -57,7 +57,7 @@ public class ProjectsController : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
 
-        var updated = await _projectService.UpdateAsync(id, project =>
+        var updated = await _projectAppService.UpdateAsync(id, project =>
         {
             project.Name = request.Name;
             project.Description = request.Description;
@@ -72,7 +72,7 @@ public class ProjectsController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
-        var deleted = await _projectService.DeleteAsync(id);
+        var deleted = await _projectAppService.DeleteAsync(id);
         return deleted ? NoContent() : NotFound();
     }
 }

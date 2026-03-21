@@ -7,6 +7,7 @@ using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Agw.Shared.Tasks.Entities;
+using Agw.Tasks.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Hosting;
@@ -87,7 +88,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
             try
             {
                 using var scope = _scopeFactory.CreateScope();
-                var projectService = scope.ServiceProvider.GetRequiredService<ProjectDomainService>();
+                var projectService = scope.ServiceProvider.GetRequiredService<ProjectAppService>();
 
                 var projects = await projectService.ListAsync(p => p.Enable);
                 var tasks = projects.Select(p => RunProjectOnceAsync(p.Id, semaphore, stoppingToken)).ToList();
@@ -124,8 +125,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
             using var scope = _scopeFactory.CreateScope();
 
             var dbContext = scope.ServiceProvider.GetRequiredService<LlmDbContext>();
-            var taskService = scope.ServiceProvider.GetRequiredService<ProjectTaskDomainService>();
-            var taskRecordService = scope.ServiceProvider.GetRequiredService<TaskRecordDomainService>();
+            var taskService = scope.ServiceProvider.GetRequiredService<ProjectTaskAppService>();
             var agentflowRuntime = scope.ServiceProvider.GetRequiredService<AgentflowRuntimeService>();
             var agentRuntime = scope.ServiceProvider.GetRequiredService<AgentRuntimeService>();
 
@@ -145,8 +145,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
             try
             {
                 // If there is a running task, we do not start another one for this project.
-                var running = await taskService.ListAsync(t => t.ProjectId == projectId.Normalize() && t.Status == ProjectTaskStatus.Running);
-                if (running.Count > 0)
+                if (await taskService.HasRunningTaskAsync(projectId))
                 {
                     activity?.SetTag("skip.reason", "task_already_running");
                     return;
@@ -159,7 +158,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                     return;
                 }
 
-                var taskRecord = await taskRecordService.GetLatestByContextIdAsync(next.ContextId);
+                var taskRecord = await taskService.GetLatestRecordAsync(next.ContextId);
                 if (taskRecord == null)
                 {
                     await taskService.MarkFailedAsync(next.Id, "Task has no TaskRecord to execute.", "scheduler");
