@@ -1,6 +1,7 @@
 using Agw.Domain.Entities;
 using Agw.Domain.Services.Agents;
 using Agw.Shared.Enums;
+using Xunit;
 
 namespace Agw.Agents.Tests;
 
