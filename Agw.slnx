@@ -19,6 +19,7 @@
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/Agw.Agents.Tests/Agw.Agents.Tests.csproj" />
+    <Project Path="tests/Agw.Tasks.Tests/Agw.Tasks.Tests.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
