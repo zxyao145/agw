@@ -1,8 +1,6 @@
-using Agw.Domain.Entities;
-using Agw.Domain.Services;
 using Agw.Manager.Api.Contracts;
+using Agw.Providers.Application;
 using Microsoft.AspNetCore.Mvc;
-using System.Linq.Expressions;
 
 namespace Agw.Manager.Api.Controllers;
 
@@ -10,9 +8,9 @@ namespace Agw.Manager.Api.Controllers;
 [Route("api/model-providers")]
 public class ModelProvidersController : ControllerBase
 {
-    private readonly ModelProviderDomainService _service;
+    private readonly IModelProviderAppService _service;
 
-    public ModelProvidersController(ModelProviderDomainService service)
+    public ModelProvidersController(IModelProviderAppService service)
     {
         _service = service;
     }
@@ -20,15 +18,7 @@ public class ModelProvidersController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> ListAsync([FromQuery] Guid? modelId = null, [FromQuery] Guid? providerId = null)
     {
-        Expression<Func<ModelProvider, bool>>? predicate = null;
-        if (modelId.HasValue || providerId.HasValue)
-        {
-            predicate = mp =>
-                (!modelId.HasValue || mp.ModelId == modelId.Value) &&
-                (!providerId.HasValue || mp.ProviderId == providerId.Value);
-        }
-
-        var entities = await _service.ListWithDetailsAsync(predicate);
+        var entities = await _service.ListAsync(modelId, providerId);
         var result = entities.Select(mp => new
         {
             mp.Id,
@@ -60,18 +50,7 @@ public class ModelProvidersController : ControllerBase
     public async Task<IActionResult> CreateAsync([FromBody] ModelProviderCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var entity = new ModelProvider
-        {
-            ModelId = request.ModelId,
-            ProviderId = request.ProviderId,
-            InputPrice = request.InputPrice,
-            OutputPrice = request.OutputPrice,
-            CacheRead = request.CacheRead,
-            CacheWrite = request.CacheWrite,
-            RpsLimit = request.RpsLimit
-        };
-
-        var created = await _service.CreateAsync(entity, user);
+        var created = await _service.CreateAsync(request, user);
         return Ok(created);
     }
 
@@ -79,14 +58,7 @@ public class ModelProvidersController : ControllerBase
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ModelProviderUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var updated = await _service.UpdateAsync(id, mp =>
-        {
-            mp.InputPrice = request.InputPrice;
-            mp.OutputPrice = request.OutputPrice;
-            mp.CacheRead = request.CacheRead;
-            mp.CacheWrite = request.CacheWrite;
-            mp.RpsLimit = request.RpsLimit;
-        }, user);
+        var updated = await _service.UpdateAsync(id, request, user);
 
         return updated == null ? NotFound() : Ok(updated);
     }

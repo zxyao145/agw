@@ -24,6 +24,7 @@ using Microsoft.Agents.AI;
 using Agw.Tasks.Services;
 using Agw.Shared.Tasks;
 using Agw.Agents.ExternalAgents;
+using Agw.Providers.Application;
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()
@@ -115,6 +116,9 @@ try
     builder.Services.AddScoped<ModelDomainService>();
     builder.Services.AddScoped<ProviderDomainService>();
     builder.Services.AddScoped<ModelProviderDomainService>();
+    builder.Services.AddScoped<IModelAppService, ModelAppService>();
+    builder.Services.AddScoped<IProviderAppService, ProviderAppService>();
+    builder.Services.AddScoped<IModelProviderAppService, ModelProviderAppService>();
     builder.Services.AddScoped<McpToolServerDomainService>();
     builder.Services.AddScoped<AgentDomainService>();
     builder.Services.AddScoped<AgentRuntimeService>();

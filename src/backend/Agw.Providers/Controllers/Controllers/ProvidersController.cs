@@ -1,6 +1,5 @@
-using Agw.Domain.Entities;
-using Agw.Domain.Services;
 using Agw.Manager.Api.Contracts;
+using Agw.Providers.Application;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Manager.Api.Controllers;
@@ -9,9 +8,9 @@ namespace Agw.Manager.Api.Controllers;
 [Route("api/providers")]
 public class ProvidersController : ControllerBase
 {
-    private readonly ProviderDomainService _service;
+    private readonly IProviderAppService _service;
 
-    public ProvidersController(ProviderDomainService service)
+    public ProvidersController(IProviderAppService service)
     {
         _service = service;
     }
@@ -34,16 +33,7 @@ public class ProvidersController : ControllerBase
     public async Task<IActionResult> CreateAsync([FromBody] ProviderCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var provider = new Provider
-        {
-            Name = request.Name,
-            ProviderType = request.ProviderType,
-            Description = request.Description,
-            Endpoint = request.Endpoint,
-            AuthConfigs = BuildAuthConfigs(request.AuthConfigs, user)
-        };
-
-        var created = await _service.CreateAsync(provider, user);
+        var created = await _service.CreateAsync(request, user);
         return Ok(created);
     }
 
@@ -51,23 +41,7 @@ public class ProvidersController : ControllerBase
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ProviderUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var updated = await _service.UpdateAsync(id, p =>
-        {
-            p.Name = request.Name;
-            p.ProviderType = request.ProviderType;
-            p.Description = request.Description;
-            p.Endpoint = request.Endpoint;
-
-            if(p.AuthConfigs == null) 
-            { 
-                p.AuthConfigs = new List<ProviderAuthConfig>();
-            }
-            p.AuthConfigs.Clear();
-            foreach (var authConfig in BuildAuthConfigs(request.AuthConfigs, user))
-            {
-                p.AuthConfigs.Add(authConfig);
-            }
-        }, user);
+        var updated = await _service.UpdateAsync(id, request, user);
 
         return updated == null ? NotFound() : Ok(updated);
     }
@@ -77,37 +51,5 @@ public class ProvidersController : ControllerBase
     {
         var deleted = await _service.DeleteAsync(id);
         return deleted ? NoContent() : NotFound();
-    }
-
-    private static List<ProviderAuthConfig> BuildAuthConfigs(IReadOnlyList<ProviderAuthConfigRequest>? requests, string user)
-    {
-        if (requests == null || requests.Count == 0)
-        {
-            return [];
-        }
-
-        var now = DateTime.UtcNow;
-
-        return requests.Select(request =>
-        {
-            var (apiKey, envKey) = request.AuthType switch
-            {
-                ProviderAuthType.ApiKey => (request.ApiKey, null),
-                ProviderAuthType.EnvVariable => (null, request.EnvKey),
-                _ => (request.ApiKey, request.EnvKey)
-            };
-
-            return new ProviderAuthConfig
-            {
-                AuthType = request.AuthType,
-                ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-                EnvName = string.IsNullOrWhiteSpace(envKey) ? null : envKey,
-                Enable = request.Enable,
-                CreateBy = user,
-                CreateTime = now,
-                UpdateBy = user,
-                UpdateTime = now
-            };
-        }).ToList();
     }
 }

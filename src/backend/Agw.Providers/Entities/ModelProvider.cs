@@ -1,8 +1,9 @@
 using Agw.Shared;
+using Agw.Shared.Abstractions;
 
 namespace Agw.Domain.Entities;
 
-public class ModelProvider : BaseEntity
+public class ModelProvider : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }
     public Guid ModelId { get; set; }
