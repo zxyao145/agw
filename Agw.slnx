@@ -17,6 +17,9 @@
     <Project Path="src/backend/Agw.Shared.Contract/Agw.Shared.Contract.csproj" />
     <Project Path="src/backend/Agw.Shared/Agw.Shared.csproj" />
   </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="tests/Agw.Agents.Tests/Agw.Agents.Tests.csproj" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
     <File Path=".gitignore" />
