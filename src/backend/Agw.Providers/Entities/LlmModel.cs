@@ -1,9 +1,10 @@
 using Agw.Shared;
+using Agw.Shared.Abstractions;
 using Agw.Shared.Enums;
 
 namespace Agw.Domain.Entities;
 
-public class LlmModel : BaseEntity
+public class LlmModel : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;

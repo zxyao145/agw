@@ -2,13 +2,11 @@ using Agw.Appliaction.Services.Agents;
 using Agw.Appliaction.Services.Agentflows;
 using Agw.Domain.Entities;
 using Agw.Domain.Services;
-using Agw.Infrastructure.Data;
 using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Agw.Shared.Tasks.Entities;
 using Agw.Tasks.Services;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,7 +14,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Agw.Host;
+namespace Agw.Jobs.Services;
 
 /// <summary>
 /// Background scheduler that executes project tasks.
@@ -43,11 +41,10 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ProjectTaskSchedulerHostedService> _logger;
-
+    
     private readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(2);
     private readonly int _maxProjectConcurrency = 4;
 
-    private readonly TimeSpan _projectLeaseDuration = TimeSpan.FromSeconds(30);
     private readonly string _instanceId = $"{Environment.MachineName}:{Guid.NewGuid():N}";
 
     public ProjectTaskSchedulerHostedService(
@@ -124,13 +121,13 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
         {
             using var scope = _scopeFactory.CreateScope();
 
-            var dbContext = scope.ServiceProvider.GetRequiredService<LlmDbContext>();
             var taskService = scope.ServiceProvider.GetRequiredService<ProjectTaskAppService>();
             var agentflowRuntime = scope.ServiceProvider.GetRequiredService<AgentflowRuntimeService>();
             var agentRuntime = scope.ServiceProvider.GetRequiredService<AgentRuntimeService>();
+            var projectLeaseService = scope.ServiceProvider.GetRequiredService<IProjectLeaseService>();
 
             // 锁定项目 projectId
-            var leaseAcquired = await TryAcquireProjectLeaseAsync(dbContext, projectId, stoppingToken);
+            var leaseAcquired = await projectLeaseService.TryAcquireAsync(projectId, _instanceId, stoppingToken);
             if (!leaseAcquired)
             {
                 _leaseFailedCounter.Add(1, new KeyValuePair<string, object?>("project.id", projectId));
@@ -186,7 +183,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                 }
 
                 // Extend lease while executing.
-                await RenewProjectLeaseAsync(dbContext, projectId, stoppingToken);
+                await projectLeaseService.RenewAsync(projectId, _instanceId, stoppingToken);
 
                 var stopwatch = Stopwatch.StartNew();
                 try
@@ -298,7 +295,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                     agentTaskRunActivity.Stop();
                 }
 
-                await ReleaseProjectLeaseAsync(dbContext, projectId, stoppingToken);
+                await projectLeaseService.ReleaseAsync(projectId, _instanceId, stoppingToken);
             }
         }
         finally
@@ -316,82 +313,5 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
         }
 
         return message;
-    }
-
-    private async Task<bool> TryAcquireProjectLeaseAsync(LlmDbContext dbContext, Guid projectId, CancellationToken cancellationToken)
-    {
-        var now = DateTime.UtcNow;
-        var until = now.Add(_projectLeaseDuration);
-
-        // 1) Try update first (common case: lease already exists).
-        // Claim if expired OR renew if we already own it.
-        var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync($@"
-UPDATE project_leases
-SET locked_by = {_instanceId},
-    locked_until_utc = {until},
-    update_by = {_instanceId},
-    update_time = {now}
-WHERE project_id = {projectId}
-  AND (locked_until_utc <= {now} OR locked_by = {_instanceId})
-", cancellationToken);
-
-        if (affected == 1)
-        {
-            return true;
-        }
-
-        // 2) If update failed (lease doesn't exist or held by another instance), try insert.
-        try
-        {
-            await dbContext.ProjectLeases.AddAsync(new ProjectLease
-            {
-                ProjectId = projectId,
-                LockedBy = _instanceId,
-                LockedUntilUtc = until,
-                CreateBy = _instanceId,
-                CreateTime = now,
-                UpdateBy = _instanceId,
-                UpdateTime = now
-            }, cancellationToken);
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return true;
-        }
-        catch (DbUpdateException)
-        {
-            // Insert failed - another instance created the lease between step 1 and 2.
-            // This is rare but possible in multi-instance environments.
-            dbContext.ChangeTracker.Clear();
-            return false;
-        }
-    }
-
-    private Task RenewProjectLeaseAsync(LlmDbContext dbContext, Guid projectId, CancellationToken cancellationToken)
-    {
-        var now = DateTime.UtcNow;
-        var until = now.Add(_projectLeaseDuration);
-
-        return dbContext.Database.ExecuteSqlInterpolatedAsync($@"
-UPDATE project_leases
-SET locked_until_utc = {until},
-    update_by = {_instanceId},
-    update_time = {now}
-WHERE project_id = {projectId}
-  AND locked_by = {_instanceId}
-", cancellationToken);
-    }
-
-    private Task ReleaseProjectLeaseAsync(LlmDbContext dbContext, Guid projectId, CancellationToken cancellationToken)
-    {
-        var now = DateTime.UtcNow;
-
-        return dbContext.Database.ExecuteSqlInterpolatedAsync($@"
-UPDATE project_leases
-SET locked_until_utc = {now},
-    update_by = {_instanceId},
-    update_time = {now}
-WHERE project_id = {projectId}
-  AND locked_by = {_instanceId}
-", cancellationToken);
     }
 }

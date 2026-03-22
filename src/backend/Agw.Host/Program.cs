@@ -1,16 +1,12 @@
-using A2A;
 using Agw.A2A;
-using Agw.Appliaction.Services;
-using Agw.Appliaction.Services.Agents;
-using Agw.Appliaction.Services.Agentflows;
 using Agw.Api.Controllers;
-using Agw.Domain.Services;
-using Agw.Domain.Services.Agents;
-using Agw.Domain.Services.Agentflows;
-using Agw.Host;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
+using Agw.Jobs;
 using Agw.Manager.Api.Controllers;
+using Agw.Providers;
+using Agw.Tasks;
+using Agw.Tools;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -26,6 +22,7 @@ using Agw.Skills.Services;
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Tasks;
 using Agw.Agents.ExternalAgents;
+
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()
@@ -103,57 +100,24 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
 
-    builder.Services.AddInfrastructure(builder.Configuration);
-    builder.Services.AddSingleton<ToolRegistryService>();  // Singleton to cache tool discovery
-    builder.Services.AddSingleton<EfCoreChatHistoryProvider>();
-    builder.Services.AddSingleton<ChatHistoryProvider>(sp =>
-    {
-        return sp.GetRequiredService<EfCoreChatHistoryProvider>();
-    });
-    builder.Services.AddSingleton<IProviderSessionState>(sp =>
-    {
-        return sp.GetRequiredService<EfCoreChatHistoryProvider>();
-    });
-    
-    builder.Services.AddScoped<ModelDomainService>();
-    builder.Services.AddScoped<ProviderDomainService>();
-    builder.Services.AddScoped<ModelProviderDomainService>();
-    builder.Services.AddScoped<McpToolServerDomainService>();
-    builder.Services.AddScoped<AgentDomainService>();
-    builder.Services.AddScoped<AgentRuntimeService>();
-    builder.Services.AddScoped<A2AAgentService>();
-    builder.Services.AddScoped<ITaskAppService, TaskAppService>();
-    builder.Services.AddScoped<IProjectAppService, ProjectAppService>();
-    builder.Services.AddScoped<ProjectTaskAppService>();
-    builder.Services.AddScoped<SessionRecordAppService>();
+  
     builder.Services.AddScoped<SkillDomainService>();
     builder.Services.AddScoped<SkillAppService>();
-    
-    builder.Services.AddScoped<TaskRecordDomainService>();
 
-    // External Agents
-    builder.Services.AddScoped<ClaudeCodeService>();
+    builder.Services.AddScoped<A2AAgentService>();
 
-    builder.Services.AddScoped<AgentflowDomainService>();
-    builder.Services.AddScoped<AgentflowRuntimeService>();
+    // add module
+    builder.Services
+        .AddA2A(builder.Configuration)
+        .AddAgents(builder.Configuration)
+        .AddInfrastructure(builder.Configuration)
+        .AddJobs(builder.Configuration)
+        .AddProviders(builder.Configuration)
+        .AddTasks(builder.Configuration)
+        .AddTools(builder.Configuration)
+        ;
 
-    builder.Services.AddScoped<ProjectDomainService>();
-    builder.Services.AddScoped<ProjectTaskDomainService>();
-    builder.Services.AddHostedService<ProjectTaskSchedulerHostedService>();
     builder.Services.AddHybridCache();
-
-    builder.Services.Configure<A2AServerOptions>(o =>
-    {
-
-    });
-
-    builder.Services.AddSingleton<TaskManagerFactory>(sp =>
-    {
-        return new TaskManagerFactory(sp);
-    });
-
-    // Register database seeder
-    builder.Services.AddScoped<ClaudeCodeAgentDbSeeder>();
 
     var app = builder.Build();
 

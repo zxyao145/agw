@@ -1,6 +1,5 @@
-using Agw.Domain.Entities;
-using Agw.Domain.Services;
 using Agw.Manager.Api.Contracts;
+using Agw.Providers.Application;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Manager.Api.Controllers;
@@ -9,9 +8,9 @@ namespace Agw.Manager.Api.Controllers;
 [Route("api/models")]
 public class ModelsController : ControllerBase
 {
-    private readonly ModelDomainService _service;
+    private readonly IModelAppService _service;
 
-    public ModelsController(ModelDomainService service)
+    public ModelsController(IModelAppService service)
     {
         _service = service;
     }
@@ -34,15 +33,7 @@ public class ModelsController : ControllerBase
     public async Task<IActionResult> CreateAsync([FromBody] ModelCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var model = new LlmModel
-        {
-            Name = request.Name,
-            Description = request.Description,
-            Type = request.Type,
-            MaxTokens = request.MaxTokens
-        };
-
-        var created = await _service.CreateAsync(model, user);
+        var created = await _service.CreateAsync(request, user);
         return Ok(created);
     }
 
@@ -50,13 +41,7 @@ public class ModelsController : ControllerBase
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ModelUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var updated = await _service.UpdateAsync(id, m =>
-        {
-            m.Name = request.Name;
-            m.Description = request.Description;
-            m.Type = request.Type;
-            m.MaxTokens = request.MaxTokens;
-        }, user);
+        var updated = await _service.UpdateAsync(id, request, user);
 
         return updated == null ? NotFound() : Ok(updated);
     }

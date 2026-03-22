@@ -1,7 +1,9 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Infrastructure.Services;
 using Agw.Domain.Repositories;
+using Agw.Jobs.Services;
 using Agw.Shared.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -37,12 +39,16 @@ public static class DependencyInjection
             options.ReplaceService<IMigrationsModelDiffer, NoForeignKeyModelDiffer>();
         });
 
+        // Register database seeder
+        services.AddScoped<ClaudeCodeAgentDbSeeder>();
+
+
         services.AddScoped<DbContext, LlmDbContext>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IGitCommandService, GitCommandService>();
+        services.AddScoped<IProjectLeaseService, ProjectLeaseService>();
 
         return services;
     }
 }
-
