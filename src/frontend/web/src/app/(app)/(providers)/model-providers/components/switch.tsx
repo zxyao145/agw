@@ -1,19 +1,15 @@
-"use client"
+"use client";
 
 type SwitchProps = {
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
-  disabled?: boolean
-  label?: string
-}
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
+  label?: string;
+};
 
 export function Switch({ checked, onCheckedChange, disabled, label }: SwitchProps) {
   return (
-    <label
-      className="inline-flex items-center gap-2"
-      aria-label={label}
-      title={label}
-    >
+    <label className="inline-flex items-center gap-2" aria-label={label} title={label}>
       <input
         type="checkbox"
         className="peer sr-only"
@@ -36,5 +32,5 @@ export function Switch({ checked, onCheckedChange, disabled, label }: SwitchProp
         />
       </span>
     </label>
-  )
+  );
 }

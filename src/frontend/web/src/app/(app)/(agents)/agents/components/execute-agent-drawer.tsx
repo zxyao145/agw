@@ -17,11 +17,7 @@ interface ExecuteAgentDrawerProps {
   executingAgent: AgentDto | null;
 }
 
-export function ExecuteAgentDrawer({
-  open,
-  setOpen,
-  executingAgent,
-}: ExecuteAgentDrawerProps) {
+export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAgentDrawerProps) {
   const [resetSignal, setResetSignal] = React.useState(0);
 
   React.useEffect(() => {
@@ -43,9 +39,7 @@ export function ExecuteAgentDrawer({
       >
         <DrawerHeader>
           <div className="flex item-center justify-between">
-            <DrawerTitle>
-              Agent: {executingAgent?.name}
-            </DrawerTitle>
+            <DrawerTitle>Agent: {executingAgent?.name}</DrawerTitle>
             <DrawerClose>
               <X size={20} className="cursor-pointer" />
             </DrawerClose>

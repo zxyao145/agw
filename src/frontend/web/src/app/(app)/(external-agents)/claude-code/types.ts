@@ -10,7 +10,8 @@ export const ClaudeCodeMessageType = {
   result: "result",
 } as const;
 
-export type ClaudeCodeMessageType = (typeof ClaudeCodeMessageType)[keyof typeof ClaudeCodeMessageType];
+export type ClaudeCodeMessageType =
+  (typeof ClaudeCodeMessageType)[keyof typeof ClaudeCodeMessageType];
 
 export interface InitMessageContent {
   claudeCodeVersion: string;
@@ -142,11 +143,11 @@ export interface DiffLineRowProps {
   isHovered: boolean;
   isCommentActive: boolean;
   commentInput: string;
-  activeSide: 'old' | 'new' | null;
+  activeSide: "old" | "new" | null;
   onHover: (index: number | null) => void;
-  onToggleComment: (index: number | null, side: 'old' | 'new') => void;
+  onToggleComment: (index: number | null, side: "old" | "new") => void;
   onCommentInputChange: (value: string) => void;
-  onAddComment: (index: number, side: 'old' | 'new') => void;
+  onAddComment: (index: number, side: "old" | "new") => void;
   onDeleteComment: (id: string) => void;
 }
 
@@ -174,7 +175,6 @@ export interface SettingsDialogProps {
   envVars: EnvVar[];
   setEnvVars: (value: EnvVar[]) => void;
 }
-
 
 export interface UnChangedFileProps {
   diffContentData: GitDiffResponse;

@@ -20,11 +20,10 @@ import {
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 
-
 // Dynamically import ChatHistoryList to keep the chat shell lightweight
 const ChatHistoryList = dynamic(
-  () => import("./chat-history-list").then(mod => ({ default: mod.ChatHistoryList })),
-  { ssr: false }
+  () => import("./chat-history-list").then((mod) => ({ default: mod.ChatHistoryList })),
+  { ssr: false },
 );
 export interface ChatProps extends ChatSessionProps {
   currentSessionId: string | null;
@@ -59,8 +58,10 @@ export function Chat({
 
   const handleSessionSelect = async (sessionId: string) => {
     try {
-      const details: ChatSessionRecordDetails | null =
-        await getSessionBySessionId(sessionId, CLAUDE_CODE_PROJECT_ID);
+      const details: ChatSessionRecordDetails | null = await getSessionBySessionId(
+        sessionId,
+        CLAUDE_CODE_PROJECT_ID,
+      );
       if (!details) {
         return;
       }
@@ -94,27 +95,27 @@ export function Chat({
         )}
         {isMobile && (
           <Drawer direction="left" open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-              <DrawerTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <PanelLeft className="h-4 w-4" />
-                  Chat History
-                </Button>
-              </DrawerTrigger>
-              <DrawerContent className="h-screen max-h-screen">
-                <DrawerHeader>
-                  <DrawerTitle>Chat History</DrawerTitle>
-                </DrawerHeader>
-                <div className="px-4 pb-6">
-                  <ChatHistoryList
-                    currentSessionId={currentSessionId}
-                    onSessionSelect={handleSessionSelect}
-                    onNewChat={onNewChat}
-                    onSessionDeleted={onSessionDeleted}
-                    onAllSessionsCleared={onAllSessionsCleared}
-                  />
-                </div>
-              </DrawerContent>
-            </Drawer>
+            <DrawerTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <PanelLeft className="h-4 w-4" />
+                Chat History
+              </Button>
+            </DrawerTrigger>
+            <DrawerContent className="h-screen max-h-screen">
+              <DrawerHeader>
+                <DrawerTitle>Chat History</DrawerTitle>
+              </DrawerHeader>
+              <div className="px-4 pb-6">
+                <ChatHistoryList
+                  currentSessionId={currentSessionId}
+                  onSessionSelect={handleSessionSelect}
+                  onNewChat={onNewChat}
+                  onSessionDeleted={onSessionDeleted}
+                  onAllSessionsCleared={onAllSessionsCleared}
+                />
+              </div>
+            </DrawerContent>
+          </Drawer>
         )}
 
         <ColResizeSplit>

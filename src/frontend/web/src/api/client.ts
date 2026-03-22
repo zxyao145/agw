@@ -22,9 +22,7 @@ type RequestContent<P extends keyof paths, M extends keyof paths[P]> =
 
 type JsonRequestBody<C> = C extends { "application/json": infer B } ? B : never;
 
-type MultipartRequestBody<C> = C extends { "multipart/form-data": unknown }
-  ? FormData
-  : never;
+type MultipartRequestBody<C> = C extends { "multipart/form-data": unknown } ? FormData : never;
 
 type RequestBody<P extends keyof paths, M extends keyof paths[P]> =
   | JsonRequestBody<RequestContent<P, M>>
@@ -45,14 +43,12 @@ type ParamsOption<P extends keyof paths, M extends keyof paths[P]> = [
     };
 
 type BodyOption<P extends keyof paths, M extends keyof paths[P]> =
-  HasRequestBody<P, M> extends true
-    ? { body: RequestBody<P, M> }
-    : Record<never, never>;
+  HasRequestBody<P, M> extends true ? { body: RequestBody<P, M> } : Record<never, never>;
 
-export type ApiRequestOptions<
-  P extends keyof paths,
-  M extends keyof paths[P],
-> = ParamsOption<P, M> &
+export type ApiRequestOptions<P extends keyof paths, M extends keyof paths[P]> = ParamsOption<
+  P,
+  M
+> &
   BodyOption<P, M> & {
     headers?: HeadersInit;
     signal?: AbortSignal;
@@ -61,11 +57,7 @@ export type ApiRequestOptions<
 type OperationResponses<P extends keyof paths, M extends keyof paths[P]> =
   Operation<P, M> extends { responses: infer R } ? R : never;
 
-type Response200<R> = R extends { 200: infer T }
-  ? T
-  : R extends { "200": infer T }
-    ? T
-    : unknown;
+type Response200<R> = R extends { 200: infer T } ? T : R extends { "200": infer T } ? T : unknown;
 
 export type ApiResponse<P extends keyof paths, M extends keyof paths[P]> =
   Response200<OperationResponses<P, M>> extends { content: infer C }
@@ -80,12 +72,7 @@ export class ApiError extends Error {
   public readonly url: string;
   public readonly body: unknown;
 
-  public constructor(args: {
-    status: number;
-    statusText: string;
-    url: string;
-    body: unknown;
-  }) {
+  public constructor(args: { status: number; statusText: string; url: string; body: unknown }) {
     super(`Request failed: ${args.status} ${args.statusText}`);
     this.name = "ApiError";
     this.status = args.status;
@@ -95,10 +82,7 @@ export class ApiError extends Error {
   }
 }
 
-function compilePath(
-  pathTemplate: string,
-  pathParams?: Record<string, unknown>,
-): string {
+function compilePath(pathTemplate: string, pathParams?: Record<string, unknown>): string {
   if (!pathParams) return pathTemplate;
   return pathTemplate.replace(/\{(\w+)\}/g, (_, key: string) => {
     const value = pathParams[key];
@@ -196,8 +180,7 @@ export async function apiRequest(
       delete (headers as Record<string, string>)["Content-Type"];
       init.body = opts.body;
     } else {
-      (headers as Record<string, string>)["content-type"] ??=
-        "application/json";
+      (headers as Record<string, string>)["content-type"] ??= "application/json";
       init.body = JSON.stringify(opts.body);
     }
   }
@@ -243,7 +226,5 @@ export function apiDelete<P extends PathsWith<"delete">>(
   path: P,
   options?: ApiRequestOptions<P, "delete">,
 ): Promise<ApiResponse<P, "delete">> {
-  return apiRequest(path, "delete", options) as Promise<
-    ApiResponse<P, "delete">
-  >;
+  return apiRequest(path, "delete", options) as Promise<ApiResponse<P, "delete">>;
 }

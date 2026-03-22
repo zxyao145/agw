@@ -9,13 +9,7 @@ import { toast } from "sonner";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import type { components } from "@/api/openapi";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -34,10 +28,8 @@ import { CreateTaskDialog } from "./components/create-task-dialog";
 import { AgentflowDto, AgentDto } from "@/types/agentflow";
 
 type ProjectUpdateRequest = components["schemas"]["ProjectUpdateRequest"];
-type ProjectTaskUpdateRequest =
-  components["schemas"]["ProjectTaskUpdateRequest"];
-type ProjectTaskReorderRequest =
-  components["schemas"]["ProjectTaskReorderRequest"];
+type ProjectTaskUpdateRequest = components["schemas"]["ProjectTaskUpdateRequest"];
+type ProjectTaskReorderRequest = components["schemas"]["ProjectTaskReorderRequest"];
 type CreateProjectTaskPayload = {
   agentType: number;
   agentflowId?: string | null;
@@ -56,7 +48,6 @@ type ProjectDto = {
   updateBy?: string | null;
   updateTime?: string | null;
 };
-
 
 type ProjectTaskDto = {
   id: string;
@@ -254,10 +245,7 @@ export default function ProjectDetailsPage() {
   });
 
   const updateTaskMutation = useMutation({
-    mutationFn: async (args: {
-      taskId: string;
-      body: ProjectTaskUpdateRequest;
-    }) => {
+    mutationFn: async (args: { taskId: string; body: ProjectTaskUpdateRequest }) => {
       return await apiPut("/api/projects/{projectId}/tasks/{taskId}", {
         params: { path: { projectId, taskId: args.taskId } },
         body: args.body,
@@ -313,9 +301,7 @@ export default function ProjectDetailsPage() {
       toast.error(`Cancel failed: ${getApiErrorMessage(error)}`);
     },
   });
-  const [deletingTaskId, setDeletingTaskId] = React.useState<string | null>(
-    null
-  );
+  const [deletingTaskId, setDeletingTaskId] = React.useState<string | null>(null);
 
   const deleteTaskMutation = useMutation({
     mutationFn: async (taskId: string) => {
@@ -355,14 +341,12 @@ export default function ProjectDetailsPage() {
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-xl font-semibold">
-              {projectQuery.isLoading
-                ? "Loading project..."
-                : project?.name ?? "Project"}
+              {projectQuery.isLoading ? "Loading project..." : (project?.name ?? "Project")}
             </h1>
             {project ? (
               <span
                 className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(
-                  project.enable ? 2 : 0
+                  project.enable ? 2 : 0,
                 )}`}
               >
                 {project.enable ? "Enabled" : "Disabled"}
@@ -370,13 +354,9 @@ export default function ProjectDetailsPage() {
             ) : null}
           </div>
           {project?.description ? (
-            <div className="text-sm text-muted-foreground">
-              {project.description}
-            </div>
+            <div className="text-sm text-muted-foreground">{project.description}</div>
           ) : (
-            <div className="text-sm text-muted-foreground">
-              Project details and tasks overview.
-            </div>
+            <div className="text-sm text-muted-foreground">Project details and tasks overview.</div>
           )}
           {project ? (
             <div className="text-xs text-muted-foreground">
@@ -402,9 +382,7 @@ export default function ProjectDetailsPage() {
               <DialogContent>
                 <DialogHeader>
                   <UiDialogTitle>Edit project</UiDialogTitle>
-                  <UiDialogDescription>
-                    Update project settings.
-                  </UiDialogDescription>
+                  <UiDialogDescription>Update project settings.</UiDialogDescription>
                 </DialogHeader>
 
                 <div className="grid gap-4">
@@ -448,17 +426,13 @@ export default function ProjectDetailsPage() {
                     onClick={() =>
                       updateProjectMutation.mutate({
                         name: editName,
-                        description: editDescription.length
-                          ? editDescription
-                          : null,
+                        description: editDescription.length ? editDescription : null,
                         workspace: null,
                         enable: editEnable,
                         extraSetting: null,
                       })
                     }
-                    disabled={
-                      !editName.trim() || updateProjectMutation.isPending
-                    }
+                    disabled={!editName.trim() || updateProjectMutation.isPending}
                   >
                     {updateProjectMutation.isPending ? "Saving..." : "Save"}
                   </Button>
@@ -484,8 +458,8 @@ export default function ProjectDetailsPage() {
             <div className="space-y-1">
               <CardTitle>Tasks</CardTitle>
               <CardDescription>
-                Display order: <code>updateTime</code> desc (fallback{" "}
-                <code>createTime</code>) to reflect reorder actions.
+                Display order: <code>updateTime</code> desc (fallback <code>createTime</code>) to
+                reflect reorder actions.
               </CardDescription>
             </div>
 
@@ -554,9 +528,7 @@ export default function ProjectDetailsPage() {
 
         <CardContent>
           {tasksQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">
-              Loading tasks...
-            </div>
+            <div className="text-sm text-muted-foreground">Loading tasks...</div>
           ) : tasksQuery.isError ? (
             <div className="text-sm text-destructive">
               Failed to load tasks: {getApiErrorMessage(tasksQuery.error)}
@@ -575,7 +547,7 @@ export default function ProjectDetailsPage() {
                           <div className="font-medium">{t.description}</div>
                           <span
                             className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(
-                              t.status
+                              t.status,
                             )}`}
                           >
                             {statusLabel(t.status)}
@@ -594,23 +566,18 @@ export default function ProjectDetailsPage() {
                         </div>
 
                         <div className="text-xs text-muted-foreground">
-                          Created: {formatDate(t.createTime)} · Updated:{" "}
-                          {formatDate(t.updateTime)}
+                          Created: {formatDate(t.createTime)} · Updated: {formatDate(t.updateTime)}
                         </div>
 
                         {t.errorMessage ? (
-                          <div className="text-xs text-destructive">
-                            Error: {t.errorMessage}
-                          </div>
+                          <div className="text-xs text-destructive">Error: {t.errorMessage}</div>
                         ) : null}
                       </div>
 
                       <div className="flex flex-wrap gap-2 sm:justify-end">
                         <ButtonGroup>
                           <Button asChild variant="outline" size="sm">
-                            <Link href={`/projects/${projectId}/tasks/${t.id}`}>
-                              View
-                            </Link>
+                            <Link href={`/projects/${projectId}/tasks/${t.id}`}>View</Link>
                           </Button>
 
                           <Button
@@ -623,11 +590,7 @@ export default function ProjectDetailsPage() {
                               setEditTaskOpen(true);
                             }}
                             disabled={!isPending}
-                            title={
-                              isPending
-                                ? "Edit task"
-                                : "Only pending tasks can be edited"
-                            }
+                            title={isPending ? "Edit task" : "Only pending tasks can be edited"}
                           >
                             Edit
                           </Button>
@@ -636,18 +599,14 @@ export default function ProjectDetailsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => reorderTaskMutation.mutate(t.id)}
-                            disabled={
-                              !isPending || reorderTaskMutation.isPending
-                            }
+                            disabled={!isPending || reorderTaskMutation.isPending}
                             title={
                               isPending
                                 ? "Reorder (bump updateTimeUtc)"
                                 : "Only pending tasks can be reordered"
                             }
                           >
-                            {reorderTaskMutation.isPending
-                              ? "Reordering..."
-                              : "Reorder"}
+                            {reorderTaskMutation.isPending ? "Reordering..." : "Reorder"}
                           </Button>
 
                           <Button
@@ -666,9 +625,7 @@ export default function ProjectDetailsPage() {
                                 : "Cancel task"
                             }
                           >
-                            {cancelTaskMutation.isPending
-                              ? "Canceling..."
-                              : "Cancel"}
+                            {cancelTaskMutation.isPending ? "Canceling..." : "Cancel"}
                           </Button>
 
                           <Button
@@ -678,8 +635,7 @@ export default function ProjectDetailsPage() {
                             disabled={deleteTaskMutation.isPending}
                             title="Delete task"
                           >
-                            {deleteTaskMutation.isPending &&
-                            deletingTaskId === t.id
+                            {deleteTaskMutation.isPending && deletingTaskId === t.id
                               ? "Deleting..."
                               : "Delete"}
                           </Button>
@@ -691,9 +647,7 @@ export default function ProjectDetailsPage() {
               })}
 
               {tasks.length > 20 ? (
-                <div className="text-xs text-muted-foreground">
-                  Showing first 20 tasks.
-                </div>
+                <div className="text-xs text-muted-foreground">Showing first 20 tasks.</div>
               ) : null}
             </div>
           )}
@@ -704,9 +658,7 @@ export default function ProjectDetailsPage() {
         <DialogContent>
           <DialogHeader>
             <UiDialogTitle>Edit task</UiDialogTitle>
-            <UiDialogDescription>
-              Only pending tasks can be updated.
-            </UiDialogDescription>
+            <UiDialogDescription>Only pending tasks can be updated.</UiDialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4">

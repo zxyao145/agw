@@ -2,13 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -20,10 +14,7 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-export class ErrorBoundary extends React.Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -55,28 +46,18 @@ export class ErrorBoundary extends React.Component<
   }
 }
 
-function DefaultErrorFallback({
-  error,
-  reset,
-}: {
-  error: Error;
-  reset: () => void;
-}) {
+function DefaultErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex items-center justify-center min-h-[400px] p-4">
       <Card className="max-w-lg border-destructive/50">
         <CardHeader>
           <CardTitle className="text-destructive">Something went wrong</CardTitle>
-          <CardDescription>
-            An unexpected error occurred. Please try again.
-          </CardDescription>
+          <CardDescription>An unexpected error occurred. Please try again.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm">
             <p className="font-medium text-destructive mb-1">Error details:</p>
-            <p className="text-destructive/90 font-mono text-xs break-all">
-              {error.message}
-            </p>
+            <p className="text-destructive/90 font-mono text-xs break-all">{error.message}</p>
           </div>
           <div className="flex gap-2">
             <Button onClick={reset} variant="outline">

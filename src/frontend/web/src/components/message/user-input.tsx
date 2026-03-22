@@ -92,11 +92,15 @@ function UserInputRoot({
 
       {/* Top bar with tools and actions */}
       <div className="flex mb-2 gap-2 pointer-events-auto">
-        <div className={`bg-background rounded-md flex items-center p-0 ${ topLeft.length > 0 ? "border" : ""}`}>
+        <div
+          className={`bg-background rounded-md flex items-center p-0 ${topLeft.length > 0 ? "border" : ""}`}
+        >
           {topLeft.length > 0 && <>{topLeft}</>}
         </div>
         <div className="flex-1" />
-        <div className={`bg-background rounded-md flex items-center p-0 ${ topRight.length > 0 ? "border" : ""}`}>
+        <div
+          className={`bg-background rounded-md flex items-center p-0 ${topRight.length > 0 ? "border" : ""}`}
+        >
           {topRight.length > 0 && <>{topRight}</>}
         </div>
       </div>
@@ -115,22 +119,14 @@ function UserInputRoot({
           />
 
           {/* Action button - comment mode or regular send */}
-          <Button
-            className="cursor-pointer m-2"
-            onClick={handleClick}
-            disabled={isDisabled}
-          >
+          <Button className="cursor-pointer m-2" onClick={handleClick} disabled={isDisabled}>
             {sender.length > 0 ? <>{sender}</> : <Send className="w-5 h-5" />}
           </Button>
         </div>
       </div>
       {/* Helper text */}
       <div className="text-xs text-muted-foreground mt-2 bg-background ">
-        {help.length > 0 ? (
-          <>{help}</>
-        ) : (
-          "Press Enter for new line • Ctrl/Shift+Enter to send"
-        )}
+        {help.length > 0 ? <>{help}</> : "Press Enter for new line • Ctrl/Shift+Enter to send"}
       </div>
     </div>
   );
@@ -181,10 +177,7 @@ interface UserInputSuggestionsProps {
   onSelect: (suggestion: SuggestionItem) => void;
 }
 
-function UserInputSuggestions({
-  suggestions,
-  onSelect,
-}: UserInputSuggestionsProps) {
+function UserInputSuggestions({ suggestions, onSelect }: UserInputSuggestionsProps) {
   if (suggestions.length === 0) {
     return null;
   }
@@ -206,10 +199,7 @@ function UserInputSuggestions({
             size="sm"
             className="cursor-pointer border-transparent bg-transparent px-2 py-2 text-xs text-foreground transition hover:border-border hover:bg-accent/50"
           >
-            <ItemMedia
-              variant="icon"
-              className="size-7 border-border/60 bg-muted/60"
-            >
+            <ItemMedia variant="icon" className="size-7 border-border/60 bg-muted/60">
               <Sparkles className="size-3 text-muted-foreground" />
             </ItemMedia>
             <ItemContent className="flex flex-row items-center justify-between">
@@ -217,9 +207,7 @@ function UserInputSuggestions({
                 {suggestion.text}
               </ItemTitle>
               {suggestion.description && (
-                <ItemDescription className="text-[11px]">
-                  {suggestion.description}
-                </ItemDescription>
+                <ItemDescription className="text-[11px]">{suggestion.description}</ItemDescription>
               )}
             </ItemContent>
           </Item>
@@ -311,14 +299,11 @@ function UserInputContainer({
   };
 
   const suggestionContent = (
-    <UserInputSuggestions
-      suggestions={suggestions}
-      onSelect={handleSuggestionClick}
-    />
+    <UserInputSuggestions suggestions={suggestions} onSelect={handleSuggestionClick} />
   );
 
   const handleSend = () => {
-    console.log("handleSend onExecute input", input)
+    console.log("handleSend onExecute input", input);
     onExecute?.(input);
     setInput("");
   };

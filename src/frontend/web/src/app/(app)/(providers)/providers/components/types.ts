@@ -1,10 +1,8 @@
 import type { components } from "@/api/openapi";
 
-type OpenApiProviderCreateRequest =
-  components["schemas"]["ProviderCreateRequest"];
+type OpenApiProviderCreateRequest = components["schemas"]["ProviderCreateRequest"];
 
-type OpenApiProviderUpdateRequest =
-  components["schemas"]["ProviderUpdateRequest"];
+type OpenApiProviderUpdateRequest = components["schemas"]["ProviderUpdateRequest"];
 
 export type ProviderType = components["schemas"]["ProviderType"];
 

@@ -65,10 +65,7 @@ function buildFileTree(items: FileItem[], rootPath: string): FileItem[] {
     const normalizedPath = item.path.replace(/\\/g, "/");
 
     // Get parent path
-    const parentPath = normalizedPath.substring(
-      0,
-      normalizedPath.lastIndexOf("/"),
-    );
+    const parentPath = normalizedPath.substring(0, normalizedPath.lastIndexOf("/"));
 
     // Ensure all parent directories exist
     let currentPath = parentPath;
@@ -121,8 +118,7 @@ function buildFileTree(items: FileItem[], rootPath: string): FileItem[] {
 
     // Process all directories
     dirMap.forEach((dir, path) => {
-      const parentPath =
-        path.substring(0, path.lastIndexOf("/")) || normalizedRoot;
+      const parentPath = path.substring(0, path.lastIndexOf("/")) || normalizedRoot;
       const normalizedParent = parentPath.replace(/\\/g, "/");
 
       if (
@@ -137,8 +133,7 @@ function buildFileTree(items: FileItem[], rootPath: string): FileItem[] {
     items.forEach((item) => {
       const normalizedPath = item.path.replace(/\\/g, "/");
       const parentPath =
-        normalizedPath.substring(0, normalizedPath.lastIndexOf("/")) ||
-        normalizedRoot;
+        normalizedPath.substring(0, normalizedPath.lastIndexOf("/")) || normalizedRoot;
       const normalizedParent = parentPath.replace(/\\/g, "/");
 
       if (
@@ -233,16 +228,22 @@ export default function Export({
     loadRootDirectory();
   }, [loadRootDirectory]);
 
-  const handleFileDeleted = React.useCallback((path: string) => {
-    // Reload the directory after deletion
-    loadRootDirectory();
-    onFileDeleted(path);
-  }, [loadRootDirectory]);
+  const handleFileDeleted = React.useCallback(
+    (path: string) => {
+      // Reload the directory after deletion
+      loadRootDirectory();
+      onFileDeleted(path);
+    },
+    [loadRootDirectory],
+  );
 
-  const handleFileReset = React.useCallback((path: string ) => {
-    onFileReseted(path);
-    loadRootDirectory();
-  }, [onLoadFileContent, loadRootDirectory]);
+  const handleFileReset = React.useCallback(
+    (path: string) => {
+      onFileReseted(path);
+      loadRootDirectory();
+    },
+    [onLoadFileContent, loadRootDirectory],
+  );
 
   const handleFileSelect = React.useCallback(
     (path: string) => {

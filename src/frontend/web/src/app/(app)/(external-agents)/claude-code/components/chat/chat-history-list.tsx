@@ -58,10 +58,7 @@ export function ChatHistoryList({
     void refreshSessions();
   }, [refreshSessions]);
 
-  const handleDelete = async (
-    session: ChatSessionRecordSummary,
-    e: React.MouseEvent
-  ) => {
+  const handleDelete = async (session: ChatSessionRecordSummary, e: React.MouseEvent) => {
     e.stopPropagation();
 
     // if (!confirm("Are you sure you want to delete this chat?")) {
@@ -69,10 +66,7 @@ export function ChatHistoryList({
     // }
 
     try {
-      const success = await deleteSessionBySessionId(
-        session.sessionId,
-        CLAUDE_CODE_PROJECT_ID,
-      );
+      const success = await deleteSessionBySessionId(session.sessionId, CLAUDE_CODE_PROJECT_ID);
       if (success) {
         toast.success("Chat deleted successfully");
         if (session.sessionId === currentSessionId) {
@@ -125,11 +119,7 @@ export function ChatHistoryList({
     }
 
     try {
-      const success = await updateSessionTitle(
-        sessionId,
-        editTitle.trim(),
-        CLAUDE_CODE_PROJECT_ID,
-      );
+      const success = await updateSessionTitle(sessionId, editTitle.trim(), CLAUDE_CODE_PROJECT_ID);
       if (success) {
         toast.success("Title updated");
         setEditingSessionId(null);
@@ -178,10 +168,7 @@ export function ChatHistoryList({
             aria-label="Refresh chat history"
           >
             <RotateCw
-              className={cn(
-                "h-4 w-4",
-                isRefreshing && "animate-spin text-muted-foreground",
-              )}
+              className={cn("h-4 w-4", isRefreshing && "animate-spin text-muted-foreground")}
             />
           </Button>
           <Button
@@ -210,9 +197,7 @@ export function ChatHistoryList({
       {/* Session list */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {sessions.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground text-sm">
-            No chat history yet
-          </div>
+          <div className="text-center py-8 text-muted-foreground text-sm">No chat history yet</div>
         ) : (
           sessions.map((session) => {
             const isActive = session.sessionId === currentSessionId;
@@ -224,18 +209,13 @@ export function ChatHistoryList({
                 onClick={() => !isEditing && onSessionSelect(session.sessionId)}
                 className={cn(
                   "group p-3 rounded-md cursor-pointer transition-colors border",
-                  isActive
-                    ? "bg-blue-50"
-                    : "bg-card hover:bg-accent/50 border-transparent",
+                  isActive ? "bg-blue-50" : "bg-card hover:bg-accent/50 border-transparent",
                 )}
               >
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     {isEditing ? (
-                      <div
-                        className="flex items-center gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="text"
                           value={editTitle}
@@ -269,9 +249,7 @@ export function ChatHistoryList({
                       </div>
                     ) : (
                       <>
-                        <div className="font-medium text-sm truncate">
-                          {session.title}
-                        </div>
+                        <div className="font-medium text-sm truncate">{session.title}</div>
                         <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                           <span>{formatDate(session.createTime)}</span>
                           <span>•</span>
@@ -312,17 +290,13 @@ export function ChatHistoryList({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Chat History Storage</DialogTitle>
-            <DialogDescription>
-              Storage statistics and management options
-            </DialogDescription>
+            <DialogDescription>Storage statistics and management options</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total sessions:</span>
-                <span className="font-mono font-medium">
-                  {sessions.length}
-                </span>
+                <span className="font-mono font-medium">{sessions.length}</span>
               </div>
             </div>
 

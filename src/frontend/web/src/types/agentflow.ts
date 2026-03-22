@@ -31,8 +31,7 @@ export const AgentflowNodeType = {
   AgentflowNode: 1,
 } as const;
 
-export type AgentflowNodeType =
-  (typeof AgentflowNodeType)[keyof typeof AgentflowNodeType];
+export type AgentflowNodeType = (typeof AgentflowNodeType)[keyof typeof AgentflowNodeType];
 
 export interface AgentflowNodeDto extends BaseDto {
   agentflowId: string;

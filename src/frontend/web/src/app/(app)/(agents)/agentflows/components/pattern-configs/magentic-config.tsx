@@ -1,22 +1,18 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Info } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+import * as React from "react";
+import { Info } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MagenticConfigProps {
-  maxRounds: number
-  maxStallCount: number
-  maxResetCount: number
-  onMaxRoundsChange: (value: number) => void
-  onMaxStallCountChange: (value: number) => void
-  onMaxResetCountChange: (value: number) => void
+  maxRounds: number;
+  maxStallCount: number;
+  maxResetCount: number;
+  onMaxRoundsChange: (value: number) => void;
+  onMaxStallCountChange: (value: number) => void;
+  onMaxResetCountChange: (value: number) => void;
 }
 
 /**
@@ -106,5 +102,5 @@ export function MagenticConfig({
         />
       </div>
     </>
-  )
+  );
 }

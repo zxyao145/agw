@@ -1,18 +1,14 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Info } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+import * as React from "react";
+import { Info } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface GroupChatConfigProps {
-  maximumIterationCount: number
-  onMaximumIterationCountChange: (value: number) => void
+  maximumIterationCount: number;
+  onMaximumIterationCountChange: (value: number) => void;
 }
 
 /**
@@ -48,5 +44,5 @@ export function GroupChatConfig({
         className="w-[120px]"
       />
     </div>
-  )
+  );
 }

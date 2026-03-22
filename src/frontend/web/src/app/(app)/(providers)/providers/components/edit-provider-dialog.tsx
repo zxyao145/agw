@@ -35,10 +35,7 @@ import type {
 } from "./types";
 import { getApiErrorMessage } from "./utils";
 
-const providerTypeOptions: ProviderType[] = [
-  "OpenAI",
-  "Anthropic",
-];
+const providerTypeOptions: ProviderType[] = ["OpenAI", "Anthropic"];
 
 interface EditProviderDialogProps {
   provider: ProviderDto | null;
@@ -46,21 +43,14 @@ interface EditProviderDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function EditProviderDialog({
-  provider,
-  open,
-  onOpenChange,
-}: EditProviderDialogProps) {
+export function EditProviderDialog({ provider, open, onOpenChange }: EditProviderDialogProps) {
   const queryClient = useQueryClient();
 
   const [name, setName] = React.useState("");
-  const [providerType, setProviderType] =
-    React.useState<ProviderType>("OpenAI");
+  const [providerType, setProviderType] = React.useState<ProviderType>("OpenAI");
   const [description, setDescription] = React.useState("");
   const [endpoint, setEndpoint] = React.useState("");
-  const [authConfigs, setAuthConfigs] = React.useState<
-    ProviderAuthConfigRequest[]
-  >([]);
+  const [authConfigs, setAuthConfigs] = React.useState<ProviderAuthConfigRequest[]>([]);
 
   React.useEffect(() => {
     if (!provider || !open) {
@@ -113,21 +103,14 @@ export function EditProviderDialog({
       description: description.length ? description : null,
       authConfigs: authConfigs.map((config) => ({
         ...config,
-        apiKey:
-          config.authType === "ApiKey" ? config.apiKey?.trim() || null : null,
-        envKey:
-          config.authType === "EnvVariable"
-            ? config.envKey?.trim() || null
-            : null,
+        apiKey: config.authType === "ApiKey" ? config.apiKey?.trim() || null : null,
+        envKey: config.authType === "EnvVariable" ? config.envKey?.trim() || null : null,
       })),
     });
   };
 
   const isDisabled =
-    !provider ||
-    !name.trim() ||
-    !endpoint.trim() ||
-    updateProviderMutation.isPending;
+    !provider || !name.trim() || !endpoint.trim() || updateProviderMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -188,10 +171,7 @@ export function EditProviderDialog({
             />
           </div>
 
-          <ProviderAuthConfigEditor
-            value={authConfigs}
-            onChange={setAuthConfigs}
-          />
+          <ProviderAuthConfigEditor value={authConfigs} onChange={setAuthConfigs} />
         </div>
 
         <DialogFooter>

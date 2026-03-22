@@ -1,20 +1,19 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 
 export default function Error({
   error,
   reset,
 }: {
-  error: Error & { digest?: string }
-  reset: () => void
+  error: Error & { digest?: string };
+  reset: () => void;
 }) {
   React.useEffect(() => {
-     
-    console.error(error)
-  }, [error])
+    console.error(error);
+  }, [error]);
 
   return (
     <div className="space-y-3">
@@ -26,5 +25,5 @@ export default function Error({
         <Button onClick={reset}>Try again</Button>
       </div>
     </div>
-  )
+  );
 }

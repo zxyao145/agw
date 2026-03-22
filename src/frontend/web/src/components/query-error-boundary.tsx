@@ -4,13 +4,7 @@ import * as React from "react";
 import { useQueryErrorResetBoundary } from "@tanstack/react-query";
 import { ErrorBoundary } from "./error-boundary";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface QueryErrorBoundaryProps {
   children: React.ReactNode;
@@ -29,13 +23,7 @@ function getApiErrorStatus(error: unknown): number | null {
   return null;
 }
 
-function ApiErrorFallback({
-  error,
-  reset,
-}: {
-  error: Error;
-  reset: () => void;
-}) {
+function ApiErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
   const status = getApiErrorStatus(error);
   const message = getApiErrorMessage(error);
 
@@ -65,11 +53,7 @@ function ApiErrorFallback({
         <CardHeader>
           <div className="flex items-center gap-2">
             <CardTitle className="text-destructive">{title}</CardTitle>
-            {status && (
-              <span className="text-sm font-mono text-muted-foreground">
-                ({status})
-              </span>
-            )}
+            {status && <span className="text-sm font-mono text-muted-foreground">({status})</span>}
           </div>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
@@ -81,11 +65,7 @@ function ApiErrorFallback({
             <Button onClick={reset} variant="outline" size="sm">
               Try again
             </Button>
-            <Button
-              onClick={() => window.history.back()}
-              variant="ghost"
-              size="sm"
-            >
+            <Button onClick={() => window.history.back()} variant="ghost" size="sm">
               Go back
             </Button>
           </div>
@@ -100,10 +80,15 @@ export function QueryErrorBoundary({ children }: QueryErrorBoundaryProps) {
 
   return (
     <ErrorBoundary
-      fallback={(props) => <ApiErrorFallback {...props} reset={() => {
-        props.reset();
-        reset();
-      }} />}
+      fallback={(props) => (
+        <ApiErrorFallback
+          {...props}
+          reset={() => {
+            props.reset();
+            reset();
+          }}
+        />
+      )}
     >
       {children}
     </ErrorBoundary>

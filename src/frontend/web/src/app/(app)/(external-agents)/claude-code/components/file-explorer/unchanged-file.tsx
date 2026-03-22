@@ -1,7 +1,6 @@
 import FileViewer from "./file-viewer";
 import { UnChangedFileProps } from "../../types";
 
-
 export default function UnChangedFile({
   diffContentData,
   selectedFile,

@@ -44,9 +44,7 @@ function CommentInput({
         }}
       />
       <div className="flex items-center justify-between mt-2.5">
-        <span className="text-xs text-muted-foreground">
-          Ctrl+Enter to submit, Esc to cancel
-        </span>
+        <span className="text-xs text-muted-foreground">Ctrl+Enter to submit, Esc to cancel</span>
       </div>
     </div>
   );
@@ -77,9 +75,7 @@ export function CommentSection({
   isOriginal = false,
   filePath = "",
 }: CommentSectionProps) {
-  const [editingCommentId, setEditingCommentId] = React.useState<string | null>(
-    null,
-  );
+  const [editingCommentId, setEditingCommentId] = React.useState<string | null>(null);
   const [editContent, setEditContent] = React.useState("");
 
   const handleStartEditing = (commentId: string, content: string) => {
@@ -120,10 +116,7 @@ export function CommentSection({
     <div className="pl-3">
       {/* Existing comments */}
       {lineComments.map((comment) => (
-        <div
-          key={comment.id}
-          className="p-3 border-b border-border last:border-b-0"
-        >
+        <div key={comment.id} className="p-3 border-b border-border last:border-b-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -155,9 +148,7 @@ export function CommentSection({
               ) : (
                 <p
                   className="text-sm whitespace-pre-wrap wrap-break-word cursor-text hover:bg-muted/50 rounded px-1 -mx-1 transition-colors"
-                  onDoubleClick={() =>
-                    handleStartEditing(comment.id, comment.content)
-                  }
+                  onDoubleClick={() => handleStartEditing(comment.id, comment.content)}
                   title="Double-click to edit"
                 >
                   {comment.content}

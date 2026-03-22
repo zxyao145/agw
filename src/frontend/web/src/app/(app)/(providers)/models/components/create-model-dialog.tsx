@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import * as React from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-import { apiPost } from "@/api/client"
-import { Button } from "@/components/ui/button"
+import { apiPost } from "@/api/client";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -13,65 +13,62 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 
-import { MODEL_TYPE_OPTIONS, getModelTypeLabel } from "./types"
-import type { ModelCreateRequest } from "./types"
-import { getApiErrorMessage, parseIntOrNull } from "./utils"
+import { MODEL_TYPE_OPTIONS, getModelTypeLabel } from "./types";
+import type { ModelCreateRequest } from "./types";
+import { getApiErrorMessage, parseIntOrNull } from "./utils";
 
 interface CreateModelDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
-export function CreateModelDialog({
-  open,
-  onOpenChange,
-}: CreateModelDialogProps) {
-  const queryClient = useQueryClient()
+export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps) {
+  const queryClient = useQueryClient();
 
-  const [name, setName] = React.useState("")
-  const [description, setDescription] = React.useState("")
-  const [selectedTypes, setSelectedTypes] = React.useState<number>(0)
-  const [maxTokens, setMaxTokens] = React.useState("4096")
+  const [name, setName] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [selectedTypes, setSelectedTypes] = React.useState<number>(0);
+  const [maxTokens, setMaxTokens] = React.useState("4096");
 
   const toggleType = (typeValue: number) => {
-    setSelectedTypes((prev) => prev ^ typeValue) // XOR to toggle bit
-  }
+    setSelectedTypes((prev) => prev ^ typeValue); // XOR to toggle bit
+  };
 
   const isTypeSelected = (typeValue: number) => {
-    return (selectedTypes & typeValue) === typeValue
-  }
+    return (selectedTypes & typeValue) === typeValue;
+  };
 
   const createModelMutation = useMutation({
     mutationFn: async (body: ModelCreateRequest) => {
-      return await apiPost("/api/models", { body })
+      return await apiPost("/api/models", { body });
     },
     onSuccess: async () => {
-      toast.success("Model created")
-      onOpenChange(false)
-      setName("")
-      setDescription("")
-      setSelectedTypes(0)
-      setMaxTokens("4096")
-      await queryClient.invalidateQueries({ queryKey: ["models"] })
+      toast.success("Model created");
+      onOpenChange(false);
+      setName("");
+      setDescription("");
+      setSelectedTypes(0);
+      setMaxTokens("4096");
+      await queryClient.invalidateQueries({ queryKey: ["models"] });
     },
     onError: (error) => {
-      toast.error(`Create failed: ${getApiErrorMessage(error)}`)
+      toast.error(`Create failed: ${getApiErrorMessage(error)}`);
     },
-  })
+  });
 
-  const parsedMaxTokens = parseIntOrNull(maxTokens)
+  const parsedMaxTokens = parseIntOrNull(maxTokens);
 
   const createDisabled =
     !name.trim() ||
     selectedTypes === 0 ||
     parsedMaxTokens === null ||
-    createModelMutation.isPending
+    createModelMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -165,5 +162,5 @@ export function CreateModelDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

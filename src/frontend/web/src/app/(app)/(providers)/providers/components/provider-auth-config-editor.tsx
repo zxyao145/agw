@@ -23,14 +23,8 @@ interface ProviderAuthConfigEditorProps {
   onChange: (nextValue: ProviderAuthConfigRequest[]) => void;
 }
 
-export function ProviderAuthConfigEditor({
-  value,
-  onChange,
-}: ProviderAuthConfigEditorProps) {
-  const updateConfig = (
-    index: number,
-    patch: Partial<ProviderAuthConfigRequest>,
-  ) => {
+export function ProviderAuthConfigEditor({ value, onChange }: ProviderAuthConfigEditorProps) {
+  const updateConfig = (index: number, patch: Partial<ProviderAuthConfigRequest>) => {
     onChange(value.map((item, idx) => (idx === index ? { ...item, ...patch } : item)));
   };
 
@@ -73,9 +67,8 @@ export function ProviderAuthConfigEditor({
                   onValueChange={(nextType) =>
                     updateConfig(index, {
                       authType: nextType as ProviderAuthType,
-                      apiKey: nextType === "ApiKey" ? config.apiKey ?? "" : null,
-                      envKey:
-                        nextType === "EnvVariable" ? config.envKey ?? "" : null,
+                      apiKey: nextType === "ApiKey" ? (config.apiKey ?? "") : null,
+                      envKey: nextType === "EnvVariable" ? (config.envKey ?? "") : null,
                     })
                   }
                 >

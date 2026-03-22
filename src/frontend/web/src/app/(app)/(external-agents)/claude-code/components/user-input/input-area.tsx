@@ -12,8 +12,6 @@ import { useRef, useMemo } from "react";
 import { Separator } from "@/components/ui/separator";
 import { ArrowUp, CirclePause, Eraser, Square } from "lucide-react";
 
-
-
 export function InputArea({
   isExecuting,
   hasMessages,
@@ -45,56 +43,59 @@ export function InputArea({
   const internalUserInputRef = useRef<UserInputRef | null>(null);
   const userInputRef = externalUserInputRef ?? internalUserInputRef;
 
-  const quickCommands: QuickTextOption[] = useMemo(() => [
-    {
-      id: "analyze",
-      label: "Analyze Code",
-      description: "Request code analysis and insights",
-      text: "Please analyze the code in this file and provide insights about",
-    },
-    {
-      id: "refactor",
-      label: "Refactor",
-      description: "Request code refactoring",
-      text: "Please refactor this code to improve",
-    },
-    {
-      id: "explain",
-      label: "Explain",
-      description: "Request code explanation",
-      text: "Please explain how this code works",
-    },
-    {
-      id: "test",
-      label: "Write Tests",
-      description: "Request test generation",
-      text: "Please write unit tests for this code",
-    },
-    {
-      id: "debug",
-      label: "Debug",
-      description: "Request debugging assistance",
-      text: "Please help me debug this issue",
-    },
-    {
-      id: "optimize",
-      label: "Optimize",
-      description: "Request code optimization",
-      text: "Please optimize this code for better performance",
-    },
-    {
-      id: "document",
-      label: "Add Docs",
-      description: "Request code documentation",
-      text: "Please add documentation comments to this code",
-    },
-    {
-      id: "review",
-      label: "Review",
-      description: "Request code review",
-      text: "Please review this code for potential issues",
-    },
-  ], []);
+  const quickCommands: QuickTextOption[] = useMemo(
+    () => [
+      {
+        id: "analyze",
+        label: "Analyze Code",
+        description: "Request code analysis and insights",
+        text: "Please analyze the code in this file and provide insights about",
+      },
+      {
+        id: "refactor",
+        label: "Refactor",
+        description: "Request code refactoring",
+        text: "Please refactor this code to improve",
+      },
+      {
+        id: "explain",
+        label: "Explain",
+        description: "Request code explanation",
+        text: "Please explain how this code works",
+      },
+      {
+        id: "test",
+        label: "Write Tests",
+        description: "Request test generation",
+        text: "Please write unit tests for this code",
+      },
+      {
+        id: "debug",
+        label: "Debug",
+        description: "Request debugging assistance",
+        text: "Please help me debug this issue",
+      },
+      {
+        id: "optimize",
+        label: "Optimize",
+        description: "Request code optimization",
+        text: "Please optimize this code for better performance",
+      },
+      {
+        id: "document",
+        label: "Add Docs",
+        description: "Request code documentation",
+        text: "Please add documentation comments to this code",
+      },
+      {
+        id: "review",
+        label: "Review",
+        description: "Request code review",
+        text: "Please review this code for potential issues",
+      },
+    ],
+    [],
+  );
 
   const handleQuickCommand = (text: string) => {
     userInputRef.current?.insertText(text);
@@ -114,11 +115,11 @@ export function InputArea({
   const handleSuggestion = (input: string): SuggestionItem[] | Promise<SuggestionItem[]> => {
     input = input.trimStart();
     let value = "";
-    if(input.indexOf(' ') < 0){
+    if (input.indexOf(" ") < 0) {
       value = input;
-    }else{
-      const textInfo = input.split(' ');
-      value = textInfo[textInfo.length - 1]
+    } else {
+      const textInfo = input.split(" ");
+      value = textInfo[textInfo.length - 1];
     }
     if (!value) {
       return [];
@@ -127,7 +128,6 @@ export function InputArea({
     const query = value.slice(1).trim();
 
     if (value.startsWith("/")) {
-
       let allCmds = initContent?.slashCommands ?? [];
       allCmds = allCmds.map((x) => (x.startsWith("/") ? x : "/" + x));
       return searchCommand(query, allCmds);
@@ -169,17 +169,9 @@ export function InputArea({
       </UserInput.TopLeft>
 
       <UserInput.TopRight>
-        <QuickTextDialog
-          quickCommands={quickCommands}
-          onCommandSelect={handleQuickCommand}
-        />
+        <QuickTextDialog quickCommands={quickCommands} onCommandSelect={handleQuickCommand} />
         <Separator orientation="vertical" />
-        <Button
-          onClick={onClearSession}
-          disabled={isExecuting}
-          variant="ghost"
-          size="sm"
-        >
+        <Button onClick={onClearSession} disabled={isExecuting} variant="ghost" size="sm">
           <Eraser width={16} />
         </Button>
         <Separator orientation="vertical" />

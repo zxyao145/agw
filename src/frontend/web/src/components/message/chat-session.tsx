@@ -52,9 +52,7 @@ export function ChatSession({
           <div className="flex items-center justify-center h-40">
             <div className="text-center text-muted-foreground ">
               <p className="text-lg mb-2">No messages yet</p>
-              <p className="text-sm">
-                Start a conversation by typing a message below
-              </p>
+              <p className="text-sm">Start a conversation by typing a message below</p>
             </div>
           </div>
         )}
@@ -64,10 +62,7 @@ export function ChatSession({
             return (
               <div className="mx-4 max-w-[80%]" key={index}>
                 <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem
-                    value="item-1"
-                    className="border rounded-lg px-2 last:border-b"
-                  >
+                  <AccordionItem value="item-1" className="border rounded-lg px-2 last:border-b">
                     <AccordionTrigger>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="text-xs">
@@ -93,10 +88,7 @@ export function ChatSession({
               !item.message.additionalProperties;
             console.debug("isUser", isUser, item.message);
             return (
-              <div
-                className={cn("mx-4", isUser ? "max-w-full" : "max-w-[80%]")}
-                key={index}
-              >
+              <div className={cn("mx-4", isUser ? "max-w-full" : "max-w-[80%]")} key={index}>
                 <AiMessageComponent message={item.message} />
               </div>
             );

@@ -16,7 +16,6 @@ export const handleSystemMessage = (
   data: AiMessage,
   context: AiMessageContext,
 ): AiMessageAction[] => {
-
   const actions: AiMessageAction[] = [];
 
   const author = data.author;
@@ -93,10 +92,7 @@ export const handleAssistantMessage = (data: AiMessage): AiMessageAction[] => [
   { type: "append", message: data },
 ];
 
-export const handleAiMessage = (
-  data: AiMessage,
-  context: AiMessageContext,
-): AiMessageAction[] => {
+export const handleAiMessage = (data: AiMessage, context: AiMessageContext): AiMessageAction[] => {
   if (data.role === "system") {
     return handleSystemMessage(data, context);
   }

@@ -2,10 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import {
-  DiffViewerProps,
-  LineComment,
-} from "../../types";
+import { DiffViewerProps, LineComment } from "../../types";
 import FileViewer from "./file-viewer";
 
 /**
@@ -49,21 +46,24 @@ function parseDiffToFiles(diffText: string): { original: string; modified: strin
   };
 }
 
-export function DiffViewer({ diff, className, filePath = "", comments = [], setComments }: DiffViewerProps) {
-  const { original, modified } = React.useMemo(
-    () => parseDiffToFiles(diff),
-    [diff]
-  );
+export function DiffViewer({
+  diff,
+  className,
+  filePath = "",
+  comments = [],
+  setComments,
+}: DiffViewerProps) {
+  const { original, modified } = React.useMemo(() => parseDiffToFiles(diff), [diff]);
 
   // Filter comments for each side
   const originalComments = React.useMemo(
     () => comments.filter((c) => c.isAfter === false),
-    [comments]
+    [comments],
   );
 
   const modifiedComments = React.useMemo(
     () => comments.filter((c) => c.isAfter === true),
-    [comments]
+    [comments],
   );
 
   // Wrapper to handle setComments with proper isAfter value
@@ -76,15 +76,14 @@ export function DiffViewer({ diff, className, filePath = "", comments = [], setC
         const currentOriginalComments = prev.filter((c) => c.isAfter === false);
         const otherComments = prev.filter((c) => c.isAfter === true);
 
-        const newOriginalComments = typeof setter === "function"
-          ? setter(currentOriginalComments)
-          : setter;
+        const newOriginalComments =
+          typeof setter === "function" ? setter(currentOriginalComments) : setter;
 
         // Merge back with other side's comments
         return [...otherComments, ...newOriginalComments];
       });
     },
-    [setComments]
+    [setComments],
   );
 
   const handleSetModifiedComments = React.useCallback(
@@ -94,24 +93,20 @@ export function DiffViewer({ diff, className, filePath = "", comments = [], setC
         const currentModifiedComments = prev.filter((c) => c.isAfter === true);
         const otherComments = prev.filter((c) => c.isAfter === false);
 
-        const newModifiedComments = typeof setter === "function"
-          ? setter(currentModifiedComments)
-          : setter;
+        const newModifiedComments =
+          typeof setter === "function" ? setter(currentModifiedComments) : setter;
 
         // Merge back with other side's comments
         return [...otherComments, ...newModifiedComments];
       });
     },
-    [setComments]
+    [setComments],
   );
 
   if (!diff.trim()) {
     return (
       <div
-        className={cn(
-          "flex items-center justify-center h-full text-muted-foreground",
-          className
-        )}
+        className={cn("flex items-center justify-center h-full text-muted-foreground", className)}
       >
         <p className="text-sm">No changes detected</p>
       </div>

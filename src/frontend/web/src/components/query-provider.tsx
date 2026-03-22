@@ -1,29 +1,24 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import {
-  MutationCache,
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query"
-import { toast } from "sonner"
+import * as React from "react";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return String(error)
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 function createQueryClient(): QueryClient {
   return new QueryClient({
     queryCache: new QueryCache({
       onError: (error) => {
-        toast.error(getErrorMessage(error))
+        toast.error(getErrorMessage(error));
       },
     }),
     mutationCache: new MutationCache({
       onError: (error) => {
-        toast.error(getErrorMessage(error))
+        toast.error(getErrorMessage(error));
       },
     }),
     defaultOptions: {
@@ -35,11 +30,11 @@ function createQueryClient(): QueryClient {
         retry: 0,
       },
     },
-  })
+  });
 }
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
-  const [client] = React.useState(() => createQueryClient())
+  const [client] = React.useState(() => createQueryClient());
 
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }

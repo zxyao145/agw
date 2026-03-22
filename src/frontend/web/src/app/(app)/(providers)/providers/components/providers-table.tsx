@@ -7,13 +7,7 @@ import { toast } from "sonner";
 
 import { apiDelete } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -36,15 +30,9 @@ interface ProvidersTableProps {
   error: unknown;
 }
 
-export function ProvidersTable({
-  providers,
-  isLoading,
-  isError,
-  error,
-}: ProvidersTableProps) {
+export function ProvidersTable({ providers, isLoading, isError, error }: ProvidersTableProps) {
   const queryClient = useQueryClient();
-  const [editingProvider, setEditingProvider] =
-    React.useState<ProviderDto | null>(null);
+  const [editingProvider, setEditingProvider] = React.useState<ProviderDto | null>(null);
 
   const deleteProviderMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -102,18 +90,14 @@ export function ProvidersTable({
         {providers!.map((provider) => (
           <TableRow key={provider.id}>
             <TableCell className="font-medium">{provider.name}</TableCell>
-            <TableCell className="max-w-xs truncate">
-              {provider.description || "-"}
-            </TableCell>
+            <TableCell className="max-w-xs truncate">{provider.description || "-"}</TableCell>
             <TableCell>{provider.providerType}</TableCell>
             <TableCell className="max-w-sm truncate font-mono text-xs">
               {provider.endpoint}
             </TableCell>
             <TableCell>{provider.authConfigs?.length ?? 0}</TableCell>
             <TableCell className="text-xs text-muted-foreground">
-              {provider.createTime
-                ? new Date(provider.createTime).toLocaleString()
-                : "-"}
+              {provider.createTime ? new Date(provider.createTime).toLocaleString() : "-"}
             </TableCell>
             <TableCell className="text-right">
               <div className="flex justify-end gap-2">

@@ -186,16 +186,10 @@ export function EditAgentDialog({
                     description,
                     systemPrompt,
                     modelProviderId,
-                    tools:
-                      selectedTools.length > 0
-                        ? JSON.stringify(selectedTools)
-                        : null,
-                    skillIds:
-                      selectedSkillIds.length > 0 ? selectedSkillIds : null,
+                    tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
+                    skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
                     mcpToolServerIds:
-                      selectedMcpToolServerIds.length > 0
-                        ? selectedMcpToolServerIds
-                        : null,
+                      selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
                   },
                 });
               }

@@ -7,13 +7,7 @@ import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -110,9 +104,7 @@ const defaultForm: FormState = {
   enabled: true,
 };
 
-function normalizeTransportType(
-  value: string | null | undefined,
-): "stdio" | "http" {
+function normalizeTransportType(value: string | null | undefined): "stdio" | "http" {
   return value?.trim().toLowerCase() === "http" ? "http" : "stdio";
 }
 
@@ -163,11 +155,7 @@ function fromServer(server: McpToolServerDto): FormState {
     command: server.command ?? "",
     argumentsText: (server.arguments ?? []).join("\n"),
     workingDirectory: server.workingDirectory ?? "",
-    environmentVariablesText: JSON.stringify(
-      server.environmentVariables ?? {},
-      null,
-      2,
-    ),
+    environmentVariablesText: JSON.stringify(server.environmentVariables ?? {}, null, 2),
     url: server.url ?? "",
     headersText: JSON.stringify(server.headers ?? {}, null, 2),
     enabled: server.enabled,
@@ -181,16 +169,12 @@ export default function McpToolServersPage() {
   const [createForm, setCreateForm] = React.useState<FormState>(defaultForm);
   const [editForm, setEditForm] = React.useState<FormState>(defaultForm);
   const [editing, setEditing] = React.useState<McpToolServerDto | null>(null);
-  const [toolsCount, setToolsCount] = React.useState<Record<string, number>>(
-    {},
-  );
+  const [toolsCount, setToolsCount] = React.useState<Record<string, number>>({});
 
   const mcpToolServersQuery = useQuery({
     queryKey: ["mcpToolServers"],
     queryFn: async () => {
-      return (await apiGet(
-        "/api/mcp-tool-servers",
-      )) as unknown as McpToolServerDto[];
+      return (await apiGet("/api/mcp-tool-servers")) as unknown as McpToolServerDto[];
     },
   });
 
@@ -210,13 +194,7 @@ export default function McpToolServersPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: McpToolServerRequest;
-    }) => {
+    mutationFn: async ({ id, body }: { id: string; body: McpToolServerRequest }) => {
       return await apiPut("/api/mcp-tool-servers/{id}", {
         params: { path: { id } },
         body,
@@ -363,15 +341,11 @@ export default function McpToolServersPage() {
         <div className="text-sm text-muted-foreground">Loading...</div>
       ) : mcpToolServersQuery.isError ? (
         <div className="text-sm text-destructive">
-          Failed to load servers:{" "}
-          {getApiErrorMessage(mcpToolServersQuery.error)}
+          Failed to load servers: {getApiErrorMessage(mcpToolServersQuery.error)}
         </div>
       ) : (
         <StaticTable
-          isEmpty={
-            mcpToolServersQuery.data === undefined ||
-            mcpToolServersQuery.data.length === 0
-          }
+          isEmpty={mcpToolServersQuery.data === undefined || mcpToolServersQuery.data.length === 0}
         >
           <Empty>
             <div className="text-sm text-muted-foreground">
@@ -400,21 +374,15 @@ export default function McpToolServersPage() {
                   )}
                 </TableCell>
                 <TableCell>{server.description || "-"}</TableCell>
-                <TableCell className="uppercase text-xs">
-                  {server.transportType}
-                </TableCell>
+                <TableCell className="uppercase text-xs">{server.transportType}</TableCell>
                 <TableCell className="max-w-sm truncate font-mono text-xs">
-                  {server.transportType === "stdio"
-                    ? server.command || "-"
-                    : server.url || "-"}
+                  {server.transportType === "stdio" ? server.command || "-" : server.url || "-"}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center">
                     <Switch
                       checked={server.enabled}
-                      onCheckedChange={(checked) =>
-                        onToggleEnabled(server, checked)
-                      }
+                      onCheckedChange={(checked) => onToggleEnabled(server, checked)}
                       disabled={updateMutation.isPending}
                       aria-label={`${server.name} enabled`}
                     />
@@ -499,8 +467,7 @@ function McpToolServerDialog({
   onSubmit: () => void;
   isSubmitting: boolean;
 }) {
-  const title =
-    mode === "create" ? "Create MCP Tool Server" : "Edit MCP Tool Server";
+  const title = mode === "create" ? "Create MCP Tool Server" : "Edit MCP Tool Server";
   const isStdio = normalizeTransportType(form.transportType) === "stdio";
 
   return (
@@ -508,9 +475,7 @@ function McpToolServerDialog({
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
-            Configure stdio or http MCP transport settings.
-          </DialogDescription>
+          <DialogDescription>Configure stdio or http MCP transport settings.</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -519,9 +484,7 @@ function McpToolServerDialog({
             <Input
               id={`${mode}-name`}
               value={form.name}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, name: event.target.value }))
-              }
+              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
               placeholder="github-mcp"
             />
           </div>
@@ -566,9 +529,7 @@ function McpToolServerDialog({
             <Switch
               id={`${mode}-enabled`}
               checked={form.enabled}
-              onCheckedChange={(checked) =>
-                setForm((prev) => ({ ...prev, enabled: checked }))
-              }
+              onCheckedChange={(checked) => setForm((prev) => ({ ...prev, enabled: checked }))}
             />
             <Label htmlFor={`${mode}-enabled`}>Enabled</Label>
           </div>
@@ -591,9 +552,7 @@ function McpToolServerDialog({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor={`${mode}-workingDirectory`}>
-                  Working Directory
-                </Label>
+                <Label htmlFor={`${mode}-workingDirectory`}>Working Directory</Label>
                 <Input
                   id={`${mode}-workingDirectory`}
                   value={form.workingDirectory}
@@ -608,9 +567,7 @@ function McpToolServerDialog({
               </div>
 
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor={`${mode}-arguments`}>
-                  Arguments (one per line)
-                </Label>
+                <Label htmlFor={`${mode}-arguments`}>Arguments (one per line)</Label>
                 <Textarea
                   id={`${mode}-arguments`}
                   value={form.argumentsText}
@@ -626,9 +583,7 @@ function McpToolServerDialog({
               </div>
 
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor={`${mode}-env`}>
-                  Environment Variables (JSON object)
-                </Label>
+                <Label htmlFor={`${mode}-env`}>Environment Variables (JSON object)</Label>
                 <Textarea
                   id={`${mode}-env`}
                   value={form.environmentVariablesText}
@@ -649,9 +604,7 @@ function McpToolServerDialog({
                 <Input
                   id={`${mode}-url`}
                   value={form.url}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, url: event.target.value }))
-                  }
+                  onChange={(event) => setForm((prev) => ({ ...prev, url: event.target.value }))}
                   placeholder="http://localhost:3001/sse"
                 />
               </div>

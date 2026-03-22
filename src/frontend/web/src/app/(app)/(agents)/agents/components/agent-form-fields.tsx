@@ -22,12 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type {
-  ToolInfo,
-  ModelProviderDto,
-  McpToolServerDto,
-  SkillDto,
-} from "./types";
+import type { ToolInfo, ModelProviderDto, McpToolServerDto, SkillDto } from "./types";
 
 interface AgentFormFieldsProps {
   displayName: string;
@@ -117,9 +112,7 @@ export function AgentFormFields({
   disabledFields = {},
   hiddenFields = {},
 }: AgentFormFieldsProps) {
-  const selectedSkills = skillsQuery.data?.filter((skill) =>
-    selectedSkillIds.includes(skill.id),
-  );
+  const selectedSkills = skillsQuery.data?.filter((skill) => selectedSkillIds.includes(skill.id));
   const groupedTools = React.useMemo(() => {
     if (!toolsQuery.data) {
       return [];
@@ -139,9 +132,7 @@ export function AgentFormFields({
       groups.set(category, [tool]);
     }
 
-    return Array.from(groups.entries()).sort(([left], [right]) =>
-      left.localeCompare(right),
-    );
+    return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
   }, [toolsQuery.data]);
   const selectedSkillCount = selectedSkillIds.length;
   const selectedToolCount = selectedTools.length;
@@ -214,9 +205,7 @@ export function AgentFormFields({
         <Label htmlFor={`${idPrefix}modelProviderId`}>
           Model Provider
           {agentType === "1" && (
-            <span className="text-xs text-muted-foreground ml-2">
-              (Optional)
-            </span>
+            <span className="text-xs text-muted-foreground ml-2">(Optional)</span>
           )}
         </Label>
         <Select
@@ -244,8 +233,7 @@ export function AgentFormFields({
                 <SelectItem value="loading" disabled>
                   Loading...
                 </SelectItem>
-              ) : modelProvidersQuery.data &&
-                modelProvidersQuery.data.length > 0 ? (
+              ) : modelProvidersQuery.data && modelProvidersQuery.data.length > 0 ? (
                 modelProvidersQuery.data.map((mp) => (
                   <SelectItem key={mp.id} value={mp.id}>
                     {mp.modelName} ({mp.providerName})
@@ -315,9 +303,7 @@ export function AgentFormFields({
             >
               <DropdownMenuLabel>Available Skills</DropdownMenuLabel>
               {skillsQuery.isLoading ? (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                  Loading skills...
-                </div>
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading skills...</div>
               ) : skillsQuery.data && skillsQuery.data.length > 0 ? (
                 skillsQuery.data.map((skill) => (
                   <DropdownMenuCheckboxItem
@@ -338,9 +324,7 @@ export function AgentFormFields({
                   </DropdownMenuCheckboxItem>
                 ))
               ) : (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                  No skills found
-                </div>
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">No skills found</div>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -352,9 +336,7 @@ export function AgentFormFields({
                 </Badge>
               ))
             ) : (
-              <p className="text-xs text-muted-foreground">
-                No skills selected
-              </p>
+              <p className="text-xs text-muted-foreground">No skills selected</p>
             )}
           </div>
         </div>
@@ -386,9 +368,7 @@ export function AgentFormFields({
             >
               <DropdownMenuLabel>Available Tools</DropdownMenuLabel>
               {toolsQuery.isLoading ? (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                  Loading tools...
-                </div>
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading tools...</div>
               ) : groupedTools.length > 0 ? (
                 groupedTools.map(([category, tools]) => (
                   <SelectGroup key={category}>
@@ -402,9 +382,7 @@ export function AgentFormFields({
                         onSelect={(event) => event.preventDefault()}
                       >
                         <div className="min-w-0">
-                          <div className="truncate font-medium">
-                            {tool.name}
-                          </div>
+                          <div className="truncate font-medium">{tool.name}</div>
                           {tool.description ? (
                             <div className="text-xs text-muted-foreground whitespace-normal break-words">
                               {tool.description}
@@ -416,9 +394,7 @@ export function AgentFormFields({
                   </SelectGroup>
                 ))
               ) : (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                  No tools found
-                </div>
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">No tools found</div>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -465,8 +441,7 @@ export function AgentFormFields({
                 <div className="px-2 py-1.5 text-sm text-muted-foreground">
                   Loading MCP tool servers...
                 </div>
-              ) : mcpToolServersQuery.data &&
-                mcpToolServersQuery.data.length > 0 ? (
+              ) : mcpToolServersQuery.data && mcpToolServersQuery.data.length > 0 ? (
                 mcpToolServersQuery.data.map((server) => (
                   <DropdownMenuCheckboxItem
                     key={server.id}
@@ -498,9 +473,7 @@ export function AgentFormFields({
                 );
               })
             ) : (
-              <p className="text-xs text-muted-foreground">
-                No MCP tool servers selected
-              </p>
+              <p className="text-xs text-muted-foreground">No MCP tool servers selected</p>
             )}
           </div>
         </div>

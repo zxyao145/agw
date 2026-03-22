@@ -3,8 +3,7 @@
 import * as React from "react";
 import { Input } from "@/components/ui/input";
 
-export interface AutocompleteProps
-  extends Omit<React.ComponentProps<typeof Input>, "list"> {
+export interface AutocompleteProps extends Omit<React.ComponentProps<typeof Input>, "list"> {
   options?: string[];
 }
 

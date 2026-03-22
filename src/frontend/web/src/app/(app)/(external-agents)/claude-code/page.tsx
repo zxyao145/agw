@@ -4,19 +4,10 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  InitMessageContent,
-  DirectoryMode,
-  PermissionMode,
-  LineComment,
-  EnvVar,
-} from "./types";
+import { InitMessageContent, DirectoryMode, PermissionMode, LineComment, EnvVar } from "./types";
 
 import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
-import {
-  createUserTextMessage,
-  toExecutionWsUserInput,
-} from "@/lib/execution-stream";
+import { createUserTextMessage, toExecutionWsUserInput } from "@/lib/execution-stream";
 
 import { Uuid4 } from "id128";
 import { InputArea } from "./components/user-input/input-area";
@@ -38,12 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
 import ColResizeSplit from "./components/split-layout";
@@ -57,10 +43,7 @@ import UnChangedFile from "./components/file-explorer/unchanged-file";
 import { DiffViewer } from "./components/file-explorer/diff-viewer";
 import "./page.css";
 import { claudeSettingsStorage } from "./lib/settings-storage";
-import {
-  type AiMessageAction,
-  handleAiMessage,
-} from "./lib/ai-message-handlers";
+import { type AiMessageAction, handleAiMessage } from "./lib/ai-message-handlers";
 
 const gitCodeSource = "./code-work";
 
@@ -80,9 +63,7 @@ export default function ClaudeCodePage() {
   );
   const [apiKey, setApiKey] = React.useState("");
   const [apiBaseUrl, setApiBaseUrl] = React.useState("");
-  const [permissionMode, setPermissionMode] = React.useState<string>(
-    PermissionMode.default,
-  );
+  const [permissionMode, setPermissionMode] = React.useState<string>(PermissionMode.default);
   const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
@@ -102,47 +83,43 @@ export default function ClaudeCodePage() {
   const [contentError, setContentError] = React.useState<string | null>(null);
   const [onlyDiff, setOnlyDiff] = React.useState(true);
   const [recursiveMode, setRecursiveMode] = React.useState(true);
-  const [diffContentData, setDiffContentData] =
-    React.useState<GitDiffResponse | null>(null);
+  const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
   // const statusRequestPendingRef = React.useRef(false);
   const settingsRequestSessionRef = React.useRef<string | null>(null);
 
-  const applyAiMessageActions = React.useCallback(
-    (actions: AiMessageAction[]) => {
-      const pendingMessages: AiMessage[] = [];
+  const applyAiMessageActions = React.useCallback((actions: AiMessageAction[]) => {
+    const pendingMessages: AiMessage[] = [];
 
-      actions.forEach((action) => {
-        switch (action.type) {
-          case "append":
-            pendingMessages.push(action.message);
-            break;
-          case "setInitContent":
-            setInitContent(action.content);
-            break;
-          case "setIsExecuting":
-            setIsExecuting(action.value);
-            break;
-          case "setIsInitStatus":
-            setIsInitStatus(action.value);
-            break;
-          case "notify":
-            if (action.variant === "info") {
-              toast.info(action.message);
-            } else {
-              toast.error(action.message);
-            }
-            break;
-          default:
-            break;
-        }
-      });
-
-      if (pendingMessages.length > 0) {
-        setMessages((prev) => [...prev, ...pendingMessages]);
+    actions.forEach((action) => {
+      switch (action.type) {
+        case "append":
+          pendingMessages.push(action.message);
+          break;
+        case "setInitContent":
+          setInitContent(action.content);
+          break;
+        case "setIsExecuting":
+          setIsExecuting(action.value);
+          break;
+        case "setIsInitStatus":
+          setIsInitStatus(action.value);
+          break;
+        case "notify":
+          if (action.variant === "info") {
+            toast.info(action.message);
+          } else {
+            toast.error(action.message);
+          }
+          break;
+        default:
+          break;
       }
-    },
-    [],
-  );
+    });
+
+    if (pendingMessages.length > 0) {
+      setMessages((prev) => [...prev, ...pendingMessages]);
+    }
+  }, []);
 
   const handleSessionId = (newSessionId: string | null) => {
     if (newSessionId !== sessionId) {
@@ -151,8 +128,7 @@ export default function ClaudeCodePage() {
     }
   };
 
-  const [initContent, setInitContent] =
-    React.useState<InitMessageContent | null>(null);
+  const [initContent, setInitContent] = React.useState<InitMessageContent | null>(null);
 
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
@@ -203,15 +179,7 @@ export default function ClaudeCodePage() {
 
   React.useEffect(() => {
     settingsRequestSessionRef.current = null;
-  }, [
-    workingDirectory,
-    gitAddress,
-    directoryMode,
-    apiKey,
-    apiBaseUrl,
-    permissionMode,
-    envVars,
-  ]);
+  }, [workingDirectory, gitAddress, directoryMode, apiKey, apiBaseUrl, permissionMode, envVars]);
 
   const getRepositoryName = React.useCallback((address: string) => {
     const trimmed = address.trim().replace(/\/$/, "");
@@ -245,13 +213,7 @@ export default function ClaudeCodePage() {
       return repoName ? `${gitCodeSource}/${repoName}/${sessionId}` : "";
     }
     return workingDirectory;
-  }, [
-    directoryMode,
-    getRepositoryName,
-    gitAddress,
-    sessionId,
-    workingDirectory,
-  ]);
+  }, [directoryMode, getRepositoryName, gitAddress, sessionId, workingDirectory]);
 
   const openDrawer = (type: "chat" | "files") => {
     setDrawerContent(type);
@@ -371,10 +333,7 @@ export default function ClaudeCodePage() {
       type: 0,
       setting: {
         workingDirectory: getResolvedWorkingDirectory(sessionId),
-        gitAddress:
-          directoryMode === DirectoryMode.gitAddress
-            ? gitAddress.trim() || null
-            : null,
+        gitAddress: directoryMode === DirectoryMode.gitAddress ? gitAddress.trim() || null : null,
         apiKey: apiKey.trim() || null,
         apiBaseUrl: apiBaseUrl.trim() || null,
         systemPrompt: null,
@@ -447,9 +406,7 @@ export default function ClaudeCodePage() {
         const data: AiMessage = JSON.parse(event.data);
         console.debug("onmessage", data);
 
-        applyAiMessageActions(
-          handleAiMessage(data, { isInitStatus }),
-        );
+        applyAiMessageActions(handleAiMessage(data, { isInitStatus }));
       } catch (e) {
         console.error("Parse error:", e);
       }
@@ -468,11 +425,7 @@ export default function ClaudeCodePage() {
       setIsExecuting(false);
 
       if (event.code !== 1000) {
-        console.error(
-          "WebSocket closed unexpectedly:",
-          event.code,
-          event.reason,
-        );
+        console.error("WebSocket closed unexpectedly:", event.code, event.reason);
         if (event.code === 1003) {
           toast.error("Invalid request data");
         } else if (event.code === 1011) {
@@ -538,11 +491,7 @@ export default function ClaudeCodePage() {
     try {
       let ws = wsRef.current;
 
-      if (
-        !ws ||
-        ws.readyState === WebSocket.CLOSED ||
-        ws.readyState === WebSocket.CLOSING
-      ) {
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
         ws = setupWebSocket();
         await waitForWebSocketOpen(ws);
       } else if (ws.readyState === WebSocket.CONNECTING) {
@@ -562,9 +511,7 @@ export default function ClaudeCodePage() {
       }
     } catch (error) {
       console.error("Execute failed:", error);
-      toast.error(
-        `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+      toast.error(`Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`);
       setIsExecuting(false);
     }
   };
@@ -602,8 +549,10 @@ export default function ClaudeCodePage() {
 
   const handleHistorySelect = async (sessionId: string) => {
     try {
-      const details: ChatSessionRecordDetails | null =
-        await getSessionBySessionId(sessionId, CLAUDE_CODE_PROJECT_ID);
+      const details: ChatSessionRecordDetails | null = await getSessionBySessionId(
+        sessionId,
+        CLAUDE_CODE_PROJECT_ID,
+      );
       if (!details) {
         return;
       }
@@ -615,16 +564,11 @@ export default function ClaudeCodePage() {
     }
   };
 
-  const handleSessionSelect = (
-    newMessages: AiMessage[],
-    newSessionId: string,
-  ) => {
+  const handleSessionSelect = (newMessages: AiMessage[], newSessionId: string) => {
     handleSessionId(newSessionId);
     for (let index = 0; index < newMessages.length; index++) {
       const aiMessage = newMessages[index];
-      applyAiMessageActions(
-        handleAiMessage(aiMessage, { isInitStatus }),
-      );
+      applyAiMessageActions(handleAiMessage(aiMessage, { isInitStatus }));
     }
     toast.info("load completed");
     // Close existing WebSocket to start fresh with loaded session
@@ -712,8 +656,7 @@ export default function ClaudeCodePage() {
         currentMsg.contents[0].type === MessageContentType.FunctionCallContent;
 
       if (isFunctionCall) {
-        const callId = currentMsg.contents[0].additionalProperties
-          ?.callId as string;
+        const callId = currentMsg.contents[0].additionalProperties?.callId as string;
 
         if (callId) {
           // Find all FunctionResults with matching callId (anywhere in the message list)
@@ -728,8 +671,7 @@ export default function ClaudeCodePage() {
               msg.contents[0].type === MessageContentType.FunctionResultContent;
 
             if (isFunctionResult) {
-              const resultCallId = msg.contents[0].additionalProperties
-                ?.callId as string;
+              const resultCallId = msg.contents[0].additionalProperties?.callId as string;
               if (resultCallId === callId) {
                 matchingResults.push({ msg, index: j });
               }
@@ -739,12 +681,8 @@ export default function ClaudeCodePage() {
           // If we found matching results, create an accordion group
           if (matchingResults.length > 0) {
             const toolName =
-              (currentMsg.contents[0].additionalProperties
-                ?.toolName as string) ?? "";
-            const groupedMessages = [
-              currentMsg,
-              ...matchingResults.map((r) => r.msg),
-            ];
+              (currentMsg.contents[0].additionalProperties?.toolName as string) ?? "";
+            const groupedMessages = [currentMsg, ...matchingResults.map((r) => r.msg)];
 
             items.push({
               type: "accordion",
@@ -775,8 +713,7 @@ export default function ClaudeCodePage() {
         // Check if it's an orphaned FunctionResult
         const isFunctionResult =
           currentMsg?.contents?.length === 1 &&
-          currentMsg.contents[0].type ===
-            MessageContentType.FunctionResultContent;
+          currentMsg.contents[0].type === MessageContentType.FunctionResultContent;
 
         if (isFunctionResult) {
           // This FunctionResult wasn't matched to any FunctionCall
@@ -848,11 +785,7 @@ export default function ClaudeCodePage() {
 
   return (
     <div className="relative flex flex-col h-[calc(100vh-58px)] w-full max-w-8xl mx-auto px-2 md:px-0 md:mr-2">
-      <Tabs
-        value={currentTab}
-        onValueChange={handleTabChange}
-        className="flex flex-col h-full"
-      >
+      <Tabs value={currentTab} onValueChange={handleTabChange} className="flex flex-col h-full">
         <div className="flex items-center gap-2">
           <TabsList className="w-fit">
             <TabsTrigger value="chat">Chat</TabsTrigger>
@@ -866,9 +799,7 @@ export default function ClaudeCodePage() {
               size="sm"
               onClick={() => handleSidebarToggle(isChatTab ? "chat" : "files")}
               title={
-                activeSidebarVisible
-                  ? `Hide ${activeSidebarTitle}`
-                  : `Show ${activeSidebarTitle}`
+                activeSidebarVisible ? `Hide ${activeSidebarTitle}` : `Show ${activeSidebarTitle}`
               }
             >
               {activeSidebarVisible ? (
@@ -1039,8 +970,8 @@ export default function ClaudeCodePage() {
           <DialogHeader>
             <DialogTitle>Unsent Comments</DialogTitle>
             <DialogDescription>
-              You have {comments.length} unsent comment(s). These will be
-              cleared if you don&apos;t send them. Would you like to send them now?
+              You have {comments.length} unsent comment(s). These will be cleared if you don&apos;t
+              send them. Would you like to send them now?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

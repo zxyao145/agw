@@ -30,25 +30,18 @@ import type { ProviderAuthConfigRequest, ProviderCreateRequest, ProviderType } f
 import { getApiErrorMessage } from "./utils";
 import { ProviderAuthConfigEditor } from "./provider-auth-config-editor";
 
-const providerTypeOptions: ProviderType[] = [
-  "OpenAI",
-  "Anthropic",
-];
+const providerTypeOptions: ProviderType[] = ["OpenAI", "Anthropic"];
 
 interface CreateProviderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateProviderDialog({
-  open,
-  onOpenChange,
-}: CreateProviderDialogProps) {
+export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialogProps) {
   const queryClient = useQueryClient();
 
   const [name, setName] = React.useState("");
-  const [providerType, setProviderType] =
-    React.useState<ProviderType>("OpenAI");
+  const [providerType, setProviderType] = React.useState<ProviderType>("OpenAI");
   const [description, setDescription] = React.useState<string>("");
   const [endpoint, setEndpoint] = React.useState("");
   const [authConfigs, setAuthConfigs] = React.useState<ProviderAuthConfigRequest[]>([]);
@@ -80,20 +73,13 @@ export function CreateProviderDialog({
       description: description.length ? description : null,
       authConfigs: authConfigs.map((config) => ({
         ...config,
-        apiKey:
-          config.authType === "ApiKey"
-            ? (config.apiKey?.trim() || null)
-            : null,
-        envKey:
-          config.authType === "EnvVariable"
-            ? (config.envKey?.trim() || null)
-            : null,
+        apiKey: config.authType === "ApiKey" ? config.apiKey?.trim() || null : null,
+        envKey: config.authType === "EnvVariable" ? config.envKey?.trim() || null : null,
       })),
     });
   };
 
-  const isDisabled =
-    !name.trim() || !endpoint.trim() || createProviderMutation.isPending;
+  const isDisabled = !name.trim() || !endpoint.trim() || createProviderMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

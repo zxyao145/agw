@@ -52,17 +52,14 @@ export function CreateTaskDialog({
   onCreate,
   isCreating,
 }: CreateTaskDialogProps) {
-  const enabledTargets = React.useMemo(
-    () => targets.filter((w) => w.enable),
-    [targets]
-  );
+  const enabledTargets = React.useMemo(() => targets.filter((w) => w.enable), [targets]);
   const enabledAgentflows = React.useMemo(
     () => enabledTargets.filter((w) => w.type === "agentflow"),
-    [enabledTargets]
+    [enabledTargets],
   );
   const enabledAgents = React.useMemo(
     () => enabledTargets.filter((w) => w.type === "agent"),
-    [enabledTargets]
+    [enabledTargets],
   );
 
   return (
@@ -79,8 +76,8 @@ export function CreateTaskDialog({
         <DialogHeader>
           <UiDialogTitle>Create task</UiDialogTitle>
           <UiDialogDescription>
-            Create a task under this project. Tasks execute asynchronously
-            (scheduler will pick it up).
+            Create a task under this project. Tasks execute asynchronously (scheduler will pick it
+            up).
           </UiDialogDescription>
         </DialogHeader>
 
@@ -101,9 +98,7 @@ export function CreateTaskDialog({
               <select
                 id="task-target"
                 value={values.target}
-                onChange={(e) =>
-                  onChange({ ...values, target: e.target.value })
-                }
+                onChange={(e) => onChange({ ...values, target: e.target.value })}
                 className="h-9 w-full rounded-md border bg-transparent px-3 text-sm shadow-sm"
               >
                 <option value="" disabled>
@@ -128,9 +123,7 @@ export function CreateTaskDialog({
                   </optgroup>
                 ) : null}
               </select>
-              <div className="text-xs text-muted-foreground">
-                Only enabled targets are shown.
-              </div>
+              <div className="text-xs text-muted-foreground">Only enabled targets are shown.</div>
             </div>
 
             {targetsErrorMessage ? (
@@ -144,9 +137,7 @@ export function CreateTaskDialog({
               <Input
                 id="task-description"
                 value={values.description}
-                onChange={(e) =>
-                  onChange({ ...values, description: e.target.value })
-                }
+                onChange={(e) => onChange({ ...values, description: e.target.value })}
                 placeholder="What to do"
               />
             </div>

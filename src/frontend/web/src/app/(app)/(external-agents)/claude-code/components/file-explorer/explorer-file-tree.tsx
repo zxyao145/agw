@@ -78,9 +78,7 @@ function FileTreeNode({
   defaultExpanded,
 }: FileTreeNodeProps) {
   const [isExpanded, setIsExpanded] = React.useState(
-    defaultExpanded &&
-      item.type === "directory" &&
-      (item.children?.length ?? 0) > 0,
+    defaultExpanded && item.type === "directory" && (item.children?.length ?? 0) > 0,
   );
   // Use item.children if available (pre-built tree), otherwise empty for lazy loading
   const initialChildren = item.children || [];
@@ -205,16 +203,13 @@ function FileTreeNode({
             {item.type === "directory" ? (
               <FolderIcon className="h-4 w-4 shrink-0 text-blue-500" />
             ) : (
-              FileIcon && (
-                <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-              )
+              FileIcon && <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
             )}
 
             <span
               className={cn(
                 "text-sm truncate flex-1",
-                item.gitStatus === "deleted" &&
-                  "line-through text-muted-foreground",
+                item.gitStatus === "deleted" && "line-through text-muted-foreground",
               )}
             >
               {item.name}
@@ -242,17 +237,13 @@ function FileTreeNode({
               </span>
             )}
 
-            {item.type === "file" &&
-              item.size !== undefined &&
-              !item.gitStatus && (
-                <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                  {formatFileSize(item.size)}
-                </span>
-              )}
-
-            {isLoading && (
-              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+            {item.type === "file" && item.size !== undefined && !item.gitStatus && (
+              <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                {formatFileSize(item.size)}
+              </span>
             )}
+
+            {isLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>

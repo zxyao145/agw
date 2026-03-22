@@ -34,12 +34,7 @@ export function ExecuteAgentflowDrawer({
   const projectId = `agentflow-${agentflow.id}`;
 
   return (
-    <Drawer
-      direction="right"
-      open={open}
-      onOpenChange={onOpenChange}
-      modal={true}
-    >
+    <Drawer direction="right" open={open} onOpenChange={onOpenChange} modal={true}>
       <DrawerContent
         className="data-[vaul-drawer-direction=right]:sm:max-w-xl"
         onPointerDownOutside={(e) => {
@@ -48,9 +43,7 @@ export function ExecuteAgentflowDrawer({
       >
         <DrawerHeader>
           <div className="flex item-center justify-between">
-            <DrawerTitle>
-              Agentflow: {agentflow.name}
-            </DrawerTitle>
+            <DrawerTitle>Agentflow: {agentflow.name}</DrawerTitle>
             <DrawerClose>
               <X size={20} className="cursor-pointer" />
             </DrawerClose>

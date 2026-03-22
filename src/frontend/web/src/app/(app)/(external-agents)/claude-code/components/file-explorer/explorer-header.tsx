@@ -2,7 +2,6 @@ import { Loader2, RotateCw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-
 export default function ExplorerHeader({
   isLoading,
   loadRootDirectory,
@@ -23,11 +22,7 @@ export default function ExplorerHeader({
         <div className="flex items-center gap-3">
           {onOnlyDiffChange && (
             <div className="flex items-center gap-2">
-              <Switch
-                id="diff-mode"
-                checked={!!onlyDiff}
-                onCheckedChange={onOnlyDiffChange}
-              />
+              <Switch id="diff-mode" checked={!!onlyDiff} onCheckedChange={onOnlyDiffChange} />
               <Label htmlFor="diff-mode" className="text-sm cursor-pointer">
                 Diff
               </Label>
@@ -36,17 +31,12 @@ export default function ExplorerHeader({
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : (
-            <RotateCw
-              onClick={loadRootDirectory}
-              className="h-4 w-4 cursor-pointer"
-            />
+            <RotateCw onClick={loadRootDirectory} className="h-4 w-4 cursor-pointer" />
           )}
         </div>
       </div>
       {rootDirectory && (
-        <p className="text-xs text-muted-foreground truncate mt-1">
-          {rootDirectory}
-        </p>
+        <p className="text-xs text-muted-foreground truncate mt-1">{rootDirectory}</p>
       )}
     </div>
   );

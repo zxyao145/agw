@@ -54,9 +54,7 @@ export function Conversation({
 }: ConversationProps) {
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
-  const [curSessionId, setSessionId] = React.useState<string>(
-    sessionId ?? nextSessionId(),
-  );
+  const [curSessionId, setSessionId] = React.useState<string>(sessionId ?? nextSessionId());
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
 
@@ -171,20 +169,11 @@ export function Conversation({
       />
 
       <div className="absolute bottom-0 z-10 left-0 right-0 h-30 px-2 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
-        <UserInput
-          isExecuting={isExecuting}
-          onExecute={handleSend}
-          placeholder={placeholder}
-        >
+        <UserInput isExecuting={isExecuting} onExecute={handleSend} placeholder={placeholder}>
           {/* <UserInput.TopLeft></UserInput.TopLeft> */}
 
           <UserInput.TopRight>
-            <Button
-              onClick={handleClear}
-              disabled={isExecuting}
-              variant="ghost"
-              size="sm"
-            >
+            <Button onClick={handleClear} disabled={isExecuting} variant="ghost" size="sm">
               <Eraser width={16} />
             </Button>
 

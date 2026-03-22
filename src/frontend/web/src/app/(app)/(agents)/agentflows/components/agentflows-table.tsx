@@ -19,11 +19,7 @@ interface AgentflowsTableProps {
   isLoading: boolean;
   isError: boolean;
   error: unknown;
-  updateMutation: UseMutationResult<
-    unknown,
-    Error,
-    { id: string; body: AgentflowDetailDto }
-  >;
+  updateMutation: UseMutationResult<unknown, Error, { id: string; body: AgentflowDetailDto }>;
   deleteMutation: UseMutationResult<unknown, Error, string>;
   onToggleEnabled: (agentflow: AgentflowDto) => void;
   onEdit: (agentflow: AgentflowDto) => void;
@@ -82,14 +78,10 @@ export function AgentflowsTable({
           {agentflows.map((agentflow) => (
             <TableRow key={agentflow.id}>
               <TableCell className="font-medium">{agentflow.name}</TableCell>
-              <TableCell className="max-w-xs truncate">
-                {agentflow.description || "-"}
-              </TableCell>
+              <TableCell className="max-w-xs truncate">{agentflow.description || "-"}</TableCell>
               <TableCell>{getPatternName(agentflow.pattern)}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {agentflow.createTime
-                  ? new Date(agentflow.createTime).toLocaleString()
-                  : "-"}
+                {agentflow.createTime ? new Date(agentflow.createTime).toLocaleString() : "-"}
               </TableCell>
               <TableCell className="text-center">
                 <label className="relative inline-flex items-center cursor-pointer">

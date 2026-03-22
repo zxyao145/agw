@@ -24,13 +24,7 @@ import {
 import { Empty } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 
 import { getApiErrorMessage } from "../agents/components/utils";
@@ -123,9 +117,7 @@ function validateSkillForm(
   }
 
   if (!SKILL_NAME_REGEX.test(name)) {
-    throw new Error(
-      "Skill name must contain only lowercase letters, numbers, and single hyphens.",
-    );
+    throw new Error("Skill name must contain only lowercase letters, numbers, and single hyphens.");
   }
 
   if (!description) {
@@ -140,12 +132,7 @@ function validateSkillForm(
     throw new Error("Skill archive is required.");
   }
 
-  if (
-    mode === "edit" &&
-    currentSkill &&
-    currentSkill.name !== name &&
-    !form.archive
-  ) {
+  if (mode === "edit" && currentSkill && currentSkill.name !== name && !form.archive) {
     throw new Error("Renaming a skill requires uploading a new zip archive.");
   }
 
@@ -183,16 +170,10 @@ export default function SkillsPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
-  const [createForm, setCreateForm] = React.useState<SkillFormState>(
-    createDefaultFormState,
-  );
-  const [editForm, setEditForm] = React.useState<SkillFormState>(
-    createDefaultFormState,
-  );
+  const [createForm, setCreateForm] = React.useState<SkillFormState>(createDefaultFormState);
+  const [editForm, setEditForm] = React.useState<SkillFormState>(createDefaultFormState);
   const [editingSkill, setEditingSkill] = React.useState<SkillDto | null>(null);
-  const [deletingSkill, setDeletingSkill] = React.useState<SkillDto | null>(
-    null,
-  );
+  const [deletingSkill, setDeletingSkill] = React.useState<SkillDto | null>(null);
   const [createFileInputKey, setCreateFileInputKey] = React.useState(0);
   const [editFileInputKey, setEditFileInputKey] = React.useState(0);
 
@@ -348,11 +329,7 @@ export default function SkillsPage() {
           Failed to load skills: {getApiErrorMessage(skillsQuery.error)}
         </div>
       ) : (
-        <StaticTable
-          isEmpty={
-            skillsQuery.data === undefined || skillsQuery.data.length === 0
-          }
-        >
+        <StaticTable isEmpty={skillsQuery.data === undefined || skillsQuery.data.length === 0}>
           <Empty>
             <div className="text-sm text-muted-foreground">
               No skills found. Upload a skill archive to get started.
@@ -470,11 +447,7 @@ function DeleteSkillDialog({
         </DialogHeader>
 
         <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
@@ -550,20 +523,14 @@ function SkillDialog({
                   const previousDefaultName = current.archive
                     ? buildDefaultSkillNameFromFileName(current.archive.name)
                     : "";
-                  const nextDefaultName = buildDefaultSkillNameFromFileName(
-                    archive.name,
-                  );
+                  const nextDefaultName = buildDefaultSkillNameFromFileName(archive.name);
                   const shouldUpdateName =
-                    !current.name.trim() ||
-                    current.name === previousDefaultName;
+                    !current.name.trim() || current.name === previousDefaultName;
 
                   return {
                     ...current,
                     archive,
-                    name:
-                      shouldUpdateName && nextDefaultName
-                        ? nextDefaultName
-                        : current.name,
+                    name: shouldUpdateName && nextDefaultName ? nextDefaultName : current.name,
                   };
                 })
               }
@@ -592,10 +559,8 @@ function SkillDialog({
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor={`${mode}-skill-description`}>Description</Label>
             <p className="text-xs text-muted-foreground">
-              If the frontmatter in SKILL.md does not include a
-              {" "}
-              &quot;description&quot;
-              field, the value of this field will be used.
+              If the frontmatter in SKILL.md does not include a &quot;description&quot; field, the
+              value of this field will be used.
             </p>
             <Textarea
               id={`${mode}-skill-description`}

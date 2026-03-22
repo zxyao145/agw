@@ -17,10 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  RadioGroup,
-  RadioGroupItem,
-} from "@/components/ui/radio-group";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -28,21 +25,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  DirectoryMode,
-  EnvVar,
-  PermissionMode,
-  SettingsDialogProps,
-} from "../../types";
-import {
-  claudeSettingsStorage,
-  ClaudeSettingsStorageValues,
-} from "../../lib/settings-storage";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { DirectoryMode, EnvVar, PermissionMode, SettingsDialogProps } from "../../types";
+import { claudeSettingsStorage, ClaudeSettingsStorageValues } from "../../lib/settings-storage";
 
 export function SettingsDialog({
   workingDirectory,
@@ -60,23 +45,22 @@ export function SettingsDialog({
 
   permissionMode,
   setPermissionMode,
-  
+
   envVars,
   setEnvVars,
 }: SettingsDialogProps) {
   const [open, setOpen] = React.useState(false);
-  const [workingDirHistory, setWorkingDirHistory] = React.useState<string[]>(
-    [],
-  );
-  const [gitAddressHistory, setGitAddressHistory] = React.useState<string[]>(
-    [],
-  );
+  const [workingDirHistory, setWorkingDirHistory] = React.useState<string[]>([]);
+  const [gitAddressHistory, setGitAddressHistory] = React.useState<string[]>([]);
 
   // Load env vars on mount
   React.useEffect(() => {
     if (open) {
-      const { envVars: savedEnvVars, workingDirHistory, gitAddressHistory } =
-        claudeSettingsStorage.get();
+      const {
+        envVars: savedEnvVars,
+        workingDirHistory,
+        gitAddressHistory,
+      } = claudeSettingsStorage.get();
       if (savedEnvVars) {
         setEnvVars(savedEnvVars);
       }
@@ -104,10 +88,7 @@ export function SettingsDialog({
         return;
       }
       setHistory((prev) => {
-        const next = [trimmed, ...prev.filter((item) => item !== trimmed)].slice(
-          0,
-          20,
-        );
+        const next = [trimmed, ...prev.filter((item) => item !== trimmed)].slice(0, 20);
         const storageUpdate: ClaudeSettingsStorageValues =
           storageKey === "workingDirHistory"
             ? { workingDirHistory: next }
@@ -188,9 +169,7 @@ export function SettingsDialog({
 
           {directoryMode === DirectoryMode.workingDirectory ? (
             <div className="grid gap-2">
-              <Label htmlFor="settings-workingDir">
-                Working Directory (Optional)
-              </Label>
+              <Label htmlFor="settings-workingDir">Working Directory (Optional)</Label>
               <Autocomplete
                 id="settings-workingDir"
                 value={workingDirectory}
@@ -247,8 +226,7 @@ export function SettingsDialog({
                   <div className="flex flex-col items-start">
                     <span className="font-medium">Bypass Permissions</span>
                     <span className="text-xs text-muted-foreground">
-                      Execute all actions without any confirmation (use with
-                      caution)
+                      Execute all actions without any confirmation (use with caution)
                     </span>
                   </div>
                 </SelectItem>
@@ -280,9 +258,7 @@ export function SettingsDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="settings-apiBaseUrl">
-              Anthropic API Base URL (Optional)
-            </Label>
+            <Label htmlFor="settings-apiBaseUrl">Anthropic API Base URL (Optional)</Label>
             <Input
               id="settings-apiBaseUrl"
               value={apiBaseUrl}
@@ -306,9 +282,7 @@ export function SettingsDialog({
               </Button>
             </div>
             {envVars.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-2">
-                No environment variables set
-              </div>
+              <div className="text-sm text-muted-foreground py-2">No environment variables set</div>
             ) : (
               <div className="border rounded-md">
                 <div className="grid grid-cols-12 gap-2 p-2 border-b bg-muted/50 text-xs font-medium text-muted-foreground">
@@ -317,23 +291,16 @@ export function SettingsDialog({
                   <div className="col-span-1"></div>
                 </div>
                 {envVars.map((env, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-12 gap-2 p-2 border-b last:border-b-0"
-                  >
+                  <div key={index} className="grid grid-cols-12 gap-2 p-2 border-b last:border-b-0">
                     <Input
                       value={env.key}
-                      onChange={(e) =>
-                        updateEnvVar(index, "key", e.target.value)
-                      }
+                      onChange={(e) => updateEnvVar(index, "key", e.target.value)}
                       placeholder="KEY"
                       className="col-span-5 h-8 text-xs md:text-xs"
                     />
                     <Input
                       value={env.value}
-                      onChange={(e) =>
-                        updateEnvVar(index, "value", e.target.value)
-                      }
+                      onChange={(e) => updateEnvVar(index, "value", e.target.value)}
                       placeholder="value"
                       className="col-span-6 h-8 text-xs md:text-xs"
                     />

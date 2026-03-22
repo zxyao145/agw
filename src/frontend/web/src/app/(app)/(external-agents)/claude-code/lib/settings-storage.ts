@@ -30,10 +30,7 @@ const canUseStorage = () =>
   typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 
 const readStoredSettings = (): ClaudeSettingsStorageValues => {
-  const stored = parseJson<unknown>(
-    localStorage.getItem(STORAGE_KEY),
-    "settings",
-  );
+  const stored = parseJson<unknown>(localStorage.getItem(STORAGE_KEY), "settings");
   if (!stored) {
     return {};
   }
@@ -52,14 +49,8 @@ const mergeSettings = (
 
     // envVars 直接替换而非合并，支持删除操作
     envVars: updates.envVars !== undefined ? updates.envVars : next.envVars,
-    workingDirHistory: mergeUnique(
-      next.workingDirHistory,
-      updates.workingDirHistory,
-    ),
-    gitAddressHistory: mergeUnique(
-      next.gitAddressHistory,
-      updates.gitAddressHistory,
-    ),
+    workingDirHistory: mergeUnique(next.workingDirHistory, updates.workingDirHistory),
+    gitAddressHistory: mergeUnique(next.gitAddressHistory, updates.gitAddressHistory),
   };
 
   return res;

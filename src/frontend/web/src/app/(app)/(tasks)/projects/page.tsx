@@ -9,13 +9,7 @@ import { toast } from "sonner";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import type { components } from "@/api/openapi";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -168,9 +162,7 @@ export default function ProjectsPage() {
   });
 
   const [deleteOpen, setDeleteOpen] = React.useState(false);
-  const [deleteProject, setDeleteProject] = React.useState<ProjectDto | null>(
-    null,
-  );
+  const [deleteProject, setDeleteProject] = React.useState<ProjectDto | null>(null);
 
   const openDelete = React.useCallback((project: ProjectDto) => {
     setDeleteProject(project);
@@ -201,9 +193,7 @@ export default function ProjectsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">Projects</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage projects and their ordered tasks.
-          </p>
+          <p className="text-sm text-muted-foreground">Manage projects and their ordered tasks.</p>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -223,9 +213,7 @@ export default function ProjectsPage() {
             <DialogContent>
               <DialogHeader>
                 <UiDialogTitle>Create project</UiDialogTitle>
-                <UiDialogDescription>
-                  Create a project to group ordered tasks.
-                </UiDialogDescription>
+                <UiDialogDescription>Create a project to group ordered tasks.</UiDialogDescription>
               </DialogHeader>
 
               <div className="grid gap-4">
@@ -308,9 +296,7 @@ export default function ProjectsPage() {
                     createProjectMutation.mutate({
                       name,
                       description: description.length ? description : null,
-                      workspace: workspace.trim().length
-                        ? workspace.trim()
-                        : null,
+                      workspace: workspace.trim().length ? workspace.trim() : null,
                       enable,
                       extraSetting: normalizeJsonPayload(extraSetting),
                     });
@@ -360,9 +346,7 @@ export default function ProjectsPage() {
                 </div>
 
                 {p.description ? (
-                  <div className="text-sm text-muted-foreground">
-                    {p.description}
-                  </div>
+                  <div className="text-sm text-muted-foreground">{p.description}</div>
                 ) : null}
 
                 <div className="text-xs text-muted-foreground">
@@ -479,22 +463,14 @@ export default function ProjectsPage() {
                   id: editProjectId,
                   body: {
                     name: editName,
-                    description: editDescription.length
-                      ? editDescription
-                      : null,
-                    workspace: editWorkspace.trim().length
-                      ? editWorkspace.trim()
-                      : null,
+                    description: editDescription.length ? editDescription : null,
+                    workspace: editWorkspace.trim().length ? editWorkspace.trim() : null,
                     enable: editEnable,
                     extraSetting: normalizeJsonPayload(editExtraSetting),
                   },
                 });
               }}
-              disabled={
-                !editProjectId ||
-                !editName.trim() ||
-                updateProjectMutation.isPending
-              }
+              disabled={!editProjectId || !editName.trim() || updateProjectMutation.isPending}
             >
               {updateProjectMutation.isPending ? "Saving..." : "Save"}
             </Button>
@@ -507,8 +483,7 @@ export default function ProjectsPage() {
           <DialogHeader>
             <UiDialogTitle>Delete project</UiDialogTitle>
             <UiDialogDescription>
-              This will permanently delete the project and its tasks (cascade
-              delete).
+              This will permanently delete the project and its tasks (cascade delete).
             </UiDialogDescription>
           </DialogHeader>
 

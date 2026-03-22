@@ -3,7 +3,7 @@ import { GripVertical } from "lucide-react";
 import React, { FC, ReactElement } from "react";
 
 export interface ColSplitProps {
-    children: React.ReactNode;
+  children: React.ReactNode;
 }
 
 interface SlotProps {
@@ -21,14 +21,14 @@ interface ColResizeSplitComponent extends FC<ColSplitProps> {
   Right: FC<SlotProps>;
 }
 
-const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => {
+const ColResizeSplit: ColResizeSplitComponent = ({ children }: ColSplitProps) => {
   // 拆分 children，找到 left 和 right
   let left: React.ReactNode = null;
   let right: React.ReactNode = null;
   let leftProps: LeftSlotProps = { children: null };
   let rightProps: SlotProps = { children: null };
 
-    React.Children.forEach(children, (child) => {
+  React.Children.forEach(children, (child) => {
     if (!React.isValidElement(child)) return;
 
     // 这里做类型断言
@@ -43,7 +43,6 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => 
     }
   });
 
-
   const [isResizing, setIsResizing] = React.useState(false);
   const resizeRef = React.useRef<HTMLDivElement>(null);
   const [panelWidth, setPanelWidth] = React.useState(320);
@@ -53,14 +52,13 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => 
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
 
-      const containerRect =
-        resizeRef.current?.parentElement?.getBoundingClientRect();
+      const containerRect = resizeRef.current?.parentElement?.getBoundingClientRect();
       if (!containerRect) return;
 
       const newWidth = e.clientX - containerRect.left;
       const minWidth = leftProps?.minWidth ?? 200;
       const maxWidth = leftProps?.maxWidth ?? 600;
-      
+
       // Clamp between min 200px and max 600px
       setPanelWidth(Math.max(minWidth, Math.min(maxWidth, newWidth)));
     };
@@ -116,12 +114,10 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }:ColSplitProps) => 
       </div>
     </div>
   );
-}
-
+};
 
 // 定义命名插槽组件
 ColResizeSplit.Left = ({ children }) => children;
 ColResizeSplit.Right = ({ children }) => children;
-
 
 export default ColResizeSplit;

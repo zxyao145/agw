@@ -1,25 +1,25 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { ChevronDownIcon } from "lucide-react"
+import * as React from "react";
+import { ChevronDownIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import type { SearchableSelectOption } from "./types"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import type { SearchableSelectOption } from "./types";
 
 type SearchableSelectProps = {
-  id: string
-  label: string
-  value: string
-  onValueChange: (value: string) => void
-  options: SearchableSelectOption[]
-  placeholder: string
-  searchPlaceholder: string
-  disabled?: boolean
-  isLoading?: boolean
-  errorMessage?: string | null
-}
+  id: string;
+  label: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  options: SearchableSelectOption[];
+  placeholder: string;
+  searchPlaceholder: string;
+  disabled?: boolean;
+  isLoading?: boolean;
+  errorMessage?: string | null;
+};
 
 export function SearchableSelect({
   id,
@@ -33,53 +33,53 @@ export function SearchableSelect({
   isLoading,
   errorMessage,
 }: SearchableSelectProps) {
-  const [open, setOpen] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-  const rootRef = React.useRef<HTMLDivElement | null>(null)
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+  const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
-    if (!open) return
+    if (!open) return;
 
     const t = window.setTimeout(() => {
-      searchInputRef.current?.focus()
-    }, 0)
+      searchInputRef.current?.focus();
+    }, 0);
 
     const onPointerDown = (e: MouseEvent) => {
-      const el = rootRef.current
-      if (!el) return
+      const el = rootRef.current;
+      if (!el) return;
       if (e.target instanceof Node && !el.contains(e.target)) {
-        setOpen(false)
-        setSearch("")
+        setOpen(false);
+        setSearch("");
       }
-    }
+    };
 
-    document.addEventListener("mousedown", onPointerDown, true)
+    document.addEventListener("mousedown", onPointerDown, true);
 
     return () => {
-      window.clearTimeout(t)
-      document.removeEventListener("mousedown", onPointerDown, true)
-    }
-  }, [open])
+      window.clearTimeout(t);
+      document.removeEventListener("mousedown", onPointerDown, true);
+    };
+  }, [open]);
 
   const selected = React.useMemo(
     () => options.find((x) => x.value === value) ?? null,
-    [options, value]
-  )
+    [options, value],
+  );
 
   const filteredOptions = React.useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q.length) return options
+    const q = search.trim().toLowerCase();
+    if (!q.length) return options;
     return options.filter((opt) => {
-      const haystack = `${opt.title} ${opt.subtitle ?? ""} ${opt.value}`.toLowerCase()
-      return haystack.includes(q)
-    })
-  }, [options, search])
+      const haystack = `${opt.title} ${opt.subtitle ?? ""} ${opt.value}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [options, search]);
 
-  const triggerText = selected ? selected.title : placeholder
+  const triggerText = selected ? selected.title : placeholder;
 
   const itemClassName =
-    "flex w-full cursor-pointer select-none items-start gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+    "flex w-full cursor-pointer select-none items-start gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground";
 
   return (
     <div ref={rootRef} className="grid gap-2">
@@ -115,10 +115,10 @@ export function SearchableSelect({
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={searchPlaceholder}
                 onKeyDown={(e) => {
-                  e.stopPropagation()
+                  e.stopPropagation();
                   if (e.key === "Escape") {
-                    setOpen(false)
-                    setSearch("")
+                    setOpen(false);
+                    setSearch("");
                   }
                 }}
               />
@@ -135,9 +135,9 @@ export function SearchableSelect({
                     type="button"
                     className={`${itemClassName} text-muted-foreground`}
                     onClick={() => {
-                      onValueChange("")
-                      setOpen(false)
-                      setSearch("")
+                      onValueChange("");
+                      setOpen(false);
+                      setSearch("");
                     }}
                   >
                     Clear selection
@@ -145,9 +145,7 @@ export function SearchableSelect({
                 )}
 
                 {filteredOptions.length === 0 ? (
-                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                    No results.
-                  </div>
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">No results.</div>
                 ) : (
                   filteredOptions.map((opt) => (
                     <button
@@ -155,9 +153,9 @@ export function SearchableSelect({
                       type="button"
                       className={itemClassName}
                       onClick={() => {
-                        onValueChange(opt.value)
-                        setOpen(false)
-                        setSearch("")
+                        onValueChange(opt.value);
+                        setOpen(false);
+                        setSearch("");
                       }}
                     >
                       <div className="min-w-0">
@@ -177,5 +175,5 @@ export function SearchableSelect({
         )}
       </div>
     </div>
-  )
+  );
 }

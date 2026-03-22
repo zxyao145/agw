@@ -22,12 +22,7 @@ interface AgentsTableProps {
   onExecute: (agent: AgentDto) => void;
 }
 
-export function AgentsTable({
-  agentsQuery,
-  onEdit,
-  onDelete,
-  onExecute,
-}: AgentsTableProps) {
+export function AgentsTable({ agentsQuery, onEdit, onDelete, onExecute }: AgentsTableProps) {
   const agents = agentsQuery.data ?? [];
 
   if (agentsQuery.isLoading) {
@@ -85,12 +80,8 @@ export function AgentsTable({
                   {agent.type === 0 ? "System" : "External"}
                 </span>
               </TableCell>
-              <TableCell className="max-w-xs truncate">
-                {agent.description || "-"}
-              </TableCell>
-              <TableCell className="max-w-xs truncate">
-                {agent.systemPrompt || "-"}
-              </TableCell>
+              <TableCell className="max-w-xs truncate">{agent.description || "-"}</TableCell>
+              <TableCell className="max-w-xs truncate">{agent.systemPrompt || "-"}</TableCell>
               <TableCell className="max-w-xs">
                 {toolNames.length > 0 ? (
                   <span className="text-xs">
@@ -102,9 +93,7 @@ export function AgentsTable({
                 )}
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {agent.createTime
-                  ? new Date(agent.createTime).toLocaleString()
-                  : "-"}
+                {agent.createTime ? new Date(agent.createTime).toLocaleString() : "-"}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">

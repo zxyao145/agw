@@ -2,13 +2,7 @@
 
 import * as React from "react";
 import { FolderOutput, FolderInput, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import {
-  listFiles,
-  readFile,
-  getFileDiff,
-  type FileItem,
-  type GitDiffResponse,
-} from "@/api/files";
+import { listFiles, readFile, getFileDiff, type FileItem, type GitDiffResponse } from "@/api/files";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -36,8 +30,7 @@ export function FileExplorer({
   const [showFileExplorer, setShowFileExplorer] = React.useState(true);
   const [onlyDiff, setOnlyDiff] = React.useState(true);
   const [recursiveMode, setRecursiveMode] = React.useState(true);
-  const [diffContentData, setDiffContentData] =
-    React.useState<GitDiffResponse | null>(null);
+  const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
 
   const loadFileContent = React.useCallback(
     async (filePath: string) => {
@@ -68,7 +61,6 @@ export function FileExplorer({
     },
     [onlyDiff],
   );
-
 
   const handleOnFileDeleted = React.useCallback((filePath: string) => {
     if (filePath === selectedFile) {
@@ -132,11 +124,7 @@ export function FileExplorer({
           )}
         </Button>
         <div className="flex items-center gap-2">
-          <Switch
-            id="diff-mode"
-            checked={onlyDiff}
-            onCheckedChange={setOnlyDiff}
-          />
+          <Switch id="diff-mode" checked={onlyDiff} onCheckedChange={setOnlyDiff} />
           <Label htmlFor="diff-mode" className="text-sm cursor-pointer">
             Diff
           </Label>

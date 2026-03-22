@@ -46,9 +46,7 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
   return (await response.json()) as T;
 }
 
-function toChatSessionSummary(
-  task: ProjectTaskHistoryResponse,
-): ChatSessionRecordSummary {
+function toChatSessionSummary(task: ProjectTaskHistoryResponse): ChatSessionRecordSummary {
   return {
     id: task.id,
     projectId: task.projectId,
@@ -60,9 +58,7 @@ function toChatSessionSummary(
   };
 }
 
-function toChatSessionDetails(
-  task: ProjectTaskHistoryResponse,
-): ChatSessionRecordDetails {
+function toChatSessionDetails(task: ProjectTaskHistoryResponse): ChatSessionRecordDetails {
   const summary = toChatSessionSummary(task);
   return {
     ...summary,
@@ -80,22 +76,12 @@ async function findTaskBySessionId(
 
   const sessions = await getAllSessions(projectId);
   return (
-    sessions.find(
-      (session) =>
-        session.sessionId === sessionId ||
-        session.id === sessionId,
-    ) ?? null
+    sessions.find((session) => session.sessionId === sessionId || session.id === sessionId) ?? null
   );
 }
 
-async function clearTaskSessionById(
-  taskId: string,
-  projectId: string,
-): Promise<boolean> {
-  const url = buildTasksEndpoint(
-    projectId,
-    `/${encodeURIComponent(taskId)}/session`,
-  );
+async function clearTaskSessionById(taskId: string, projectId: string): Promise<boolean> {
+  const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(taskId)}/session`);
   const response = await fetch(url, { method: "DELETE" });
   if (response.status === 404) {
     return false;
@@ -107,9 +93,7 @@ async function clearTaskSessionById(
   return true;
 }
 
-export async function getAllSessions(
-  projectId: string,
-): Promise<ChatSessionRecordSummary[]> {
+export async function getAllSessions(projectId: string): Promise<ChatSessionRecordSummary[]> {
   const url = buildTasksEndpoint(projectId);
   const tasks = await fetchJson<ProjectTaskHistoryResponse[]>(url);
   return tasks.map(toChatSessionSummary);
@@ -168,10 +152,7 @@ export async function updateSessionTitle(
     return false;
   }
 
-  const url = buildTasksEndpoint(
-    projectId,
-    `/${encodeURIComponent(task.id)}/title`,
-  );
+  const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(task.id)}/title`);
   const response = await fetch(url, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -189,7 +170,5 @@ export async function updateSessionTitle(
 
 export async function clearAllSessions(projectId: string): Promise<void> {
   const sessions = await getAllSessions(projectId);
-  await Promise.all(
-    sessions.map((session) => clearTaskSessionById(session.id, projectId)),
-  );
+  await Promise.all(sessions.map((session) => clearTaskSessionById(session.id, projectId)));
 }

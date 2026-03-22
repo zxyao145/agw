@@ -34,4 +34,3 @@ export const MessageContentType = {
 } as const;
 
 export type MessageContentType = (typeof MessageContentType)[keyof typeof MessageContentType];
-

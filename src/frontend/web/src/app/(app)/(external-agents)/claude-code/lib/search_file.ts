@@ -5,7 +5,10 @@ import { searchFiles } from "@/api/files";
  * Search for files by keyword
  * Returns async suggestions with file paths prefixed with @
  */
-export async function searchFile(rootDirectory: string, keyword: string): Promise<SuggestionItem[]> {
+export async function searchFile(
+  rootDirectory: string,
+  keyword: string,
+): Promise<SuggestionItem[]> {
   if (!rootDirectory) {
     return [];
   }

@@ -142,18 +142,14 @@ const navItems: SidebarMenuGroupProps[] = [
 
 function getActiveNavLabel(pathname: string): MenuItem | undefined {
   const allNavItems = navItems.flatMap((group) => group.menus);
-  const match = allNavItems.find(
-    (x) => pathname === x.url || pathname.startsWith(`${x.url}/`),
-  );
+  const match = allNavItems.find((x) => pathname === x.url || pathname.startsWith(`${x.url}/`));
   return match;
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeMenu = getActiveNavLabel(pathname);
-  const [sidebarOpen, setSidebarOpen] = React.useState(
-    pathname !== "/claude-code",
-  );
+  const [sidebarOpen, setSidebarOpen] = React.useState(pathname !== "/claude-code");
 
   React.useEffect(() => {
     if (pathname === "/claude-code") {

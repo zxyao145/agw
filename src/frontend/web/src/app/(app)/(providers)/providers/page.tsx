@@ -1,25 +1,25 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
+import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import { apiGet } from "@/api/client"
+import { apiGet } from "@/api/client";
 
-import { ProvidersHeader } from "./components/providers-header"
-import { CreateProviderDialog } from "./components/create-provider-dialog"
-import { ProvidersTable } from "./components/providers-table"
-import type { ProviderDto } from "./components/types"
+import { ProvidersHeader } from "./components/providers-header";
+import { CreateProviderDialog } from "./components/create-provider-dialog";
+import { ProvidersTable } from "./components/providers-table";
+import type { ProviderDto } from "./components/types";
 
 export default function ProvidersPage() {
-  const [createOpen, setCreateOpen] = React.useState(false)
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   const providersQuery = useQuery({
     queryKey: ["providers"],
     queryFn: async () => {
       // OpenAPI currently doesn't declare response schemas.
-      return (await apiGet("/api/providers")) as unknown as ProviderDto[]
+      return (await apiGet("/api/providers")) as unknown as ProviderDto[];
     },
-  })
+  });
 
   return (
     <div className="space-y-6 w-full">
@@ -38,5 +38,5 @@ export default function ProvidersPage() {
 
       <CreateProviderDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
-  )
+  );
 }

@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Button } from "@/components/ui/button"
+import * as React from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -9,19 +9,19 @@ import {
   DialogDescription as UiDialogDescription,
   DialogHeader,
   DialogTitle as UiDialogTitle,
-} from "@/components/ui/dialog"
-import { VisualAgentflowBuilder } from "./visual-agentflow-builder"
-import { X } from "lucide-react"
+} from "@/components/ui/dialog";
+import { VisualAgentflowBuilder } from "./visual-agentflow-builder";
+import { X } from "lucide-react";
 import { AgentDto, AgentflowDetailDto, AgentflowDto } from "@/types/agentflow";
 
 type VisualAgentflowDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  agents: AgentDto[]
-  agentflows: AgentflowDto[]
-  editingAgentflow?: AgentflowDetailDto | null
-  onAgentflowCreated?: () => void
-}
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  agents: AgentDto[];
+  agentflows: AgentflowDto[];
+  editingAgentflow?: AgentflowDetailDto | null;
+  onAgentflowCreated?: () => void;
+};
 
 export function VisualAgentflowDialog({
   open,
@@ -32,9 +32,9 @@ export function VisualAgentflowDialog({
   onAgentflowCreated,
 }: VisualAgentflowDialogProps) {
   const handleAgentflowCreated = React.useCallback(() => {
-    onAgentflowCreated?.()
-    onOpenChange(false)
-  }, [onAgentflowCreated, onOpenChange])
+    onAgentflowCreated?.();
+    onOpenChange(false);
+  }, [onAgentflowCreated, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,5 +73,5 @@ export function VisualAgentflowDialog({
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

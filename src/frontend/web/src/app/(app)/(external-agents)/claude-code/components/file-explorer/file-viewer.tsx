@@ -13,16 +13,11 @@ export default function FileViewer({
   isDiffView,
   isOriginal,
 }: FileViewerProps) {
-  const [activeCommentLine, setActiveCommentLine] = React.useState<
-    number | null
-  >(null);
+  const [activeCommentLine, setActiveCommentLine] = React.useState<number | null>(null);
   const [hoveredLine, setHoveredLine] = React.useState<number | null>(null);
 
   const lines = React.useMemo(() => content.split("\n"), [content]);
-  const lineNumberWidth = React.useMemo(
-    () => String(lines.length).length,
-    [lines.length],
-  );
+  const lineNumberWidth = React.useMemo(() => String(lines.length).length, [lines.length]);
 
   const getCommentsForLine = React.useCallback(
     (lineNumber: number) => comments.filter((c) => c.lineIndex === lineNumber),
@@ -53,9 +48,7 @@ export default function FileViewer({
 
   const handleUpdateComment = (commentId: string, newContent: string) => {
     setComments((prev) =>
-      prev.map((c) =>
-        c.id === commentId ? { ...c, content: newContent } : c
-      )
+      prev.map((c) => (c.id === commentId ? { ...c, content: newContent } : c)),
     );
   };
 
@@ -96,9 +89,7 @@ export default function FileViewer({
                     <button
                       onClick={() => {
                         if (!hasComments) {
-                          setActiveCommentLine(
-                            isCommentActive ? null : lineNumber,
-                          );
+                          setActiveCommentLine(isCommentActive ? null : lineNumber);
                         }
                       }}
                       className={cn(
@@ -133,9 +124,7 @@ export default function FileViewer({
                 <CommentSection
                   lineComments={lineComments}
                   isCommentActive={isCommentActive}
-                  onAddComment={(content) =>
-                    handleAddComment(lineNumber, content)
-                  }
+                  onAddComment={(content) => handleAddComment(lineNumber, content)}
                   onDeleteComment={handleDeleteComment}
                   onUpdateComment={handleUpdateComment}
                   onSetActiveCommentLine={setActiveCommentLine}

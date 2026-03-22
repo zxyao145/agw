@@ -1,4 +1,3 @@
-
 export type ProjectTaskDto = {
   id: string;
   projectId: string;

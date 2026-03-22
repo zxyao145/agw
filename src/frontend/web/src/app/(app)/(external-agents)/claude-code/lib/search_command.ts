@@ -1,4 +1,3 @@
-
 // https://github.com/slopus/happy/blob/main/expo-app/sources/sync/suggestionCommands.ts
 
 import { SuggestionItem } from "@/components/message/user-input";
@@ -44,7 +43,11 @@ export const IGNORED_COMMANDS = [
 const DEFAULT_COMMANDS: SuggestionItem[] = [
   { text: "/compact", description: "Compact the conversation history" },
   { text: "/clear", description: "Clear the conversation" },
-  { text: "/status", description: "Show Claude Code status including version, model, account, API connectivity, and tool statuses" },
+  {
+    text: "/status",
+    description:
+      "Show Claude Code status including version, model, account, API connectivity, and tool statuses",
+  },
 ];
 
 // Command descriptions for known tools/commands
@@ -66,12 +69,13 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   // Add more descriptions as needed
 };
 
-export const searchCommand = (keyword: string, allCommands: string[]): Promise<SuggestionItem[]> => {
-  const commands: SuggestionItem[] = [
-    ...DEFAULT_COMMANDS
-  ];
+export const searchCommand = (
+  keyword: string,
+  allCommands: string[],
+): Promise<SuggestionItem[]> => {
+  const commands: SuggestionItem[] = [...DEFAULT_COMMANDS];
 
-  if(!allCommands){
+  if (!allCommands) {
     return Promise.resolve(commands);
   }
   // Add commands from metadata.slashCommands (filter with ignore list)

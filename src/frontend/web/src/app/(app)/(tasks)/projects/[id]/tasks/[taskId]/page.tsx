@@ -7,13 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { ProjectTaskDto } from "./types";
 import { Conversation } from "@/components/message/conversation";
@@ -73,8 +67,7 @@ export default function TaskDetailsPage() {
 
   const task = taskQuery.data;
   const targetType = task?.agentType === 0 ? "agent" : "agentflow";
-  const targetId =
-    targetType === "agent" ? (task?.agentId ?? null) : (task?.agentflowId ?? null);
+  const targetId = targetType === "agent" ? (task?.agentId ?? null) : (task?.agentflowId ?? null);
   const sessionId = task?.contextId ?? taskId;
 
   return (
@@ -83,32 +76,20 @@ export default function TaskDetailsPage() {
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-xl font-semibold">
-              {taskQuery.isLoading
-                ? "Loading task..."
-                : (task?.description ?? "Task")}
+              {taskQuery.isLoading ? "Loading task..." : (task?.description ?? "Task")}
             </h1>
             {task ? (
               <>
-                <span
-                  className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(
-                    task.status,
-                  )}`}
-                >
+                <span className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(task.status)}`}>
                   {task?.id}
                 </span>
-                <span
-                  className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(
-                    task.status,
-                  )}`}
-                >
+                <span className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(task.status)}`}>
                   {statusLabel(task.status)}
                 </span>
               </>
             ) : null}
           </div>
-          <div className="text-sm text-muted-foreground">
-            {task?.description ?? ""}
-          </div>
+          <div className="text-sm text-muted-foreground">{task?.description ?? ""}</div>
         </div>
 
         <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -119,11 +100,7 @@ export default function TaskDetailsPage() {
             {task && targetId && (
               <Button asChild variant="outline" size="sm">
                 <Link
-                  href={
-                    task.agentType === 0
-                      ? `/agents/${targetId}`
-                      : `/agentflows/${targetId}`
-                  }
+                  href={task.agentType === 0 ? `/agents/${targetId}` : `/agentflows/${targetId}`}
                 >
                   {task.agentType === 0 ? "Agent" : "Agentflow"}
                 </Link>
@@ -134,9 +111,7 @@ export default function TaskDetailsPage() {
       </div>
 
       {taskQuery.isLoading ? (
-        <div className="text-sm text-muted-foreground">
-          Loading task details...
-        </div>
+        <div className="text-sm text-muted-foreground">Loading task details...</div>
       ) : taskQuery.isError ? (
         <div className="text-sm text-destructive">
           Failed to load task: {getApiErrorMessage(taskQuery.error)}
@@ -169,7 +144,6 @@ export default function TaskDetailsPage() {
               </CardContent>
             </Card>
           ) : null}
-
         </div>
       ) : null}
     </div>

@@ -25,11 +25,7 @@ export function StaticTable({
     if (empty) {
       return empty;
     }
-    return (
-      <div className="text-sm text-muted-foreground">
-        {empty ? empty : "No data found."}
-      </div>
-    );
+    return <div className="text-sm text-muted-foreground">{empty ? empty : "No data found."}</div>;
   }
 
   let renderedHeader = header;
@@ -40,7 +36,7 @@ export function StaticTable({
   }
 
   const restChildrenArray = childrenArray.filter(
-    (child) => child != empty && child != header && child != body, 
+    (child) => child != empty && child != header && child != body,
   );
 
   return (

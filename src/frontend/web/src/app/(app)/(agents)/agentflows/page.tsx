@@ -7,13 +7,7 @@ import { toast } from "sonner";
 
 import { apiGet, apiPut, apiDelete } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -24,11 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { VisualAgentflowDialog } from "./components/visual-agentflow-dialog";
 import { AgentDto, AgentflowDto, AgentflowDetailDto } from "@/types/agentflow";
-import {
-  AgentflowsTable,
-  ExecuteAgentflowDrawer,
-  fetchAgentflowDetails,
-} from "./components";
+import { AgentflowsTable, ExecuteAgentflowDrawer, fetchAgentflowDetails } from "./components";
 import { Copy, X } from "lucide-react";
 
 export default function AgentflowsPage() {
@@ -51,21 +41,16 @@ export default function AgentflowsPage() {
   });
 
   const [visualOpen, setVisualOpen] = React.useState(false);
-  const [editingAgentflow, setEditingAgentflow] =
-    React.useState<AgentflowDetailDto | null>(null);
+  const [editingAgentflow, setEditingAgentflow] = React.useState<AgentflowDetailDto | null>(null);
 
   // Execute drawer state
   const [executeOpen, setExecuteOpen] = React.useState(false);
-  const [executingAgentflow, setExecutingAgentflow] =
-    React.useState<AgentflowDto | null>(null);
+  const [executingAgentflow, setExecutingAgentflow] = React.useState<AgentflowDto | null>(null);
 
   const [mermaidOpen, setMermaidOpen] = React.useState(false);
-  const [mermaidAgentflow, setMermaidAgentflow] =
-    React.useState<AgentflowDto | null>(null);
+  const [mermaidAgentflow, setMermaidAgentflow] = React.useState<AgentflowDto | null>(null);
   const [mermaidText, setMermaidText] = React.useState("");
-  const [mermaidRenderError, setMermaidRenderError] = React.useState<
-    string | null
-  >(null);
+  const [mermaidRenderError, setMermaidRenderError] = React.useState<string | null>(null);
   const [isMermaidLoading, setIsMermaidLoading] = React.useState(false);
   const mermaidContainerRef = React.useRef<HTMLDivElement | null>(null);
   const mermaidInitializedRef = React.useRef(false);
@@ -118,10 +103,7 @@ export default function AgentflowsPage() {
         const container = mermaidContainerRef.current;
         setMermaidRenderError(null);
         const renderId = `agentflow-mermaid-${crypto.randomUUID()}`;
-        const { svg, bindFunctions } = await mermaid.render(
-          renderId,
-          normalizedMermaidText,
-        );
+        const { svg, bindFunctions } = await mermaid.render(renderId, normalizedMermaidText);
 
         if (cancelled || !container) {
           return;
@@ -132,9 +114,7 @@ export default function AgentflowsPage() {
       } catch (error) {
         if (!cancelled) {
           setMermaidRenderError(
-            error instanceof Error
-              ? error.message
-              : "Failed to render Mermaid chart",
+            error instanceof Error ? error.message : "Failed to render Mermaid chart",
           );
           if (mermaidContainerRef.current) {
             mermaidContainerRef.current.innerHTML = "";
@@ -151,13 +131,7 @@ export default function AgentflowsPage() {
   }, [isMermaidLoading, mermaidOpen, normalizedMermaidText]);
 
   const updateAgentflowMutation = useMutation({
-    mutationFn: async ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: AgentflowDetailDto;
-    }) => {
+    mutationFn: async ({ id, body }: { id: string; body: AgentflowDetailDto }) => {
       return await apiPut("/api/agentflows/{id}", {
         params: { path: { id } },
         body,
@@ -209,9 +183,7 @@ export default function AgentflowsPage() {
 
   const handleDelete = React.useCallback(
     (agentflow: AgentflowDto) => {
-      if (
-        window.confirm(`Are you sure you want to delete "${agentflow.name}"?`)
-      ) {
+      if (window.confirm(`Are you sure you want to delete "${agentflow.name}"?`)) {
         deleteAgentflowMutation.mutate(agentflow.id);
       }
     },
@@ -250,44 +222,39 @@ export default function AgentflowsPage() {
     setExecuteOpen(true);
   }, []);
 
-  const handleViewMermaid = React.useCallback(
-    async (agentflow: AgentflowDto) => {
-      const requestId = mermaidRequestIdRef.current + 1;
-      mermaidRequestIdRef.current = requestId;
+  const handleViewMermaid = React.useCallback(async (agentflow: AgentflowDto) => {
+    const requestId = mermaidRequestIdRef.current + 1;
+    mermaidRequestIdRef.current = requestId;
 
-      setMermaidAgentflow(agentflow);
-      setMermaidText("");
-      setMermaidRenderError(null);
-      setMermaidOpen(true);
-      setIsMermaidLoading(true);
+    setMermaidAgentflow(agentflow);
+    setMermaidText("");
+    setMermaidRenderError(null);
+    setMermaidOpen(true);
+    setIsMermaidLoading(true);
 
-      try {
-        const result = await apiGet("/api/agentflows/mermaid/{id}", {
-          params: { path: { id: agentflow.id } },
-        });
+    try {
+      const result = await apiGet("/api/agentflows/mermaid/{id}", {
+        params: { path: { id: agentflow.id } },
+      });
 
-        if (mermaidRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        setMermaidText(
-          typeof result === "string" ? result : JSON.stringify(result, null, 2),
-        );
-      } catch {
-        if (mermaidRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        toast.error("Failed to load Mermaid chart text");
-        setMermaidText("");
-      } finally {
-        if (mermaidRequestIdRef.current === requestId) {
-          setIsMermaidLoading(false);
-        }
+      if (mermaidRequestIdRef.current !== requestId) {
+        return;
       }
-    },
-    [],
-  );
+
+      setMermaidText(typeof result === "string" ? result : JSON.stringify(result, null, 2));
+    } catch {
+      if (mermaidRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      toast.error("Failed to load Mermaid chart text");
+      setMermaidText("");
+    } finally {
+      if (mermaidRequestIdRef.current === requestId) {
+        setIsMermaidLoading(false);
+      }
+    }
+  }, []);
 
   const handleCopyMermaid = React.useCallback(async () => {
     const textToCopy = mermaidText.trim();
@@ -310,9 +277,7 @@ export default function AgentflowsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">Agentflows</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage agentflows and execute them.
-          </p>
+          <p className="text-sm text-muted-foreground">Manage agentflows and execute them.</p>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -325,10 +290,7 @@ export default function AgentflowsPage() {
             Refresh
           </Button>
 
-          <Button
-            className="cursor-pointer"
-            onClick={() => setVisualOpen(true)}
-          >
+          <Button className="cursor-pointer" onClick={() => setVisualOpen(true)}>
             Create
           </Button>
 
@@ -382,9 +344,7 @@ export default function AgentflowsPage() {
 
           <div className="relative overflow-auto rounded-md border bg-muted/30 p-4 h-full">
             {isMermaidLoading ? (
-              <p className="text-sm text-muted-foreground">
-                Loading Mermaid text...
-              </p>
+              <p className="text-sm text-muted-foreground">Loading Mermaid text...</p>
             ) : (
               <>
                 <Button
@@ -403,9 +363,7 @@ export default function AgentflowsPage() {
                     ref={mermaidContainerRef}
                   />
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No Mermaid content returned.
-                  </p>
+                  <p className="text-sm text-muted-foreground">No Mermaid content returned.</p>
                 )}
               </>
             )}

@@ -1,9 +1,6 @@
 import type { AiMessage } from "@/types";
 
-export type ExecutionWsUserInput = Pick<
-  AiMessage,
-  "messageId" | "author" | "contents"
->;
+export type ExecutionWsUserInput = Pick<AiMessage, "messageId" | "author" | "contents">;
 
 export type ExecutionWsRequest = {
   agentType: number;
@@ -24,7 +21,6 @@ function toWsOrigin(baseUrl: string): string {
 }
 
 function buildExecutionWsUrls(id: string): string[] {
-  
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const url = `${protocol}//${window.location.host}/api/executions/${id}/execute-ws`;
   const urls: string[] = [];
@@ -35,7 +31,7 @@ function buildExecutionWsUrls(id: string): string[] {
 function openExecutionWebSocket(
   wsUrl: string,
   request: ExecutionWsRequest,
-  onMessage: (data: string) => void
+  onMessage: (data: string) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
@@ -68,11 +64,7 @@ function openExecutionWebSocket(
         resolve();
         return;
       }
-      reject(
-        new Error(
-          event.reason || `WebSocket closed unexpectedly with code ${event.code}`
-        )
-      );
+      reject(new Error(event.reason || `WebSocket closed unexpectedly with code ${event.code}`));
     };
   });
 }
@@ -80,7 +72,7 @@ function openExecutionWebSocket(
 export async function executeWithWebSocket(
   id: string,
   request: ExecutionWsRequest,
-  onMessage: (data: string) => void
+  onMessage: (data: string) => void,
 ): Promise<void> {
   const urls = buildExecutionWsUrls(id);
   let lastError: Error | null = null;
@@ -90,8 +82,7 @@ export async function executeWithWebSocket(
       await openExecutionWebSocket(url, request, onMessage);
       return;
     } catch (error) {
-      lastError =
-        error instanceof Error ? error : new Error("WebSocket connection error");
+      lastError = error instanceof Error ? error : new Error("WebSocket connection error");
     }
   }
 

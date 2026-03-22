@@ -51,12 +51,7 @@ interface CreateAgentDialogProps {
   mcpToolServerSearchTerm: string;
   setMcpToolServerSearchTerm: (value: string) => void;
   filteredMcpToolServers: McpToolServerDto[];
-  createAgentMutation: UseMutationResult<
-    unknown,
-    Error,
-    AgentCreateRequest,
-    unknown
-  >;
+  createAgentMutation: UseMutationResult<unknown, Error, AgentCreateRequest, unknown>;
   toggleSkill: (skillId: string) => void;
   toggleTool: (toolName: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
@@ -161,15 +156,10 @@ export function CreateAgentDialog({
                 description,
                 systemPrompt,
                 modelProviderId,
-                tools:
-                  selectedTools.length > 0
-                    ? JSON.stringify(selectedTools)
-                    : null,
+                tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
                 skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
                 mcpToolServerIds:
-                  selectedMcpToolServerIds.length > 0
-                    ? selectedMcpToolServerIds
-                    : null,
+                  selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
               })
             }
             disabled={

@@ -6,13 +6,7 @@ import { toast } from "sonner";
 
 import { apiDelete } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -35,12 +29,7 @@ interface ModelsTableProps {
   error: unknown;
 }
 
-export function ModelsTable({
-  models,
-  isLoading,
-  isError,
-  error,
-}: ModelsTableProps) {
+export function ModelsTable({ models, isLoading, isError, error }: ModelsTableProps) {
   const queryClient = useQueryClient();
 
   const deleteModelMutation = useMutation({
@@ -87,22 +76,16 @@ export function ModelsTable({
           {models!.map((model) => (
             <TableRow key={model.id}>
               <TableCell className="font-medium">{model.name}</TableCell>
-              <TableCell className="max-w-xs truncate">
-                {model.description || "-"}
-              </TableCell>
+              <TableCell className="max-w-xs truncate">{model.description || "-"}</TableCell>
               <TableCell>
                 <div className="text-sm">{getModelTypeLabel(model.type)}</div>
                 {/* <div className="text-xs text-muted-foreground font-mono">
                       {model.type}
                     </div> */}
               </TableCell>
-              <TableCell className="text-right">
-                {model.maxTokens.toLocaleString()}
-              </TableCell>
+              <TableCell className="text-right">{model.maxTokens.toLocaleString()}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {model.createTime
-                  ? new Date(model.createTime).toLocaleString()
-                  : "-"}
+                {model.createTime ? new Date(model.createTime).toLocaleString() : "-"}
               </TableCell>
               <TableCell className="text-right">
                 <Button

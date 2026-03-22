@@ -58,9 +58,7 @@ export function QuickTextDialog({ quickCommands, onCommandSelect }: QuickTextDia
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="font-medium text-sm mb-1">{option.label}</div>
-                    <div className="text-xs text-muted-foreground mb-0">
-                      {option.description}
-                    </div>
+                    <div className="text-xs text-muted-foreground mb-0">{option.description}</div>
                     {/* <div className="text-xs bg-muted p-2 rounded font-mono">
                       {option.text}
                     </div> */}

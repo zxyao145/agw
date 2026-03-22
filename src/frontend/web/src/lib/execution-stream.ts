@@ -40,9 +40,7 @@ export function createUserTextMessage(input: string): AiMessage {
   };
 }
 
-export function toExecutionWsUserInput(
-  message: AiMessage,
-): ExecutionWsUserInput {
+export function toExecutionWsUserInput(message: AiMessage): ExecutionWsUserInput {
   return {
     messageId: message.messageId,
     author: message.author,
@@ -54,13 +52,8 @@ export function getMessageTextContent(message: AiMessage): string {
   return message.contents.find(isTextContent)?.content ?? "";
 }
 
-export function mergeStreamingMessage(
-  messages: AiMessage[],
-  incoming: AiMessage
-): AiMessage[] {
-  const existingIndex = messages.findIndex(
-    (message) => message.messageId === incoming.messageId
-  );
+export function mergeStreamingMessage(messages: AiMessage[], incoming: AiMessage): AiMessage[] {
+  const existingIndex = messages.findIndex((message) => message.messageId === incoming.messageId);
   if (existingIndex < 0) {
     return [...messages, cloneMessage(incoming)];
   }
@@ -72,8 +65,7 @@ export function mergeStreamingMessage(
 
   if (incomingText) {
     if (existingText) {
-      existingText.content =
-        (existingText.content || "") + (incomingText.content || "");
+      existingText.content = (existingText.content || "") + (incomingText.content || "");
     } else {
       existing.contents.push(cloneMessageContent(incomingText));
     }
@@ -93,7 +85,7 @@ export function mergeStreamingMessage(
 export function mergeStreamingMessagesById(messages: AiMessage[]): AiMessage[] {
   return messages.reduce<AiMessage[]>(
     (accumulator, message) => mergeStreamingMessage(accumulator, message),
-    []
+    [],
   );
 }
 
