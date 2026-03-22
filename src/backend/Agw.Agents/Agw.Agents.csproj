@@ -1,14 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="ClaudeCodeSdk.MAF" />
-    <PackageReference Include="Microsoft.Agents.AI" />
-    <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
-    <PackageReference Include="Microsoft.Agents.AI.Anthropic" />
-    <PackageReference Include="ModelContextProtocol" />
-    <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
-    <ProjectReference Include="..\Agw.Shared.Contract\Agw.Shared.Contract.csproj" />
-    <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
-    <ProjectReference Include="..\Agw.Tools\Agw.Tools.csproj" />
-  </ItemGroup>
+    <PropertyGroup>
+        <NoWarn>$(NoWarn);MAAI001</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <PackageReference Include="ClaudeCodeSdk.MAF" />
+        <PackageReference Include="Microsoft.Agents.AI" />
+        <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
+        <PackageReference Include="Microsoft.Agents.AI.Anthropic" />
+        <PackageReference Include="ModelContextProtocol" />
+        <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
+        <ProjectReference Include="..\Agw.Shared.Contract\Agw.Shared.Contract.csproj" />
+        <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
+        <ProjectReference Include="..\Agw.Tools\Agw.Tools.csproj" />
+    </ItemGroup>
 </Project>

@@ -22,6 +22,7 @@ using Agw.Skills.Services;
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Tasks;
 using Agw.Agents.ExternalAgents;
+using Agw.Skills;
 
 
 // Configure Serilog early in the pipeline
@@ -100,12 +101,6 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
 
-  
-    builder.Services.AddScoped<SkillDomainService>();
-    builder.Services.AddScoped<SkillAppService>();
-
-    builder.Services.AddScoped<A2AAgentService>();
-
     // add module
     builder.Services
         .AddA2A(builder.Configuration)
@@ -113,6 +108,7 @@ try
         .AddInfrastructure(builder.Configuration)
         .AddJobs(builder.Configuration)
         .AddProviders(builder.Configuration)
+        .AddSkills(builder.Configuration)
         .AddTasks(builder.Configuration)
         .AddTools(builder.Configuration)
         ;

@@ -482,7 +482,7 @@ public class AgentRuntimeService
         Provider provider,
         ProviderAuthConfig authConfig,
         IList<AITool>? tools,
-        FileAgentSkillsProvider? skillsProvider)
+        AIContextProvider? skillsProvider)
     {
         var apiKey = ResolveApiKey(authConfig);
         var credential = new ApiKeyCredential(apiKey);
@@ -522,7 +522,7 @@ public class AgentRuntimeService
         Provider provider,
         ProviderAuthConfig authConfig,
         IList<AITool>? tools,
-        FileAgentSkillsProvider? skillsProvider)
+        AIContextProvider? skillsProvider)
     {
         var anthropicClientOptions = new Anthropic.Core.ClientOptions
         {
@@ -846,7 +846,7 @@ public class AgentRuntimeService
         return _projectAppService.GetProjectExtraSettingAsync(projectId);
     }
 
-    private async Task<FileAgentSkillsProvider?> CreateSkillsProviderAsync(Guid agentId)
+    private async Task<AIContextProvider?> CreateSkillsProviderAsync(Guid agentId)
     {
         var relations = await _agentSkillRelationRepository.ListAsync(x => x.AgentId == agentId);
         if (relations.Count == 0)
