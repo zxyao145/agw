@@ -32,6 +32,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Agw.A2A\Agw.A2A.csproj" />
     <ProjectReference Include="..\Agw.Infrastructure\Agw.Infrastructure.csproj" />
+    <ProjectReference Include="..\Agw.Jobs\Agw.Jobs.csproj" />
   </ItemGroup>
 
   <ItemGroup>
