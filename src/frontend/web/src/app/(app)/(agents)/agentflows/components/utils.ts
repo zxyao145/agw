@@ -47,11 +47,9 @@ export function mergeMessages(messages: AiMessage[]): AiMessage[] {
 
 export async function fetchAgentflowDetails(id: string): Promise<AgentflowDetailDto> {
   const [nodes, edges] = await Promise.all([
-    // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
     apiGet("/api/agentflows/{id}/nodes", {
       params: { path: { id } },
     }),
-    // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
     apiGet("/api/agentflows/{id}/edges", {
       params: { path: { id } },
     }),

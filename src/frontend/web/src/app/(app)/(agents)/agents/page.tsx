@@ -169,7 +169,6 @@ export default function AgentsPage() {
 
   const deleteAgentMutation = useMutation({
     mutationFn: async (id: string) => {
-      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
       return await apiDelete("/api/agents/{id}", {
         params: { path: { id } },
       });

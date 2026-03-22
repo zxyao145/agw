@@ -28,6 +28,8 @@ export function AgentsTable({
   onDelete,
   onExecute,
 }: AgentsTableProps) {
+  const agents = agentsQuery.data ?? [];
+
   if (agentsQuery.isLoading) {
     return <div className="text-sm text-muted-foreground">Loading...</div>;
   }
@@ -40,7 +42,7 @@ export function AgentsTable({
   }
 
   return (
-    <StaticTable isEmpty={(agentsQuery.data?.length ?? 0) === 0}>
+    <StaticTable isEmpty={agents.length === 0}>
       <Empty>
         <div className="text-sm text-muted-foreground">
           No agents found. Create one to get started.
@@ -60,7 +62,7 @@ export function AgentsTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {agentsQuery.data.map((agent) => {
+        {agents.map((agent) => {
           let toolNames: string[] = [];
           try {
             toolNames = agent.tools ? JSON.parse(agent.tools) : [];

@@ -33,8 +33,6 @@ import { ProviderAuthConfigEditor } from "./provider-auth-config-editor";
 const providerTypeOptions: ProviderType[] = [
   "OpenAI",
   "Anthropic",
-  "GoogleGemini",
-  "GitHubCopilot",
 ];
 
 interface CreateProviderDialogProps {

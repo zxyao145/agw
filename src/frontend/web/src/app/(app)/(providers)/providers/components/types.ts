@@ -6,11 +6,7 @@ type OpenApiProviderCreateRequest =
 type OpenApiProviderUpdateRequest =
   components["schemas"]["ProviderUpdateRequest"];
 
-export type ProviderType =
-  | "OpenAI"
-  | "Anthropic"
-  | "GoogleGemini"
-  | "GitHubCopilot";
+export type ProviderType = components["schemas"]["ProviderType"];
 
 export type ProviderAuthType = "ApiKey" | "EnvVariable";
 

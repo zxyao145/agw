@@ -592,7 +592,9 @@ function SkillDialog({
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor={`${mode}-skill-description`}>Description</Label>
             <p className="text-xs text-muted-foreground">
-              If the frontmatter in SKILL.md does not include a "description"
+              If the frontmatter in SKILL.md does not include a
+              {" "}
+              &quot;description&quot;
               field, the value of this field will be used.
             </p>
             <Textarea

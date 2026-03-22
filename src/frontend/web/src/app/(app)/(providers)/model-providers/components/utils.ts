@@ -1,4 +1,4 @@
-import { ApiError, apiGet } from "@/api/client"
+import { ApiError } from "@/api/client"
 import type { ModelProviderApiKeyDto } from "./types"
 
 export function getApiErrorMessage(error: unknown): string {
@@ -31,11 +31,12 @@ export function parseFloatOrNull(value: string): number | null {
 export async function listKeysByPair(args: {
   modelProviderId: string
 }): Promise<ModelProviderApiKeyDto[]> {
-  // NOTE: openapi-typescript didn't generate query param types for this endpoint
-  // so we narrow the typing at the boundary.
-  return (await apiGet("/api/model-provider-keys", {
-    params: {
-      query: { modelProviderId: args.modelProviderId },
-    },
-  } as never)) as unknown as ModelProviderApiKeyDto[];
+  const params = new URLSearchParams({ modelProviderId: args.modelProviderId })
+  const response = await fetch(`/api/model-provider-keys?${params.toString()}`)
+
+  if (!response.ok) {
+    throw new Error(`Failed to load model provider keys for ${args.modelProviderId}`)
+  }
+
+  return (await response.json()) as ModelProviderApiKeyDto[]
 }

@@ -72,6 +72,7 @@ type McpToolItem = {
 
 type McpToolServerRequest = {
   name: string;
+  agentIds: string[] | null;
   description: string | null;
   transportType: string;
   command: string | null;
@@ -139,6 +140,7 @@ function toRequest(form: FormState): McpToolServerRequest {
 
   return {
     name: form.name.trim(),
+    agentIds: null,
     description: form.description.trim() || null,
     transportType,
     command: isStdio ? form.command.trim() || null : null,
@@ -233,7 +235,6 @@ export default function McpToolServersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
       return await apiDelete("/api/mcp-tool-servers/{id}", {
         params: { path: { id } },
       });
@@ -318,6 +319,7 @@ export default function McpToolServersPage() {
   const onToggleEnabled = (server: McpToolServerDto, checked: boolean) => {
     const body: McpToolServerRequest = {
       name: server.name,
+      agentIds: null,
       description: server.description ?? null,
       transportType: server.transportType,
       command: server.command ?? null,

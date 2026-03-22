@@ -38,8 +38,6 @@ import { getApiErrorMessage } from "./utils";
 const providerTypeOptions: ProviderType[] = [
   "OpenAI",
   "Anthropic",
-  "GoogleGemini",
-  "GitHubCopilot",
 ];
 
 interface EditProviderDialogProps {
@@ -88,7 +86,6 @@ export function EditProviderDialog({
       if (!provider) {
         throw new Error("Provider is required");
       }
-      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
       return await apiPut("/api/providers/{id}", {
         params: { path: { id: provider.id } },
         body,

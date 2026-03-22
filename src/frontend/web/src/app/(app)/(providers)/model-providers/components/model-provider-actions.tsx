@@ -28,7 +28,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ButtonGroup } from "@/components/ui/button-group"
-import type { ApiKeyCreateRequest, ApiKeyUpdateRequest } from "./types"
 import { getApiErrorMessage, listKeysByPair } from "./utils"
 import { Switch } from "./switch"
 
@@ -49,14 +48,19 @@ export function ModelProviderActions({
     mutationFn: async () => {
       const keys = await listKeysByPair({ modelProviderId })
       await Promise.all(
-        keys.map((k) =>
-          // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
-          apiDelete("/api/model-provider-keys/{id}", { params: { path: { id: k.id } } })
-        )
+        keys.map(async (k) => {
+          const response = await fetch(
+            `/api/model-provider-keys/${encodeURIComponent(k.id)}`,
+            { method: "DELETE" }
+          )
+
+          if (!response.ok) {
+            throw new Error(`Failed to delete API key ${k.id}`)
+          }
+        })
       )
-      // @ts-expect-error - OpenAPI schema has incorrect top-level path parameters definition
-      await apiDelete("/api/model-providers/{modelProviderId}", {
-        params: { path: { modelProviderId } },
+      await apiDelete("/api/model-providers/{id}", {
+        params: { path: { id: modelProviderId } },
       })
     },
     onSuccess: async () => {

@@ -3,9 +3,6 @@ import type { components } from "@/api/openapi"
 export type ModelProviderCreateRequest =
   components["schemas"]["ModelProviderCreateRequest"]
 
-export type ApiKeyCreateRequest = components["schemas"]["ApiKeyCreateRequest"]
-export type ApiKeyUpdateRequest = components["schemas"]["ApiKeyUpdateRequest"]
-
 export type ModelProviderDto = {
   id: string
   modelId: string
