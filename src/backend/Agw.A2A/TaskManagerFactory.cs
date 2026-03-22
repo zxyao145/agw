@@ -40,7 +40,6 @@ public class TaskManagerFactory
         return taskManager;
     }
 
-
     public async Task<ITaskManager> GetTaskManager(string agentName)
     {
         if (_taskManagers.ContainsKey(agentName))
@@ -95,7 +94,6 @@ public class TaskManagerFactory
             ?? string.Empty;
 
         _logger.LogInformation($"[CLI Agent] Received command: {userText}");
-
 
         try
         {

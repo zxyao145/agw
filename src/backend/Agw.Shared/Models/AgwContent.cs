@@ -20,16 +20,13 @@ public abstract class AgwContent
     public abstract string Kind { get; }
 
     public AdditionalPropertiesDictionary? AdditionalProperties { get; set; }
-
 }
-
 
 public class AgwTextContent : AgwContent
 {
     public override string Kind => AiMessageContentType.TextContent;
 
     public string? Content { get; set; }
-
 }
 
 public class AgwTextReasoningContent : AgwContent
@@ -112,13 +109,10 @@ public class AgwUriContent : AgwContent
         }
     }
 
-
-
     public AgwUriContent(string uri, string mediaType)
         : this(new Uri(ThrowUtil.IfNull(uri, "uri")), mediaType)
     {
     }
-
 
     [JsonConstructor]
     public AgwUriContent(Uri uri, string mediaType)
@@ -181,4 +175,3 @@ public class AgwUriContent : AgwContent
         return MediaTypeHeaderValue.TryParse(mediaType, out _);
     }
 }
-

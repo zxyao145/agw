@@ -13,8 +13,6 @@ public class AgentflowNode : BaseEntity
 
     public Guid RelateId { get; set; }
 
-
-
     public ICollection<AgentflowEdge> SourceEdges { get; set; } = new List<AgentflowEdge>();
     public ICollection<AgentflowEdge> TargetEdges { get; set; } = new List<AgentflowEdge>();
 }

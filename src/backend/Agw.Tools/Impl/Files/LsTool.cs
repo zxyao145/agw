@@ -1,12 +1,8 @@
 ﻿using Agw.Tools.Abstractions;
 using Microsoft.Extensions.AI;
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Text;
 
 namespace Agw.Tools.Impl.Files;
-
 
 public class LsToolParams
 {
@@ -16,7 +12,6 @@ public class LsToolParams
         """
     )]
     public string Directory { get; set; } = "";
-
 
     [Description(
         """
@@ -35,7 +30,6 @@ public class LsToolParams
     public bool Recursion { get; set; } = false;
 }
 
-
 public class LsToolResult
 {
     public List<string> Files { get; set; } = new();
@@ -47,7 +41,7 @@ internal class LsTool : IAgwTool
 
     [Description(
         """
-        Returns the names of files (including their paths) that match the specified search 
+        Returns the names of files (including their paths) that match the specified search
         pattern in the specified directory, using a value to determine whether to search subdirectories.
         """
     )]
@@ -78,5 +72,4 @@ internal class LsTool : IAgwTool
         var aiTool = AIFunctionFactory.Create(func, Name);
         return aiTool;
     }
-
 }

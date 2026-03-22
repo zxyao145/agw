@@ -1,4 +1,4 @@
-namespace Agw.Domain.Repositories;
+namespace Agw.Shared.Abstractions.Repositories;
 
 public interface IUnitOfWork
 {

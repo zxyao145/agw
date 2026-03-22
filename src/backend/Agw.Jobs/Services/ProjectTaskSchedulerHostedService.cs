@@ -4,7 +4,6 @@ using Agw.Domain.Entities;
 using Agw.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Enums;
-using Agw.Shared.Models;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Agw.Tasks.Services;
@@ -42,7 +41,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ProjectTaskSchedulerHostedService> _logger;
-    
+
     private readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(2);
     private readonly int _maxProjectConcurrency = 4;
 
@@ -291,7 +290,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
             }
             finally
             {
-                if(agentTaskRunActivity != null)
+                if (agentTaskRunActivity != null)
                 {
                     agentTaskRunActivity.Stop();
                 }

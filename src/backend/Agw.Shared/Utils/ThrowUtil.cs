@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Text;
 
 namespace Agw.Shared.Utils;
 
@@ -26,7 +23,6 @@ internal class ThrowUtil
         throw new ArgumentNullException(paramName);
     }
 
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [return: NotNull]
     public static string IfNullOrWhitespace([NotNull] string? argument, [CallerArgumentExpression("argument")] string paramName = "")
@@ -46,11 +42,9 @@ internal class ThrowUtil
         return argument;
     }
 
-
     [DoesNotReturn]
     public static void ArgumentException(string paramName, string? message)
     {
         throw new ArgumentException(message, paramName);
     }
-
 }

@@ -15,6 +15,4 @@ public class AgentflowEdge : BaseEntity
 
     public virtual AgentflowNode SourceNode { get; set; } = null!;
     public virtual AgentflowNode TargetNode { get; set; } = null!;
-
-
 }

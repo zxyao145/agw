@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace Agw.Domain.Repositories;
+namespace Agw.Shared.Abstractions.Repositories;
 
 public interface IRepository<TEntity> where TEntity : class
 {

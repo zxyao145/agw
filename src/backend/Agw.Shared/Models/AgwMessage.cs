@@ -28,7 +28,7 @@ public record AgwMessage
         Author = author;
         Role = role;
         Contents = contents;
-        AdditionalProperties = additionalProperties;        
+        AdditionalProperties = additionalProperties;
     }
 
     public AgwMessage(

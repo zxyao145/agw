@@ -7,5 +7,6 @@ public interface IAgwTool
     string Category => "Default";
 
     string Name { get; }
+
     AITool ToAITool();
 }

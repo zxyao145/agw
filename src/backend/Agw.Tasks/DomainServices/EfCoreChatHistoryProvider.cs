@@ -1,6 +1,5 @@
 using Agw.Shared;
 using Agw.Shared.Enums;
-using Agw.Shared.Models;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Microsoft.Agents.AI;
@@ -20,13 +19,12 @@ internal partial class ChatHistoryProviderStateJsonContext : JsonSerializerConte
 {
 }
 
-
 /// <summary>
 /// Persists agent chat history in EF Core while keeping the conversation key in session state.
 /// </summary>
 public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSessionState
 {
-    private static readonly JsonSerializerOptions DefaultJsonSerializerOptions = new (JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerOptions DefaultJsonSerializerOptions = new(JsonSerializerDefaults.Web)
     {
         TypeInfoResolver = JsonTypeInfoResolver.Combine(
         ChatHistoryProviderStateJsonContext.Default,
@@ -68,7 +66,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentException.ThrowIfNullOrWhiteSpace(contextId);
-        if(Guid.TryParse(contextId, out var guidContextId))
+        if (Guid.TryParse(contextId, out var guidContextId))
         {
             contextId = guidContextId.Normalize();
         }

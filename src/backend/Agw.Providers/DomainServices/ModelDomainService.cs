@@ -18,4 +18,3 @@ public class ModelDomainService
         model.UpdateTime = DateTime.UtcNow;
     }
 }
-

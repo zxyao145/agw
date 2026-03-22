@@ -96,6 +96,7 @@ public static class DA2AJsonRpcProcessor
                 var a2aResponse = await taskManager.SendMessageAsync(taskSendParams, cancellationToken).ConfigureAwait(false);
                 response = JsonRpcResponse.CreateJsonRpcResponse(requestId, a2aResponse);
                 break;
+
             case A2AMethods.TaskGet:
                 var taskIdParams = DeserializeAndValidate<TaskQueryParams>(parameters.Value);
                 var getAgentTask = await taskManager.GetTaskAsync(taskIdParams, cancellationToken).ConfigureAwait(false);
@@ -103,21 +104,25 @@ public static class DA2AJsonRpcProcessor
                     ? JsonRpcResponse.TaskNotFoundResponse(requestId)
                     : JsonRpcResponse.CreateJsonRpcResponse(requestId, getAgentTask);
                 break;
+
             case A2AMethods.TaskCancel:
                 var taskIdParamsCancel = DeserializeAndValidate<TaskIdParams>(parameters.Value);
                 var cancelledTask = await taskManager.CancelTaskAsync(taskIdParamsCancel, cancellationToken).ConfigureAwait(false);
                 response = JsonRpcResponse.CreateJsonRpcResponse(requestId, cancelledTask);
                 break;
+
             case A2AMethods.TaskPushNotificationConfigSet:
                 var taskPushNotificationConfig = DeserializeAndValidate<TaskPushNotificationConfig>(parameters.Value);
                 var setConfig = await taskManager.SetPushNotificationAsync(taskPushNotificationConfig, cancellationToken).ConfigureAwait(false);
                 response = JsonRpcResponse.CreateJsonRpcResponse(requestId, setConfig);
                 break;
+
             case A2AMethods.TaskPushNotificationConfigGet:
                 var notificationConfigParams = DeserializeAndValidate<GetTaskPushNotificationConfigParams>(parameters.Value);
                 var getConfig = await taskManager.GetPushNotificationAsync(notificationConfigParams, cancellationToken).ConfigureAwait(false);
                 response = JsonRpcResponse.CreateJsonRpcResponse(requestId, getConfig);
                 break;
+
             default:
                 response = JsonRpcResponse.MethodNotFoundResponse(requestId);
                 break;
@@ -182,10 +187,12 @@ public static class DA2AJsonRpcProcessor
                 var taskIdParams = DeserializeAndValidate<TaskIdParams>(parameters.Value);
                 var taskEvents = taskManager.SubscribeToTaskAsync(taskIdParams, cancellationToken);
                 return new JsonRpcStreamedResult(taskEvents, requestId);
+
             case A2AMethods.MessageStream:
                 var taskSendParams = DeserializeAndValidate<MessageSendParams>(parameters.Value);
                 var sendEvents = taskManager.SendMessageStreamingAsync(taskSendParams, cancellationToken);
                 return new JsonRpcStreamedResult(sendEvents, requestId);
+
             default:
                 activity?.SetStatus(ActivityStatusCode.Error, "Invalid method");
                 return new JsonRpcResponseResult(JsonRpcResponse.MethodNotFoundResponse(requestId));

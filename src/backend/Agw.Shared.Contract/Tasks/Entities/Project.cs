@@ -1,5 +1,3 @@
-using Agw.Shared;
-
 namespace Agw.Shared.Tasks.Entities;
 
 public class Project : BaseEntity

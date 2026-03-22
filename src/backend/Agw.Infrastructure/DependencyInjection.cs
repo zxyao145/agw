@@ -2,8 +2,8 @@ using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Infrastructure.Services;
-using Agw.Domain.Repositories;
 using Agw.Jobs.Services;
+using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -29,6 +29,7 @@ public static class DependencyInjection
                     options.UseNpgsql(settings.ConnectionString)
                         .UseSnakeCaseNamingConvention();
                     break;
+
                 default:
                     options.UseSqlite(string.IsNullOrWhiteSpace(settings.ConnectionString)
                         ? "Data Source=d_system.db"
@@ -41,7 +42,6 @@ public static class DependencyInjection
 
         // Register database seeder
         services.AddScoped<ClaudeCodeAgentDbSeeder>();
-
 
         services.AddScoped<DbContext, LlmDbContext>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));

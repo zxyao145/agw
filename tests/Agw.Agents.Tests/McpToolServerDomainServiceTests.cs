@@ -1,6 +1,5 @@
 using Agw.Domain.Entities;
 using Agw.Domain.Services.Agents;
-using Xunit;
 
 namespace Agw.Agents.Tests;
 

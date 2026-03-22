@@ -1,10 +1,7 @@
 ﻿using A2A;
-using A2A.AspNetCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -294,7 +291,7 @@ internal class DA2AHttpProcessor
             A2AErrorCode.InvalidParams or
             A2AErrorCode.ParseError => Results.Problem(detail: exception.Message, statusCode: StatusCodes.Status400BadRequest),
 
-            // Return HTTP 400 for now. Later we may want to return 501 Not Implemented in case 
+            // Return HTTP 400 for now. Later we may want to return 501 Not Implemented in case
             // push notifications are advertised by agent card(AgentCard.capabilities.pushNotifications: true)
             // but there's no server-side support for them.
             A2AErrorCode.PushNotificationNotSupported => Results.Problem(detail: exception.Message, statusCode: StatusCodes.Status400BadRequest),
@@ -309,8 +306,6 @@ internal class DA2AHttpProcessor
         };
     }
 }
-
-
 
 /// <summary>
 /// Result type for returning A2A responses as JSON in HTTP responses.
@@ -407,7 +402,7 @@ internal sealed class A2AEventStreamResult : IResult
     }
 }
 
-static partial class Log
+internal static partial class Log
 {
     [LoggerMessage(0, LogLevel.Error, "Unexpected error in {ActivityName}")]
     internal static partial void UnexpectedErrorInActivityName(this ILogger logger, Exception exception, string ActivityName);

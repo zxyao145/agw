@@ -1,4 +1,5 @@
 using Agw.Shared.Models;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -26,7 +27,6 @@ public static class AgentRunResponseUpdateExtensions
             chatMessage.AdditionalProperties
         );
     }
-
 
     /// <summary>
     /// Convert AgentResponseUpdate to AiMessage DTO.

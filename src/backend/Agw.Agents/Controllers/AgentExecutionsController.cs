@@ -1,14 +1,14 @@
 using Agw.Api.Contracts;
-using Agw.Appliaction.Services.Agents;
 using Agw.Appliaction.Services.Agentflows;
+using Agw.Appliaction.Services.Agents;
 using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
+using Agw.Shared.Utils;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using System.IO;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -175,6 +175,7 @@ public class AgentExecutionsController : ControllerBase
                 }
 
                 break;
+
             case ProjectTaskAgentType.Agentflow:
                 await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
                                    id,
@@ -189,6 +190,7 @@ public class AgentExecutionsController : ControllerBase
                 }
 
                 break;
+
             default:
                 await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Invalid AgentType.");
                 break;

@@ -14,19 +14,15 @@ public class ReadFileParam
     public string FilePath { get; set; } = "";
 }
 
-
-
 public class ReadFileResult
 {
     public string Content { get; set; } = "";
 }
 
-
 internal class ReadFileTool : IAgwTool
 {
     public string Name => "read_file";
     public bool ApprovalRequired => false;
-
 
     [Description(
         """
@@ -58,7 +54,7 @@ internal class ReadFileTool : IAgwTool
     {
         Func<ReadFileParam, ReadFileResult> func = Execute;
         var aiTool = AIFunctionFactory.Create(func, Name);
-        if(ApprovalRequired)
+        if (ApprovalRequired)
         {
 #pragma warning disable MEAI001 // 类型仅用于评估，在将来的更新中可能会被更改或删除。取消此诊断以继续。
             aiTool = new ApprovalRequiredAIFunction(aiTool);

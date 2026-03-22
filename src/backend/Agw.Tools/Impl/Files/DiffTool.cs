@@ -22,15 +22,12 @@ public class DiffToolParams
     """
     )]
     public string After { get; set; } = "";
-
 }
 
-
-public class DiffToolResult 
+public class DiffToolResult
 {
     public string Result { get; set; } = "";
 }
-
 
 internal class DiffTool : IAgwTool
 {
@@ -53,9 +50,11 @@ internal class DiffTool : IAgwTool
                 case ChangeType.Inserted:
                     sb.Append("+ ");
                     break;
+
                 case ChangeType.Deleted:
                     sb.Append("- ");
                     break;
+
                 default:
                     sb.Append("  ");
                     break;
@@ -71,12 +70,10 @@ internal class DiffTool : IAgwTool
         return res;
     }
 
-
     public AITool ToAITool()
     {
         Func<DiffToolParams, DiffToolResult> func = Execute;
         var aiTool = AIFunctionFactory.Create(func, Name);
         return aiTool;
     }
-
 }

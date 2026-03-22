@@ -1,8 +1,6 @@
 ﻿using A2A;
-using Agw.Domain.Entities;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,9 +12,7 @@ namespace Agw.A2A;
 
 public static class A2ARoutesBuilderExtensions
 {
-    const string PathPlaceholder = "{agentName}";
-
-
+    private const string PathPlaceholder = "{agentName}";
 
     /// <summary>
     /// Activity source for tracing A2A endpoint operations.
@@ -36,8 +32,6 @@ public static class A2ARoutesBuilderExtensions
 
         var loggerFactory = endpoints.ServiceProvider.GetRequiredService<ILoggerFactory>();
         var logger = loggerFactory.CreateLogger<IEndpointRouteBuilder>();
-
-
 
         if (!agentPath.Contains(PathPlaceholder))
         {
@@ -63,8 +57,6 @@ public static class A2ARoutesBuilderExtensions
             var agentCard = await taskManager.OnAgentCardQuery(agentUrl, cancellationToken);
             return Results.Ok(agentCard);
         });
-
-
 
         routeGroup.MapPost(agentPath, async (HttpRequest request, CancellationToken cancellationToken) =>
             {

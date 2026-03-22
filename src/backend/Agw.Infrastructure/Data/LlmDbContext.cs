@@ -1,5 +1,4 @@
 using Agw.Domain.Entities;
-using Agw.Shared.Models;
 using Agw.Shared.Tasks.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -73,7 +72,6 @@ public class LlmDbContext : DbContext
                 .HasForeignKey(e => e.ProviderId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
-
 
         modelBuilder.Entity<ProviderAuthConfig>(entity =>
         {
@@ -239,7 +237,6 @@ public class LlmDbContext : DbContext
                 v => string.IsNullOrWhiteSpace(v)
                     ? new Dictionary<string, string>()
                     : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new Dictionary<string, string>());
-
         });
 
         modelBuilder.Entity<AgentMcpToolServer>(entity =>

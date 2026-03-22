@@ -5,6 +5,7 @@ using Agw.Infrastructure.Data;
 using Agw.Jobs;
 using Agw.Manager.Api.Controllers;
 using Agw.Providers;
+using Agw.Skills;
 using Agw.Tasks;
 using Agw.Tools;
 using OpenTelemetry.Logs;
@@ -14,16 +15,6 @@ using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Enrichers.OpenTelemetry;
-using System.Configuration;
-using System.Runtime;
-using Microsoft.Agents.AI;
-using Agw.Tasks.Services;
-using Agw.Skills.Services;
-using Agw.Domain.Services.Skills;
-using Agw.Shared.Tasks;
-using Agw.Agents.ExternalAgents;
-using Agw.Skills;
-
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()

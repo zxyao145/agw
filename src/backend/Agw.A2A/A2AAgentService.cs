@@ -1,7 +1,7 @@
 using A2A;
 using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Entities;
-using Agw.Domain.Repositories;
+using Agw.Shared.Abstractions.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Options;
 
@@ -15,7 +15,6 @@ public class A2AAgentService
     private readonly AgentRuntimeService _agentRuntimeService;
     private readonly IRepository<Agent> _agentRepository;
     private readonly A2AServerOptions _a2AServerOptions;
-
 
     public A2AAgentService(
         AgentRuntimeService agentRuntimeService,
@@ -79,5 +78,3 @@ public class A2AAgentService
         return card;
     }
 }
-
-

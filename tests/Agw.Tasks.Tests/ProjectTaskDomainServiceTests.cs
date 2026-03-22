@@ -1,9 +1,9 @@
-using System.Text.Json;
 using Agw.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Tasks.Entities;
 using Microsoft.Extensions.AI;
+using System.Text.Json;
 
 namespace Agw.Tasks.Tests;
 

@@ -1,5 +1,5 @@
-﻿using Agw.Domain.Repositories;
-using Agw.Domain.Services;
+﻿using Agw.Domain.Services;
+using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using System.Linq.Expressions;

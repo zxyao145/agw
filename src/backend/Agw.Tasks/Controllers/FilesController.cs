@@ -2,7 +2,6 @@ using Agw.Shared.Contracts;
 using Agw.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using System.IO;
 
 namespace Agw.Api.Controllers;
 
@@ -395,6 +394,7 @@ public class FilesController : ControllerBase
     {
         "node_modules",
     };
+
     private static HashSet<string> IgnoreFiles = new HashSet<string>()
     {
         "tmpclaude*",

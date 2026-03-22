@@ -18,4 +18,3 @@ public class ModelProviderDomainService
         entity.UpdateTime = DateTime.UtcNow;
     }
 }
-

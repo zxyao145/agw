@@ -3,6 +3,7 @@
 public class A2AServerOptions
 {
     private string _prefix = "/api/a2a";
+
     public string Prefix
     {
         get => _prefix;

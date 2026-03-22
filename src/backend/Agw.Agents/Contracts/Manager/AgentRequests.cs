@@ -1,6 +1,5 @@
 using Agw.Appliaction.Services.Agents;
 using Agw.Shared.Models;
-using Microsoft.Extensions.AI;
 
 namespace Agw.Manager.Api.Contracts;
 

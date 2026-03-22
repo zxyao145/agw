@@ -28,7 +28,7 @@ public readonly struct AiRole : IEquatable<AiRole>
 
     /// <summary>Gets the role that provides additional information and references in response to tool use requests.</summary>
     public static AiRole Tool { get; } = new("tool");
-    
+
     public static AiRole Empty { get; } = new("");
 
     /// <summary>

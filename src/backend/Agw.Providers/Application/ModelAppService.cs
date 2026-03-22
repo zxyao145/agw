@@ -1,7 +1,7 @@
 using Agw.Domain.Entities;
-using Agw.Domain.Repositories;
 using Agw.Domain.Services;
 using Agw.Manager.Api.Contracts;
+using Agw.Shared.Abstractions.Repositories;
 
 namespace Agw.Providers.Application;
 

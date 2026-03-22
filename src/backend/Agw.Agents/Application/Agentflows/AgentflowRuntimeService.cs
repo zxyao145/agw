@@ -1,8 +1,8 @@
 using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Entities;
-using Agw.Domain.Repositories;
 using Agw.Domain.Services.Agentflows;
 using Agw.Shared;
+using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Microsoft.Agents.AI;
@@ -247,9 +247,11 @@ public class AgentflowRuntimeService
                 case ExecutorInvokedEvent invoke:
                     _logger.LogInformation("Starting {ExecutorId}", invoke.ExecutorId);
                     break;
+
                 case ExecutorCompletedEvent complete:
                     _logger.LogInformation("Completed {ExecutorId}, {Data}", complete.ExecutorId, complete.Data);
                     break;
+
                 case AgentResponseUpdateEvent updateEvt when updateEvt.Data is AgentResponseUpdate update:
                     _logger.LogInformation("AgentResponseUpdateEvent {ExecutorId}, {Data}", updateEvt.ExecutorId, updateEvt.Data);
                     var chatMsg = update.ToAiMessage();
@@ -258,9 +260,11 @@ public class AgentflowRuntimeService
                         yield return chatMsg;
                     }
                     break;
+
                 case WorkflowOutputEvent output:
                     _logger.LogInformation("Workflow output: {Data}", output.Data);
                     break;
+
                 case WorkflowErrorEvent error:
                     _logger.LogError(error.Exception, "Workflow error");
                     break;

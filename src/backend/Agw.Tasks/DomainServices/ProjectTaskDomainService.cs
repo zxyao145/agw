@@ -1,7 +1,7 @@
 using Agw.Shared;
 using Agw.Shared.Enums;
-using Microsoft.Extensions.AI;
 using Agw.Shared.Tasks.Entities;
+using Microsoft.Extensions.AI;
 using System.Text.Json;
 
 namespace Agw.Domain.Services;

@@ -1,4 +1,4 @@
-using Agw.Domain.Repositories;
+using Agw.Shared.Abstractions.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Repositories;
@@ -14,4 +14,3 @@ public class UnitOfWork : IUnitOfWork
 
     public Task<int> SaveChangesAsync() => _dbContext.SaveChangesAsync();
 }
-

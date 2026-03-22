@@ -10,7 +10,6 @@ public static class DependencyInjection
         services.AddScoped<A2AAgentService>();
         services.Configure<A2AServerOptions>(o =>
         {
-
         });
 
         services.AddSingleton<TaskManagerFactory>(sp =>

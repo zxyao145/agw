@@ -1,7 +1,4 @@
-using Agw.Domain.Repositories;
 using Agw.Jobs.Services;
-using Agw.Shared.Services;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 

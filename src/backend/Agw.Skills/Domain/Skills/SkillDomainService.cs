@@ -1,5 +1,5 @@
-using System.Text.RegularExpressions;
 using Agw.Domain.Entities;
+using System.Text.RegularExpressions;
 
 namespace Agw.Domain.Services.Skills;
 

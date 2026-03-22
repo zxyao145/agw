@@ -1,12 +1,12 @@
-using System.IO.Compression;
-using System.Text;
 using Agw.Domain.Entities;
-using Agw.Domain.Repositories;
 using Agw.Domain.Services.Skills;
+using Agw.Shared.Abstractions.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.IO.Compression;
+using System.Text;
 
 namespace Agw.Skills.Services;
 
