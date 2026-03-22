@@ -22,6 +22,8 @@ using System.Configuration;
 using System.Runtime;
 using Microsoft.Agents.AI;
 using Agw.Tasks.Services;
+using Agw.Skills.Services;
+using Agw.Domain.Services.Skills;
 using Agw.Shared.Tasks;
 using Agw.Agents.ExternalAgents;
 
@@ -96,7 +98,8 @@ try
             options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
         })
         .AddApplicationPart(typeof(AgentsController).Assembly)
-        .AddApplicationPart(typeof(ProjectsController).Assembly);
+        .AddApplicationPart(typeof(ProjectsController).Assembly)
+        .AddApplicationPart(typeof(SkillsController).Assembly);
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
 
@@ -123,6 +126,8 @@ try
     builder.Services.AddScoped<IProjectAppService, ProjectAppService>();
     builder.Services.AddScoped<ProjectTaskAppService>();
     builder.Services.AddScoped<SessionRecordAppService>();
+    builder.Services.AddScoped<SkillDomainService>();
+    builder.Services.AddScoped<SkillAppService>();
     
     builder.Services.AddScoped<TaskRecordDomainService>();
 
@@ -181,6 +186,7 @@ try
 
     // Enable WebSocket support
     app.UseWebSockets();
+    app.UseStaticFiles();
 
     var a2AServerOptions = app.Services
         .GetRequiredService<Microsoft.Extensions.Options.IOptions<A2AServerOptions>>()

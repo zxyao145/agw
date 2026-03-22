@@ -32,4 +32,5 @@ public class Agent : BaseEntity
 
     public ICollection<AgentflowNode> Agentflows { get; set; } = new List<AgentflowNode>();
     public ICollection<AgentMcpToolServer> AgentMcpToolServers { get; set; } = new List<AgentMcpToolServer>();
+    public ICollection<AgentSkillRelation> AgentSkillRelations { get; set; } = new List<AgentSkillRelation>();
 }

@@ -9,6 +9,7 @@ using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Agw.Shared.Tasks;
 using Microsoft.Agents.AI;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -36,6 +37,8 @@ public class AgentRuntimeService
     private readonly IRepository<ModelProvider> _modelProviderRepository;
     private readonly IRepository<McpToolServer> _mcpToolServerRepository;
     private readonly IRepository<AgentMcpToolServer> _agentMcpToolServerRepository;
+    private readonly IRepository<Skill> _skillRepository;
+    private readonly IRepository<AgentSkillRelation> _agentSkillRelationRepository;
     private readonly IRepository<LlmModel> _modelRepository;
     private readonly IRepository<Provider> _providerRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -47,12 +50,15 @@ public class AgentRuntimeService
     private readonly ITaskAppService _taskRecordApplication;
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
+    private readonly IWebHostEnvironment _webHostEnvironment;
 
     public AgentRuntimeService(
         IRepository<Agent> agentRepository,
         IRepository<ModelProvider> modelProviderRepository,
         IRepository<McpToolServer> mcpToolServerRepository,
         IRepository<AgentMcpToolServer> agentMcpToolServerRepository,
+        IRepository<Skill> skillRepository,
+        IRepository<AgentSkillRelation> agentSkillRelationRepository,
         IRepository<LlmModel> modelRepository,
         IRepository<Provider> providerRepository,
         IUnitOfWork unitOfWork,
@@ -64,12 +70,15 @@ public class AgentRuntimeService
         ITaskAppService taskRecordApplication,
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
+        IWebHostEnvironment webHostEnvironment,
         ILogger<AgentRuntimeService> logger)
     {
         _agentRepository = agentRepository;
         _modelProviderRepository = modelProviderRepository;
         _mcpToolServerRepository = mcpToolServerRepository;
         _agentMcpToolServerRepository = agentMcpToolServerRepository;
+        _skillRepository = skillRepository;
+        _agentSkillRelationRepository = agentSkillRelationRepository;
         _modelRepository = modelRepository;
         _providerRepository = providerRepository;
         _unitOfWork = unitOfWork;
@@ -81,6 +90,7 @@ public class AgentRuntimeService
         _taskRecordApplication = taskRecordApplication;
         _chatHistoryProvider = chatHistoryProvider;
         _providerSessionState = providerSessionState;
+        _webHostEnvironment = webHostEnvironment;
         _logger = logger;
     }
 
@@ -133,6 +143,12 @@ public class AgentRuntimeService
         if (existing == null)
         {
             return false;
+        }
+
+        var skillRelations = await _agentSkillRelationRepository.ListAsync(x => x.AgentId == id);
+        foreach (var relation in skillRelations)
+        {
+            _agentSkillRelationRepository.Remove(relation);
         }
 
         _agentRepository.Remove(existing);
@@ -450,11 +466,12 @@ public class AgentRuntimeService
 
         var authConfig = authConfigs[Random.Shared.Next(authConfigs.Count)];
         IList<AITool>? tools = await CreateAgentTools(agentDefinition, cancellationToken).ConfigureAwait(false);
+        var skillsProvider = await CreateSkillsProviderAsync(agentDefinition.Id).ConfigureAwait(false);
 
         return provider.ProviderType switch
         {
-            ProviderType.OpenAI => CreateOpenAiAgent(agentDefinition, model, provider, authConfig, tools),
-            ProviderType.Anthropic => CreateAnthropicAgent(agentDefinition, model, provider, authConfig, tools),
+            ProviderType.OpenAI => CreateOpenAiAgent(agentDefinition, model, provider, authConfig, tools, skillsProvider),
+            ProviderType.Anthropic => CreateAnthropicAgent(agentDefinition, model, provider, authConfig, tools, skillsProvider),
             _ => throw new NotSupportedException($"Provider type '{provider.ProviderType}' is not supported")
         };
     }
@@ -464,7 +481,8 @@ public class AgentRuntimeService
         LlmModel model,
         Provider provider,
         ProviderAuthConfig authConfig,
-        IList<AITool>? tools)
+        IList<AITool>? tools,
+        FileAgentSkillsProvider? skillsProvider)
     {
         var apiKey = ResolveApiKey(authConfig);
         var credential = new ApiKeyCredential(apiKey);
@@ -487,6 +505,11 @@ public class AgentRuntimeService
             }
         };
 
+        if (skillsProvider != null)
+        {
+            agentOptions.AIContextProviders = [skillsProvider];
+        }
+
         return chatCompletionClient.AsAIAgent(agentOptions)
             .AsBuilder()
             .UseOpenTelemetry(sourceName: provider.Name, configure: cfg => cfg.EnableSensitiveData = true)
@@ -498,7 +521,8 @@ public class AgentRuntimeService
         LlmModel model,
         Provider provider,
         ProviderAuthConfig authConfig,
-        IList<AITool>? tools)
+        IList<AITool>? tools,
+        FileAgentSkillsProvider? skillsProvider)
     {
         var anthropicClientOptions = new Anthropic.Core.ClientOptions
         {
@@ -518,6 +542,11 @@ public class AgentRuntimeService
                 Tools = tools
             }
         };
+
+        if (skillsProvider != null)
+        {
+            agentOptions.AIContextProviders = [skillsProvider];
+        }
 
         return client.AsAIAgent(agentOptions)
             .AsBuilder()
@@ -815,6 +844,52 @@ public class AgentRuntimeService
     private Task<string?> GetProjectExtraSettingAsync(string? projectId)
     {
         return _projectAppService.GetProjectExtraSettingAsync(projectId);
+    }
+
+    private async Task<FileAgentSkillsProvider?> CreateSkillsProviderAsync(Guid agentId)
+    {
+        var relations = await _agentSkillRelationRepository.ListAsync(x => x.AgentId == agentId);
+        if (relations.Count == 0)
+        {
+            return null;
+        }
+
+        var skillIds = relations.Select(x => x.SkillId).Distinct().ToList();
+        var skills = await _skillRepository.ListAsync(x => skillIds.Contains(x.Id));
+        var skillPaths = skills
+            .Select(GetSkillAbsolutePath)
+            .Where(Directory.Exists)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (skillPaths.Length == 0)
+        {
+            _logger.LogWarning("Agent {AgentId} has skill relations configured but no extracted skill directories were found.", agentId);
+            return null;
+        }
+
+        return new FileAgentSkillsProvider(skillPaths: skillPaths);
+    }
+
+    private string GetSkillAbsolutePath(Skill skill)
+    {
+        if (!string.IsNullOrWhiteSpace(skill.ContentPath))
+        {
+            var normalizedPath = skill.ContentPath.Replace('/', Path.DirectorySeparatorChar);
+            return Path.Combine(GetWebRootPath(), normalizedPath);
+        }
+
+        return Path.Combine(GetWebRootPath(), "skills", skill.Name);
+    }
+
+    private string GetWebRootPath()
+    {
+        if (!string.IsNullOrWhiteSpace(_webHostEnvironment.WebRootPath))
+        {
+            return _webHostEnvironment.WebRootPath;
+        }
+
+        return Path.Combine(_webHostEnvironment.ContentRootPath, "wwwroot");
     }
 
     private async Task<bool> HasInvalidModelProviderAsync(Guid? modelProviderId)
