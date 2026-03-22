@@ -39,6 +39,10 @@ public static class DependencyInjection
             options.ReplaceService<IMigrationsModelDiffer, NoForeignKeyModelDiffer>();
         });
 
+        // Register database seeder
+        services.AddScoped<ClaudeCodeAgentDbSeeder>();
+
+
         services.AddScoped<DbContext, LlmDbContext>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
