@@ -1,18 +1,19 @@
-using Agw.Appliaction.Services.Agents;
 using Agw.Appliaction.Services.Agentflows;
+using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Entities;
 using Agw.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
+using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Agw.Tasks.Services;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Jobs.Services;
 
@@ -85,7 +86,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
             try
             {
                 using var scope = _scopeFactory.CreateScope();
-                var projectService = scope.ServiceProvider.GetRequiredService<ProjectAppService>();
+                var projectService = scope.ServiceProvider.GetRequiredService<IProjectAppService>();
 
                 var projects = await projectService.ListAsync(p => p.Enable);
                 var tasks = projects.Select(p => RunProjectOnceAsync(p.Id, semaphore, stoppingToken)).ToList();
