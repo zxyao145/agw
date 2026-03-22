@@ -106,6 +106,12 @@ const navItems: SidebarMenuGroupProps[] = [
         isActive: true,
         icon: <Server />,
       },
+      {
+        url: "/skills",
+        title: "Skills",
+        isActive: true,
+        icon: <Package />,
+      },
     ],
   },
 

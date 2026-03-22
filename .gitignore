@@ -370,3 +370,4 @@ logs/
 tmpclaude-*
 
 code-work/
+**/wwwroot/skills/**/*

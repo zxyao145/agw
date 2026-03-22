@@ -44,7 +44,7 @@ public class SkillsController : ControllerBase
                 Description = request.Description,
             };
 
-            var created = await _skillAppService.CreateAsync(skill, request.Archive, request.AgentIds, user);
+            var created = await _skillAppService.CreateAsync(skill, request.Archive, user);
             return Ok(Map(created));
         }
         catch (InvalidOperationException ex)
@@ -61,7 +61,7 @@ public class SkillsController : ControllerBase
         try
         {
             var user = User?.Identity?.Name ?? "system";
-            var updated = await _skillAppService.UpdateAsync(id, request.Name, request.Description, request.Archive, request.AgentIds, user);
+            var updated = await _skillAppService.UpdateAsync(id, request.Name, request.Description, request.Archive, user);
             return updated == null ? NotFound() : Ok(Map(updated));
         }
         catch (InvalidOperationException ex)

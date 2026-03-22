@@ -58,7 +58,7 @@ public class SkillAppService
         return new SkillDetails(skill, agentIds);
     }
 
-    public async Task<SkillDetails> CreateAsync(Skill skill, IFormFile archive, IEnumerable<Guid>? agentIds, string user)
+    public async Task<SkillDetails> CreateAsync(Skill skill, IFormFile archive, string user)
     {
         ArgumentNullException.ThrowIfNull(skill);
         ArgumentNullException.ThrowIfNull(archive);
@@ -72,7 +72,6 @@ public class SkillAppService
         await using var preparedDirectory = await PrepareArchiveDirectoryAsync(skill.Name, skill.Description, archive);
 
         await _skillRepository.AddAsync(skill);
-        await SyncAgentSkillRelationsAsync(skill.Id, agentIds);
         await _unitOfWork.SaveChangesAsync();
 
         var targetDirectory = GetSkillAbsolutePath(skill.Name);
@@ -82,7 +81,7 @@ public class SkillAppService
         return await GetAsync(skill.Id) ?? new SkillDetails(skill, []);
     }
 
-    public async Task<SkillDetails?> UpdateAsync(Guid id, string name, string description, IFormFile? archive, IEnumerable<Guid>? agentIds, string user)
+    public async Task<SkillDetails?> UpdateAsync(Guid id, string name, string description, IFormFile? archive, string user)
     {
         var existing = await _skillRepository.GetByIdAsync(id);
         if (existing == null)
@@ -111,7 +110,6 @@ public class SkillAppService
         }
 
         _skillRepository.Update(existing);
-        await SyncAgentSkillRelationsAsync(existing.Id, agentIds);
         await _unitOfWork.SaveChangesAsync();
 
         if (preparedDirectory != null)
@@ -223,8 +221,15 @@ public class SkillAppService
             throw new InvalidOperationException("Skill archive must be a .zip file.");
         }
 
-        var extractionRoot = Path.Combine(Path.GetTempPath(), $"agw-skill-extract-{Guid.NewGuid():N}");
-        var preparedRoot = Path.Combine(Path.GetTempPath(), $"agw-skill-prepared-{Guid.NewGuid():N}");
+        var exeRootPath = _webHostEnvironment.ContentRootPath;
+        var tempPath = Path.Combine(exeRootPath, "temp");
+        if (!Directory.Exists(tempPath))
+        {
+            Directory.CreateDirectory(tempPath);
+        }
+
+        var extractionRoot = Path.Combine(tempPath, $"agw-skill-extract-{Guid.NewGuid():N}");
+        var preparedRoot = Path.Combine(tempPath, $"agw-skill-prepared-{Guid.NewGuid():N}");
         Directory.CreateDirectory(extractionRoot);
         Directory.CreateDirectory(preparedRoot);
 
@@ -340,10 +345,9 @@ public class SkillAppService
         var frontmatter = normalized[4..secondDelimiterIndex];
         var body = normalized[(secondDelimiterIndex + 5)..];
         var lines = frontmatter.Split('\n').ToList();
-        var escapedDescription = EscapeYamlDoubleQuotedString(description.Trim());
         var updatedLines = new List<string>();
         var replacedName = false;
-        var replacedDescription = false;
+        var hasDescription = false;
 
         foreach (var line in lines)
         {
@@ -354,10 +358,10 @@ public class SkillAppService
                 continue;
             }
 
-            if (line.StartsWith("description:", StringComparison.Ordinal))
+            if (line.StartsWith("description:", StringComparison.OrdinalIgnoreCase))
             {
-                updatedLines.Add($"description: \"{escapedDescription}\"");
-                replacedDescription = true;
+                updatedLines.Add(line);
+                hasDescription = true;
                 continue;
             }
 
@@ -369,8 +373,9 @@ public class SkillAppService
             updatedLines.Insert(0, $"name: {skillName}");
         }
 
-        if (!replacedDescription)
+        if (!hasDescription)
         {
+            var escapedDescription = EscapeYamlDoubleQuotedString(description.Trim());
             updatedLines.Insert(replacedName ? 1 : 0, $"description: \"{escapedDescription}\"");
         }
 
