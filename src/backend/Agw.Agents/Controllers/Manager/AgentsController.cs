@@ -44,7 +44,11 @@ public class AgentsController : ControllerBase
             Tools = request.Tools
         };
 
-        var created = await _agentRuntimeService.CreateAgentAsync(agent, request.McpToolServerIds, user);
+        var created = await _agentRuntimeService.CreateAgentAsync(
+            agent,
+            request.McpToolServerIds,
+            request.SkillIds,
+            user);
         return created == null ? BadRequest("Failed to create agent.") : Ok(created);
     }
 
@@ -63,6 +67,7 @@ public class AgentsController : ControllerBase
                 agent.Tools = request.Tools;
             },
             request.McpToolServerIds,
+            request.SkillIds,
             user);
 
         return updated == null ? NotFound() : Ok(updated);

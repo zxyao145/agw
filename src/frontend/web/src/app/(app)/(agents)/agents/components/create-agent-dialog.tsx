@@ -17,6 +17,7 @@ import type {
   ToolInfo,
   ModelProviderDto,
   McpToolServerDto,
+  SkillDto,
 } from "./types";
 
 interface CreateAgentDialogProps {
@@ -36,19 +37,27 @@ interface CreateAgentDialogProps {
   setAgentType: (value: string) => void;
   extra: string;
   setExtra: (value: string) => void;
+  selectedSkillIds: string[];
   selectedTools: string[];
   setSelectedTools: React.Dispatch<React.SetStateAction<string[]>>;
   toolSearchTerm: string;
   setToolSearchTerm: (value: string) => void;
   filteredTools: ToolInfo[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
+  skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
   mcpToolServerSearchTerm: string;
   setMcpToolServerSearchTerm: (value: string) => void;
   filteredMcpToolServers: McpToolServerDto[];
-  createAgentMutation: UseMutationResult<unknown, Error, AgentCreateRequest, unknown>;
+  createAgentMutation: UseMutationResult<
+    unknown,
+    Error,
+    AgentCreateRequest,
+    unknown
+  >;
+  toggleSkill: (skillId: string) => void;
   toggleTool: (toolName: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
 }
@@ -70,12 +79,14 @@ export function CreateAgentDialog({
   setAgentType,
   extra,
   setExtra,
+  selectedSkillIds,
   selectedTools,
   setSelectedTools,
   toolSearchTerm,
   setToolSearchTerm,
   filteredTools,
   modelProvidersQuery,
+  skillsQuery,
   toolsQuery,
   mcpToolServersQuery,
   selectedMcpToolServerIds,
@@ -83,6 +94,7 @@ export function CreateAgentDialog({
   setMcpToolServerSearchTerm,
   filteredMcpToolServers,
   createAgentMutation,
+  toggleSkill,
   toggleTool,
   toggleMcpToolServer,
 }: CreateAgentDialogProps) {
@@ -115,14 +127,17 @@ export function CreateAgentDialog({
           setAgentType={setAgentType}
           extra={extra}
           setExtra={setExtra}
+          selectedSkillIds={selectedSkillIds}
           selectedTools={selectedTools}
           setSelectedTools={setSelectedTools}
           toolSearchTerm={toolSearchTerm}
           setToolSearchTerm={setToolSearchTerm}
           filteredTools={filteredTools}
           modelProvidersQuery={modelProvidersQuery}
+          skillsQuery={skillsQuery}
           toolsQuery={toolsQuery}
           mcpToolServersQuery={mcpToolServersQuery}
+          toggleSkill={toggleSkill}
           toggleTool={toggleTool}
           selectedMcpToolServerIds={selectedMcpToolServerIds}
           mcpToolServerSearchTerm={mcpToolServerSearchTerm}
@@ -150,6 +165,7 @@ export function CreateAgentDialog({
                   selectedTools.length > 0
                     ? JSON.stringify(selectedTools)
                     : null,
+                skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
                 mcpToolServerIds:
                   selectedMcpToolServerIds.length > 0
                     ? selectedMcpToolServerIds

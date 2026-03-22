@@ -1,6 +1,9 @@
 using Agw.Domain.Tools;
 using Agw.Shared.Models;
+using Agw.Tools.Abstractions;
+using Agw.Tools.Attributes;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.Reflection;
 
@@ -8,53 +11,45 @@ namespace Agw.Domain.Services;
 
 /// <summary>
 /// Service for discovering, registering, and managing AI tools available to agents.
-/// Supports both attribute-based static methods and IAiTool implementations.
+/// Supports both attribute-based methods and <see cref="IAgwTool"/> implementations.
 /// </summary>
 public class ToolRegistryService
 {
-    private readonly Dictionary<string, MethodInfo> _methods = new();
-    private readonly Dictionary<string, ToolInfo> _toolInfos = new();
-    private readonly Dictionary<string, IAiTool> _toolInstances = new();
-    private readonly AiToolFactory _toolFactory;
+    private readonly Dictionary<string, MethodInfo> _methods = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ToolInfo> _toolInfos = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IAgwTool> _toolInstances = new(StringComparer.OrdinalIgnoreCase);
+    private readonly AgwToolFactory _toolFactory;
+    private readonly IServiceProvider? _serviceProvider;
 
     public ToolRegistryService(IServiceProvider? serviceProvider = null)
     {
-        _toolFactory = new AiToolFactory(serviceProvider);
-        //DiscoverTools();
+        _serviceProvider = serviceProvider;
+        _toolFactory = new AgwToolFactory(serviceProvider);
+        DiscoverTools();
     }
 
     /// <summary>
-    /// Discovers all methods marked with AiToolAttribute and IAiTool implementations
-    /// in the Agw.Domain.Tools namespace.
+    /// Discovers all tools available in the current assembly.
     /// </summary>
     private void DiscoverTools()
     {
         var assembly = typeof(AiToolAttribute).Assembly;
-
-        // Discover attributed static methods
         DiscoverAttributedMethods(assembly);
-
-        // Discover IAiTool implementations
         DiscoverToolImplementations(assembly);
     }
 
     /// <summary>
-    /// Discovers methods marked with AiToolAttribute.
+    /// Discovers public static methods marked with <see cref="AiToolAttribute"/>.
     /// </summary>
     private void DiscoverAttributedMethods(Assembly assembly)
     {
-        var toolTypes = assembly.GetTypes()
-            .Where(t => t.Namespace != null && t.Namespace.StartsWith("Agw."));
-
-        foreach (var type in toolTypes)
+        foreach (var type in assembly.GetTypes())
         {
             var containerAttr = type.GetCustomAttribute<AiToolContainerAttribute>();
             var defaultCategory = containerAttr?.DefaultCategory ?? "General";
 
-            var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.GetCustomAttribute<AiToolAttribute>() != null);
-
-            foreach (var method in methods)
+            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                         .Where(m => m.GetCustomAttribute<AiToolAttribute>() != null))
             {
                 RegisterMethod(method, defaultCategory);
             }
@@ -62,30 +57,22 @@ public class ToolRegistryService
     }
 
     /// <summary>
-    /// Discovers and instantiates IAiTool implementations.
+    /// Discovers and instantiates <see cref="IAgwTool"/> implementations.
     /// </summary>
     private void DiscoverToolImplementations(Assembly assembly)
     {
         var toolTypes = assembly.GetTypes()
-            .Where(t => !t.IsAbstract
-                && !t.IsInterface
-                && typeof(IAiTool).IsAssignableFrom(t)
-                && t.Namespace?.StartsWith("Agw.Domain.Tools") == true);
+            .Where(t => !t.IsAbstract && !t.IsInterface && typeof(IAgwTool).IsAssignableFrom(t));
 
         foreach (var type in toolTypes)
         {
             try
             {
-                // Try to create instance (supports parameterless constructors)
-                if (Activator.CreateInstance(type) is IAiTool tool)
-                {
-                    RegisterTool(tool);
-                }
+                RegisterTool(CreateToolInstance(type));
             }
             catch (Exception)
             {
-                // Skip types that can't be instantiated without DI
-                // These should be registered via DI in Program.cs
+                // Ignore tool types that require unavailable dependencies.
             }
         }
     }
@@ -99,56 +86,18 @@ public class ToolRegistryService
         var methodName = toolAttr.Name ?? method.Name;
 
         _methods[methodName] = method;
-
-        var parameters = method.GetParameters()
-            .Select(p => new ToolParameterInfo
-            {
-                Name = p.Name ?? "param",
-                Type = GetFriendlyTypeName(p.ParameterType),
-                Description = p.GetCustomAttribute<DescriptionAttribute>()?.Description,
-                IsOptional = p.IsOptional || p.HasDefaultValue
-            })
-            .ToList();
-
-        var category = !string.IsNullOrEmpty(toolAttr.Category) && toolAttr.Category != "General"
-            ? toolAttr.Category
-            : defaultCategory;
-
-        _toolInfos[methodName] = new ToolInfo
-        {
-            Name = methodName,
-            Description = method.GetCustomAttribute<DescriptionAttribute>()?.Description ?? string.Empty,
-            Category = category,
-            TypeName = method.DeclaringType?.FullName ?? method.DeclaringType?.Name ?? "Unknown",
-            Parameters = parameters,
-            IsAsync = false,
-            RequiresConfirmation = toolAttr.RequiresConfirmation,
-            TimeoutMs = toolAttr.TimeoutMs
-        };
+        _toolInfos[methodName] = BuildMethodToolInfo(method, defaultCategory);
     }
 
     /// <summary>
-    /// Registers an IAiTool instance.
+    /// Registers an <see cref="IAgwTool"/> instance.
     /// </summary>
-    public void RegisterTool(IAiTool tool)
+    public void RegisterTool(IAgwTool tool)
     {
-        _toolInstances[tool.Name] = tool;
+        ArgumentNullException.ThrowIfNull(tool);
 
-        // Create ToolInfo for the registered tool
-        if (!_toolInfos.ContainsKey(tool.Name))
-        {
-            _toolInfos[tool.Name] = new ToolInfo
-            {
-                Name = tool.Name,
-                Description = tool.Description,
-                Category = tool.Category,
-                TypeName = tool.GetType().FullName ?? tool.GetType().Name,
-                Parameters = [],
-                IsAsync = tool is IAsyncAiTool,
-                RequiresConfirmation = false,
-                TimeoutMs = 30000
-            };
-        }
+        _toolInstances[tool.Name] = tool;
+        _toolInfos[tool.Name] = BuildRegisteredToolInfo(tool);
     }
 
     /// <summary>
@@ -168,7 +117,7 @@ public class ToolRegistryService
     }
 
     /// <summary>
-    /// Gets the MethodInfo for a tool by its name.
+    /// Gets the <see cref="MethodInfo"/> for a tool backed by an attributed method.
     /// </summary>
     public MethodInfo? GetToolMethod(string name)
     {
@@ -176,9 +125,9 @@ public class ToolRegistryService
     }
 
     /// <summary>
-    /// Gets an IAiTool instance by its name.
+    /// Gets a registered <see cref="IAgwTool"/> instance by its name.
     /// </summary>
-    public IAiTool? GetToolInstance(string name)
+    public IAgwTool? GetToolInstance(string name)
     {
         return _toolInstances.TryGetValue(name, out var tool) ? tool : null;
     }
@@ -202,17 +151,15 @@ public class ToolRegistryService
     }
 
     /// <summary>
-    /// Creates an AIFunction for a tool by its name.
+    /// Creates an <see cref="AITool"/> for a tool by its name.
     /// </summary>
-    public AIFunction? CreateAIFunction(string name)
+    public AITool? CreateAIFunction(string name)
     {
-        // First check for IAiTool instances
         if (_toolInstances.TryGetValue(name, out var tool))
         {
-            return tool.ToAIFunction();
+            return tool.ToAITool();
         }
 
-        // Then check for static methods
         if (_methods.TryGetValue(name, out var method))
         {
             return _toolFactory.CreateFromMethod(method);
@@ -222,30 +169,189 @@ public class ToolRegistryService
     }
 
     /// <summary>
-    /// Creates AIFunction instances for a list of tool names.
+    /// Creates <see cref="AITool"/> instances for a list of tool names.
     /// </summary>
-    public IList<AIFunction> CreateAIFunctions(IEnumerable<string> names)
+    public IList<AITool> CreateAIFunctions(IEnumerable<string> names)
     {
-        var functions = new List<AIFunction>();
+        ArgumentNullException.ThrowIfNull(names);
 
+        var tools = new List<AITool>();
         foreach (var name in names)
         {
-            var function = CreateAIFunction(name);
-            if (function != null)
+            var tool = CreateAIFunction(name);
+            if (tool != null)
             {
-                functions.Add(function);
+                tools.Add(tool);
             }
         }
 
-        return functions;
+        return tools;
     }
 
     /// <summary>
-    /// Creates AIFunction instances for all registered tools.
+    /// Creates <see cref="AITool"/> instances for all registered tools.
     /// </summary>
-    public IList<AIFunction> CreateAllAIFunctions()
+    public IList<AITool> CreateAllAIFunctions()
     {
         return CreateAIFunctions(_toolInfos.Keys);
+    }
+
+    private IAgwTool CreateToolInstance(Type type)
+    {
+        object instance;
+        if (_serviceProvider != null)
+        {
+            instance = ActivatorUtilities.GetServiceOrCreateInstance(_serviceProvider, type);
+        }
+        else
+        {
+            instance = Activator.CreateInstance(type)
+                ?? throw new InvalidOperationException($"Cannot create instance of {type.FullName}");
+        }
+
+        return (IAgwTool)instance;
+    }
+
+    private static ToolInfo BuildMethodToolInfo(MethodInfo method, string defaultCategory)
+    {
+        var toolAttr = method.GetCustomAttribute<AiToolAttribute>()!;
+        var category = !string.IsNullOrWhiteSpace(toolAttr.Category) && toolAttr.Category != "General"
+            ? toolAttr.Category
+            : defaultCategory;
+
+        return new ToolInfo
+        {
+            Name = toolAttr.Name ?? method.Name,
+            Description = method.GetCustomAttribute<DescriptionAttribute>()?.Description ?? string.Empty,
+            Category = category,
+            TypeName = method.DeclaringType?.FullName ?? method.DeclaringType?.Name ?? "Unknown",
+            Parameters = BuildParameters(method.GetParameters()),
+            IsAsync = IsAsyncReturnType(method.ReturnType),
+            RequiresConfirmation = toolAttr.RequiresConfirmation,
+            TimeoutMs = toolAttr.TimeoutMs
+        };
+    }
+
+    private static ToolInfo BuildRegisteredToolInfo(IAgwTool tool)
+    {
+        var toolType = tool.GetType();
+        var executeMethod = ResolveExecuteMethod(toolType);
+        var aiTool = tool.ToAITool();
+
+        return new ToolInfo
+        {
+            Name = tool.Name,
+            Description = ResolveDescription(tool, executeMethod, aiTool),
+            Category = ResolveCategory(tool),
+            TypeName = toolType.FullName ?? toolType.Name,
+            Parameters = executeMethod == null ? [] : BuildParameters(executeMethod.GetParameters()),
+            IsAsync = executeMethod != null && IsAsyncReturnType(executeMethod.ReturnType),
+            RequiresConfirmation = ResolveRequiresConfirmation(tool, aiTool),
+            TimeoutMs = ResolveTimeoutMs(tool)
+        };
+    }
+
+    private static MethodInfo? ResolveExecuteMethod(Type toolType)
+    {
+        return toolType.GetMethod("Execute", BindingFlags.Public | BindingFlags.Instance)
+            ?? toolType.GetMethod("ExecuteAsync", BindingFlags.Public | BindingFlags.Instance);
+    }
+
+    private static string ResolveDescription(IAgwTool tool, MethodInfo? executeMethod, AITool aiTool)
+    {
+        var toolType = tool.GetType();
+        var descriptionProperty = toolType.GetProperty("Description", BindingFlags.Public | BindingFlags.Instance);
+        if (descriptionProperty?.PropertyType == typeof(string)
+            && descriptionProperty.GetValue(tool) is string description
+            && !string.IsNullOrWhiteSpace(description))
+        {
+            return description;
+        }
+
+        return executeMethod?.GetCustomAttribute<DescriptionAttribute>()?.Description
+            ?? aiTool.Description
+            ?? string.Empty;
+    }
+
+    private static string ResolveCategory(IAgwTool tool)
+    {
+        var toolType = tool.GetType();
+        var categoryProperty = toolType.GetProperty("Category", BindingFlags.Public | BindingFlags.Instance);
+        if (categoryProperty?.PropertyType == typeof(string)
+            && categoryProperty.GetValue(tool) is string category
+            && !string.IsNullOrWhiteSpace(category))
+        {
+            return category;
+        }
+
+        return "General";
+    }
+
+    private static bool ResolveRequiresConfirmation(IAgwTool tool, AITool aiTool)
+    {
+        if (string.Equals(
+                aiTool.GetType().FullName,
+                "Microsoft.Extensions.AI.ApprovalRequiredAIFunction",
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var toolType = tool.GetType();
+        var approvalProperty = toolType.GetProperty("ApprovalRequired", BindingFlags.Public | BindingFlags.Instance);
+        if (approvalProperty?.PropertyType == typeof(bool)
+            && approvalProperty.GetValue(tool) is bool approvalRequired)
+        {
+            return approvalRequired;
+        }
+
+        return false;
+    }
+
+    private static int ResolveTimeoutMs(IAgwTool tool)
+    {
+        var toolType = tool.GetType();
+        var timeoutProperty = toolType.GetProperty("TimeoutMs", BindingFlags.Public | BindingFlags.Instance);
+        if (timeoutProperty?.PropertyType == typeof(int)
+            && timeoutProperty.GetValue(tool) is int timeoutMs
+            && timeoutMs > 0)
+        {
+            return timeoutMs;
+        }
+
+        return 30000;
+    }
+
+    private static IReadOnlyList<ToolParameterInfo> BuildParameters(IEnumerable<ParameterInfo> parameters)
+    {
+        return parameters.Select(p => new ToolParameterInfo
+        {
+            Name = p.Name ?? "param",
+            Type = GetFriendlyTypeName(p.ParameterType),
+            Description = p.GetCustomAttribute<DescriptionAttribute>()?.Description,
+            IsOptional = p.IsOptional || p.HasDefaultValue,
+            DefaultValue = p.HasDefaultValue ? p.DefaultValue : null,
+            SchemaType = p.GetCustomAttribute<AiToolParameterSchemaAttribute>()?.Type,
+            Format = p.GetCustomAttribute<AiToolParameterSchemaAttribute>()?.Format,
+            EnumValues = ParseEnumValues(p.GetCustomAttribute<AiToolParameterSchemaAttribute>()?.EnumValues)
+        }).ToList();
+    }
+
+    private static IReadOnlyList<string>? ParseEnumValues(string? enumValues)
+    {
+        if (string.IsNullOrWhiteSpace(enumValues))
+        {
+            return null;
+        }
+
+        return enumValues.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    private static bool IsAsyncReturnType(Type returnType)
+    {
+        return typeof(Task).IsAssignableFrom(returnType)
+            || (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(ValueTask<>))
+            || returnType == typeof(ValueTask);
     }
 
     /// <summary>

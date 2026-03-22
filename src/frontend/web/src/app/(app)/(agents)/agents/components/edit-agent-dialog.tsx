@@ -17,6 +17,7 @@ import type {
   ToolInfo,
   ModelProviderDto,
   McpToolServerDto,
+  SkillDto,
 } from "./types";
 
 interface EditAgentDialogProps {
@@ -37,12 +38,14 @@ interface EditAgentDialogProps {
   setAgentType: (value: string) => void;
   extra: string;
   setExtra: (value: string) => void;
+  selectedSkillIds: string[];
   selectedTools: string[];
   setSelectedTools: React.Dispatch<React.SetStateAction<string[]>>;
   toolSearchTerm: string;
   setToolSearchTerm: (value: string) => void;
   filteredTools: ToolInfo[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
+  skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
@@ -55,6 +58,7 @@ interface EditAgentDialogProps {
     { id: string; body: AgentUpdateRequest },
     unknown
   >;
+  toggleSkill: (skillId: string) => void;
   toggleTool: (toolName: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
 }
@@ -77,12 +81,14 @@ export function EditAgentDialog({
   setAgentType,
   extra,
   setExtra,
+  selectedSkillIds,
   selectedTools,
   setSelectedTools,
   toolSearchTerm,
   setToolSearchTerm,
   filteredTools,
   modelProvidersQuery,
+  skillsQuery,
   toolsQuery,
   mcpToolServersQuery,
   selectedMcpToolServerIds,
@@ -90,6 +96,7 @@ export function EditAgentDialog({
   setMcpToolServerSearchTerm,
   filteredMcpToolServers,
   updateAgentMutation,
+  toggleSkill,
   toggleTool,
   toggleMcpToolServer,
 }: EditAgentDialogProps) {
@@ -116,14 +123,17 @@ export function EditAgentDialog({
           setAgentType={setAgentType}
           extra={extra}
           setExtra={setExtra}
+          selectedSkillIds={selectedSkillIds}
           selectedTools={selectedTools}
           setSelectedTools={setSelectedTools}
           toolSearchTerm={toolSearchTerm}
           setToolSearchTerm={setToolSearchTerm}
           filteredTools={filteredTools}
           modelProvidersQuery={modelProvidersQuery}
+          skillsQuery={skillsQuery}
           toolsQuery={toolsQuery}
           mcpToolServersQuery={mcpToolServersQuery}
+          toggleSkill={toggleSkill}
           toggleTool={toggleTool}
           selectedMcpToolServerIds={selectedMcpToolServerIds}
           mcpToolServerSearchTerm={mcpToolServerSearchTerm}
@@ -137,6 +147,7 @@ export function EditAgentDialog({
                   name: true,
                   systemPrompt: true,
                   agentType: true,
+                  skills: true,
                   tools: true,
                 }
               : {
@@ -149,6 +160,7 @@ export function EditAgentDialog({
                   name: true,
                   systemPrompt: true,
                   agentType: true,
+                  skills: true,
                   tools: true,
                 }
               : {
@@ -178,6 +190,8 @@ export function EditAgentDialog({
                       selectedTools.length > 0
                         ? JSON.stringify(selectedTools)
                         : null,
+                    skillIds:
+                      selectedSkillIds.length > 0 ? selectedSkillIds : null,
                     mcpToolServerIds:
                       selectedMcpToolServerIds.length > 0
                         ? selectedMcpToolServerIds

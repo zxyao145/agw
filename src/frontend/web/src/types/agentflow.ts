@@ -20,15 +20,19 @@ export interface AgentDto extends BaseDto {
     agentId: string;
     mcpToolServerId: string;
   }> | null;
+  agentSkillRelations?: Array<{
+    agentId: string;
+    skillId: string;
+  }> | null;
 }
-
 
 export const AgentflowNodeType = {
   AgentNode: 0,
   AgentflowNode: 1,
 } as const;
 
-export type AgentflowNodeType = (typeof AgentflowNodeType)[keyof typeof AgentflowNodeType];
+export type AgentflowNodeType =
+  (typeof AgentflowNodeType)[keyof typeof AgentflowNodeType];
 
 export interface AgentflowNodeDto extends BaseDto {
   agentflowId: string;

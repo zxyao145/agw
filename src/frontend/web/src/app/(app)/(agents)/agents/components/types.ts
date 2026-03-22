@@ -1,5 +1,4 @@
-export type {AgentDto} from  "@/types/agentflow";
-
+export type { AgentDto } from "@/types/agentflow";
 
 export interface AgentCreateRequest {
   displayName: string;
@@ -9,6 +8,7 @@ export interface AgentCreateRequest {
   modelProviderId: string | null;
   tools?: string | null;
   mcpToolServerIds?: string[] | null;
+  skillIds?: string[] | null;
 }
 
 export interface AgentUpdateRequest {
@@ -18,6 +18,7 @@ export interface AgentUpdateRequest {
   modelProviderId: string | null;
   tools?: string | null;
   mcpToolServerIds?: string[] | null;
+  skillIds?: string[] | null;
 }
 
 export type ToolInfo = {
@@ -44,4 +45,11 @@ export type ModelProviderDto = {
 export type McpToolServerDto = {
   id: string;
   name: string;
+};
+
+export type SkillDto = {
+  id: string;
+  name: string;
+  description: string;
+  agentIds: string[];
 };

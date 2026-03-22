@@ -11,7 +11,8 @@ public record AgentCreateRequest(
     string SystemPrompt,
     Guid? ModelProviderId,
     string? Tools = null,  // JSON array of tool names
-    List<Guid>? McpToolServerIds = null);
+    List<Guid>? McpToolServerIds = null,
+    List<Guid>? SkillIds = null);
 
 public record AgentUpdateRequest(
     string DisplayName,
@@ -19,7 +20,8 @@ public record AgentUpdateRequest(
     string SystemPrompt,
     Guid? ModelProviderId,
     string? Tools = null,  // JSON array of tool names
-    List<Guid>? McpToolServerIds = null);
+    List<Guid>? McpToolServerIds = null,
+    List<Guid>? SkillIds = null);
 
 public record AiAgentResponse(Guid Id, string Name, string SystemPrompt, string ProviderName, string ModelName, string Endpoint, string ApiKey)
 {

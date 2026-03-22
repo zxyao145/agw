@@ -10,15 +10,29 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Agw.Domain.Services;
+
+[JsonSerializable(typeof(EfCoreChatHistoryProvider.State))]
+internal partial class ChatHistoryProviderStateJsonContext : JsonSerializerContext
+{
+}
+
 
 /// <summary>
 /// Persists agent chat history in EF Core while keeping the conversation key in session state.
 /// </summary>
 public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSessionState
 {
-    private static readonly JsonSerializerOptions DefaultJsonSerializerOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions DefaultJsonSerializerOptions = new (JsonSerializerDefaults.Web)
+    {
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+        ChatHistoryProviderStateJsonContext.Default,
+        new DefaultJsonTypeInfoResolver())
+    };
+
     private const string DefaultUser = "system";
 
     private readonly IServiceScopeFactory _serviceScopeFactory;

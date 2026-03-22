@@ -95,15 +95,22 @@ public class AgentRuntimeService
     }
 
     public Task<IReadOnlyList<Agent>> ListAgentsAsync() =>
-        _agentRepository.ListAsync(null, x => x.AgentMcpToolServers);
+        _agentRepository.ListAsync(null, x => x.AgentMcpToolServers, x => x.AgentSkillRelations);
 
     public async Task<Agent?> GetAgentAsync(Guid id)
     {
-        var matches = await _agentRepository.ListAsync(x => x.Id == id, x => x.AgentMcpToolServers);
+        var matches = await _agentRepository.ListAsync(
+            x => x.Id == id,
+            x => x.AgentMcpToolServers,
+            x => x.AgentSkillRelations);
         return matches.FirstOrDefault();
     }
 
-    public async Task<Agent?> CreateAgentAsync(Agent agent, IEnumerable<Guid>? mcpToolServerIds, string user)
+    public async Task<Agent?> CreateAgentAsync(
+        Agent agent,
+        IEnumerable<Guid>? mcpToolServerIds,
+        IEnumerable<Guid>? skillIds,
+        string user)
     {
         if (await HasInvalidModelProviderAsync(agent.ModelProviderId))
         {
@@ -113,11 +120,17 @@ public class AgentRuntimeService
         _agentDomainService.PrepareForCreate(agent, user);
         await _agentRepository.AddAsync(agent);
         await SyncAgentMcpToolServerRelationsAsync(agent.Id, mcpToolServerIds);
+        await SyncAgentSkillRelationsAsync(agent.Id, skillIds);
         await _unitOfWork.SaveChangesAsync();
         return agent;
     }
 
-    public async Task<Agent?> UpdateAgentAsync(Guid id, Action<Agent> updateAction, IEnumerable<Guid>? mcpToolServerIds, string user)
+    public async Task<Agent?> UpdateAgentAsync(
+        Guid id,
+        Action<Agent> updateAction,
+        IEnumerable<Guid>? mcpToolServerIds,
+        IEnumerable<Guid>? skillIds,
+        string user)
     {
         var existing = await _agentRepository.GetByIdAsync(id);
         if (existing == null)
@@ -133,6 +146,7 @@ public class AgentRuntimeService
 
         _agentRepository.Update(existing);
         await SyncAgentMcpToolServerRelationsAsync(existing.Id, mcpToolServerIds);
+        await SyncAgentSkillRelationsAsync(existing.Id, skillIds);
         await _unitOfWork.SaveChangesAsync();
         return existing;
     }
@@ -923,6 +937,34 @@ public class AgentRuntimeService
             {
                 AgentId = agentId,
                 McpToolServerId = serverId
+            });
+        }
+    }
+
+    private async Task SyncAgentSkillRelationsAsync(Guid agentId, IEnumerable<Guid>? skillIds)
+    {
+        var existingLinks = await _agentSkillRelationRepository.ListAsync(x => x.AgentId == agentId);
+        foreach (var link in existingLinks)
+        {
+            _agentSkillRelationRepository.Remove(link);
+        }
+
+        var requestedIds = (skillIds ?? [])
+            .Where(static id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (requestedIds.Count == 0)
+        {
+            return;
+        }
+
+        var existingSkills = await _skillRepository.ListAsync(x => requestedIds.Contains(x.Id));
+        foreach (var skillId in existingSkills.Select(x => x.Id))
+        {
+            await _agentSkillRelationRepository.AddAsync(new AgentSkillRelation
+            {
+                AgentId = agentId,
+                SkillId = skillId
             });
         }
     }

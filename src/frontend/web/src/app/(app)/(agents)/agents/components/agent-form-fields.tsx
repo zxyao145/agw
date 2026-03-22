@@ -1,11 +1,18 @@
 import * as React from "react";
 import { UseQueryResult } from "@tanstack/react-query";
+import { ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -15,7 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ToolInfo, ModelProviderDto, McpToolServerDto } from "./types";
+import type {
+  ToolInfo,
+  ModelProviderDto,
+  McpToolServerDto,
+  SkillDto,
+} from "./types";
 
 interface AgentFormFieldsProps {
   displayName: string;
@@ -32,14 +44,17 @@ interface AgentFormFieldsProps {
   setAgentType: (value: string) => void;
   extra: string;
   setExtra: (value: string) => void;
+  selectedSkillIds: string[];
   selectedTools: string[];
   setSelectedTools: React.Dispatch<React.SetStateAction<string[]>>;
   toolSearchTerm: string;
   setToolSearchTerm: (value: string) => void;
   filteredTools: ToolInfo[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
+  skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
+  toggleSkill: (skillId: string) => void;
   toggleTool: (toolName: string) => void;
   selectedMcpToolServerIds: string[];
   mcpToolServerSearchTerm: string;
@@ -55,6 +70,7 @@ interface AgentFormFieldsProps {
     modelProviderId?: boolean;
     agentType?: boolean;
     extra?: boolean;
+    skills?: boolean;
     tools?: boolean;
     mcpToolServers?: boolean;
   };
@@ -66,6 +82,7 @@ interface AgentFormFieldsProps {
     modelProviderId?: boolean;
     agentType?: boolean;
     extra?: boolean;
+    skills?: boolean;
     tools?: boolean;
     mcpToolServers?: boolean;
   };
@@ -86,23 +103,50 @@ export function AgentFormFields({
   setAgentType,
   extra,
   setExtra,
+  selectedSkillIds,
   selectedTools,
-  toolSearchTerm,
-  setToolSearchTerm,
-  filteredTools,
   modelProvidersQuery,
+  skillsQuery,
   toolsQuery,
   mcpToolServersQuery,
+  toggleSkill,
   toggleTool,
   selectedMcpToolServerIds,
-  mcpToolServerSearchTerm,
-  setMcpToolServerSearchTerm,
-  filteredMcpToolServers,
   toggleMcpToolServer,
   idPrefix = "",
   disabledFields = {},
   hiddenFields = {},
 }: AgentFormFieldsProps) {
+  const selectedSkills = skillsQuery.data?.filter((skill) =>
+    selectedSkillIds.includes(skill.id),
+  );
+  const groupedTools = React.useMemo(() => {
+    if (!toolsQuery.data) {
+      return [];
+    }
+
+    const groups = new Map<string, ToolInfo[]>();
+
+    for (const tool of toolsQuery.data) {
+      const category = tool.category.trim() || "Uncategorized";
+      const existing = groups.get(category);
+
+      if (existing) {
+        existing.push(tool);
+        continue;
+      }
+
+      groups.set(category, [tool]);
+    }
+
+    return Array.from(groups.entries()).sort(([left], [right]) =>
+      left.localeCompare(right),
+    );
+  }, [toolsQuery.data]);
+  const selectedSkillCount = selectedSkillIds.length;
+  const selectedToolCount = selectedTools.length;
+  const selectedMcpToolServerCount = selectedMcpToolServerIds.length;
+
   return (
     <div className="grid gap-4 overflow-y-auto pr-2 -mr-2">
       {!hiddenFields.displayName && (
@@ -119,7 +163,7 @@ export function AgentFormFields({
       )}
 
       <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}name`}>Id (Optional)</Label>
+        <Label htmlFor={`${idPrefix}name`}>Name (Optional)</Label>
         <Input
           id={`${idPrefix}name`}
           value={name}
@@ -245,50 +289,148 @@ export function AgentFormFields({
         </div>
       )}
 
+      {!hiddenFields.skills && (
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}skills`}>Skills</Label>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                id={`${idPrefix}skills`}
+                type="button"
+                variant="outline"
+                className="w-full justify-between font-normal"
+                disabled={disabledFields.skills}
+              >
+                <span className="truncate">
+                  {selectedSkillCount > 0
+                    ? `${selectedSkillCount} skill${selectedSkillCount === 1 ? "" : "s"} selected`
+                    : "Select skills..."}
+                </span>
+                <ChevronDown className="size-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-72"
+            >
+              <DropdownMenuLabel>Available Skills</DropdownMenuLabel>
+              {skillsQuery.isLoading ? (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                  Loading skills...
+                </div>
+              ) : skillsQuery.data && skillsQuery.data.length > 0 ? (
+                skillsQuery.data.map((skill) => (
+                  <DropdownMenuCheckboxItem
+                    key={skill.id}
+                    checked={selectedSkillIds.includes(skill.id)}
+                    className="items-start"
+                    onCheckedChange={() => toggleSkill(skill.id)}
+                    onSelect={(event) => event.preventDefault()}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{skill.name}</div>
+                      {skill.description ? (
+                        <div className="text-xs text-muted-foreground whitespace-normal break-words">
+                          {skill.description}
+                        </div>
+                      ) : null}
+                    </div>
+                  </DropdownMenuCheckboxItem>
+                ))
+              ) : (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                  No skills found
+                </div>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <div className="flex flex-wrap gap-2">
+            {selectedSkills && selectedSkills.length > 0 ? (
+              selectedSkills.map((skill) => (
+                <Badge key={skill.id} variant="secondary">
+                  {skill.name}
+                </Badge>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No skills selected
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {!hiddenFields.tools && (
         <div className="grid gap-2">
-          <Label>Tools</Label>
-          <Input
-            placeholder="Search tools..."
-            value={toolSearchTerm}
-            onChange={(e) => setToolSearchTerm(e.target.value)}
-            disabled={disabledFields.tools}
-          />
-          <div
-            className={`rounded-md px-2 max-h-48 overflow-y-auto space-y-2 ${disabledFields.tools ? "opacity-50 pointer-events-none" : ""}`}
-          >
-            {toolsQuery.isLoading ? (
-              <div className="text-sm text-muted-foreground">
-                Loading tools...
-              </div>
-            ) : filteredTools.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                No tools found
-              </div>
-            ) : (
-              filteredTools.map((tool) => (
-                <div key={tool.name} className="flex items-start space-x-2">
-                  <Checkbox
-                    id={`${idPrefix}tool-${tool.name}`}
-                    checked={selectedTools.includes(tool.name)}
-                    onCheckedChange={() => toggleTool(tool.name)}
-                  />
-                  <div className="grid gap-1 leading-none">
-                    <label
-                      htmlFor={`${idPrefix}tool-${tool.name}`}
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                    >
-                      {tool.name}
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        ({tool.category})
-                      </span>
-                    </label>
-                    <p className="text-xs text-muted-foreground">
-                      {tool.description}
-                    </p>
-                  </div>
+          <Label htmlFor={`${idPrefix}tools`}>Tools</Label>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                id={`${idPrefix}tools`}
+                type="button"
+                variant="outline"
+                className="w-full justify-between font-normal"
+                disabled={disabledFields.tools}
+              >
+                <span className="truncate">
+                  {selectedToolCount > 0
+                    ? `${selectedToolCount} tool${selectedToolCount === 1 ? "" : "s"} selected`
+                    : "Select tools..."}
+                </span>
+                <ChevronDown className="size-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-72"
+            >
+              <DropdownMenuLabel>Available Tools</DropdownMenuLabel>
+              {toolsQuery.isLoading ? (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                  Loading tools...
                 </div>
+              ) : groupedTools.length > 0 ? (
+                groupedTools.map(([category, tools]) => (
+                  <SelectGroup key={category}>
+                    <SelectLabel>{category}</SelectLabel>
+                    {tools.map((tool) => (
+                      <DropdownMenuCheckboxItem
+                        key={tool.name}
+                        checked={selectedTools.includes(tool.name)}
+                        className="items-start"
+                        onCheckedChange={() => toggleTool(tool.name)}
+                        onSelect={(event) => event.preventDefault()}
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">
+                            {tool.name}
+                          </div>
+                          {tool.description ? (
+                            <div className="text-xs text-muted-foreground whitespace-normal break-words">
+                              {tool.description}
+                            </div>
+                          ) : null}
+                        </div>
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </SelectGroup>
+                ))
+              ) : (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                  No tools found
+                </div>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <div className="flex flex-wrap gap-2">
+            {selectedTools.length > 0 ? (
+              selectedTools.map((toolName) => (
+                <Badge key={toolName} variant="secondary">
+                  {toolName}
+                </Badge>
               ))
+            ) : (
+              <p className="text-xs text-muted-foreground">No tools selected</p>
             )}
           </div>
         </div>
@@ -296,78 +438,69 @@ export function AgentFormFields({
 
       {!hiddenFields.mcpToolServers && (
         <div className="grid gap-2">
-          <Label>MCP Tool Servers</Label>
-          <Input
-            placeholder="Search MCP tool servers..."
-            value={mcpToolServerSearchTerm}
-            onChange={(e) => setMcpToolServerSearchTerm(e.target.value)}
-            className="mb-2"
-            disabled={disabledFields.mcpToolServers}
-          />
-          <Select
-            onValueChange={(value) => toggleMcpToolServer(value)}
-            disabled={disabledFields.mcpToolServers}
-          >
-            <SelectTrigger
-              id={`${idPrefix}mcpToolServers`}
-              className="w-full"
-              disabled={disabledFields.mcpToolServers}
+          <Label htmlFor={`${idPrefix}mcpToolServers`}>MCP Tool Servers</Label>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                id={`${idPrefix}mcpToolServers`}
+                type="button"
+                variant="outline"
+                className="w-full justify-between font-normal"
+                disabled={disabledFields.mcpToolServers}
+              >
+                <span className="truncate">
+                  {selectedMcpToolServerCount > 0
+                    ? `${selectedMcpToolServerCount} server${selectedMcpToolServerCount === 1 ? "" : "s"} selected`
+                    : "Select MCP tool servers..."}
+                </span>
+                <ChevronDown className="size-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-72"
             >
-              <SelectValue placeholder="Select MCP tool server..." />
-            </SelectTrigger>
-            <SelectContent position="popper" sideOffset={4}>
-              <SelectGroup>
-                <SelectLabel>Available MCP Tool Servers</SelectLabel>
-                {mcpToolServersQuery.isLoading ? (
-                  <SelectItem value="loading" disabled>
-                    Loading MCP tool servers...
-                  </SelectItem>
-                ) : filteredMcpToolServers.length === 0 ? (
-                  <SelectItem value="none" disabled>
-                    No MCP tool servers found
-                  </SelectItem>
-                ) : (
-                  filteredMcpToolServers.map((server) => (
-                    <SelectItem key={server.id} value={server.id}>
-                      {server.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <div className="rounded-md px-2">
-            {selectedMcpToolServerIds.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                No MCP Tool servers selected
-              </div>
+              <DropdownMenuLabel>Available MCP Tool Servers</DropdownMenuLabel>
+              {mcpToolServersQuery.isLoading ? (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                  Loading MCP tool servers...
+                </div>
+              ) : mcpToolServersQuery.data &&
+                mcpToolServersQuery.data.length > 0 ? (
+                mcpToolServersQuery.data.map((server) => (
+                  <DropdownMenuCheckboxItem
+                    key={server.id}
+                    checked={selectedMcpToolServerIds.includes(server.id)}
+                    onCheckedChange={() => toggleMcpToolServer(server.id)}
+                    onSelect={(event) => event.preventDefault()}
+                  >
+                    {server.name}
+                  </DropdownMenuCheckboxItem>
+                ))
+              ) : (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                  No MCP tool servers found
+                </div>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <div className="flex flex-wrap gap-2">
+            {selectedMcpToolServerIds.length > 0 ? (
+              selectedMcpToolServerIds.map((selectedId) => {
+                const selectedServer = mcpToolServersQuery.data?.find(
+                  (server) => server.id === selectedId,
+                );
+
+                return (
+                  <Badge key={selectedId} variant="secondary">
+                    {selectedServer?.name ?? selectedId}
+                  </Badge>
+                );
+              })
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {selectedMcpToolServerIds.map((selectedId) => {
-                  const selectedServer = mcpToolServersQuery.data?.find(
-                    (server) => server.id === selectedId
-                  );
-                  return (
-                    <Badge
-                      key={selectedId}
-                      variant="secondary"
-                      className="flex items-center gap-1"
-                    >
-                      <span>{selectedServer?.name ?? selectedId}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-4 w-4 p-0"
-                        onClick={() => toggleMcpToolServer(selectedId)}
-                        disabled={disabledFields.mcpToolServers}
-                      >
-                        x
-                      </Button>
-                    </Badge>
-                  );
-                })}
-              </div>
+              <p className="text-xs text-muted-foreground">
+                No MCP tool servers selected
+              </p>
             )}
           </div>
         </div>

@@ -1,6 +1,8 @@
+using Agw.Tools.Attributes;
 using System.ComponentModel;
+using System.Globalization;
 
-namespace Agw.Domain.Tools;
+namespace Agw.Tools.Impl.Basic;
 
 /// <summary>
 /// Provides basic utility tools for agents.
@@ -8,21 +10,21 @@ namespace Agw.Domain.Tools;
 [AiToolContainer(DefaultCategory = "Utility")]
 public static class BasicTools
 {
-    [AiTool(Category = "DateTime")]
+    [AiTool("get_current_date_time", Category = "DateTime")]
     [Description("Returns the current UTC date and time")]
     public static string GetCurrentDateTime()
     {
-        return DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC");
+        return DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
     }
 
-    [AiTool(Category = "DateTime")]
+    [AiTool("get_current_date", Category = "DateTime")]
     [Description("Returns the current date in yyyy-MM-dd format")]
     public static string GetCurrentDate()
     {
-        return DateTime.UtcNow.ToString("yyyy-MM-dd");
+        return DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
-    [AiTool(Category = "Math")]
+    [AiTool("add", Category = "Math")]
     [Description("Adds two numbers and returns the result")]
     public static double Add(
         [Description("The first number")] double a,
@@ -31,7 +33,7 @@ public static class BasicTools
         return a + b;
     }
 
-    [AiTool(Category = "Math")]
+    [AiTool("multiply", Category = "Math")]
     [Description("Multiplies two numbers and returns the result")]
     public static double Multiply(
         [Description("The first number")] double a,
@@ -40,7 +42,7 @@ public static class BasicTools
         return a * b;
     }
 
-    [AiTool(Category = "Math")]
+    [AiTool("subtract", Category = "Math")]
     [Description("Subtracts the second number from the first and returns the result")]
     public static double Subtract(
         [Description("The first number")] double a,
@@ -49,7 +51,7 @@ public static class BasicTools
         return a - b;
     }
 
-    [AiTool(Category = "Math")]
+    [AiTool("divide", Category = "Math")]
     [Description("Divides the first number by the second and returns the result")]
     public static double Divide(
         [Description("The dividend (number to be divided)")] double a,
@@ -62,7 +64,7 @@ public static class BasicTools
         return a / b;
     }
 
-    [AiTool(Category = "Utility")]
+    [AiTool("get_random_number", Category = "Utility")]
     [Description("Generates a random integer between min and max (inclusive)")]
     public static int GetRandomNumber(
         [Description("Minimum value (inclusive)")] int min,
@@ -71,23 +73,23 @@ public static class BasicTools
         return Random.Shared.Next(min, max + 1);
     }
 
-    [AiTool(Category = "Text")]
+    [AiTool("to_upper_case", Category = "Text")]
     [Description("Converts the input text to uppercase")]
     public static string ToUpperCase(
         [Description("The text to convert")] string text)
     {
-        return text.ToUpper();
+        return text.ToUpperInvariant();
     }
 
-    [AiTool(Category = "Text")]
+    [AiTool("to_lower_case", Category = "Text")]
     [Description("Converts the input text to lowercase")]
     public static string ToLowerCase(
         [Description("The text to convert")] string text)
     {
-        return text.ToLower();
+        return text.ToLowerInvariant();
     }
 
-    [AiTool(Category = "Text")]
+    [AiTool("count_characters", Category = "Text")]
     [Description("Returns the number of characters in the given text")]
     public static int CountCharacters(
         [Description("The text to count")] string text)
@@ -95,7 +97,7 @@ public static class BasicTools
         return text.Length;
     }
 
-    [AiTool(Category = "Text")]
+    [AiTool("count_words", Category = "Text")]
     [Description("Returns the number of words in the given text")]
     public static int CountWords(
         [Description("The text to count words in")] string text)
@@ -107,7 +109,7 @@ public static class BasicTools
         return text.Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries).Length;
     }
 
-    [AiTool(Category = "Text")]
+    [AiTool("reverse_text", Category = "Text")]
     [Description("Reverses the given text")]
     public static string ReverseText(
         [Description("The text to reverse")] string text)
@@ -117,7 +119,7 @@ public static class BasicTools
         return new string(chars);
     }
 
-    [AiTool(Category = "Text")]
+    [AiTool("trim_text", Category = "Text")]
     [Description("Trims whitespace from both ends of the text")]
     public static string TrimText(
         [Description("The text to trim")] string text)
@@ -125,26 +127,26 @@ public static class BasicTools
         return text.Trim();
     }
 
-    [AiTool(Category = "Utility")]
+    [AiTool("generate_guid", Category = "Utility")]
     [Description("Generates a new unique identifier (GUID)")]
     public static string GenerateGuid()
     {
         return Guid.NewGuid().ToString();
     }
 
-    [AiTool(Category = "DateTime")]
+    [AiTool("get_unix_timestamp", Category = "DateTime")]
     [Description("Returns the current Unix timestamp (seconds since 1970-01-01)")]
     public static long GetUnixTimestamp()
     {
         return DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     }
 
-    [AiTool(Category = "DateTime")]
+    [AiTool("unix_timestamp_to_date", Category = "DateTime")]
     [Description("Converts a Unix timestamp to a human-readable date string")]
     public static string UnixTimestampToDate(
         [Description("The Unix timestamp (seconds since 1970-01-01)")] long timestamp)
     {
         var dateTime = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
-        return dateTime.ToString("yyyy-MM-dd HH:mm:ss UTC");
+        return dateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
     }
 }

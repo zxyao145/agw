@@ -1,5 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
+        <PackageReference Include="DiffPlex" />
         <PackageReference Include="Microsoft.Agents.AI" />
     </ItemGroup>
     <ItemGroup>

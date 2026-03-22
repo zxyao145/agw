@@ -1,4 +1,4 @@
-using Agw.Domain.Tools;
+using Agw.Tools.Attributes;
 
 namespace Agw.Domain.Attributes;
 
