@@ -11,6 +11,7 @@
     <Project Path="src/backend/Agw.Jobs/Agw.Jobs.csproj" />
     <Project Path="src/backend/Agw.Providers/Agw.Providers.csproj" />
     <Project Path="src/backend/Agw.Tasks/Agw.Tasks.csproj" />
+    <Project Path="src/backend/Agw.Skills/Agw.Skills.csproj" />
     <Project Path="src/backend/Agw.Tools/Agw.Tools.csproj" Id="ba592b35-3c77-47d7-b977-396f0fa9acba" />
   </Folder>
   <Folder Name="/Shared/">
@@ -20,6 +21,7 @@
   <Folder Name="/Tests/">
     <Project Path="tests/Agw.Agents.Tests/Agw.Agents.Tests.csproj" />
     <Project Path="tests/Agw.Tasks.Tests/Agw.Tasks.Tests.csproj" />
+    <Project Path="tests/Agw.Skills.Tests/Agw.Skills.Tests.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />

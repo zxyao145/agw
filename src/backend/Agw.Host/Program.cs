@@ -14,6 +14,15 @@ using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Enrichers.OpenTelemetry;
+using System.Configuration;
+using System.Runtime;
+using Microsoft.Agents.AI;
+using Agw.Tasks.Services;
+using Agw.Skills.Services;
+using Agw.Domain.Services.Skills;
+using Agw.Shared.Tasks;
+using Agw.Agents.ExternalAgents;
+
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()
@@ -86,10 +95,14 @@ try
             options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
         })
         .AddApplicationPart(typeof(AgentsController).Assembly)
-        .AddApplicationPart(typeof(ProjectsController).Assembly);
+        .AddApplicationPart(typeof(ProjectsController).Assembly)
+        .AddApplicationPart(typeof(SkillsController).Assembly);
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
 
+  
+    builder.Services.AddScoped<SkillDomainService>();
+    builder.Services.AddScoped<SkillAppService>();
 
     builder.Services.AddScoped<A2AAgentService>();
 
@@ -137,6 +150,7 @@ try
 
     // Enable WebSocket support
     app.UseWebSockets();
+    app.UseStaticFiles();
 
     var a2AServerOptions = app.Services
         .GetRequiredService<Microsoft.Extensions.Options.IOptions<A2AServerOptions>>()

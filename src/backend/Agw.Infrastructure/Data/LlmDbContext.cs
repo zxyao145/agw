@@ -29,6 +29,8 @@ public class LlmDbContext : DbContext
     public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
     public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
     public DbSet<AgentMcpToolServer> AgentMcpToolServers => Set<AgentMcpToolServer>();
+    public DbSet<Skill> Skills => Set<Skill>();
+    public DbSet<AgentSkillRelation> AgentSkillRelations => Set<AgentSkillRelation>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -102,6 +104,15 @@ public class LlmDbContext : DbContext
             //    .HasForeignKey(e => e.ModelProviderId)
             //    .OnDelete(DeleteBehavior.Cascade)
             //    .IsRequired(false);
+        });
+
+        modelBuilder.Entity<Skill>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Name).IsUnique();
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Description).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.ContentPath).IsRequired().HasMaxLength(500);
         });
 
         modelBuilder.Entity<Agentflow>(entity =>
@@ -247,6 +258,24 @@ public class LlmDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => e.McpToolServerId);
+        });
+
+        modelBuilder.Entity<AgentSkillRelation>(entity =>
+        {
+            entity.ToTable("agent_skill_relations");
+            entity.HasKey(e => new { e.AgentId, e.SkillId });
+
+            entity.HasOne(e => e.Agent)
+                .WithMany(a => a.AgentSkillRelations)
+                .HasForeignKey(e => e.AgentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<Skill>()
+                .WithMany()
+                .HasForeignKey(e => e.SkillId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.SkillId);
         });
     }
 }
