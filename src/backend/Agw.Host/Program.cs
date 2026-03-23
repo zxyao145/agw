@@ -3,11 +3,13 @@ using Agw.Api.Controllers;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
 using Agw.Jobs;
+using Agw.Jobs.Controllers;
 using Agw.Manager.Api.Controllers;
 using Agw.Providers;
 using Agw.Skills;
 using Agw.Tasks;
 using Agw.Tools;
+using Hangfire;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -88,6 +90,7 @@ try
         })
         .AddApplicationPart(typeof(AgentsController).Assembly)
         .AddApplicationPart(typeof(ProjectsController).Assembly)
+        .AddApplicationPart(typeof(HangfireJobsController).Assembly)
         .AddApplicationPart(typeof(SkillsController).Assembly);
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
@@ -138,6 +141,7 @@ try
     // Enable WebSocket support
     app.UseWebSockets();
     app.UseStaticFiles();
+    app.UseHangfireDashboard("/hangfire");
 
     var a2AServerOptions = app.Services
         .GetRequiredService<Microsoft.Extensions.Options.IOptions<A2AServerOptions>>()
