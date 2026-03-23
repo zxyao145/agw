@@ -32,8 +32,8 @@ public static class ProjectDefaults
     ];
 
     public static string GetDefaultProjectIdentifier(string? projectId) =>
-        string.IsNullOrWhiteSpace(projectId) ? DefaultBuiltName : projectId.Trim();
+        string.IsNullOrWhiteSpace(projectId) ? DefaultBuiltId.ToString("D") : projectId.Trim();
 
     public static string GetClaudeCodeProjectIdentifier(string? projectId) =>
-        string.IsNullOrWhiteSpace(projectId) ? ClaudeCodeName : projectId.Trim();
+        string.IsNullOrWhiteSpace(projectId) ? ClaudeCodeId.ToString("D") : projectId.Trim();
 }

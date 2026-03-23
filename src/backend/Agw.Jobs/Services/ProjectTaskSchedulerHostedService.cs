@@ -228,7 +228,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                                 taskRecord.SessionId,
                                 [chatMessage],
                                 stoppingToken,
-                                marked.ProjectId.Normalize(),
+                                marked.ProjectId.ToString("D"),
                                 marked.ContextId),
                         ProjectTaskAgentType.Agent when next.AgentId.HasValue =>
                             await agentRuntime.ExecuteAsync(
@@ -236,7 +236,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                                 taskRecord.SessionId,
                                 [chatMessage],
                                 stoppingToken,
-                                marked.ProjectId.Normalize(),
+                                marked.ProjectId.ToString("D"),
                                 marked.ContextId),
                         _ => null
                     };
