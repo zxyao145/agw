@@ -41,7 +41,7 @@ public class ProjectTaskAppService
 
     public Task<ProjectTask?> GetTaskAsync(Guid id) => _taskRepository.GetByIdAsync(id);
 
-    public async Task<IReadOnlyList<ProjectTaskResponse>> ListResponsesAsync(string projectId)
+    public async Task<IReadOnlyList<ProjectTaskResponse>> ListResponsesAsync(Guid projectId)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
@@ -65,7 +65,7 @@ public class ProjectTaskAppService
             .ToList();
     }
 
-    public async Task<ProjectTaskResponse?> GetResponseAsync(string projectId, Guid taskId)
+    public async Task<ProjectTaskResponse?> GetResponseAsync(Guid projectId, Guid taskId)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
@@ -85,7 +85,7 @@ public class ProjectTaskAppService
     }
 
     public async Task<ApplicationResult<ProjectTaskResponse>> CreateAsync(
-        string projectId,
+        Guid projectId,
         ProjectTaskCreateRequest request,
         string user)
     {
@@ -148,7 +148,7 @@ public class ProjectTaskAppService
     }
 
     public async Task<ApplicationResult<ProjectTaskResponse>> UpdateAsync(
-        string projectId,
+        Guid projectId,
         Guid taskId,
         ProjectTaskUpdateRequest request,
         string user)
@@ -188,7 +188,7 @@ public class ProjectTaskAppService
     }
 
     public async Task<ApplicationResult> UpdateTitleAsync(
-        string projectId,
+        Guid projectId,
         Guid taskId,
         string title,
         string user)
@@ -215,7 +215,7 @@ public class ProjectTaskAppService
         return ApplicationResult.Success();
     }
 
-    public async Task<ApplicationResult> DeleteSessionAsync(string projectId, Guid taskId)
+    public async Task<ApplicationResult> DeleteSessionAsync(Guid projectId, Guid taskId)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
@@ -245,7 +245,7 @@ public class ProjectTaskAppService
     }
 
     public async Task<ApplicationResult<ProjectTaskResponse>> ReorderAsync(
-        string projectId,
+        Guid projectId,
         Guid taskId,
         DateTime updateTimeUtc,
         string user)
@@ -275,7 +275,7 @@ public class ProjectTaskAppService
     }
 
     public async Task<ApplicationResult<ProjectTaskResponse>> CancelAsync(
-        string projectId,
+        Guid projectId,
         Guid taskId,
         string user)
     {
@@ -303,7 +303,7 @@ public class ProjectTaskAppService
         return ApplicationResult<ProjectTaskResponse>.Success(ToResponse(task, records, null));
     }
 
-    public async Task<ApplicationResult> DeleteAsync(string projectId, Guid taskId)
+    public async Task<ApplicationResult> DeleteAsync(Guid projectId, Guid taskId)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)

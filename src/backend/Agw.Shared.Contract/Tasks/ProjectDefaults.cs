@@ -31,6 +31,11 @@ public static class ProjectDefaults
         }
     ];
 
+    public static Guid GetDefaultProjectIdentifier(Guid? projectId) =>
+        projectId == null ? DefaultBuiltId : projectId.Value;
+
+
+
     public static string GetDefaultProjectIdentifier(string? projectId) =>
         string.IsNullOrWhiteSpace(projectId) ? DefaultBuiltId.ToString("D") : projectId.Trim();
 

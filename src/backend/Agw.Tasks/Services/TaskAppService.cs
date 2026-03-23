@@ -43,7 +43,7 @@ public class TaskAppService : ITaskAppService
 
     public async Task<bool> HasSessionAsync(
         string sessionId,
-        string? projectId = null,
+        Guid? projectId = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
@@ -57,9 +57,9 @@ public class TaskAppService : ITaskAppService
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(projectId))
+        if (projectId == null)
         {
-            return true;
+            return false;
         }
 
         var project = await _projectResolver.ResolveAsync(projectId, cancellationToken);

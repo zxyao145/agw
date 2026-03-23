@@ -16,21 +16,21 @@ public class ProjectTasksController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> ListAsync(string projectId)
+    public async Task<IActionResult> ListAsync(Guid projectId)
     {
         var tasks = await _projectTaskAppService.ListResponsesAsync(projectId);
         return Ok(tasks);
     }
 
     [HttpGet("{taskId:guid}")]
-    public async Task<IActionResult> GetAsync(string projectId, Guid taskId)
+    public async Task<IActionResult> GetAsync(Guid projectId, Guid taskId)
     {
         var task = await _projectTaskAppService.GetResponseAsync(projectId, taskId);
         return task == null ? NotFound() : Ok(task);
     }
 
     [HttpPost]
-    public async Task<IActionResult> CreateAsync(string projectId, [FromBody] ProjectTaskCreateRequest request)
+    public async Task<IActionResult> CreateAsync(Guid projectId, [FromBody] ProjectTaskCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
         var result = await _projectTaskAppService.CreateAsync(projectId, request, user);
@@ -43,7 +43,7 @@ public class ProjectTasksController : ControllerBase
     }
 
     [HttpPut("{taskId:guid}")]
-    public async Task<IActionResult> UpdateAsync(string projectId, Guid taskId, [FromBody] ProjectTaskUpdateRequest request)
+    public async Task<IActionResult> UpdateAsync(Guid projectId, Guid taskId, [FromBody] ProjectTaskUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
         var result = await _projectTaskAppService.UpdateAsync(projectId, taskId, request, user);
@@ -57,7 +57,7 @@ public class ProjectTasksController : ControllerBase
 
     [HttpPut("{taskId:guid}/title")]
     public async Task<IActionResult> UpdateTitleAsync(
-        string projectId,
+        Guid projectId,
         Guid taskId,
         [FromBody] SessionRecordTitleUpdateRequest request)
     {
@@ -72,14 +72,14 @@ public class ProjectTasksController : ControllerBase
     }
 
     [HttpDelete("{taskId:guid}/session")]
-    public async Task<IActionResult> DeleteSessionAsync(string projectId, Guid taskId)
+    public async Task<IActionResult> DeleteSessionAsync(Guid projectId, Guid taskId)
     {
         var result = await _projectTaskAppService.DeleteSessionAsync(projectId, taskId);
         return result.Type == ApplicationResultType.Success ? NoContent() : NotFound();
     }
 
     [HttpPost("{taskId:guid}/reorder")]
-    public async Task<IActionResult> ReorderAsync(string projectId, Guid taskId, [FromBody] ProjectTaskReorderRequest request)
+    public async Task<IActionResult> ReorderAsync(Guid projectId, Guid taskId, [FromBody] ProjectTaskReorderRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
         var result = await _projectTaskAppService.ReorderAsync(projectId, taskId, request.UpdateTimeUtc, user);
@@ -92,7 +92,7 @@ public class ProjectTasksController : ControllerBase
     }
 
     [HttpPost("{taskId:guid}/cancel")]
-    public async Task<IActionResult> CancelAsync(string projectId, Guid taskId)
+    public async Task<IActionResult> CancelAsync(Guid projectId, Guid taskId)
     {
         var user = User?.Identity?.Name ?? "system";
         var result = await _projectTaskAppService.CancelAsync(projectId, taskId, user);
@@ -105,7 +105,7 @@ public class ProjectTasksController : ControllerBase
     }
 
     [HttpDelete("{taskId:guid}")]
-    public async Task<IActionResult> DeleteAsync(string projectId, Guid taskId)
+    public async Task<IActionResult> DeleteAsync(Guid projectId, Guid taskId)
     {
         var result = await _projectTaskAppService.DeleteAsync(projectId, taskId);
         return result.Type == ApplicationResultType.Success ? Ok() : NotFound();

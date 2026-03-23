@@ -9,14 +9,14 @@ public record AgentExecutionRequest(
     ProjectTaskAgentType AgentType,
     string Input,
     string? SessionId = null,
-    string? ProjectId = null,
+    Guid? ProjectId = null,
     Guid? TaskId = null);
 
 public record AgentExecutionWsRequest(
     ProjectTaskAgentType AgentType,
     AgwUserInput Input,
     string? SessionId = null,
-    string? ProjectId = null,
+    Guid? ProjectId = null,
     Guid? TaskId = null);
 
 public record AgentExecutionResponse(

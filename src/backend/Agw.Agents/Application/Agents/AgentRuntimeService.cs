@@ -241,7 +241,7 @@ public class AgentRuntimeService
         Agent agent,
         string? extraOverride = null,
         string? sessionId = null,
-        string? projectId = null,
+        Guid? projectId = null,
         CancellationToken cancellationToken = default)
     {
         if (agent.Type == AgentType.External)
@@ -293,7 +293,7 @@ public class AgentRuntimeService
     public async Task<AgentExecSession?> CreateSessionAsync(
         Guid agentId,
         string sessionId,
-        string? projectId = null,
+        Guid? projectId = null,
         string? contextId = null,
         CancellationToken cancellationToken = default)
     {
@@ -319,7 +319,7 @@ public class AgentRuntimeService
         }
 
         var agentSession = await GetOrCreateThreadAsync(aiAgent, sessionId, cancellationToken);
-        _providerSessionState.InitializeSessionState(agentSession, resolvedContextId, sessionId, projectId);
+        _providerSessionState.InitializeSessionState(agentSession, resolvedContextId, sessionId, ProjectDefaults.GetDefaultProjectIdentifier(projectId));
         return new AgentExecSession(
             aiAgent,
             agentSession,
@@ -379,7 +379,7 @@ public class AgentRuntimeService
         string sessionId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
-        string? projectId = null,
+        Guid? projectId = null,
         string? contextId = null)
     {
         var session = await CreateSessionAsync(agentId, sessionId, projectId, contextId, cancellationToken);
@@ -402,7 +402,7 @@ public class AgentRuntimeService
         string sessionId,
         string input,
         CancellationToken cancellationToken = default,
-        string? projectId = null,
+        Guid? projectId = null,
         string? contextId = null)
     {
         var agent = await _agentRepository.SingleOrDefaultAsync(a => a.Name == agentName);
@@ -423,7 +423,7 @@ public class AgentRuntimeService
         string sessionId,
         string input,
         CancellationToken cancellationToken = default,
-        string? projectId = null,
+        Guid? projectId = null,
         string? contextId = null)
     {
         var chatMsg = new ChatMessage(ChatRole.User, input)
@@ -439,7 +439,7 @@ public class AgentRuntimeService
         string sessionId,
         List<ChatMessage> input,
         CancellationToken cancellationToken = default,
-        string? projectId = null,
+        Guid? projectId = null,
         string? contextId = null)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
@@ -450,6 +450,79 @@ public class AgentRuntimeService
 
         return await ExecuteAsync(sessionId, input, projectId, contextId, agent);
     }
+
+
+    private async Task<AgentExecutionResult?> ExecuteAsync(
+     string sessionId,
+     List<ChatMessage> chatMsg,
+     Guid? projectId,
+     string? contextId,
+     Agent agent)
+    {
+        projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
+        var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
+        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
+        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);
+        if (aiAgent == null)
+        {
+            throw new Exception("aiAgent not found");
+        }
+
+        try
+        {
+            AgentSession session;
+            if (string.IsNullOrWhiteSpace(sessionId))
+            {
+                sessionId = Guid.NewGuid().ToString();
+                session = await aiAgent.CreateSessionAsync();
+            }
+            else
+            {
+                var value = await _cache.GetOrCreateAsync<string>(sessionId, _ => ValueTask.FromResult(string.Empty));
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    session = await aiAgent.CreateSessionAsync();
+                }
+                else
+                {
+                    var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
+                    session = await aiAgent.DeserializeSessionAsync(serializedThread);
+                }
+            }
+
+            _providerSessionState.InitializeSessionState(
+                session,
+                string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
+                sessionId,
+                ProjectDefaults.GetDefaultProjectIdentifier(projectId)
+                );
+
+            var stream = aiAgent.RunStreamingAsync(chatMsg, session);
+            var messages = new List<AgwMessage>();
+            await foreach (var update in stream)
+            {
+                var msg = update.ToAiMessage();
+                if (msg != null)
+                {
+                    messages.Add(msg);
+                }
+            }
+
+            return new AgentExecutionResult(sessionId, messages);
+        }
+        finally
+        {
+            if (aiAgent is IAsyncDisposable asyncDisposable)
+            {
+                await asyncDisposable.DisposeAsync();
+            }
+            else if (aiAgent is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+        }
+    }
+
 
     private async Task<AIAgent?> CreateDefinitionAgent(Agent agentDefinition, CancellationToken cancellationToken)
     {
@@ -718,7 +791,7 @@ public class AgentRuntimeService
         return new HttpClientTransport(options);
     }
 
-    private async Task<bool> HasSessionRecordAsync(string sessionId, string? projectId)
+    private async Task<bool> HasSessionRecordAsync(string sessionId, Guid? projectId)
     {
         return await _taskRecordApplication.HasSessionAsync(sessionId, projectId);
     }
@@ -756,76 +829,7 @@ public class AgentRuntimeService
         await _cache.SetAsync(sessionId, serialized, cancellationToken: cancellationToken);
     }
 
-    private async Task<AgentExecutionResult?> ExecuteAsync(
-        string sessionId,
-        List<ChatMessage> chatMsg,
-        string? projectId,
-        string? contextId,
-        Agent agent)
-    {
-        projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
-        var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
-        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
-        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);
-        if (aiAgent == null)
-        {
-            throw new Exception("aiAgent not found");
-        }
-
-        try
-        {
-            AgentSession session;
-            if (string.IsNullOrWhiteSpace(sessionId))
-            {
-                sessionId = Guid.NewGuid().ToString();
-                session = await aiAgent.CreateSessionAsync();
-            }
-            else
-            {
-                var value = await _cache.GetOrCreateAsync<string>(sessionId, _ => ValueTask.FromResult(string.Empty));
-                if (string.IsNullOrWhiteSpace(value))
-                {
-                    session = await aiAgent.CreateSessionAsync();
-                }
-                else
-                {
-                    var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
-                    session = await aiAgent.DeserializeSessionAsync(serializedThread);
-                }
-            }
-
-            _providerSessionState.InitializeSessionState(
-                session,
-                string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
-                sessionId,
-                projectId);
-
-            var stream = aiAgent.RunStreamingAsync(chatMsg, session);
-            var messages = new List<AgwMessage>();
-            await foreach (var update in stream)
-            {
-                var msg = update.ToAiMessage();
-                if (msg != null)
-                {
-                    messages.Add(msg);
-                }
-            }
-
-            return new AgentExecutionResult(sessionId, messages);
-        }
-        finally
-        {
-            if (aiAgent is IAsyncDisposable asyncDisposable)
-            {
-                await asyncDisposable.DisposeAsync();
-            }
-            else if (aiAgent is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
-        }
-    }
-
+ 
     private string? MergeExtraSettings(string? agentExtra, string? projectExtraSetting)
     {
         if (string.IsNullOrWhiteSpace(projectExtraSetting))
@@ -858,7 +862,7 @@ public class AgentRuntimeService
         return merged.ToJsonString();
     }
 
-    private Task<string?> GetProjectExtraSettingAsync(string? projectId)
+    private Task<string?> GetProjectExtraSettingAsync(Guid? projectId)
     {
         return _projectAppService.GetProjectExtraSettingAsync(projectId);
     }

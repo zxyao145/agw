@@ -15,35 +15,26 @@ public class ProjectResolver
         _projectRepository = projectRepository;
     }
 
-    public Task<Project?> ResolveAsync(string? projectId, CancellationToken cancellationToken = default) =>
+    public Task<Project?> ResolveAsync(Guid? projectId, CancellationToken cancellationToken = default) =>
         ResolveInternalAsync(ProjectDefaults.GetDefaultProjectIdentifier(projectId), cancellationToken);
 
-    public Task<Project?> ResolveRequiredAsync(string projectId, CancellationToken cancellationToken = default) =>
+    public Task<Project?> ResolveRequiredAsync(Guid projectId, CancellationToken cancellationToken = default) =>
         ResolveInternalAsync(projectId, cancellationToken);
 
-    public async Task<Guid?> ResolveProjectIdAsync(string? projectId, CancellationToken cancellationToken = default)
+    public async Task<Guid?> ResolveProjectIdAsync(Guid? projectId, CancellationToken cancellationToken = default)
     {
         var project = await ResolveAsync(projectId, cancellationToken);
         return project?.Id;
     }
 
-    private async Task<Project?> ResolveInternalAsync(string? projectId, CancellationToken cancellationToken)
+    private async Task<Project?> ResolveInternalAsync(Guid? projectId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(projectId))
+        if (projectId == null)
         {
             return null;
         }
 
-        var normalizedProjectId = projectId.Trim();
-        if (Guid.TryParse(normalizedProjectId, out var projectGuid))
-        {
-            return await _projectRepository.Queryable
-                .FirstOrDefaultAsync(project => project.Id == projectGuid, cancellationToken);
-        }
-
         return await _projectRepository.Queryable
-            .FirstOrDefaultAsync(
-                project => project.Name.ToLower() == normalizedProjectId.ToLower(),
-                cancellationToken);
+                .FirstOrDefaultAsync(project => project.Id == projectId.Value, cancellationToken);
     }
 }

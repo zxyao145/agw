@@ -5,6 +5,7 @@ using Agw.Shared;
 using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
+using Agw.Shared.Tasks;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -208,7 +209,7 @@ public class AgentflowRuntimeService
         string sessionId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
-        string? projectId = null,
+        Guid? projectId = null,
         string? contextId = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
@@ -277,7 +278,7 @@ public class AgentflowRuntimeService
         string sessionId,
         string input,
         CancellationToken cancellationToken = default,
-        string? projectId = null,
+        Guid? projectId = null,
         string? contextId = null)
     {
         var messages = new List<ChatMessage>
@@ -296,10 +297,10 @@ public class AgentflowRuntimeService
         string sessionId,
         List<ChatMessage> messages,
         CancellationToken cancellationToken = default,
-        string? projectId = null,
+        Guid? projectId = null,
         string? contextId = null)
     {
-        return await ExecuteAsync(agentflowId, sessionId, messages, cancellationToken).ConfigureAwait(false);
+        return await ExecuteAsync(agentflowId, ProjectDefaults.GetDefaultProjectIdentifier(projectId), sessionId, messages, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<Workflow?> CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken = default)
@@ -315,6 +316,7 @@ public class AgentflowRuntimeService
 
     private async Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
+        Guid projectId,
         string sessionId,
         List<ChatMessage> messages,
         CancellationToken cancellationToken)

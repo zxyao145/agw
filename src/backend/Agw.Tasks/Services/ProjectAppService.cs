@@ -73,13 +73,13 @@ public class ProjectAppService : IProjectAppService
         return true;
     }
 
-    public async Task<string?> GetProjectExtraSettingAsync(string? projectId)
+    public async Task<string?> GetProjectExtraSettingAsync(Guid? projectId)
     {
         var project = await _projectResolver.ResolveAsync(projectId);
         return project?.ExtraSetting;
     }
 
-    public async Task<Guid?> ResolveProjectIdAsync(string? projectId)
+    public async Task<Guid?> ResolveProjectIdAsync(Guid? projectId)
     {
         var project = await _projectResolver.ResolveAsync(projectId);
         return project?.Id;

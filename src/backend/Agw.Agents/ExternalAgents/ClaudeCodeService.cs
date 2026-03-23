@@ -50,7 +50,7 @@ public class ClaudeCodeService
         ArgumentException.ThrowIfNullOrWhiteSpace(initRequest.SessionId);
 
         await EnsureGitRepositoryAsync(initRequest, cancellationToken);
-        var projectId = ProjectDefaults.GetClaudeCodeProjectIdentifier(initRequest.ProjectId);
+        var projectId = ProjectDefaults.ClaudeCodeId;
         var hasTaskRecord = await _taskRecordAppService.HasSessionAsync(
             initRequest.SessionId,
             projectId,

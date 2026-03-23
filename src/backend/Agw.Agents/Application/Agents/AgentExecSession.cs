@@ -1,6 +1,7 @@
 using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
+using Agw.Shared.Tasks;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -19,7 +20,7 @@ public sealed class AgentExecSession : IAsyncDisposable
 
     private readonly ILogger _logger;
     public readonly string _sessionId;
-    public readonly string _projectId;
+    public readonly Guid _projectId;
     public readonly string _contextId;
     private readonly ProjectTaskAgentType _agentType;
     private readonly Guid? _agentId;
@@ -31,7 +32,7 @@ public sealed class AgentExecSession : IAsyncDisposable
     public AgentExecSession(
         AIAgent agent,
         AgentSession thread,
-        string projectId,
+        Guid? projectId,
         string contextId,
         string? sessionId,
         ProjectTaskAgentType agentType,
@@ -44,7 +45,7 @@ public sealed class AgentExecSession : IAsyncDisposable
     {
         Agent = agent ?? throw new ArgumentNullException(nameof(agent));
         Session = thread ?? throw new ArgumentNullException(nameof(thread));
-        _projectId = projectId;
+        _projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         _contextId = contextId;
         _sessionId = sessionId ?? Guid.NewGuid().ToString();
         _agentType = agentType;

@@ -52,7 +52,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 var contextId = Activity.Current?.TraceId.ToString();
                 contextId ??= Guid.NewGuid().Normalize();
                 var sessionId = Guid.NewGuid().Normalize();
-                return new State(contextId, sessionId, null);
+                return new State(contextId, sessionId, ProjectDefaults.DefaultBuiltId);
             },
             nameof(EfCoreChatHistoryProvider),
             _jsonSerializerOptions);
@@ -62,7 +62,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         AgentSession session,
         string contextId,
         string? sessionId,
-        string? projectId)
+        Guid projectId)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentException.ThrowIfNullOrWhiteSpace(contextId);
@@ -74,7 +74,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         var state = new State(
             contextId.Trim(),
             string.IsNullOrWhiteSpace(sessionId) ? contextId.Trim() : sessionId.Trim(),
-            string.IsNullOrWhiteSpace(projectId) ? null : projectId.Trim());
+            projectId);
         _state.SaveState(session, state);
     }
 
@@ -139,18 +139,11 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         if (projectTask == null)
         {
-            var projectIdentifier = ProjectDefaults.GetDefaultProjectIdentifier(state.ProjectId);
-            var project = await ResolveProjectAsync(dbContext, projectIdentifier, cancellationToken).ConfigureAwait(false);
-            if (project == null)
-            {
-                throw new InvalidOperationException($"Project '{projectIdentifier}' could not be resolved for chat history persistence.");
-            }
-
             var firstUserText = ExtractFirstText(newMessages.FirstOrDefault(message => message.Role == ChatRole.User));
             projectTask = new ProjectTask
             {
                 Id = Guid.NewGuid(),
-                ProjectId = project.Id,
+                ProjectId = state.ProjectId,
                 ContextId = state.ContextId,
                 Title = string.IsNullOrWhiteSpace(firstUserText) ? "New Chat" : firstUserText[..Math.Min(firstUserText.Length, 80)],
                 Description = firstUserText ?? string.Empty,
@@ -227,5 +220,5 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .Trim();
     }
 
-    public sealed record State(string ContextId, string? SessionId, string? ProjectId);
+    public sealed record State(string ContextId, string? SessionId, Guid ProjectId);
 }

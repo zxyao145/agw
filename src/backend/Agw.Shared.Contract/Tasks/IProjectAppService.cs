@@ -7,7 +7,7 @@ public interface IProjectAppService
 {
     Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null);
 
-    Task<string?> GetProjectExtraSettingAsync(string? projectId);
+    Task<string?> GetProjectExtraSettingAsync(Guid? projectId);
 
-    Task<Guid?> ResolveProjectIdAsync(string? projectId);
+    Task<Guid?> ResolveProjectIdAsync(Guid? projectId);
 }

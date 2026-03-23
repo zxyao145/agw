@@ -32,7 +32,7 @@ public class SessionRecordAppService
         _projectResolver = projectResolver;
     }
 
-    public async Task<IReadOnlyList<SessionRecordSummary>> ListAsync(string projectId)
+    public async Task<IReadOnlyList<SessionRecordSummary>> ListAsync(Guid projectId)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
@@ -54,7 +54,7 @@ public class SessionRecordAppService
             .ToList();
     }
 
-    public async Task<SessionRecordDetails?> GetAsync(string sessionId, string projectId)
+    public async Task<SessionRecordDetails?> GetAsync(string sessionId, Guid projectId)
     {
         var task = await FindTaskAsync(sessionId, projectId);
         if (task == null)
@@ -92,7 +92,7 @@ public class SessionRecordAppService
 
     public async Task<ApplicationResult> UpdateTitleAsync(
         string sessionId,
-        string projectId,
+        Guid projectId,
         string title,
         string user)
     {
@@ -112,7 +112,7 @@ public class SessionRecordAppService
         return ApplicationResult.Success();
     }
 
-    public async Task<ApplicationResult> DeleteAsync(string sessionId, string projectId)
+    public async Task<ApplicationResult> DeleteAsync(string sessionId, Guid projectId)
     {
         var task = await FindTaskAsync(sessionId, projectId);
         if (task == null)
@@ -135,14 +135,14 @@ public class SessionRecordAppService
         return ApplicationResult.Success();
     }
 
-    private async Task<ProjectTask?> FindTaskAsync(string sessionId, string projectId)
+    private async Task<ProjectTask?> FindTaskAsync(string sessionId, Guid? projectId)
     {
-        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(projectId))
+        if (string.IsNullOrWhiteSpace(sessionId) || projectId == null)
         {
             return null;
         }
 
-        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId.Value);
         if (project == null)
         {
             return null;

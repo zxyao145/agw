@@ -185,7 +185,7 @@ public class AgentExecutionsController : ControllerBase
                                    request.SessionId ?? string.Empty,
                                    ExtractAgentflowInputText(request.Input),
                                    cancellationToken,
-                                   request.ProjectId,
+                                   ProjectDefaults.GetDefaultProjectIdentifier(request.ProjectId),
                                    task?.ContextId))
                 {
                     var json = JsonUtil.Serialize(message);
@@ -236,7 +236,7 @@ public class AgentExecutionsController : ControllerBase
         catch (JsonException) { return default; }
     }
 
-    private async Task<(ProjectTask? task, IActionResult? error)> ResolveTaskAsync(Guid? taskId, string? projectId)
+    private async Task<(ProjectTask? task, IActionResult? error)> ResolveTaskAsync(Guid? taskId, Guid? projectId)
     {
         if (!taskId.HasValue)
         {
@@ -249,7 +249,7 @@ public class AgentExecutionsController : ControllerBase
             return (null, NotFound("Task not found."));
         }
 
-        if (!string.IsNullOrWhiteSpace(projectId))
+        if (projectId != null)
         {
             var resolvedProjectId = await _projectAppService.ResolveProjectIdAsync(projectId);
             if (!resolvedProjectId.HasValue || task.ProjectId != resolvedProjectId.Value)
