@@ -1,4 +1,5 @@
 using Agw.Shared.Contracts;
+using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Agw.Tasks.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -9,9 +10,9 @@ namespace Agw.Api.Controllers;
 [Route("api/projects")]
 public class ProjectsController : ControllerBase
 {
-    private readonly ProjectAppService _projectAppService;
+    private readonly IProjectAppService _projectAppService;
 
-    public ProjectsController(ProjectAppService projectAppService)
+    public ProjectsController(IProjectAppService projectAppService)
     {
         _projectAppService = projectAppService;
     }

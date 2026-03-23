@@ -10,4 +10,9 @@ public interface IProjectAppService
     Task<string?> GetProjectExtraSettingAsync(Guid? projectId);
 
     Task<Guid?> ResolveProjectIdAsync(Guid? projectId);
+    Task<Project?> CreateAsync(Project project, string user);
+    Task<bool> DeleteAsync(Guid id);
+    Task<Project?> GetAsync(Guid id);
+
+    Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user);
 }
