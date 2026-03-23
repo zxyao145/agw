@@ -50,9 +50,10 @@ public class ClaudeCodeService
         ArgumentException.ThrowIfNullOrWhiteSpace(initRequest.SessionId);
 
         await EnsureGitRepositoryAsync(initRequest, cancellationToken);
+        var projectId = ProjectDefaults.GetClaudeCodeProjectIdentifier(initRequest.ProjectId);
         var hasTaskRecord = await _taskRecordAppService.HasSessionAsync(
             initRequest.SessionId,
-            initRequest.ProjectId,
+            projectId,
             cancellationToken);
 
         var options = BuildAgentOptions(initRequest, hasTaskRecord);
@@ -67,12 +68,12 @@ public class ClaudeCodeService
             agentSession,
             initRequest.SessionId,
             initRequest.SessionId,
-            initRequest.ProjectId);
+            projectId);
 
         return new AgentExecSession(
             agent,
             agentSession,
-            initRequest.ProjectId,
+            projectId,
             initRequest.SessionId,
             initRequest.SessionId,
             ProjectTaskAgentType.Agent,

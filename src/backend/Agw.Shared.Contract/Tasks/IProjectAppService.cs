@@ -8,4 +8,6 @@ public interface IProjectAppService
     Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null);
 
     Task<string?> GetProjectExtraSettingAsync(string? projectId);
+
+    Task<Guid?> ResolveProjectIdAsync(string? projectId);
 }

@@ -139,11 +139,18 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         if (projectTask == null)
         {
+            var projectIdentifier = ProjectDefaults.GetDefaultProjectIdentifier(state.ProjectId);
+            var project = await ResolveProjectAsync(dbContext, projectIdentifier, cancellationToken).ConfigureAwait(false);
+            if (project == null)
+            {
+                throw new InvalidOperationException($"Project '{projectIdentifier}' could not be resolved for chat history persistence.");
+            }
+
             var firstUserText = ExtractFirstText(newMessages.FirstOrDefault(message => message.Role == ChatRole.User));
             projectTask = new ProjectTask
             {
                 Id = Guid.NewGuid(),
-                ProjectId = state.ProjectId ?? string.Empty,
+                ProjectId = project.Id,
                 ContextId = state.ContextId,
                 Title = string.IsNullOrWhiteSpace(firstUserText) ? "New Chat" : firstUserText[..Math.Min(firstUserText.Length, 80)],
                 Description = firstUserText ?? string.Empty,
@@ -193,6 +200,20 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         _state.SaveState(context.Session, state);
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+
+    private static Task<Project?> ResolveProjectAsync(DbContext dbContext, string projectId, CancellationToken cancellationToken)
+    {
+        var normalizedProjectId = projectId.Trim();
+        if (Guid.TryParse(normalizedProjectId, out var projectGuid))
+        {
+            return dbContext.Set<Project>()
+                .SingleOrDefaultAsync(project => project.Id == projectGuid, cancellationToken);
+        }
+
+        return dbContext.Set<Project>()
+            .SingleOrDefaultAsync(project => project.Name.ToLower() == normalizedProjectId.ToLower(), cancellationToken);
     }
 
     private static string? ExtractFirstText(ChatMessage? message)

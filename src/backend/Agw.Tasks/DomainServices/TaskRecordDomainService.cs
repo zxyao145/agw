@@ -50,6 +50,5 @@ public class TaskRecordDomainService
             : taskByContext.GetValueOrDefault(latestMatch.ContextId);
     }
 
-    public bool ShouldDeleteTask(ProjectTask task) =>
-        !Guid.TryParse(task.ProjectId, out _);
+    public bool ShouldDeleteTask(ProjectTask task) => false;
 }

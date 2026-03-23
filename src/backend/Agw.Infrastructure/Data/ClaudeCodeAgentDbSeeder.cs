@@ -1,5 +1,7 @@
 using Agw.Domain.Entities;
 using Agw.Shared.Enums;
+using Agw.Shared.Tasks;
+using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
 using ClaudeCodeSdk.MAF;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +35,7 @@ public class ClaudeCodeAgentDbSeeder
             // Ensure database is created
             await _context.Database.EnsureCreatedAsync();
 
-            // Seed Claude Code agent if it doesn't exist
+            await SeedBuiltInProjectsAsync();
             await SeedClaudeCodeAgentAsync();
 
             await _context.SaveChangesAsync();
@@ -46,11 +48,51 @@ public class ClaudeCodeAgentDbSeeder
         }
     }
 
+    private async Task SeedBuiltInProjectsAsync()
+    {
+        foreach (var definition in ProjectDefaults.BuiltInProjects)
+        {
+            var existingProject = await _context.Projects
+                .FirstOrDefaultAsync(project => project.Id == definition.Id || project.Name == definition.Name);
+
+            if (existingProject == null)
+            {
+                _logger.LogInformation("Seeding built-in project {ProjectName}", definition.Name);
+                _context.Projects.Add(CreateBuiltInProject(definition));
+                continue;
+            }
+
+            existingProject.Name = definition.Name;
+            existingProject.Type = definition.Type;
+            existingProject.Description = definition.Description;
+            existingProject.Enable = true;
+            existingProject.UpdateTime = DateTime.UtcNow;
+        }
+    }
+
+    private static Project CreateBuiltInProject(Project definition)
+    {
+        var now = DateTime.UtcNow;
+        return new Project
+        {
+            Id = definition.Id,
+            Name = definition.Name,
+            Type = definition.Type,
+            Description = definition.Description,
+            Workspace = definition.Workspace,
+            Enable = true,
+            ExtraSetting = definition.ExtraSetting,
+            CreateBy = "system",
+            CreateTime = now,
+            UpdateBy = "system",
+            UpdateTime = now
+        };
+    }
+
     private async Task SeedClaudeCodeAgentAsync()
     {
         const string ClaudeCodeAgentName = "ClaudeCode";
 
-        // Check if Claude Code agent already exists
         var existingAgent = await _context.Agents
             .FirstOrDefaultAsync(a => a.Name == ClaudeCodeAgentName && a.Type == AgentType.External);
 
@@ -62,11 +104,9 @@ public class ClaudeCodeAgentDbSeeder
 
         _logger.LogInformation("Seeding Claude Code Agent");
 
-        // Create default ClaudeCodeAIAgentOptions
         var claudeCodeOptions = new ClaudeCodeAIAgentOptions();
         var extraJson = JsonUtil.Serialize(claudeCodeOptions);
 
-        // External agents don't require a ModelProvider
         var claudeCodeAgent = new Agent
         {
             Id = Guid.NewGuid(),
@@ -75,7 +115,7 @@ public class ClaudeCodeAgentDbSeeder
             SystemPrompt = string.Empty,
             Type = AgentType.External,
             Extra = extraJson,
-            ModelProviderId = null,  // External agents can have null ModelProviderId
+            ModelProviderId = null,
             Tools = null,
             CreateTime = DateTime.UtcNow,
             UpdateTime = DateTime.UtcNow
