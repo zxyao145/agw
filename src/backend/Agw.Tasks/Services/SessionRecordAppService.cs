@@ -14,25 +14,33 @@ public class SessionRecordAppService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectTaskDomainService _projectTaskDomainService;
     private readonly TaskRecordDomainService _taskRecordDomainService;
+    private readonly ProjectResolver _projectResolver;
 
     public SessionRecordAppService(
         IRepository<ProjectTask> taskRepository,
         IRepository<TaskRecord> recordRepository,
         IUnitOfWork unitOfWork,
         ProjectTaskDomainService projectTaskDomainService,
-        TaskRecordDomainService taskRecordDomainService)
+        TaskRecordDomainService taskRecordDomainService,
+        ProjectResolver projectResolver)
     {
         _taskRepository = taskRepository;
         _recordRepository = recordRepository;
         _unitOfWork = unitOfWork;
         _projectTaskDomainService = projectTaskDomainService;
         _taskRecordDomainService = taskRecordDomainService;
+        _projectResolver = projectResolver;
     }
 
     public async Task<IReadOnlyList<SessionRecordSummary>> ListAsync(string projectId)
     {
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
-        var tasks = await _taskRepository.ListAsync(task => task.ProjectId == normalizedProjectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return [];
+        }
+
+        var tasks = await _taskRepository.ListAsync(task => task.ProjectId == project.Id);
         if (tasks.Count == 0)
         {
             return [];
@@ -74,7 +82,7 @@ public class SessionRecordAppService
 
         return new SessionRecordDetails(
             task.Id,
-            task.ProjectId,
+            task.ProjectId.Normalize(),
             task.ContextId,
             NormalizeTitle(task.Title),
             messages,
@@ -134,8 +142,13 @@ public class SessionRecordAppService
             return null;
         }
 
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
-        var tasks = await _taskRepository.ListAsync(task => task.ProjectId == normalizedProjectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return null;
+        }
+
+        var tasks = await _taskRepository.ListAsync(task => task.ProjectId == project.Id);
         if (tasks.Count == 0)
         {
             return null;
@@ -204,7 +217,7 @@ public class SessionRecordAppService
 
         return new SessionRecordSummary(
             task.Id,
-            task.ProjectId,
+            task.ProjectId.Normalize(),
             task.ContextId,
             NormalizeTitle(task.Title),
             messageCount,

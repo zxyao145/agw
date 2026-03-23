@@ -11,15 +11,18 @@ public class ProjectAppService : IProjectAppService
     private readonly IRepository<Project> _projectRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectDomainService _projectDomainService;
+    private readonly ProjectResolver _projectResolver;
 
     public ProjectAppService(
         IRepository<Project> projectRepository,
         IUnitOfWork unitOfWork,
-        ProjectDomainService projectDomainService)
+        ProjectDomainService projectDomainService,
+        ProjectResolver projectResolver)
     {
         _projectRepository = projectRepository;
         _unitOfWork = unitOfWork;
         _projectDomainService = projectDomainService;
+        _projectResolver = projectResolver;
     }
 
     public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
@@ -72,17 +75,13 @@ public class ProjectAppService : IProjectAppService
 
     public async Task<string?> GetProjectExtraSettingAsync(string? projectId)
     {
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            return null;
-        }
-
-        if (!Guid.TryParse(projectId, out var projectGuid))
-        {
-            return null;
-        }
-
-        var project = await _projectRepository.GetByIdAsync(projectGuid);
+        var project = await _projectResolver.ResolveAsync(projectId);
         return project?.ExtraSetting;
+    }
+
+    public async Task<Guid?> ResolveProjectIdAsync(string? projectId)
+    {
+        var project = await _projectResolver.ResolveAsync(projectId);
+        return project?.Id;
     }
 }

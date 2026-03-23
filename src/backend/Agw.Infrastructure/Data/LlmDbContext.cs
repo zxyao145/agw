@@ -42,13 +42,16 @@ public class LlmDbContext : DbContext
         modelBuilder.Entity<LlmModel>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Name).IsUnique();
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Type).HasConversion<int>();
             entity.Property(e => e.Description).HasMaxLength(1000);
         });
 
         modelBuilder.Entity<Provider>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Name).IsUnique();
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Endpoint).IsRequired().HasMaxLength(500);
             entity.Property(e => e.Description).HasMaxLength(1000);
@@ -146,17 +149,17 @@ public class LlmDbContext : DbContext
         modelBuilder.Entity<Project>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Name).IsUnique();
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Type).HasConversion<int>();
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.Workspace).HasMaxLength(1000);
             entity.Property(e => e.ExtraSetting).HasMaxLength(16000);
-            entity.Ignore(e => e.Tasks);
         });
 
         modelBuilder.Entity<ProjectTask>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.ProjectId).HasMaxLength(64);
             entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.AgentType).HasConversion<int>();
             entity.Property(e => e.Description).IsRequired().HasMaxLength(1024);
@@ -169,6 +172,11 @@ public class LlmDbContext : DbContext
             entity.HasIndex(e => e.AgentId).IsUnique(false);
             entity.HasIndex(e => e.ProjectId);
             entity.HasIndex(e => new { e.ProjectId, e.Status, e.UpdateTime });
+
+            entity.HasOne(e => e.Project)
+                .WithMany(project => project.Tasks)
+                .HasForeignKey(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasMany(e => e.ConversationList)
                 .WithOne()

@@ -24,15 +24,18 @@ public class AgentExecutionsController : ControllerBase
     private readonly AgentRuntimeService _agentRuntimeService;
     private readonly AgentflowRuntimeService _agentflowRuntimeService;
     private readonly ITaskAppService _taskAppService;
+    private readonly IProjectAppService _projectAppService;
 
     public AgentExecutionsController(
         AgentRuntimeService agentRuntimeService,
         AgentflowRuntimeService agentflowRuntimeService,
-        ITaskAppService taskAppService)
+        ITaskAppService taskAppService,
+        IProjectAppService projectAppService)
     {
         _agentRuntimeService = agentRuntimeService;
         _agentflowRuntimeService = agentflowRuntimeService;
         _taskAppService = taskAppService;
+        _projectAppService = projectAppService;
     }
 
     [HttpPost("{id:guid}/execute")]
@@ -248,19 +251,10 @@ public class AgentExecutionsController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(projectId))
         {
-            if (Guid.TryParse(projectId, out var normalizedProjectId))
+            var resolvedProjectId = await _projectAppService.ResolveProjectIdAsync(projectId);
+            if (!resolvedProjectId.HasValue || task.ProjectId != resolvedProjectId.Value)
             {
-                if (!string.Equals(task.ProjectId, normalizedProjectId.Normalize(), StringComparison.OrdinalIgnoreCase))
-                {
-                    return (null, BadRequest("Task does not belong to the supplied projectId."));
-                }
-            }
-            else
-            {
-                if (!string.Equals(task.ProjectId, projectId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return (null, BadRequest("Task does not belong to the supplied projectId."));
-                }
+                return (null, BadRequest("Task does not belong to the supplied projectId."));
             }
         }
 

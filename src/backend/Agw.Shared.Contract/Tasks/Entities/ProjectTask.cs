@@ -6,7 +6,9 @@ public class ProjectTask : BaseEntity
 {
     public Guid Id { get; set; }
 
-    public string ProjectId { get; set; } = string.Empty;
+    public Guid ProjectId { get; set; }
+
+    public Project? Project { get; set; }
 
     /// <summary>
     /// ContextId 全局唯一

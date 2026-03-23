@@ -155,15 +155,13 @@ public class TaskRecordDomainServiceTests
         Assert.Null(result);
     }
 
-    [Theory]
-    [InlineData("not-a-guid", true)]
-    [InlineData("d2719d59-e4d6-4ddb-9be3-e6fe0f79d56c", false)]
-    public void ShouldDeleteTask_ReturnsExpectedValue(string projectId, bool expected)
+    [Fact]
+    public void ShouldDeleteTask_ProjectBackedTask_ReturnsFalse()
     {
-        var task = new ProjectTask { ProjectId = projectId };
+        var task = new ProjectTask { ProjectId = Guid.NewGuid() };
 
         var result = _service.ShouldDeleteTask(task);
 
-        Assert.Equal(expected, result);
+        Assert.False(result);
     }
 }

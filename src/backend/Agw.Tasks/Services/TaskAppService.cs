@@ -9,13 +9,16 @@ public class TaskAppService : ITaskAppService
 {
     private readonly IRepository<ProjectTask> _taskRepository;
     private readonly IRepository<TaskRecord> _recordRepository;
+    private readonly ProjectResolver _projectResolver;
 
     public TaskAppService(
         IRepository<ProjectTask> taskRepository,
-        IRepository<TaskRecord> recordRepository)
+        IRepository<TaskRecord> recordRepository,
+        ProjectResolver projectResolver)
     {
         _taskRepository = taskRepository;
         _recordRepository = recordRepository;
+        _projectResolver = projectResolver;
     }
 
     public Task<ProjectTask?> GetTaskAsync(Guid id) => _taskRepository.GetByIdAsync(id);
@@ -34,7 +37,7 @@ public class TaskAppService : ITaskAppService
             return false;
         }
 
-        var exist = await _taskRepository.Queryable.AnyAsync(r => r.Id == taskGuid);
+        var exist = await _taskRepository.Queryable.AnyAsync(r => r.Id == taskGuid, cancellationToken);
         return exist;
     }
 
@@ -59,6 +62,12 @@ public class TaskAppService : ITaskAppService
             return true;
         }
 
+        var project = await _projectResolver.ResolveAsync(projectId, cancellationToken);
+        if (project == null)
+        {
+            return false;
+        }
+
         var contexts = records
             .Select(r => r.ContextId)
             .Where(contextId => !string.IsNullOrWhiteSpace(contextId))
@@ -70,7 +79,7 @@ public class TaskAppService : ITaskAppService
             return false;
         }
 
-        var tasks = await _taskRepository.ListAsync(t => t.ProjectId == projectId);
+        var tasks = await _taskRepository.ListAsync(t => t.ProjectId == project.Id);
         var knownContexts = tasks
             .Select(t => t.ContextId)
             .ToHashSet(StringComparer.Ordinal);

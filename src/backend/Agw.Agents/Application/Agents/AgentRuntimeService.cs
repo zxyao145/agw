@@ -303,6 +303,7 @@ public class AgentRuntimeService
             return null;
         }
 
+        projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
         if (string.IsNullOrWhiteSpace(sessionId))
@@ -322,7 +323,7 @@ public class AgentRuntimeService
         return new AgentExecSession(
             aiAgent,
             agentSession,
-            projectId ?? string.Empty,
+            projectId,
             resolvedContextId,
             sessionId,
             ProjectTaskAgentType.Agent,
@@ -762,6 +763,7 @@ public class AgentRuntimeService
         string? contextId,
         Agent agent)
     {
+        projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
         var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);

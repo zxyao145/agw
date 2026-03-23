@@ -15,25 +15,25 @@ public class ProjectTaskAppService
 {
     private readonly IRepository<ProjectTask> _taskRepository;
     private readonly IRepository<TaskRecord> _recordRepository;
-    private readonly IRepository<Project> _projectRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectTaskDomainService _projectTaskDomainService;
     private readonly TaskRecordDomainService _taskRecordDomainService;
+    private readonly ProjectResolver _projectResolver;
 
     public ProjectTaskAppService(
         IRepository<ProjectTask> taskRepository,
         IRepository<TaskRecord> recordRepository,
-        IRepository<Project> projectRepository,
         IUnitOfWork unitOfWork,
         ProjectTaskDomainService projectTaskDomainService,
-        TaskRecordDomainService taskRecordDomainService)
+        TaskRecordDomainService taskRecordDomainService,
+        ProjectResolver projectResolver)
     {
         _taskRepository = taskRepository;
         _recordRepository = recordRepository;
-        _projectRepository = projectRepository;
         _unitOfWork = unitOfWork;
         _projectTaskDomainService = projectTaskDomainService;
         _taskRecordDomainService = taskRecordDomainService;
+        _projectResolver = projectResolver;
     }
 
     public Task<IReadOnlyList<ProjectTask>> ListAsync(Expression<Func<ProjectTask, bool>>? predicate = null) =>
@@ -43,8 +43,13 @@ public class ProjectTaskAppService
 
     public async Task<IReadOnlyList<ProjectTaskResponse>> ListResponsesAsync(string projectId)
     {
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
-        var tasks = await _taskRepository.ListAsync(task => task.ProjectId == normalizedProjectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return [];
+        }
+
+        var tasks = await _taskRepository.ListAsync(task => task.ProjectId == project.Id);
         if (tasks.Count == 0)
         {
             return [];
@@ -62,9 +67,14 @@ public class ProjectTaskAppService
 
     public async Task<ProjectTaskResponse?> GetResponseAsync(string projectId, Guid taskId)
     {
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return null;
+        }
+
         var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null || task.ProjectId != normalizedProjectId)
+        if (task == null || task.ProjectId != project.Id)
         {
             return null;
         }
@@ -79,8 +89,8 @@ public class ProjectTaskAppService
         ProjectTaskCreateRequest request,
         string user)
     {
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
-        if (!await ProjectExistsAsync(normalizedProjectId))
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
         {
             return ApplicationResult<ProjectTaskResponse>.Invalid(
                 "Failed to create task (project/target invalid, target mismatch, or input missing).");
@@ -97,7 +107,7 @@ public class ProjectTaskAppService
         var task = new ProjectTask
         {
             Id = taskId,
-            ProjectId = normalizedProjectId,
+            ProjectId = project.Id,
             ContextId = contextId,
             AgentType = request.AgentType,
             AgentId = request.AgentType == ProjectTaskAgentType.Agentflow
@@ -143,9 +153,14 @@ public class ProjectTaskAppService
         ProjectTaskUpdateRequest request,
         string user)
     {
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return ApplicationResult<ProjectTaskResponse>.NotFound();
+        }
+
         var existing = await _taskRepository.GetByIdAsync(taskId);
-        if (existing == null || existing.ProjectId != normalizedProjectId)
+        if (existing == null || existing.ProjectId != project.Id)
         {
             return ApplicationResult<ProjectTaskResponse>.NotFound();
         }
@@ -178,9 +193,14 @@ public class ProjectTaskAppService
         string title,
         string user)
     {
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return ApplicationResult.NotFound();
+        }
+
         var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null || task.ProjectId != normalizedProjectId)
+        if (task == null || task.ProjectId != project.Id)
         {
             return ApplicationResult.NotFound();
         }
@@ -197,9 +217,14 @@ public class ProjectTaskAppService
 
     public async Task<ApplicationResult> DeleteSessionAsync(string projectId, Guid taskId)
     {
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return ApplicationResult.NotFound();
+        }
+
         var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null || task.ProjectId != normalizedProjectId)
+        if (task == null || task.ProjectId != project.Id)
         {
             return ApplicationResult.NotFound();
         }
@@ -225,9 +250,14 @@ public class ProjectTaskAppService
         DateTime updateTimeUtc,
         string user)
     {
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return ApplicationResult<ProjectTaskResponse>.NotFound();
+        }
+
         var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null || task.ProjectId != normalizedProjectId)
+        if (task == null || task.ProjectId != project.Id)
         {
             return ApplicationResult<ProjectTaskResponse>.NotFound();
         }
@@ -249,9 +279,14 @@ public class ProjectTaskAppService
         Guid taskId,
         string user)
     {
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return ApplicationResult<ProjectTaskResponse>.NotFound();
+        }
+
         var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null || task.ProjectId != normalizedProjectId)
+        if (task == null || task.ProjectId != project.Id)
         {
             return ApplicationResult<ProjectTaskResponse>.NotFound();
         }
@@ -270,9 +305,14 @@ public class ProjectTaskAppService
 
     public async Task<ApplicationResult> DeleteAsync(string projectId, Guid taskId)
     {
-        var normalizedProjectId = ProjectIdNormalizer.Normalize(projectId);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return ApplicationResult.NotFound();
+        }
+
         var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null || task.ProjectId != normalizedProjectId)
+        if (task == null || task.ProjectId != project.Id)
         {
             return ApplicationResult.NotFound();
         }
@@ -290,17 +330,15 @@ public class ProjectTaskAppService
 
     public async Task<bool> HasRunningTaskAsync(Guid projectId)
     {
-        var normalizedProjectId = projectId.Normalize();
         var running = await _taskRepository.ListAsync(task =>
-            task.ProjectId == normalizedProjectId && task.Status == ProjectTaskStatus.Running);
+            task.ProjectId == projectId && task.Status == ProjectTaskStatus.Running);
         return running.Count > 0;
     }
 
     public async Task<ProjectTask?> GetNextPendingAsync(Guid projectId)
     {
-        var normalizedProjectId = projectId.Normalize();
         var pending = await _taskRepository.ListAsync(task =>
-            task.ProjectId == normalizedProjectId && task.Status == ProjectTaskStatus.Pending);
+            task.ProjectId == projectId && task.Status == ProjectTaskStatus.Pending);
         return _projectTaskDomainService.GetNextPending(pending);
     }
 
@@ -349,16 +387,6 @@ public class ProjectTaskAppService
         return task;
     }
 
-    private async Task<bool> ProjectExistsAsync(string projectId)
-    {
-        if (!Guid.TryParse(projectId, out var projectGuid))
-        {
-            return true;
-        }
-
-        return await _projectRepository.GetByIdAsync(projectGuid) is not null;
-    }
-
     private async Task<IReadOnlyList<TaskRecord>> GetOrderedRecordsByContextIdAsync(string contextId)
     {
         if (string.IsNullOrWhiteSpace(contextId))
@@ -403,7 +431,7 @@ public class ProjectTaskAppService
 
         return new ProjectTaskResponse(
             task.Id,
-            task.ProjectId,
+            task.ProjectId.Normalize(),
             task.ContextId,
             task.AgentType,
             responseAgentflowId,

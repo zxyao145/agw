@@ -1,9 +1,12 @@
+using Agw.Shared.Enums;
+
 namespace Agw.Shared.Tasks.Entities;
 
 public class Project : BaseEntity
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public ProjectType Type { get; set; } = ProjectType.UserDefined;
     public string? Description { get; set; }
     public string? Workspace { get; set; }
     public bool Enable { get; set; } = true;
