@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace Agw.Shared.Utils;
 
-internal class ThrowUtil
+public class ThrowUtil
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [return: NotNull]
