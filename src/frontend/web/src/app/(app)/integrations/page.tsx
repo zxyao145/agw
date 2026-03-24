@@ -112,10 +112,14 @@ const statusLabel: Record<IntegrationTemplate["status"], string> = {
 
 function buildRedirectUri(path: string) {
   if (typeof window === "undefined") {
-    return path;
+    return { value: path, error: null };
   }
 
-  return new URL(path, window.location.origin).toString();
+  try {
+    return { value: new URL(path, window.location.origin).toString(), error: null };
+  } catch {
+    return { value: "", error: "Enter a valid redirect URI." };
+  }
 }
 
 function encodeBase64Url(value: ArrayBuffer | Uint8Array | string) {
@@ -181,7 +185,7 @@ export default function IntegrationsPage() {
     setForm(createInitialFormState(selectedIntegration));
   }, [selectedIntegration]);
 
-  const resolvedRedirectUri = React.useMemo(
+  const resolvedRedirect = React.useMemo(
     () => buildRedirectUri(form.redirectUri),
     [form.redirectUri],
   );
@@ -201,7 +205,12 @@ export default function IntegrationsPage() {
 
   const handleCopyRedirectUri = async () => {
     try {
-      await navigator.clipboard.writeText(resolvedRedirectUri);
+      if (resolvedRedirect.error) {
+        toast.error(resolvedRedirect.error);
+        return;
+      }
+
+      await navigator.clipboard.writeText(resolvedRedirect.value);
       toast.success("Callback URL copied");
     } catch {
       toast.error("Unable to copy callback URL");
@@ -213,6 +222,10 @@ export default function IntegrationsPage() {
       toast.error("Authorization URL, client ID, and at least one scope are required.");
       return;
     }
+    if (resolvedRedirect.error) {
+      toast.error(resolvedRedirect.error);
+      return;
+    }
 
     setIsAuthorizing(true);
 
@@ -222,7 +235,7 @@ export default function IntegrationsPage() {
       const params = new URLSearchParams({
         response_type: "code",
         client_id: form.clientId.trim(),
-        redirect_uri: resolvedRedirectUri,
+        redirect_uri: resolvedRedirect.value,
         scope: scopeList.join(" "),
         state,
       });
@@ -251,7 +264,9 @@ export default function IntegrationsPage() {
         );
       }
 
-      url.search = params.toString();
+      params.forEach((value, key) => {
+        url.searchParams.set(key, value);
+      });
       window.open(url.toString(), "_self");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to start OAuth2 login.";
@@ -365,8 +380,14 @@ export default function IntegrationsPage() {
                     }
                     placeholder="/integrations/callback"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Backend callback: {resolvedRedirectUri}
+                  <p
+                    className={`text-xs ${
+                      resolvedRedirect.error ? "text-destructive" : "text-muted-foreground"
+                    }`}
+                  >
+                    {resolvedRedirect.error
+                      ? resolvedRedirect.error
+                      : `Backend callback: ${resolvedRedirect.value}`}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     UI hand-off: {resolvedUiCallbackUri}
