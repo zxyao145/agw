@@ -37,6 +37,7 @@ type IntegrationTemplate = {
   clientId: string;
   scopes: string[];
   redirectPath: string;
+  uiCallbackPath: string;
 };
 
 type OAuthFormState = {
@@ -58,7 +59,8 @@ const integrationTemplates: IntegrationTemplate[] = [
     authUrl: "https://github.com/login/oauth/authorize",
     clientId: "agw-github-client",
     scopes: ["repo", "read:user", "read:org"],
-    redirectPath: "/integrations/callback",
+    redirectPath: "/api/integrations/oauth/callback",
+    uiCallbackPath: "/integrations/callback",
   },
   {
     id: "slack",
@@ -70,7 +72,8 @@ const integrationTemplates: IntegrationTemplate[] = [
     authUrl: "https://slack.com/oauth/v2/authorize",
     clientId: "agw-slack-client",
     scopes: ["channels:read", "chat:write", "users:read"],
-    redirectPath: "/integrations/callback",
+    redirectPath: "/api/integrations/oauth/callback",
+    uiCallbackPath: "/integrations/callback",
   },
   {
     id: "google-workspace",
@@ -87,7 +90,8 @@ const integrationTemplates: IntegrationTemplate[] = [
       "https://www.googleapis.com/auth/drive.readonly",
       "https://www.googleapis.com/auth/calendar.readonly",
     ],
-    redirectPath: "/integrations/callback",
+    redirectPath: "/api/integrations/oauth/callback",
+    uiCallbackPath: "/integrations/callback",
   },
 ];
 
@@ -140,6 +144,14 @@ async function createPkcePair() {
   };
 }
 
+function buildUiCallbackUri(path: string) {
+  if (typeof window === "undefined") {
+    return path;
+  }
+
+  return new URL(path, window.location.origin).toString();
+}
+
 function createInitialFormState(template: IntegrationTemplate): OAuthFormState {
   return {
     authUrl: template.authUrl,
@@ -172,6 +184,10 @@ export default function IntegrationsPage() {
   const resolvedRedirectUri = React.useMemo(
     () => buildRedirectUri(form.redirectUri),
     [form.redirectUri],
+  );
+  const resolvedUiCallbackUri = React.useMemo(
+    () => buildUiCallbackUri(selectedIntegration.uiCallbackPath),
+    [selectedIntegration.uiCallbackPath],
   );
 
   const scopeList = React.useMemo(
@@ -249,8 +265,8 @@ export default function IntegrationsPage() {
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">Integrations</h1>
         <p className="text-sm text-muted-foreground">
-          Start OAuth2 flows for external apps, review requested scopes, and hand users a callback
-          URL that returns authorization codes back to Agw.
+          Start OAuth2 flows for external apps, review requested scopes, and send provider callbacks
+          through Agw's backend before returning users to the integrations UI.
         </p>
       </div>
 
@@ -350,7 +366,10 @@ export default function IntegrationsPage() {
                     placeholder="/integrations/callback"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Resolved callback: {resolvedRedirectUri}
+                    Backend callback: {resolvedRedirectUri}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    UI hand-off: {resolvedUiCallbackUri}
                   </p>
                 </div>
               </div>
@@ -432,7 +451,8 @@ export default function IntegrationsPage() {
                 <CheckCircle2 className="size-5 text-primary" />
                 <h3 className="mt-3 font-medium">Callback hand-off</h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Give app owners a stable redirect URI that returns users to Agw after consent.
+                  Route provider callbacks through Agw's backend endpoint before returning to the
+                  UI.
                 </p>
               </div>
             </CardContent>
