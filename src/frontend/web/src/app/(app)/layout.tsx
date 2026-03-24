@@ -16,6 +16,8 @@ import {
   Gauge,
   Waypoints,
   Link2,
+  Hammer,
+  Cable,
 } from "lucide-react";
 
 import {
@@ -31,34 +33,23 @@ import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
 const navItems: SidebarMenuGroupProps[] = [
-  {
-    groupLable: "Overview",
-    menus: [
-      {
-        url: "/dashboard",
-        title: "Dashboard",
-        isActive: true,
-        icon: <Gauge />,
-      },
-      {
-        url: "/traces",
-        title: "Traces",
-        isActive: true,
-        icon: <Waypoints />,
-      },
-    ],
-  },
-  {
-    groupLable: "ExternalAgents",
-    menus: [
-      {
-        url: "/claude-code",
-        title: "ClaudeCode",
-        isActive: true,
-        icon: <Terminal />,
-      },
-    ],
-  },
+  // {
+  //   groupLable: "Overview",
+  //   menus: [
+  //     {
+  //       url: "/dashboard",
+  //       title: "Dashboard",
+  //       isActive: true,
+  //       icon: <Gauge />,
+  //     },
+  //     {
+  //       url: "/traces",
+  //       title: "Traces",
+  //       isActive: true,
+  //       icon: <Waypoints />,
+  //     },
+  //   ],
+  // },
 
   {
     groupLable: "Projects",
@@ -99,6 +90,19 @@ const navItems: SidebarMenuGroupProps[] = [
         isActive: true,
         icon: <Package />,
       },
+      {
+        url: "/skills",
+        title: "ExternalAgents",
+        isActive: true,
+        icon: <Hammer />,
+        subMenuItems: [
+          {
+            title: "ClaudeCode",
+            url: "/claude-code",
+            // icon: <Terminal />,
+          },
+        ],
+      },
     ],
   },
 
@@ -123,11 +127,17 @@ const navItems: SidebarMenuGroupProps[] = [
         isActive: true,
         icon: <Box />,
       },
+    ],
+  },
+
+  {
+    groupLable: "Integrations",
+    menus: [
       {
         url: "/integrations",
         title: "Integrations",
         isActive: true,
-        icon: <Link2 />,
+        icon: <Cable />,
       },
     ],
   },
@@ -135,14 +145,18 @@ const navItems: SidebarMenuGroupProps[] = [
 
 function getActiveNavLabel(pathname: string): MenuItem | undefined {
   const allNavItems = navItems.flatMap((group) => group.menus);
-  const match = allNavItems.find((x) => pathname === x.url || pathname.startsWith(`${x.url}/`));
+  const match = allNavItems.find(
+    (x) => pathname === x.url || pathname.startsWith(`${x.url}/`),
+  );
   return match;
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeMenu = getActiveNavLabel(pathname);
-  const [sidebarOpen, setSidebarOpen] = React.useState(pathname !== "/claude-code");
+  const [sidebarOpen, setSidebarOpen] = React.useState(
+    pathname !== "/claude-code",
+  );
 
   React.useEffect(() => {
     if (pathname === "/claude-code") {

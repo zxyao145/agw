@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-export type MenuLink = { title: string; url: string };
+export type MenuLink = { title: string; url: string, icon?: React.ReactNode };
 
 export type MenuItem = {
   title: string;
@@ -104,9 +104,10 @@ export function AppSidebar({ menus }: AppSidebarProps) {
                                 <SidebarMenuSubItem key={subItem.title}>
                                   <Link href={subItem.url}>
                                     <SidebarMenuSubButton
-                                      asChild
+                                      // asChild
                                       className={`cursor-pointer ${isActive(pathname, subItem.url) ? "font-bold" : ""}`}
                                     >
+                                      {subItem.icon}
                                       <span>{subItem.title}</span>
                                     </SidebarMenuSubButton>
                                   </Link>
