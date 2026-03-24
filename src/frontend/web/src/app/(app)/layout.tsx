@@ -4,11 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  MenuIcon,
   LayoutDashboard,
   Workflow,
   Bot,
-  Cog,
   Package,
   Blocks,
   Terminal,
@@ -17,10 +15,9 @@ import {
   Box,
   Gauge,
   Waypoints,
+  Link2,
 } from "lucide-react";
 
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -29,19 +26,9 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Separator } from "@/components/ui/separator";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import { QueryErrorBoundary } from "@/components/query-error-boundary";
 import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { group } from "console";
+import { SidebarProvider } from "@/components/ui/sidebar";
 
 const navItems: SidebarMenuGroupProps[] = [
   {
@@ -135,6 +122,12 @@ const navItems: SidebarMenuGroupProps[] = [
         title: "Model Providers",
         isActive: true,
         icon: <Box />,
+      },
+      {
+        url: "/integrations",
+        title: "Integrations",
+        isActive: true,
+        icon: <Link2 />,
       },
     ],
   },
