@@ -156,6 +156,26 @@ function buildUiCallbackUri(path: string) {
   return new URL(path, window.location.origin).toString();
 }
 
+function buildOAuthCookieName(state: string) {
+  return `agw_oauth2_${encodeBase64Url(state)}`;
+}
+
+function storeOAuthCallbackStateCookie(payload: {
+  state: string;
+  integrationId: string;
+  verifier?: string;
+  createdAt: string;
+}) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const secure = window.location.protocol === "https:" ? "; secure" : "";
+  document.cookie = `${buildOAuthCookieName(payload.state)}=${encodeURIComponent(
+    JSON.stringify(payload),
+  )}; path=/; max-age=600; samesite=lax${secure}`;
+}
+
 function createInitialFormState(template: IntegrationTemplate): OAuthFormState {
   return {
     authUrl: template.authUrl,
@@ -231,6 +251,7 @@ export default function IntegrationsPage() {
 
     try {
       const state = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
       const url = new URL(form.authUrl.trim());
       const params = new URLSearchParams({
         response_type: "code",
@@ -242,26 +263,30 @@ export default function IntegrationsPage() {
 
       if (form.usePkce) {
         const pkce = await createPkcePair();
+        const authState = {
+          state,
+          verifier: pkce.verifier,
+          integrationId: selectedIntegration.id,
+          createdAt,
+        };
         sessionStorage.setItem(
           `agw.oauth2.${selectedIntegration.id}`,
-          JSON.stringify({
-            state,
-            verifier: pkce.verifier,
-            integrationId: selectedIntegration.id,
-            createdAt: new Date().toISOString(),
-          }),
+          JSON.stringify(authState),
         );
+        storeOAuthCallbackStateCookie(authState);
         params.set("code_challenge", pkce.challenge);
         params.set("code_challenge_method", "S256");
       } else {
+        const authState = {
+          state,
+          integrationId: selectedIntegration.id,
+          createdAt,
+        };
         sessionStorage.setItem(
           `agw.oauth2.${selectedIntegration.id}`,
-          JSON.stringify({
-            state,
-            integrationId: selectedIntegration.id,
-            createdAt: new Date().toISOString(),
-          }),
+          JSON.stringify(authState),
         );
+        storeOAuthCallbackStateCookie(authState);
       }
 
       params.forEach((value, key) => {
@@ -293,7 +318,7 @@ export default function IntegrationsPage() {
               Choose an app connection to prefill its OAuth2 authorization settings.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+          <CardContent className="grid gap-3 md:grid-cols-2">
             {integrationTemplates.map((integration) => {
               const isSelected = integration.id === selectedIntegration.id;
 
@@ -302,26 +327,26 @@ export default function IntegrationsPage() {
                   key={integration.id}
                   type="button"
                   onClick={() => setSelectedIntegrationId(integration.id)}
-                  className={`rounded-xl border p-4 text-left transition hover:border-primary hover:shadow-sm ${
+                  className={`rounded-xl border p-3.5 text-left transition hover:border-primary hover:shadow-sm ${
                     isSelected ? "border-primary bg-primary/5" : "border-border"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-base font-medium">{integration.name}</h2>
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-sm font-medium leading-5">{integration.name}</h2>
                         <Badge variant={statusBadgeVariant[integration.status]}>
                           {statusLabel[integration.status]}
                         </Badge>
                       </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{integration.provider}</p>
+                      <p className="text-sm text-muted-foreground">{integration.provider}</p>
                     </div>
-                    <Link2 className="mt-0.5 size-4 text-muted-foreground" />
+                    <Link2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  <p className="mt-2.5 text-sm leading-[1.35rem] text-muted-foreground">
                     {integration.description}
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-1.5">
                     {integration.scopes.map((scope) => (
                       <Badge key={scope} variant="outline">
                         {scope}

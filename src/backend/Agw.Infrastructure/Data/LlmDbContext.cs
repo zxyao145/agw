@@ -16,6 +16,7 @@ public class LlmDbContext : DbContext
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ModelProvider> ModelProviders => Set<ModelProvider>();
     public DbSet<ProviderAuthConfig> ProviderAuthConfigs => Set<ProviderAuthConfig>();
+    public DbSet<OAuthAuthorizationToken> OAuthAuthorizationTokens => Set<OAuthAuthorizationToken>();
     public DbSet<Agent> Agents => Set<Agent>();
 
     public DbSet<Agentflow> Agentflows => Set<Agentflow>();
@@ -87,6 +88,20 @@ public class LlmDbContext : DbContext
                 .WithMany(p => p.AuthConfigs)
                 .HasForeignKey(e => e.ProviderId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OAuthAuthorizationToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Provider);
+            entity.HasIndex(e => new { e.Provider, e.Subject });
+            entity.HasIndex(e => e.ExpiresAtUtc);
+            entity.Property(e => e.Provider).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Subject).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.AccessToken).IsRequired().HasMaxLength(4000);
+            entity.Property(e => e.RefreshToken).HasMaxLength(4000);
+            entity.Property(e => e.TokenType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Scope).HasMaxLength(2000);
         });
 
         modelBuilder.Entity<Agent>(entity =>

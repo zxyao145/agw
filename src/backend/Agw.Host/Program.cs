@@ -91,6 +91,7 @@ try
         .AddApplicationPart(typeof(SkillsController).Assembly);
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
+    builder.Services.AddHttpClient();
 
     // add module
     builder.Services

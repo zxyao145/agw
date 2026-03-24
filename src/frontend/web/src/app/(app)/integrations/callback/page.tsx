@@ -47,6 +47,10 @@ export default function IntegrationsCallbackPage() {
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
+  const exchangeStatus = searchParams.get("exchange_status");
+  const exchangeError = searchParams.get("exchange_error");
+  const provider = searchParams.get("provider");
+  const subject = searchParams.get("subject");
   const matchingRequest = React.useMemo(() => findMatchingAuthRequest(state), [state]);
   const isStateVerified = Boolean(state && matchingRequest);
 
@@ -56,7 +60,7 @@ export default function IntegrationsCallbackPage() {
         <CardHeader>
           <CardTitle>Integration callback</CardTitle>
           <CardDescription>
-            Review the OAuth2 provider response before exchanging the returned authorization code.
+            Review the OAuth2 provider response and the backend token exchange result.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -67,6 +71,11 @@ export default function IntegrationsCallbackPage() {
             <Badge variant={isStateVerified ? "secondary" : "outline"}>
               {isStateVerified ? "State verified" : "State not verified"}
             </Badge>
+            {exchangeStatus ? (
+              <Badge variant={exchangeStatus === "success" ? "secondary" : "destructive"}>
+                {exchangeStatus === "success" ? "Token stored" : "Token exchange failed"}
+              </Badge>
+            ) : null}
           </div>
 
           <div className="rounded-lg border p-4">
@@ -80,14 +89,23 @@ export default function IntegrationsCallbackPage() {
               )}
               <div className="space-y-2 text-sm">
                 {error ? (
+                <p className="text-muted-foreground">
+                  The external provider returned an OAuth2 error of{" "}
+                  <span className="font-medium">{error}</span>.
+                </p>
+                ) : exchangeStatus === "success" ? (
                   <p className="text-muted-foreground">
-                    The external provider returned an OAuth2 error of{" "}
-                    <span className="font-medium">{error}</span>.
+                    The backend exchanged the authorization code and persisted the token for{" "}
+                    <span className="font-medium">{provider ?? matchingRequest?.integrationId ?? "the integration"}</span>.
+                  </p>
+                ) : exchangeStatus === "failed" ? (
+                  <p className="text-muted-foreground">
+                    The provider returned an authorization code, but the backend token exchange failed
+                    with <span className="font-medium">{exchangeError ?? "an unknown error"}</span>.
                   </p>
                 ) : code ? (
                   <p className="text-muted-foreground">
-                    An authorization code was returned. Exchange it on the backend together with the
-                    stored PKCE verifier to complete the login flow.
+                    An authorization code was returned and forwarded through Agw's backend callback.
                   </p>
                 ) : (
                   <p className="text-muted-foreground">
@@ -110,7 +128,7 @@ export default function IntegrationsCallbackPage() {
             <div>
               <dt className="font-medium">Integration</dt>
               <dd className="mt-1 text-muted-foreground">
-                {matchingRequest?.integrationId ?? "Unknown"}
+                {provider ?? matchingRequest?.integrationId ?? "Unknown"}
               </dd>
             </div>
             <div>
@@ -118,6 +136,14 @@ export default function IntegrationsCallbackPage() {
               <dd className="mt-1 text-muted-foreground">
                 {matchingRequest?.createdAt ?? "Unknown"}
               </dd>
+            </div>
+            <div>
+              <dt className="font-medium">Exchange status</dt>
+              <dd className="mt-1 text-muted-foreground">{exchangeStatus ?? "Not attempted"}</dd>
+            </div>
+            <div>
+              <dt className="font-medium">Stored subject</dt>
+              <dd className="mt-1 break-all text-muted-foreground">{subject ?? "-"}</dd>
             </div>
           </dl>
 
