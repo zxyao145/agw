@@ -13,9 +13,12 @@ public class JobAppService(
 {
     public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
     {
-        return await jobTaskRepository.Queryable
-            .OrderBy(t => t.NextRunTime)
+        var jobs = await jobTaskRepository.Queryable
             .ToListAsync(cancellationToken);
+
+        return jobs
+            .OrderBy(t => t.NextRunTime)
+            .ToList();
     }
 
     public Task<Job?> GetAsync(Guid id)
@@ -25,10 +28,13 @@ public class JobAppService(
 
     public async Task<IReadOnlyList<JobLog>> ListLogsAsync(Guid taskId, CancellationToken cancellationToken = default)
     {
-        return await jobExecutionLogRepository.Queryable
+        var logs = await jobExecutionLogRepository.Queryable
             .Where(log => log.TaskId == taskId)
-            .OrderByDescending(log => log.StartTime)
             .ToListAsync(cancellationToken);
+
+        return logs
+            .OrderByDescending(log => log.StartTime)
+            .ToList();
     }
 
     public async Task<Job> CreateAsync(JobCreateRequest request, string user)

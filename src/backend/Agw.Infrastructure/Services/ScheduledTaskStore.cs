@@ -10,43 +10,48 @@ public class JobStore(LlmDbContext dbContext) : IJobStore
 {
     public async Task<IReadOnlyList<Job>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken)
     {
-        return await dbContext.Jobs
-            .Where(t => t.IsEnabled
-                && t.Status == JobStatus.Pending
-                && t.NextRunTime <= horizon)
+        var jobs = await dbContext.Jobs
+            .Where(t => t.IsEnabled)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
+
+        return jobs
+            .Where(t => t.Status == JobStatus.Pending
+                && t.NextRunTime <= horizon)
+            .ToList();
     }
 
     public async Task<bool> MarkRunningAsync(Guid jobId, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        var rowsAffected = await dbContext.Jobs
-            .Where(t => t.Id == jobId
-                && t.IsEnabled
-                && t.Status == JobStatus.Pending)
-            .ExecuteUpdateAsync(
-                setters => setters
-                    .SetProperty(t => t.Status, JobStatus.Running)
-                    .SetProperty(t => t.UpdateTime, now)
-                    .SetProperty(t => t.UpdateBy, "scheduler"),
-                cancellationToken);
+        var job = await dbContext.Jobs
+            .FirstOrDefaultAsync(t => t.Id == jobId && t.IsEnabled, cancellationToken);
 
-        if (rowsAffected > 0)
+        if (job == null)
         {
-            return true;
+            var exists = await dbContext.Jobs
+                .AsNoTracking()
+                .AnyAsync(t => t.Id == jobId, cancellationToken);
+
+            if (!exists)
+            {
+                throw new InvalidOperationException($"Job not found: {jobId}");
+            }
+
+            return false;
         }
 
-        var exists = await dbContext.Jobs
-            .AsNoTracking()
-            .AnyAsync(t => t.Id == jobId, cancellationToken);
-
-        if (!exists)
+        if (job.Status != JobStatus.Pending)
         {
-            throw new InvalidOperationException($"Job not found: {jobId}");
+            return false;
         }
 
-        return false;
+        job.Status = JobStatus.Running;
+        job.UpdateTime = now;
+        job.UpdateBy = "scheduler";
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task MarkSucceededAsync(Guid jobId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
