@@ -203,9 +203,9 @@ type VisualAgentflowBuilderProps = {
 
 export function VisualAgentflowBuilder({
   agents,
-  agentflows: agentflows = [],
-  editingAgentflow: editingAgentflow,
-  onAgentflowCreated: onAgentflowCreated,
+  agentflows = [],
+  editingAgentflow,
+  onAgentflowCreated,
 }: VisualAgentflowBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);

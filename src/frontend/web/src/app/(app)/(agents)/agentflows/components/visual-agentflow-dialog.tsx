@@ -28,7 +28,7 @@ export function VisualAgentflowDialog({
   onOpenChange,
   agents,
   agentflows,
-  editingAgentflow: editingAgentflow,
+  editingAgentflow,
   onAgentflowCreated,
 }: VisualAgentflowDialogProps) {
   const handleAgentflowCreated = React.useCallback(() => {

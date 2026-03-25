@@ -167,7 +167,7 @@ export async function apiRequest(
   const urlWithPath = compilePath(String(path), opts.params?.path);
   const url = appendQuery(urlWithPath, opts.params?.query);
 
-  const headers: HeadersInit = { ...(opts.headers ?? {}) };
+  const headers: HeadersInit = { ...opts.headers };
   const init: RequestInit = {
     method: method.toUpperCase(),
     headers,
