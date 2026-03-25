@@ -60,6 +60,12 @@ const navItems: SidebarMenuGroupProps[] = [
         isActive: true,
         icon: <LayoutDashboard />,
       },
+      {
+        url: "/scheduled-tasks",
+        title: "Scheduled Tasks",
+        isActive: true,
+        icon: <LayoutDashboard />,
+      },
     ],
   },
 
