@@ -18,16 +18,35 @@ public class ScheduledTaskStore(LlmDbContext dbContext) : IScheduledTaskStore
             .ToListAsync(cancellationToken);
     }
 
-    public async Task MarkRunningAsync(Guid taskId, CancellationToken cancellationToken)
+    public async Task<bool> MarkRunningAsync(Guid taskId, CancellationToken cancellationToken)
     {
-        var task = await dbContext.ScheduledTasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken)
-            ?? throw new InvalidOperationException($"Scheduled task not found: {taskId}");
+        var now = DateTime.UtcNow;
+        var rowsAffected = await dbContext.ScheduledTasks
+            .Where(t => t.Id == taskId
+                && t.IsEnabled
+                && t.Status == ScheduledTaskStatus.Pending)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(t => t.Status, ScheduledTaskStatus.Running)
+                    .SetProperty(t => t.UpdateTime, now)
+                    .SetProperty(t => t.UpdateBy, "scheduler"),
+                cancellationToken);
 
-        task.Status = ScheduledTaskStatus.Running;
-        task.UpdateTime = DateTime.UtcNow;
-        task.UpdateBy = "scheduler";
+        if (rowsAffected > 0)
+        {
+            return true;
+        }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var exists = await dbContext.ScheduledTasks
+            .AsNoTracking()
+            .AnyAsync(t => t.Id == taskId, cancellationToken);
+
+        if (!exists)
+        {
+            throw new InvalidOperationException($"Scheduled task not found: {taskId}");
+        }
+
+        return false;
     }
 
     public async Task MarkSucceededAsync(Guid taskId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)

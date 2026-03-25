@@ -97,7 +97,15 @@ public class ScheduledTaskHostedService(
 
         try
         {
-            await scheduledTaskStore.MarkRunningAsync(inMemoryTask.TaskId, cancellationToken);
+            var markedRunning = await scheduledTaskStore.MarkRunningAsync(inMemoryTask.TaskId, cancellationToken);
+            if (!markedRunning)
+            {
+                logger.LogInformation(
+                    "Scheduled task {TaskId} is no longer enabled/pending. Dropping stale in-memory entry.",
+                    inMemoryTask.TaskId);
+                _taskMap.TryRemove(inMemoryTask.TaskId, out _);
+                return;
+            }
 
             var scheduledTask = ToScheduledTask(inMemoryTask);
             await agentExecutor.ExecuteAsync(scheduledTask, cancellationToken);

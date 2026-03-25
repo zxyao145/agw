@@ -6,7 +6,7 @@ public interface IScheduledTaskStore
 {
     Task<IReadOnlyList<ScheduledTask>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken);
 
-    Task MarkRunningAsync(Guid taskId, CancellationToken cancellationToken);
+    Task<bool> MarkRunningAsync(Guid taskId, CancellationToken cancellationToken);
 
     Task MarkSucceededAsync(Guid taskId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken);
 
