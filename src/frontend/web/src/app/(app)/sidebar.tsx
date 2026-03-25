@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, PanelLeftIcon } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import {
   Sidebar,
@@ -19,7 +19,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarProvider,
   SidebarTrigger,
   SidebarRail,
 } from "@/components/ui/sidebar";
@@ -80,15 +79,16 @@ export function AppSidebar({ menus }: AppSidebarProps) {
                   >
                     <SidebarMenuItem>
                       {!item.subMenuItems?.length ? (
-                        <Link href={item.url}>
-                          <SidebarMenuButton
-                            tooltip={item.title}
-                            className={`cursor-pointer ${isActive(pathname, item.url) ? "font-bold" : ""}`}
-                          >
+                        <SidebarMenuButton
+                          asChild
+                          tooltip={item.title}
+                          className={`cursor-pointer ${isActive(pathname, item.url) ? "font-bold" : ""}`}
+                        >
+                          <Link href={item.url}>
                             {item.icon}
                             <span>{item.title}</span>
-                          </SidebarMenuButton>
-                        </Link>
+                          </Link>
+                        </SidebarMenuButton>
                       ) : (
                         <>
                           <CollapsibleTrigger asChild>
@@ -102,15 +102,15 @@ export function AppSidebar({ menus }: AppSidebarProps) {
                             <SidebarMenuSub>
                               {item.subMenuItems.map((subItem) => (
                                 <SidebarMenuSubItem key={subItem.title}>
-                                  <Link href={subItem.url}>
-                                    <SidebarMenuSubButton
-                                      // asChild
-                                      className={`cursor-pointer ${isActive(pathname, subItem.url) ? "font-bold" : ""}`}
-                                    >
+                                  <SidebarMenuSubButton
+                                    asChild
+                                    className={`cursor-pointer ${isActive(pathname, subItem.url) ? "font-bold" : ""}`}
+                                  >
+                                    <Link href={subItem.url}>
                                       {subItem.icon}
                                       <span>{subItem.title}</span>
-                                    </SidebarMenuSubButton>
-                                  </Link>
+                                    </Link>
+                                  </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                               ))}
                             </SidebarMenuSub>
