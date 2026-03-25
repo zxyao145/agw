@@ -127,21 +127,37 @@ public class ScheduledTaskHostedService(
         }
         catch (Exception ex)
         {
+            if (IsMissingTaskException(ex))
+            {
+                logger.LogWarning("Scheduled task {TaskId} no longer exists. Dropping stale in-memory entry.", inMemoryTask.TaskId);
+                _taskMap.TryRemove(inMemoryTask.TaskId, out _);
+                return;
+            }
+
             logger.LogError(ex, "Scheduled task {TaskId} execution failed.", inMemoryTask.TaskId);
             var retryCount = inMemoryTask.RetryCount + 1;
 
             if (retryCount <= inMemoryTask.MaxRetryCount)
             {
                 var nextRunTime = DateTimeOffset.UtcNow.Add(_retryDelay);
-                await scheduledTaskStore.MarkRetryAsync(inMemoryTask.TaskId, nextRunTime, retryCount, ex.Message, cancellationToken);
-                await scheduledTaskStore.AddExecutionLogAsync(
-                    inMemoryTask.TaskId,
-                    start,
-                    DateTimeOffset.UtcNow,
-                    success: false,
-                    attempt: retryCount,
-                    errorMessage: ex.Message,
-                    cancellationToken);
+                try
+                {
+                    await scheduledTaskStore.MarkRetryAsync(inMemoryTask.TaskId, nextRunTime, retryCount, ex.Message, cancellationToken);
+                    await scheduledTaskStore.AddExecutionLogAsync(
+                        inMemoryTask.TaskId,
+                        start,
+                        DateTimeOffset.UtcNow,
+                        success: false,
+                        attempt: retryCount,
+                        errorMessage: ex.Message,
+                        cancellationToken);
+                }
+                catch (Exception bookkeepingEx) when (IsMissingTaskException(bookkeepingEx))
+                {
+                    logger.LogWarning("Scheduled task {TaskId} disappeared during retry bookkeeping. Dropping stale in-memory entry.", inMemoryTask.TaskId);
+                    _taskMap.TryRemove(inMemoryTask.TaskId, out _);
+                    return;
+                }
 
                 var updatedTask = ToScheduledTask(inMemoryTask);
                 updatedTask.NextRunTime = nextRunTime;
@@ -150,18 +166,32 @@ public class ScheduledTaskHostedService(
             }
             else
             {
-                await scheduledTaskStore.MarkFailedAsync(inMemoryTask.TaskId, retryCount, ex.Message, cancellationToken);
-                await scheduledTaskStore.AddExecutionLogAsync(
-                    inMemoryTask.TaskId,
-                    start,
-                    DateTimeOffset.UtcNow,
-                    success: false,
-                    attempt: retryCount,
-                    errorMessage: ex.Message,
-                    cancellationToken);
+                try
+                {
+                    await scheduledTaskStore.MarkFailedAsync(inMemoryTask.TaskId, retryCount, ex.Message, cancellationToken);
+                    await scheduledTaskStore.AddExecutionLogAsync(
+                        inMemoryTask.TaskId,
+                        start,
+                        DateTimeOffset.UtcNow,
+                        success: false,
+                        attempt: retryCount,
+                        errorMessage: ex.Message,
+                        cancellationToken);
+                }
+                catch (Exception bookkeepingEx) when (IsMissingTaskException(bookkeepingEx))
+                {
+                    logger.LogWarning("Scheduled task {TaskId} disappeared during failure bookkeeping. Dropping stale in-memory entry.", inMemoryTask.TaskId);
+                }
+
                 _taskMap.TryRemove(inMemoryTask.TaskId, out _);
             }
         }
+    }
+
+    private static bool IsMissingTaskException(Exception exception)
+    {
+        return exception is InvalidOperationException invalidOperationException
+            && invalidOperationException.Message.StartsWith("Scheduled task not found:", StringComparison.Ordinal);
     }
 
     private void UpsertInMemoryTask(ScheduledTask task)
