@@ -19,6 +19,8 @@ Agw.Providers/         # LLM models, providers, model-providers, auth configs
 Agw.Tasks/             # Projects, tasks, session records, chat history
 Agw.Jobs/              # Background jobs, project leases
 Agw.A2A/               # A2A protocol implementation for agent discovery/communication
+Agw.Skills/            # Skill archive management (ZIP uploads, SKILL.md format)
+Agw.Tools/             # Tool discovery and registration system
 ```
 
 ### Key Domain Entities
@@ -79,6 +81,20 @@ Project → ProjectTask → TaskRecord
 - Max 4 projects executing in parallel, one task per project at a time
 - DB-backed `ProjectLease` with 30-second TTL for distributed locking
 
+**ToolRegistryService** (`Agw.Tools/ToolRegistryService.cs`):
+- Discovers AI tools from `[AiTool]` attributes and `IAgwTool` implementations
+- Singleton service that caches tool metadata on startup
+- Creates `AITool` instances for agent execution via `AgwToolFactory`
+- Supports tool categories, parameter schemas, and timeout configuration
+- Integrates with Microsoft.Extensions.AI for tool registration
+
+**SkillAppService** (`Agw.Skills/Services/SkillAppService.cs`):
+- Manages skill archives uploaded as ZIP files
+- Extracts archives and validates SKILL.md frontmatter
+- Rewrites SKILL.md metadata (name/description) to match database values
+- Skills stored in `wwwroot/skills/{skillName}/` directory
+- Creates/deletes physical directories on skill CRUD operations
+
 ## Build & Development Commands
 
 ### Backend
@@ -123,6 +139,17 @@ pnpm format
 
 # Generate API types from backend OpenAPI spec
 pnpm gen:openapi
+```
+
+### Tests
+```bash
+# Run all tests
+dotnet test Agw.slnx
+
+# Run specific test project
+dotnet test tests/Agw.Agents.Tests
+dotnet test tests/Agw.Tasks.Tests
+dotnet test tests/Agw.Skills.Tests
 ```
 
 ### Code Formatting
@@ -238,6 +265,33 @@ curl -X POST http://localhost:5000/a2a/my-agent/v1/message:stream \
 - **GroupChat**: Round-robin manager-controlled conversation
 - **Handoff**: Dynamic agent switching based on context
 - **Magentic**: Orchestrator + workers pattern with stall detection
+
+## Tools System
+
+The `Agw.Tools` module provides a tool discovery and registration mechanism for AI agents.
+
+**Tool Registration Methods:**
+- **Attribute-based**: Mark public static methods with `[AiTool]` attribute
+- **Interface-based**: Implement `IAgwTool` interface with `ExecuteAsync` method
+
+**Tool Metadata:**
+- `[AiTool("name", Category = "...")]` - Tool name and category
+- `[Description("...")]` - Tool description (also on parameters)
+- `[AiToolParameterSchema("string", Format = "...")]` - JSON Schema type hints
+- `[AiToolRequired]` - Mark required parameters
+
+**Example:**
+```csharp
+[AiTool("read_file", Category = "Files", RequiresConfirmation = false, TimeoutMs = 5000)]
+[Description("Reads a file from the filesystem")]
+public static Task<string> ReadFile(
+    [Description("Path to the file to read")] string path)
+{
+    return Task.FromResult(File.ReadAllText(path));
+}
+```
+
+Tools are automatically discovered on app startup via `ToolRegistryService` (Singleton) and exposed as `AITool` instances for agent consumption.
 
 ## Development Notes
 
