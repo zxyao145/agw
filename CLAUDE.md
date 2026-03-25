@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Agw is an ASP.NET Core + EF Core backend for managing LLM agents, models, providers, and multi-agent workflows. It uses Clean Architecture with a modular project structure, built on Microsoft.Agents.AI framework. The system supports both internal agents (OpenAI, Anthropic) and external agents (Claude Code SDK) with MCP tool integration.
+Agw is an ASP.NET Core + EF Core backend with a Next.js frontend for managing LLM agents, models, providers, tools, skills, jobs, and multi-agent workflows. It uses a modular project structure built around Microsoft.Agents.AI, MCP tool servers, A2A endpoints, and external agents such as Claude Code SDK.
 
 ## Architecture & Project Structure
 
@@ -22,6 +22,8 @@ Agw.A2A/               # A2A protocol implementation for agent discovery/communi
 Agw.Skills/            # Skill archive management (ZIP uploads, SKILL.md format)
 Agw.Tools/             # Tool discovery and registration system
 ```
+
+`Agw.slnx` currently includes these backend projects plus `tests/Agw.Agents.Tests`, `tests/Agw.Tasks.Tests`, and `tests/Agw.Skills.Tests`.
 
 ### Key Domain Entities
 
@@ -65,18 +67,18 @@ Project → ProjectTask → TaskRecord
 
 ### Core Services
 
-**AgentRuntimeService** (`Agw.Agents/Services/AgentRuntimeService.cs`):
+**AgentRuntimeService** (`Agw.Agents/Application/Agents/AgentRuntimeService.cs`):
 - Creates `AIAgent` instances from persisted `Agent` entities
 - Hydrates provider config, selects random enabled auth config
 - Builds tool list from registered functions + MCP tools
 - Supports OpenAI and Anthropic providers via Microsoft.Agents.AI
 - Handles Claude Code external agents with session resumption
 
-**AgentflowRuntimeService** (`Agw.Agents/Services/AgentflowRuntimeService.cs`):
+**AgentflowRuntimeService** (`Agw.Agents/Application/Agentflows/AgentflowRuntimeService.cs`):
 - Executes multi-agent workflows with different orchestration patterns
 - Patterns: Concurrent, Sequential, GroupChat, Handoff, Magentic
 
-**ProjectTaskSchedulerHostedService** (`Agw.Host/`):
+**ProjectTaskSchedulerHostedService** (`Agw.Jobs/HostedService/ProjectTaskSchedulerHostedService.cs`):
 - Background service polling for pending tasks every 2 seconds
 - Max 4 projects executing in parallel, one task per project at a time
 - DB-backed `ProjectLease` with 30-second TTL for distributed locking
@@ -103,11 +105,14 @@ Project → ProjectTask → TaskRecord
 dotnet restore Agw.slnx
 dotnet build Agw.slnx
 
-# Run locally (default port 5000)
+# Run locally (default port 5015 on the http profile)
 dotnet run --project src/backend/Agw.Host
 
 # Run with hot reload
 dotnet watch --project src/backend/Agw.Host
+
+# Run tests
+dotnet test Agw.slnx
 
 # EF Core migrations (DO NOT run automatically)
 dotnet ef migrations add <MigrationName> \
@@ -141,6 +146,8 @@ pnpm format
 pnpm gen:openapi
 ```
 
+The frontend dev server runs on `http://localhost:3000`. `src/frontend/web/next.config.ts` rewrites `/api/*` and `/openapi/*` to `BACKEND_API_BASE_URL`, which defaults to `http://localhost:5015`.
+
 ### Tests
 ```bash
 # Run all tests
@@ -151,6 +158,8 @@ dotnet test tests/Agw.Agents.Tests
 dotnet test tests/Agw.Tasks.Tests
 dotnet test tests/Agw.Skills.Tests
 ```
+
+Current test projects use xUnit v3.
 
 ### Code Formatting
 ```bash
@@ -218,39 +227,43 @@ src/app/(app)/
 ├── (agents)/
 │   ├── agents/           # Agent CRUD
 │   ├── agentflows/       # Workflow editor (React Flow)
-│   └── mcp-tool-servers/ # MCP server management
+│   ├── mcp-tool-servers/ # MCP server management
+│   └── skills/           # Skill archive management
 ├── (external-agents)/
 │   └── claude-code/      # Claude Code integration UI
 ├── (overview)/
-│   └── dashboard/        # Dashboard
+│   ├── dashboard/        # Dashboard
+│   └── traces/           # Trace viewer
 ├── (providers)/
 │   ├── models/           # Model management
 │   ├── providers/        # Provider management
 │   └── model-providers/  # Model-Provider associations
 └── (tasks)/
-    └── projects/         # Project & task execution
+    ├── projects/         # Project & task execution
+    └── jobs/             # Scheduled jobs
+
+src/app/(app)/integrations/ # OAuth-backed integrations UI
 ```
 
 ### API Integration
 - Run `pnpm gen:openapi` after backend schema changes
 - Use typed `apiGet()`, `apiPost()`, `apiPut()`, `apiDelete()` from `api/client.ts`
 - OpenAPI types in `api/openapi.d.ts`
+- Use `api/files.ts` for file operations in the Claude Code UI
+- Use `api/execution-ws.ts` for task execution websocket flows
 
 ## A2A Protocol
 
-Agw exposes agents via A2A protocol for standardized agent-to-agent communication.
+Agw exposes JSON-RPC A2A endpoints by default. The mapped prefix is `/api/a2a/`.
 
 **Endpoints:**
-- `GET /a2a/agents` - List available agents
-- `GET /a2a/{agentName}/v1/card` - Get agent metadata (AgentCard)
-- `POST /a2a/{agentName}/v1/message:stream` - Send message (SSE streaming)
+- `GET /.well-known/agents.json` - List available agents
+- `GET /api/a2a/{agentName}/.well-known/agent-card.json` - Get agent metadata (AgentCard)
+- `POST /api/a2a/{agentName}` - JSON-RPC request entrypoint
 
 **Client Example:**
 ```bash
-curl -X POST http://localhost:5000/a2a/my-agent/v1/message:stream \
-  -H "Content-Type: application/json" \
-  -H "Accept: text/event-stream" \
-  -d '{"messages": [{"role": "user", "content": "Hello!"}], "context": {"sessionId": null}}'
+curl http://localhost:5015/.well-known/agents.json
 ```
 
 ## Agent Types

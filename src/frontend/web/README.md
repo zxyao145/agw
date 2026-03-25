@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Agw Web
 
-## Getting Started
+Next.js 16 admin UI for Agw. This app manages agents, agentflows, providers, models, MCP tool servers, skills, projects, jobs, traces, integrations, and the Claude Code external-agent experience.
 
-First, run the development server:
+## Requirements
+
+- Node.js 20+
+- `pnpm`
+- Agw backend running on `http://localhost:5015` by default
+
+## Local Development
+
+Run from `src/frontend/web`:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.local.example .env.local
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dev server starts on `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`next.config.ts` rewrites:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `/api/*` -> `${BACKEND_API_BASE_URL}/api/*`
+- `/openapi/*` -> `${BACKEND_API_BASE_URL}/openapi/*`
 
-## Learn More
+If you keep the backend on the default ASP.NET Core `http` profile, the example `.env.local` value already points to `http://localhost:5015`.
 
-To learn more about Next.js, take a look at the following resources:
+## Common Commands
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm dev
+pnpm build
+pnpm lint
+pnpm lint:fix
+pnpm format
+pnpm gen:openapi
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Notes:
 
-## Deploy on Vercel
+- `pnpm lint` uses `oxlint`.
+- `pnpm format` uses `oxfmt`.
+- Regenerate `src/api/openapi.d.ts` after backend contract changes.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Project Structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+src/app/
+  layout.tsx
+  page.tsx
+  (app)/
+    (agents)/
+      agents/
+      agentflows/
+      mcp-tool-servers/
+      skills/
+    (external-agents)/
+      claude-code/
+    (overview)/
+      dashboard/
+      traces/
+    (providers)/
+      models/
+      providers/
+      model-providers/
+    (tasks)/
+      projects/
+      jobs/
+    integrations/
+src/api/            # Typed request helpers, websocket helpers, generated OpenAPI types
+src/components/     # Shared UI components
+src/lib/            # App-side helpers such as execution streaming
+```
+
+## API Conventions
+
+- Prefer `src/api/client.ts` for typed `apiGet`, `apiPost`, `apiPut`, and `apiDelete` calls.
+- Use `src/api/execution-ws.ts` for task execution websocket flows.
+- Use `src/api/files.ts` for Claude Code file operations exposed through the backend.
+
+## Related Files
+
+- `next.config.ts`: local proxy configuration
+- `.env.local.example`: backend base URL example
+- `openapi.json`: backend schema snapshot used by `pnpm gen:openapi`
