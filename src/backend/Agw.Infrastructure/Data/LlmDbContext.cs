@@ -1,4 +1,5 @@
 using Agw.Domain.Entities;
+using Agw.Jobs.Enums;
 using Agw.Shared.Tasks.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -27,6 +28,8 @@ public class LlmDbContext : DbContext
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
     public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
     public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
+    public DbSet<ScheduledTask> ScheduledTasks => Set<ScheduledTask>();
+    public DbSet<TaskExecutionLog> TaskExecutionLogs => Set<TaskExecutionLog>();
     public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
     public DbSet<AgentMcpToolServer> AgentMcpToolServers => Set<AgentMcpToolServer>();
     public DbSet<Skill> Skills => Set<Skill>();
@@ -231,6 +234,32 @@ public class LlmDbContext : DbContext
             //    .WithOne()
             //    .HasForeignKey<ProjectLease>(e => e.ProjectId)
             //    .OnDelete(DeleteBehavior.Cascade);
+        });
+
+
+        modelBuilder.Entity<ScheduledTask>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Prompt).HasMaxLength(4000);
+            entity.Property(e => e.TriggerType).HasConversion<int>();
+            entity.Property(e => e.TriggerValue).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.TimeZoneId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.LastError).HasMaxLength(2000);
+            entity.Property(e => e.RowVersion).IsRowVersion();
+
+            entity.HasIndex(e => new { e.IsEnabled, e.Status, e.NextRunTime })
+                .HasDatabaseName("ix_task_next_run_time");
+            entity.HasIndex(e => e.ProjectId)
+                .HasDatabaseName("ix_task_project");
+        });
+
+        modelBuilder.Entity<TaskExecutionLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+            entity.HasIndex(e => new { e.TaskId, e.StartTime });
         });
 
         modelBuilder.Entity<McpToolServer>(entity =>

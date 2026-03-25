@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <PackageReference Include="Cronos" />
         <PackageReference Include="Microsoft.Agents.AI" />
         <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
         <ProjectReference Include="..\Agw.Shared.Contract\Agw.Shared.Contract.csproj" />
