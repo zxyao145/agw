@@ -9,42 +9,42 @@ public class AgentExecutor(
     AgentRuntimeService agentRuntimeService,
     AgentflowRuntimeService agentflowRuntimeService) : IAgentExecutor
 {
-    public async Task ExecuteAsync(Job task, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(Job job, CancellationToken cancellationToken)
     {
-        if (task.AgentId == null || task.AgentType == null)
+        if (job.AgentId == null || job.AgentType == null)
         {
-            throw new InvalidOperationException("Scheduled task agent target is required.");
+            throw new InvalidOperationException("Job agent target is required.");
         }
 
-        var prompt = string.IsNullOrWhiteSpace(task.Prompt)
-            ? $"Run scheduled task: {task.Name}"
-            : task.Prompt;
+        var prompt = string.IsNullOrWhiteSpace(job.Prompt)
+            ? $"Run job: {job.Name}"
+            : job.Prompt;
 
         var sessionId = Guid.NewGuid().ToString("N");
         var contextId = Guid.NewGuid().ToString("N");
 
-        switch (task.AgentType.Value)
+        switch (job.AgentType.Value)
         {
             case ProjectTaskAgentType.Agent:
                 _ = await agentRuntimeService.ExecuteAsync(
-                    task.AgentId.Value,
+                    job.AgentId.Value,
                     sessionId,
                     prompt,
                     cancellationToken,
-                    task.ProjectId,
+                    job.ProjectId,
                     contextId);
                 break;
             case ProjectTaskAgentType.Agentflow:
                 _ = await agentflowRuntimeService.ExecuteAsync(
-                    task.AgentId.Value,
+                    job.AgentId.Value,
                     sessionId,
                     prompt,
                     cancellationToken,
-                    task.ProjectId,
+                    job.ProjectId,
                     contextId);
                 break;
             default:
-                throw new NotSupportedException($"Unsupported agent type: {task.AgentType}");
+                throw new NotSupportedException($"Unsupported agent type: {job.AgentType}");
         }
     }
 }

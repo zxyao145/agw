@@ -6,28 +6,28 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Services;
 
-public class ScheduledTaskStore(LlmDbContext dbContext) : IScheduledTaskStore
+public class JobStore(LlmDbContext dbContext) : IJobStore
 {
     public async Task<IReadOnlyList<Job>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken)
     {
-        return await dbContext.ScheduledTasks
+        return await dbContext.Jobs
             .Where(t => t.IsEnabled
-                && t.Status == ScheduledTaskStatus.Pending
+                && t.Status == JobStatus.Pending
                 && t.NextRunTime <= horizon)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<bool> MarkRunningAsync(Guid taskId, CancellationToken cancellationToken)
+    public async Task<bool> MarkRunningAsync(Guid jobId, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        var rowsAffected = await dbContext.ScheduledTasks
-            .Where(t => t.Id == taskId
+        var rowsAffected = await dbContext.Jobs
+            .Where(t => t.Id == jobId
                 && t.IsEnabled
-                && t.Status == ScheduledTaskStatus.Pending)
+                && t.Status == JobStatus.Pending)
             .ExecuteUpdateAsync(
                 setters => setters
-                    .SetProperty(t => t.Status, ScheduledTaskStatus.Running)
+                    .SetProperty(t => t.Status, JobStatus.Running)
                     .SetProperty(t => t.UpdateTime, now)
                     .SetProperty(t => t.UpdateBy, "scheduler"),
                 cancellationToken);
@@ -37,26 +37,26 @@ public class ScheduledTaskStore(LlmDbContext dbContext) : IScheduledTaskStore
             return true;
         }
 
-        var exists = await dbContext.ScheduledTasks
+        var exists = await dbContext.Jobs
             .AsNoTracking()
-            .AnyAsync(t => t.Id == taskId, cancellationToken);
+            .AnyAsync(t => t.Id == jobId, cancellationToken);
 
         if (!exists)
         {
-            throw new InvalidOperationException($"Scheduled task not found: {taskId}");
+            throw new InvalidOperationException($"Job not found: {jobId}");
         }
 
         return false;
     }
 
-    public async Task MarkSucceededAsync(Guid taskId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
+    public async Task MarkSucceededAsync(Guid jobId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
     {
-        var task = await dbContext.ScheduledTasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken)
-            ?? throw new InvalidOperationException($"Scheduled task not found: {taskId}");
+        var task = await dbContext.Jobs.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
+            ?? throw new InvalidOperationException($"Job not found: {jobId}");
 
         task.RetryCount = 0;
         task.LastError = null;
-        task.Status = ScheduledTaskStatus.Pending;
+        task.Status = JobStatus.Pending;
 
         if (nextRunTime.HasValue)
         {
@@ -65,7 +65,7 @@ public class ScheduledTaskStore(LlmDbContext dbContext) : IScheduledTaskStore
         else
         {
             task.IsEnabled = false;
-            task.Status = ScheduledTaskStatus.Paused;
+            task.Status = JobStatus.Paused;
         }
 
         task.UpdateTime = DateTime.UtcNow;
@@ -74,12 +74,12 @@ public class ScheduledTaskStore(LlmDbContext dbContext) : IScheduledTaskStore
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task MarkRetryAsync(Guid taskId, DateTimeOffset nextRunTime, int retryCount, string errorMessage, CancellationToken cancellationToken)
+    public async Task MarkRetryAsync(Guid jobId, DateTimeOffset nextRunTime, int retryCount, string errorMessage, CancellationToken cancellationToken)
     {
-        var task = await dbContext.ScheduledTasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken)
-            ?? throw new InvalidOperationException($"Scheduled task not found: {taskId}");
+        var task = await dbContext.Jobs.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
+            ?? throw new InvalidOperationException($"Job not found: {jobId}");
 
-        task.Status = ScheduledTaskStatus.Pending;
+        task.Status = JobStatus.Pending;
         task.RetryCount = retryCount;
         task.NextRunTime = nextRunTime;
         task.LastError = errorMessage;
@@ -89,12 +89,12 @@ public class ScheduledTaskStore(LlmDbContext dbContext) : IScheduledTaskStore
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task MarkFailedAsync(Guid taskId, int retryCount, string errorMessage, CancellationToken cancellationToken)
+    public async Task MarkFailedAsync(Guid jobId, int retryCount, string errorMessage, CancellationToken cancellationToken)
     {
-        var task = await dbContext.ScheduledTasks.FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken)
-            ?? throw new InvalidOperationException($"Scheduled task not found: {taskId}");
+        var task = await dbContext.Jobs.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
+            ?? throw new InvalidOperationException($"Job not found: {jobId}");
 
-        task.Status = ScheduledTaskStatus.Paused;
+        task.Status = JobStatus.Paused;
         task.IsEnabled = false;
         task.RetryCount = retryCount;
         task.LastError = errorMessage;

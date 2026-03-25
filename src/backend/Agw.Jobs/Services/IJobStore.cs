@@ -2,7 +2,7 @@ using Agw.Domain.Entities;
 
 namespace Agw.Jobs.Services;
 
-public interface IScheduledTaskStore
+public interface IJobStore
 {
     Task<IReadOnlyList<Job>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken);
 

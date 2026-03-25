@@ -28,7 +28,7 @@ public class LlmDbContext : DbContext
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
     public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
     public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
-    public DbSet<Job> ScheduledTasks => Set<Job>();
+    public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobLog> TaskExecutionLogs => Set<JobLog>();
     public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
     public DbSet<AgentMcpToolServer> AgentMcpToolServers => Set<AgentMcpToolServer>();

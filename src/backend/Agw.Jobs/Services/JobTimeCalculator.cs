@@ -4,7 +4,7 @@ using Cronos;
 
 namespace Agw.Jobs.Services;
 
-public class ScheduledTaskTimeCalculator : IScheduledTaskTimeCalculator
+public class JobTimeCalculator : IJobTimeCalculator
 {
     public DateTimeOffset? GetNextRunTime(Job task, DateTimeOffset now)
     {

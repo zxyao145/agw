@@ -89,7 +89,7 @@ try
         .AddApplicationPart(typeof(AgentsController).Assembly)
         .AddApplicationPart(typeof(ProjectsController).Assembly)
         .AddApplicationPart(typeof(SkillsController).Assembly)
-        .AddApplicationPart(typeof(ScheduledTasksController).Assembly);
+        .AddApplicationPart(typeof(JobsController).Assembly);
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
     builder.Services.AddHttpClient();

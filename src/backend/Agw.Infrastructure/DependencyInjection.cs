@@ -48,7 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IGitCommandService, GitCommandService>();
         services.AddScoped<IProjectLeaseService, ProjectLeaseService>();
-        services.AddScoped<IScheduledTaskStore, ScheduledTaskStore>();
+        services.AddScoped<IJobStore, JobStore>();
 
         return services;
     }

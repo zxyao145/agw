@@ -1,23 +1,26 @@
 using Agw.Domain.Entities;
 using Agw.Jobs.Models;
+using Agw.Jobs.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 
-namespace Agw.Jobs.Services;
+namespace Agw.Jobs.HostedService;
 
 /// <summary>
 /// In-memory scheduler backed by persistent task state in DB.
 /// DB handles durability and coarse scheduling; memory queue handles precise execution.
 /// </summary>
-public class ScheduledTaskHostedService(
-    IScheduledTaskStore scheduledTaskStore,
-    IScheduledTaskTimeCalculator timeCalculator,
-    IAgentExecutor agentExecutor,
-    ILogger<ScheduledTaskHostedService> logger) : BackgroundService
+public class JobHostedService(
+    IServiceScopeFactory scopeFactory,
+    ILogger<JobHostedService> logger) : BackgroundService
 {
-    private readonly PriorityQueue<InMemoryScheduledTask, DateTimeOffset> _queue = new();
-    private readonly ConcurrentDictionary<Guid, InMemoryScheduledTask> _taskMap = new();
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly ILogger<JobHostedService> _logger = logger;
+
+    private readonly PriorityQueue<InMemoryJob, DateTimeOffset> _queue = new();
+    private readonly ConcurrentDictionary<Guid, InMemoryJob> _taskMap = new();
     private readonly object _queueLock = new();
     private readonly SemaphoreSlim _wakeSignal = new(0, int.MaxValue);
 
@@ -38,8 +41,11 @@ public class ScheduledTaskHostedService(
         {
             try
             {
+                using var scope = _scopeFactory.CreateScope();
+                var jobTaskStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
+
                 var now = DateTimeOffset.UtcNow;
-                var tasks = await scheduledTaskStore.PrefetchAsync(now, now.Add(_prefetchWindow), cancellationToken);
+                var tasks = await jobTaskStore.PrefetchAsync(now, now.Add(_prefetchWindow), cancellationToken);
                 foreach (var task in tasks)
                 {
                     UpsertInMemoryTask(task);
@@ -47,7 +53,7 @@ public class ScheduledTaskHostedService(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "ScheduledTask prefetch loop failed.");
+                _logger.LogError(ex, "Job prefetch loop failed.");
             }
 
             try
@@ -91,29 +97,33 @@ public class ScheduledTaskHostedService(
         }
     }
 
-    private async Task ExecuteOneAsync(InMemoryScheduledTask inMemoryTask, CancellationToken cancellationToken)
+    private async Task ExecuteOneAsync(InMemoryJob inMemoryTask, CancellationToken cancellationToken)
     {
         var start = DateTimeOffset.UtcNow;
+        using var scope = _scopeFactory.CreateScope();
+        var jobTaskStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
+        var timeCalculator = scope.ServiceProvider.GetRequiredService<IJobTimeCalculator>();
+        var agentExecutor = scope.ServiceProvider.GetRequiredService<IAgentExecutor>();
 
         try
         {
-            var markedRunning = await scheduledTaskStore.MarkRunningAsync(inMemoryTask.TaskId, cancellationToken);
+            var markedRunning = await jobTaskStore.MarkRunningAsync(inMemoryTask.JobId, cancellationToken);
             if (!markedRunning)
             {
-                logger.LogInformation(
-                    "Scheduled task {TaskId} is no longer enabled/pending. Dropping stale in-memory entry.",
-                    inMemoryTask.TaskId);
-                _taskMap.TryRemove(inMemoryTask.TaskId, out _);
+                _logger.LogInformation(
+                    "Job {JobId} is no longer enabled/pending. Dropping stale in-memory entry.",
+                    inMemoryTask.JobId);
+                _taskMap.TryRemove(inMemoryTask.JobId, out _);
                 return;
             }
 
-            var scheduledTask = ToScheduledTask(inMemoryTask);
-            await agentExecutor.ExecuteAsync(scheduledTask, cancellationToken);
+            var job = ToJob(inMemoryTask);
+            await agentExecutor.ExecuteAsync(job, cancellationToken);
 
-            var nextRunTime = timeCalculator.GetNextRunTime(scheduledTask, DateTimeOffset.UtcNow);
-            await scheduledTaskStore.MarkSucceededAsync(inMemoryTask.TaskId, nextRunTime, cancellationToken);
-            await scheduledTaskStore.AddExecutionLogAsync(
-                inMemoryTask.TaskId,
+            var nextRunTime = timeCalculator.GetNextRunTime(job, DateTimeOffset.UtcNow);
+            await jobTaskStore.MarkSucceededAsync(inMemoryTask.JobId, nextRunTime, cancellationToken);
+            await jobTaskStore.AddExecutionLogAsync(
+                inMemoryTask.JobId,
                 start,
                 DateTimeOffset.UtcNow,
                 success: true,
@@ -123,26 +133,26 @@ public class ScheduledTaskHostedService(
 
             if (nextRunTime.HasValue)
             {
-                var updatedTask = ToScheduledTask(inMemoryTask);
+                var updatedTask = ToJob(inMemoryTask);
                 updatedTask.NextRunTime = nextRunTime.Value;
                 updatedTask.RetryCount = 0;
                 UpsertInMemoryTask(updatedTask);
             }
             else
             {
-                _taskMap.TryRemove(inMemoryTask.TaskId, out _);
+                _taskMap.TryRemove(inMemoryTask.JobId, out _);
             }
         }
         catch (Exception ex)
         {
             if (IsMissingTaskException(ex))
             {
-                logger.LogWarning("Scheduled task {TaskId} no longer exists. Dropping stale in-memory entry.", inMemoryTask.TaskId);
-                _taskMap.TryRemove(inMemoryTask.TaskId, out _);
+                _logger.LogWarning("Job {JobId} no longer exists. Dropping stale in-memory entry.", inMemoryTask.JobId);
+                _taskMap.TryRemove(inMemoryTask.JobId, out _);
                 return;
             }
 
-            logger.LogError(ex, "Scheduled task {TaskId} execution failed.", inMemoryTask.TaskId);
+            _logger.LogError(ex, "Job {JobId} execution failed.", inMemoryTask.JobId);
             var retryCount = inMemoryTask.RetryCount + 1;
 
             if (retryCount <= inMemoryTask.MaxRetryCount)
@@ -150,9 +160,9 @@ public class ScheduledTaskHostedService(
                 var nextRunTime = DateTimeOffset.UtcNow.Add(_retryDelay);
                 try
                 {
-                    await scheduledTaskStore.MarkRetryAsync(inMemoryTask.TaskId, nextRunTime, retryCount, ex.Message, cancellationToken);
-                    await scheduledTaskStore.AddExecutionLogAsync(
-                        inMemoryTask.TaskId,
+                    await jobTaskStore.MarkRetryAsync(inMemoryTask.JobId, nextRunTime, retryCount, ex.Message, cancellationToken);
+                    await jobTaskStore.AddExecutionLogAsync(
+                        inMemoryTask.JobId,
                         start,
                         DateTimeOffset.UtcNow,
                         success: false,
@@ -162,12 +172,12 @@ public class ScheduledTaskHostedService(
                 }
                 catch (Exception bookkeepingEx) when (IsMissingTaskException(bookkeepingEx))
                 {
-                    logger.LogWarning("Scheduled task {TaskId} disappeared during retry bookkeeping. Dropping stale in-memory entry.", inMemoryTask.TaskId);
-                    _taskMap.TryRemove(inMemoryTask.TaskId, out _);
+                    _logger.LogWarning("Job {JobId} disappeared during retry bookkeeping. Dropping stale in-memory entry.", inMemoryTask.JobId);
+                    _taskMap.TryRemove(inMemoryTask.JobId, out _);
                     return;
                 }
 
-                var updatedTask = ToScheduledTask(inMemoryTask);
+                var updatedTask = ToJob(inMemoryTask);
                 updatedTask.NextRunTime = nextRunTime;
                 updatedTask.RetryCount = retryCount;
                 UpsertInMemoryTask(updatedTask);
@@ -176,9 +186,9 @@ public class ScheduledTaskHostedService(
             {
                 try
                 {
-                    await scheduledTaskStore.MarkFailedAsync(inMemoryTask.TaskId, retryCount, ex.Message, cancellationToken);
-                    await scheduledTaskStore.AddExecutionLogAsync(
-                        inMemoryTask.TaskId,
+                    await jobTaskStore.MarkFailedAsync(inMemoryTask.JobId, retryCount, ex.Message, cancellationToken);
+                    await jobTaskStore.AddExecutionLogAsync(
+                        inMemoryTask.JobId,
                         start,
                         DateTimeOffset.UtcNow,
                         success: false,
@@ -188,10 +198,10 @@ public class ScheduledTaskHostedService(
                 }
                 catch (Exception bookkeepingEx) when (IsMissingTaskException(bookkeepingEx))
                 {
-                    logger.LogWarning("Scheduled task {TaskId} disappeared during failure bookkeeping. Dropping stale in-memory entry.", inMemoryTask.TaskId);
+                    _logger.LogWarning("Job {JobId} disappeared during failure bookkeeping. Dropping stale in-memory entry.", inMemoryTask.JobId);
                 }
 
-                _taskMap.TryRemove(inMemoryTask.TaskId, out _);
+                _taskMap.TryRemove(inMemoryTask.JobId, out _);
             }
         }
     }
@@ -199,12 +209,12 @@ public class ScheduledTaskHostedService(
     private static bool IsMissingTaskException(Exception exception)
     {
         return exception is InvalidOperationException invalidOperationException
-            && invalidOperationException.Message.StartsWith("Scheduled task not found:", StringComparison.Ordinal);
+            && invalidOperationException.Message.StartsWith("Job not found:", StringComparison.Ordinal);
     }
 
     private void UpsertInMemoryTask(Job task)
     {
-        InMemoryScheduledTask upserted;
+        InMemoryJob upserted;
 
         lock (_queueLock)
         {
@@ -212,9 +222,9 @@ public class ScheduledTaskHostedService(
                 ? existing.Version + 1
                 : 1;
 
-            upserted = new InMemoryScheduledTask
+            upserted = new InMemoryJob
             {
-                TaskId = task.Id,
+                JobId = task.Id,
                 ProjectId = task.ProjectId,
                 AgentType = task.AgentType,
                 AgentId = task.AgentId,
@@ -236,13 +246,13 @@ public class ScheduledTaskHostedService(
         _wakeSignal.Release();
     }
 
-    private bool TryPeekLatest(out InMemoryScheduledTask? task)
+    private bool TryPeekLatest(out InMemoryJob? task)
     {
         lock (_queueLock)
         {
             while (_queue.TryPeek(out var candidate, out _))
             {
-                if (_taskMap.TryGetValue(candidate.TaskId, out var current) && current.Version == candidate.Version)
+                if (_taskMap.TryGetValue(candidate.JobId, out var current) && current.Version == candidate.Version)
                 {
                     task = candidate;
                     return true;
@@ -256,13 +266,13 @@ public class ScheduledTaskHostedService(
         return false;
     }
 
-    private bool TryDequeueLatest(out InMemoryScheduledTask? task)
+    private bool TryDequeueLatest(out InMemoryJob? task)
     {
         lock (_queueLock)
         {
             while (_queue.TryDequeue(out var candidate, out _))
             {
-                if (_taskMap.TryGetValue(candidate.TaskId, out var current) && current.Version == candidate.Version)
+                if (_taskMap.TryGetValue(candidate.JobId, out var current) && current.Version == candidate.Version)
                 {
                     task = candidate;
                     return true;
@@ -274,11 +284,11 @@ public class ScheduledTaskHostedService(
         return false;
     }
 
-    private static Job ToScheduledTask(InMemoryScheduledTask inMemoryTask)
+    private static Job ToJob(InMemoryJob inMemoryTask)
     {
         return new Job
         {
-            Id = inMemoryTask.TaskId,
+            Id = inMemoryTask.JobId,
             ProjectId = inMemoryTask.ProjectId,
             AgentType = inMemoryTask.AgentType,
             AgentId = inMemoryTask.AgentId,

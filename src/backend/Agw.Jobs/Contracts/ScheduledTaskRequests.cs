@@ -3,7 +3,7 @@ using Agw.Shared.Enums;
 
 namespace Agw.Jobs.Contracts;
 
-public class ScheduledTaskCreateRequest
+public class JobCreateRequest
 {
     public Guid ProjectId { get; set; }
     public ProjectTaskAgentType? AgentType { get; set; }
@@ -18,7 +18,7 @@ public class ScheduledTaskCreateRequest
     public bool IsEnabled { get; set; } = true;
 }
 
-public class ScheduledTaskUpdateRequest
+public class JobUpdateRequest
 {
     public Guid ProjectId { get; set; }
     public ProjectTaskAgentType? AgentType { get; set; }
@@ -31,5 +31,5 @@ public class ScheduledTaskUpdateRequest
     public DateTimeOffset NextRunTime { get; set; }
     public int MaxRetryCount { get; set; } = 3;
     public bool IsEnabled { get; set; } = true;
-    public ScheduledTaskStatus Status { get; set; } = ScheduledTaskStatus.Pending;
+    public JobStatus Status { get; set; } = JobStatus.Pending;
 }

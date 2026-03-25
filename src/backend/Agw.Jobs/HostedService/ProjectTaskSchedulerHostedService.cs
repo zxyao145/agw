@@ -2,6 +2,7 @@ using Agw.Appliaction.Services.Agentflows;
 using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Entities;
 using Agw.Domain.Services;
+using Agw.Jobs.Services;
 using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Tasks;
@@ -14,7 +15,7 @@ using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
-namespace Agw.Jobs.Services;
+namespace Agw.Jobs.HostedService;
 
 /// <summary>
 /// Background scheduler that executes project tasks.

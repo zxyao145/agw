@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-type ScheduledTaskDto = {
+type JobDto = {
   id: string;
   projectId: string;
   agentType: number | null;
@@ -39,7 +39,7 @@ type TaskExecutionLogDto = {
   errorMessage: string | null;
 };
 
-type ScheduledTaskRequest = {
+type JobRequest = {
   projectId: string;
   agentType: number | null;
   agentId: string | null;
@@ -54,9 +54,9 @@ type ScheduledTaskRequest = {
   status?: number;
 };
 
-const taskPath = "/api/scheduled-tasks" as never;
-const taskItemPath = "/api/scheduled-tasks/{id}" as never;
-const taskLogsPath = "/api/scheduled-tasks/{id}/logs" as never;
+const taskPath = "/api/jobs" as never;
+const taskItemPath = "/api/jobs/{id}" as never;
+const taskLogsPath = "/api/jobs/{id}/logs" as never;
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -88,13 +88,13 @@ function fromLocalInput(value: string): string {
   return new Date(value).toISOString();
 }
 
-export default function ScheduledTasksPage() {
+export default function JobsPage() {
   const queryClient = useQueryClient();
 
   const [selectedTaskId, setSelectedTaskId] = React.useState<string | null>(null);
-  const [editingTask, setEditingTask] = React.useState<ScheduledTaskDto | null>(null);
+  const [editingTask, setEditingTask] = React.useState<JobDto | null>(null);
 
-  const [form, setForm] = React.useState<ScheduledTaskRequest>({
+  const [form, setForm] = React.useState<JobRequest>({
     projectId: "",
     agentType: 0,
     agentId: null,
@@ -109,21 +109,21 @@ export default function ScheduledTasksPage() {
   });
 
   const tasksQuery = useQuery({
-    queryKey: ["scheduled-tasks"],
-    queryFn: async () => (await apiGet(taskPath)) as ScheduledTaskDto[],
+    queryKey: ["jobs"],
+    queryFn: async () => (await apiGet(taskPath)) as JobDto[],
   });
 
   const taskDetailQuery = useQuery({
-    queryKey: ["scheduled-task", selectedTaskId],
+    queryKey: ["job", selectedTaskId],
     enabled: Boolean(selectedTaskId),
     queryFn: async () =>
       (await apiGet(taskItemPath, {
         params: { path: { id: selectedTaskId as string } },
-      } as never)) as ScheduledTaskDto,
+      } as never)) as JobDto,
   });
 
   const taskLogsQuery = useQuery({
-    queryKey: ["scheduled-task-logs", selectedTaskId],
+    queryKey: ["job-logs", selectedTaskId],
     enabled: Boolean(selectedTaskId),
     queryFn: async () =>
       (await apiGet(taskLogsPath, {
@@ -132,25 +132,25 @@ export default function ScheduledTasksPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (payload: ScheduledTaskRequest) => apiPost(taskPath, { body: payload } as never),
+    mutationFn: async (payload: JobRequest) => apiPost(taskPath, { body: payload } as never),
     onSuccess: async () => {
-      toast.success("ScheduledTask 创建成功");
-      await queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });
+      toast.success("Job 创建成功");
+      await queryClient.invalidateQueries({ queryKey: ["jobs"] });
     },
     onError: (error) => toast.error(`创建失败: ${errorMessage(error)}`),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, payload }: { id: string; payload: ScheduledTaskRequest }) =>
+    mutationFn: async ({ id, payload }: { id: string; payload: JobRequest }) =>
       apiPut(taskItemPath, {
         params: { path: { id } },
         body: payload,
       } as never),
     onSuccess: async () => {
-      toast.success("ScheduledTask 更新成功");
+      toast.success("Job 更新成功");
       setEditingTask(null);
-      await queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });
-      await queryClient.invalidateQueries({ queryKey: ["scheduled-task", selectedTaskId] });
+      await queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      await queryClient.invalidateQueries({ queryKey: ["job", selectedTaskId] });
     },
     onError: (error) => toast.error(`更新失败: ${errorMessage(error)}`),
   });
@@ -161,16 +161,16 @@ export default function ScheduledTasksPage() {
         params: { path: { id } },
       } as never),
     onSuccess: async () => {
-      toast.success("ScheduledTask 已删除");
+      toast.success("Job 已删除");
       setSelectedTaskId(null);
-      await queryClient.invalidateQueries({ queryKey: ["scheduled-tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["jobs"] });
     },
     onError: (error) => toast.error(`删除失败: ${errorMessage(error)}`),
   });
 
   const tasks = tasksQuery.data ?? [];
 
-  const applyTaskToForm = React.useCallback((task: ScheduledTaskDto) => {
+  const applyTaskToForm = React.useCallback((task: JobDto) => {
     setForm({
       projectId: task.projectId,
       agentType: task.agentType,
@@ -188,7 +188,7 @@ export default function ScheduledTasksPage() {
   }, []);
 
   const submit = () => {
-    const payload: ScheduledTaskRequest = {
+    const payload: JobRequest = {
       ...form,
       name: form.name.trim(),
       projectId: form.projectId.trim(),
@@ -214,7 +214,7 @@ export default function ScheduledTasksPage() {
     <div className="w-full space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Scheduled Tasks</h1>
+          <h1 className="text-xl font-semibold">Jobs</h1>
           <p className="text-sm text-muted-foreground">支持 list / detail / create / update / delete / logs。</p>
         </div>
         <Button variant="outline" onClick={() => tasksQuery.refetch()}>
@@ -224,7 +224,7 @@ export default function ScheduledTasksPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{editingTask ? "编辑 ScheduledTask" : "创建 ScheduledTask"}</CardTitle>
+          <CardTitle>{editingTask ? "编辑 Job" : "创建 Job"}</CardTitle>
           <CardDescription>TriggerType: 1=Once, 2=Interval, 3=Cron</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -345,7 +345,7 @@ export default function ScheduledTasksPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>ScheduledTask 列表</CardTitle>
+          <CardTitle>Job 列表</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {tasksQuery.isLoading ? <div className="text-sm text-muted-foreground">Loading...</div> : null}
@@ -378,7 +378,7 @@ export default function ScheduledTasksPage() {
             </div>
           ))}
           {!tasksQuery.isLoading && tasks.length === 0 ? (
-            <div className="text-sm text-muted-foreground">暂无 ScheduledTask。</div>
+            <div className="text-sm text-muted-foreground">暂无 Job。</div>
           ) : null}
         </CardContent>
       </Card>
@@ -386,7 +386,7 @@ export default function ScheduledTasksPage() {
       {selectedTaskId ? (
         <Card>
           <CardHeader>
-            <CardTitle>ScheduledTask 详情 + TaskExecutionLog</CardTitle>
+            <CardTitle>Job 详情 + TaskExecutionLog</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {taskDetailQuery.data ? (

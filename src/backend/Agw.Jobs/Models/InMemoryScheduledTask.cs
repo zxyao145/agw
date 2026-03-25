@@ -3,9 +3,9 @@ using Agw.Shared.Enums;
 
 namespace Agw.Jobs.Models;
 
-public sealed class InMemoryScheduledTask
+public sealed class InMemoryJob
 {
-    public Guid TaskId { get; init; }
+    public Guid JobId { get; init; }
     public Guid ProjectId { get; init; }
     public ProjectTaskAgentType? AgentType { get; init; }
     public Guid? AgentId { get; init; }

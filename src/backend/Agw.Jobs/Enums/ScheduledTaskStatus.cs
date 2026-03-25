@@ -1,6 +1,6 @@
 namespace Agw.Jobs.Enums;
 
-public enum ScheduledTaskStatus
+public enum JobStatus
 {
     Pending = 1,
     Running = 2,

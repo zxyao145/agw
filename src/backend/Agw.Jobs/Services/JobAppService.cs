@@ -6,32 +6,32 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Jobs.Services;
 
-public class ScheduledTaskAppService(
-    IRepository<Job> scheduledTaskRepository,
-    IRepository<JobLog> taskExecutionLogRepository,
+public class JobAppService(
+    IRepository<Job> jobTaskRepository,
+    IRepository<JobLog> jobExecutionLogRepository,
     IUnitOfWork unitOfWork)
 {
     public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
     {
-        return await scheduledTaskRepository.Queryable
+        return await jobTaskRepository.Queryable
             .OrderBy(t => t.NextRunTime)
             .ToListAsync(cancellationToken);
     }
 
     public Task<Job?> GetAsync(Guid id)
     {
-        return scheduledTaskRepository.GetByIdAsync(id);
+        return jobTaskRepository.GetByIdAsync(id);
     }
 
     public async Task<IReadOnlyList<JobLog>> ListLogsAsync(Guid taskId, CancellationToken cancellationToken = default)
     {
-        return await taskExecutionLogRepository.Queryable
+        return await jobExecutionLogRepository.Queryable
             .Where(log => log.TaskId == taskId)
             .OrderByDescending(log => log.StartTime)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Job> CreateAsync(ScheduledTaskCreateRequest request, string user)
+    public async Task<Job> CreateAsync(JobCreateRequest request, string user)
     {
         var now = DateTime.UtcNow;
         var entity = new Job
@@ -48,21 +48,21 @@ public class ScheduledTaskAppService(
             NextRunTime = request.NextRunTime,
             MaxRetryCount = request.MaxRetryCount,
             IsEnabled = request.IsEnabled,
-            Status = ScheduledTaskStatus.Pending,
+            Status = JobStatus.Pending,
             CreateBy = user,
             CreateTime = now,
             UpdateBy = user,
             UpdateTime = now
         };
 
-        await scheduledTaskRepository.AddAsync(entity);
+        await jobTaskRepository.AddAsync(entity);
         await unitOfWork.SaveChangesAsync();
         return entity;
     }
 
-    public async Task<Job?> UpdateAsync(Guid id, ScheduledTaskUpdateRequest request, string user)
+    public async Task<Job?> UpdateAsync(Guid id, JobUpdateRequest request, string user)
     {
-        var entity = await scheduledTaskRepository.GetByIdAsync(id);
+        var entity = await jobTaskRepository.GetByIdAsync(id);
         if (entity == null)
         {
             return null;
@@ -83,20 +83,20 @@ public class ScheduledTaskAppService(
         entity.UpdateBy = user;
         entity.UpdateTime = DateTime.UtcNow;
 
-        scheduledTaskRepository.Update(entity);
+        jobTaskRepository.Update(entity);
         await unitOfWork.SaveChangesAsync();
         return entity;
     }
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var entity = await scheduledTaskRepository.GetByIdAsync(id);
+        var entity = await jobTaskRepository.GetByIdAsync(id);
         if (entity == null)
         {
             return false;
         }
 
-        scheduledTaskRepository.Remove(entity);
+        jobTaskRepository.Remove(entity);
         await unitOfWork.SaveChangesAsync();
         return true;
     }

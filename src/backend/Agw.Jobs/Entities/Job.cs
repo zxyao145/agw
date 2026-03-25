@@ -22,7 +22,7 @@ public class Job : BaseEntity
 
     public DateTimeOffset NextRunTime { get; set; }
 
-    public ScheduledTaskStatus Status { get; set; } = ScheduledTaskStatus.Pending;
+    public JobStatus Status { get; set; } = JobStatus.Pending;
     public bool IsEnabled { get; set; } = true;
 
     public int RetryCount { get; set; }
