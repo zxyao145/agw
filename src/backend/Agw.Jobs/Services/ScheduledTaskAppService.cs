@@ -7,23 +7,23 @@ using Microsoft.EntityFrameworkCore;
 namespace Agw.Jobs.Services;
 
 public class ScheduledTaskAppService(
-    IRepository<ScheduledTask> scheduledTaskRepository,
-    IRepository<TaskExecutionLog> taskExecutionLogRepository,
+    IRepository<Job> scheduledTaskRepository,
+    IRepository<JobLog> taskExecutionLogRepository,
     IUnitOfWork unitOfWork)
 {
-    public async Task<IReadOnlyList<ScheduledTask>> ListAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
     {
         return await scheduledTaskRepository.Queryable
             .OrderBy(t => t.NextRunTime)
             .ToListAsync(cancellationToken);
     }
 
-    public Task<ScheduledTask?> GetAsync(Guid id)
+    public Task<Job?> GetAsync(Guid id)
     {
         return scheduledTaskRepository.GetByIdAsync(id);
     }
 
-    public async Task<IReadOnlyList<TaskExecutionLog>> ListLogsAsync(Guid taskId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<JobLog>> ListLogsAsync(Guid taskId, CancellationToken cancellationToken = default)
     {
         return await taskExecutionLogRepository.Queryable
             .Where(log => log.TaskId == taskId)
@@ -31,10 +31,10 @@ public class ScheduledTaskAppService(
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<ScheduledTask> CreateAsync(ScheduledTaskCreateRequest request, string user)
+    public async Task<Job> CreateAsync(ScheduledTaskCreateRequest request, string user)
     {
         var now = DateTime.UtcNow;
-        var entity = new ScheduledTask
+        var entity = new Job
         {
             Id = Guid.NewGuid(),
             ProjectId = request.ProjectId,
@@ -60,7 +60,7 @@ public class ScheduledTaskAppService(
         return entity;
     }
 
-    public async Task<ScheduledTask?> UpdateAsync(Guid id, ScheduledTaskUpdateRequest request, string user)
+    public async Task<Job?> UpdateAsync(Guid id, ScheduledTaskUpdateRequest request, string user)
     {
         var entity = await scheduledTaskRepository.GetByIdAsync(id);
         if (entity == null)

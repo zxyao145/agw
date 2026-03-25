@@ -28,8 +28,8 @@ public class LlmDbContext : DbContext
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
     public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
     public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
-    public DbSet<ScheduledTask> ScheduledTasks => Set<ScheduledTask>();
-    public DbSet<TaskExecutionLog> TaskExecutionLogs => Set<TaskExecutionLog>();
+    public DbSet<Job> ScheduledTasks => Set<Job>();
+    public DbSet<JobLog> TaskExecutionLogs => Set<JobLog>();
     public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
     public DbSet<AgentMcpToolServer> AgentMcpToolServers => Set<AgentMcpToolServer>();
     public DbSet<Skill> Skills => Set<Skill>();
@@ -237,7 +237,7 @@ public class LlmDbContext : DbContext
         });
 
 
-        modelBuilder.Entity<ScheduledTask>(entity =>
+        modelBuilder.Entity<Job>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
@@ -255,7 +255,7 @@ public class LlmDbContext : DbContext
                 .HasDatabaseName("ix_task_project");
         });
 
-        modelBuilder.Entity<TaskExecutionLog>(entity =>
+        modelBuilder.Entity<JobLog>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);

@@ -2,7 +2,7 @@ using Agw.Shared;
 
 namespace Agw.Domain.Entities;
 
-public class TaskExecutionLog : BaseEntity
+public class JobLog : BaseEntity
 {
     public Guid Id { get; set; }
     public Guid TaskId { get; set; }

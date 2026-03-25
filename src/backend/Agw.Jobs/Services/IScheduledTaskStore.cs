@@ -4,7 +4,7 @@ namespace Agw.Jobs.Services;
 
 public interface IScheduledTaskStore
 {
-    Task<IReadOnlyList<ScheduledTask>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Job>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken);
 
     Task<bool> MarkRunningAsync(Guid taskId, CancellationToken cancellationToken);
 

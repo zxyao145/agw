@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Agw.Domain.Entities;
 
-public class ScheduledTask : BaseEntity
+public class Job : BaseEntity
 {
     public Guid Id { get; set; }
 

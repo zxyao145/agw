@@ -6,7 +6,7 @@ namespace Agw.Jobs.Services;
 
 public class ScheduledTaskTimeCalculator : IScheduledTaskTimeCalculator
 {
-    public DateTimeOffset? GetNextRunTime(ScheduledTask task, DateTimeOffset now)
+    public DateTimeOffset? GetNextRunTime(Job task, DateTimeOffset now)
     {
         switch (task.TriggerType)
         {

@@ -202,7 +202,7 @@ public class ScheduledTaskHostedService(
             && invalidOperationException.Message.StartsWith("Scheduled task not found:", StringComparison.Ordinal);
     }
 
-    private void UpsertInMemoryTask(ScheduledTask task)
+    private void UpsertInMemoryTask(Job task)
     {
         InMemoryScheduledTask upserted;
 
@@ -274,9 +274,9 @@ public class ScheduledTaskHostedService(
         return false;
     }
 
-    private static ScheduledTask ToScheduledTask(InMemoryScheduledTask inMemoryTask)
+    private static Job ToScheduledTask(InMemoryScheduledTask inMemoryTask)
     {
-        return new ScheduledTask
+        return new Job
         {
             Id = inMemoryTask.TaskId,
             ProjectId = inMemoryTask.ProjectId,

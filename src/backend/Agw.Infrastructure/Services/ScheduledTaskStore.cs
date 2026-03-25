@@ -8,7 +8,7 @@ namespace Agw.Infrastructure.Services;
 
 public class ScheduledTaskStore(LlmDbContext dbContext) : IScheduledTaskStore
 {
-    public async Task<IReadOnlyList<ScheduledTask>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Job>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken)
     {
         return await dbContext.ScheduledTasks
             .Where(t => t.IsEnabled
@@ -106,7 +106,7 @@ public class ScheduledTaskStore(LlmDbContext dbContext) : IScheduledTaskStore
 
     public async Task AddExecutionLogAsync(Guid taskId, DateTimeOffset startTime, DateTimeOffset endTime, bool success, int attempt, string? errorMessage, CancellationToken cancellationToken)
     {
-        var log = new TaskExecutionLog
+        var log = new JobLog
         {
             Id = Guid.NewGuid(),
             TaskId = taskId,

@@ -4,5 +4,5 @@ namespace Agw.Jobs.Services;
 
 public interface IScheduledTaskTimeCalculator
 {
-    DateTimeOffset? GetNextRunTime(ScheduledTask task, DateTimeOffset now);
+    DateTimeOffset? GetNextRunTime(Job task, DateTimeOffset now);
 }

@@ -9,7 +9,7 @@ public class AgentExecutor(
     AgentRuntimeService agentRuntimeService,
     AgentflowRuntimeService agentflowRuntimeService) : IAgentExecutor
 {
-    public async Task ExecuteAsync(ScheduledTask task, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(Job task, CancellationToken cancellationToken)
     {
         if (task.AgentId == null || task.AgentType == null)
         {
