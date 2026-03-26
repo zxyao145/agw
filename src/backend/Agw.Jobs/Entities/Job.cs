@@ -18,8 +18,6 @@ public class Job : BaseEntity
 
     public TriggerType TriggerType { get; set; }
     public string TriggerValue { get; set; } = string.Empty;
-    public string TimeZoneId { get; set; } = "Asia/Shanghai";
-
     public DateTimeOffset NextRunTime { get; set; }
 
     public JobStatus Status { get; set; } = JobStatus.Pending;
