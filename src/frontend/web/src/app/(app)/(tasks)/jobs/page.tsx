@@ -111,6 +111,7 @@ type JobDialogProps = {
   setForm: React.Dispatch<React.SetStateAction<JobFormState>>;
   projects: ProjectDto[];
   assignableAgents: AgentOption[];
+  areAssignableAgentsReady: boolean;
   onSubmit: () => void;
   isSubmitting: boolean;
 };
@@ -322,6 +323,7 @@ export default function JobsPage() {
 
     return [...agentOptions, ...agentflowOptions];
   }, [agentsQuery.data, agentflowsQuery.data]);
+  const areAssignableAgentsReady = agentsQuery.isSuccess && agentflowsQuery.isSuccess;
 
   const viewingJobId = viewingJob?.id ?? null;
 
@@ -597,6 +599,7 @@ export default function JobsPage() {
         setForm={setCreateForm}
         projects={projectsQuery.data ?? []}
         assignableAgents={assignableAgents}
+        areAssignableAgentsReady={areAssignableAgentsReady}
         onSubmit={submitCreate}
         isSubmitting={createMutation.isPending}
       />
@@ -609,6 +612,7 @@ export default function JobsPage() {
         setForm={setEditForm}
         projects={projectsQuery.data ?? []}
         assignableAgents={assignableAgents}
+        areAssignableAgentsReady={areAssignableAgentsReady}
         onSubmit={submitEdit}
         isSubmitting={updateMutation.isPending}
       />
@@ -691,6 +695,7 @@ function JobDialog({
   setForm,
   projects,
   assignableAgents,
+  areAssignableAgentsReady,
   onSubmit,
   isSubmitting,
 }: JobDialogProps) {
@@ -709,13 +714,17 @@ function JobDialog({
       return;
     }
 
+    if (!areAssignableAgentsReady) {
+      return;
+    }
+
     const matchesSelectedType = assignableAgents.some(
       (agent) => agent.id === form.agentId && agent.type === form.agentType,
     );
     if (!matchesSelectedType && form.agentId) {
       setForm((current) => ({ ...current, agentId: "" }));
     }
-  }, [assignableAgents, form.agentId, form.agentType, setForm]);
+  }, [areAssignableAgentsReady, assignableAgents, form.agentId, form.agentType, setForm]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
