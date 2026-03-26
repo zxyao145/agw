@@ -119,23 +119,37 @@ type JobDialogProps = {
 const jobsPath = "/api/jobs" as never;
 const jobItemPath = "/api/jobs/{id}" as never;
 const jobLogsPath = "/api/jobs/{id}/logs" as never;
+const TRIGGER_TYPE_ONCE = 1;
+const TRIGGER_TYPE_INTERVAL = 2;
+const TRIGGER_TYPE_CRON = 3;
+const DEFAULT_INTERVAL_TRIGGER_VALUE = "00:01:00";
+const DEFAULT_CRON_TRIGGER_VALUE = "*/1 * * * *";
+
+function createDefaultOnceRunTime(): string {
+  return new Date(Date.now() + 3 * 60 * 1000).toISOString();
+}
 
 function createDefaultJobFormState(): JobFormState {
   return {
-    projectId: "",
+    projectId: "11111111-1111-1111-1111-111111111111",
     agentType: 0,
     agentId: "",
     name: "",
     prompt: "",
-    triggerType: 3,
-    triggerValue: "*/1 * * * *",
-    nextRunTime: new Date().toISOString(),
+    triggerType: TRIGGER_TYPE_CRON,
+    triggerValue: DEFAULT_CRON_TRIGGER_VALUE,
+    nextRunTime: createDefaultOnceRunTime(),
     maxRetryCount: 3,
     isEnabled: true,
   };
 }
 
 function createEditFormState(job: JobDto): JobFormState {
+  const nextRunTime =
+    job.triggerType === TRIGGER_TYPE_ONCE && isValidDateTimeValue(job.triggerValue)
+      ? job.triggerValue
+      : job.nextRunTime;
+
   return {
     projectId: job.projectId,
     agentType: job.agentType,
@@ -144,7 +158,7 @@ function createEditFormState(job: JobDto): JobFormState {
     prompt: job.prompt ?? "",
     triggerType: job.triggerType,
     triggerValue: job.triggerValue,
-    nextRunTime: job.nextRunTime,
+    nextRunTime,
     maxRetryCount: job.maxRetryCount,
     isEnabled: job.isEnabled,
     status: job.status,
@@ -152,6 +166,7 @@ function createEditFormState(job: JobDto): JobFormState {
 }
 
 function buildJobRequest(form: JobFormState, mode: "create" | "edit"): JobRequest {
+  const triggerValue = resolveTriggerValue(form);
   const payload: JobRequest = {
     projectId: form.projectId.trim(),
     agentType: form.agentType,
@@ -159,7 +174,7 @@ function buildJobRequest(form: JobFormState, mode: "create" | "edit"): JobReques
     name: form.name.trim(),
     prompt: form.prompt.trim() || null,
     triggerType: form.triggerType,
-    triggerValue: form.triggerValue.trim(),
+    triggerValue,
     maxRetryCount: form.maxRetryCount,
     isEnabled: form.isEnabled,
     status: mode === "edit" ? form.status : undefined,
@@ -177,7 +192,9 @@ function buildJobRequest(form: JobFormState, mode: "create" | "edit"): JobReques
     throw new Error("Trigger value is required.");
   }
 
-  if (![1, 2, 3].includes(payload.triggerType)) {
+  if (
+    ![TRIGGER_TYPE_ONCE, TRIGGER_TYPE_INTERVAL, TRIGGER_TYPE_CRON].includes(payload.triggerType)
+  ) {
     throw new Error("Trigger type is invalid.");
   }
 
@@ -194,6 +211,64 @@ function buildJobRequest(form: JobFormState, mode: "create" | "edit"): JobReques
   }
 
   return payload;
+}
+
+function isValidDateTimeValue(value?: string | null): value is string {
+  if (!value) {
+    return false;
+  }
+
+  return !Number.isNaN(new Date(value).getTime());
+}
+
+function isPositiveIntervalValue(value?: string | null): value is string {
+  if (!value) {
+    return false;
+  }
+
+  const match = value.trim().match(/^(?:(\d+)\.)?(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/);
+  if (!match) {
+    return false;
+  }
+
+  const days = Number(match[1] ?? 0);
+  const hours = Number(match[2]);
+  const minutes = Number(match[3]);
+  const seconds = Number(match[4] ?? 0);
+  const totalMilliseconds = (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1000;
+
+  return totalMilliseconds > 0;
+}
+
+function isCronValue(value?: string | null): value is string {
+  if (!value) {
+    return false;
+  }
+
+  return value.trim().split(/\s+/).length === 5;
+}
+
+function getNextRunTimeForOnce(form: JobFormState): string {
+  if (isValidDateTimeValue(form.triggerValue)) {
+    return form.triggerValue;
+  }
+
+  return createDefaultOnceRunTime();
+}
+
+function resolveTriggerValue(form: JobFormState): string {
+  switch (form.triggerType) {
+    case TRIGGER_TYPE_ONCE:
+      return getNextRunTimeForOnce(form).trim();
+    case TRIGGER_TYPE_INTERVAL:
+      return isPositiveIntervalValue(form.triggerValue)
+        ? form.triggerValue.trim()
+        : DEFAULT_INTERVAL_TRIGGER_VALUE;
+    case TRIGGER_TYPE_CRON:
+      return isCronValue(form.triggerValue) ? form.triggerValue.trim() : DEFAULT_CRON_TRIGGER_VALUE;
+    default:
+      return form.triggerValue.trim();
+  }
 }
 
 function formatDateTime(value?: string | null): string {
@@ -222,13 +297,26 @@ function toLocalInput(dateTime?: string | null): string {
   return local.toISOString().slice(0, 16);
 }
 
+function fromLocalInput(dateTime: string): string {
+  if (!dateTime) {
+    return "";
+  }
+
+  const parsed = new Date(dateTime);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString();
+}
+
 function getTriggerTypeLabel(triggerType: number): string {
   switch (triggerType) {
-    case 1:
+    case TRIGGER_TYPE_ONCE:
       return "Once";
-    case 2:
+    case TRIGGER_TYPE_INTERVAL:
       return "Interval";
-    case 3:
+    case TRIGGER_TYPE_CRON:
       return "Cron";
     default:
       return `Unknown (${triggerType})`;
@@ -701,6 +789,9 @@ function JobDialog({
 }: JobDialogProps) {
   const title = mode === "create" ? "Create Job" : "Edit Job";
   const submitLabel = mode === "create" ? "Create Job" : "Save Changes";
+  const isOnceTrigger = form.triggerType === TRIGGER_TYPE_ONCE;
+  const isIntervalTrigger = form.triggerType === TRIGGER_TYPE_INTERVAL;
+  const isCronTrigger = form.triggerType === TRIGGER_TYPE_CRON;
   const filteredAgents = React.useMemo(
     () => assignableAgents.filter((agent) => form.agentType !== null && agent.type === form.agentType),
     [assignableAgents, form.agentType],
@@ -725,6 +816,53 @@ function JobDialog({
       setForm((current) => ({ ...current, agentId: "" }));
     }
   }, [areAssignableAgentsReady, assignableAgents, form.agentId, form.agentType, setForm]);
+
+  React.useEffect(() => {
+    setForm((current) => {
+      if (current.triggerType === TRIGGER_TYPE_ONCE) {
+        const onceRunTime = getNextRunTimeForOnce(current);
+        if (current.triggerValue === onceRunTime && current.nextRunTime === onceRunTime) {
+          return current;
+        }
+
+        return {
+          ...current,
+          triggerValue: onceRunTime,
+          nextRunTime: onceRunTime,
+        };
+      }
+
+      if (current.triggerType === TRIGGER_TYPE_INTERVAL) {
+        const nextTriggerValue = isPositiveIntervalValue(current.triggerValue)
+          ? current.triggerValue
+          : DEFAULT_INTERVAL_TRIGGER_VALUE;
+        if (current.triggerValue === nextTriggerValue) {
+          return current;
+        }
+
+        return {
+          ...current,
+          triggerValue: nextTriggerValue,
+        };
+      }
+
+      if (current.triggerType === TRIGGER_TYPE_CRON) {
+        const nextTriggerValue = isCronValue(current.triggerValue)
+          ? current.triggerValue
+          : DEFAULT_CRON_TRIGGER_VALUE;
+        if (current.triggerValue === nextTriggerValue) {
+          return current;
+        }
+
+        return {
+          ...current,
+          triggerValue: nextTriggerValue,
+        };
+      }
+
+      return current;
+    });
+  }, [form.triggerType, setForm]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -841,44 +979,59 @@ function JobDialog({
                 <SelectValue placeholder="Select trigger type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">Once</SelectItem>
-                <SelectItem value="2">Interval</SelectItem>
-                <SelectItem value="3">Cron</SelectItem>
+                <SelectItem value={String(TRIGGER_TYPE_ONCE)}>Once</SelectItem>
+                <SelectItem value={String(TRIGGER_TYPE_INTERVAL)}>Interval</SelectItem>
+                <SelectItem value={String(TRIGGER_TYPE_CRON)}>Cron</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-next-run-time`}>Next Run Time</Label>
-            <Input
-              id={`${mode}-next-run-time`}
-              type="datetime-local"
-              value={toLocalInput(form.nextRunTime)}
-              disabled
-            />
-            <p className="text-xs text-muted-foreground">
-              Calculated by backend after saving this job.
-            </p>
-          </div>
+          {isOnceTrigger ? (
+            <div className="space-y-2">
+              <Label htmlFor={`${mode}-next-run-time`}>Run Time</Label>
+              <Input
+                id={`${mode}-next-run-time`}
+                type="datetime-local"
+                value={toLocalInput(getNextRunTimeForOnce(form))}
+                onChange={(event) => {
+                  const nextRunTime = fromLocalInput(event.target.value);
+                  setForm((current) => ({
+                    ...current,
+                    nextRunTime,
+                    triggerValue: nextRunTime,
+                  }));
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Pick the exact time to run this job once. This value will be sent as the once
+                trigger value.
+              </p>
+            </div>
+          ) : null}
 
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor={`${mode}-trigger-value`}>Trigger Value</Label>
-            <p className="text-xs text-muted-foreground">
-              Use an ISO date for once, an interval expression for interval jobs, or a cron string
-              for cron jobs.
-            </p>
-            <Input
-              id={`${mode}-trigger-value`}
-              value={form.triggerValue}
-              placeholder="*/5 * * * *"
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  triggerValue: event.target.value,
-                }))
-              }
-            />
-          </div>
+          {(isIntervalTrigger || isCronTrigger) ? (
+            <div className="space-y-2">
+              <Label htmlFor={`${mode}-trigger-value`}>
+                {isIntervalTrigger ? "Interval" : "Trigger Value"}
+              </Label>
+              <Input
+                id={`${mode}-trigger-value`}
+                value={form.triggerValue}
+                placeholder={isIntervalTrigger ? DEFAULT_INTERVAL_TRIGGER_VALUE : "*/5 * * * *"}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    triggerValue: event.target.value,
+                  }))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                {isIntervalTrigger
+                  ? "Use a .NET TimeSpan value such as 00:01:00 for a one-minute interval."
+                  : "Use a standard cron string such as */5 * * * *."}
+              </p>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor={`${mode}-max-retry-count`}>Max Retry Count</Label>

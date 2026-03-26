@@ -42,6 +42,9 @@ type ProjectDto = {
   id: string;
   name: string;
   description: string | null;
+  workspace?: string | null;
+  extraSetting?: string | null;
+  type: number;
   enable: boolean;
   createBy?: string | null;
   createTime?: string | null;
@@ -166,6 +169,8 @@ export default function ProjectDetailsPage() {
   const [editOpen, setEditOpen] = React.useState(false);
   const [editName, setEditName] = React.useState("");
   const [editDescription, setEditDescription] = React.useState<string>("");
+  const [editWorkspace, setEditWorkspace] = React.useState<string>("");
+  const [editExtraSetting, setEditExtraSetting] = React.useState<string>("");
   const [editEnable, setEditEnable] = React.useState(true);
 
   const [createTaskOpen, setCreateTaskOpen] = React.useState(false);
@@ -183,6 +188,8 @@ export default function ProjectDetailsPage() {
     if (!p) return;
     setEditName(p.name ?? "");
     setEditDescription(p.description ?? "");
+    setEditWorkspace(p.workspace ?? "");
+    setEditExtraSetting(p.extraSetting ?? "");
     setEditEnable(Boolean(p.enable));
   }, [projectQuery.data]);
 
@@ -326,6 +333,9 @@ export default function ProjectDetailsPage() {
 
   const project = projectQuery.data;
 
+  // System projects (type !== 0) have restricted editing
+  const isSystemProject = project?.type !== 0;
+
   const tasks = React.useMemo(() => {
     const list = tasksQuery.data ?? [];
     return [...list].sort((a, b) => {
@@ -375,7 +385,12 @@ export default function ProjectDetailsPage() {
 
             <Dialog open={editOpen} onOpenChange={setEditOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm" disabled={!project}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!project || isSystemProject}
+                  title={isSystemProject ? "System projects cannot be edited" : undefined}
+                >
                   Edit
                 </Button>
               </DialogTrigger>
@@ -392,6 +407,7 @@ export default function ProjectDetailsPage() {
                       id="edit-name"
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
+                      disabled={isSystemProject}
                     />
                   </div>
 
@@ -402,6 +418,30 @@ export default function ProjectDetailsPage() {
                       value={editDescription}
                       onChange={(e) => setEditDescription(e.target.value)}
                       rows={4}
+                      disabled={isSystemProject}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-workspace">Workspace</Label>
+                    <Input
+                      id="edit-workspace"
+                      value={editWorkspace}
+                      onChange={(e) => setEditWorkspace(e.target.value)}
+                      placeholder="/path/to/workspace"
+                      disabled={isSystemProject}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-extra-setting">Extra Setting (JSON)</Label>
+                    <Textarea
+                      id="edit-extra-setting"
+                      value={editExtraSetting}
+                      onChange={(e) => setEditExtraSetting(e.target.value)}
+                      rows={4}
+                      placeholder="{}"
+                      disabled={isSystemProject}
                     />
                   </div>
 
@@ -427,12 +467,12 @@ export default function ProjectDetailsPage() {
                       updateProjectMutation.mutate({
                         name: editName,
                         description: editDescription.length ? editDescription : null,
-                        workspace: null,
+                        workspace: editWorkspace.trim().length ? editWorkspace.trim() : null,
                         enable: editEnable,
-                        extraSetting: null,
+                        extraSetting: editExtraSetting.trim().length ? editExtraSetting.trim() : null,
                       })
                     }
-                    disabled={!editName.trim() || updateProjectMutation.isPending}
+                    disabled={!editName.trim() || updateProjectMutation.isPending || isSystemProject}
                   >
                     {updateProjectMutation.isPending ? "Saving..." : "Save"}
                   </Button>
@@ -444,7 +484,8 @@ export default function ProjectDetailsPage() {
               variant="destructive"
               size="sm"
               onClick={() => deleteProjectMutation.mutate()}
-              disabled={!project || deleteProjectMutation.isPending}
+              disabled={!project || deleteProjectMutation.isPending || isSystemProject}
+              title={isSystemProject ? "System projects cannot be deleted" : undefined}
             >
               {deleteProjectMutation.isPending ? "Deleting..." : "Delete"}
             </Button>

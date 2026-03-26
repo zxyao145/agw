@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import type { components } from "@/api/openapi";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -38,6 +37,7 @@ type ProjectDto = {
   name: string;
   description: string | null;
   workspace?: string | null;
+  type: number;
   enable: boolean;
   extraSetting?: string | null;
   createBy?: string | null;
@@ -127,14 +127,18 @@ export default function ProjectsPage() {
 
   const [editOpen, setEditOpen] = React.useState(false);
   const [editProjectId, setEditProjectId] = React.useState<string | null>(null);
+  const [editProjectType, setEditProjectType] = React.useState<number>(0);
   const [editName, setEditName] = React.useState("");
   const [editDescription, setEditDescription] = React.useState<string>("");
   const [editWorkspace, setEditWorkspace] = React.useState<string>("");
   const [editEnable, setEditEnable] = React.useState(true);
   const [editExtraSetting, setEditExtraSetting] = React.useState("{\n  \n}");
 
+  const isEditingSystemProject = editProjectType !== 0;
+
   const openEdit = React.useCallback((project: ProjectDto) => {
     setEditProjectId(project.id);
+    setEditProjectType(project.type ?? 0);
     setEditName(project.name ?? "");
     setEditDescription(project.description ?? "");
     setEditWorkspace(project.workspace ?? "");
@@ -334,6 +338,11 @@ export default function ProjectsPage() {
                   >
                     {p.name}
                   </Link>
+                  {p.type !== 0 && (
+                    <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
+                      BuiltIn
+                    </span>
+                  )}
                   <span
                     className={
                       p.enable
@@ -360,14 +369,21 @@ export default function ProjectsPage() {
                 <Button asChild variant="outline" size="sm">
                   <Link href={`/projects/${p.id}`}>View</Link>
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => openEdit(p)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openEdit(p)}
+                  disabled={p.type !== 0}
+                  title={p.type !== 0 ? "System projects cannot be edited" : undefined}
+                >
                   Edit
                 </Button>
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={() => openDelete(p)}
-                  disabled={deleteProjectMutation.isPending}
+                  disabled={p.type !== 0 || deleteProjectMutation.isPending}
+                  title={p.type !== 0 ? "System projects cannot be deleted" : undefined}
                 >
                   Delete
                 </Button>
@@ -380,8 +396,19 @@ export default function ProjectsPage() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent size="lg">
           <DialogHeader>
-            <UiDialogTitle>Edit project</UiDialogTitle>
-            <UiDialogDescription>Update project settings.</UiDialogDescription>
+            <UiDialogTitle>
+              Edit project
+              {isEditingSystemProject && (
+                <span className="ml-2 rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-normal text-amber-700 dark:text-amber-300">
+                  System
+                </span>
+              )}
+            </UiDialogTitle>
+            <UiDialogDescription>
+              {isEditingSystemProject
+                ? "System projects have restricted editing. Only the enable toggle is available."
+                : "Update project settings."}
+            </UiDialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4">
@@ -391,6 +418,7 @@ export default function ProjectsPage() {
                 id="edit-name"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
+                disabled={isEditingSystemProject}
               />
             </div>
 
@@ -401,6 +429,7 @@ export default function ProjectsPage() {
                 value={editDescription}
                 onChange={(e) => setEditDescription(e.target.value)}
                 rows={4}
+                disabled={isEditingSystemProject}
               />
             </div>
 
@@ -410,6 +439,7 @@ export default function ProjectsPage() {
                 id="edit-workspace"
                 value={editWorkspace}
                 onChange={(e) => setEditWorkspace(e.target.value)}
+                disabled={isEditingSystemProject}
               />
             </div>
 
@@ -427,6 +457,7 @@ export default function ProjectsPage() {
                     scrollBeyondLastLine: false,
                     fontSize: 13,
                     automaticLayout: true,
+                    readOnly: isEditingSystemProject,
                   }}
                 />
               </div>
