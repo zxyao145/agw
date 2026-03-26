@@ -11,7 +11,12 @@ public class JobTimeCalculator : IJobTimeCalculator
         switch (task.TriggerType)
         {
             case TriggerType.Once:
-                return null;
+                if (!DateTimeOffset.TryParse(task.TriggerValue, out var onceRunTime))
+                {
+                    throw new InvalidOperationException($"Invalid once trigger value: {task.TriggerValue}");
+                }
+
+                return onceRunTime;
             case TriggerType.Interval:
                 if (!TimeSpan.TryParse(task.TriggerValue, out var interval) || interval <= TimeSpan.Zero)
                 {
@@ -21,20 +26,9 @@ public class JobTimeCalculator : IJobTimeCalculator
                 return now.Add(interval);
             case TriggerType.Cron:
                 var cron = CronExpression.Parse(task.TriggerValue, CronFormat.Standard);
-                var timezone = GetTimeZone(task.TimeZoneId);
-                return cron.GetNextOccurrence(now, timezone);
+                return cron.GetNextOccurrence(now, TimeZoneInfo.Utc);
             default:
                 throw new NotSupportedException($"Unsupported trigger type: {task.TriggerType}");
         }
-    }
-
-    private static TimeZoneInfo GetTimeZone(string timeZoneId)
-    {
-        if (string.IsNullOrWhiteSpace(timeZoneId))
-        {
-            return TimeZoneInfo.Utc;
-        }
-
-        return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
     }
 }

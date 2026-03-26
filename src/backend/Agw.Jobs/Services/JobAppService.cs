@@ -9,7 +9,8 @@ namespace Agw.Jobs.Services;
 public class JobAppService(
     IRepository<Job> jobTaskRepository,
     IRepository<JobLog> jobExecutionLogRepository,
-    IUnitOfWork unitOfWork)
+    IUnitOfWork unitOfWork,
+    IJobTimeCalculator jobTimeCalculator)
 {
     public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
     {
@@ -50,8 +51,7 @@ public class JobAppService(
             Prompt = request.Prompt,
             TriggerType = request.TriggerType,
             TriggerValue = request.TriggerValue,
-            TimeZoneId = request.TimeZoneId,
-            NextRunTime = request.NextRunTime,
+            NextRunTime = DateTimeOffset.UtcNow,
             MaxRetryCount = request.MaxRetryCount,
             IsEnabled = request.IsEnabled,
             Status = JobStatus.Pending,
@@ -60,6 +60,7 @@ public class JobAppService(
             UpdateBy = user,
             UpdateTime = now
         };
+        entity.NextRunTime = ResolveNextRunTime(entity);
 
         await jobTaskRepository.AddAsync(entity);
         await unitOfWork.SaveChangesAsync();
@@ -81,13 +82,12 @@ public class JobAppService(
         entity.Prompt = request.Prompt;
         entity.TriggerType = request.TriggerType;
         entity.TriggerValue = request.TriggerValue;
-        entity.TimeZoneId = request.TimeZoneId;
-        entity.NextRunTime = request.NextRunTime;
         entity.MaxRetryCount = request.MaxRetryCount;
         entity.IsEnabled = request.IsEnabled;
         entity.Status = request.Status;
         entity.UpdateBy = user;
         entity.UpdateTime = DateTime.UtcNow;
+        entity.NextRunTime = ResolveNextRunTime(entity);
 
         jobTaskRepository.Update(entity);
         await unitOfWork.SaveChangesAsync();
@@ -105,5 +105,16 @@ public class JobAppService(
         jobTaskRepository.Remove(entity);
         await unitOfWork.SaveChangesAsync();
         return true;
+    }
+
+    private DateTimeOffset ResolveNextRunTime(Job entity)
+    {
+        var nextRunTime = jobTimeCalculator.GetNextRunTime(entity, DateTimeOffset.UtcNow);
+        if (!nextRunTime.HasValue)
+        {
+            return DateTimeOffset.MaxValue;
+        }
+
+        return nextRunTime.Value;
     }
 }

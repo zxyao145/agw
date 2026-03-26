@@ -244,7 +244,6 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.Prompt).HasMaxLength(4000);
             entity.Property(e => e.TriggerType).HasConversion<int>();
             entity.Property(e => e.TriggerValue).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.TimeZoneId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Status).HasConversion<int>();
             entity.Property(e => e.LastError).HasMaxLength(2000);
             entity.Property(e => e.RowVersion).IsRowVersion();

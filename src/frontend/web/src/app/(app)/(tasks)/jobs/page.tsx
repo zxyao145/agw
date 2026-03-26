@@ -47,7 +47,6 @@ type JobDto = {
   prompt: string | null;
   triggerType: number;
   triggerValue: string;
-  timeZoneId: string;
   nextRunTime: string;
   status: number;
   isEnabled: boolean;
@@ -74,7 +73,6 @@ type JobFormState = {
   prompt: string;
   triggerType: number;
   triggerValue: string;
-  timeZoneId: string;
   nextRunTime: string;
   maxRetryCount: number;
   isEnabled: boolean;
@@ -89,11 +87,20 @@ type JobRequest = {
   prompt: string | null;
   triggerType: number;
   triggerValue: string;
-  timeZoneId: string;
-  nextRunTime: string;
   maxRetryCount: number;
   isEnabled: boolean;
   status?: number;
+};
+
+type ProjectDto = {
+  id: string;
+  name: string;
+};
+
+type AgentOption = {
+  id: string;
+  label: string;
+  type: 0 | 1;
 };
 
 type JobDialogProps = {
@@ -102,6 +109,8 @@ type JobDialogProps = {
   onOpenChange: (open: boolean) => void;
   form: JobFormState;
   setForm: React.Dispatch<React.SetStateAction<JobFormState>>;
+  projects: ProjectDto[];
+  assignableAgents: AgentOption[];
   onSubmit: () => void;
   isSubmitting: boolean;
 };
@@ -119,7 +128,6 @@ function createDefaultJobFormState(): JobFormState {
     prompt: "",
     triggerType: 3,
     triggerValue: "*/1 * * * *",
-    timeZoneId: "Asia/Shanghai",
     nextRunTime: new Date().toISOString(),
     maxRetryCount: 3,
     isEnabled: true,
@@ -135,7 +143,6 @@ function createEditFormState(job: JobDto): JobFormState {
     prompt: job.prompt ?? "",
     triggerType: job.triggerType,
     triggerValue: job.triggerValue,
-    timeZoneId: job.timeZoneId,
     nextRunTime: job.nextRunTime,
     maxRetryCount: job.maxRetryCount,
     isEnabled: job.isEnabled,
@@ -152,8 +159,6 @@ function buildJobRequest(form: JobFormState, mode: "create" | "edit"): JobReques
     prompt: form.prompt.trim() || null,
     triggerType: form.triggerType,
     triggerValue: form.triggerValue.trim(),
-    timeZoneId: form.timeZoneId.trim(),
-    nextRunTime: form.nextRunTime,
     maxRetryCount: form.maxRetryCount,
     isEnabled: form.isEnabled,
     status: mode === "edit" ? form.status : undefined,
@@ -169,14 +174,6 @@ function buildJobRequest(form: JobFormState, mode: "create" | "edit"): JobReques
 
   if (!payload.triggerValue) {
     throw new Error("Trigger value is required.");
-  }
-
-  if (!payload.timeZoneId) {
-    throw new Error("Time zone ID is required.");
-  }
-
-  if (!payload.nextRunTime || Number.isNaN(new Date(payload.nextRunTime).getTime())) {
-    throw new Error("Next run time must be a valid date.");
   }
 
   if (![1, 2, 3].includes(payload.triggerType)) {
@@ -222,11 +219,6 @@ function toLocalInput(dateTime?: string | null): string {
 
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 16);
-}
-
-function fromLocalInput(value: string): string {
-  if (!value) return "";
-  return new Date(value).toISOString();
 }
 
 function getTriggerTypeLabel(triggerType: number): string {
@@ -296,6 +288,40 @@ export default function JobsPage() {
       return (await apiGet(jobsPath)) as JobDto[];
     },
   });
+
+  const projectsQuery = useQuery({
+    queryKey: ["projects"],
+    queryFn: async () => (await apiGet("/api/projects")) as unknown as ProjectDto[],
+  });
+
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    queryFn: async () =>
+      (await apiGet("/api/agents")) as unknown as Array<{ id: string; displayName: string; name: string }>,
+  });
+
+  const agentflowsQuery = useQuery({
+    queryKey: ["agentflows"],
+    queryFn: async () => (await apiGet("/api/agentflows")) as unknown as Array<{ id: string; name: string }>,
+  });
+
+  const assignableAgents = React.useMemo<AgentOption[]>(() => {
+    const agentOptions =
+      agentsQuery.data?.map((agent) => ({
+        id: agent.id,
+        label: agent.displayName?.trim() || agent.name,
+        type: 0 as const,
+      })) ?? [];
+
+    const agentflowOptions =
+      agentflowsQuery.data?.map((agentflow) => ({
+        id: agentflow.id,
+        label: agentflow.name,
+        type: 1 as const,
+      })) ?? [];
+
+    return [...agentOptions, ...agentflowOptions];
+  }, [agentsQuery.data, agentflowsQuery.data]);
 
   const viewingJobId = viewingJob?.id ?? null;
 
@@ -515,7 +541,6 @@ export default function JobsPage() {
                 </TableCell>
                 <TableCell className="min-w-44 text-sm text-muted-foreground">
                   <div>{formatDateTime(job.nextRunTime)}</div>
-                  <div className="text-xs">{job.timeZoneId}</div>
                 </TableCell>
                 <TableCell className="min-w-52">
                   <div className="flex flex-col items-start gap-2">
@@ -570,6 +595,8 @@ export default function JobsPage() {
         onOpenChange={closeCreateDialog}
         form={createForm}
         setForm={setCreateForm}
+        projects={projectsQuery.data ?? []}
+        assignableAgents={assignableAgents}
         onSubmit={submitCreate}
         isSubmitting={createMutation.isPending}
       />
@@ -580,6 +607,8 @@ export default function JobsPage() {
         onOpenChange={closeEditDialog}
         form={editForm}
         setForm={setEditForm}
+        projects={projectsQuery.data ?? []}
+        assignableAgents={assignableAgents}
         onSubmit={submitEdit}
         isSubmitting={updateMutation.isPending}
       />
@@ -660,11 +689,33 @@ function JobDialog({
   onOpenChange,
   form,
   setForm,
+  projects,
+  assignableAgents,
   onSubmit,
   isSubmitting,
 }: JobDialogProps) {
   const title = mode === "create" ? "Create Job" : "Edit Job";
   const submitLabel = mode === "create" ? "Create Job" : "Save Changes";
+  const filteredAgents = React.useMemo(
+    () => assignableAgents.filter((agent) => form.agentType !== null && agent.type === form.agentType),
+    [assignableAgents, form.agentType],
+  );
+
+  React.useEffect(() => {
+    if (form.agentType === null) {
+      if (form.agentId) {
+        setForm((current) => ({ ...current, agentId: "" }));
+      }
+      return;
+    }
+
+    const matchesSelectedType = assignableAgents.some(
+      (agent) => agent.id === form.agentId && agent.type === form.agentType,
+    );
+    if (!matchesSelectedType && form.agentId) {
+      setForm((current) => ({ ...current, agentId: "" }));
+    }
+  }, [assignableAgents, form.agentId, form.agentType, setForm]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -676,7 +727,7 @@ function JobDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-6 overflow-y-auto pr-1 sm:grid-cols-2">
+        <div className="grid max-h-[65vh] grid-cols-1 gap-6 overflow-y-auto pr-1 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor={`${mode}-job-name`}>Name</Label>
             <Input
@@ -694,17 +745,26 @@ function JobDialog({
 
           <div className="space-y-2">
             <Label htmlFor={`${mode}-project-id`}>Project ID</Label>
-            <Input
-              id={`${mode}-project-id`}
+            <Select
               value={form.projectId}
-              placeholder="00000000-0000-0000-0000-000000000000"
-              onChange={(event) =>
+              onValueChange={(value) =>
                 setForm((current) => ({
                   ...current,
-                  projectId: event.target.value,
+                  projectId: value,
                 }))
               }
-            />
+            >
+              <SelectTrigger id={`${mode}-project-id`} className="w-full">
+                <SelectValue placeholder="Select a project" />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
@@ -731,17 +791,30 @@ function JobDialog({
 
           <div className="space-y-2">
             <Label htmlFor={`${mode}-agent-id`}>Agent ID</Label>
-            <Input
-              id={`${mode}-agent-id`}
-              value={form.agentId}
-              placeholder="Optional agent or agentflow ID"
-              onChange={(event) =>
+            <Select
+              value={form.agentId || "none"}
+              onValueChange={(value) =>
                 setForm((current) => ({
                   ...current,
-                  agentId: event.target.value,
+                  agentId: value === "none" ? "" : value,
                 }))
               }
-            />
+              disabled={form.agentType === null}
+            >
+              <SelectTrigger id={`${mode}-agent-id`} className="w-full">
+                <SelectValue
+                  placeholder={form.agentType === null ? "Select agent type first" : "Optional agent"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not assigned</SelectItem>
+                {filteredAgents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
@@ -772,13 +845,11 @@ function JobDialog({
               id={`${mode}-next-run-time`}
               type="datetime-local"
               value={toLocalInput(form.nextRunTime)}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  nextRunTime: fromLocalInput(event.target.value),
-                }))
-              }
+              disabled
             />
+            <p className="text-xs text-muted-foreground">
+              Calculated by backend after saving this job.
+            </p>
           </div>
 
           <div className="space-y-2 sm:col-span-2">
@@ -795,21 +866,6 @@ function JobDialog({
                 setForm((current) => ({
                   ...current,
                   triggerValue: event.target.value,
-                }))
-              }
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-time-zone-id`}>Time Zone ID</Label>
-            <Input
-              id={`${mode}-time-zone-id`}
-              value={form.timeZoneId}
-              placeholder="Asia/Shanghai"
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  timeZoneId: event.target.value,
                 }))
               }
             />
@@ -962,7 +1018,6 @@ function JobDetailsDialog({
                 <DetailField label="Trigger Type" value={getTriggerTypeLabel(job.triggerType)} />
                 <DetailField label="Trigger Value" value={job.triggerValue} mono />
                 <DetailField label="Next Run" value={formatDateTime(job.nextRunTime)} />
-                <DetailField label="Time Zone" value={job.timeZoneId} />
                 <DetailField label="Status" value={getStatusLabel(job.status)} />
                 <DetailField
                   label="Execution"

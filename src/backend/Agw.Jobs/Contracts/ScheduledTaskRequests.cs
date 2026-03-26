@@ -12,8 +12,6 @@ public class JobCreateRequest
     public string? Prompt { get; set; }
     public TriggerType TriggerType { get; set; }
     public string TriggerValue { get; set; } = string.Empty;
-    public string TimeZoneId { get; set; } = "Asia/Shanghai";
-    public DateTimeOffset NextRunTime { get; set; }
     public int MaxRetryCount { get; set; } = 3;
     public bool IsEnabled { get; set; } = true;
 }
@@ -27,8 +25,6 @@ public class JobUpdateRequest
     public string? Prompt { get; set; }
     public TriggerType TriggerType { get; set; }
     public string TriggerValue { get; set; } = string.Empty;
-    public string TimeZoneId { get; set; } = "Asia/Shanghai";
-    public DateTimeOffset NextRunTime { get; set; }
     public int MaxRetryCount { get; set; } = 3;
     public bool IsEnabled { get; set; } = true;
     public JobStatus Status { get; set; } = JobStatus.Pending;

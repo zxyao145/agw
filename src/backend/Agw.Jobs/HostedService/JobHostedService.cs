@@ -232,7 +232,6 @@ public class JobHostedService(
                 Prompt = task.Prompt,
                 TriggerType = task.TriggerType,
                 TriggerValue = task.TriggerValue,
-                TimeZoneId = task.TimeZoneId,
                 NextRunTime = task.NextRunTime,
                 RetryCount = task.RetryCount,
                 MaxRetryCount = task.MaxRetryCount,
@@ -296,7 +295,6 @@ public class JobHostedService(
             Prompt = inMemoryTask.Prompt,
             TriggerType = inMemoryTask.TriggerType,
             TriggerValue = inMemoryTask.TriggerValue,
-            TimeZoneId = inMemoryTask.TimeZoneId,
             NextRunTime = inMemoryTask.NextRunTime,
             RetryCount = inMemoryTask.RetryCount,
             MaxRetryCount = inMemoryTask.MaxRetryCount

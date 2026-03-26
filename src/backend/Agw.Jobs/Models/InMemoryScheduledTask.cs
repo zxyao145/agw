@@ -14,8 +14,6 @@ public sealed class InMemoryJob
 
     public TriggerType TriggerType { get; init; }
     public string TriggerValue { get; init; } = string.Empty;
-    public string TimeZoneId { get; init; } = "UTC";
-
     public DateTimeOffset NextRunTime { get; init; }
 
     public int RetryCount { get; init; }
