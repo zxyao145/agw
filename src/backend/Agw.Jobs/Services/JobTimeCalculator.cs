@@ -16,7 +16,7 @@ public class JobTimeCalculator : IJobTimeCalculator
                     throw new InvalidOperationException($"Invalid once trigger value: {task.TriggerValue}");
                 }
 
-                return onceRunTime;
+                return onceRunTime > now ? onceRunTime : null;
             case TriggerType.Interval:
                 if (!TimeSpan.TryParse(task.TriggerValue, out var interval) || interval <= TimeSpan.Zero)
                 {
