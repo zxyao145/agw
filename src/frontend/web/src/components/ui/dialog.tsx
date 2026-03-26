@@ -2,9 +2,30 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { cva, type VariantProps } from "class-variance-authority";
 import { XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+
+const dialogVariants = cva(
+  "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 border p-6 shadow-lg duration-200 outline-none",
+  {
+    variants: {
+      size: {
+        sm: "sm:max-w-[var(--dialog-max-w-sm)]",      /* 384px - Simple confirmations */
+        md: "sm:max-w-[var(--dialog-max-w-md)]",      /* 512px - Default, simple forms */
+        lg: "sm:max-w-[var(--dialog-max-w-lg)]",      /* 672px - Medium forms */
+        xl: "sm:max-w-[var(--dialog-max-w-xl)]",      /* 768px - Complex forms */
+        "2xl": "sm:max-w-[var(--dialog-max-w-2xl)]",  /* 896px - Wide content */
+        "3xl": "sm:max-w-[var(--dialog-max-w-3xl)]",  /* 1152px - Very wide content */
+        full: "sm:max-w-[calc(100vw-4rem)] sm:max-h-[calc(100vh-4rem)]", /* Full viewport with padding */
+      },
+    },
+    defaultVariants: {
+      size: "md",
+    },
+  },
+);
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -38,23 +59,20 @@ function DialogOverlay({
   );
 }
 
-function DialogContent({
-  className,
-  children,
-  showCloseButton = true,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+interface DialogContentProps
+  extends React.ComponentProps<typeof DialogPrimitive.Content>,
+    VariantProps<typeof dialogVariants> {
   showCloseButton?: boolean;
-}) {
+}
+
+function DialogContent({ className, children, showCloseButton = true, size, ...props }: DialogContentProps) {
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
-        className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
-          className,
-        )}
+        data-size={size}
+        className={cn(dialogVariants({ size }), className)}
         {...props}
       >
         {children}
@@ -126,4 +144,5 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+  dialogVariants,
 };

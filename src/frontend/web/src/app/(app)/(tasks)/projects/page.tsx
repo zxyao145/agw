@@ -210,7 +210,7 @@ export default function ProjectsPage() {
               <Button>Create project</Button>
             </DialogTrigger>
 
-            <DialogContent>
+            <DialogContent size="lg">
               <DialogHeader>
                 <UiDialogTitle>Create project</UiDialogTitle>
                 <UiDialogDescription>Create a project to group ordered tasks.</UiDialogDescription>
@@ -378,7 +378,7 @@ export default function ProjectsPage() {
       )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
+        <DialogContent size="lg">
           <DialogHeader>
             <UiDialogTitle>Edit project</UiDialogTitle>
             <UiDialogDescription>Update project settings.</UiDialogDescription>
@@ -479,7 +479,7 @@ export default function ProjectsPage() {
       </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
+        <DialogContent size="lg">
           <DialogHeader>
             <UiDialogTitle>Delete project</UiDialogTitle>
             <UiDialogDescription>

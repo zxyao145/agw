@@ -656,7 +656,7 @@ function DeleteJobDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Delete job</DialogTitle>
           <DialogDescription>
@@ -728,7 +728,7 @@ function JobDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden">
+      <DialogContent size="2xl" className="max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -1004,7 +1004,7 @@ function JobDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden">
+      <DialogContent size="2xl" className="max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>{job?.name ?? "Job details"}</DialogTitle>
           <DialogDescription>

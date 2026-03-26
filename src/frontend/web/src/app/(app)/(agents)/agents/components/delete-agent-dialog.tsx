@@ -27,7 +27,7 @@ export function DeleteAgentDialog({
 }: DeleteAgentDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent>
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Delete agent</DialogTitle>
           <DialogDescription>

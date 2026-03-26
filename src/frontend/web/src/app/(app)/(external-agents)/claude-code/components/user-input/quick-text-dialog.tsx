@@ -40,7 +40,7 @@ export function QuickTextDialog({ quickCommands, onCommandSelect }: QuickTextDia
           <Zap className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-125">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Quick Text Insert</DialogTitle>
           <DialogDescription>

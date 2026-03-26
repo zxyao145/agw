@@ -287,7 +287,7 @@ export function ChatHistoryList({
 
       {/* Info Modal */}
       <Dialog open={infoModalOpen} onOpenChange={setInfoModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Chat History Storage</DialogTitle>
             <DialogDescription>Storage statistics and management options</DialogDescription>

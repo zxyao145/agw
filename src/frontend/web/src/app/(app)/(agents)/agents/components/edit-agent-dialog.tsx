@@ -102,7 +102,7 @@ export function EditAgentDialog({
 }: EditAgentDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent size="xl" className="max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Edit agent</DialogTitle>
           <DialogDescription>Update the agent configuration</DialogDescription>

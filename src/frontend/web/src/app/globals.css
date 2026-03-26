@@ -37,6 +37,51 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+}
+
+/* ============================================================================
+   Design Tokens
+   ============================================================================ */
+
+:root {
+  /* Spacing Scale */
+  --spacing-xs: 0.25rem;   /* 4px */
+  --spacing-sm: 0.5rem;    /* 8px */
+  --spacing-md: 0.75rem;   /* 12px */
+  --spacing-lg: 1rem;      /* 16px */
+  --spacing-xl: 1.5rem;    /* 24px */
+  --spacing-2xl: 2rem;     /* 32px */
+  --spacing-3xl: 2.5rem;   /* 40px */
+
+  /* Form Layout */
+  --form-gap: var(--spacing-lg);           /* Gap between form fields */
+  --form-field-gap: var(--spacing-sm);     /* Gap between label and input */
+  --form-label-weight: 500;
+
+  /* Dialog Sizes */
+  --dialog-max-w-sm: 24rem;    /* 384px - Simple confirmations */
+  --dialog-max-w-md: 32rem;    /* 512px - Default, simple forms */
+  --dialog-max-w-lg: 42rem;    /* 672px - Medium forms */
+  --dialog-max-w-xl: 48rem;    /* 768px - Complex forms */
+  --dialog-max-w-2xl: 56rem;   /* 896px - Wide content */
+  --dialog-max-w-3xl: 72rem;   /* 1152px - Very wide content */
+  --dialog-padding: var(--spacing-xl);
+  --dialog-gap: var(--spacing-lg);
+
+  /* Card & Container */
+  --card-padding: var(--spacing-xl);
+  --card-radius: var(--radius-lg);
+  --card-gap: var(--spacing-xl);
+
+  /* Content Width Constraints */
+  --content-max-w-sm: 28rem;
+  --content-max-w-md: 40rem;
+  --content-max-w-lg: 52rem;
+  --content-max-w-xl: 64rem;
+  --content-max-w-2xl: 80rem;
+
+  /* Radius */
+  --radius: 0.625rem;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -44,10 +89,8 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
-}
 
-:root {
-  --radius: 0.625rem;
+  /* Colors */
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0);

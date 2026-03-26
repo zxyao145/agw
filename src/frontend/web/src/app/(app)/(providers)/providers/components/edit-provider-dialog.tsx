@@ -114,7 +114,7 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Edit provider</DialogTitle>
           <DialogDescription>

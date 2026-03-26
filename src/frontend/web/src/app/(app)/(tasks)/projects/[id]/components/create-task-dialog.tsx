@@ -72,7 +72,7 @@ export function CreateTaskDialog({
       >
         Create task
       </Button>
-      <DialogContent>
+      <DialogContent size="lg">
         <DialogHeader>
           <UiDialogTitle>Create task</UiDialogTitle>
           <UiDialogDescription>

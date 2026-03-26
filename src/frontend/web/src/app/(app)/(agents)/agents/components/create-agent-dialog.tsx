@@ -99,7 +99,7 @@ export function CreateAgentDialog({
         <Button>Create</Button>
       </DialogTrigger>
 
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent size="xl" className="max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Create agent</DialogTitle>
           <DialogDescription>

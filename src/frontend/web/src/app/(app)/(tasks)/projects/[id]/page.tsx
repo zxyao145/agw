@@ -379,7 +379,7 @@ export default function ProjectDetailsPage() {
                   Edit
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent size="lg">
                 <DialogHeader>
                   <UiDialogTitle>Edit project</UiDialogTitle>
                   <UiDialogDescription>Update project settings.</UiDialogDescription>
@@ -655,7 +655,7 @@ export default function ProjectDetailsPage() {
       </Card>
 
       <Dialog open={editTaskOpen} onOpenChange={setEditTaskOpen}>
-        <DialogContent>
+        <DialogContent size="lg">
           <DialogHeader>
             <UiDialogTitle>Edit task</UiDialogTitle>
             <UiDialogDescription>Only pending tasks can be updated.</UiDialogDescription>

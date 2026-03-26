@@ -83,7 +83,7 @@ export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Create provider</DialogTitle>
           <DialogDescription>
