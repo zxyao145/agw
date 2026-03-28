@@ -10,7 +10,11 @@ public class ProjectTaskDomainService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public bool TryPrepareForCreate(ProjectTask task, TaskRecord initialRecord, string user)
+    public bool TryPrepareForCreate(
+        ProjectTask task,
+        TaskRecord initialRecord,
+        string user,
+        ProjectTaskStatus initialStatus = ProjectTaskStatus.Pending)
     {
         if (string.IsNullOrWhiteSpace(task.Description)
             || string.IsNullOrWhiteSpace(task.ContextId)
@@ -28,7 +32,7 @@ public class ProjectTaskDomainService
         task.Id = task.Id == Guid.Empty ? Guid.NewGuid() : task.Id;
         task.Title = task.Title?.Trim() ?? string.Empty;
         task.Description = task.Description.Trim();
-        task.Status = ProjectTaskStatus.Pending;
+        task.Status = initialStatus;
         task.CreateBy = user;
         task.CreateTime = DateTime.UtcNow;
         task.UpdateBy = user;

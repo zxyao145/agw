@@ -100,20 +100,23 @@ export async function getAllSessions(projectId: string): Promise<ChatSessionReco
 }
 
 export async function getSessionBySessionId(
-  sessionId: string,
+  contextId: string,
   projectId: string,
 ): Promise<ChatSessionRecordDetails | null> {
-  if (!sessionId) {
+  if (!contextId) {
     return null;
   }
 
-  const task = await findTaskBySessionId(sessionId, projectId);
+  const task = await findTaskBySessionId(contextId, projectId);
   if (!task) {
+    console.warn("task not found, sessionId:", contextId, projectId)
+    console.warn("task not found, contextId:", contextId, ", projectId:", projectId)
     return null;
   }
 
   const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(task.id)}`);
   const response = await fetch(url);
+  console.warn("getSessionBySessionId:", response)
   if (response.status === 404) {
     return null;
   }

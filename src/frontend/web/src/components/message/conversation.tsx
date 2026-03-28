@@ -28,7 +28,7 @@ export interface ConversationProps {
   agentType: number;
   projectId: string;
   taskId?: string | null;
-  sessionId?: string | null;
+  contextId?: string | null;
   resetSignal?: string | number | boolean;
   placeholder?: string;
   className?: string;
@@ -45,7 +45,7 @@ export function Conversation({
   agentType,
   projectId,
   taskId,
-  sessionId,
+  contextId: sessionId,
   resetSignal,
   placeholder = "Type your message...",
   className,

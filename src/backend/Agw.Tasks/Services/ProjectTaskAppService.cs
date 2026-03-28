@@ -89,6 +89,23 @@ public class ProjectTaskAppService
         ProjectTaskCreateRequest request,
         string user)
     {
+        return await CreateAsync(projectId, request, user, ProjectTaskStatus.Pending);
+    }
+
+    public async Task<ApplicationResult<ProjectTaskResponse>> CreateRunningAsync(
+        Guid projectId,
+        ProjectTaskCreateRequest request,
+        string user)
+    {
+        return await CreateAsync(projectId, request, user, ProjectTaskStatus.Running);
+    }
+
+    private async Task<ApplicationResult<ProjectTaskResponse>> CreateAsync(
+        Guid projectId,
+        ProjectTaskCreateRequest request,
+        string user,
+        ProjectTaskStatus initialStatus)
+    {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
         {
@@ -101,7 +118,7 @@ public class ProjectTaskAppService
             ? taskId.Normalize()
             : request.ContextId.Trim();
         var sessionId = string.IsNullOrWhiteSpace(request.SessionId)
-            ? contextId
+            ? taskId.Normalize()
             : request.SessionId.Trim();
 
         var task = new ProjectTask
@@ -115,8 +132,7 @@ public class ProjectTaskAppService
                 : request.AgentId,
             Title = request.Title ?? string.Empty,
             Description = request.Description,
-            SystemPrompt = request.SystemPrompt,
-            Status = ProjectTaskStatus.Pending
+            SystemPrompt = request.SystemPrompt
         };
 
         var inputMessage = new ChatMessage(ChatRole.User, request.Input.Trim())
@@ -134,7 +150,7 @@ public class ProjectTaskAppService
             ConversationPayload = JsonUtil.Serialize(inputMessage)
         };
 
-        if (!_projectTaskDomainService.TryPrepareForCreate(task, initialRecord, user))
+        if (!_projectTaskDomainService.TryPrepareForCreate(task, initialRecord, user, initialStatus))
         {
             return ApplicationResult<ProjectTaskResponse>.Invalid(
                 "Failed to create task (project/target invalid, target mismatch, or input missing).");
