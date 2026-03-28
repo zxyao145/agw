@@ -29,12 +29,12 @@ type ProjectTaskHistoryResponse = {
   messages?: AiMessage[] | null;
 };
 
-function buildTasksEndpoint(projectId: string, suffix = ""): string {
+function buildTasksEndpoint(projectId: string, taskId = ""): string {
   const value = projectId.trim();
   if (!value) {
     throw new Error("projectId is required");
   }
-  return `/api/projects/${encodeURIComponent(value)}/tasks${suffix}`;
+  return `/api/projects/${encodeURIComponent(value)}/tasks${taskId}`;
 }
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -66,18 +66,16 @@ function toChatSessionDetails(task: ProjectTaskHistoryResponse): ChatSessionReco
   };
 }
 
-async function findTaskBySessionId(
-  sessionId: string,
+async function findTaskByTaskId(
+  taskId: string,
   projectId: string,
-): Promise<ChatSessionRecordSummary | null> {
-  if (!sessionId) {
+): Promise<ProjectTaskHistoryResponse | null> {
+  if (!taskId) {
     return null;
   }
 
-  const sessions = await getAllSessions(projectId);
-  return (
-    sessions.find((session) => session.sessionId === sessionId || session.id === sessionId) ?? null
-  );
+  const session = await getTaskSessions(projectId, taskId);
+  return session;
 }
 
 async function clearTaskSessionById(taskId: string, projectId: string): Promise<boolean> {
@@ -93,38 +91,35 @@ async function clearTaskSessionById(taskId: string, projectId: string): Promise<
   return true;
 }
 
-export async function getAllSessions(projectId: string): Promise<ChatSessionRecordSummary[]> {
+export async function getAllTasksSessions(projectId: string): Promise<ChatSessionRecordSummary[]> {
   const url = buildTasksEndpoint(projectId);
   const tasks = await fetchJson<ProjectTaskHistoryResponse[]>(url);
   return tasks.map(toChatSessionSummary);
 }
 
-export async function getSessionBySessionId(
-  contextId: string,
+export async function getTaskSessions(projectId: string, taskId: string): Promise<ProjectTaskHistoryResponse> {
+  const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(taskId)}`);
+  const task = await fetchJson<ProjectTaskHistoryResponse>(url);
+  // TODO
+  return task;
+}
+
+export async function getSessionByTaskId(
+  taskId: string | null | undefined,
   projectId: string,
 ): Promise<ChatSessionRecordDetails | null> {
-  if (!contextId) {
+  if (!taskId) {
     return null;
   }
 
-  const task = await findTaskBySessionId(contextId, projectId);
+  const task = await findTaskByTaskId(taskId, projectId);
   if (!task) {
-    console.warn("task not found, sessionId:", contextId, projectId)
-    console.warn("task not found, contextId:", contextId, ", projectId:", projectId)
+    console.warn("task not found, sessionId:", taskId, projectId)
+    console.warn("task not found, contextId:", taskId, ", projectId:", projectId)
     return null;
   }
 
-  const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(task.id)}`);
-  const response = await fetch(url);
-  console.warn("getSessionBySessionId:", response)
-  if (response.status === 404) {
-    return null;
-  }
-  if (!response.ok) {
-    const message = await response.text().catch(() => "");
-    throw new Error(message || `Request failed: ${response.status}`);
-  }
-  return toChatSessionDetails((await response.json()) as ProjectTaskHistoryResponse);
+  return toChatSessionDetails(task);
 }
 
 export async function deleteSessionBySessionId(
@@ -134,7 +129,7 @@ export async function deleteSessionBySessionId(
   if (!sessionId) {
     return false;
   }
-  const task = await findTaskBySessionId(sessionId, projectId);
+  const task = await findTaskByTaskId(sessionId, projectId);
   if (!task) {
     return false;
   }
@@ -150,7 +145,7 @@ export async function updateSessionTitle(
   if (!sessionId || !newTitle.trim()) {
     return false;
   }
-  const task = await findTaskBySessionId(sessionId, projectId);
+  const task = await findTaskByTaskId(sessionId, projectId);
   if (!task) {
     return false;
   }
@@ -172,6 +167,6 @@ export async function updateSessionTitle(
 }
 
 export async function clearAllSessions(projectId: string): Promise<void> {
-  const sessions = await getAllSessions(projectId);
+  const sessions = await getAllTasksSessions(projectId);
   await Promise.all(sessions.map((session) => clearTaskSessionById(session.id, projectId)));
 }

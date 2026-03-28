@@ -15,7 +15,7 @@ import type { UserInputRef } from "@/components/message/user-input";
 import { ChatSession } from "@/components/message/chat-session";
 import {
   CLAUDE_CODE_PROJECT_ID,
-  getSessionBySessionId,
+  getSessionByTaskId,
   type ChatSessionRecordDetails,
 } from "./lib/chat-history-service";
 import { Label } from "@/components/ui/label";
@@ -549,7 +549,7 @@ export default function ClaudeCodePage() {
 
   const handleHistorySelect = async (sessionId: string) => {
     try {
-      const details: ChatSessionRecordDetails | null = await getSessionBySessionId(
+      const details: ChatSessionRecordDetails | null = await getSessionByTaskId(
         sessionId,
         CLAUDE_CODE_PROJECT_ID,
       );

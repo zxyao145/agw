@@ -16,7 +16,7 @@ import {
   deleteSessionBySessionId,
   updateSessionTitle,
   clearAllSessions,
-  getAllSessions,
+  getAllTasksSessions,
   type ChatSessionRecordSummary,
 } from "../../lib/chat-history-service";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,7 @@ export function ChatHistoryList({
   const refreshSessions = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const latestSessions = await getAllSessions(CLAUDE_CODE_PROJECT_ID);
+      const latestSessions = await getAllTasksSessions(CLAUDE_CODE_PROJECT_ID);
       setSessions(latestSessions);
     } catch (error) {
       console.error("Failed to load chat history:", error);

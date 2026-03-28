@@ -20,7 +20,7 @@ import { Separator } from "../ui/separator";
 import { useQuery } from "@tanstack/react-query";
 import {
   deleteSessionBySessionId,
-  getSessionBySessionId,
+  getSessionByTaskId,
 } from "@/app/(app)/(external-agents)/claude-code/lib/chat-history-service";
 
 export interface ConversationProps {
@@ -67,7 +67,7 @@ export function Conversation({
   const sessionQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", curSessionId, "session-record"],
     queryFn: async () => {
-      return await getSessionBySessionId(curSessionId, projectId);
+      return await getSessionByTaskId(taskId, projectId);
     },
     enabled: Boolean(curSessionId),
     refetchInterval: false,
