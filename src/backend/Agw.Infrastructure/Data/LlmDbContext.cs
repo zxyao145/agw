@@ -13,6 +13,18 @@ public class LlmDbContext : DbContext
     {
     }
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        StampJobRowVersions();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        StampJobRowVersions();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     public DbSet<LlmModel> Models => Set<LlmModel>();
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ModelProvider> ModelProviders => Set<ModelProvider>();
@@ -29,7 +41,7 @@ public class LlmDbContext : DbContext
     public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
     public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
     public DbSet<Job> Jobs => Set<Job>();
-    public DbSet<JobLog> TaskExecutionLogs => Set<JobLog>();
+    public DbSet<JobLog> JobLogs => Set<JobLog>();
     public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
     public DbSet<AgentMcpToolServer> AgentMcpToolServers => Set<AgentMcpToolServer>();
     public DbSet<Skill> Skills => Set<Skill>();
@@ -246,7 +258,10 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.TriggerValue).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Status).HasConversion<int>();
             entity.Property(e => e.LastError).HasMaxLength(2000);
-            entity.Property(e => e.RowVersion).IsRowVersion();
+            entity.Property(e => e.RowVersion)
+                .IsRequired()
+                .IsConcurrencyToken()
+                .ValueGeneratedNever();
 
             entity.HasIndex(e => new { e.IsEnabled, e.Status, e.NextRunTime })
                 .HasDatabaseName("ix_task_next_run_time");
@@ -325,5 +340,16 @@ public class LlmDbContext : DbContext
 
             entity.HasIndex(e => e.SkillId);
         });
+    }
+
+    private void StampJobRowVersions()
+    {
+        foreach (var entry in ChangeTracker.Entries<Job>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Entity.RowVersion = Guid.NewGuid().ToByteArray();
+            }
+        }
     }
 }

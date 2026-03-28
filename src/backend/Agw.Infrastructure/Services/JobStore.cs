@@ -126,7 +126,7 @@ public class JobStore(LlmDbContext dbContext) : IJobStore
             UpdateTime = DateTime.UtcNow
         };
 
-        await dbContext.TaskExecutionLogs.AddAsync(log, cancellationToken);
+        await dbContext.JobLogs.AddAsync(log, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

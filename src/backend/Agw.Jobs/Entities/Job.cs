@@ -1,7 +1,6 @@
 using Agw.Jobs.Enums;
 using Agw.Shared;
 using Agw.Shared.Enums;
-using System.ComponentModel.DataAnnotations;
 
 namespace Agw.Domain.Entities;
 
@@ -27,6 +26,5 @@ public class Job : BaseEntity
     public int MaxRetryCount { get; set; } = 3;
     public string? LastError { get; set; }
 
-    [Timestamp]
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 }

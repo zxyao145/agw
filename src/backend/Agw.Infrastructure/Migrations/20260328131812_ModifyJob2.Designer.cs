@@ -3,6 +3,7 @@ using System;
 using Agw.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Agw.Infrastructure.Migrations
 {
     [DbContext(typeof(LlmDbContext))]
-    partial class LlmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260328131812_ModifyJob2")]
+    partial class ModifyJob2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.5");
@@ -441,12 +444,12 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_job_logs");
+                        .HasName("pk_task_execution_logs");
 
                     b.HasIndex("TaskId", "StartTime")
-                        .HasDatabaseName("ix_job_logs_task_id_start_time");
+                        .HasDatabaseName("ix_task_execution_logs_task_id_start_time");
 
-                    b.ToTable("job_logs", (string)null);
+                    b.ToTable("task_execution_logs", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.LlmModel", b =>
