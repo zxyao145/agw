@@ -2,6 +2,7 @@ using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -49,8 +50,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         _state = new ProviderSessionState<State>(
             _ =>
             {
-                var contextId = Activity.Current?.TraceId.ToString();
-                contextId ??= Guid.NewGuid().Normalize();
+                var contextId = TaskUtil.GenContextId();
                 var sessionId = Guid.NewGuid().Normalize();
                 return new State(contextId, sessionId, ProjectDefaults.DefaultBuiltId);
             },

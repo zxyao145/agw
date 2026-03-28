@@ -2,8 +2,9 @@ using Agw.Appliaction.Services.Agentflows;
 using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Entities;
 using Agw.Shared;
-using Agw.Shared.Enums;
 using Agw.Shared.Contracts;
+using Agw.Shared.Enums;
+using Agw.Shared.Utils;
 using Agw.Tasks.Services;
 
 namespace Agw.Jobs.Services;
@@ -32,7 +33,7 @@ public class AgentExecutor(
         var description = string.IsNullOrWhiteSpace(job.Name)
             ? prompt
             : job.Name.Trim();
-        var contextId = job.Id.Normalize();
+        var contextId = TaskUtil.GenContextId();
 
         var createResult = await projectTaskAppService.CreateRunningAsync(
             job.ProjectId,
