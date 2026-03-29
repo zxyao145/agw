@@ -1,5 +1,5 @@
+using Agw.Agents.Application;
 using Agw.Appliaction.ExternalAgents;
-using Agw.Appliaction.Services.Agents;
 using Agw.Shared.Enums;
 using Agw.Shared.Services;
 using Agw.Shared.Tasks;
@@ -76,7 +76,7 @@ public class ClaudeCodeService
             projectId,
             initRequest.SessionId,
             initRequest.SessionId,
-            ProjectTaskAgentType.Agent,
+            AgentRuntimeType.Agent,
             null,
             "ClaudeCode",
             _logger,

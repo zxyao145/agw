@@ -6,7 +6,7 @@ namespace Agw.Jobs.Contracts;
 public class JobCreateRequest
 {
     public Guid ProjectId { get; set; }
-    public ProjectTaskAgentType? AgentType { get; set; }
+    public AgentRuntimeType? AgentType { get; set; }
     public Guid? AgentId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Prompt { get; set; }
@@ -19,7 +19,7 @@ public class JobCreateRequest
 public class JobUpdateRequest
 {
     public Guid ProjectId { get; set; }
-    public ProjectTaskAgentType? AgentType { get; set; }
+    public AgentRuntimeType? AgentType { get; set; }
     public Guid? AgentId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Prompt { get; set; }

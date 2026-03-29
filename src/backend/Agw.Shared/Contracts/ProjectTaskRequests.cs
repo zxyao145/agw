@@ -4,7 +4,7 @@ using Agw.Shared.Models;
 namespace Agw.Shared.Contracts;
 
 public record ProjectTaskCreateRequest(
-    ProjectTaskAgentType AgentType,
+    AgentRuntimeType AgentType,
     Guid? AgentflowId,
     Guid? AgentId,
     string Description,
@@ -22,7 +22,7 @@ public record ProjectTaskResponse(
     Guid Id,
     string ProjectId,
     string ContextId,
-    ProjectTaskAgentType AgentType,
+    AgentRuntimeType AgentType,
     Guid? AgentflowId,
     Guid? AgentId,
     ProjectTaskStatus Status,

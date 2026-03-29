@@ -127,7 +127,7 @@ public class ProjectTaskAppService
             ProjectId = project.Id,
             ContextId = contextId,
             AgentType = request.AgentType,
-            AgentId = request.AgentType == ProjectTaskAgentType.Agentflow
+            AgentId = request.AgentType == AgentRuntimeType.Agentflow
                 ? request.AgentflowId
                 : request.AgentId,
             Title = request.Title ?? string.Empty,
@@ -438,10 +438,10 @@ public class ProjectTaskAppService
         var latestRecord = records.LastOrDefault();
         var latestUserRecord = records
             .LastOrDefault(record => record.ToChatMessage()?.Role == ChatRole.User);
-        var responseAgentId = task.AgentType == ProjectTaskAgentType.Agent
+        var responseAgentId = task.AgentType == AgentRuntimeType.Agent
             ? task.AgentId
             : null;
-        var responseAgentflowId = task.AgentType == ProjectTaskAgentType.Agentflow
+        var responseAgentflowId = task.AgentType == AgentRuntimeType.Agentflow
             ? task.AgentId
             : null;
 

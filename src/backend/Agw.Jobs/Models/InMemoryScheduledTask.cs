@@ -7,7 +7,7 @@ public sealed class InMemoryJob
 {
     public Guid JobId { get; init; }
     public Guid ProjectId { get; init; }
-    public ProjectTaskAgentType? AgentType { get; init; }
+    public AgentRuntimeType? AgentType { get; init; }
     public Guid? AgentId { get; init; }
     public string Name { get; init; } = string.Empty;
     public string? Prompt { get; init; }

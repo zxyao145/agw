@@ -1,31 +1,22 @@
-using Agw.Appliaction.Services.Agentflows;
-using Agw.Appliaction.Services.Agents;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
+using System.Text.Json.Serialization;
 
 namespace Agw.Api.Contracts;
 
-public record AgentExecutionRequest(
-    ProjectTaskAgentType AgentType,
-    string Input,
-    string? SessionId = null,
-    Guid? ProjectId = null,
-    Guid? TaskId = null);
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(SettingRequest), nameof(SettingRequest))]
+[JsonDerivedType(typeof(ExecRequest), nameof(ExecRequest))]
+[JsonDerivedType(typeof(InterruptRequest), nameof(InterruptRequest))]
+public abstract record AgentRunCommand;
 
-public record AgentExecutionWsRequest(
-    ProjectTaskAgentType AgentType,
+public record SettingRequest(string SettingContent) : AgentRunCommand;
+
+public record ExecRequest(
+    AgentRuntimeType AgentType,
     AgwUserInput Input,
     string? SessionId = null,
     Guid? ProjectId = null,
-    Guid? TaskId = null);
+    Guid? TaskId = null) : AgentRunCommand;
 
-public record AgentExecutionResponse(
-    string? SessionId,
-    IReadOnlyList<AgwMessage> Messages)
-{
-    public static AgentExecutionResponse FromAgentResult(AgentExecutionResult result) =>
-        new(result.SessionId, result.Messages);
-
-    public static AgentExecutionResponse FromAgentflowResult(AgentflowExecutionResult result) =>
-        new(result.SessionId, result.Messages);
-}
+public record InterruptRequest(string? Reason = null) : AgentRunCommand;

@@ -10,15 +10,12 @@ export type ExecutionWsRequest = {
   taskId?: string | null;
 };
 
-function toWsOrigin(baseUrl: string): string {
-  const url = new URL(baseUrl, window.location.origin);
-  if (url.protocol === "https:") {
-    url.protocol = "wss:";
-  } else if (url.protocol === "http:") {
-    url.protocol = "ws:";
-  }
-  return `${url.protocol}//${url.host}`;
-}
+type ExecutionWsResultStatus = "completed" | "interrupted" | "cancelled" | "failed";
+
+type ExecutionWsResult = {
+  status: ExecutionWsResultStatus;
+  message: string;
+};
 
 function buildExecutionWsUrls(id: string): string[] {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -26,6 +23,35 @@ function buildExecutionWsUrls(id: string): string[] {
   const urls: string[] = [];
   urls.push(url);
   return urls;
+}
+
+function tryParseExecutionWsResult(payload: string): ExecutionWsResult | null {
+  try {
+    const message = JSON.parse(payload) as AiMessage;
+    if (message.role !== "system") {
+      return null;
+    }
+
+    const status = message.additionalProperties?.status;
+    if (
+      status !== "completed" &&
+      status !== "interrupted" &&
+      status !== "cancelled" &&
+      status !== "failed"
+    ) {
+      return null;
+    }
+
+    return {
+      status,
+      message:
+        typeof message.contents?.[0]?.content === "string"
+          ? message.contents[0].content
+          : "Execution completed",
+    };
+  } catch {
+    return null;
+  }
 }
 
 function openExecutionWebSocket(
@@ -44,13 +70,38 @@ function openExecutionWebSocket(
     };
 
     ws.onopen = () => {
-      ws.send(JSON.stringify(request));
+      ws.send(
+        JSON.stringify({
+          type: "ExecRequest",
+          ...request,
+        }),
+      );
     };
 
     ws.onmessage = (event) => {
-      if (typeof event.data === "string") {
-        onMessage(event.data);
+      if (typeof event.data !== "string") {
+        return;
       }
+
+      const result = tryParseExecutionWsResult(event.data);
+      if (result) {
+        if (settled) return;
+        settled = true;
+
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(1000, result.message);
+        }
+
+        if (result.status === "failed") {
+          reject(new Error(result.message || "Execution failed"));
+          return;
+        }
+
+        resolve();
+        return;
+      }
+
+      onMessage(event.data);
     };
 
     ws.onerror = () => {

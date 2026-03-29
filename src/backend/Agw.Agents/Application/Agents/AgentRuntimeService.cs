@@ -1,3 +1,4 @@
+using Agw.Agents.Application;
 using Agw.Domain.Entities;
 using Agw.Domain.Services;
 using Agw.Domain.Services.Agents;
@@ -290,11 +291,22 @@ public class AgentRuntimeService
         return await CreateDefinitionAgent(agent, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<AgentExecSession?> CreateSessionAsync(
+    public Task<AgentExecSession?> CreateSessionAsync(
         Guid agentId,
         string sessionId,
         Guid? projectId = null,
         string? contextId = null,
+        CancellationToken cancellationToken = default)
+    {
+        return CreateSessionAsync(agentId, sessionId, projectId, contextId, extraSetting: null, cancellationToken);
+    }
+
+    public async Task<AgentExecSession?> CreateSessionAsync(
+        Guid agentId,
+        string sessionId,
+        Guid? projectId,
+        string? contextId,
+        string? extraSetting,
         CancellationToken cancellationToken = default)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
@@ -305,7 +317,7 @@ public class AgentRuntimeService
 
         projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
-        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
+        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, extraSetting);
         if (string.IsNullOrWhiteSpace(sessionId))
         {
             sessionId = Guid.NewGuid().ToString();
@@ -326,7 +338,7 @@ public class AgentRuntimeService
             projectId,
             resolvedContextId,
             sessionId,
-            ProjectTaskAgentType.Agent,
+            AgentRuntimeType.Agent,
             agentId,
             agent.Name,
             _logger,
@@ -461,7 +473,7 @@ public class AgentRuntimeService
     {
         projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
-        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting);
+        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, null);
         var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);
         if (aiAgent == null)
         {
@@ -830,36 +842,35 @@ public class AgentRuntimeService
     }
 
  
-    private string? MergeExtraSettings(string? agentExtra, string? projectExtraSetting)
+    private string? MergeExtraSettings(string? agentExtra, string? projectExtraSetting, string? requestExtraSetting)
     {
-        if (string.IsNullOrWhiteSpace(projectExtraSetting))
+        JsonObject? merged = null;
+
+        MergeExtraSetting(ref merged, agentExtra, "Agent.Extra");
+        MergeExtraSetting(ref merged, projectExtraSetting, "Project.ExtraSetting");
+        MergeExtraSetting(ref merged, requestExtraSetting, "SettingRequest.SettingContent");
+
+        return merged?.ToJsonString();
+    }
+
+    private void MergeExtraSetting(ref JsonObject? merged, string? rawSetting, string settingName)
+    {
+        if (string.IsNullOrWhiteSpace(rawSetting))
         {
-            return agentExtra;
+            return;
         }
 
-        if (string.IsNullOrWhiteSpace(agentExtra))
+        if (!TryParseJsonObject(rawSetting, out var jsonObject))
         {
-            return projectExtraSetting;
+            _logger.LogWarning("{SettingName} is not a valid JSON object. Skipping it.", settingName);
+            return;
         }
 
-        if (!TryParseJsonObject(agentExtra, out var merged))
-        {
-            _logger.LogWarning("Agent.Extra is not a valid JSON object. Using Project.ExtraSetting instead.");
-            return projectExtraSetting;
-        }
-
-        if (!TryParseJsonObject(projectExtraSetting, out var projectExtra))
-        {
-            _logger.LogWarning("Project.ExtraSetting is not a valid JSON object. Keeping Agent.Extra.");
-            return agentExtra;
-        }
-
-        foreach (var pair in projectExtra)
+        merged ??= new JsonObject();
+        foreach (var pair in jsonObject)
         {
             merged[pair.Key] = pair.Value?.DeepClone();
         }
-
-        return merged.ToJsonString();
     }
 
     private Task<string?> GetProjectExtraSettingAsync(Guid? projectId)

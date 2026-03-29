@@ -1,3 +1,4 @@
+using Agw.Agents.Application;
 using Agw.Api.Contracts;
 using Agw.Appliaction.Services.Agentflows;
 using Agw.Appliaction.Services.Agents;
@@ -7,17 +8,23 @@ using Agw.Shared.Models;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
+using Anthropic.Models.Messages;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using OpenTelemetry.Trace;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 
 namespace Agw.Api.Controllers;
 
 [ApiController]
 [Route("api/executions")]
-public class AgentExecutionsController : ControllerBase
+public partial class AgentExecutionsController : ControllerBase
 {
     private const int BufferSize = 1024 * 4;
     private const int MaxRequestBytes = 1024 * 64;
@@ -25,17 +32,20 @@ public class AgentExecutionsController : ControllerBase
     private readonly AgentflowRuntimeService _agentflowRuntimeService;
     private readonly ITaskAppService _taskAppService;
     private readonly IProjectAppService _projectAppService;
+    private readonly ILogger<AgentExecutionsController> _logger;
 
     public AgentExecutionsController(
         AgentRuntimeService agentRuntimeService,
         AgentflowRuntimeService agentflowRuntimeService,
         ITaskAppService taskAppService,
-        IProjectAppService projectAppService)
+        IProjectAppService projectAppService,
+        ILogger<AgentExecutionsController> logger)
     {
         _agentRuntimeService = agentRuntimeService;
         _agentflowRuntimeService = agentflowRuntimeService;
         _taskAppService = taskAppService;
         _projectAppService = projectAppService;
+        _logger = logger;
     }
 
     [HttpPost("{id:guid}/execute")]
@@ -46,43 +56,10 @@ public class AgentExecutionsController : ControllerBase
     {
         return request.AgentType switch
         {
-            ProjectTaskAgentType.Agent => await ExecuteAgentAsync(id, request, cancellationToken),
-            ProjectTaskAgentType.Agentflow => await ExecuteAgentflowAsync(id, request, cancellationToken),
+            AgentRuntimeType.Agent => await ExecuteAgentAsync(id, request, cancellationToken),
+            AgentRuntimeType.Agentflow => await ExecuteAgentflowAsync(id, request, cancellationToken),
             _ => BadRequest("Invalid AgentType.")
         };
-    }
-
-    [HttpGet("{id:guid}/execute-ws")]
-    public async Task ExecuteWsAsync(Guid id, CancellationToken cancellationToken)
-    {
-        if (!HttpContext.WebSockets.IsWebSocketRequest)
-        {
-            Response.StatusCode = StatusCodes.Status400BadRequest;
-            return;
-        }
-
-        using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
-        try
-        {
-            var request = await ReceiveRequestAsync<AgentExecutionWsRequest>(webSocket, cancellationToken);
-            if (request == null)
-            {
-                await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Invalid request payload");
-                return;
-            }
-
-            await SendStreamingMessagesAsync(id, request, webSocket, cancellationToken);
-
-            await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Completed");
-        }
-        catch (OperationCanceledException)
-        {
-            await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Request cancelled");
-        }
-        catch (WebSocketException)
-        {
-            // Connection closed by client.
-        }
     }
 
     private async Task<IActionResult> ExecuteAgentAsync(
@@ -111,6 +88,7 @@ public class AgentExecutionsController : ControllerBase
         return Ok(AgentExecutionResponse.FromAgentResult(result));
     }
 
+
     private async Task<IActionResult> ExecuteAgentflowAsync(
         Guid id,
         AgentExecutionRequest request,
@@ -137,66 +115,233 @@ public class AgentExecutionsController : ControllerBase
         return Ok(AgentExecutionResponse.FromAgentflowResult(result));
     }
 
-    private async Task SendStreamingMessagesAsync(
-        Guid id,
-        AgentExecutionWsRequest request,
-        WebSocket webSocket,
-        CancellationToken cancellationToken)
+
+    [HttpGet("{id:guid}/execute-ws")]
+    public async Task ExecuteWsAsync(Guid id, CancellationToken cancellationToken)
     {
-        var (task, contextError) = await ResolveTaskAsync(request.TaskId, request.ProjectId);
-        if (contextError != null)
+        if (!HttpContext.WebSockets.IsWebSocketRequest)
         {
-            await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, ExtractReason(contextError));
+            Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
 
-        switch (request.AgentType)
+        using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+        using var sendLock = new SemaphoreSlim(1, 1);
+        using var socketLoopCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        ActiveExecution? activeExecution = null;
+        AgentExecSession? agentSession = null;
+        SettingRequest? settings = null;
+
+        try
         {
-            case ProjectTaskAgentType.Agent:
-                var session = await _agentRuntimeService.CreateSessionAsync(
-                    id,
-                    request.SessionId ?? string.Empty,
-                    request.ProjectId,
-                    task?.ContextId,
-                    cancellationToken);
-                if (session == null)
+            while (webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+            {
+                var command = await ReceiveRequestAsync<AgentRunCommand>(webSocket, cancellationToken);
+                if (command == null)
                 {
-                    await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Agent not found.");
+                    await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Not Support Payload");
                     break;
                 }
 
-                await using (session)
+                switch (command)
                 {
-                    await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(
-                                       session,
-                                       request.Input,
-                                       cancellationToken))
+                    case SettingRequest settingRequest:
+                        if (!IsJsonObject(settingRequest.SettingContent))
+                        {
+                            await TryCloseAsync(
+                                webSocket,
+                                WebSocketCloseStatus.InvalidPayloadData,
+                                "SettingContent must be a JSON object string.");
+                            return;
+                        }
+
+                        settings = settingRequest;
+                        if (agentSession != null)
+                        {
+                            await agentSession.DisposeAsync();
+                            agentSession = null;
+                        }
+                        break;
+
+                    case ExecRequest executionRequest:
+                        if (agentSession == null)
+                        {
+                            var (task, contextError) = await ResolveTaskAsync(executionRequest.TaskId, executionRequest.ProjectId);
+                            if (contextError != null)
+                            {
+                                await TryCloseAsync(
+                                    webSocket,
+                                    WebSocketCloseStatus.InvalidPayloadData,
+                                    ExtractReason(contextError) ?? "Invalid request payload");
+                                return;
+                            }
+
+                            var (execution, session, error) = await StartExecAsync(
+                                id,
+                                task,
+                                executionRequest,
+                                agentSession,
+                                settings,
+                                webSocket,
+                                sendLock,
+                                cancellationToken
+                                );
+
+                            if (execution == null)
+                            {
+                                await TryCloseAsync(
+                                    webSocket,
+                                    WebSocketCloseStatus.InvalidPayloadData,
+                                    error ?? "Invalid request payload");
+                                return;
+                            }
+
+                            activeExecution = execution;
+                            agentSession = session;
+                        }
+
+                        break;
+
+                    case InterruptRequest interruptRequest:
+                        if (activeExecution == null)
+                        {
+                            var message = string.IsNullOrWhiteSpace(interruptRequest.Reason)
+                                ? "No active request is currently running."
+                                : interruptRequest.Reason;
+                            await SendSystemMessageAsync(webSocket, sendLock, message, cancellationToken);
+                            break;
+                        }
+                        activeExecution.RequestInterrupt(interruptRequest.Reason);
+                        break;
+
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Request cancelled");
+        }
+        catch (WebSocketException)
+        {
+            socketLoopCts.Cancel();
+            await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "WebSocket Error");
+            if (activeExecution != null)
+            {
+                if (!activeExecution.ExecutionTask.IsCompleted)
+                {
+                    activeExecution.RequestInterrupt(null);
+                }
+
+                await activeExecution.DisposeAsync();
+            }
+            if (agentSession != null)
+            {
+                await agentSession.DisposeAsync();
+            }
+        }
+    }
+
+    private async Task<(ActiveExecution? execution, AgentExecSession? session, string? error)> StartExecAsync(
+        Guid id,
+        ProjectTask? task,
+        ExecRequest request,
+        AgentExecSession? currentSession,
+        SettingRequest? settings,
+        WebSocket webSocket,
+        SemaphoreSlim sendLock,
+        CancellationToken cancellationToken)
+    {
+        var executionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        switch (request.AgentType)
+        {
+            case AgentRuntimeType.Agent:
+                var session = currentSession;
+                if (!CanReuseAgentSession(currentSession, request, task?.ContextId))
+                {
+                    if (currentSession != null)
                     {
-                        var json = JsonUtil.Serialize(message);
-                        await SendJsonAsync(webSocket, json, cancellationToken);
+                        await currentSession.DisposeAsync();
                     }
+
+                    session = await _agentRuntimeService.CreateSessionAsync(
+                        id,
+                        request.SessionId ?? string.Empty,
+                        request.ProjectId,
+                        task?.ContextId,
+                        extraSetting: settings?.SettingContent,
+                        cancellationToken: cancellationToken);
                 }
 
-                break;
-
-            case ProjectTaskAgentType.Agentflow:
-                await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
-                                   id,
-                                   request.SessionId ?? string.Empty,
-                                   ExtractAgentflowInputText(request.Input),
-                                   cancellationToken,
-                                   ProjectDefaults.GetDefaultProjectIdentifier(request.ProjectId),
-                                   task?.ContextId))
+                if (session == null)
                 {
-                    var json = JsonUtil.Serialize(message);
-                    await SendJsonAsync(webSocket, json, cancellationToken);
+                    executionCts.Dispose();
+                    return (null, null, "Agent not found.");
                 }
 
-                break;
+                return (
+                    new ActiveExecution(
+                        ExecuteAgentStreamingAsync(session, request.Input, webSocket, sendLock, executionCts.Token),
+                        executionCts,
+                        session),
+                    session,
+                    null);
+
+            case AgentRuntimeType.Agentflow:
+                return (
+                    new ActiveExecution(
+                        ExecuteAgentflowStreamingAsync(id, request, task?.ContextId, webSocket, sendLock, executionCts.Token),
+                        executionCts),
+                    currentSession,
+                    null);
 
             default:
-                await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Invalid AgentType.");
-                break;
+                executionCts.Dispose();
+                return (null, currentSession, "Invalid AgentType.");
+        }
+    }
+
+    private async Task ExecuteAgentStreamingAsync(
+        AgentExecSession session,
+        AgwUserInput input,
+        WebSocket webSocket,
+        SemaphoreSlim sendLock,
+        CancellationToken cancellationToken)
+    {
+        session.ResetCancellationToken();
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            session.CancellationToken);
+
+        await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(
+                           session,
+                           input,
+                           linkedCts.Token))
+        {
+            var json = JsonUtil.Serialize(message);
+            await SendJsonAsync(webSocket, json, sendLock, linkedCts.Token);
+        }
+    }
+
+    private async Task ExecuteAgentflowStreamingAsync(
+        Guid id,
+        ExecRequest request,
+        string? contextId,
+        WebSocket webSocket,
+        SemaphoreSlim sendLock,
+        CancellationToken cancellationToken)
+    {
+        await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
+                           id,
+                           request.SessionId ?? string.Empty,
+                           ExtractAgentflowInputText(request.Input),
+                           cancellationToken,
+                           ProjectDefaults.GetDefaultProjectIdentifier(request.ProjectId),
+                           contextId))
+        {
+            var json = JsonUtil.Serialize(message);
+            await SendJsonAsync(webSocket, json, sendLock, cancellationToken);
         }
     }
 
@@ -232,8 +377,23 @@ public class AgentExecutionsController : ControllerBase
         } while (!result.EndOfMessage);
 
         var json = Encoding.UTF8.GetString(stream.ToArray());
-        try { return JsonUtil.Deserialize<T>(json); }
-        catch (JsonException) { return default; }
+        try
+        {
+            var request = JsonUtil.Deserialize<T>(json);
+            if (request == null)
+            {
+                await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Invalid request payload");
+                return default;
+            }
+
+            return request;
+        }
+        catch (JsonException e)
+        {
+            _logger.LogError(e, "Failed to deserialize WebSocket message: {Message}.", json);
+            await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Invalid request payload");
+            return default;
+        }
     }
 
     private async Task<(ProjectTask? task, IActionResult? error)> ResolveTaskAsync(Guid? taskId, Guid? projectId)
@@ -271,21 +431,132 @@ public class AgentExecutionsController : ControllerBase
         };
     }
 
-    private static Task SendJsonAsync(WebSocket webSocket, string json, CancellationToken cancellationToken)
+    private static bool CanReuseAgentSession(
+        AgentExecSession? session,
+        ExecRequest request,
+        string? contextId)
     {
-        if (webSocket.State != WebSocketState.Open) return Task.CompletedTask;
-        var data = Encoding.UTF8.GetBytes(json);
-        return webSocket.SendAsync(
-            new ArraySegment<byte>(data),
-            WebSocketMessageType.Text,
-            endOfMessage: true,
-            cancellationToken);
+        if (session == null)
+        {
+            return false;
+        }
+
+        var requestedSessionId = string.IsNullOrWhiteSpace(request.SessionId)
+            ? session._sessionId
+            : request.SessionId;
+        var requestedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(request.ProjectId);
+        var requestedContextId = string.IsNullOrWhiteSpace(contextId) ? requestedSessionId : contextId;
+
+        return session._sessionId == requestedSessionId
+            && session._projectId == requestedProjectId
+            && session._contextId == requestedContextId;
+    }
+
+    private static bool IsJsonObject(string settingContent)
+    {
+        if (string.IsNullOrWhiteSpace(settingContent))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(settingContent);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static Task SendSystemMessageAsync(
+        WebSocket webSocket,
+        SemaphoreSlim sendLock,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        var payload = new AgwMessage(
+            Guid.NewGuid().ToString(),
+            "$agw-server",
+            AiRole.System,
+            new List<AgwContent> { new AgwTextContent { Content = message } });
+        return SendJsonAsync(webSocket, JsonUtil.Serialize(payload), sendLock, cancellationToken);
+    }
+
+    private static Task SendErrorAsync(
+        WebSocket webSocket,
+        SemaphoreSlim sendLock,
+        string errorMessage,
+        CancellationToken cancellationToken)
+    {
+        var payload = new AgwMessage(
+            Guid.NewGuid().ToString(),
+            "$agw-server",
+            AiRole.System,
+            new List<AgwContent> { new AgwErrorContent { Content = errorMessage } });
+        return SendJsonAsync(webSocket, JsonUtil.Serialize(payload), sendLock, cancellationToken);
+    }
+
+    private static Task SendExecutionResultAsync(
+        WebSocket webSocket,
+        SemaphoreSlim sendLock,
+        string status,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        var payload = new AgwMessage(
+            Guid.NewGuid().ToString(),
+            "$agw-server",
+            AiRole.System,
+            new List<AgwContent> { new AgwTextContent { Content = message } },
+            new Dictionary<string, object?>
+            {
+                { "type", "result" },
+                { "status", status }
+            });
+        return SendJsonAsync(webSocket, JsonUtil.Serialize(payload), sendLock, cancellationToken);
+    }
+
+    private static async Task SendJsonAsync(
+        WebSocket webSocket,
+        string json,
+        SemaphoreSlim sendLock,
+        CancellationToken cancellationToken)
+    {
+        if (webSocket.State != WebSocketState.Open) return;
+
+        await sendLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (webSocket.State != WebSocketState.Open) return;
+
+            var data = Encoding.UTF8.GetBytes(json);
+            await webSocket.SendAsync(
+                new ArraySegment<byte>(data),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                cancellationToken);
+        }
+        finally
+        {
+            sendLock.Release();
+        }
     }
 
     private static Task TryCloseAsync(WebSocket webSocket, WebSocketCloseStatus status, string reason)
     {
-        if (webSocket.State != WebSocketState.Open) return Task.CompletedTask;
-        return webSocket.CloseAsync(status, reason, CancellationToken.None);
+        return webSocket.State switch
+        {
+            WebSocketState.Open => webSocket.CloseAsync(status, reason, CancellationToken.None),
+            WebSocketState.CloseReceived => webSocket.CloseOutputAsync(status, reason, CancellationToken.None),
+            _ => Task.CompletedTask
+        };
     }
 
     private static string ExtractAgentflowInputText(AgwUserInput input)

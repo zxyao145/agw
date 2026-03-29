@@ -39,8 +39,8 @@ public class AgentExecutor(
             job.ProjectId,
             new ProjectTaskCreateRequest(
                 AgentType: job.AgentType.Value,
-                AgentflowId: job.AgentType == ProjectTaskAgentType.Agentflow ? job.AgentId : null,
-                AgentId: job.AgentType == ProjectTaskAgentType.Agent ? job.AgentId : null,
+                AgentflowId: job.AgentType == AgentRuntimeType.Agentflow ? job.AgentId : null,
+                AgentId: job.AgentType == AgentRuntimeType.Agent ? job.AgentId : null,
                 Description: description,
                 Input: prompt,
                 SessionId: null,
@@ -62,14 +62,14 @@ public class AgentExecutor(
         {
             object? execution = job.AgentType.Value switch
             {
-                ProjectTaskAgentType.Agent => await agentRuntimeService.ExecuteAsync(
+                AgentRuntimeType.Agent => await agentRuntimeService.ExecuteAsync(
                     job.AgentId.Value,
                     sessionId,
                     prompt,
                     cancellationToken,
                     job.ProjectId,
                     contextId),
-                ProjectTaskAgentType.Agentflow => await agentflowRuntimeService.ExecuteAsync(
+                AgentRuntimeType.Agentflow => await agentflowRuntimeService.ExecuteAsync(
                     job.AgentId.Value,
                     sessionId,
                     prompt,
@@ -81,7 +81,7 @@ public class AgentExecutor(
 
             if (execution == null)
             {
-                var targetText = job.AgentType == ProjectTaskAgentType.Agent ? "Agent" : "Agentflow";
+                var targetText = job.AgentType == AgentRuntimeType.Agent ? "Agent" : "Agentflow";
                 throw new InvalidOperationException(
                     $"{targetText} execution failed (target disabled/missing or runtime unavailable).");
             }

@@ -27,7 +27,7 @@ export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAge
   }, [open, executingAgent]);
 
   if (!executingAgent) return null;
-  const projectId = `agent-${executingAgent.id}`;
+  const projectId = `11111111-1111-1111-1111-111111111111`;
 
   return (
     <Drawer direction="right" open={open} onOpenChange={setOpen} modal={true}>

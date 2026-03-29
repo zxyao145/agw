@@ -2,12 +2,14 @@ using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Agw.Shared.Tasks;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 
-namespace Agw.Appliaction.Services.Agents;
+namespace Agw.Agents.Application;
 
 public sealed class AgentExecSession : IAsyncDisposable
 {
@@ -22,7 +24,7 @@ public sealed class AgentExecSession : IAsyncDisposable
     public readonly string _sessionId;
     public readonly Guid _projectId;
     public readonly string _contextId;
-    private readonly ProjectTaskAgentType _agentType;
+    private readonly AgentRuntimeType _agentType;
     private readonly Guid? _agentId;
     private readonly string? _agentName;
     private readonly string? _taskTitle;
@@ -35,7 +37,7 @@ public sealed class AgentExecSession : IAsyncDisposable
         Guid? projectId,
         string contextId,
         string? sessionId,
-        ProjectTaskAgentType agentType,
+        AgentRuntimeType agentType,
         Guid? agentId,
         string? agentName,
         ILogger logger,
@@ -129,6 +131,8 @@ public sealed class AgentExecSession : IAsyncDisposable
             }
         }
 
+        yield return CreateTurnFinishedMessage(cancellationToken);
+
         _logger.LogDebug("Saved thread state for session: {SessionId}", _sessionId);
     }
 
@@ -180,6 +184,27 @@ public sealed class AgentExecSession : IAsyncDisposable
             _disposed = true;
         }
     }
+
+    private static AgwMessage CreateTurnFinishedMessage(CancellationToken cancellationToken)
+    {
+        var content = new AgwTextContent
+        {
+            Content = "",
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                { "type", "turn-finished" },
+                { "status", "" }
+            }
+        };
+
+        var payload = new AgwMessage(
+            Guid.NewGuid().ToString(),
+            "$agw-server",
+            AiRole.System,
+            new List<AgwContent> { content });
+        return payload;
+    }
+
 
     private static List<AIContent> ConvertToAIContents(List<AgwContent> contents)
     {

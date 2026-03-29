@@ -9,7 +9,7 @@ public class Job : BaseEntity
     public Guid Id { get; set; }
 
     public Guid ProjectId { get; set; }
-    public ProjectTaskAgentType? AgentType { get; set; }
+    public AgentRuntimeType? AgentType { get; set; }
     public Guid? AgentId { get; set; }
 
     public string Name { get; set; } = string.Empty;

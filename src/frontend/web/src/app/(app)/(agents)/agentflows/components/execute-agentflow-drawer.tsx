@@ -31,7 +31,7 @@ export function ExecuteAgentflowDrawer({
   }, [open, agentflow]);
 
   if (!agentflow) return null;
-  const projectId = `agentflow-${agentflow.id}`;
+  const projectId = `11111111-1111-1111-1111-111111111111`;
 
   return (
     <Drawer direction="right" open={open} onOpenChange={onOpenChange} modal={true}>

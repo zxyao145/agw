@@ -15,7 +15,7 @@ public class ProjectTask : BaseEntity
     /// </summary>
     public string ContextId { get; set; } = string.Empty;
 
-    public ProjectTaskAgentType AgentType { get; set; } = ProjectTaskAgentType.Agent;
+    public AgentRuntimeType AgentType { get; set; } = AgentRuntimeType.Agent;
 
     /// <summary>
     /// if AgentType == Agent, AgentId == entity Agent.Id；

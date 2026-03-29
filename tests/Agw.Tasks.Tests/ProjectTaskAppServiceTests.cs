@@ -53,7 +53,7 @@ public class ProjectTaskAppServiceTests
         var result = await service.CreateRunningAsync(
             projectId,
             new ProjectTaskCreateRequest(
-                AgentType: ProjectTaskAgentType.Agent,
+                AgentType: AgentRuntimeType.Agent,
                 AgentflowId: null,
                 AgentId: agentId,
                 Description: "Nightly sync",

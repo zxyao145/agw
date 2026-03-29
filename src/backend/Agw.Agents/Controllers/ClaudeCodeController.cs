@@ -1,6 +1,6 @@
+using Agw.Agents.Application;
 using Agw.Agents.ExternalAgents;
 using Agw.Appliaction.ExternalAgents;
-using Agw.Appliaction.Services.Agents;
 using Agw.Shared;
 using Agw.Shared.Models;
 using Agw.Shared.Utils;
@@ -298,8 +298,12 @@ public class ClaudeCodeController(
 
     private static Task TryCloseAsync(WebSocket webSocket, WebSocketCloseStatus status, string reason)
     {
-        if (webSocket.State != WebSocketState.Open) return Task.CompletedTask;
-        return webSocket.CloseAsync(status, reason, CancellationToken.None);
+        return webSocket.State switch
+        {
+            WebSocketState.Open => webSocket.CloseAsync(status, reason, CancellationToken.None),
+            WebSocketState.CloseReceived => webSocket.CloseOutputAsync(status, reason, CancellationToken.None),
+            _ => Task.CompletedTask
+        };
     }
 
     private static AgentResponseUpdate CreateSystemMessage(string message)

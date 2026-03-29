@@ -64,6 +64,20 @@ export function Conversation({
     [],
   );
 
+  const isTurnFinishedMessage = React.useCallback((message: AiMessage): boolean => {
+    if (message.role?.toLowerCase() !== "system") {
+      return false;
+    }
+
+    if (message.author !== "$agw-server") {
+      return false;
+    }
+
+    return message.contents.some(
+      (content) => content.additionalProperties?.type === "turn-finished",
+    );
+  }, []);
+
   const sessionQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", curSessionId, "session-record"],
     queryFn: async () => {
@@ -116,7 +130,13 @@ export function Conversation({
             input: toExecutionWsUserInput(userMessage),
           },
           onMessage: (message) => {
-            setMessages((prev) => mergeStreamingMessagesById([...prev, message]));
+            if (isTurnFinishedMessage(message)) {
+              setIsExecuting(false);
+            } else {
+              setMessages((prev) =>
+                mergeStreamingMessagesById([...prev, message]),
+              );
+            }
           },
         });
         // await sessionQuery.refetch();
@@ -137,6 +157,7 @@ export function Conversation({
     [
       agentType,
       executionId,
+      isTurnFinishedMessage,
       onExecutionComplete,
       onExecutionError,
       projectId,

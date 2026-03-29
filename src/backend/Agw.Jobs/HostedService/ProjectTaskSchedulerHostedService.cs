@@ -167,11 +167,11 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                 activity?.SetTag("task.id", next.Id);
                 activity?.SetTag("task.context_id", next.ContextId);
                 activity?.SetTag("task.agent_type", next.AgentType.ToString());
-                if (next.AgentType == ProjectTaskAgentType.Agentflow && next.AgentId.HasValue)
+                if (next.AgentType == AgentRuntimeType.Agentflow && next.AgentId.HasValue)
                 {
                     activity?.SetTag("agentflow.id", next.AgentId.Value);
                 }
-                if (next.AgentType == ProjectTaskAgentType.Agent && next.AgentId.HasValue)
+                if (next.AgentType == AgentRuntimeType.Agent && next.AgentId.HasValue)
                 {
                     activity?.SetTag("agent.id", next.AgentId.Value);
                 }
@@ -189,18 +189,18 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                 var stopwatch = Stopwatch.StartNew();
                 try
                 {
-                    var activityName = next.AgentType == ProjectTaskAgentType.Agent
+                    var activityName = next.AgentType == AgentRuntimeType.Agent
                         ? "ExecuteAgent"
                         : "ExecuteAgentflow";
                     using var taskActivity = ActivitySource.StartActivity(activityName, ActivityKind.Internal);
                     taskActivity?.SetTag("task.id", marked.Id);
                     taskActivity?.SetTag("task.context_id", marked.ContextId);
                     taskActivity?.SetTag("task.agent_type", next.AgentType.ToString());
-                    if (next.AgentType == ProjectTaskAgentType.Agentflow && next.AgentId.HasValue)
+                    if (next.AgentType == AgentRuntimeType.Agentflow && next.AgentId.HasValue)
                     {
                         taskActivity?.SetTag("agentflow.id", next.AgentId.Value);
                     }
-                    if (next.AgentType == ProjectTaskAgentType.Agent && next.AgentId.HasValue)
+                    if (next.AgentType == AgentRuntimeType.Agent && next.AgentId.HasValue)
                     {
                         taskActivity?.SetTag("agent.id", next.AgentId.Value);
                     }
@@ -223,7 +223,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
                     object? execution = next.AgentType switch
                     {
-                        ProjectTaskAgentType.Agentflow when next.AgentId.HasValue =>
+                        AgentRuntimeType.Agentflow when next.AgentId.HasValue =>
                             await agentflowRuntime.ExecuteAsync(
                                 next.AgentId.Value,
                                 taskRecord.SessionId,
@@ -231,7 +231,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                                 stoppingToken,
                                 marked.ProjectId,
                                 marked.ContextId),
-                        ProjectTaskAgentType.Agent when next.AgentId.HasValue =>
+                        AgentRuntimeType.Agent when next.AgentId.HasValue =>
                             await agentRuntime.ExecuteAsync(
                                 next.AgentId.Value,
                                 taskRecord.SessionId,
@@ -247,7 +247,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
                     if (execution == null)
                     {
-                        var targetText = next.AgentType == ProjectTaskAgentType.Agent ? "Agent" : "Agentflow";
+                        var targetText = next.AgentType == AgentRuntimeType.Agent ? "Agent" : "Agentflow";
                         await taskService.MarkFailedAsync(marked.Id, $"{targetText} execution failed (target disabled/missing or runtime unavailable).", "scheduler");
                         _tasksFailedCounter.Add(1,
                             new KeyValuePair<string, object?>("task.id", marked.Id),
