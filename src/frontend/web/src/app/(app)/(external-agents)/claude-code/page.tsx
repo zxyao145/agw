@@ -46,6 +46,14 @@ import { claudeSettingsStorage } from "./lib/settings-storage";
 import { type AiMessageAction, handleAiMessage } from "./lib/ai-message-handlers";
 
 const gitCodeSource = "./code-work";
+const claudeCodeExecutionId = "11111111-1111-1111-2222-000000000001";
+const agentRuntimeTypeAgent = 0;
+const permissionModeToValue: Record<string, number> = {
+  default: 0,
+  acceptEdits: 1,
+  plan: 2,
+  bypassPermissions: 3,
+};
 
 const ChatHistoryList = dynamic(
   () =>
@@ -119,6 +127,20 @@ export default function ClaudeCodePage() {
     if (pendingMessages.length > 0) {
       setMessages((prev) => [...prev, ...pendingMessages]);
     }
+  }, []);
+
+  const isTurnFinishedMessage = React.useCallback((message: AiMessage): boolean => {
+    if (message.role?.toLowerCase() !== "system") {
+      return false;
+    }
+
+    if (message.author !== "$agw-server") {
+      return false;
+    }
+
+    return message.contents.some(
+      (content) => content.additionalProperties?.type === "turn-finished",
+    );
   }, []);
 
   const handleSessionId = (newSessionId: string | null) => {
@@ -329,38 +351,39 @@ export default function ClaudeCodePage() {
   };
 
   const buildSettingRequest = (sessionId: string) => {
+    const settingContent = {
+      workingDirectory: getResolvedWorkingDirectory(sessionId),
+      gitAddress: directoryMode === DirectoryMode.gitAddress ? gitAddress.trim() || null : null,
+      apiKey: apiKey.trim() || null,
+      baseUrl: apiBaseUrl.trim() || null,
+      systemPrompt: null,
+      maxTurns: null,
+      permissionMode: permissionModeToValue[permissionMode] ?? permissionModeToValue.default,
+      environmentVariables: buildEnvironmentVariables(),
+      sessionId: sessionId,
+      projectId: CLAUDE_CODE_PROJECT_ID,
+    };
+
     return {
-      type: 0,
-      setting: {
-        workingDirectory: getResolvedWorkingDirectory(sessionId),
-        gitAddress: directoryMode === DirectoryMode.gitAddress ? gitAddress.trim() || null : null,
-        apiKey: apiKey.trim() || null,
-        apiBaseUrl: apiBaseUrl.trim() || null,
-        systemPrompt: null,
-        maxTurns: null,
-        sessionId: sessionId,
-        projectId: CLAUDE_CODE_PROJECT_ID,
-        permissionMode: permissionMode,
-        environmentVariables: buildEnvironmentVariables(),
-      },
+      type: "SettingRequest",
+      settingContent: JSON.stringify(settingContent),
     };
   };
 
-  const buildInputRequest = (message: AiMessage) => {
+  const buildExecRequest = (message: AiMessage, currentSessionId: string) => {
     return {
-      type: 1,
-      input: {
-        input: toExecutionWsUserInput(message),
-      },
+      type: "ExecRequest",
+      agentType: agentRuntimeTypeAgent,
+      input: toExecutionWsUserInput(message),
+      sessionId: currentSessionId,
+      projectId: CLAUDE_CODE_PROJECT_ID,
     };
   };
 
   const buildInterruptRequest = (reason: string) => {
     return {
-      type: 2,
-      interrupt: {
-        reason,
-      },
+      type: "InterruptRequest",
+      reason,
     };
   };
 
@@ -384,15 +407,15 @@ export default function ClaudeCodePage() {
 
   const sendStatusRequest = (ws: WebSocket) => {
     // statusRequestPendingRef.current = true;
-    const sessionId = ensureSessionId();
-    sendSettingIfNeeded(ws, sessionId);
+    const currentSessionId = ensureSessionId();
+    sendSettingIfNeeded(ws, currentSessionId);
     setIsInitStatus(true);
-    ws.send(JSON.stringify(buildInputRequest(createUserTextMessage("/status"))));
+    ws.send(JSON.stringify(buildExecRequest(createUserTextMessage("/status"), currentSessionId)));
   };
 
   const setupWebSocket = () => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/api/external-agents/claude-code/ws`;
+    const wsUrl = `${protocol}//${window.location.host}/api/executions/${claudeCodeExecutionId}/ws`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -405,6 +428,14 @@ export default function ClaudeCodePage() {
       try {
         const data: AiMessage = JSON.parse(event.data);
         console.debug("onmessage", data);
+
+        if (isTurnFinishedMessage(data)) {
+          setIsExecuting(false);
+          if (isInitStatus) {
+            setIsInitStatus(false);
+          }
+          return;
+        }
 
         applyAiMessageActions(handleAiMessage(data, { isInitStatus }));
       } catch (e) {
@@ -428,6 +459,8 @@ export default function ClaudeCodePage() {
         console.error("WebSocket closed unexpectedly:", event.code, event.reason);
         if (event.code === 1003) {
           toast.error("Invalid request data");
+        } else if (event.code === 1007) {
+          toast.error(event.reason || "Invalid request payload");
         } else if (event.code === 1011) {
           toast.error("Server error during execution");
         }
@@ -505,7 +538,7 @@ export default function ClaudeCodePage() {
 
         const tid = ensureSessionId();
         sendSettingIfNeeded(ws, tid);
-        const request = buildInputRequest(userMsg);
+        const request = buildExecRequest(userMsg, tid);
         // console.debug("Sending request:", request);
         ws.send(JSON.stringify(request));
       }
@@ -527,6 +560,10 @@ export default function ClaudeCodePage() {
 
     try {
       ws.send(JSON.stringify(buildInterruptRequest("Stop requested by user.")));
+      ws.close(1000, "Stop requested by user.");
+      wsRef.current = null;
+      settingsRequestSessionRef.current = null;
+      setIsExecuting(false);
     } catch (error) {
       console.error("Failed to send interrupt request:", error);
       toast.error("Failed to interrupt execution");
@@ -568,6 +605,9 @@ export default function ClaudeCodePage() {
     handleSessionId(newSessionId);
     for (let index = 0; index < newMessages.length; index++) {
       const aiMessage = newMessages[index];
+      if (isTurnFinishedMessage(aiMessage)) {
+        continue;
+      }
       applyAiMessageActions(handleAiMessage(aiMessage, { isInitStatus }));
     }
     toast.info("load completed");

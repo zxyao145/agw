@@ -16,7 +16,7 @@ export interface ChatSessionRecordDetails extends ChatSessionRecordSummary {
   messages: AiMessage[];
 }
 
-export const CLAUDE_CODE_PROJECT_ID = "claude-code";
+export const CLAUDE_CODE_PROJECT_ID = "11111111-1111-1111-1111-000000000002";
 type ProjectTaskHistoryResponse = {
   id: string;
   projectId: string;
