@@ -32,7 +32,7 @@ public record AgentExecutionResult(
     string SessionId,
     IReadOnlyList<AgwMessage> Messages);
 
-public class AgentRuntimeService
+public class AgentRuntimeService: RuntimService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;
@@ -347,26 +347,6 @@ public class AgentRuntimeService
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgentExecSession session,
-        string input,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(session);
-
-        try
-        {
-            await foreach (var message in session.ExecuteStreamingAsync(input, cancellationToken).ConfigureAwait(false))
-            {
-                yield return message;
-            }
-        }
-        finally
-        {
-            await SaveSessionThreadStateAsync(session._sessionId, session.Agent, session.Session, cancellationToken);
-        }
-    }
-
-    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-        AgentExecSession session,
         AgwUserInput input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -379,33 +359,12 @@ public class AgentRuntimeService
             {
                 yield return message;
             }
+
+            yield return CreateTurnFinishedMessage(cancellationToken);
         }
         finally
         {
             await SaveSessionThreadStateAsync(session._sessionId, session.Agent, session.Session, cancellationToken);
-        }
-    }
-
-    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-        Guid agentId,
-        string sessionId,
-        string input,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default,
-        Guid? projectId = null,
-        string? contextId = null)
-    {
-        var session = await CreateSessionAsync(agentId, sessionId, projectId, contextId, cancellationToken);
-        if (session == null)
-        {
-            yield break;
-        }
-
-        await using (session)
-        {
-            await foreach (var message in ExecuteStreamingAsync(session, input, cancellationToken).ConfigureAwait(false))
-            {
-                yield return message;
-            }
         }
     }
 

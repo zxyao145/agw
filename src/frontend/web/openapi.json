@@ -596,6 +596,29 @@
         }
       }
     },
+    "/api/executions/{id}/ws": {
+      "get": {
+        "tags": [
+          "AgentExecutions"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/executions/{id}/execute": {
       "post": {
         "tags": [
@@ -632,29 +655,6 @@
           },
           "required": true
         },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/executions/{id}/execute-ws": {
-      "get": {
-        "tags": [
-          "AgentExecutions"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -2191,7 +2191,7 @@
         "type": "object",
         "properties": {
           "agentType": {
-            "$ref": "#/components/schemas/ProjectTaskAgentType"
+            "$ref": "#/components/schemas/AgentRuntimeType"
           },
           "input": {
             "type": "string"
@@ -2361,6 +2361,9 @@
           }
         }
       },
+      "AgentRuntimeType": {
+        "type": "integer"
+      },
       "AgentUpdateRequest": {
         "required": [
           "displayName",
@@ -2431,7 +2434,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ProjectTaskAgentType"
+                "$ref": "#/components/schemas/AgentRuntimeType"
               }
             ]
           },
@@ -2456,13 +2459,6 @@
           },
           "triggerValue": {
             "type": "string"
-          },
-          "timeZoneId": {
-            "type": "string"
-          },
-          "nextRunTime": {
-            "type": "string",
-            "format": "date-time"
           },
           "maxRetryCount": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -2493,7 +2489,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ProjectTaskAgentType"
+                "$ref": "#/components/schemas/AgentRuntimeType"
               }
             ]
           },
@@ -2518,13 +2514,6 @@
           },
           "triggerValue": {
             "type": "string"
-          },
-          "timeZoneId": {
-            "type": "string"
-          },
-          "nextRunTime": {
-            "type": "string",
-            "format": "date-time"
           },
           "maxRetryCount": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -2934,9 +2923,6 @@
           }
         }
       },
-      "ProjectTaskAgentType": {
-        "type": "integer"
-      },
       "ProjectTaskCreateRequest": {
         "required": [
           "agentType",
@@ -2948,7 +2934,7 @@
         "type": "object",
         "properties": {
           "agentType": {
-            "$ref": "#/components/schemas/ProjectTaskAgentType"
+            "$ref": "#/components/schemas/AgentRuntimeType"
           },
           "agentflowId": {
             "type": [

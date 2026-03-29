@@ -469,10 +469,14 @@ export default function ProjectDetailsPage() {
                         description: editDescription.length ? editDescription : null,
                         workspace: editWorkspace.trim().length ? editWorkspace.trim() : null,
                         enable: editEnable,
-                        extraSetting: editExtraSetting.trim().length ? editExtraSetting.trim() : null,
+                        extraSetting: editExtraSetting.trim().length
+                          ? editExtraSetting.trim()
+                          : null,
                       })
                     }
-                    disabled={!editName.trim() || updateProjectMutation.isPending || isSystemProject}
+                    disabled={
+                      !editName.trim() || updateProjectMutation.isPending || isSystemProject
+                    }
                   >
                     {updateProjectMutation.isPending ? "Saving..." : "Save"}
                   </Button>

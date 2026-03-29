@@ -131,8 +131,6 @@ public sealed class AgentExecSession : IAsyncDisposable
             }
         }
 
-        yield return CreateTurnFinishedMessage(cancellationToken);
-
         _logger.LogDebug("Saved thread state for session: {SessionId}", _sessionId);
     }
 
@@ -184,27 +182,6 @@ public sealed class AgentExecSession : IAsyncDisposable
             _disposed = true;
         }
     }
-
-    private static AgwMessage CreateTurnFinishedMessage(CancellationToken cancellationToken)
-    {
-        var content = new AgwTextContent
-        {
-            Content = "",
-            AdditionalProperties = new AdditionalPropertiesDictionary
-            {
-                { "type", "turn-finished" },
-                { "status", "" }
-            }
-        };
-
-        var payload = new AgwMessage(
-            Guid.NewGuid().ToString(),
-            "$agw-server",
-            AiRole.System,
-            new List<AgwContent> { content });
-        return payload;
-    }
-
 
     private static List<AIContent> ConvertToAIContents(List<AgwContent> contents)
     {

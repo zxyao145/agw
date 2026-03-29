@@ -269,10 +269,7 @@ export default function IntegrationsPage() {
           integrationId: selectedIntegration.id,
           createdAt,
         };
-        sessionStorage.setItem(
-          `agw.oauth2.${selectedIntegration.id}`,
-          JSON.stringify(authState),
-        );
+        sessionStorage.setItem(`agw.oauth2.${selectedIntegration.id}`, JSON.stringify(authState));
         storeOAuthCallbackStateCookie(authState);
         params.set("code_challenge", pkce.challenge);
         params.set("code_challenge_method", "S256");
@@ -282,10 +279,7 @@ export default function IntegrationsPage() {
           integrationId: selectedIntegration.id,
           createdAt,
         };
-        sessionStorage.setItem(
-          `agw.oauth2.${selectedIntegration.id}`,
-          JSON.stringify(authState),
-        );
+        sessionStorage.setItem(`agw.oauth2.${selectedIntegration.id}`, JSON.stringify(authState));
         storeOAuthCallbackStateCookie(authState);
       }
 

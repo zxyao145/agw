@@ -45,26 +45,26 @@
 
 :root {
   /* Spacing Scale */
-  --spacing-xs: 0.25rem;   /* 4px */
-  --spacing-sm: 0.5rem;    /* 8px */
-  --spacing-md: 0.75rem;   /* 12px */
-  --spacing-lg: 1rem;      /* 16px */
-  --spacing-xl: 1.5rem;    /* 24px */
-  --spacing-2xl: 2rem;     /* 32px */
-  --spacing-3xl: 2.5rem;   /* 40px */
+  --spacing-xs: 0.25rem; /* 4px */
+  --spacing-sm: 0.5rem; /* 8px */
+  --spacing-md: 0.75rem; /* 12px */
+  --spacing-lg: 1rem; /* 16px */
+  --spacing-xl: 1.5rem; /* 24px */
+  --spacing-2xl: 2rem; /* 32px */
+  --spacing-3xl: 2.5rem; /* 40px */
 
   /* Form Layout */
-  --form-gap: var(--spacing-lg);           /* Gap between form fields */
-  --form-field-gap: var(--spacing-sm);     /* Gap between label and input */
+  --form-gap: var(--spacing-lg); /* Gap between form fields */
+  --form-field-gap: var(--spacing-sm); /* Gap between label and input */
   --form-label-weight: 500;
 
   /* Dialog Sizes */
-  --dialog-max-w-sm: 24rem;    /* 384px - Simple confirmations */
-  --dialog-max-w-md: 32rem;    /* 512px - Default, simple forms */
-  --dialog-max-w-lg: 42rem;    /* 672px - Medium forms */
-  --dialog-max-w-xl: 48rem;    /* 768px - Complex forms */
-  --dialog-max-w-2xl: 56rem;   /* 896px - Wide content */
-  --dialog-max-w-3xl: 72rem;   /* 1152px - Very wide content */
+  --dialog-max-w-sm: 24rem; /* 384px - Simple confirmations */
+  --dialog-max-w-md: 32rem; /* 512px - Default, simple forms */
+  --dialog-max-w-lg: 42rem; /* 672px - Medium forms */
+  --dialog-max-w-xl: 48rem; /* 768px - Complex forms */
+  --dialog-max-w-2xl: 56rem; /* 896px - Wide content */
+  --dialog-max-w-3xl: 72rem; /* 1152px - Very wide content */
   --dialog-padding: var(--spacing-xl);
   --dialog-gap: var(--spacing-lg);
 

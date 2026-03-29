@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-export type MenuLink = { title: string; url: string, icon?: React.ReactNode };
+export type MenuLink = { title: string; url: string; icon?: React.ReactNode };
 
 export type MenuItem = {
   title: string;
@@ -66,9 +66,7 @@ export function AppSidebar({ menus }: AppSidebarProps) {
         <SidebarContent>
           {menus.map((grpItem, index) => (
             <SidebarGroup key={index}>
-              {grpItem.groupLable && (
-                <SidebarGroupLabel>{grpItem.groupLable}</SidebarGroupLabel>
-              )}
+              {grpItem.groupLable && <SidebarGroupLabel>{grpItem.groupLable}</SidebarGroupLabel>}
               <SidebarMenu>
                 {grpItem.menus.map((item) => (
                   <Collapsible

@@ -89,19 +89,23 @@ export default function IntegrationsCallbackPage() {
               )}
               <div className="space-y-2 text-sm">
                 {error ? (
-                <p className="text-muted-foreground">
-                  The external provider returned an OAuth2 error of{" "}
-                  <span className="font-medium">{error}</span>.
-                </p>
+                  <p className="text-muted-foreground">
+                    The external provider returned an OAuth2 error of{" "}
+                    <span className="font-medium">{error}</span>.
+                  </p>
                 ) : exchangeStatus === "success" ? (
                   <p className="text-muted-foreground">
                     The backend exchanged the authorization code and persisted the token for{" "}
-                    <span className="font-medium">{provider ?? matchingRequest?.integrationId ?? "the integration"}</span>.
+                    <span className="font-medium">
+                      {provider ?? matchingRequest?.integrationId ?? "the integration"}
+                    </span>
+                    .
                   </p>
                 ) : exchangeStatus === "failed" ? (
                   <p className="text-muted-foreground">
-                    The provider returned an authorization code, but the backend token exchange failed
-                    with <span className="font-medium">{exchangeError ?? "an unknown error"}</span>.
+                    The provider returned an authorization code, but the backend token exchange
+                    failed with{" "}
+                    <span className="font-medium">{exchangeError ?? "an unknown error"}</span>.
                   </p>
                 ) : code ? (
                   <p className="text-muted-foreground">

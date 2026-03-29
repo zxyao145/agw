@@ -12,13 +12,13 @@ const dialogVariants = cva(
   {
     variants: {
       size: {
-        sm: "sm:max-w-[var(--dialog-max-w-sm)]",      /* 384px - Simple confirmations */
-        md: "sm:max-w-[var(--dialog-max-w-md)]",      /* 512px - Default, simple forms */
-        lg: "sm:max-w-[var(--dialog-max-w-lg)]",      /* 672px - Medium forms */
-        xl: "sm:max-w-[var(--dialog-max-w-xl)]",      /* 768px - Complex forms */
-        "2xl": "sm:max-w-[var(--dialog-max-w-2xl)]",  /* 896px - Wide content */
-        "3xl": "sm:max-w-[var(--dialog-max-w-3xl)]",  /* 1152px - Very wide content */
-        full: "sm:max-w-[calc(100vw-4rem)] sm:max-h-[calc(100vh-4rem)]", /* Full viewport with padding */
+        sm: "sm:max-w-[var(--dialog-max-w-sm)]" /* 384px - Simple confirmations */,
+        md: "sm:max-w-[var(--dialog-max-w-md)]" /* 512px - Default, simple forms */,
+        lg: "sm:max-w-[var(--dialog-max-w-lg)]" /* 672px - Medium forms */,
+        xl: "sm:max-w-[var(--dialog-max-w-xl)]" /* 768px - Complex forms */,
+        "2xl": "sm:max-w-[var(--dialog-max-w-2xl)]" /* 896px - Wide content */,
+        "3xl": "sm:max-w-[var(--dialog-max-w-3xl)]" /* 1152px - Very wide content */,
+        full: "sm:max-w-[calc(100vw-4rem)] sm:max-h-[calc(100vh-4rem)]" /* Full viewport with padding */,
       },
     },
     defaultVariants: {
@@ -60,12 +60,19 @@ function DialogOverlay({
 }
 
 interface DialogContentProps
-  extends React.ComponentProps<typeof DialogPrimitive.Content>,
+  extends
+    React.ComponentProps<typeof DialogPrimitive.Content>,
     VariantProps<typeof dialogVariants> {
   showCloseButton?: boolean;
 }
 
-function DialogContent({ className, children, showCloseButton = true, size, ...props }: DialogContentProps) {
+function DialogContent({
+  className,
+  children,
+  showCloseButton = true,
+  size,
+  ...props
+}: DialogContentProps) {
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />

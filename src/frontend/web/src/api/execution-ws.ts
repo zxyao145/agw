@@ -19,7 +19,7 @@ type ExecutionWsResult = {
 
 function buildExecutionWsUrls(id: string): string[] {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const url = `${protocol}//${window.location.host}/api/executions/${id}/execute-ws`;
+  const url = `${protocol}//${window.location.host}/api/executions/${id}/ws`;
   const urls: string[] = [];
   urls.push(url);
   return urls;

@@ -1,3 +1,4 @@
+using Agw.Agents.Application;
 using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Entities;
 using Agw.Domain.Services.Agentflows;
@@ -21,7 +22,7 @@ public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int 
 
 public record AgentflowExecutionResult(string SessionId, IReadOnlyList<AgwMessage> Messages);
 
-public class AgentflowRuntimeService
+public class AgentflowRuntimeService : RuntimService
 {
     private readonly ILogger<AgentflowRuntimeService> _logger;
     private readonly IRepository<Agentflow> _agentflowRepository;
@@ -271,6 +272,8 @@ public class AgentflowRuntimeService
                     break;
             }
         }
+
+        yield return CreateTurnFinishedMessage(cancellationToken);
     }
 
     public async Task<AgentflowExecutionResult?> ExecuteAsync(

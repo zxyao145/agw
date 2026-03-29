@@ -2,23 +2,17 @@ using Agw.Agents.Application;
 using Agw.Api.Contracts;
 using Agw.Appliaction.Services.Agentflows;
 using Agw.Appliaction.Services.Agents;
-using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
-using Anthropic.Models.Messages;
-using Microsoft.Agents.AI.Workflows;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using OpenTelemetry.Trace;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Channels;
 
 namespace Agw.Api.Controllers;
 
@@ -48,75 +42,7 @@ public partial class AgentExecutionsController : ControllerBase
         _logger = logger;
     }
 
-    [HttpPost("{id:guid}/execute")]
-    public async Task<IActionResult> ExecuteAsync(
-        Guid id,
-        [FromBody] AgentExecutionRequest request,
-        CancellationToken cancellationToken)
-    {
-        return request.AgentType switch
-        {
-            AgentRuntimeType.Agent => await ExecuteAgentAsync(id, request, cancellationToken),
-            AgentRuntimeType.Agentflow => await ExecuteAgentflowAsync(id, request, cancellationToken),
-            _ => BadRequest("Invalid AgentType.")
-        };
-    }
-
-    private async Task<IActionResult> ExecuteAgentAsync(
-        Guid id,
-        AgentExecutionRequest request,
-        CancellationToken cancellationToken)
-    {
-        var (task, contextError) = await ResolveTaskAsync(request.TaskId, request.ProjectId);
-        if (contextError != null)
-        {
-            return contextError;
-        }
-
-        var result = await _agentRuntimeService.ExecuteAsync(
-            id,
-            request.SessionId ?? string.Empty,
-            request.Input,
-            cancellationToken,
-            request.ProjectId,
-            task?.ContextId);
-        if (result == null)
-        {
-            return NotFound();
-        }
-
-        return Ok(AgentExecutionResponse.FromAgentResult(result));
-    }
-
-
-    private async Task<IActionResult> ExecuteAgentflowAsync(
-        Guid id,
-        AgentExecutionRequest request,
-        CancellationToken cancellationToken)
-    {
-        var (task, contextError) = await ResolveTaskAsync(request.TaskId, request.ProjectId);
-        if (contextError != null)
-        {
-            return contextError;
-        }
-
-        var result = await _agentflowRuntimeService.ExecuteAsync(
-            id,
-            request.SessionId ?? string.Empty,
-            request.Input,
-            cancellationToken,
-            request.ProjectId,
-            task?.ContextId);
-        if (result == null)
-        {
-            return NotFound();
-        }
-
-        return Ok(AgentExecutionResponse.FromAgentflowResult(result));
-    }
-
-
-    [HttpGet("{id:guid}/execute-ws")]
+    [HttpGet("{id:guid}/ws")]
     public async Task ExecuteWsAsync(Guid id, CancellationToken cancellationToken)
     {
         if (!HttpContext.WebSockets.IsWebSocketRequest)

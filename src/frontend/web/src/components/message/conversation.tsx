@@ -133,9 +133,7 @@ export function Conversation({
             if (isTurnFinishedMessage(message)) {
               setIsExecuting(false);
             } else {
-              setMessages((prev) =>
-                mergeStreamingMessagesById([...prev, message]),
-              );
+              setMessages((prev) => mergeStreamingMessagesById([...prev, message]));
             }
           },
         });

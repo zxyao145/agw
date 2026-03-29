@@ -10,7 +10,7 @@
     "lint:fix": "oxlint --fix ./src",
     "format": "oxfmt ./src",
     "fmt": "oxfmt ./src",
-    "fmt:check": "oxfmt --check./src",
+    "fmt:check": "oxfmt --check ./src",
     "gen:openapi": "openapi-typescript ./openapi.json -o src/api/openapi.d.ts"
   },
   "dependencies": {

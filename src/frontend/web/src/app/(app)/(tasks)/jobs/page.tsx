@@ -386,12 +386,17 @@ export default function JobsPage() {
   const agentsQuery = useQuery({
     queryKey: ["agents"],
     queryFn: async () =>
-      (await apiGet("/api/agents")) as unknown as Array<{ id: string; displayName: string; name: string }>,
+      (await apiGet("/api/agents")) as unknown as Array<{
+        id: string;
+        displayName: string;
+        name: string;
+      }>,
   });
 
   const agentflowsQuery = useQuery({
     queryKey: ["agentflows"],
-    queryFn: async () => (await apiGet("/api/agentflows")) as unknown as Array<{ id: string; name: string }>,
+    queryFn: async () =>
+      (await apiGet("/api/agentflows")) as unknown as Array<{ id: string; name: string }>,
   });
 
   const assignableAgents = React.useMemo<AgentOption[]>(() => {
@@ -634,7 +639,9 @@ export default function JobsPage() {
                 </TableCell>
                 <TableCell className="min-w-52">
                   <div className="flex flex-col items-start gap-2">
-                    <Badge variant={getStatusVariant(job.status)}>{getStatusLabel(job.status)}</Badge>
+                    <Badge variant={getStatusVariant(job.status)}>
+                      {getStatusLabel(job.status)}
+                    </Badge>
                     <div className="text-xs text-muted-foreground">
                       {job.isEnabled ? "Enabled" : "Disabled"} · Retry {job.retryCount}/
                       {job.maxRetryCount}
@@ -793,7 +800,8 @@ function JobDialog({
   const isIntervalTrigger = form.triggerType === TRIGGER_TYPE_INTERVAL;
   const isCronTrigger = form.triggerType === TRIGGER_TYPE_CRON;
   const filteredAgents = React.useMemo(
-    () => assignableAgents.filter((agent) => form.agentType !== null && agent.type === form.agentType),
+    () =>
+      assignableAgents.filter((agent) => form.agentType !== null && agent.type === form.agentType),
     [assignableAgents, form.agentType],
   );
 
@@ -950,7 +958,9 @@ function JobDialog({
             >
               <SelectTrigger id={`${mode}-agent-id`} className="w-full">
                 <SelectValue
-                  placeholder={form.agentType === null ? "Select agent type first" : "Optional agent"}
+                  placeholder={
+                    form.agentType === null ? "Select agent type first" : "Optional agent"
+                  }
                 />
               </SelectTrigger>
               <SelectContent>
@@ -1009,7 +1019,7 @@ function JobDialog({
             </div>
           ) : null}
 
-          {(isIntervalTrigger || isCronTrigger) ? (
+          {isIntervalTrigger || isCronTrigger ? (
             <div className="space-y-2">
               <Label htmlFor={`${mode}-trigger-value`}>
                 {isIntervalTrigger ? "Interval" : "Trigger Value"}

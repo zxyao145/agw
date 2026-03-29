@@ -97,7 +97,10 @@ export async function getAllTasksSessions(projectId: string): Promise<ChatSessio
   return tasks.map(toChatSessionSummary);
 }
 
-export async function getTaskSessions(projectId: string, taskId: string): Promise<ProjectTaskHistoryResponse> {
+export async function getTaskSessions(
+  projectId: string,
+  taskId: string,
+): Promise<ProjectTaskHistoryResponse> {
   const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(taskId)}`);
   const task = await fetchJson<ProjectTaskHistoryResponse>(url);
   // TODO
@@ -114,8 +117,8 @@ export async function getSessionByTaskId(
 
   const task = await findTaskByTaskId(taskId, projectId);
   if (!task) {
-    console.warn("task not found, sessionId:", taskId, projectId)
-    console.warn("task not found, contextId:", taskId, ", projectId:", projectId)
+    console.warn("task not found, sessionId:", taskId, projectId);
+    console.warn("task not found, contextId:", taskId, ", projectId:", projectId);
     return null;
   }
 
