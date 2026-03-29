@@ -127,7 +127,6 @@ public partial class AgentExecutionsController : ControllerBase
 
         using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
         using var sendLock = new SemaphoreSlim(1, 1);
-        using var socketLoopCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         ActiveExecution? activeExecution = null;
         AgentExecSession? agentSession = null;
@@ -149,13 +148,10 @@ public partial class AgentExecutionsController : ControllerBase
                     case SettingRequest settingRequest:
                         if (!IsJsonObject(settingRequest.SettingContent))
                         {
-                            await TryCloseAsync(
-                                webSocket,
-                                WebSocketCloseStatus.InvalidPayloadData,
+                            await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData,
                                 "SettingContent must be a JSON object string.");
                             return;
                         }
-
                         settings = settingRequest;
                         if (agentSession != null)
                         {
@@ -165,42 +161,30 @@ public partial class AgentExecutionsController : ControllerBase
                         break;
 
                     case ExecRequest executionRequest:
-                        if (agentSession == null)
+                        activeExecution = await ReleaseCompletedExecutionAsync(activeExecution);
+                        if (activeExecution != null) break;
+
+                        var (task, contextError) = await ResolveTaskAsync(executionRequest.TaskId, executionRequest.ProjectId);
+                        if (contextError != null)
                         {
-                            var (task, contextError) = await ResolveTaskAsync(executionRequest.TaskId, executionRequest.ProjectId);
-                            if (contextError != null)
-                            {
-                                await TryCloseAsync(
-                                    webSocket,
-                                    WebSocketCloseStatus.InvalidPayloadData,
-                                    ExtractReason(contextError) ?? "Invalid request payload");
-                                return;
-                            }
-
-                            var (execution, session, error) = await StartExecAsync(
-                                id,
-                                task,
-                                executionRequest,
-                                agentSession,
-                                settings,
-                                webSocket,
-                                sendLock,
-                                cancellationToken
-                                );
-
-                            if (execution == null)
-                            {
-                                await TryCloseAsync(
-                                    webSocket,
-                                    WebSocketCloseStatus.InvalidPayloadData,
-                                    error ?? "Invalid request payload");
-                                return;
-                            }
-
-                            activeExecution = execution;
-                            agentSession = session;
+                            await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData,
+                                ExtractReason(contextError) ?? "Invalid request payload");
+                            return;
                         }
 
+                        var (execution, session, error) = await StartExecAsync(
+                            id, task, executionRequest, agentSession, settings,
+                            webSocket, sendLock, cancellationToken);
+
+                        if (execution == null)
+                        {
+                            await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData,
+                                error ?? "Invalid request payload");
+                            return;
+                        }
+
+                        activeExecution = execution;
+                        agentSession = session;
                         break;
 
                     case InterruptRequest interruptRequest:
@@ -214,7 +198,6 @@ public partial class AgentExecutionsController : ControllerBase
                         }
                         activeExecution.RequestInterrupt(interruptRequest.Reason);
                         break;
-
                 }
             }
         }
@@ -224,22 +207,45 @@ public partial class AgentExecutionsController : ControllerBase
         }
         catch (WebSocketException)
         {
-            socketLoopCts.Cancel();
             await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "WebSocket Error");
-            if (activeExecution != null)
-            {
-                if (!activeExecution.ExecutionTask.IsCompleted)
-                {
-                    activeExecution.RequestInterrupt(null);
-                }
-
-                await activeExecution.DisposeAsync();
-            }
+            activeExecution?.RequestInterrupt(null);
+        }
+        finally
+        {
+            await DisposeActiveExecutionAsync(activeExecution, interruptIfRunning: true);
             if (agentSession != null)
             {
                 await agentSession.DisposeAsync();
             }
         }
+    }
+
+    private static async Task<ActiveExecution?> ReleaseCompletedExecutionAsync(ActiveExecution? activeExecution)
+    {
+        if (activeExecution == null || !activeExecution.ExecutionTask.IsCompleted)
+        {
+            return activeExecution;
+        }
+
+        await DisposeActiveExecutionAsync(activeExecution, interruptIfRunning: false);
+        return null;
+    }
+
+    private static async Task DisposeActiveExecutionAsync(
+        ActiveExecution? activeExecution,
+        bool interruptIfRunning)
+    {
+        if (activeExecution == null)
+        {
+            return;
+        }
+
+        if (interruptIfRunning && !activeExecution.ExecutionTask.IsCompleted)
+        {
+            activeExecution.RequestInterrupt(null);
+        }
+
+        await activeExecution.DisposeAsync();
     }
 
     private async Task<(ActiveExecution? execution, AgentExecSession? session, string? error)> StartExecAsync(
@@ -486,40 +492,6 @@ public partial class AgentExecutionsController : ControllerBase
             "$agw-server",
             AiRole.System,
             new List<AgwContent> { new AgwTextContent { Content = message } });
-        return SendJsonAsync(webSocket, JsonUtil.Serialize(payload), sendLock, cancellationToken);
-    }
-
-    private static Task SendErrorAsync(
-        WebSocket webSocket,
-        SemaphoreSlim sendLock,
-        string errorMessage,
-        CancellationToken cancellationToken)
-    {
-        var payload = new AgwMessage(
-            Guid.NewGuid().ToString(),
-            "$agw-server",
-            AiRole.System,
-            new List<AgwContent> { new AgwErrorContent { Content = errorMessage } });
-        return SendJsonAsync(webSocket, JsonUtil.Serialize(payload), sendLock, cancellationToken);
-    }
-
-    private static Task SendExecutionResultAsync(
-        WebSocket webSocket,
-        SemaphoreSlim sendLock,
-        string status,
-        string message,
-        CancellationToken cancellationToken)
-    {
-        var payload = new AgwMessage(
-            Guid.NewGuid().ToString(),
-            "$agw-server",
-            AiRole.System,
-            new List<AgwContent> { new AgwTextContent { Content = message } },
-            new Dictionary<string, object?>
-            {
-                { "type", "result" },
-                { "status", status }
-            });
         return SendJsonAsync(webSocket, JsonUtil.Serialize(payload), sendLock, cancellationToken);
     }
 
