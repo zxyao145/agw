@@ -56,7 +56,7 @@ public partial class AgentExecutionsController : ControllerBase
 
         ActiveExecution? activeExecution = null;
         AgentExecSession? agentSession = null;
-        SettingRequest? settings = null;
+        SettingCommand? settings = null;
 
         try
         {
@@ -71,7 +71,7 @@ public partial class AgentExecutionsController : ControllerBase
 
                 switch (command)
                 {
-                    case SettingRequest settingRequest:
+                    case SettingCommand settingRequest:
                         if (!IsJsonObject(settingRequest.SettingContent))
                         {
                             await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData,
@@ -86,7 +86,7 @@ public partial class AgentExecutionsController : ControllerBase
                         }
                         break;
 
-                    case ExecRequest executionRequest:
+                    case ExecCommand executionRequest:
                         activeExecution = await ReleaseCompletedExecutionAsync(activeExecution);
                         if (activeExecution != null) break;
 
@@ -113,7 +113,7 @@ public partial class AgentExecutionsController : ControllerBase
                         agentSession = session;
                         break;
 
-                    case InterruptRequest interruptRequest:
+                    case InterruptCommand interruptRequest:
                         if (activeExecution == null)
                         {
                             var message = string.IsNullOrWhiteSpace(interruptRequest.Reason)
@@ -177,9 +177,9 @@ public partial class AgentExecutionsController : ControllerBase
     private async Task<(ActiveExecution? execution, AgentExecSession? session, string? error)> StartExecAsync(
         Guid id,
         ProjectTask? task,
-        ExecRequest request,
+        ExecCommand request,
         AgentExecSession? currentSession,
-        SettingRequest? settings,
+        SettingCommand? settings,
         WebSocket webSocket,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken)
@@ -258,7 +258,7 @@ public partial class AgentExecutionsController : ControllerBase
 
     private async Task ExecuteAgentflowStreamingAsync(
         Guid id,
-        ExecRequest request,
+        ExecCommand request,
         string? contextId,
         WebSocket webSocket,
         SemaphoreSlim sendLock,
@@ -365,7 +365,7 @@ public partial class AgentExecutionsController : ControllerBase
 
     private static bool CanReuseAgentSession(
         AgentExecSession? session,
-        ExecRequest request,
+        ExecCommand request,
         string? contextId)
     {
         if (session == null)

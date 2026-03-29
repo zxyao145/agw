@@ -19,7 +19,7 @@ public class ExecutionRequestsTests
 
         var request = JsonUtil.Deserialize<AgentRunCommand>(json);
 
-        var settingRequest = Assert.IsType<SettingRequest>(request);
+        var settingRequest = Assert.IsType<SettingCommand>(request);
         Assert.Equal("{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}", settingRequest.SettingContent);
     }
 
@@ -48,7 +48,7 @@ public class ExecutionRequestsTests
 
         var request = JsonUtil.Deserialize<AgentRunCommand>(json);
 
-        var executionRequest = Assert.IsType<ExecRequest>(request);
+        var executionRequest = Assert.IsType<ExecCommand>(request);
         Assert.Equal(AgentRuntimeType.Agent, executionRequest.AgentType);
         Assert.Equal("session-1", executionRequest.SessionId);
         var textContent = Assert.IsType<AgwTextContent>(Assert.Single(executionRequest.Input.Contents));
@@ -66,7 +66,7 @@ public class ExecutionRequestsTests
 
         var request = JsonUtil.Deserialize<AgentRunCommand>(json);
 
-        var interruptRequest = Assert.IsType<InterruptRequest>(request);
+        var interruptRequest = Assert.IsType<InterruptCommand>(request);
         Assert.Null(interruptRequest.Reason);
     }
 }
