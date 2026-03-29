@@ -5,8 +5,8 @@ namespace Agw.Shared.Tasks;
 
 public static class ProjectDefaults
 {
-    public static readonly Guid DefaultBuiltId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-    public static readonly Guid ClaudeCodeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    public static readonly Guid DefaultBuiltId = Guid.Parse("11111111-1111-1111-1111-000000000001");
+    public static readonly Guid ClaudeCodeId = Guid.Parse("11111111-1111-1111-1111-000000000002");
 
     public const string DefaultBuiltName = "default-built";
     public const string ClaudeCodeName = "claude-code";

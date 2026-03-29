@@ -131,7 +131,7 @@ function createDefaultOnceRunTime(): string {
 
 function createDefaultJobFormState(): JobFormState {
   return {
-    projectId: "11111111-1111-1111-1111-111111111111",
+    projectId: "11111111-1111-1111-1111-000000000001",
     agentType: 0,
     agentId: "",
     name: "",
