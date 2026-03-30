@@ -26,18 +26,18 @@ const ChatHistoryList = dynamic(
   { ssr: false },
 );
 export interface ChatProps extends ChatSessionProps {
-  currentSessionId: string | null;
-  onSessionSelect: (messages: AiMessage[], sessionId: string) => void;
+  currentTaskId: string | null;
+  onTaskSelect: (messages: AiMessage[], taskId: string) => void;
   onNewChat: () => void;
-  onSessionDeleted: (sessionId: string) => void;
+  onTaskDeleted: (taskId: string) => void;
   onAllSessionsCleared: () => void;
 }
 
 export function Chat({
-  currentSessionId,
-  onSessionSelect,
+  currentTaskId,
+  onTaskSelect,
   onNewChat,
-  onSessionDeleted,
+  onTaskDeleted,
   onAllSessionsCleared,
   ...messageAreaProps
 }: ChatProps) {
@@ -56,16 +56,16 @@ export function Chat({
     return () => mediaQuery.removeEventListener("change", handleMediaChange);
   }, []);
 
-  const handleSessionSelect = async (sessionId: string) => {
+  const handleTaskSelect = async (taskId: string) => {
     try {
       const details: ChatSessionRecordDetails | null = await getSessionByTaskId(
-        sessionId,
+        taskId,
         CLAUDE_CODE_PROJECT_ID,
       );
       if (!details) {
         return;
       }
-      onSessionSelect(details.messages ?? [], details.sessionId);
+      onTaskSelect(details.messages ?? [], details.taskId);
     } catch (error) {
       console.error("Failed to load session:", error);
     } finally {
@@ -107,10 +107,10 @@ export function Chat({
               </DrawerHeader>
               <div className="px-4 pb-6">
                 <ChatHistoryList
-                  currentSessionId={currentSessionId}
-                  onSessionSelect={handleSessionSelect}
+                  currentTaskId={currentTaskId}
+                  onTaskSelect={handleTaskSelect}
                   onNewChat={onNewChat}
-                  onSessionDeleted={onSessionDeleted}
+                  onTaskDeleted={onTaskDeleted}
                   onAllSessionsCleared={onAllSessionsCleared}
                 />
               </div>
@@ -122,10 +122,10 @@ export function Chat({
           {!isMobile && showChatHistory && (
             <ColResizeSplit.Left>
               <ChatHistoryList
-                currentSessionId={currentSessionId}
-                onSessionSelect={handleSessionSelect}
+                currentTaskId={currentTaskId}
+                onTaskSelect={handleTaskSelect}
                 onNewChat={onNewChat}
-                onSessionDeleted={onSessionDeleted}
+                onTaskDeleted={onTaskDeleted}
                 onAllSessionsCleared={onAllSessionsCleared}
               />
             </ColResizeSplit.Left>

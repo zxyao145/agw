@@ -584,16 +584,16 @@ export default function ClaudeCodePage() {
     settingsRequestSessionRef.current = null;
   };
 
-  const handleHistorySelect = async (sessionId: string) => {
+  const handleHistorySelect = async (taskId: string) => {
     try {
       const details: ChatSessionRecordDetails | null = await getSessionByTaskId(
-        sessionId,
+        taskId,
         CLAUDE_CODE_PROJECT_ID,
       );
       if (!details) {
         return;
       }
-      handleSessionSelect(details.messages ?? [], details.sessionId);
+      handleSessionSelect(details.messages ?? [], details.taskId);
     } catch (error) {
       console.error("Failed to load session:", error);
     } finally {
@@ -856,10 +856,10 @@ export default function ClaudeCodePage() {
             {!isMobile && isChatTab && showChatHistory && (
               <ColResizeSplit.Left minWidth={200} maxWidth={600}>
                 <ChatHistoryList
-                  currentSessionId={sessionId}
-                  onSessionSelect={handleHistorySelect}
+                  currentTaskId={sessionId}
+                  onTaskSelect={handleHistorySelect}
                   onNewChat={handleNewChat}
-                  onSessionDeleted={handleSessionDeleted}
+                  onTaskDeleted={handleSessionDeleted}
                   onAllSessionsCleared={handleAllSessionsCleared}
                 />
               </ColResizeSplit.Left>
@@ -883,6 +883,7 @@ export default function ClaudeCodePage() {
                 <TabsContent value="chat" className="mt-0 h-full w-full">
                   <div className="flex flex-col h-full px-2 w-full">
                     <ChatSession
+                      taskId={sessionId}
                       messages={messages}
                       messagesStartRef={messagesStartRef}
                       messagesEndRef={messagesEndRef}
@@ -982,10 +983,10 @@ export default function ClaudeCodePage() {
           <div className="px-4 pb-6 h-full min-h-0 overflow-hidden">
             {drawerContent === "chat" && (
               <ChatHistoryList
-                currentSessionId={sessionId}
-                onSessionSelect={handleHistorySelect}
+                currentTaskId={sessionId}
+                onTaskSelect={handleHistorySelect}
                 onNewChat={handleNewChat}
-                onSessionDeleted={handleSessionDeleted}
+                onTaskDeleted={handleSessionDeleted}
                 onAllSessionsCleared={handleAllSessionsCleared}
               />
             )}

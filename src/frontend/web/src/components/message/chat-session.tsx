@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export interface ChatSessionProps {
+  taskId?: string | null;
   messages: AiMessage[];
   messagesStartRef?: React.RefObject<HTMLDivElement>;
   messagesEndRef: React.RefObject<HTMLDivElement>;
@@ -26,6 +27,7 @@ export interface ChatSessionProps {
 }
 
 export function ChatSession({
+  taskId,
   messages,
   messagesStartRef,
   messagesEndRef,
@@ -36,7 +38,11 @@ export function ChatSession({
       <Empty>
         <EmptyHeader>
           <EmptyTitle>No Message Yet</EmptyTitle>
-          <EmptyDescription>There are currently no messages.</EmptyDescription>
+          <EmptyDescription>
+            {taskId
+              ? `There are currently no messages in task ${taskId}.`
+              : "There are currently no messages."}
+          </EmptyDescription>
         </EmptyHeader>
         <EmptyContent className="flex-row justify-center gap-2"></EmptyContent>
       </Empty>
