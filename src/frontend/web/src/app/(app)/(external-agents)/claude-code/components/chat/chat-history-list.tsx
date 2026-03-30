@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   CLAUDE_CODE_PROJECT_ID,
-  deleteSessionBySessionId,
-  updateSessionTitle,
+  deleteTaskSessionByTaskId,
+  updateTaskTitle,
   clearAllSessions,
   getAllTasksSessions,
   type ChatSessionRecordSummary,
@@ -22,18 +22,18 @@ import {
 import { cn } from "@/lib/utils";
 
 interface ChatHistoryListProps {
-  currentSessionId: string | null;
-  onSessionSelect: (sessionId: string) => void;
+  currentTaskId: string | null;
+  onTaskSelect: (taskId: string) => void;
   onNewChat: () => void;
-  onSessionDeleted: (sessionId: string) => void;
+  onTaskDeleted: (taskId: string) => void;
   onAllSessionsCleared: () => void;
 }
 
 export function ChatHistoryList({
-  currentSessionId,
-  onSessionSelect,
+  currentTaskId,
+  onTaskSelect,
   onNewChat,
-  onSessionDeleted,
+  onTaskDeleted,
   onAllSessionsCleared,
 }: ChatHistoryListProps) {
   const [sessions, setSessions] = React.useState<ChatSessionRecordSummary[]>([]);
@@ -66,11 +66,11 @@ export function ChatHistoryList({
     // }
 
     try {
-      const success = await deleteSessionBySessionId(session.sessionId, CLAUDE_CODE_PROJECT_ID);
+      const success = await deleteTaskSessionByTaskId(session.taskId, CLAUDE_CODE_PROJECT_ID);
       if (success) {
         toast.success("Chat deleted successfully");
-        if (session.sessionId === currentSessionId) {
-          onSessionDeleted(session.sessionId);
+        if (session.taskId === currentTaskId) {
+          onTaskDeleted(session.taskId);
         }
         await refreshSessions();
       } else {
@@ -100,7 +100,7 @@ export function ChatHistoryList({
 
   const startEditing = (session: ChatSessionRecordSummary, e: React.MouseEvent) => {
     e.stopPropagation();
-    setEditingSessionId(session.sessionId);
+    setEditingSessionId(session.taskId);
     setEditTitle(session.title);
   };
 
@@ -119,7 +119,7 @@ export function ChatHistoryList({
     }
 
     try {
-      const success = await updateSessionTitle(sessionId, editTitle.trim(), CLAUDE_CODE_PROJECT_ID);
+      const success = await updateTaskTitle(sessionId, editTitle.trim(), CLAUDE_CODE_PROJECT_ID);
       if (success) {
         toast.success("Title updated");
         setEditingSessionId(null);
@@ -200,13 +200,13 @@ export function ChatHistoryList({
           <div className="text-center py-8 text-muted-foreground text-sm">No chat history yet</div>
         ) : (
           sessions.map((session) => {
-            const isActive = session.sessionId === currentSessionId;
-            const isEditing = editingSessionId === session.sessionId;
+            const isActive = session.taskId === currentTaskId;
+            const isEditing = editingSessionId === session.taskId;
 
             return (
               <div
-                key={session.sessionId}
-                onClick={() => !isEditing && onSessionSelect(session.sessionId)}
+                key={session.taskId}
+                onClick={() => !isEditing && onTaskSelect(session.taskId)}
                 className={cn(
                   "group p-3 rounded-md cursor-pointer transition-colors border",
                   isActive ? "bg-blue-50" : "bg-card hover:bg-accent/50 border-transparent",
@@ -224,7 +224,7 @@ export function ChatHistoryList({
                           autoFocus
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
-                              saveEdit(session.sessionId, e);
+                              saveEdit(session.taskId, e);
                             } else if (e.key === "Escape") {
                               cancelEditing(e);
                             }
@@ -234,7 +234,7 @@ export function ChatHistoryList({
                           size="sm"
                           variant="ghost"
                           className="h-6 w-6 p-0"
-                          onClick={(e) => saveEdit(session.sessionId, e)}
+                          onClick={(e) => saveEdit(session.taskId, e)}
                         >
                           <Check className="h-3 w-3" />
                         </Button>

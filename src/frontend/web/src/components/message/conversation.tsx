@@ -19,7 +19,7 @@ import { ArrowUp, Eraser, Square } from "lucide-react";
 import { Separator } from "../ui/separator";
 import { useQuery } from "@tanstack/react-query";
 import {
-  deleteSessionBySessionId,
+  deleteTaskSessionByTaskId,
   getSessionByTaskId,
 } from "@/app/(app)/(external-agents)/claude-code/lib/chat-history-service";
 
@@ -79,11 +79,11 @@ export function Conversation({
   }, []);
 
   const sessionQuery = useQuery({
-    queryKey: ["projects", projectId, "tasks", curSessionId, "session-record"],
+    queryKey: ["projects", projectId, "tasks", taskId, "session-record"],
     queryFn: async () => {
       return await getSessionByTaskId(taskId, projectId);
     },
-    enabled: Boolean(curSessionId),
+    enabled: Boolean(taskId),
     refetchInterval: false,
   });
 
@@ -165,11 +165,15 @@ export function Conversation({
   );
 
   const handleClear = React.useCallback(async () => {
-    const success = await deleteSessionBySessionId(curSessionId, projectId);
+    if (!taskId) {
+      return;
+    }
+
+    const success = await deleteTaskSessionByTaskId(taskId, projectId);
     if (success) {
       setMessages([]);
     }
-  }, [curSessionId, projectId]);
+  }, [projectId, taskId]);
 
   const handleScrollToTop = () => {
     messagesStartRef.current?.scrollIntoView({
@@ -181,6 +185,7 @@ export function Conversation({
   return (
     <div className={cn("flex h-full relative", className)}>
       <ChatSession
+        taskId={taskId}
         messages={messages}
         messagesStartRef={messagesStartRef}
         messagesEndRef={messagesEndRef}

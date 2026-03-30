@@ -3,7 +3,7 @@
 import type { AiMessage } from "@/types";
 
 export interface ChatSessionRecordSummary {
-  id: string;
+  taskId: string;
   projectId: string;
   sessionId: string;
   title: string;
@@ -48,7 +48,7 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
 
 function toChatSessionSummary(task: ProjectTaskHistoryResponse): ChatSessionRecordSummary {
   return {
-    id: task.id,
+    taskId: task.id,
     projectId: task.projectId,
     sessionId: task.sessionId || task.contextId,
     title: task.title,
@@ -125,35 +125,26 @@ export async function getSessionByTaskId(
   return toChatSessionDetails(task);
 }
 
-export async function deleteSessionBySessionId(
-  sessionId: string,
+export async function deleteTaskSessionByTaskId(
+  taskId: string,
   projectId: string,
 ): Promise<boolean> {
-  if (!sessionId) {
+  if (!taskId) {
     return false;
   }
-  const task = await findTaskByTaskId(sessionId, projectId);
-  if (!task) {
-    return false;
-  }
-
-  return await clearTaskSessionById(task.id, projectId);
+  return await clearTaskSessionById(taskId, projectId);
 }
 
-export async function updateSessionTitle(
-  sessionId: string,
+export async function updateTaskTitle(
+  taskId: string,
   newTitle: string,
   projectId: string,
 ): Promise<boolean> {
-  if (!sessionId || !newTitle.trim()) {
-    return false;
-  }
-  const task = await findTaskByTaskId(sessionId, projectId);
-  if (!task) {
+  if (!taskId || !newTitle.trim()) {
     return false;
   }
 
-  const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(task.id)}/title`);
+  const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(taskId)}/title`);
   const response = await fetch(url, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -171,5 +162,5 @@ export async function updateSessionTitle(
 
 export async function clearAllSessions(projectId: string): Promise<void> {
   const sessions = await getAllTasksSessions(projectId);
-  await Promise.all(sessions.map((session) => clearTaskSessionById(session.id, projectId)));
+  await Promise.all(sessions.map((session) => clearTaskSessionById(session.taskId, projectId)));
 }
