@@ -7,6 +7,7 @@ using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Agw.Shared.Tasks;
+using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
 using Anthropic;
 using ClaudeCodeSdk.MAF;
@@ -291,21 +292,9 @@ public class AgentRuntimeService: RuntimService
         return await CreateDefinitionAgent(agent, cancellationToken).ConfigureAwait(false);
     }
 
-    public Task<AgentExecSession?> CreateSessionAsync(
-        Guid agentId,
-        string sessionId,
-        Guid? projectId = null,
-        string? contextId = null,
-        CancellationToken cancellationToken = default)
-    {
-        return CreateSessionAsync(agentId, sessionId, projectId, contextId, extraSetting: null, cancellationToken);
-    }
-
     public async Task<AgentExecSession?> CreateSessionAsync(
         Guid agentId,
-        string sessionId,
-        Guid? projectId,
-        string? contextId,
+        ProjectTask task,
         string? extraSetting,
         CancellationToken cancellationToken = default)
     {
@@ -315,28 +304,25 @@ public class AgentRuntimeService: RuntimService
             return null;
         }
 
-        projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
+        Guid projectId = task.ProjectId;
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, extraSetting);
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            sessionId = Guid.NewGuid().ToString();
-        }
+        string sessionId = task.Id.ToString();
 
-        var resolvedContextId = string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId;
+        var resolvedContextId = TaskUtil.GenContextId();
         var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, sessionId, projectId, cancellationToken);
         if (aiAgent == null)
         {
             return null;
         }
 
-        var agentSession = await GetOrCreateThreadAsync(aiAgent, sessionId, cancellationToken);
+        var agentSession = await GetOrCreateThreadAsync(agent, aiAgent, sessionId, cancellationToken);
         _providerSessionState.InitializeSessionState(agentSession, resolvedContextId, sessionId, ProjectDefaults.GetDefaultProjectIdentifier(projectId));
         return new AgentExecSession(
             aiAgent,
             agentSession,
-            projectId,
-            resolvedContextId,
+            projectId: projectId,
+            contextId: resolvedContextId,
             sessionId,
             AgentRuntimeType.Agent,
             agentId,
@@ -768,10 +754,16 @@ public class AgentRuntimeService: RuntimService
     }
 
     private async Task<AgentSession> GetOrCreateThreadAsync(
+        Agent agent,
         AIAgent aiAgent,
         string sessionId,
         CancellationToken cancellationToken)
     {
+        if(agent.Type == AgentType.External)
+        {
+            return await aiAgent.CreateSessionAsync(cancellationToken);
+        }
+
         var value = await _cache.GetOrCreateAsync<string>(
             sessionId,
             _ => ValueTask.FromResult(string.Empty),
@@ -789,7 +781,7 @@ public class AgentRuntimeService: RuntimService
         catch (JsonException)
         {
             _logger.LogWarning("Thread cache deserialization failed for sessionId: {SessionId}. A new thread will be created.", sessionId);
-            return await aiAgent.CreateSessionAsync();
+            return await aiAgent.CreateSessionAsync(cancellationToken);
         }
     }
 
@@ -807,7 +799,7 @@ public class AgentRuntimeService: RuntimService
 
         MergeExtraSetting(ref merged, agentExtra, "Agent.Extra");
         MergeExtraSetting(ref merged, projectExtraSetting, "Project.ExtraSetting");
-        MergeExtraSetting(ref merged, requestExtraSetting, "SettingRequest.SettingContent");
+        MergeExtraSetting(ref merged, requestExtraSetting, "SettingCommand.SettingContent");
 
         return merged?.ToJsonString();
     }

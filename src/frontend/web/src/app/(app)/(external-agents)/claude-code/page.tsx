@@ -75,7 +75,7 @@ export default function ClaudeCodePage() {
   const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
-  const [sessionId, setSessionId] = React.useState<string | null>(null);
+  const [taskId, setTaskId] = React.useState<string | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [showCommentDialog, setShowCommentDialog] = React.useState(false);
@@ -143,10 +143,10 @@ export default function ClaudeCodePage() {
     );
   }, []);
 
-  const handleSessionId = (newSessionId: string | null) => {
-    if (newSessionId !== sessionId) {
+  const handleTaskId = (newTaskId: string | null) => {
+    if (newTaskId !== taskId) {
       settingsRequestSessionRef.current = null;
-      setSessionId(newSessionId);
+      setTaskId(newTaskId);
     }
   };
 
@@ -213,13 +213,13 @@ export default function ClaudeCodePage() {
   }, []);
 
   const getResolvedWorkingDirectory = React.useCallback(
-    (sessionId: string | null) => {
+    (taskId: string | null) => {
       if (directoryMode === DirectoryMode.gitAddress) {
         const repoName = getRepositoryName(gitAddress);
-        if (!repoName || !sessionId) {
+        if (!repoName || !taskId) {
           return null;
         }
-        return `${gitCodeSource}/${repoName}/${sessionId}`;
+        return `${gitCodeSource}/${repoName}/${taskId}`;
       }
       return workingDirectory.trim() || null;
     },
@@ -228,14 +228,14 @@ export default function ClaudeCodePage() {
 
   const resolvedWorkingDirectory = React.useMemo(() => {
     if (directoryMode === DirectoryMode.gitAddress) {
-      if (!sessionId) {
+      if (!taskId) {
         return "";
       }
       const repoName = getRepositoryName(gitAddress);
-      return repoName ? `${gitCodeSource}/${repoName}/${sessionId}` : "";
+      return repoName ? `${gitCodeSource}/${repoName}/${taskId}` : "";
     }
     return workingDirectory;
-  }, [directoryMode, getRepositoryName, gitAddress, sessionId, workingDirectory]);
+  }, [directoryMode, getRepositoryName, gitAddress, taskId, workingDirectory]);
 
   const openDrawer = (type: "chat" | "files") => {
     setDrawerContent(type);
@@ -350,9 +350,9 @@ export default function ClaudeCodePage() {
     return envObj;
   };
 
-  const buildSettingRequest = (sessionId: string) => {
+  const buildSettingRequest = (taskId: string) => {
     const settingContent = {
-      workingDirectory: getResolvedWorkingDirectory(sessionId),
+      workingDirectory: getResolvedWorkingDirectory(taskId),
       gitAddress: directoryMode === DirectoryMode.gitAddress ? gitAddress.trim() || null : null,
       apiKey: apiKey.trim() || null,
       baseUrl: apiBaseUrl.trim() || null,
@@ -360,57 +360,57 @@ export default function ClaudeCodePage() {
       maxTurns: null,
       permissionMode: permissionModeToValue[permissionMode] ?? permissionModeToValue.default,
       environmentVariables: buildEnvironmentVariables(),
-      sessionId: sessionId,
+      taskId: taskId,
       projectId: CLAUDE_CODE_PROJECT_ID,
     };
 
     return {
-      type: "SettingRequest",
+      type: "SettingCommand",
       settingContent: JSON.stringify(settingContent),
     };
   };
 
-  const buildExecRequest = (message: AiMessage, currentSessionId: string) => {
+  const buildExecRequest = (message: AiMessage, currentTaskId: string) => {
     return {
-      type: "ExecRequest",
+      type: "ExecCommand",
       agentType: agentRuntimeTypeAgent,
       input: toExecutionWsUserInput(message),
-      sessionId: currentSessionId,
+      taskId: currentTaskId,
       projectId: CLAUDE_CODE_PROJECT_ID,
     };
   };
 
   const buildInterruptRequest = (reason: string) => {
     return {
-      type: "InterruptRequest",
+      type: "InterruptCommand",
       reason,
     };
   };
 
-  const sendSettingIfNeeded = (ws: WebSocket, sessionId: string) => {
-    if (settingsRequestSessionRef.current === sessionId) {
+  const sendSettingIfNeeded = (ws: WebSocket, taskId: string) => {
+    if (settingsRequestSessionRef.current === taskId) {
       return;
     }
-    const settingRequest = buildSettingRequest(sessionId);
+    const settingRequest = buildSettingRequest(taskId);
     ws.send(JSON.stringify(settingRequest));
-    settingsRequestSessionRef.current = sessionId;
+    settingsRequestSessionRef.current = taskId;
   };
 
-  const ensureSessionId = () => {
-    if (sessionId) {
-      return sessionId;
+  const ensureTaskId = () => {
+    if (taskId) {
+      return taskId;
     }
-    const newSessionId = Uuid4.generate().toCanonical();
-    handleSessionId(newSessionId);
-    return newSessionId;
+    const newTaskId = Uuid4.generate().toCanonical();
+    handleTaskId(newTaskId);
+    return newTaskId;
   };
 
   const sendStatusRequest = (ws: WebSocket) => {
     // statusRequestPendingRef.current = true;
-    const currentSessionId = ensureSessionId();
-    sendSettingIfNeeded(ws, currentSessionId);
+    const currentTaskId = ensureTaskId();
+    sendSettingIfNeeded(ws, currentTaskId);
     setIsInitStatus(true);
-    ws.send(JSON.stringify(buildExecRequest(createUserTextMessage("/status"), currentSessionId)));
+    ws.send(JSON.stringify(buildExecRequest(createUserTextMessage("/status"), currentTaskId)));
   };
 
   const setupWebSocket = () => {
@@ -536,7 +536,7 @@ export default function ClaudeCodePage() {
         // Add user message to chat immediately
         setMessages((prev) => [...prev, userMsg]);
 
-        const tid = ensureSessionId();
+        const tid = ensureTaskId();
         sendSettingIfNeeded(ws, tid);
         const request = buildExecRequest(userMsg, tid);
         // console.debug("Sending request:", request);
@@ -576,7 +576,7 @@ export default function ClaudeCodePage() {
 
   const clearActiveSessionState = () => {
     setMessages([]);
-    handleSessionId(null);
+    handleTaskId(null);
     if (wsRef.current) {
       wsRef.current.close(1000, "Session cleared");
       wsRef.current = null;
@@ -601,8 +601,8 @@ export default function ClaudeCodePage() {
     }
   };
 
-  const handleSessionSelect = (newMessages: AiMessage[], newSessionId: string) => {
-    handleSessionId(newSessionId);
+  const handleSessionSelect = (newMessages: AiMessage[], newTaskId: string) => {
+    handleTaskId(newTaskId);
     for (let index = 0; index < newMessages.length; index++) {
       const aiMessage = newMessages[index];
       if (isTurnFinishedMessage(aiMessage)) {
@@ -619,15 +619,15 @@ export default function ClaudeCodePage() {
     settingsRequestSessionRef.current = null;
   };
 
-  const handleSessionDeleted = (deletedSessionId: string) => {
-    if (deletedSessionId !== sessionId) {
+  const handleSessionDeleted = (deletedTaskId: string) => {
+    if (deletedTaskId !== taskId) {
       return;
     }
     clearActiveSessionState();
   };
 
   const handleAllSessionsCleared = () => {
-    if (!sessionId) {
+    if (!taskId) {
       return;
     }
     clearActiveSessionState();
@@ -641,8 +641,8 @@ export default function ClaudeCodePage() {
   const initializeNewChat = async () => {
     handleClearSession();
 
-    const newSessionId = Uuid4.generate().toCanonical();
-    handleSessionId(newSessionId);
+    const newTaskId = Uuid4.generate().toCanonical();
+    handleTaskId(newTaskId);
 
     try {
       const ws = setupWebSocket();
@@ -856,7 +856,7 @@ export default function ClaudeCodePage() {
             {!isMobile && isChatTab && showChatHistory && (
               <ColResizeSplit.Left minWidth={200} maxWidth={600}>
                 <ChatHistoryList
-                  currentTaskId={sessionId}
+                  currentTaskId={taskId}
                   onTaskSelect={handleHistorySelect}
                   onNewChat={handleNewChat}
                   onTaskDeleted={handleSessionDeleted}
@@ -883,7 +883,7 @@ export default function ClaudeCodePage() {
                 <TabsContent value="chat" className="mt-0 h-full w-full">
                   <div className="flex flex-col h-full px-2 w-full">
                     <ChatSession
-                      taskId={sessionId}
+                      taskId={taskId}
                       messages={messages}
                       messagesStartRef={messagesStartRef}
                       messagesEndRef={messagesEndRef}
@@ -983,7 +983,7 @@ export default function ClaudeCodePage() {
           <div className="px-4 pb-6 h-full min-h-0 overflow-hidden">
             {drawerContent === "chat" && (
               <ChatHistoryList
-                currentTaskId={sessionId}
+                currentTaskId={taskId}
                 onTaskSelect={handleHistorySelect}
                 onNewChat={handleNewChat}
                 onTaskDeleted={handleSessionDeleted}

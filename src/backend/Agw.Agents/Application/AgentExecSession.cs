@@ -34,7 +34,7 @@ public sealed class AgentExecSession : IAsyncDisposable
     public AgentExecSession(
         AIAgent agent,
         AgentSession thread,
-        Guid? projectId,
+        Guid projectId,
         string contextId,
         string? sessionId,
         AgentRuntimeType agentType,

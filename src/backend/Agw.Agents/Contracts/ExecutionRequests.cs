@@ -24,16 +24,20 @@ public class ExecCommand : AgentRunCommand
         AgentRuntimeType agentType,
         AgwUserInput input,
         Guid projectId,
-        Guid taskId,
+        Guid? taskId = null,
         string? sessionId = null)
     {
         AgentType = agentType;
         Input = input;
         ProjectId = projectId;
         TaskId = taskId;
-        if (string.IsNullOrEmpty(sessionId))
+        if (string.IsNullOrEmpty(sessionId) && TaskId.HasValue)
         {
-            SessionId = TaskId.ToString();
+            SessionId = TaskId.Value.ToString();
+        }
+        else
+        {
+            SessionId = sessionId;
         }
     }
 
@@ -43,7 +47,7 @@ public class ExecCommand : AgentRunCommand
 
     public required Guid ProjectId { get; set; }
 
-    public required Guid TaskId { get; set; }
+    public Guid? TaskId { get; set; }
 
     public string? SessionId { get; set; }
 }

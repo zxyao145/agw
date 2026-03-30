@@ -72,7 +72,7 @@ function openExecutionWebSocket(
     ws.onopen = () => {
       ws.send(
         JSON.stringify({
-          type: "ExecRequest",
+          type: "ExecCommand",
           ...request,
         }),
       );

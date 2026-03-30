@@ -8,11 +8,11 @@ namespace Agw.Agents.Tests;
 public class ExecutionRequestsTests
 {
     [Fact]
-    public void Deserialize_SettingRequest_ReturnsSettingRequest()
+    public void Deserialize_SettingCommand_ReturnsSettingCommand()
     {
         const string json = """
                             {
-                              "type": "SettingRequest",
+                              "type": "SettingCommand",
                               "settingContent": "{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}"
                             }
                             """;
@@ -24,11 +24,11 @@ public class ExecutionRequestsTests
     }
 
     [Fact]
-    public void Deserialize_ExecRequest_WithoutSettingRequest_ReturnsExecutionRequest()
+    public void Deserialize_ExecCommand_WithoutSettingCommand_ReturnsExecutionCommand()
     {
         const string json = """
                             {
-                              "type": "ExecRequest",
+                              "type": "ExecCommand",
                               "agentType": 0,
                               "input": {
                                 "messageId": "msg-1",
@@ -51,16 +51,17 @@ public class ExecutionRequestsTests
         var executionRequest = Assert.IsType<ExecCommand>(request);
         Assert.Equal(AgentRuntimeType.Agent, executionRequest.AgentType);
         Assert.Equal("session-1", executionRequest.SessionId);
+        Assert.Null(executionRequest.TaskId);
         var textContent = Assert.IsType<AgwTextContent>(Assert.Single(executionRequest.Input.Contents));
         Assert.Equal("hello", textContent.Content);
     }
 
     [Fact]
-    public void Deserialize_InterruptRequest_WithoutReason_ReturnsInterruptRequest()
+    public void Deserialize_InterruptCommand_WithoutReason_ReturnsInterruptCommand()
     {
         const string json = """
                             {
-                              "type": "InterruptRequest"
+                              "type": "InterruptCommand"
                             }
                             """;
 

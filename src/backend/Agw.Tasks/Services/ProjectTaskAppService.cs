@@ -100,11 +100,21 @@ public class ProjectTaskAppService
         return await CreateAsync(projectId, request, user, ProjectTaskStatus.Running);
     }
 
+    public async Task<ApplicationResult<ProjectTaskResponse>> CreateForExecutionAsync(
+        Guid projectId,
+        Guid? taskId,
+        ProjectTaskCreateRequest request,
+        string user)
+    {
+        return await CreateAsync(projectId, request, user, ProjectTaskStatus.Pending, taskId);
+    }
+
     private async Task<ApplicationResult<ProjectTaskResponse>> CreateAsync(
         Guid projectId,
         ProjectTaskCreateRequest request,
         string user,
-        ProjectTaskStatus initialStatus)
+        ProjectTaskStatus initialStatus,
+        Guid? taskIdOverride = null)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
@@ -113,7 +123,9 @@ public class ProjectTaskAppService
                 "Failed to create task (project/target invalid, target mismatch, or input missing).");
         }
 
-        var taskId = Guid.NewGuid();
+        var taskId = taskIdOverride.HasValue && taskIdOverride.Value != Guid.Empty
+            ? taskIdOverride.Value
+            : Guid.NewGuid();
         var contextId = string.IsNullOrWhiteSpace(request.ContextId)
             ? taskId.Normalize()
             : request.ContextId.Trim();

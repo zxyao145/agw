@@ -25,7 +25,13 @@ public partial class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
-        var (task, contextError) = await ResolveTaskAsync(request.TaskId, request.ProjectId);
+        var (task, contextError) = await ResolveTaskAsync(
+            id,
+            request.AgentType,
+            request.TaskId,
+            request.ProjectId,
+            request.Input,
+            request.SessionId);
         if (contextError != null)
         {
             return contextError;
@@ -52,7 +58,13 @@ public partial class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
-        var (task, contextError) = await ResolveTaskAsync(request.TaskId, request.ProjectId);
+        var (task, contextError) = await ResolveTaskAsync(
+            id,
+            request.AgentType,
+            request.TaskId,
+            request.ProjectId,
+            request.Input,
+            request.SessionId);
         if (contextError != null)
         {
             return contextError;

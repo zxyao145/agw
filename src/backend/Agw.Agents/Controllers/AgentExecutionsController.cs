@@ -90,7 +90,13 @@ public partial class AgentExecutionsController : ControllerBase
                         activeExecution = await ReleaseCompletedExecutionAsync(activeExecution);
                         if (activeExecution != null) break;
 
-                        var (task, contextError) = await ResolveTaskAsync(executionRequest.TaskId, executionRequest.ProjectId);
+                        var (task, contextError) = await ResolveTaskAsync(
+                            id,
+                            executionRequest.AgentType,
+                            executionRequest.TaskId,
+                            executionRequest.ProjectId,
+                            ExtractAgentflowInputText(executionRequest.Input),
+                            executionRequest.SessionId);
                         if (contextError != null)
                         {
                             await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData,
@@ -99,7 +105,7 @@ public partial class AgentExecutionsController : ControllerBase
                         }
 
                         var (execution, session, error) = await StartExecAsync(
-                            id, task, executionRequest, agentSession, settings,
+                            id, task!, executionRequest, agentSession, settings,
                             webSocket, sendLock, cancellationToken);
 
                         if (execution == null)
@@ -176,7 +182,7 @@ public partial class AgentExecutionsController : ControllerBase
 
     private async Task<(ActiveExecution? execution, AgentExecSession? session, string? error)> StartExecAsync(
         Guid id,
-        ProjectTask? task,
+        ProjectTask task,
         ExecCommand request,
         AgentExecSession? currentSession,
         SettingCommand? settings,
@@ -199,9 +205,7 @@ public partial class AgentExecutionsController : ControllerBase
 
                     session = await _agentRuntimeService.CreateSessionAsync(
                         id,
-                        request.SessionId ?? string.Empty,
-                        request.ProjectId,
-                        task?.ContextId,
+                        task!,
                         extraSetting: settings?.SettingContent,
                         cancellationToken: cancellationToken);
                 }
@@ -328,26 +332,70 @@ public partial class AgentExecutionsController : ControllerBase
         }
     }
 
-    private async Task<(ProjectTask? task, IActionResult? error)> ResolveTaskAsync(Guid? taskId, Guid? projectId)
+    private async Task<(ProjectTask? task, IActionResult? error)> ResolveTaskAsync(
+        Guid executionId,
+        AgentRuntimeType agentType,
+        Guid? taskId,
+        Guid? projectId,
+        string input,
+        string? sessionId)
     {
-        if (!taskId.HasValue)
+        var resolvedProjectId = await _projectAppService.ResolveProjectIdAsync(projectId);
+        if (!resolvedProjectId.HasValue)
         {
-            return (null, null);
+            return (null, BadRequest("Project not found."));
+        }
+
+        if (!taskId.HasValue || taskId == Guid.Empty)
+        {
+            return await CreateTaskAsync(
+                executionId,
+                agentType,
+                resolvedProjectId.Value,
+                null,
+                input,
+                sessionId);
         }
 
         var task = await _taskAppService.GetTaskAsync(taskId.Value);
         if (task == null)
         {
-            return (null, NotFound("Task not found."));
+            return await CreateTaskAsync(
+                executionId,
+                agentType,
+                resolvedProjectId.Value,
+                taskId,
+                input,
+                sessionId);
+        }
+        else if (task.ProjectId != resolvedProjectId.Value)
+        {
+            return (null, BadRequest("Task does not belong to the supplied projectId."));
         }
 
-        if (projectId != null)
+        return (task, null);
+    }
+
+    private async Task<(ProjectTask? task, IActionResult? error)> CreateTaskAsync(
+        Guid executionId,
+        AgentRuntimeType agentType,
+        Guid projectId,
+        Guid? taskId,
+        string input,
+        string? sessionId)
+    {
+        var user = User?.Identity?.Name ?? "system";
+        var task = await _taskAppService.CreateTaskForExecutionAsync(
+            projectId,
+            taskId,
+            agentType,
+            executionId,
+            input,
+            sessionId,
+            user);
+        if (task == null)
         {
-            var resolvedProjectId = await _projectAppService.ResolveProjectIdAsync(projectId);
-            if (!resolvedProjectId.HasValue || task.ProjectId != resolvedProjectId.Value)
-            {
-                return (null, BadRequest("Task does not belong to the supplied projectId."));
-            }
+            return (null, BadRequest("Failed to create task."));
         }
 
         return (task, null);
