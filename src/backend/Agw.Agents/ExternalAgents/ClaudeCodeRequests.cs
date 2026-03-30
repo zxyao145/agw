@@ -1,4 +1,5 @@
 using Agw.Shared.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace Agw.Appliaction.ExternalAgents;
 
@@ -91,6 +92,7 @@ public record ClaudeCodeSettingRequest
     /// <summary>
     /// Thread ID for conversation context.
     /// </summary>
+    [Required]
     public string SessionId { get; init; } = "";
 
     /// <summary>

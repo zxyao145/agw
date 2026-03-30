@@ -13,11 +13,11 @@ import {
 } from "@/components/ui/dialog";
 import {
   CLAUDE_CODE_PROJECT_ID,
-  deleteTaskSessionByTaskId,
+  deleteTaskById,
   updateTaskTitle,
-  clearAllSessions,
-  getAllTasksSessions,
-  type ChatSessionRecordSummary,
+  clearAllTasks,
+  getAllTasks,
+  type TaskSummary,
 } from "../../lib/chat-history-service";
 import { cn } from "@/lib/utils";
 
@@ -36,17 +36,17 @@ export function ChatHistoryList({
   onTaskDeleted,
   onAllSessionsCleared,
 }: ChatHistoryListProps) {
-  const [sessions, setSessions] = React.useState<ChatSessionRecordSummary[]>([]);
-  const [editingSessionId, setEditingSessionId] = React.useState<string | null>(null);
+  const [tasks, setTasks] = React.useState<TaskSummary[]>([]);
+  const [editingTaskId, setEditingTaskId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState("");
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
-  const refreshSessions = React.useCallback(async () => {
+  const refreshTasks = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const latestSessions = await getAllTasksSessions(CLAUDE_CODE_PROJECT_ID);
-      setSessions(latestSessions);
+      const latestTasks = await getAllTasks(CLAUDE_CODE_PROJECT_ID);
+      setTasks(latestTasks);
     } catch (error) {
       console.error("Failed to load chat history:", error);
     } finally {
@@ -55,10 +55,10 @@ export function ChatHistoryList({
   }, []);
 
   React.useEffect(() => {
-    void refreshSessions();
-  }, [refreshSessions]);
+    void refreshTasks();
+  }, [refreshTasks]);
 
-  const handleDelete = async (session: ChatSessionRecordSummary, e: React.MouseEvent) => {
+  const handleDelete = async (task: TaskSummary, e: React.MouseEvent) => {
     e.stopPropagation();
 
     // if (!confirm("Are you sure you want to delete this chat?")) {
@@ -66,13 +66,13 @@ export function ChatHistoryList({
     // }
 
     try {
-      const success = await deleteTaskSessionByTaskId(session.taskId, CLAUDE_CODE_PROJECT_ID);
+      const success = await deleteTaskById(task.taskId, CLAUDE_CODE_PROJECT_ID);
       if (success) {
         toast.success("Chat deleted successfully");
-        if (session.taskId === currentTaskId) {
-          onTaskDeleted(session.taskId);
+        if (task.taskId === currentTaskId) {
+          onTaskDeleted(task.taskId);
         }
-        await refreshSessions();
+        await refreshTasks();
       } else {
         toast.error("Failed to delete chat");
       }
@@ -88,29 +88,29 @@ export function ChatHistoryList({
     }
 
     try {
-      await clearAllSessions(CLAUDE_CODE_PROJECT_ID);
+      await clearAllTasks(CLAUDE_CODE_PROJECT_ID);
       toast.success("All chats cleared");
       onAllSessionsCleared();
-      await refreshSessions();
+      await refreshTasks();
     } catch (error) {
       console.error("Clear all error:", error);
       toast.error("Error clearing chats");
     }
   };
 
-  const startEditing = (session: ChatSessionRecordSummary, e: React.MouseEvent) => {
+  const startEditing = (task: TaskSummary, e: React.MouseEvent) => {
     e.stopPropagation();
-    setEditingSessionId(session.taskId);
-    setEditTitle(session.title);
+    setEditingTaskId(task.taskId);
+    setEditTitle(task.title);
   };
 
   const cancelEditing = (e: React.SyntheticEvent<HTMLElement>) => {
     e.stopPropagation();
-    setEditingSessionId(null);
+    setEditingTaskId(null);
     setEditTitle("");
   };
 
-  const saveEdit = async (sessionId: string, e: React.SyntheticEvent<HTMLElement>) => {
+  const saveEdit = async (taskId: string, e: React.SyntheticEvent<HTMLElement>) => {
     e.stopPropagation();
 
     if (!editTitle.trim()) {
@@ -119,12 +119,12 @@ export function ChatHistoryList({
     }
 
     try {
-      const success = await updateTaskTitle(sessionId, editTitle.trim(), CLAUDE_CODE_PROJECT_ID);
+      const success = await updateTaskTitle(taskId, editTitle.trim(), CLAUDE_CODE_PROJECT_ID);
       if (success) {
         toast.success("Title updated");
-        setEditingSessionId(null);
+        setEditingTaskId(null);
         setEditTitle("");
-        await refreshSessions();
+        await refreshTasks();
       } else {
         toast.error("Failed to update title");
       }
@@ -163,7 +163,7 @@ export function ChatHistoryList({
             className="cursor-pointer"
             size="sm"
             variant="ghost"
-            onClick={refreshSessions}
+            onClick={refreshTasks}
             disabled={isRefreshing}
             aria-label="Refresh chat history"
           >
@@ -177,7 +177,7 @@ export function ChatHistoryList({
             variant="ghost"
             onClick={async () => {
               await Promise.resolve(onNewChat());
-              await refreshSessions();
+              await refreshTasks();
             }}
           >
             {/* NewChat */}
@@ -196,17 +196,17 @@ export function ChatHistoryList({
 
       {/* Session list */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {sessions.length === 0 ? (
+        {tasks.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground text-sm">No chat history yet</div>
         ) : (
-          sessions.map((session) => {
-            const isActive = session.taskId === currentTaskId;
-            const isEditing = editingSessionId === session.taskId;
+          tasks.map((task) => {
+            const isActive = task.taskId === currentTaskId;
+            const isEditing = editingTaskId === task.taskId;
 
             return (
               <div
-                key={session.taskId}
-                onClick={() => !isEditing && onTaskSelect(session.taskId)}
+                key={task.taskId}
+                onClick={() => !isEditing && onTaskSelect(task.taskId)}
                 className={cn(
                   "group p-3 rounded-md cursor-pointer transition-colors border",
                   isActive ? "bg-blue-50" : "bg-card hover:bg-accent/50 border-transparent",
@@ -224,7 +224,7 @@ export function ChatHistoryList({
                           autoFocus
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
-                              saveEdit(session.taskId, e);
+                              saveEdit(task.taskId, e);
                             } else if (e.key === "Escape") {
                               cancelEditing(e);
                             }
@@ -234,7 +234,7 @@ export function ChatHistoryList({
                           size="sm"
                           variant="ghost"
                           className="h-6 w-6 p-0"
-                          onClick={(e) => saveEdit(session.taskId, e)}
+                          onClick={(e) => saveEdit(task.taskId, e)}
                         >
                           <Check className="h-3 w-3" />
                         </Button>
@@ -249,11 +249,9 @@ export function ChatHistoryList({
                       </div>
                     ) : (
                       <>
-                        <div className="font-medium text-sm truncate">{session.title}</div>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                          <span>{formatDate(session.createTime)}</span>
-                          <span>•</span>
-                          <span>{session.messageCount ?? 0} msgs</span>
+                        <div className="font-medium text-sm truncate">{task.title}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {formatDate(task.updateTime ?? task.createTime)}
                         </div>
                       </>
                     )}
@@ -264,7 +262,7 @@ export function ChatHistoryList({
                         size="sm"
                         variant="ghost"
                         className="h-6 w-6 p-0"
-                        onClick={(e) => startEditing(session, e)}
+                        onClick={(e) => startEditing(task, e)}
                       >
                         <Edit2 className="h-3 w-3" />
                       </Button>
@@ -272,7 +270,7 @@ export function ChatHistoryList({
                         size="sm"
                         variant="ghost"
                         className="h-6 w-6 p-0 text-destructive"
-                        onClick={(e) => handleDelete(session, e)}
+                        onClick={(e) => handleDelete(task, e)}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -295,12 +293,12 @@ export function ChatHistoryList({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total sessions:</span>
-                <span className="font-mono font-medium">{sessions.length}</span>
+                <span className="text-muted-foreground">Total tasks:</span>
+                <span className="font-mono font-medium">{tasks.length}</span>
               </div>
             </div>
 
-            {sessions.length > 0 && (
+            {tasks.length > 0 && (
               <Button
                 variant="destructive"
                 className="w-full"

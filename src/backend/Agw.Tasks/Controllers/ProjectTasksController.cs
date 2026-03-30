@@ -55,6 +55,22 @@ public class ProjectTasksController : ControllerBase
         };
     }
 
+
+    [HttpDelete("{taskId:guid}")]
+    public async Task<IActionResult> DeleteAsync(Guid projectId, Guid taskId)
+    {
+        var result = await _projectTaskAppService.DeleteAsync(projectId, taskId);
+        return result.Type == ApplicationResultType.Success ? Ok() : NotFound();
+    }
+
+    [HttpDelete("{taskId:guid}/session")]
+    public async Task<IActionResult> ClearSessionAsync(Guid projectId, Guid taskId)
+    {
+        var result = await _projectTaskAppService.DeleteSessionAsync(projectId, taskId);
+        return result.Type == ApplicationResultType.Success ? NoContent() : NotFound();
+    }
+
+
     [HttpPut("{taskId:guid}/title")]
     public async Task<IActionResult> UpdateTitleAsync(
         Guid projectId,
@@ -71,25 +87,6 @@ public class ProjectTasksController : ControllerBase
         };
     }
 
-    [HttpDelete("{taskId:guid}/session")]
-    public async Task<IActionResult> DeleteSessionAsync(Guid projectId, Guid taskId)
-    {
-        var result = await _projectTaskAppService.DeleteSessionAsync(projectId, taskId);
-        return result.Type == ApplicationResultType.Success ? NoContent() : NotFound();
-    }
-
-    [HttpPost("{taskId:guid}/reorder")]
-    public async Task<IActionResult> ReorderAsync(Guid projectId, Guid taskId, [FromBody] ProjectTaskReorderRequest request)
-    {
-        var user = User?.Identity?.Name ?? "system";
-        var result = await _projectTaskAppService.ReorderAsync(projectId, taskId, request.UpdateTimeUtc, user);
-        return result.Type switch
-        {
-            ApplicationResultType.Success when result.Value != null => Ok(result.Value),
-            ApplicationResultType.NotFound => NotFound(),
-            _ => BadRequest(result.Error ?? "Only pending tasks can be reordered.")
-        };
-    }
 
     [HttpPost("{taskId:guid}/cancel")]
     public async Task<IActionResult> CancelAsync(Guid projectId, Guid taskId)
@@ -102,12 +99,5 @@ public class ProjectTasksController : ControllerBase
             ApplicationResultType.NotFound => NotFound(),
             _ => BadRequest(result.Error ?? "Task cannot be canceled in its current state.")
         };
-    }
-
-    [HttpDelete("{taskId:guid}")]
-    public async Task<IActionResult> DeleteAsync(Guid projectId, Guid taskId)
-    {
-        var result = await _projectTaskAppService.DeleteAsync(projectId, taskId);
-        return result.Type == ApplicationResultType.Success ? Ok() : NotFound();
     }
 }

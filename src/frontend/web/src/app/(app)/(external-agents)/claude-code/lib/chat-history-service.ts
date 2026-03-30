@@ -2,21 +2,28 @@
 
 import type { AiMessage } from "@/types";
 
-export interface ChatSessionRecordSummary {
+export interface TaskSummary {
   taskId: string;
   projectId: string;
-  sessionId: string;
   title: string;
-  messageCount: number;
   createTime: string;
   updateTime?: string | null;
 }
 
-export interface ChatSessionRecordDetails extends ChatSessionRecordSummary {
+export interface TaskRecordDetails extends TaskSummary {
   messages: AiMessage[];
 }
 
 export const CLAUDE_CODE_PROJECT_ID = "11111111-1111-1111-1111-000000000002";
+type ProjectTaskSummaryResponse = {
+  id: string;
+  projectId: string;
+  contextId: string;
+  title: string;
+  createTime: string;
+  updateTime?: string | null;
+};
+
 type ProjectTaskHistoryResponse = {
   id: string;
   projectId: string;
@@ -46,19 +53,17 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
   return (await response.json()) as T;
 }
 
-function toChatSessionSummary(task: ProjectTaskHistoryResponse): ChatSessionRecordSummary {
+function toChatSessionSummary(task: ProjectTaskSummaryResponse): TaskSummary {
   return {
     taskId: task.id,
     projectId: task.projectId,
-    sessionId: task.sessionId || task.contextId,
     title: task.title,
-    messageCount: task.messageCount ?? 0,
     createTime: task.createTime,
     updateTime: task.updateTime ?? null,
   };
 }
 
-function toChatSessionDetails(task: ProjectTaskHistoryResponse): ChatSessionRecordDetails {
+function toChatSessionDetails(task: ProjectTaskHistoryResponse): TaskRecordDetails {
   const summary = toChatSessionSummary(task);
   return {
     ...summary,
@@ -78,8 +83,8 @@ async function findTaskByTaskId(
   return session;
 }
 
-async function clearTaskSessionById(taskId: string, projectId: string): Promise<boolean> {
-  const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(taskId)}/session`);
+async function clearTaskByTaskId(taskId: string, projectId: string): Promise<boolean> {
+  const url = buildTasksEndpoint(projectId, `/${encodeURIComponent(taskId)}`);
   const response = await fetch(url, { method: "DELETE" });
   if (response.status === 404) {
     return false;
@@ -91,9 +96,9 @@ async function clearTaskSessionById(taskId: string, projectId: string): Promise<
   return true;
 }
 
-export async function getAllTasksSessions(projectId: string): Promise<ChatSessionRecordSummary[]> {
+export async function getAllTasks(projectId: string): Promise<TaskSummary[]> {
   const url = buildTasksEndpoint(projectId);
-  const tasks = await fetchJson<ProjectTaskHistoryResponse[]>(url);
+  const tasks = await fetchJson<ProjectTaskSummaryResponse[]>(url);
   return tasks.map(toChatSessionSummary);
 }
 
@@ -110,7 +115,7 @@ export async function getTaskSessions(
 export async function getSessionByTaskId(
   taskId: string | null | undefined,
   projectId: string,
-): Promise<ChatSessionRecordDetails | null> {
+): Promise<TaskRecordDetails | null> {
   if (!taskId) {
     return null;
   }
@@ -125,14 +130,14 @@ export async function getSessionByTaskId(
   return toChatSessionDetails(task);
 }
 
-export async function deleteTaskSessionByTaskId(
+export async function deleteTaskById(
   taskId: string,
   projectId: string,
 ): Promise<boolean> {
-  if (!taskId) {
+  if (!taskId || !projectId) {
     return false;
   }
-  return await clearTaskSessionById(taskId, projectId);
+  return await clearTaskByTaskId(taskId, projectId);
 }
 
 export async function updateTaskTitle(
@@ -160,7 +165,7 @@ export async function updateTaskTitle(
   return true;
 }
 
-export async function clearAllSessions(projectId: string): Promise<void> {
-  const sessions = await getAllTasksSessions(projectId);
-  await Promise.all(sessions.map((session) => clearTaskSessionById(session.taskId, projectId)));
+export async function clearAllTasks(projectId: string): Promise<void> {
+  const tasks = await getAllTasks(projectId);
+  await Promise.all(tasks.map((session) => clearTaskByTaskId(session.taskId, projectId)));
 }

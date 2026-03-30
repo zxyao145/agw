@@ -18,6 +18,22 @@ public record ProjectTaskUpdateRequest(string Description, string Input);
 
 public record ProjectTaskReorderRequest(DateTime UpdateTimeUtc);
 
+public record ProjectTaskSummaryResponse(
+    Guid Id,
+    string ProjectId,
+    string ContextId,
+    AgentRuntimeType AgentType,
+    Guid? AgentflowId,
+    Guid? AgentId,
+    ProjectTaskStatus Status,
+    string Title,
+    string Description,
+    string? ErrorMessage,
+    DateTime CreateTime,
+    DateTime? UpdateTime,
+    DateTime? FinishedTime,
+    DateTime? StartedTime);
+
 public record ProjectTaskResponse(
     Guid Id,
     string ProjectId,

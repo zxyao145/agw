@@ -1,4 +1,6 @@
 using Agw.Agents.Application;
+using Agw.Agents.ExternalAgents;
+using Agw.Appliaction.ExternalAgents;
 using Agw.Domain.Entities;
 using Agw.Domain.Services;
 using Agw.Domain.Services.Agents;
@@ -54,6 +56,7 @@ public class AgentRuntimeService: RuntimService
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
     private readonly IWebHostEnvironment _webHostEnvironment;
+    private readonly ClaudeCodeService _claudeCodeService;
 
     public AgentRuntimeService(
         IRepository<Agent> agentRepository,
@@ -74,7 +77,8 @@ public class AgentRuntimeService: RuntimService
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
         IWebHostEnvironment webHostEnvironment,
-        ILogger<AgentRuntimeService> logger)
+        ILogger<AgentRuntimeService> logger,
+        ClaudeCodeService claudeCodeService)
     {
         _agentRepository = agentRepository;
         _modelProviderRepository = modelProviderRepository;
@@ -95,6 +99,7 @@ public class AgentRuntimeService: RuntimService
         _providerSessionState = providerSessionState;
         _webHostEnvironment = webHostEnvironment;
         _logger = logger;
+        _claudeCodeService = claudeCodeService;
     }
 
     public Task<IReadOnlyList<Agent>> ListAgentsAsync() =>
@@ -304,26 +309,39 @@ public class AgentRuntimeService: RuntimService
             return null;
         }
 
+        //if(agent.Name == "ClaudeCode")
+        //{
+        //    var request = JsonUtil.Deserialize<ClaudeCodeSettingRequest>(extraSetting ?? "")
+        //        ?? new ClaudeCodeSettingRequest();
+        //    request = request with
+        //    {
+        //        SessionId = task.Id.ToString()
+        //    };
+        //    var session = await _claudeCodeService.InitializeSessionAsync(request, cancellationToken);
+        //    return session;
+        //}
+
+
         Guid projectId = task.ProjectId;
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, extraSetting);
-        string sessionId = task.Id.ToString();
+        string taskId = task.Id.ToString();
 
         var resolvedContextId = TaskUtil.GenContextId();
-        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, sessionId, projectId, cancellationToken);
+        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, taskId, projectId, cancellationToken);
         if (aiAgent == null)
         {
             return null;
         }
 
-        var agentSession = await GetOrCreateThreadAsync(agent, aiAgent, sessionId, cancellationToken);
-        _providerSessionState.InitializeSessionState(agentSession, resolvedContextId, sessionId, ProjectDefaults.GetDefaultProjectIdentifier(projectId));
+        var agentSession = await GetOrCreateThreadAsync(agent, aiAgent, taskId, cancellationToken);
+        _providerSessionState.InitializeSessionState(agentSession, resolvedContextId, taskId, ProjectDefaults.GetDefaultProjectIdentifier(projectId));
         return new AgentExecSession(
             aiAgent,
             agentSession,
             projectId: projectId,
             contextId: resolvedContextId,
-            sessionId,
+            taskId,
             AgentRuntimeType.Agent,
             agentId,
             agent.Name,
@@ -350,7 +368,7 @@ public class AgentRuntimeService: RuntimService
         }
         finally
         {
-            await SaveSessionThreadStateAsync(session._sessionId, session.Agent, session.Session, cancellationToken);
+            await SaveSessionThreadStateAsync(session._taskId, session.Agent, session.Session, cancellationToken);
         }
     }
 

@@ -41,7 +41,7 @@ public class ProjectTaskAppService
 
     public Task<ProjectTask?> GetTaskAsync(Guid id) => _taskRepository.GetByIdAsync(id);
 
-    public async Task<IReadOnlyList<ProjectTaskResponse>> ListResponsesAsync(Guid projectId)
+    public async Task<IReadOnlyList<ProjectTaskSummaryResponse>> ListResponsesAsync(Guid projectId)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
@@ -55,13 +55,9 @@ public class ProjectTaskAppService
             return [];
         }
 
-        var recordsByContext = await GetRecordsByContextAsync(tasks.Select(task => task.ContextId));
         return tasks
             .OrderByDescending(task => task.UpdateTime ?? task.CreateTime)
-            .Select(task => ToResponse(
-                task,
-                recordsByContext.GetValueOrDefault(task.ContextId) ?? [],
-                null))
+            .Select(ToSummaryResponse)
             .ToList();
     }
 
@@ -426,30 +422,9 @@ public class ProjectTaskAppService
         return _taskRecordDomainService.Order(records);
     }
 
-    private async Task<Dictionary<string, List<TaskRecord>>> GetRecordsByContextAsync(IEnumerable<string> contextIds)
+    private static ProjectTaskSummaryResponse ToSummaryResponse(
+        ProjectTask task)
     {
-        var values = contextIds
-            .Where(contextId => !string.IsNullOrWhiteSpace(contextId))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        if (values.Length == 0)
-        {
-            return [];
-        }
-
-        var records = await _recordRepository.ListAsync(record => values.Contains(record.ContextId));
-        return _taskRecordDomainService.GroupByContext(records);
-    }
-
-    private static ProjectTaskResponse ToResponse(
-        ProjectTask task,
-        IReadOnlyList<TaskRecord> records,
-        IReadOnlyList<AgwMessage>? messages)
-    {
-        var latestRecord = records.LastOrDefault();
-        var latestUserRecord = records
-            .LastOrDefault(record => record.ToChatMessage()?.Role == ChatRole.User);
         var responseAgentId = task.AgentType == AgentRuntimeType.Agent
             ? task.AgentId
             : null;
@@ -457,7 +432,7 @@ public class ProjectTaskAppService
             ? task.AgentId
             : null;
 
-        return new ProjectTaskResponse(
+        return new ProjectTaskSummaryResponse(
             task.Id,
             task.ProjectId.Normalize(),
             task.ContextId,
@@ -465,15 +440,39 @@ public class ProjectTaskAppService
             responseAgentflowId,
             responseAgentId,
             task.Status,
-            latestRecord?.SessionId ?? task.ContextId,
             task.Title,
             task.Description,
-            GetInputText(latestUserRecord),
-            task.ErrorMessage ?? latestRecord?.Error,
+            task.ErrorMessage,
             task.CreateTime,
             task.UpdateTime,
-            task.Status == ProjectTaskStatus.Pending ? null : task.CreateTime,
             task.FinishedTime,
+            GetStartedTime(task));
+    }
+
+    private static ProjectTaskResponse ToResponse(
+        ProjectTask task,
+        IReadOnlyList<TaskRecord> records,
+        IReadOnlyList<AgwMessage>? messages)
+    {
+        var summary = ToSummaryResponse(task);
+
+        return new ProjectTaskResponse(
+            summary.Id,
+            summary.ProjectId,
+            summary.ContextId,
+            summary.AgentType,
+            summary.AgentflowId,
+            summary.AgentId,
+            summary.Status,
+            records.LastOrDefault()?.SessionId ?? task.ContextId,
+            summary.Title,
+            summary.Description,
+            GetInputText(records.LastOrDefault(record => record.ToChatMessage()?.Role == ChatRole.User)),
+            task.ErrorMessage ?? records.LastOrDefault()?.Error,
+            summary.CreateTime,
+            summary.UpdateTime,
+            GetStartedTime(task),
+            summary.FinishedTime,
             CountMessages(records),
             messages);
     }
@@ -492,6 +491,9 @@ public class ProjectTaskAppService
 
     private static int CountMessages(TaskRecord record) =>
         record.ToChatMessage() == null ? 0 : 1;
+
+    private static DateTime? GetStartedTime(ProjectTask task) =>
+        task.Status == ProjectTaskStatus.Pending ? null : task.CreateTime;
 
     private static string GetInputText(TaskRecord? record)
     {

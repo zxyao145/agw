@@ -19,7 +19,7 @@ import { ArrowUp, Eraser, Square } from "lucide-react";
 import { Separator } from "../ui/separator";
 import { useQuery } from "@tanstack/react-query";
 import {
-  deleteTaskSessionByTaskId,
+  deleteTaskById,
   getSessionByTaskId,
 } from "@/app/(app)/(external-agents)/claude-code/lib/chat-history-service";
 
@@ -169,7 +169,7 @@ export function Conversation({
       return;
     }
 
-    const success = await deleteTaskSessionByTaskId(taskId, projectId);
+    const success = await deleteTaskById(taskId, projectId);
     if (success) {
       setMessages([]);
     }

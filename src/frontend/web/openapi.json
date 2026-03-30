@@ -1877,90 +1877,6 @@
         }
       }
     },
-    "/api/projects/{projectId}/tasks/{taskId}/session": {
-      "delete": {
-        "tags": [
-          "ProjectTasks"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/tasks/{taskId}/reorder": {
-      "post": {
-        "tags": [
-          "ProjectTasks"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskReorderRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskReorderRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskReorderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/projects/{projectId}/tasks/{taskId}/cancel": {
       "post": {
         "tags": [
@@ -1993,129 +1909,31 @@
         }
       }
     },
-    "/api/session-records": {
-      "get": {
-        "tags": [
-          "SessionRecords"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/session-records/{sessionId}": {
-      "get": {
-        "tags": [
-          "SessionRecords"
-        ],
-        "parameters": [
-          {
-            "name": "sessionId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "projectId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
+    "/api/projects/{projectId}/tasks/{taskId}/session": {
       "delete": {
         "tags": [
-          "SessionRecords"
+          "ProjectTasks"
         ],
         "parameters": [
           {
-            "name": "sessionId",
+            "name": "projectId",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           },
           {
-            "name": "projectId",
-            "in": "query",
+            "name": "taskId",
+            "in": "path",
+            "required": true,
             "schema": {
               "type": "string",
               "format": "uuid"
             }
           }
         ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/session-records/{sessionId}/title": {
-      "put": {
-        "tags": [
-          "SessionRecords"
-        ],
-        "parameters": [
-          {
-            "name": "sessionId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "projectId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionRecordTitleUpdateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionRecordTitleUpdateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionRecordTitleUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "description": "OK"
@@ -2982,18 +2800,6 @@
           }
         }
       },
-      "ProjectTaskReorderRequest": {
-        "required": [
-          "updateTimeUtc"
-        ],
-        "type": "object",
-        "properties": {
-          "updateTimeUtc": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
       "ProjectTaskUpdateRequest": {
         "required": [
           "description",
@@ -3222,9 +3028,6 @@
     },
     {
       "name": "ProjectTasks"
-    },
-    {
-      "name": "SessionRecords"
     }
   ]
 }

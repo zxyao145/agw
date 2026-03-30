@@ -52,7 +52,7 @@ type ProjectDto = {
   updateTime?: string | null;
 };
 
-type ProjectTaskDto = {
+type ProjectTaskSummaryDto = {
   id: string;
   projectId: string;
   contextId: string;
@@ -60,13 +60,19 @@ type ProjectTaskDto = {
   agentflowId?: string | null;
   agentId?: string | null;
   status: number;
+  title: string;
   description: string;
-  input: string;
   errorMessage?: string | null;
   createTime?: string | null;
   updateTime?: string | null;
   startedTime?: string | null;
   finishedTime?: string | null;
+};
+
+type ProjectTaskDto = ProjectTaskSummaryDto & {
+  sessionId: string;
+  input: string;
+  messageCount: number;
 };
 
 function formatDate(value?: string | null): string {
@@ -149,7 +155,7 @@ export default function ProjectDetailsPage() {
     queryFn: async () => {
       return (await apiGet("/api/projects/{projectId}/tasks", {
         params: { path: { projectId } },
-      } as never)) as unknown as ProjectTaskDto[];
+      } as never)) as unknown as ProjectTaskSummaryDto[];
     },
   });
 
@@ -182,6 +188,7 @@ export default function ProjectDetailsPage() {
   const [editTaskId, setEditTaskId] = React.useState<string | null>(null);
   const [editTaskDescription, setEditTaskDescription] = React.useState("");
   const [editTaskInput, setEditTaskInput] = React.useState("");
+  const [loadingEditTaskId, setLoadingEditTaskId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const p = projectQuery.data;
@@ -344,6 +351,27 @@ export default function ProjectDetailsPage() {
       return bt - at;
     });
   }, [tasksQuery.data]);
+
+  const openEditTask = React.useCallback(
+    async (task: ProjectTaskSummaryDto) => {
+      setLoadingEditTaskId(task.id);
+      try {
+        const detail = (await apiGet("/api/projects/{projectId}/tasks/{taskId}", {
+          params: { path: { projectId, taskId: task.id } },
+        } as never)) as unknown as ProjectTaskDto;
+
+        setEditTaskId(detail.id);
+        setEditTaskDescription(detail.description ?? task.description ?? "");
+        setEditTaskInput(detail.input ?? "");
+        setEditTaskOpen(true);
+      } catch (error) {
+        toast.error(`Load task failed: ${getApiErrorMessage(error)}`);
+      } finally {
+        setLoadingEditTaskId(null);
+      }
+    },
+    [projectId],
+  );
 
   return (
     <div className="space-y-6 w-full">
@@ -628,16 +656,11 @@ export default function ProjectDetailsPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
-                              setEditTaskId(t.id);
-                              setEditTaskDescription(t.description ?? "");
-                              setEditTaskInput(t.input ?? "");
-                              setEditTaskOpen(true);
-                            }}
-                            disabled={!isPending}
+                            onClick={() => void openEditTask(t)}
+                            disabled={!isPending || loadingEditTaskId === t.id}
                             title={isPending ? "Edit task" : "Only pending tasks can be edited"}
                           >
-                            Edit
+                            {loadingEditTaskId === t.id ? "Loading..." : "Edit"}
                           </Button>
 
                           <Button

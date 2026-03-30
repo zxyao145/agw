@@ -9,7 +9,7 @@ import ColResizeSplit from "../split-layout";
 import {
   CLAUDE_CODE_PROJECT_ID,
   getSessionByTaskId,
-  type ChatSessionRecordDetails,
+  type TaskRecordDetails,
 } from "../../lib/chat-history-service";
 import {
   Drawer,
@@ -58,7 +58,7 @@ export function Chat({
 
   const handleTaskSelect = async (taskId: string) => {
     try {
-      const details: ChatSessionRecordDetails | null = await getSessionByTaskId(
+      const details: TaskRecordDetails | null = await getSessionByTaskId(
         taskId,
         CLAUDE_CODE_PROJECT_ID,
       );

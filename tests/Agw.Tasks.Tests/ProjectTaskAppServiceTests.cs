@@ -90,6 +90,72 @@ public class ProjectTaskAppServiceTests
         Assert.Equal("Run scheduled sync", record.GetText());
     }
 
+    [Fact]
+    public async Task ListResponsesAsync_ReturnsTaskOnlySummaryWithoutTaskRecords()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = new DbContextOptionsBuilder<LlmDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+
+        await using (var setupContext = new LlmDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.NewGuid();
+        await using (var seedContext = new LlmDbContext(options))
+        {
+            seedContext.Projects.Add(new Project
+            {
+                Id = projectId,
+                Name = "Jobs Project",
+                Type = ProjectType.UserDefined,
+                Enable = true,
+                CreateBy = "tester",
+                CreateTime = DateTime.UtcNow
+            });
+
+            seedContext.ProjectTasks.Add(new ProjectTask
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                ContextId = "context-1",
+                AgentType = AgentRuntimeType.Agent,
+                AgentId = Guid.NewGuid(),
+                Title = "Nightly sync",
+                Description = "Nightly sync",
+                Status = ProjectTaskStatus.Succeeded,
+                CreateBy = "tester",
+                CreateTime = DateTime.UtcNow,
+                UpdateBy = "tester",
+                UpdateTime = DateTime.UtcNow,
+                FinishedTime = DateTime.UtcNow
+            });
+
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new LlmDbContext(options);
+        var service = CreateService(dbContext);
+
+        var responses = await service.ListResponsesAsync(projectId);
+
+        var response = Assert.Single(responses);
+        Assert.IsType<ProjectTaskSummaryResponse>(response);
+        Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("Messages"));
+        Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("SessionId"));
+        Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("Input"));
+        Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("MessageCount"));
+        Assert.Equal("Nightly sync", response.Description);
+        Assert.Equal(ProjectTaskStatus.Succeeded, response.Status);
+    }
+
     private static ProjectTaskAppService CreateService(LlmDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);

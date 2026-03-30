@@ -2,13 +2,16 @@ using Agw.Agents.Application;
 using Agw.Api.Contracts;
 using Agw.Appliaction.Services.Agentflows;
 using Agw.Appliaction.Services.Agents;
+using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
+using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using System.Net.WebSockets;
 using System.Text;
@@ -54,8 +57,8 @@ public partial class AgentExecutionsController : ControllerBase
         using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
         using var sendLock = new SemaphoreSlim(1, 1);
 
-        ActiveExecution? activeExecution = null;
         AgentExecSession? agentSession = null;
+        Task? execTask = null;
         SettingCommand? settings = null;
 
         try
@@ -87,8 +90,16 @@ public partial class AgentExecutionsController : ControllerBase
                         break;
 
                     case ExecCommand executionRequest:
-                        activeExecution = await ReleaseCompletedExecutionAsync(activeExecution);
-                        if (activeExecution != null) break;
+                        if (execTask is { IsCompleted: false })
+                        {
+                            await SendErrorAsync(
+                                webSocket, 
+                                "A request is already in progress. Wait for it to complete before starting a new one.",
+                                sendLock, 
+                                cancellationToken
+                                );
+                            break;
+                        }
 
                         var (task, contextError) = await ResolveTaskAsync(
                             id,
@@ -103,24 +114,17 @@ public partial class AgentExecutionsController : ControllerBase
                                 ExtractReason(contextError) ?? "Invalid request payload");
                             return;
                         }
-
-                        var (execution, session, error) = await StartExecAsync(
-                            id, task!, executionRequest, agentSession, settings,
-                            webSocket, sendLock, cancellationToken);
-
-                        if (execution == null)
+                        (agentSession, execTask) = await StartExecAsync(
+                           id, task!, executionRequest, agentSession, settings,
+                           webSocket, sendLock, cancellationToken);
+                        if (execTask != null)
                         {
-                            await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData,
-                                error ?? "Invalid request payload");
-                            return;
+                            ObserveActiveExecTask(execTask);
                         }
-
-                        activeExecution = execution;
-                        agentSession = session;
                         break;
 
                     case InterruptCommand interruptRequest:
-                        if (activeExecution == null)
+                        if (agentSession == null)
                         {
                             var message = string.IsNullOrWhiteSpace(interruptRequest.Reason)
                                 ? "No active request is currently running."
@@ -128,27 +132,66 @@ public partial class AgentExecutionsController : ControllerBase
                             await SendSystemMessageAsync(webSocket, sendLock, message, cancellationToken);
                             break;
                         }
-                        activeExecution.RequestInterrupt(interruptRequest.Reason);
+                        agentSession.CancelActiveRequest();
                         break;
                 }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation("Operation Canceled");
             await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Request cancelled");
         }
-        catch (WebSocketException)
+        catch (WebSocketException ex)
         {
+            _logger.LogError(ex, "Unexpected WebSocketException");
             await TryCloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "WebSocket Error");
-            activeExecution?.RequestInterrupt(null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error in WebSocket handler");
+            await SendErrorAsync(webSocket, $"Unexpected error: {ex.Message}", sendLock, cancellationToken);
+            await TryCloseAsync(webSocket, WebSocketCloseStatus.InternalServerError, "Unexpected error");
         }
         finally
         {
-            await DisposeActiveExecutionAsync(activeExecution, interruptIfRunning: true);
+            if (agentSession != null)
+            {
+                agentSession.CancelActiveRequest();
+            }
+            if (execTask != null)
+            {
+                await AwaitActiveExecTaskAsync(execTask);
+            }
             if (agentSession != null)
             {
                 await agentSession.DisposeAsync();
             }
+            _logger.LogDebug("WebSocket connection closed");
+        }
+    }
+
+    private void ObserveActiveExecTask(Task inputTask)
+    {
+        _ = inputTask.ContinueWith(
+            task =>
+            {
+                if (task.IsCanceled) return;
+                if (task.Exception != null)
+                {
+                    _logger.LogError(task.Exception, "Unhandled error while processing ClaudeCode input");
+                }
+            },
+            TaskScheduler.Default);
+    }
+
+    private async Task AwaitActiveExecTaskAsync(Task inputTask)
+    {
+        try { await inputTask; }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error while awaiting ClaudeCode input task");
         }
     }
 
@@ -180,7 +223,7 @@ public partial class AgentExecutionsController : ControllerBase
         await activeExecution.DisposeAsync();
     }
 
-    private async Task<(ActiveExecution? execution, AgentExecSession? session, string? error)> StartExecAsync(
+    private async Task<(AgentExecSession?, Task)> StartExecAsync(
         Guid id,
         ProjectTask task,
         ExecCommand request,
@@ -195,46 +238,41 @@ public partial class AgentExecutionsController : ControllerBase
         switch (request.AgentType)
         {
             case AgentRuntimeType.Agent:
-                var session = currentSession;
-                if (!CanReuseAgentSession(currentSession, request, task?.ContextId))
                 {
-                    if (currentSession != null)
+                    var session = currentSession;
+                    if (!CanReuseAgentSession(currentSession, request, task?.ContextId))
                     {
-                        await currentSession.DisposeAsync();
+                        if (currentSession != null)
+                        {
+                            await currentSession.DisposeAsync();
+                        }
+
+                        session = await _agentRuntimeService.CreateSessionAsync(
+                            id,
+                            task!,
+                            extraSetting: settings?.SettingContent,
+                            cancellationToken: cancellationToken);
                     }
 
-                    session = await _agentRuntimeService.CreateSessionAsync(
-                        id,
-                        task!,
-                        extraSetting: settings?.SettingContent,
-                        cancellationToken: cancellationToken);
-                }
+                    if (session == null)
+                    {
+                        executionCts.Dispose();
+                        return (null, Task.CompletedTask);
+                    }
 
-                if (session == null)
-                {
-                    executionCts.Dispose();
-                    return (null, null, "Agent not found.");
+                    Task execTask = ExecuteAgentStreamingAsync(session, request.Input, webSocket, sendLock, executionCts.Token);
+                    return (session, execTask);
                 }
-
-                return (
-                    new ActiveExecution(
-                        ExecuteAgentStreamingAsync(session, request.Input, webSocket, sendLock, executionCts.Token),
-                        executionCts,
-                        session),
-                    session,
-                    null);
 
             case AgentRuntimeType.Agentflow:
-                return (
-                    new ActiveExecution(
-                        ExecuteAgentflowStreamingAsync(id, request, task?.ContextId, webSocket, sendLock, executionCts.Token),
-                        executionCts),
-                    currentSession,
-                    null);
+                {
+                    Task execTask = ExecuteAgentflowStreamingAsync(id, request, task?.ContextId, webSocket, sendLock, executionCts.Token);
+                    return (null, execTask);
+                }
 
             default:
                 executionCts.Dispose();
-                return (null, currentSession, "Invalid AgentType.");
+                return (null, Task.CompletedTask);
         }
     }
 
@@ -270,7 +308,7 @@ public partial class AgentExecutionsController : ControllerBase
     {
         await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
                            id,
-                           request.SessionId ?? string.Empty,
+                           request.TaskId?.ToString() ?? string.Empty,
                            ExtractAgentflowInputText(request.Input),
                            cancellationToken,
                            ProjectDefaults.GetDefaultProjectIdentifier(request.ProjectId),
@@ -422,12 +460,12 @@ public partial class AgentExecutionsController : ControllerBase
         }
 
         var requestedSessionId = string.IsNullOrWhiteSpace(request.SessionId)
-            ? session._sessionId
+            ? session._taskId
             : request.SessionId;
         var requestedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(request.ProjectId);
         var requestedContextId = string.IsNullOrWhiteSpace(contextId) ? requestedSessionId : contextId;
 
-        return session._sessionId == requestedSessionId
+        return session._taskId == requestedSessionId
             && session._projectId == requestedProjectId
             && session._contextId == requestedContextId;
     }
@@ -528,5 +566,31 @@ public partial class AgentExecutionsController : ControllerBase
             AgwUriContent uri => uri.Uri.ToString(),
             _ => null
         };
+    }
+
+    private Task SendErrorAsync(
+        WebSocket webSocket, 
+        string errorMessage,
+        SemaphoreSlim sendLock,
+        CancellationToken cancellationToken
+        ) =>
+        SendJsonAsync(webSocket, CreateErrorMessage(errorMessage).Serialize(), sendLock, cancellationToken);
+
+
+    private static AgwMessage CreateErrorMessage(string errorMessage)
+    {
+        var content = new AgwErrorContent
+        {
+            Content = errorMessage
+        };
+
+        var payload = new AgwMessage
+            (
+                Guid.NewGuid().ToString(),
+                "$agw-server",
+                AiRole.System,
+                new List<AgwContent> { content }
+            );
+        return payload;
     }
 }

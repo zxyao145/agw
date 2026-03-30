@@ -16,7 +16,7 @@ import { ChatSession } from "@/components/message/chat-session";
 import {
   CLAUDE_CODE_PROJECT_ID,
   getSessionByTaskId,
-  type ChatSessionRecordDetails,
+  type TaskRecordDetails,
 } from "./lib/chat-history-service";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -358,6 +358,7 @@ export default function ClaudeCodePage() {
       baseUrl: apiBaseUrl.trim() || null,
       systemPrompt: null,
       maxTurns: null,
+      // permissionMode: permissionModeToValue[permissionMode] ?? permissionModeToValue.default,
       permissionMode: permissionModeToValue[permissionMode] ?? permissionModeToValue.default,
       environmentVariables: buildEnvironmentVariables(),
       taskId: taskId,
@@ -586,7 +587,7 @@ export default function ClaudeCodePage() {
 
   const handleHistorySelect = async (taskId: string) => {
     try {
-      const details: ChatSessionRecordDetails | null = await getSessionByTaskId(
+      const details: TaskRecordDetails | null = await getSessionByTaskId(
         taskId,
         CLAUDE_CODE_PROJECT_ID,
       );

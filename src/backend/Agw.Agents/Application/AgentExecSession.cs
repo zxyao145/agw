@@ -21,7 +21,7 @@ public sealed class AgentExecSession : IAsyncDisposable
     public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
     private readonly ILogger _logger;
-    public readonly string _sessionId;
+    public readonly string _taskId;
     public readonly Guid _projectId;
     public readonly string _contextId;
     private readonly AgentRuntimeType _agentType;
@@ -36,7 +36,7 @@ public sealed class AgentExecSession : IAsyncDisposable
         AgentSession thread,
         Guid projectId,
         string contextId,
-        string? sessionId,
+        string? taskId,
         AgentRuntimeType agentType,
         Guid? agentId,
         string? agentName,
@@ -49,7 +49,7 @@ public sealed class AgentExecSession : IAsyncDisposable
         Session = thread ?? throw new ArgumentNullException(nameof(thread));
         _projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         _contextId = contextId;
-        _sessionId = sessionId ?? Guid.NewGuid().ToString();
+        _taskId = taskId ?? Guid.NewGuid().ToString();
         _agentType = agentType;
         _agentId = agentId;
         _agentName = agentName;
@@ -131,7 +131,7 @@ public sealed class AgentExecSession : IAsyncDisposable
             }
         }
 
-        _logger.LogDebug("Saved thread state for session: {SessionId}", _sessionId);
+        _logger.LogDebug("Saved thread state for session: {SessionId}", _taskId);
     }
 
     public void UpdateThread(AgentSession newThread) => Session = newThread;
