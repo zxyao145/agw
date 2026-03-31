@@ -19,23 +19,24 @@ import {
   type TaskSummary,
 } from "@/api/task-client";
 import { cn } from "@/lib/utils";
-import { CLAUDE_CODE_PROJECT_ID } from "../../app/(app)/(external-agents)/claude-code/contants";
 
-interface ChatHistoryListProps {
+interface TaskHistoryListProps {
+  projectId: string;
   currentTaskId: string | null;
   onTaskSelect: (taskId: string) => void;
-  onNewChat: () => void;
+  onNewTask: () => void;
   onTaskDeleted: (taskId: string) => void;
-  onAllSessionsCleared: () => void;
+  onAllTasksDeleted: () => void;
 }
 
-export function ChatHistoryList({
+export function TaskHistoryList({
+  projectId,
   currentTaskId,
   onTaskSelect,
-  onNewChat,
+  onNewTask,
   onTaskDeleted,
-  onAllSessionsCleared,
-}: ChatHistoryListProps) {
+  onAllTasksDeleted
+}: TaskHistoryListProps) {
   const [tasks, setTasks] = React.useState<TaskSummary[]>([]);
   const [editingTaskId, setEditingTaskId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState("");
@@ -45,14 +46,14 @@ export function ChatHistoryList({
   const refreshTasks = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const latestTasks = await getAllTasks(CLAUDE_CODE_PROJECT_ID);
+      const latestTasks = await getAllTasks(projectId);
       setTasks(latestTasks);
     } catch (error) {
       console.error("Failed to load chat history:", error);
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [projectId]);
 
   React.useEffect(() => {
     void refreshTasks();
@@ -66,7 +67,7 @@ export function ChatHistoryList({
     // }
 
     try {
-      const success = await deleteTaskById(task.taskId, CLAUDE_CODE_PROJECT_ID);
+      const success = await deleteTaskById(task.taskId, projectId);
       if (success) {
         toast.success("Chat deleted successfully");
         if (task.taskId === currentTaskId) {
@@ -88,9 +89,9 @@ export function ChatHistoryList({
     }
 
     try {
-      await deleteAllTasks(CLAUDE_CODE_PROJECT_ID);
+      await deleteAllTasks(projectId);
       toast.success("All chats cleared");
-      onAllSessionsCleared();
+      onAllTasksDeleted();
       await refreshTasks();
     } catch (error) {
       console.error("Clear all error:", error);
@@ -119,7 +120,7 @@ export function ChatHistoryList({
     }
 
     try {
-      const success = await updateTaskTitle(taskId, editTitle.trim(), CLAUDE_CODE_PROJECT_ID);
+      const success = await updateTaskTitle(taskId, editTitle.trim(), projectId);
       if (success) {
         toast.success("Title updated");
         setEditingTaskId(null);
@@ -176,7 +177,7 @@ export function ChatHistoryList({
             size="sm"
             variant="ghost"
             onClick={async () => {
-              await Promise.resolve(onNewChat());
+              await Promise.resolve(onNewTask());
               await refreshTasks();
             }}
           >

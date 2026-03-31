@@ -54,10 +54,10 @@ const permissionModeToValue: Record<string, number> = {
   bypassPermissions: 3,
 };
 
-const ChatHistoryList = dynamic(
+const TaskHistoryList = dynamic(
   () =>
-    import("../../../../components/task/chat-history-list").then((mod) => ({
-      default: mod.ChatHistoryList,
+    import("../../../../components/task/task-list").then((mod) => ({
+      default: mod.TaskHistoryList,
     })),
   { ssr: false },
 );
@@ -624,21 +624,21 @@ export default function ClaudeCodePage() {
     settingsRequestSessionRef.current = null;
   };
 
-  const handleSessionDeleted = (deletedTaskId: string) => {
+  const handleTaskDeleted = (deletedTaskId: string) => {
     if (deletedTaskId !== taskId) {
       return;
     }
     clearActiveSessionState();
   };
 
-  const handleAllSessionsCleared = () => {
+  const handleAllTasksDeleted = () => {
     if (!taskId) {
       return;
     }
     clearActiveSessionState();
   };
 
-  const handleNewChat = () => {
+  const handleNewTask = () => {
     void initializeNewChat();
     setIsDrawerOpen(false);
   };
@@ -863,12 +863,13 @@ export default function ClaudeCodePage() {
           <ColResizeSplit>
             {!isMobile && isChatTab && showChatHistory && (
               <ColResizeSplit.Left minWidth={200} maxWidth={600}>
-                <ChatHistoryList
+                <TaskHistoryList
+                  projectId={CLAUDE_CODE_PROJECT_ID}
                   currentTaskId={taskId}
                   onTaskSelect={handleHistorySelect}
-                  onNewChat={handleNewChat}
-                  onTaskDeleted={handleSessionDeleted}
-                  onAllSessionsCleared={handleAllSessionsCleared}
+                  onNewTask={handleNewTask}
+                  onTaskDeleted={handleTaskDeleted}
+                  onAllTasksDeleted={handleAllTasksDeleted}
                 />
               </ColResizeSplit.Left>
             )}
@@ -990,12 +991,13 @@ export default function ClaudeCodePage() {
           </DrawerHeader>
           <div className="px-4 pb-6 h-full min-h-0 overflow-hidden">
             {drawerContent === "chat" && (
-              <ChatHistoryList
+              <TaskHistoryList
+                projectId={CLAUDE_CODE_PROJECT_ID}
                 currentTaskId={taskId}
                 onTaskSelect={handleHistorySelect}
-                onNewChat={handleNewChat}
-                onTaskDeleted={handleSessionDeleted}
-                onAllSessionsCleared={handleAllSessionsCleared}
+                onNewTask={handleNewTask}
+                onTaskDeleted={handleTaskDeleted}
+                onAllTasksDeleted={handleAllTasksDeleted}
               />
             )}
             {drawerContent === "files" && (
