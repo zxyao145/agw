@@ -1,5 +1,6 @@
 using Agw.Agents.Application;
 using Agw.Agents.ExternalAgents;
+using Agw.Api.Contracts;
 using Agw.Appliaction.ExternalAgents;
 using Agw.Domain.Entities;
 using Agw.Domain.Services;
@@ -249,6 +250,7 @@ public class AgentRuntimeService: RuntimService
         string? extraOverride = null,
         string? sessionId = null,
         Guid? projectId = null,
+        bool resume = false,
         CancellationToken cancellationToken = default)
     {
         if (agent.Type == AgentType.External)
@@ -271,7 +273,7 @@ public class AgentRuntimeService: RuntimService
 
                 if (!string.IsNullOrWhiteSpace(sessionId))
                 {
-                    if (await HasSessionRecordAsync(sessionId, projectId))
+                    if (resume)
                     {
                         ccOptions = ccOptions with
                         {
@@ -289,6 +291,10 @@ public class AgentRuntimeService: RuntimService
                         };
                     }
                 }
+                ccOptions = ccOptions with
+                {
+                    ChatHistoryProvider = _chatHistoryProvider,
+                };
 
                 return new ClaudeCodeAIAgent(ccOptions, _logger);
             }
@@ -300,7 +306,7 @@ public class AgentRuntimeService: RuntimService
     public async Task<AgentExecSession?> CreateSessionAsync(
         Guid agentId,
         ProjectTask task,
-        string? extraSetting,
+        SettingCommand settings,
         CancellationToken cancellationToken = default)
     {
         var agent = await _agentRepository.GetByIdAsync(agentId);
@@ -324,11 +330,11 @@ public class AgentRuntimeService: RuntimService
 
         Guid projectId = task.ProjectId;
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
-        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, extraSetting);
-        string taskId = task.Id.ToString();
+        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, settings.SettingContent);
+        string taskId = task.Id.Normalize();
 
         var resolvedContextId = TaskUtil.GenContextId();
-        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, taskId, projectId, cancellationToken);
+        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, taskId, projectId, resume: settings.Resume, cancellationToken);
         if (aiAgent == null)
         {
             return null;
@@ -448,7 +454,7 @@ public class AgentRuntimeService: RuntimService
             AgentSession session;
             if (string.IsNullOrWhiteSpace(sessionId))
             {
-                sessionId = Guid.NewGuid().ToString();
+                sessionId = Guid.NewGuid().Normalize();
                 session = await aiAgent.CreateSessionAsync();
             }
             else

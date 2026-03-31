@@ -1,4 +1,5 @@
 using Agw.Domain.Entities;
+using Agw.Shared;
 using Agw.Shared.Enums;
 
 namespace Agw.Domain.Services.Agents;
@@ -11,7 +12,7 @@ public class AgentDomainService
 
         EnsureModelProviderIsPresentWhenRequired(agent);
         agent.Id = agent.Id == Guid.Empty ? Guid.NewGuid() : agent.Id;
-        agent.Name = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id.ToString() : agent.Name;
+        agent.Name = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id.Normalize() : agent.Name;
         agent.CreateBy = user;
         agent.CreateTime = DateTime.UtcNow;
     }
@@ -43,7 +44,7 @@ public class AgentDomainService
         }
 
         EnsureModelProviderIsPresentWhenRequired(existing);
-        existing.Name = string.IsNullOrWhiteSpace(existing.Name) ? existing.Id.ToString() : existing.Name;
+        existing.Name = string.IsNullOrWhiteSpace(existing.Name) ? existing.Id.Normalize() : existing.Name;
         existing.UpdateBy = user;
         existing.UpdateTime = DateTime.UtcNow;
     }

@@ -100,4 +100,19 @@ public class ProjectTasksController : ControllerBase
             _ => BadRequest(result.Error ?? "Task cannot be canceled in its current state.")
         };
     }
+
+
+
+    [HttpPost("{taskId:guid}/reorder")]
+    public async Task<IActionResult> ReorderAsync(Guid projectId, Guid taskId, [FromBody] ProjectTaskReorderRequest request)
+    {
+        var user = User?.Identity?.Name ?? "system";
+        var result = await _projectTaskAppService.ReorderAsync(projectId, taskId, request.UpdateTimeUtc, user);
+        return result.Type switch
+        {
+            ApplicationResultType.Success when result.Value != null => Ok(result.Value),
+            ApplicationResultType.NotFound => NotFound(),
+            _ => BadRequest(result.Error ?? "Only pending tasks can be reordered.")
+        };
+    }
 }

@@ -788,7 +788,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/executions/{id}/ws": {
+    "/api/executions/{agentId}/ws": {
         parameters: {
             query?: never;
             header?: never;
@@ -800,7 +800,7 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    id: string;
+                    agentId: string;
                 };
                 cookie?: never;
             };
@@ -2106,6 +2106,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{projectId}/tasks/{taskId}/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: string;
+                    taskId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{projectId}/tasks/{taskId}/title": {
         parameters: {
             query?: never;
@@ -2184,7 +2220,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{projectId}/tasks/{taskId}/session": {
+    "/api/projects/{projectId}/tasks/{taskId}/reorder": {
         parameters: {
             query?: never;
             header?: never;
@@ -2193,8 +2229,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
-        delete: {
+        post: {
             parameters: {
                 query?: never;
                 header?: never;
@@ -2204,7 +2239,13 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProjectTaskReorderRequest"];
+                    "text/json": components["schemas"]["ProjectTaskReorderRequest"];
+                    "application/*+json": components["schemas"]["ProjectTaskReorderRequest"];
+                };
+            };
             responses: {
                 /** @description OK */
                 200: {
@@ -2215,6 +2256,7 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2420,6 +2462,10 @@ export interface components {
             title?: null | string;
             systemPrompt?: null | string;
             contextId?: null | string;
+        };
+        ProjectTaskReorderRequest: {
+            /** Format: date-time */
+            updateTimeUtc: string;
         };
         ProjectTaskUpdateRequest: {
             description: string;

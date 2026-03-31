@@ -12,14 +12,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  CLAUDE_CODE_PROJECT_ID,
   deleteTaskById,
   updateTaskTitle,
-  clearAllTasks,
+  deleteAllTasks,
   getAllTasks,
   type TaskSummary,
-} from "../../lib/chat-history-service";
+} from "@/api/task-client";
 import { cn } from "@/lib/utils";
+import { CLAUDE_CODE_PROJECT_ID } from "../../contants";
 
 interface ChatHistoryListProps {
   currentTaskId: string | null;
@@ -88,7 +88,7 @@ export function ChatHistoryList({
     }
 
     try {
-      await clearAllTasks(CLAUDE_CODE_PROJECT_ID);
+      await deleteAllTasks(CLAUDE_CODE_PROJECT_ID);
       toast.success("All chats cleared");
       onAllSessionsCleared();
       await refreshTasks();

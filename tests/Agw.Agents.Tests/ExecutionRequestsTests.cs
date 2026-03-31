@@ -10,21 +10,33 @@ public class ExecutionRequestsTests
     [Fact]
     public void Deserialize_SettingCommand_ReturnsSettingCommand()
     {
+        var projectId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
         const string json = """
                             {
                               "type": "SettingCommand",
-                              "settingContent": "{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}"
+                              "settingContent": "{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}",
+                              "projectId": "__PROJECT_ID__",
+                              "taskId": "__TASK_ID__",
+                              "resume": true
                             }
                             """;
+        var payload = json
+            .Replace("__PROJECT_ID__", projectId.ToString())
+            .Replace("__TASK_ID__", taskId.ToString());
 
-        var request = JsonUtil.Deserialize<AgentRunCommand>(json);
+        var request = JsonUtil.Deserialize<AgentRunCommand>(payload);
 
         var settingRequest = Assert.IsType<SettingCommand>(request);
         Assert.Equal("{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}", settingRequest.SettingContent);
+        Assert.Equal(projectId, settingRequest.ProjectId);
+        Assert.Equal(taskId, settingRequest.TaskId);
+        Assert.Equal(taskId.ToString(), settingRequest.SessionId);
+        Assert.True(settingRequest.Resume);
     }
 
     [Fact]
-    public void Deserialize_ExecCommand_WithoutSettingCommand_ReturnsExecutionCommand()
+    public void Deserialize_ExecCommand_ReturnsExecutionCommand()
     {
         const string json = """
                             {
@@ -39,10 +51,7 @@ public class ExecutionRequestsTests
                                     "content": "hello"
                                   }
                                 ]
-                              },
-                              "sessionId": "session-1",
-                              "projectId": null,
-                              "taskId": null
+                              }
                             }
                             """;
 
@@ -50,8 +59,6 @@ public class ExecutionRequestsTests
 
         var executionRequest = Assert.IsType<ExecCommand>(request);
         Assert.Equal(AgentRuntimeType.Agent, executionRequest.AgentType);
-        Assert.Equal("session-1", executionRequest.SessionId);
-        Assert.Null(executionRequest.TaskId);
         var textContent = Assert.IsType<AgwTextContent>(Assert.Single(executionRequest.Input.Contents));
         Assert.Equal("hello", textContent.Content);
     }

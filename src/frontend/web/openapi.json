@@ -596,14 +596,14 @@
         }
       }
     },
-    "/api/executions/{id}/ws": {
+    "/api/executions/{agentId}/ws": {
       "get": {
         "tags": [
           "AgentExecutions"
         ],
         "parameters": [
           {
-            "name": "id",
+            "name": "agentId",
             "in": "path",
             "required": true,
             "schema": {
@@ -1825,6 +1825,38 @@
         }
       }
     },
+    "/api/projects/{projectId}/tasks/{taskId}/session": {
+      "delete": {
+        "tags": [
+          "ProjectTasks"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/projects/{projectId}/tasks/{taskId}/title": {
       "put": {
         "tags": [
@@ -1909,8 +1941,8 @@
         }
       }
     },
-    "/api/projects/{projectId}/tasks/{taskId}/session": {
-      "delete": {
+    "/api/projects/{projectId}/tasks/{taskId}/reorder": {
+      "post": {
         "tags": [
           "ProjectTasks"
         ],
@@ -1934,6 +1966,26 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectTaskReorderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectTaskReorderRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectTaskReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -2797,6 +2849,18 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "ProjectTaskReorderRequest": {
+        "required": [
+          "updateTimeUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "updateTimeUtc": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

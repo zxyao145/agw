@@ -7,7 +7,7 @@ public class TaskUtil
     public static string GenContextId()
     {
         var contextId = Activity.Current?.TraceId.ToString();
-        contextId ??= Guid.NewGuid().Normalize();
+        contextId ??= Guid.NewGuid().ToString("N");
         return contextId;
     }
 }

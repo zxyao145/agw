@@ -1,4 +1,5 @@
-﻿using Agw.Shared.Models;
+﻿using Agw.Shared;
+using Agw.Shared.Models;
 using Microsoft.Extensions.AI;
 using System;
 using System.Collections.Generic;
@@ -21,7 +22,7 @@ public class RuntimService
         };
 
         var payload = new AgwMessage(
-            Guid.NewGuid().ToString(),
+            Guid.NewGuid().Normalize(),
             "$agw-server",
             AiRole.System,
             new List<AgwContent> { content });

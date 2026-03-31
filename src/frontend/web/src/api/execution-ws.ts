@@ -5,9 +5,11 @@ export type ExecutionWsUserInput = Pick<AiMessage, "messageId" | "author" | "con
 export type ExecutionWsRequest = {
   agentType: number;
   input: ExecutionWsUserInput;
+  projectId: string;
+  settingContent?: string;
   sessionId?: string | null;
-  projectId?: string | null;
   taskId?: string | null;
+  resume?: boolean;
 };
 
 type ExecutionWsResultStatus = "completed" | "interrupted" | "cancelled" | "failed";
@@ -72,8 +74,19 @@ function openExecutionWebSocket(
     ws.onopen = () => {
       ws.send(
         JSON.stringify({
+          type: "SettingCommand",
+          settingContent: request.settingContent ?? "{}",
+          projectId: request.projectId,
+          taskId: request.taskId ?? null,
+          sessionId: request.sessionId ?? null,
+          resume: request.resume ?? false,
+        }),
+      );
+      ws.send(
+        JSON.stringify({
           type: "ExecCommand",
-          ...request,
+          agentType: request.agentType,
+          input: request.input,
         }),
       );
     };

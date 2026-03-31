@@ -45,8 +45,8 @@ public partial class AgentExecutionsController : ControllerBase
         _logger = logger;
     }
 
-    [HttpGet("{id:guid}/ws")]
-    public async Task ExecuteWsAsync(Guid id, CancellationToken cancellationToken)
+    [HttpGet("{agentId:guid}/ws")]
+    public async Task ExecuteWsAsync(Guid agentId, CancellationToken cancellationToken)
     {
         if (!HttpContext.WebSockets.IsWebSocketRequest)
         {
@@ -90,6 +90,15 @@ public partial class AgentExecutionsController : ControllerBase
                         break;
 
                     case ExecCommand executionRequest:
+                        if (settings == null)
+                        {
+                            settings = new SettingCommand
+                                (
+                                    projectId: ProjectDefaults.DefaultBuiltId,
+                                    taskId: Guid.NewGuid()
+                                );
+                        }
+
                         if (execTask is { IsCompleted: false })
                         {
                             await SendErrorAsync(
@@ -102,12 +111,13 @@ public partial class AgentExecutionsController : ControllerBase
                         }
 
                         var (task, contextError) = await ResolveTaskAsync(
-                            id,
+                            agentId,
                             executionRequest.AgentType,
-                            executionRequest.TaskId,
-                            executionRequest.ProjectId,
+                            settings.TaskId,
+                            settings.ProjectId,
                             ExtractAgentflowInputText(executionRequest.Input),
-                            executionRequest.SessionId);
+                            settings.SessionId,
+                            settings.Resume);
                         if (contextError != null)
                         {
                             await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData,
@@ -115,7 +125,7 @@ public partial class AgentExecutionsController : ControllerBase
                             return;
                         }
                         (agentSession, execTask) = await StartExecAsync(
-                           id, task!, executionRequest, agentSession, settings,
+                           agentId, task!, executionRequest, agentSession, settings,
                            webSocket, sendLock, cancellationToken);
                         if (execTask != null)
                         {
@@ -228,7 +238,7 @@ public partial class AgentExecutionsController : ControllerBase
         ProjectTask task,
         ExecCommand request,
         AgentExecSession? currentSession,
-        SettingCommand? settings,
+        SettingCommand settings,
         WebSocket webSocket,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken)
@@ -240,7 +250,7 @@ public partial class AgentExecutionsController : ControllerBase
             case AgentRuntimeType.Agent:
                 {
                     var session = currentSession;
-                    if (!CanReuseAgentSession(currentSession, request, task?.ContextId))
+                    if (!CanReuseAgentSession(currentSession, settings, task.ContextId))
                     {
                         if (currentSession != null)
                         {
@@ -249,8 +259,8 @@ public partial class AgentExecutionsController : ControllerBase
 
                         session = await _agentRuntimeService.CreateSessionAsync(
                             id,
-                            task!,
-                            extraSetting: settings?.SettingContent,
+                            task,
+                            settings: settings,
                             cancellationToken: cancellationToken);
                     }
 
@@ -266,7 +276,7 @@ public partial class AgentExecutionsController : ControllerBase
 
             case AgentRuntimeType.Agentflow:
                 {
-                    Task execTask = ExecuteAgentflowStreamingAsync(id, request, task?.ContextId, webSocket, sendLock, executionCts.Token);
+                    Task execTask = ExecuteAgentflowStreamingAsync(id, request, settings, task.ContextId, webSocket, sendLock, executionCts.Token);
                     return (null, execTask);
                 }
 
@@ -301,6 +311,7 @@ public partial class AgentExecutionsController : ControllerBase
     private async Task ExecuteAgentflowStreamingAsync(
         Guid id,
         ExecCommand request,
+        SettingCommand settings,
         string? contextId,
         WebSocket webSocket,
         SemaphoreSlim sendLock,
@@ -308,10 +319,10 @@ public partial class AgentExecutionsController : ControllerBase
     {
         await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
                            id,
-                           request.TaskId?.ToString() ?? string.Empty,
+                           settings.TaskId?.Normalize() ?? string.Empty,
                            ExtractAgentflowInputText(request.Input),
                            cancellationToken,
-                           ProjectDefaults.GetDefaultProjectIdentifier(request.ProjectId),
+                           ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId),
                            contextId))
         {
             var json = JsonUtil.Serialize(message);
@@ -376,7 +387,8 @@ public partial class AgentExecutionsController : ControllerBase
         Guid? taskId,
         Guid? projectId,
         string input,
-        string? sessionId)
+        string? sessionId,
+        bool resume = false)
     {
         var resolvedProjectId = await _projectAppService.ResolveProjectIdAsync(projectId);
         if (!resolvedProjectId.HasValue)
@@ -384,7 +396,28 @@ public partial class AgentExecutionsController : ControllerBase
             return (null, BadRequest("Project not found."));
         }
 
-        if (!taskId.HasValue || taskId == Guid.Empty)
+        if (resume)
+        {
+            if (!taskId.HasValue || taskId.Value == Guid.Empty)
+            {
+                return (null, BadRequest("TaskId is required when resume is true."));
+            }
+
+            var existingTask = await _taskAppService.GetTaskAsync(taskId.Value);
+            if (existingTask == null)
+            {
+                return (null, BadRequest("Task not found."));
+            }
+
+            if (existingTask.ProjectId != resolvedProjectId.Value)
+            {
+                return (null, BadRequest("Task does not belong to the supplied projectId."));
+            }
+
+            return (existingTask, null);
+        }
+
+        if (!taskId.HasValue || taskId.Value == Guid.Empty)
         {
             return await CreateTaskAsync(
                 executionId,
@@ -451,7 +484,7 @@ public partial class AgentExecutionsController : ControllerBase
 
     private static bool CanReuseAgentSession(
         AgentExecSession? session,
-        ExecCommand request,
+        SettingCommand settings,
         string? contextId)
     {
         if (session == null)
@@ -459,10 +492,9 @@ public partial class AgentExecutionsController : ControllerBase
             return false;
         }
 
-        var requestedSessionId = string.IsNullOrWhiteSpace(request.SessionId)
-            ? session._taskId
-            : request.SessionId;
-        var requestedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(request.ProjectId);
+        var requestedSessionId = settings.TaskId?.Normalize() ?? settings.SessionId;
+
+        var requestedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);
         var requestedContextId = string.IsNullOrWhiteSpace(contextId) ? requestedSessionId : contextId;
 
         return session._taskId == requestedSessionId
@@ -500,7 +532,7 @@ public partial class AgentExecutionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var payload = new AgwMessage(
-            Guid.NewGuid().ToString(),
+            Guid.NewGuid().Normalize(),
             "$agw-server",
             AiRole.System,
             new List<AgwContent> { new AgwTextContent { Content = message } });
@@ -586,7 +618,7 @@ public partial class AgentExecutionsController : ControllerBase
 
         var payload = new AgwMessage
             (
-                Guid.NewGuid().ToString(),
+                Guid.NewGuid().Normalize(),
                 "$agw-server",
                 AiRole.System,
                 new List<AgwContent> { content }

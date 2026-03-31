@@ -127,6 +127,7 @@ export default function TaskDetailsPage() {
             projectId={projectId}
             taskId={task?.id ?? taskId}
             sessionId={sessionId}
+            resume={true}
             resetSignal={`${taskId}:${targetId ?? "none"}`}
             placeholder="请输入要发送给任务执行器的内容..."
           />

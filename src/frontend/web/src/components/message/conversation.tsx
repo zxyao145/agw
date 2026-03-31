@@ -20,8 +20,8 @@ import { Separator } from "../ui/separator";
 import { useQuery } from "@tanstack/react-query";
 import {
   deleteTaskById,
-  getSessionByTaskId,
-} from "@/app/(app)/(external-agents)/claude-code/lib/chat-history-service";
+  getTaskDetails,
+} from "@/api/task-client";
 
 export interface ConversationProps {
   executionId: string | null | undefined;
@@ -29,6 +29,7 @@ export interface ConversationProps {
   projectId: string;
   taskId?: string | null;
   sessionId?: string | null;
+  resume?: boolean;
   resetSignal?: string | number | boolean;
   placeholder?: string;
   className?: string;
@@ -46,6 +47,7 @@ export function Conversation({
   projectId,
   taskId,
   sessionId,
+  resume = false,
   resetSignal,
   placeholder = "Type your message...",
   className,
@@ -79,9 +81,9 @@ export function Conversation({
   }, []);
 
   const sessionQuery = useQuery({
-    queryKey: ["projects", projectId, "tasks", taskId, "session-record"],
+    queryKey: ["projects", projectId, "tasks", taskId, "task-record"],
     queryFn: async () => {
-      return await getSessionByTaskId(taskId, projectId);
+      return await getTaskDetails(taskId!, projectId);
     },
     enabled: Boolean(taskId),
     refetchInterval: false,
@@ -127,6 +129,7 @@ export function Conversation({
             sessionId: curSessionId,
             projectId,
             taskId,
+            resume,
             input: toExecutionWsUserInput(userMessage),
           },
           onMessage: (message) => {
@@ -159,6 +162,7 @@ export function Conversation({
       onExecutionComplete,
       onExecutionError,
       projectId,
+      resume,
       taskId,
       curSessionId,
     ],

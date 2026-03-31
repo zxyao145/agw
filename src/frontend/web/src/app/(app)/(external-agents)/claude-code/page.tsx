@@ -14,10 +14,9 @@ import { InputArea } from "./components/user-input/input-area";
 import type { UserInputRef } from "@/components/message/user-input";
 import { ChatSession } from "@/components/message/chat-session";
 import {
-  CLAUDE_CODE_PROJECT_ID,
-  getSessionByTaskId,
+  getTaskDetails,
   type TaskRecordDetails,
-} from "./lib/chat-history-service";
+} from "@/api/task-client";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -45,8 +44,8 @@ import "./page.css";
 import { claudeSettingsStorage } from "./lib/settings-storage";
 import { type AiMessageAction, handleAiMessage } from "./lib/ai-message-handlers";
 
-const gitCodeSource = "./code-work";
-const claudeCodeExecutionId = "11111111-1111-1111-2222-000000000001";
+import { CLAUDE_CODE_PROJECT_ID, claudeCodeExecutionId, gitCodeSource } from "./contants";
+
 const agentRuntimeTypeAgent = 0;
 const permissionModeToValue: Record<string, number> = {
   default: 0,
@@ -76,6 +75,7 @@ export default function ClaudeCodePage() {
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [taskId, setTaskId] = React.useState<string | null>(null);
+  const [resumeTask, setResumeTask] = React.useState(false);
   const [comments, setComments] = React.useState<LineComment[]>([]);
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [showCommentDialog, setShowCommentDialog] = React.useState(false);
@@ -90,7 +90,7 @@ export default function ClaudeCodePage() {
   const [isLoadingContent, setIsLoadingContent] = React.useState(false);
   const [contentError, setContentError] = React.useState<string | null>(null);
   const [onlyDiff, setOnlyDiff] = React.useState(true);
-  const [recursiveMode, setRecursiveMode] = React.useState(true);
+  const [recursiveMode] = React.useState(true);
   const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
   // const statusRequestPendingRef = React.useRef(false);
   const settingsRequestSessionRef = React.useRef<string | null>(null);
@@ -148,6 +148,7 @@ export default function ClaudeCodePage() {
       settingsRequestSessionRef.current = null;
       setTaskId(newTaskId);
     }
+    setResumeTask(false);
   };
 
   const [initContent, setInitContent] = React.useState<InitMessageContent | null>(null);
@@ -350,7 +351,7 @@ export default function ClaudeCodePage() {
     return envObj;
   };
 
-  const buildSettingRequest = (taskId: string) => {
+  const buildSettingRequest = (taskId: string, resume: boolean) => {
     const settingContent = {
       workingDirectory: getResolvedWorkingDirectory(taskId),
       gitAddress: directoryMode === DirectoryMode.gitAddress ? gitAddress.trim() || null : null,
@@ -361,23 +362,23 @@ export default function ClaudeCodePage() {
       // permissionMode: permissionModeToValue[permissionMode] ?? permissionModeToValue.default,
       permissionMode: permissionModeToValue[permissionMode] ?? permissionModeToValue.default,
       environmentVariables: buildEnvironmentVariables(),
-      taskId: taskId,
-      projectId: CLAUDE_CODE_PROJECT_ID,
     };
 
     return {
       type: "SettingCommand",
       settingContent: JSON.stringify(settingContent),
+      projectId: CLAUDE_CODE_PROJECT_ID,
+      taskId,
+      sessionId: taskId,
+      resume,
     };
   };
 
-  const buildExecRequest = (message: AiMessage, currentTaskId: string) => {
+  const buildExecRequest = (message: AiMessage) => {
     return {
       type: "ExecCommand",
       agentType: agentRuntimeTypeAgent,
       input: toExecutionWsUserInput(message),
-      taskId: currentTaskId,
-      projectId: CLAUDE_CODE_PROJECT_ID,
     };
   };
 
@@ -388,11 +389,11 @@ export default function ClaudeCodePage() {
     };
   };
 
-  const sendSettingIfNeeded = (ws: WebSocket, taskId: string) => {
+  const sendSettingIfNeeded = (ws: WebSocket, taskId: string, resume: boolean) => {
     if (settingsRequestSessionRef.current === taskId) {
       return;
     }
-    const settingRequest = buildSettingRequest(taskId);
+    const settingRequest = buildSettingRequest(taskId, resume);
     ws.send(JSON.stringify(settingRequest));
     settingsRequestSessionRef.current = taskId;
   };
@@ -409,9 +410,9 @@ export default function ClaudeCodePage() {
   const sendStatusRequest = (ws: WebSocket) => {
     // statusRequestPendingRef.current = true;
     const currentTaskId = ensureTaskId();
-    sendSettingIfNeeded(ws, currentTaskId);
+    sendSettingIfNeeded(ws, currentTaskId, resumeTask);
     setIsInitStatus(true);
-    ws.send(JSON.stringify(buildExecRequest(createUserTextMessage("/status"), currentTaskId)));
+    ws.send(JSON.stringify(buildExecRequest(createUserTextMessage("/status"))));
   };
 
   const setupWebSocket = () => {
@@ -435,6 +436,7 @@ export default function ClaudeCodePage() {
           if (isInitStatus) {
             setIsInitStatus(false);
           }
+          setResumeTask(true);
           return;
         }
 
@@ -538,8 +540,8 @@ export default function ClaudeCodePage() {
         setMessages((prev) => [...prev, userMsg]);
 
         const tid = ensureTaskId();
-        sendSettingIfNeeded(ws, tid);
-        const request = buildExecRequest(userMsg, tid);
+        sendSettingIfNeeded(ws, tid, resumeTask);
+        const request = buildExecRequest(userMsg);
         // console.debug("Sending request:", request);
         ws.send(JSON.stringify(request));
       }
@@ -577,6 +579,7 @@ export default function ClaudeCodePage() {
 
   const clearActiveSessionState = () => {
     setMessages([]);
+    setResumeTask(false);
     handleTaskId(null);
     if (wsRef.current) {
       wsRef.current.close(1000, "Session cleared");
@@ -587,7 +590,7 @@ export default function ClaudeCodePage() {
 
   const handleHistorySelect = async (taskId: string) => {
     try {
-      const details: TaskRecordDetails | null = await getSessionByTaskId(
+      const details: TaskRecordDetails | null = await getTaskDetails(
         taskId,
         CLAUDE_CODE_PROJECT_ID,
       );
@@ -604,6 +607,7 @@ export default function ClaudeCodePage() {
 
   const handleSessionSelect = (newMessages: AiMessage[], newTaskId: string) => {
     handleTaskId(newTaskId);
+    setResumeTask(true);
     for (let index = 0; index < newMessages.length; index++) {
       const aiMessage = newMessages[index];
       if (isTurnFinishedMessage(aiMessage)) {
@@ -690,6 +694,9 @@ export default function ClaudeCodePage() {
       }
 
       const currentMsg = msgs[i];
+      if (!currentMsg.author) {
+        continue;
+      }
 
       // Check if current message is a FunctionCall
       const isFunctionCall =

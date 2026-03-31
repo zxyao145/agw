@@ -7,10 +7,9 @@ import { ChatSession, ChatSessionProps } from "@/components/message/chat-session
 import type { AiMessage } from "@/types";
 import ColResizeSplit from "../split-layout";
 import {
-  CLAUDE_CODE_PROJECT_ID,
-  getSessionByTaskId,
+  getTaskDetails,
   type TaskRecordDetails,
-} from "../../lib/chat-history-service";
+} from "@/api/task-client";
 import {
   Drawer,
   DrawerContent,
@@ -19,6 +18,7 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
+import { CLAUDE_CODE_PROJECT_ID } from "../../contants";
 
 // Dynamically import ChatHistoryList to keep the chat shell lightweight
 const ChatHistoryList = dynamic(
@@ -58,7 +58,7 @@ export function Chat({
 
   const handleTaskSelect = async (taskId: string) => {
     try {
-      const details: TaskRecordDetails | null = await getSessionByTaskId(
+      const details: TaskRecordDetails | null = await getTaskDetails(
         taskId,
         CLAUDE_CODE_PROJECT_ID,
       );

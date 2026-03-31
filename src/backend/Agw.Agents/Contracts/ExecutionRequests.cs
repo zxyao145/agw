@@ -1,3 +1,4 @@
+using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using System.Diagnostics.CodeAnalysis;
@@ -13,7 +14,44 @@ public abstract class AgentRunCommand;
 
 public class SettingCommand : AgentRunCommand
 {
+    [JsonConstructor]
+    [SetsRequiredMembers]
+    public SettingCommand(
+        Guid projectId,
+        Guid? taskId = null,
+        string? sessionId = null,
+        string settingContent = "{}",
+        bool resume = false)
+    {
+        if (resume && !taskId.HasValue)
+        {
+            throw new ArgumentException("taskId cannot be null when resume is true", nameof(taskId));
+        }
+        taskId ??= Guid.NewGuid();
+
+        SettingContent = settingContent;
+        ProjectId = projectId;
+        TaskId = taskId;
+        Resume = resume;
+        if (string.IsNullOrEmpty(sessionId) && TaskId.HasValue)
+        {
+            SessionId = TaskId.Value.Normalize();
+        }
+        else
+        {
+            SessionId = sessionId;
+        }
+    }
+
     public required string SettingContent { get; set; }
+
+    public required Guid ProjectId { get; set; }
+
+    public Guid? TaskId { get; set; }
+
+    public string? SessionId { get; set; }
+
+    public bool Resume { get; set; }
 }
 
 public class ExecCommand : AgentRunCommand
@@ -22,34 +60,15 @@ public class ExecCommand : AgentRunCommand
     [SetsRequiredMembers]
     public ExecCommand(
         AgentRuntimeType agentType,
-        AgwUserInput input,
-        Guid projectId,
-        Guid? taskId = null,
-        string? sessionId = null)
+        AgwUserInput input)
     {
         AgentType = agentType;
         Input = input;
-        ProjectId = projectId;
-        TaskId = taskId;
-        if (string.IsNullOrEmpty(sessionId) && TaskId.HasValue)
-        {
-            SessionId = TaskId.Value.ToString();
-        }
-        else
-        {
-            SessionId = sessionId;
-        }
     }
 
     public required AgentRuntimeType AgentType { get; set; }
 
     public required AgwUserInput Input { get; set; }
-
-    public required Guid ProjectId { get; set; }
-
-    public Guid? TaskId { get; set; }
-
-    public string? SessionId { get; set; }
 }
 
 public class InterruptCommand : AgentRunCommand
