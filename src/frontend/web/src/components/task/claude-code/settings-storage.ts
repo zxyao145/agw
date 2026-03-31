@@ -1,16 +1,4 @@
-import { DirectoryMode, EnvVar, PermissionMode } from "../types";
-
-export type ClaudeSettingsStorageValues = {
-  workingDirectory?: string;
-  gitAddress?: string;
-  directoryMode?: DirectoryMode;
-  apiKey?: string;
-  apiBaseUrl?: string;
-  permissionMode?: PermissionMode | string;
-  envVars?: EnvVar[];
-  workingDirHistory?: string[];
-  gitAddressHistory?: string[];
-};
+import type { ClaudeSettingsStorageValues } from "./type";
 
 const STORAGE_KEY = "claudecode_settings";
 
@@ -46,8 +34,6 @@ const mergeSettings = (
   const res: ClaudeSettingsStorageValues = {
     ...next,
     ...pickDefined(updates),
-
-    // envVars 直接替换而非合并，支持删除操作
     envVars: updates.envVars !== undefined ? updates.envVars : next.envVars,
     workingDirHistory: mergeUnique(next.workingDirHistory, updates.workingDirHistory),
     gitAddressHistory: mergeUnique(next.gitAddressHistory, updates.gitAddressHistory),
@@ -68,6 +54,7 @@ function pickDefined<T extends object>(obj: T): Partial<T> {
 
   return result;
 }
+
 function mergeUnique(a?: string[], b?: string[]): string[] | undefined {
   if (!a && !b) return undefined;
   if (!a) return b;
@@ -83,8 +70,7 @@ export const claudeSettingsStorage = {
     }
 
     try {
-      const stored = readStoredSettings();
-      return stored;
+      return readStoredSettings();
     } catch (error) {
       console.warn("Storage access failed while reading settings.", error);
       return {};

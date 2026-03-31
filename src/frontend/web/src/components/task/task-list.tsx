@@ -3,6 +3,8 @@
 import * as React from "react";
 import { Trash2, Plus, Edit2, Check, X, Info, RotateCw } from "lucide-react";
 import { toast } from "sonner";
+import { SettingsDialog } from "@/components/task/claude-code/settings-dialog";
+import type { SettingsDialogProps } from "@/components/task/claude-code/type";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,7 +22,7 @@ import {
 } from "@/api/task-client";
 import { cn } from "@/lib/utils";
 
-interface TaskHistoryListProps {
+interface TaskHistoryListProps extends SettingsDialogProps {
   projectId: string;
   currentTaskId: string | null;
   onTaskSelect: (taskId: string) => void;
@@ -36,6 +38,20 @@ export function TaskHistoryList({
   onNewTask,
   onTaskDeleted,
   onAllTasksDeleted,
+  workingDirectory,
+  setWorkingDirectory,
+  gitAddress,
+  setGitAddress,
+  directoryMode,
+  setDirectoryMode,
+  apiKey,
+  setApiKey,
+  apiBaseUrl,
+  setApiBaseUrl,
+  permissionMode,
+  setPermissionMode,
+  envVars,
+  setEnvVars,
 }: TaskHistoryListProps) {
   const [tasks, setTasks] = React.useState<TaskSummary[]>([]);
   const [editingTaskId, setEditingTaskId] = React.useState<string | null>(null);
@@ -159,7 +175,7 @@ export function TaskHistoryList({
       {/* Header */}
       <div className="p-4 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">Chat History</h2>
-        <div>
+        <div className="tools">
           <Button
             className="cursor-pointer"
             size="sm"
@@ -192,6 +208,22 @@ export function TaskHistoryList({
           >
             <Info className="h-4 w-4 " />
           </Button>
+          <SettingsDialog
+            workingDirectory={workingDirectory}
+            setWorkingDirectory={setWorkingDirectory}
+            gitAddress={gitAddress}
+            setGitAddress={setGitAddress}
+            directoryMode={directoryMode}
+            setDirectoryMode={setDirectoryMode}
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            apiBaseUrl={apiBaseUrl}
+            setApiBaseUrl={setApiBaseUrl}
+            permissionMode={permissionMode}
+            setPermissionMode={setPermissionMode}
+            envVars={envVars}
+            setEnvVars={setEnvVars}
+          />
         </div>
       </div>
 

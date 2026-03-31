@@ -26,8 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DirectoryMode, EnvVar, PermissionMode, SettingsDialogProps } from "../../types";
-import { claudeSettingsStorage, ClaudeSettingsStorageValues } from "../../lib/settings-storage";
+import type { ClaudeSettingsStorageValues, EnvVar, SettingsDialogProps } from "./type";
+import { DirectoryMode, PermissionMode } from "./type";
+import { claudeSettingsStorage } from "./settings-storage";
 
 export function SettingsDialog({
   workingDirectory,

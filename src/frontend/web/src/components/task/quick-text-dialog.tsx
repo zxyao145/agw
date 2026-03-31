@@ -21,11 +21,62 @@ export interface QuickTextOption {
 }
 
 interface QuickTextDialogProps {
-  quickCommands: QuickTextOption[];
+  quickCommands?: QuickTextOption[];
   onCommandSelect: (text: string) => void;
 }
 
-export function QuickTextDialog({ quickCommands, onCommandSelect }: QuickTextDialogProps) {
+  const defaultQuickCommands: QuickTextOption[] = [
+    {
+      id: "analyze",
+      label: "Analyze Code",
+      description: "Request code analysis and insights",
+      text: "Please analyze the code in this file and provide insights about",
+    },
+    {
+      id: "refactor",
+      label: "Refactor",
+      description: "Request code refactoring",
+      text: "Please refactor this code to improve",
+    },
+    {
+      id: "explain",
+      label: "Explain",
+      description: "Request code explanation",
+      text: "Please explain how this code works",
+    },
+    {
+      id: "test",
+      label: "Write Tests",
+      description: "Request test generation",
+      text: "Please write unit tests for this code",
+    },
+    {
+      id: "debug",
+      label: "Debug",
+      description: "Request debugging assistance",
+      text: "Please help me debug this issue",
+    },
+    {
+      id: "optimize",
+      label: "Optimize",
+      description: "Request code optimization",
+      text: "Please optimize this code for better performance",
+    },
+    {
+      id: "document",
+      label: "Add Docs",
+      description: "Request code documentation",
+      text: "Please add documentation comments to this code",
+    },
+    {
+      id: "review",
+      label: "Review",
+      description: "Request code review",
+      text: "Please review this code for potential issues",
+    },
+  ];
+
+export function QuickTextDialog({ quickCommands = defaultQuickCommands, onCommandSelect }: QuickTextDialogProps) {
   const [open, setOpen] = useState(false);
 
   const handleSelect = (text: string) => {

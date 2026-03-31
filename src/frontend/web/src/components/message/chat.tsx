@@ -14,11 +14,12 @@ import {
   mergeStreamingMessagesById,
   toExecutionWsUserInput,
 } from "@/lib/execution-stream";
-import { UserInput } from "./user-input";
+import { UserInput, UserInputRef } from "./user-input";
 import { ArrowUp, Eraser, Square } from "lucide-react";
 import { Separator } from "../ui/separator";
 import { useQuery } from "@tanstack/react-query";
 import { deleteTaskById, getTaskDetails } from "@/api/task-client";
+import { QuickTextDialog } from "../task/quick-text-dialog";
 
 export interface ChatProps {
   executionId: string | null | undefined;
@@ -39,11 +40,10 @@ function nextSessionId(): string {
 }
 
 export function Chat({
-  executionId,
-  agentType,
+  executionId, // agent executionId
+  agentType,   // agent type
   projectId,
   taskId,
-  sessionId,
   resume = false,
   resetSignal,
   placeholder = "Type your message...",
@@ -54,10 +54,11 @@ export function Chat({
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [curSessionId, setSessionId] = React.useState<string>(
-    sessionId ?? nextSessionId(),
+    taskId ?? nextSessionId(),
   );
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
+  const userInputRef = React.useRef<UserInputRef | null>(null);
 
   const processMessages = React.useCallback(
     (items: AiMessage[]): ProcessedMessageItem[] =>
@@ -92,9 +93,9 @@ export function Chat({
   });
 
   React.useEffect(() => {
-    setSessionId(sessionId ?? nextSessionId());
+    setSessionId(taskId ?? nextSessionId());
     setMessages([]);
-  }, [resetSignal, sessionId]);
+  }, [resetSignal, taskId]);
 
   React.useEffect(() => {
     const sessionMessages = sessionQuery.data?.messages ?? [];
@@ -107,6 +108,10 @@ export function Chat({
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleQuickCommand = (text: string) => {
+    userInputRef.current?.insertText(text);
+  };
 
   const handleSend = React.useCallback(
     async (value: string) => {
@@ -128,7 +133,6 @@ export function Chat({
           id: executionId,
           request: {
             agentType,
-            sessionId: curSessionId,
             projectId,
             taskId,
             resume,
@@ -204,6 +208,7 @@ export function Chat({
       {/* input */}
       <div className="absolute bottom-0 z-10 left-0 right-0 h-30 px-2 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
         <UserInput
+          ref={userInputRef}
           isExecuting={isExecuting}
           onExecute={handleSend}
           placeholder={placeholder}
@@ -211,6 +216,10 @@ export function Chat({
           {/* <UserInput.TopLeft></UserInput.TopLeft> */}
 
           <UserInput.TopRight>
+            <QuickTextDialog
+              onCommandSelect={handleQuickCommand}
+            />
+            <Separator orientation="vertical" />
             <Button
               onClick={handleClear}
               disabled={isExecuting}

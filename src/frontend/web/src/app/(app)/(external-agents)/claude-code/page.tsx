@@ -34,7 +34,7 @@ import { Explorer, FileContent } from "@/components/file-explorer";
 import type { LineComment } from "@/components/file-explorer";
 
 import "./page.css";
-import { claudeSettingsStorage } from "./lib/settings-storage";
+import { claudeSettingsStorage } from "@/components/task/claude-code/settings-storage";
 import { type AiMessageAction, handleAiMessage } from "./lib/ai-message-handlers";
 
 import { CLAUDE_CODE_PROJECT_ID, claudeCodeExecutionId, gitCodeSource } from "./contants";
@@ -869,6 +869,20 @@ export default function ClaudeCodePage() {
                   onNewTask={handleNewTask}
                   onTaskDeleted={handleTaskDeleted}
                   onAllTasksDeleted={handleAllTasksDeleted}
+                  workingDirectory={workingDirectory}
+                  setWorkingDirectory={setWorkingDirectory}
+                  gitAddress={gitAddress}
+                  setGitAddress={setGitAddress}
+                  directoryMode={directoryMode}
+                  setDirectoryMode={setDirectoryMode}
+                  apiKey={apiKey}
+                  setApiKey={setApiKey}
+                  apiBaseUrl={apiBaseUrl}
+                  setApiBaseUrl={setApiBaseUrl}
+                  permissionMode={permissionMode}
+                  setPermissionMode={setPermissionMode}
+                  envVars={envVars}
+                  setEnvVars={setEnvVars}
                 />
               </ColResizeSplit.Left>
             )}
@@ -900,7 +914,7 @@ export default function ClaudeCodePage() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="files" className="mt-0 h-full">
+                <TabsContent value="files" className="mt-0 h-full  w-full">
                   <FileContent
                     selectedFile={selectedFile}
                     isLoadingContent={isLoadingContent}
@@ -965,6 +979,20 @@ export default function ClaudeCodePage() {
                 onNewTask={handleNewTask}
                 onTaskDeleted={handleTaskDeleted}
                 onAllTasksDeleted={handleAllTasksDeleted}
+                workingDirectory={workingDirectory}
+                setWorkingDirectory={setWorkingDirectory}
+                gitAddress={gitAddress}
+                setGitAddress={setGitAddress}
+                directoryMode={directoryMode}
+                setDirectoryMode={setDirectoryMode}
+                apiKey={apiKey}
+                setApiKey={setApiKey}
+                apiBaseUrl={apiBaseUrl}
+                setApiBaseUrl={setApiBaseUrl}
+                permissionMode={permissionMode}
+                setPermissionMode={setPermissionMode}
+                envVars={envVars}
+                setEnvVars={setEnvVars}
               />
             )}
             {drawerContent === "files" && (

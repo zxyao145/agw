@@ -3,37 +3,22 @@
 import { Button } from "@/components/ui/button";
 import { SuggestionItem, UserInput, type UserInputRef } from "@/components/message/user-input";
 import type { ChatInputAreaProps } from "../../types";
-import { SettingsDialog } from "./settings-dialog";
 import { ChatInfoPopover } from "./chat-info-popover";
-import { QuickTextDialog, type QuickTextOption } from "./quick-text-dialog";
+import { QuickTextDialog, type QuickTextOption } from "@/components/task/quick-text-dialog";
 import { searchCommand } from "../../lib/search_command";
 import { searchFile } from "../../lib/search_file";
 import { useRef, useMemo } from "react";
 import { Separator } from "@/components/ui/separator";
-import { ArrowUp, CirclePause, Eraser, Square } from "lucide-react";
+import { ArrowUp, Eraser, Square } from "lucide-react";
 
 export function InputArea({
   isExecuting,
-  hasMessages,
   onExecute,
   onExecuteWithComment,
   onInterrupt,
   onClearSession,
   onScrollToTop,
   workingDirectory,
-  setWorkingDirectory,
-  gitAddress,
-  setGitAddress,
-  directoryMode,
-  setDirectoryMode,
-  apiKey,
-  setApiKey,
-  apiBaseUrl,
-  setApiBaseUrl,
-  permissionMode,
-  setPermissionMode,
-  envVars,
-  setEnvVars,
   initContent,
   createArr,
   currentTab,
@@ -148,23 +133,6 @@ export function InputArea({
       onStop={onInterrupt}
     >
       <UserInput.TopLeft>
-        <SettingsDialog
-          workingDirectory={workingDirectory}
-          setWorkingDirectory={setWorkingDirectory}
-          gitAddress={gitAddress}
-          setGitAddress={setGitAddress}
-          directoryMode={directoryMode}
-          setDirectoryMode={setDirectoryMode}
-          apiKey={apiKey}
-          setApiKey={setApiKey}
-          apiBaseUrl={apiBaseUrl}
-          setApiBaseUrl={setApiBaseUrl}
-          permissionMode={permissionMode}
-          setPermissionMode={setPermissionMode}
-          envVars={envVars}
-          setEnvVars={setEnvVars}
-        />
-        <Separator orientation="vertical" />
         <ChatInfoPopover initContent={initContent} createArr={createArr} />
       </UserInput.TopLeft>
 
