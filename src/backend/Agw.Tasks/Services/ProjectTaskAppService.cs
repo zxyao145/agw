@@ -75,7 +75,7 @@ public class ProjectTaskAppService
             return null;
         }
 
-        var records = await GetOrderedRecordsByContextIdAsync(task.ContextId);
+        var records = await GetOrderedRecordsBySessionIdAsync(task.Id.Normalize());
         var messages = records.SelectMany(ToAiMessages).ToList();
         return ToResponse(task, records, messages);
     }
@@ -125,9 +125,6 @@ public class ProjectTaskAppService
         var contextId = string.IsNullOrWhiteSpace(request.ContextId)
             ? taskId.Normalize()
             : request.ContextId.Trim();
-        var sessionId = string.IsNullOrWhiteSpace(request.SessionId)
-            ? taskId.Normalize()
-            : request.SessionId.Trim();
 
         var task = new ProjectTask
         {
@@ -152,8 +149,7 @@ public class ProjectTaskAppService
         var initialRecord = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            ContextId = contextId,
-            SessionId = sessionId,
+            SessionId = taskId.Normalize(),
             ConversationSequence = 0,
             ConversationPayload = JsonUtil.Serialize(inputMessage)
         };
@@ -194,7 +190,7 @@ public class ProjectTaskAppService
             return ApplicationResult<ProjectTaskResponse>.Invalid("Only pending tasks can be updated.");
         }
 
-        var records = await GetOrderedRecordsByContextIdAsync(existing.ContextId);
+        var records = await GetOrderedRecordsBySessionIdAsync(existing.Id.Normalize());
         var latestRecord = _taskRecordDomainService.GetLatest(records);
         if (latestRecord == null
             || !_projectTaskDomainService.TryApplyUpdate(existing, latestRecord, request.Description, request.Input, out var newRecord)
@@ -253,7 +249,7 @@ public class ProjectTaskAppService
             return ApplicationResult.NotFound();
         }
 
-        var records = await GetOrderedRecordsByContextIdAsync(task.ContextId);
+        var records = await GetOrderedRecordsBySessionIdAsync(task.Id.Normalize());
         foreach (var record in records)
         {
             _recordRepository.Remove(record);
@@ -294,7 +290,7 @@ public class ProjectTaskAppService
         _taskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync();
 
-        var records = await GetOrderedRecordsByContextIdAsync(task.ContextId);
+        var records = await GetOrderedRecordsBySessionIdAsync(task.Id.Normalize());
         return ApplicationResult<ProjectTaskResponse>.Success(ToResponse(task, records, null));
     }
 
@@ -323,7 +319,7 @@ public class ProjectTaskAppService
         _taskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync();
 
-        var records = await GetOrderedRecordsByContextIdAsync(task.ContextId);
+        var records = await GetOrderedRecordsBySessionIdAsync(task.Id.Normalize());
         return ApplicationResult<ProjectTaskResponse>.Success(ToResponse(task, records, null));
     }
 
@@ -341,7 +337,7 @@ public class ProjectTaskAppService
             return ApplicationResult.NotFound();
         }
 
-        var records = await GetOrderedRecordsByContextIdAsync(task.ContextId);
+        var records = await GetOrderedRecordsBySessionIdAsync(task.Id.Normalize());
         foreach (var record in records)
         {
             _recordRepository.Remove(record);
@@ -366,9 +362,9 @@ public class ProjectTaskAppService
         return _projectTaskDomainService.GetNextPending(pending);
     }
 
-    public async Task<TaskRecord?> GetLatestRecordAsync(string contextId)
+    public async Task<TaskRecord?> GetLatestRecordAsync(string sessionId)
     {
-        var records = await GetOrderedRecordsByContextIdAsync(contextId);
+        var records = await GetOrderedRecordsBySessionIdAsync(sessionId);
         return _taskRecordDomainService.GetLatest(records);
     }
 
@@ -411,14 +407,14 @@ public class ProjectTaskAppService
         return task;
     }
 
-    private async Task<IReadOnlyList<TaskRecord>> GetOrderedRecordsByContextIdAsync(string contextId)
+    private async Task<IReadOnlyList<TaskRecord>> GetOrderedRecordsBySessionIdAsync(string sessionId)
     {
-        if (string.IsNullOrWhiteSpace(contextId))
+        if (string.IsNullOrWhiteSpace(sessionId))
         {
             return [];
         }
 
-        var records = await _recordRepository.ListAsync(record => record.ContextId == contextId);
+        var records = await _recordRepository.ListAsync(record => record.SessionId == sessionId);
         return _taskRecordDomainService.Order(records);
     }
 
@@ -464,7 +460,7 @@ public class ProjectTaskAppService
             summary.AgentflowId,
             summary.AgentId,
             summary.Status,
-            records.LastOrDefault()?.SessionId ?? task.ContextId,
+            task.Id.Normalize(),
             summary.Title,
             summary.Description,
             GetInputText(records.LastOrDefault(record => record.ToChatMessage()?.Role == ChatRole.User)),

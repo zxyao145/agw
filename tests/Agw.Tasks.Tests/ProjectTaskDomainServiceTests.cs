@@ -40,6 +40,7 @@ public class ProjectTaskDomainServiceTests
         var before = DateTime.UtcNow;
         var task = new ProjectTask
         {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             Title = "  New task  ",
             Description = "  Investigate issue  ",
             ContextId = "context-1",
@@ -64,7 +65,7 @@ public class ProjectTaskDomainServiceTests
         Assert.Equal(task.CreateTime, task.UpdateTime);
 
         Assert.NotEqual(Guid.Empty, initialRecord.Id);
-        Assert.Equal(task.ContextId, initialRecord.ContextId);
+        Assert.Equal(task.Id.Normalize(), initialRecord.SessionId);
         Assert.Equal(Constants.DefaultAuthor, initialRecord.AgentName);
         Assert.Equal(task.CreateTime, initialRecord.CreateTime);
         Assert.Equal(task.CreateTime, initialRecord.UpdateTime);
@@ -99,6 +100,7 @@ public class ProjectTaskDomainServiceTests
     {
         var task = new ProjectTask
         {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             ContextId = "context-1",
             Description = "existing",
         };
@@ -116,8 +118,7 @@ public class ProjectTaskDomainServiceTests
         Assert.NotNull(record);
         Assert.Equal("Updated description", task.Description);
         Assert.InRange(task.UpdateTime!.Value, before, DateTime.UtcNow);
-        Assert.Equal(task.ContextId, record!.ContextId);
-        Assert.Equal(latestRecord.SessionId, record.SessionId);
+        Assert.Equal(task.Id.Normalize(), record!.SessionId);
         Assert.Equal(latestRecord.AgentName, record.AgentName);
         Assert.Equal(4, record.ConversationSequence);
         Assert.Equal("user input", record.GetText());

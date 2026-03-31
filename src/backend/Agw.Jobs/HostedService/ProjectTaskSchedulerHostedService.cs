@@ -156,7 +156,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                     return;
                 }
 
-                var taskRecord = await taskService.GetLatestRecordAsync(next.ContextId);
+                var taskRecord = await taskService.GetLatestRecordAsync(next.Id.Normalize());
                 if (taskRecord == null)
                 {
                     await taskService.MarkFailedAsync(next.Id, "Task has no TaskRecord to execute.", "scheduler");

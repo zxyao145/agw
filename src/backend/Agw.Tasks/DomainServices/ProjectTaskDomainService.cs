@@ -39,7 +39,7 @@ public class ProjectTaskDomainService
         task.UpdateTime = task.CreateTime;
 
         initialRecord.Id = initialRecord.Id == Guid.Empty ? Guid.NewGuid() : initialRecord.Id;
-        initialRecord.ContextId = task.ContextId;
+        initialRecord.SessionId = task.Id.Normalize();
         initialRecord.AgentName = Constants.DefaultAuthor;
         initialRecord.CreateTime = task.CreateTime;
         initialRecord.UpdateTime = task.CreateTime;
@@ -70,8 +70,7 @@ public class ProjectTaskDomainService
         record = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            ContextId = task.ContextId,
-            SessionId = latestRecord.SessionId,
+            SessionId = task.Id.Normalize(),
             AgentName = latestRecord.AgentName,
             ConversationSequence = (latestRecord.ConversationSequence ?? -1) + 1,
             ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, input.Trim()), JsonOptions),

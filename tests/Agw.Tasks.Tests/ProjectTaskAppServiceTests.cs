@@ -69,7 +69,7 @@ public class ProjectTaskAppServiceTests
         Assert.Equal(ProjectTaskStatus.Running, response.Status);
         Assert.Equal(projectId.Normalize(), response.ProjectId);
         Assert.Equal("context-1", response.ContextId);
-        Assert.Equal("session-1", response.SessionId);
+        Assert.Equal(response.Id.Normalize(), response.SessionId);
         Assert.Equal("Nightly sync", response.Title);
         Assert.Equal("Nightly sync", response.Description);
         Assert.Equal("Run scheduled sync", response.Input);
@@ -83,9 +83,9 @@ public class ProjectTaskAppServiceTests
         Assert.Equal("job-executor", task.UpdateBy);
 
         var record = await dbContext.TaskRecords.SingleAsync(
-            x => x.ContextId == "context-1",
+            x => x.SessionId == response.Id.Normalize(),
             cancellationToken);
-        Assert.Equal("session-1", record.SessionId);
+        Assert.Equal(response.Id.Normalize(), record.SessionId);
         Assert.Equal(0, record.ConversationSequence);
         Assert.Equal("Run scheduled sync", record.GetText());
     }
