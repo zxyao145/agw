@@ -590,8 +590,8 @@ export default function ClaudeCodePage() {
   const handleHistorySelect = async (taskId: string) => {
     try {
       const details: TaskRecordDetails | null = await getTaskDetails(
-        taskId,
         CLAUDE_CODE_PROJECT_ID,
+        taskId,
       );
       if (!details) {
         return;
