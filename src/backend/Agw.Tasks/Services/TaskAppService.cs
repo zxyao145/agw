@@ -1,6 +1,7 @@
 using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Contracts;
 using Agw.Shared.Enums;
+using Agw.Shared;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -103,22 +104,11 @@ public class TaskAppService : ITaskAppService
             return false;
         }
 
-        var contexts = records
-            .Select(r => r.ContextId)
-            .Where(contextId => !string.IsNullOrWhiteSpace(contextId))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        if (contexts.Length == 0)
-        {
-            return false;
-        }
-
         var tasks = await _taskRepository.ListAsync(t => t.ProjectId == project.Id);
-        var knownContexts = tasks
-            .Select(t => t.ContextId)
-            .ToHashSet(StringComparer.Ordinal);
+        var knownTaskIds = tasks
+            .Select(t => t.Id.Normalize())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        return contexts.Any(knownContexts.Contains);
+        return records.Any(record => knownTaskIds.Contains(record.SessionId));
     }
 }

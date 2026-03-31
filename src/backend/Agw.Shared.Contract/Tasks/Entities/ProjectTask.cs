@@ -41,5 +41,4 @@ public class ProjectTask : BaseEntity
 
     public DateTime? FinishedTime { get; set; }
 
-    public ICollection<TaskRecord> ConversationList { get; set; } = [];
 }

@@ -7,12 +7,7 @@ public class TaskRecord
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Used to associate multiple TaskRecords, equivalent to traceId
-    /// </summary>
-    public string ContextId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// current TaskRecord's sessionId
+    /// TaskRecord session id, unified as ProjectTask.Id
     /// </summary>
     public string SessionId { get; set; } = string.Empty;
 

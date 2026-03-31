@@ -16,7 +16,7 @@ public class TaskRecordDomainServiceTests
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                ContextId = "context-a",
+                SessionId = "task-a",
                 ConversationSequence = 2,
                 CreateTime = new DateTime(2024, 1, 1, 3, 0, 0, DateTimeKind.Utc),
                 UpdateTime = new DateTime(2024, 1, 1, 3, 0, 1, DateTimeKind.Utc),
@@ -24,14 +24,14 @@ public class TaskRecordDomainServiceTests
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                ContextId = "context-a",
+                SessionId = "task-a",
                 ConversationSequence = null,
                 CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
             },
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                ContextId = "context-a",
+                SessionId = "task-a",
                 ConversationSequence = 2,
                 CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
                 UpdateTime = new DateTime(2024, 1, 1, 2, 0, 1, DateTimeKind.Utc),
@@ -49,14 +49,14 @@ public class TaskRecordDomainServiceTests
         var first = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            ContextId = "context-a",
+            SessionId = "task-a",
             ConversationSequence = 1,
             CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
         };
         var second = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            ContextId = "context-a",
+            SessionId = "task-a",
             ConversationSequence = 2,
             CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
         };
@@ -67,42 +67,42 @@ public class TaskRecordDomainServiceTests
     }
 
     [Fact]
-    public void GroupByContext_GroupsOrderedRecordsPerContext()
+    public void GroupBySessionId_GroupsOrderedRecordsPerSessionId()
     {
         var earlier = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            ContextId = "context-a",
+            SessionId = "task-a",
             ConversationSequence = 1,
             CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
         };
         var later = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            ContextId = "context-a",
+            SessionId = "task-a",
             ConversationSequence = 2,
             CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
         };
         var other = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            ContextId = "context-b",
+            SessionId = "task-b",
             ConversationSequence = 1,
             CreateTime = new DateTime(2024, 1, 1, 3, 0, 0, DateTimeKind.Utc),
         };
 
-        var groups = _service.GroupByContext([later, other, earlier]);
+        var groups = _service.GroupBySessionId([later, other, earlier]);
 
-        Assert.Equal([earlier.Id, later.Id], groups["context-a"].Select(record => record.Id));
-        Assert.Equal([other.Id], groups["context-b"].Select(record => record.Id));
+        Assert.Equal([earlier.Id, later.Id], groups["task-a"].Select(record => record.Id));
+        Assert.Equal([other.Id], groups["task-b"].Select(record => record.Id));
     }
 
     [Fact]
-    public void FindTask_ReturnsDirectMatchByContextId()
+    public void FindTask_ReturnsDirectMatchByTaskId()
     {
-        var task = new ProjectTask { Id = Guid.NewGuid(), ContextId = "session-1" };
+        var task = new ProjectTask { Id = Guid.NewGuid(), ContextId = "context-1" };
 
-        var result = _service.FindTask("session-1", [task], []);
+        var result = _service.FindTask(task.Id.Normalize(), [task], []);
 
         Assert.Same(task, result);
     }
@@ -118,7 +118,7 @@ public class TaskRecordDomainServiceTests
     }
 
     [Fact]
-    public void FindTask_WhenDirectMatchMissing_UsesLatestRecordContext()
+    public void FindTask_WhenDirectMatchMissing_UsesLatestRecordSession()
     {
         var olderTask = new ProjectTask { Id = Guid.NewGuid(), ContextId = "context-a" };
         var newerTask = new ProjectTask { Id = Guid.NewGuid(), ContextId = "context-b" };
@@ -127,14 +127,14 @@ public class TaskRecordDomainServiceTests
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                ContextId = olderTask.ContextId,
+                SessionId = olderTask.Id.Normalize(),
                 CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
                 UpdateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
             },
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                ContextId = newerTask.ContextId,
+                SessionId = newerTask.Id.Normalize(),
                 CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
                 UpdateTime = new DateTime(2024, 1, 1, 3, 0, 0, DateTimeKind.Utc),
             },

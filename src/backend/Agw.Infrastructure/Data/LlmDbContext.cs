@@ -208,24 +208,17 @@ public class LlmDbContext : DbContext
                 .HasForeignKey(e => e.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasMany(e => e.ConversationList)
-                .WithOne()
-                .HasForeignKey(e => e.ContextId)
-                .HasPrincipalKey(e => e.ContextId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TaskRecord>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.AgentName).HasMaxLength(200);
             entity.Property(e => e.ConversationPayload).HasColumnType("text");
             entity.Property(e => e.Error).HasColumnType("text");
-            entity.HasIndex(e => new { e.ContextId, e.CreateTime });
-            entity.HasIndex(e => new { e.ContextId, e.SessionId, e.CreateTime });
-            entity.HasIndex(e => new { e.ContextId, e.ConversationSequence }).IsUnique(false);
+            entity.HasIndex(e => new { e.SessionId, e.CreateTime });
+            entity.HasIndex(e => new { e.SessionId, e.ConversationSequence }).IsUnique(false);
 
             entity.Property(e => e.Metadata)
                 .HasColumnType("jsonb")
