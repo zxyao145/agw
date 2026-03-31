@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/drawer";
 import { X } from "lucide-react";
 import type { AgentDto } from "./types";
-import { Conversation } from "@/components/message/conversation";
+import { Chat } from "@/components/message/chat";
 
 interface ExecuteAgentDrawerProps {
   open: boolean;
@@ -47,7 +47,7 @@ export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAge
           <DrawerDescription />
         </DrawerHeader>
 
-        <Conversation
+        <Chat
           className="px-4 pb-4 h-[calc(100vh-62px)]"
           executionId={executingAgent.id}
           agentType={0}

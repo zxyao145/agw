@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { ProjectTaskDto } from "./types";
-import { Conversation } from "@/components/message/conversation";
+import { Chat } from "@/components/message/chat";
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -120,7 +120,7 @@ export default function TaskDetailsPage() {
         <div className="space-y-6 flex-1 min-w-0">
           {/* <Conversation task={task} /> */}
 
-          <Conversation
+          <Chat
             className="h-[calc(100vh-100px)]"
             executionId={targetId}
             agentType={targetType === "agent" ? 0 : 1}

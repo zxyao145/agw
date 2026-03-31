@@ -12,7 +12,7 @@ import { createUserTextMessage, toExecutionWsUserInput } from "@/lib/execution-s
 import { Uuid4 } from "id128";
 import { InputArea } from "./components/user-input/input-area";
 import type { UserInputRef } from "@/components/message/user-input";
-import { ChatSession } from "@/components/message/chat-session";
+import { Conversation } from "@/components/message/conversation";
 import { getTaskDetails, type TaskRecordDetails } from "@/api/task-client";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -890,7 +890,7 @@ export default function ClaudeCodePage() {
               <div className="relative flex flex-1 min-h-0 overflow-hidden">
                 <TabsContent value="chat" className="mt-0 h-full w-full">
                   <div className="flex flex-col h-full px-2 w-full">
-                    <ChatSession
+                    <Conversation
                       taskId={taskId}
                       messages={messages}
                       messagesStartRef={messagesStartRef}

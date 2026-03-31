@@ -1,227 +1,107 @@
 "use client";
 
-import * as React from "react";
-import { Uuid4 } from "id128";
-import { toast } from "sonner";
-
-import { Button } from "@/components/ui/button";
-import { ChatSession } from "@/components/message/chat-session";
-import { cn } from "@/lib/utils";
-import type { AiMessage, ProcessedMessageItem } from "@/types";
+import { Badge } from "@/components/ui/badge";
 import {
-  createUserTextMessage,
-  executeWithWebSocketStream,
-  mergeStreamingMessagesById,
-  toExecutionWsUserInput,
-} from "@/lib/execution-stream";
-import { UserInput } from "./user-input";
-import { ArrowUp, Eraser, Square } from "lucide-react";
-import { Separator } from "../ui/separator";
-import { useQuery } from "@tanstack/react-query";
-import { deleteTaskById, getTaskDetails } from "@/api/task-client";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { AiMessageComponent } from "./message";
+import { AiMessage, ProcessedMessageItem } from "@/types";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { cn } from "@/lib/utils";
 
-export interface ConversationProps {
-  executionId: string | null | undefined;
-  agentType: number;
-  projectId: string;
+export interface ChatSessionProps {
   taskId?: string | null;
-  sessionId?: string | null;
-  resume?: boolean;
-  resetSignal?: string | number | boolean;
-  placeholder?: string;
-  className?: string;
-  onExecutionComplete?: () => void | Promise<void>;
-  onExecutionError?: (error: unknown) => void;
-}
-
-function nextSessionId(): string {
-  return Uuid4.generate().toCanonical();
+  messages: AiMessage[];
+  messagesStartRef?: React.RefObject<HTMLDivElement>;
+  messagesEndRef: React.RefObject<HTMLDivElement>;
+  processMessages: (msgs: AiMessage[]) => ProcessedMessageItem[];
 }
 
 export function Conversation({
-  executionId,
-  agentType,
-  projectId,
   taskId,
-  sessionId,
-  resume = false,
-  resetSignal,
-  placeholder = "Type your message...",
-  className,
-  onExecutionComplete,
-  onExecutionError,
-}: ConversationProps) {
-  const [isExecuting, setIsExecuting] = React.useState(false);
-  const [messages, setMessages] = React.useState<AiMessage[]>([]);
-  const [curSessionId, setSessionId] = React.useState<string>(sessionId ?? nextSessionId());
-  const messagesEndRef = React.useRef<HTMLDivElement>(null!);
-  const messagesStartRef = React.useRef<HTMLDivElement>(null!);
-
-  const processMessages = React.useCallback(
-    (items: AiMessage[]): ProcessedMessageItem[] =>
-      items.map((message) => ({ type: "normal", message })),
-    [],
-  );
-
-  const isTurnFinishedMessage = React.useCallback((message: AiMessage): boolean => {
-    if (message.role?.toLowerCase() !== "system") {
-      return false;
-    }
-
-    if (message.author !== "$agw-server") {
-      return false;
-    }
-
-    return message.contents.some(
-      (content) => content.additionalProperties?.type === "turn-finished",
+  messages,
+  messagesStartRef,
+  messagesEndRef,
+  processMessages,
+}: ChatSessionProps) {
+  if (!messages || messages.length == 0) {
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyTitle>No Message Yet</EmptyTitle>
+          <EmptyDescription>
+            {taskId
+              ? `There are currently no messages in task ${taskId}.`
+              : "There are currently no messages."}
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent className="flex-row justify-center gap-2"></EmptyContent>
+      </Empty>
     );
-  }, []);
-
-  const sessionQuery = useQuery({
-    queryKey: ["projects", projectId, "tasks", taskId, "task-record"],
-    queryFn: async () => {
-      return await getTaskDetails(taskId!, projectId);
-    },
-    enabled: Boolean(taskId),
-    refetchInterval: false,
-  });
-
-  React.useEffect(() => {
-    setSessionId(sessionId ?? nextSessionId());
-    setMessages([]);
-  }, [resetSignal, sessionId]);
-
-  React.useEffect(() => {
-    const sessionMessages = sessionQuery.data?.messages ?? [];
-    if (sessionMessages.length > 0) {
-      setMessages(sessionMessages);
-    }
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [sessionQuery.data]);
-
-  React.useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const handleSend = React.useCallback(
-    async (value: string) => {
-      if (!executionId) {
-        toast.error("Please enter executionId");
-        return;
-      }
-      if (!value.trim()) {
-        toast.error("Please enter a prompt");
-        return;
-      }
-
-      const userMessage = createUserTextMessage(value);
-      setMessages((prev) => [...prev, userMessage]);
-      setIsExecuting(true);
-
-      try {
-        await executeWithWebSocketStream({
-          id: executionId,
-          request: {
-            agentType,
-            sessionId: curSessionId,
-            projectId,
-            taskId,
-            resume,
-            input: toExecutionWsUserInput(userMessage),
-          },
-          onMessage: (message) => {
-            if (isTurnFinishedMessage(message)) {
-              setIsExecuting(false);
-            } else {
-              setMessages((prev) => mergeStreamingMessagesById([...prev, message]));
-            }
-          },
-        });
-        // await sessionQuery.refetch();
-        await onExecutionComplete?.();
-      } catch (error) {
-        console.error("Execute failed:", error);
-        if (onExecutionError) {
-          onExecutionError(error);
-        } else {
-          toast.error(
-            `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-          );
-        }
-      } finally {
-        setIsExecuting(false);
-      }
-    },
-    [
-      agentType,
-      executionId,
-      isTurnFinishedMessage,
-      onExecutionComplete,
-      onExecutionError,
-      projectId,
-      resume,
-      taskId,
-      curSessionId,
-    ],
-  );
-
-  const handleClear = React.useCallback(async () => {
-    if (!taskId) {
-      return;
-    }
-
-    const success = await deleteTaskById(taskId, projectId);
-    if (success) {
-      setMessages([]);
-    }
-  }, [projectId, taskId]);
-
-  const handleScrollToTop = () => {
-    messagesStartRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  };
+  }
 
   return (
-    <div className={cn("flex h-full relative", className)}>
-      <ChatSession
-        taskId={taskId}
-        messages={messages}
-        messagesStartRef={messagesStartRef}
-        messagesEndRef={messagesEndRef}
-        processMessages={processMessages}
-      />
+    <div className="flex-1 flex min-h-full pb-36 max-w-full">
+      <div className="flex-1 overflow-y-auto space-y-4">
+        {messagesStartRef ? <div ref={messagesStartRef} /> : null}
 
-      <div className="absolute bottom-0 z-10 left-0 right-0 h-30 px-2 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
-        <UserInput isExecuting={isExecuting} onExecute={handleSend} placeholder={placeholder}>
-          {/* <UserInput.TopLeft></UserInput.TopLeft> */}
+        {(messages?.length ?? 0) === 0 && (
+          <div className="flex items-center justify-center h-40">
+            <div className="text-center text-muted-foreground ">
+              <p className="text-lg mb-2">No messages yet</p>
+              <p className="text-sm">Start a conversation by typing a message below</p>
+            </div>
+          </div>
+        )}
 
-          <UserInput.TopRight>
-            <Button onClick={handleClear} disabled={isExecuting} variant="ghost" size="sm">
-              <Eraser width={16} />
-            </Button>
+        {processMessages(messages).map((item, index) => {
+          if (item.type === "accordion") {
+            return (
+              <div className="mx-4 max-w-[80%]" key={index}>
+                <Accordion type="single" collapsible className="w-full">
+                  <AccordionItem value="item-1" className="border rounded-lg px-2 last:border-b">
+                    <AccordionTrigger>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {item.toolName}
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-4">
+                        {item.messages.map((msg, msgIndex) => (
+                          <AiMessageComponent key={msgIndex} message={msg} />
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </div>
+            );
+          } else {
+            const isUser =
+              item.message.role === "user" &&
+              item.message.author === "user" &&
+              !item.message.additionalProperties;
+            console.debug("isUser", isUser, item.message);
+            return (
+              <div className={cn("mx-4", isUser ? "max-w-full" : "max-w-[80%]")} key={index}>
+                <AiMessageComponent message={item.message} />
+              </div>
+            );
+          }
+        })}
 
-            <Separator orientation="vertical" />
-            <Button onClick={handleScrollToTop} variant="ghost" size="sm">
-              <ArrowUp width={16} />
-            </Button>
-          </UserInput.TopRight>
-
-          {/* {isExecuting ? executingLabel : sendLabel} */}
-
-          {isExecuting ? (
-            <UserInput.Sender>
-              <Square size={20} />
-            </UserInput.Sender>
-          ) : null}
-
-          {/* {messages.length > 0 && (
-            <Button variant="outline" onClick={handleClear} className="w-full">
-              清空会话
-            </Button>
-          )} */}
-        </UserInput>
+        <div ref={messagesEndRef} />
       </div>
     </div>
   );
