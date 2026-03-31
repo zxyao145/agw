@@ -13,10 +13,7 @@ import { Uuid4 } from "id128";
 import { InputArea } from "./components/user-input/input-area";
 import type { UserInputRef } from "@/components/message/user-input";
 import { ChatSession } from "@/components/message/chat-session";
-import {
-  getTaskDetails,
-  type TaskRecordDetails,
-} from "@/api/task-client";
+import { getTaskDetails, type TaskRecordDetails } from "@/api/task-client";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,14 +29,9 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/u
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
 import ColResizeSplit from "./components/split-layout";
-import Export from "./components/file-explorer/explorer";
-import NoSelectedFile from "./components/file-explorer/no-selected-file";
-import FileHeader from "./components/file-explorer/file-header";
-import FileLoading from "./components/file-explorer/file-loading";
-import FileError from "./components/file-explorer/file-error";
-import FileViewer from "./components/file-explorer/file-viewer";
-import UnChangedFile from "./components/file-explorer/unchanged-file";
-import { DiffViewer } from "./components/file-explorer/diff-viewer";
+
+import { Explorer, FileContent } from "@/components/file-explorer";
+
 import "./page.css";
 import { claudeSettingsStorage } from "./lib/settings-storage";
 import { type AiMessageAction, handleAiMessage } from "./lib/ai-message-handlers";
@@ -875,7 +867,7 @@ export default function ClaudeCodePage() {
             )}
             {!isMobile && isFilesTab && showFileExplorer && (
               <ColResizeSplit.Left minWidth={200} maxWidth={600}>
-                <Export
+                <Explorer
                   rootDirectory={resolvedWorkingDirectory}
                   onlyDiff={onlyDiff}
                   recursiveMode={recursiveMode}
@@ -902,48 +894,16 @@ export default function ClaudeCodePage() {
                 </TabsContent>
 
                 <TabsContent value="files" className="mt-0 h-full">
-                  <div className="flex flex-col h-full px-2">
-                    <div className="flex-1 min-h-0 pb-36">
-                      {!selectedFile ? (
-                        NoSelectedFile()
-                      ) : (
-                        <div className="flex flex-col h-full min-h-0">
-                          <FileHeader file={selectedFile} />
-                          <div className="flex-1 min-h-0 overflow-y-auto">
-                            {isLoadingContent ? (
-                              <FileLoading />
-                            ) : contentError ? (
-                              <FileError message={contentError} />
-                            ) : onlyDiff && diffContentData ? (
-                              diffContentData.unchanged ? (
-                                <UnChangedFile
-                                  diffContentData={diffContentData}
-                                  selectedFile={selectedFile}
-                                  comments={comments}
-                                  setComments={setComments}
-                                />
-                              ) : (
-                                <DiffViewer
-                                  diff={diffContentData.diff}
-                                  filePath={selectedFile}
-                                  comments={comments}
-                                  setComments={setComments}
-                                />
-                              )
-                            ) : (
-                              <FileViewer
-                                content={fileContent}
-                                filePath={selectedFile}
-                                comments={comments}
-                                setComments={setComments}
-                                isDiffView={false}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <FileContent
+                    selectedFile={selectedFile}
+                    isLoadingContent={isLoadingContent}
+                    contentError={contentError}
+                    onlyDiff={onlyDiff}
+                    diffContentData={diffContentData}
+                    comments={comments}
+                    setComments={setComments}
+                    fileContent={fileContent}
+                  />
                 </TabsContent>
 
                 <div className="absolute bottom-0 z-10 left-0 right-0 h-30 px-2 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
@@ -1001,7 +961,7 @@ export default function ClaudeCodePage() {
               />
             )}
             {drawerContent === "files" && (
-              <Export
+              <Explorer
                 rootDirectory={resolvedWorkingDirectory}
                 onlyDiff={onlyDiff}
                 recursiveMode={recursiveMode}

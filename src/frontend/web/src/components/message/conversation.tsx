@@ -18,10 +18,7 @@ import { UserInput } from "./user-input";
 import { ArrowUp, Eraser, Square } from "lucide-react";
 import { Separator } from "../ui/separator";
 import { useQuery } from "@tanstack/react-query";
-import {
-  deleteTaskById,
-  getTaskDetails,
-} from "@/api/task-client";
+import { deleteTaskById, getTaskDetails } from "@/api/task-client";
 
 export interface ConversationProps {
   executionId: string | null | undefined;

@@ -35,7 +35,7 @@ export function TaskHistoryList({
   onTaskSelect,
   onNewTask,
   onTaskDeleted,
-  onAllTasksDeleted
+  onAllTasksDeleted,
 }: TaskHistoryListProps) {
   const [tasks, setTasks] = React.useState<TaskSummary[]>([]);
   const [editingTaskId, setEditingTaskId] = React.useState<string | null>(null);

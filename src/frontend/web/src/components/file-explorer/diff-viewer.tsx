@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { DiffViewerProps, LineComment } from "../../types";
+import { DiffViewerProps, LineComment } from "../../app/(app)/(external-agents)/claude-code/types";
 import FileViewer from "./file-viewer";
 
 /**

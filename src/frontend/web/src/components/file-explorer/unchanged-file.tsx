@@ -1,5 +1,5 @@
 import FileViewer from "./file-viewer";
-import { UnChangedFileProps } from "../../types";
+import { UnChangedFileProps } from "../../app/(app)/(external-agents)/claude-code/types";
 
 export default function UnChangedFile({
   diffContentData,

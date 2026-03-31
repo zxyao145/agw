@@ -25,7 +25,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { toast } from "sonner";
-import { FileTreeNodeProps } from "../../types";
+import { FileTreeNodeProps } from "../../app/(app)/(external-agents)/claude-code/types";
 
 const getFileIcon = (fileName: string) => {
   const ext = fileName.split(".").pop()?.toLowerCase();

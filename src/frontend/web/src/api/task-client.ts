@@ -65,7 +65,7 @@ function isNotFoundError(error: unknown): boolean {
 }
 
 export async function getAllTasks(projectId: string): Promise<TaskSummary[]> {
-   const result = (await client.apiGet("/api/projects/{projectId}/tasks", {
+  const result = (await client.apiGet("/api/projects/{projectId}/tasks", {
     params: { path: { projectId } },
   })) as ProjectTaskSummaryResponse[];
 
@@ -82,11 +82,7 @@ export async function getTaskDetails(
   return toChatSessionDetails(response);
 }
 
-
-export async function deleteTaskById(
-  taskId: string,
-  projectId: string,
-): Promise<boolean> {
+export async function deleteTaskById(taskId: string, projectId: string): Promise<boolean> {
   if (!taskId || !projectId) {
     return false;
   }

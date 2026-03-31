@@ -1,5 +1,5 @@
 import { Trash2 } from "lucide-react";
-import { LineComment } from "../../types";
+import { LineComment } from "../../app/(app)/(external-agents)/claude-code/types";
 import React from "react";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";

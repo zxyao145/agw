@@ -171,7 +171,7 @@ function buildFileTree(items: FileItem[], rootPath: string): FileItem[] {
   return buildTree(null, items);
 }
 
-export default function Export({
+export default function Explorer({
   rootDirectory,
   onlyDiff,
   recursiveMode,

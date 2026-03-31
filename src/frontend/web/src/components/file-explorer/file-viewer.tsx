@@ -1,6 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import { CodeViewerProps as FileViewerProps, LineComment } from "../../types";
+import {
+  CodeViewerProps as FileViewerProps,
+  LineComment,
+} from "../../app/(app)/(external-agents)/claude-code/types";
 import React from "react";
 import { cn } from "@/lib/utils";
 import { CommentSection } from "./comment-section";
