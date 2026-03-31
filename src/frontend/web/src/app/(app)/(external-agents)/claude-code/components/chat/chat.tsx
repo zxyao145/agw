@@ -22,7 +22,7 @@ import { CLAUDE_CODE_PROJECT_ID } from "../../contants";
 
 // Dynamically import ChatHistoryList to keep the chat shell lightweight
 const ChatHistoryList = dynamic(
-  () => import("./chat-history-list").then((mod) => ({ default: mod.ChatHistoryList })),
+  () => import("../../../../../../components/task/chat-history-list").then((mod) => ({ default: mod.ChatHistoryList })),
   { ssr: false },
 );
 export interface ChatProps extends ChatSessionProps {

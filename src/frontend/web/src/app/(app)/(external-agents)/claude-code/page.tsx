@@ -56,7 +56,7 @@ const permissionModeToValue: Record<string, number> = {
 
 const ChatHistoryList = dynamic(
   () =>
-    import("./components/chat/chat-history-list").then((mod) => ({
+    import("../../../../components/task/chat-history-list").then((mod) => ({
       default: mod.ChatHistoryList,
     })),
   { ssr: false },

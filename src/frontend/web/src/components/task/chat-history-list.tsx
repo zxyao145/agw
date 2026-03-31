@@ -19,7 +19,7 @@ import {
   type TaskSummary,
 } from "@/api/task-client";
 import { cn } from "@/lib/utils";
-import { CLAUDE_CODE_PROJECT_ID } from "../../contants";
+import { CLAUDE_CODE_PROJECT_ID } from "../../app/(app)/(external-agents)/claude-code/contants";
 
 interface ChatHistoryListProps {
   currentTaskId: string | null;
