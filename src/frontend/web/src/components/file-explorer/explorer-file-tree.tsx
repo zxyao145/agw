@@ -25,7 +25,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { toast } from "sonner";
-import { FileTreeNodeProps } from "../../app/(app)/(external-agents)/claude-code/types";
+import { FileItemType, FileTreeNodeProps, GitStatus, GitStatusBadgeLabel } from "./types";
 
 const getFileIcon = (fileName: string) => {
   const ext = fileName.split(".").pop()?.toLowerCase();
@@ -78,7 +78,7 @@ function FileTreeNode({
   defaultExpanded,
 }: FileTreeNodeProps) {
   const [isExpanded, setIsExpanded] = React.useState(
-    defaultExpanded && item.type === "directory" && (item.children?.length ?? 0) > 0,
+    defaultExpanded && item.type === FileItemType.Directory && (item.children?.length ?? 0) > 0,
   );
   // Use item.children if available (pre-built tree), otherwise empty for lazy loading
   const initialChildren = item.children || [];
@@ -94,7 +94,7 @@ function FileTreeNode({
   }, [item.children]);
 
   const loadChildren = async () => {
-    if (item.type !== "directory" || children.length > 0) return;
+    if (item.type !== FileItemType.Directory || children.length > 0) return;
 
     setIsLoading(true);
     setError(null);
@@ -111,7 +111,7 @@ function FileTreeNode({
   };
 
   const handleToggle = () => {
-    if (item.type === "directory") {
+    if (item.type === FileItemType.Directory) {
       setIsExpanded(!isExpanded);
       if (!isExpanded && children.length === 0 && !item.children) {
         loadChildren();
@@ -120,7 +120,7 @@ function FileTreeNode({
   };
 
   const handleClick = () => {
-    if (item.type === "file" && onFileSelect) {
+    if (item.type === FileItemType.File && onFileSelect) {
       onFileSelect(item.path);
     } else {
       handleToggle();
@@ -132,7 +132,7 @@ function FileTreeNode({
     e.stopPropagation();
 
     const confirmMessage =
-      item.type === "directory"
+      item.type === FileItemType.Directory
         ? `Are you sure you want to delete the directory "${item.name}" and all its contents?`
         : `Are you sure you want to delete "${item.name}"?`;
 
@@ -158,7 +158,7 @@ function FileTreeNode({
     e.preventDefault();
     e.stopPropagation();
 
-    if (item.type !== "file") {
+    if (item.type !== FileItemType.File) {
       toast.error("Can only reset files, not directories");
       return;
     }
@@ -177,11 +177,11 @@ function FileTreeNode({
     }
   };
 
-  const FileIcon = item.type === "file" ? getFileIcon(item.name) : null;
+  const FileIcon = item.type === FileItemType.File ? getFileIcon(item.name) : null;
   const FolderIcon = isExpanded ? FolderOpen : Folder;
   const ChevronIcon = isExpanded ? ChevronDown : ChevronRight;
 
-  const hasChildren = item.type === "directory" && children.length > 0;
+  const hasChildren = item.type === FileItemType.Directory && children.length > 0;
 
   return (
     <div>
@@ -195,12 +195,12 @@ function FileTreeNode({
             style={{ paddingLeft: `${level * 12 + 8}px` }}
             onClick={handleClick}
           >
-            {item.type === "directory" && (
+            {item.type === FileItemType.Directory && (
               <ChevronIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
             )}
-            {item.type === "file" && <div className="w-4" />}
+            {item.type === FileItemType.File && <div className="w-4" />}
 
-            {item.type === "directory" ? (
+            {item.type === FileItemType.Directory ? (
               <FolderIcon className="h-4 w-4 shrink-0 text-blue-500" />
             ) : (
               FileIcon && <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -209,7 +209,7 @@ function FileTreeNode({
             <span
               className={cn(
                 "text-sm truncate flex-1",
-                item.gitStatus === "deleted" && "line-through text-muted-foreground",
+                item.gitStatus === GitStatus.Deleted && "line-through text-muted-foreground",
               )}
             >
               {item.name}
@@ -220,24 +220,21 @@ function FileTreeNode({
               <span
                 className={cn(
                   "text-[10px] font-medium px-1.5 py-0.5 rounded",
-                  item.gitStatus === "added" &&
+                  item.gitStatus === GitStatus.Added &&
                     "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-                  item.gitStatus === "modified" &&
+                  item.gitStatus === GitStatus.Modified &&
                     "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-                  item.gitStatus === "deleted" &&
+                  item.gitStatus === GitStatus.Deleted &&
                     "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-                  item.gitStatus === "untracked" &&
+                  item.gitStatus === GitStatus.Untracked &&
                     "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
                 )}
               >
-                {item.gitStatus === "added" && "A"}
-                {item.gitStatus === "modified" && "M"}
-                {item.gitStatus === "deleted" && "D"}
-                {item.gitStatus === "untracked" && "U"}
+                {GitStatusBadgeLabel[item.gitStatus]}
               </span>
             )}
 
-            {item.type === "file" && item.size !== undefined && !item.gitStatus && (
+            {item.type === FileItemType.File && item.size !== undefined && !item.gitStatus && (
               <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
                 {formatFileSize(item.size)}
               </span>
@@ -251,7 +248,7 @@ function FileTreeNode({
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
           </ContextMenuItem>
-          {item.type === "file" && (
+          {item.type === FileItemType.File && (
             <>
               <ContextMenuSeparator />
               <ContextMenuItem onClick={handleReset}>

@@ -4,7 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { InitMessageContent, DirectoryMode, PermissionMode, LineComment, EnvVar } from "./types";
+import { InitMessageContent, DirectoryMode, PermissionMode, EnvVar } from "./types";
 
 import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
 import { createUserTextMessage, toExecutionWsUserInput } from "@/lib/execution-stream";
@@ -31,6 +31,7 @@ import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
 import ColResizeSplit from "./components/split-layout";
 
 import { Explorer, FileContent } from "@/components/file-explorer";
+import type { LineComment } from "@/components/file-explorer";
 
 import "./page.css";
 import { claudeSettingsStorage } from "./lib/settings-storage";
@@ -487,7 +488,13 @@ export default function ClaudeCodePage() {
     prompt += "\n\n";
 
     comments.forEach((comment) => {
-      prompt += `file ${comment.filePath}, ${comment.isAfter ? "after" : "before"} the modification, the ${comment.lineIndex}th line: `;
+      const location =
+        comment.side === "original"
+          ? "before the modification"
+          : comment.side === "modified"
+            ? "after the modification"
+            : "at the current content";
+      prompt += `file ${comment.filePath}, ${location}, the ${comment.lineNumber}th line: `;
       prompt += comment.content + "\n\n";
     });
     // console.debug("Final input with comments:", prompt);

@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { DiffViewerProps, LineComment } from "../../app/(app)/(external-agents)/claude-code/types";
 import FileViewer from "./file-viewer";
+import { CommentSide, DiffViewerProps, LineComment } from "./types";
 
 /**
  * Parse unified diff format into original and modified file contents
@@ -57,24 +57,24 @@ export function DiffViewer({
 
   // Filter comments for each side
   const originalComments = React.useMemo(
-    () => comments.filter((c) => c.isAfter === false),
+    () => comments.filter((c) => c.side === CommentSide.Original),
     [comments],
   );
 
   const modifiedComments = React.useMemo(
-    () => comments.filter((c) => c.isAfter === true),
+    () => comments.filter((c) => c.side === CommentSide.Modified),
     [comments],
   );
 
-  // Wrapper to handle setComments with proper isAfter value
+  // FileViewer updates one side at a time, so merge the edited slice back into the full list.
   const handleSetOriginalComments = React.useCallback(
     (setter: React.SetStateAction<LineComment[]>) => {
       if (!setComments) return;
       // FileViewer will call this with a setter that operates on the filtered comments
       // We need to translate that to operate on the full comments array
       setComments((prev) => {
-        const currentOriginalComments = prev.filter((c) => c.isAfter === false);
-        const otherComments = prev.filter((c) => c.isAfter === true);
+        const currentOriginalComments = prev.filter((c) => c.side === CommentSide.Original);
+        const otherComments = prev.filter((c) => c.side !== CommentSide.Original);
 
         const newOriginalComments =
           typeof setter === "function" ? setter(currentOriginalComments) : setter;
@@ -90,8 +90,8 @@ export function DiffViewer({
     (setter: React.SetStateAction<LineComment[]>) => {
       if (!setComments) return;
       setComments((prev) => {
-        const currentModifiedComments = prev.filter((c) => c.isAfter === true);
-        const otherComments = prev.filter((c) => c.isAfter === false);
+        const currentModifiedComments = prev.filter((c) => c.side === CommentSide.Modified);
+        const otherComments = prev.filter((c) => c.side !== CommentSide.Modified);
 
         const newModifiedComments =
           typeof setter === "function" ? setter(currentModifiedComments) : setter;
@@ -135,7 +135,7 @@ export function DiffViewer({
             comments={originalComments}
             setComments={handleSetOriginalComments}
             isDiffView={true}
-            isOriginal={true}
+            commentSide={CommentSide.Original}
           />
         </div>
 
@@ -147,7 +147,7 @@ export function DiffViewer({
             comments={modifiedComments}
             setComments={handleSetModifiedComments}
             isDiffView={true}
-            isOriginal={false}
+            commentSide={CommentSide.Modified}
           />
         </div>
       </div>

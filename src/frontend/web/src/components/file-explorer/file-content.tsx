@@ -6,7 +6,7 @@ import FileViewer from "@/components/file-explorer/file-viewer";
 import UnChangedFile from "@/components/file-explorer/unchanged-file";
 import { DiffViewer } from "@/components/file-explorer/diff-viewer";
 import { GitDiffResponse } from "@/api/files";
-import { LineComment } from "../../app/(app)/(external-agents)/claude-code/types";
+import { LineComment } from "./types";
 
 interface FileContentProps {
   selectedFile: string | null;

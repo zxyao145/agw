@@ -1,6 +1,5 @@
-import { FileItem, GitDiffResponse } from "@/api/files";
-import { AiMessage } from "@/types";
 import type { UserInputRef } from "@/components/message/user-input";
+import type { LineComment } from "@/components/file-explorer";
 
 export type AdditionalProperties = Record<string, unknown>;
 
@@ -77,81 +76,6 @@ export interface ChatInputAreaProps {
 }
 
 // ============================================================================
-// File Explorer Component Types
-// ============================================================================
-
-export interface LineComment {
-  id: string;
-  isAfter: boolean;
-  filePath: string;
-  lineIndex: number;
-  content: string;
-  timestamp: Date;
-}
-
-export interface FileExplorerProps {
-  rootDirectory: string;
-  onFileSelect?: (path: string) => void;
-  comments: LineComment[];
-  setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
-}
-
-export interface FileTreeNodeProps {
-  item: FileItem;
-  onFileSelect?: (path: string) => void;
-  level: number;
-  diffMode: boolean;
-  recursiveMode: boolean;
-  onFileDeleted?: (filePath: string) => void;
-  onFileReset?: (filePath: string) => void;
-  defaultExpanded?: boolean;
-}
-
-export interface CodeViewerProps {
-  content: string;
-  filePath: string;
-  comments: LineComment[];
-  setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
-  isDiffView?: boolean;
-  isOriginal?: boolean;
-}
-
-// ============================================================================
-// Diff Viewer Component Types
-// ============================================================================
-
-export interface DiffLine {
-  type: "add" | "remove" | "context" | "header";
-  oldLineNum?: number;
-  newLineNum?: number;
-  content: string;
-}
-
-export interface DiffViewerProps {
-  diff: string;
-  className?: string;
-  filePath?: string;
-  comments?: LineComment[];
-  setComments?: React.Dispatch<React.SetStateAction<LineComment[]>>;
-}
-
-export interface DiffLineRowProps {
-  oldLine: DiffLine;
-  newLine: DiffLine;
-  index: number;
-  comments: LineComment[];
-  isHovered: boolean;
-  isCommentActive: boolean;
-  commentInput: string;
-  activeSide: "old" | "new" | null;
-  onHover: (index: number | null) => void;
-  onToggleComment: (index: number | null, side: "old" | "new") => void;
-  onCommentInputChange: (value: string) => void;
-  onAddComment: (index: number, side: "old" | "new") => void;
-  onDeleteComment: (id: string) => void;
-}
-
-// ============================================================================
 // Settings Dialog Component Types
 // ============================================================================
 export interface EnvVar {
@@ -174,11 +98,4 @@ export interface SettingsDialogProps {
   setPermissionMode: (value: string) => void;
   envVars: EnvVar[];
   setEnvVars: (value: EnvVar[]) => void;
-}
-
-export interface UnChangedFileProps {
-  diffContentData: GitDiffResponse;
-  selectedFile: string;
-  comments: LineComment[];
-  setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
 }

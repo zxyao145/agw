@@ -1,9 +1,5 @@
-import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import {
-  CodeViewerProps as FileViewerProps,
-  LineComment,
-} from "../../app/(app)/(external-agents)/claude-code/types";
+import { CodeViewerProps as FileViewerProps, CommentSide, LineComment } from "./types";
 import React from "react";
 import { cn } from "@/lib/utils";
 import { CommentSection } from "./comment-section";
@@ -14,7 +10,7 @@ export default function FileViewer({
   comments,
   setComments,
   isDiffView,
-  isOriginal,
+  commentSide = CommentSide.Current,
 }: FileViewerProps) {
   const [activeCommentLine, setActiveCommentLine] = React.useState<number | null>(null);
   const [hoveredLine, setHoveredLine] = React.useState<number | null>(null);
@@ -23,7 +19,7 @@ export default function FileViewer({
   const lineNumberWidth = React.useMemo(() => String(lines.length).length, [lines.length]);
 
   const getCommentsForLine = React.useCallback(
-    (lineNumber: number) => comments.filter((c) => c.lineIndex === lineNumber),
+    (lineNumber: number) => comments.filter((c) => c.lineNumber === lineNumber),
     [comments],
   );
 
@@ -32,11 +28,9 @@ export default function FileViewer({
 
     const newComment: LineComment = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      // In diff view: Original side = isAfter=false, Modified side = isAfter=true
-      // In normal view: isAfter=true
-      isAfter: isDiffView ? !isOriginal : true,
+      side: commentSide,
       filePath: filePath,
-      lineIndex: lineNumber,
+      lineNumber,
       content: content.trim(),
       timestamp: new Date(),
     };
@@ -130,11 +124,8 @@ export default function FileViewer({
                   onAddComment={(content) => handleAddComment(lineNumber, content)}
                   onDeleteComment={handleDeleteComment}
                   onUpdateComment={handleUpdateComment}
-                  onSetActiveCommentLine={setActiveCommentLine}
-                  lineNumber={lineNumber}
                   isDiffView={isDiffView}
-                  isOriginal={isOriginal}
-                  filePath={filePath}
+                  commentSide={commentSide}
                 />
               </div>
             )}

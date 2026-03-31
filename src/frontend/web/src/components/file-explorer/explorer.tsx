@@ -5,6 +5,7 @@ import ExplorerFileError from "./explorer-file-error";
 import ExplorerFileEmpty from "./explorer-file-empty";
 import { ExplorerFileTree } from "./explorer-file-tree";
 import React from "react";
+import { FileItemType, GitStatus, type GitStatus as GitStatusValue } from "./types";
 
 /**
  * Build a tree structure from a flat list of file paths
@@ -46,16 +47,14 @@ function buildFileTree(items: FileItem[], rootPath: string): FileItem[] {
   });
 
   // Helper to get aggregated git status for a directory
-  const getDirGitStatus = (
-    path: string,
-  ): "added" | "modified" | "deleted" | "untracked" | undefined => {
+  const getDirGitStatus = (path: string): GitStatusValue | undefined => {
     const statuses = fileStatusesMap.get(path);
     if (!statuses || statuses.size === 0) return undefined;
 
-    if (statuses.has("modified")) return "modified";
-    if (statuses.has("added")) return "added";
-    if (statuses.has("untracked")) return "untracked";
-    if (statuses.has("deleted")) return "deleted";
+    if (statuses.has(GitStatus.Modified)) return GitStatus.Modified;
+    if (statuses.has(GitStatus.Added)) return GitStatus.Added;
+    if (statuses.has(GitStatus.Untracked)) return GitStatus.Untracked;
+    if (statuses.has(GitStatus.Deleted)) return GitStatus.Deleted;
 
     return undefined;
   };
@@ -85,20 +84,20 @@ function buildFileTree(items: FileItem[], rootPath: string): FileItem[] {
       dirMap.set(path, {
         name: dirName,
         path: path,
-        type: "directory",
+        type: FileItemType.Directory,
         gitStatus: getDirGitStatus(path),
         children: [],
       });
     });
 
     // Add file to its parent directory
-    if (item.type === "file") {
+    if (item.type === FileItemType.File) {
       if (parentPath === normalizedRoot || parentPath === "") {
         // File at root level - will be added later
       } else if (dirMap.has(parentPath)) {
         dirMap.get(parentPath)!.children.push(item);
       }
-    } else if (item.type === "directory") {
+    } else if (item.type === FileItemType.Directory) {
       // Create or update directory
       if (!dirMap.has(normalizedPath)) {
         dirMap.set(normalizedPath, {
@@ -147,7 +146,7 @@ function buildFileTree(items: FileItem[], rootPath: string): FileItem[] {
 
     // Build and sort items at this level
     levelMap.forEach((item) => {
-      if (item.type === "directory") {
+      if (item.type === FileItemType.Directory) {
         const dirWithChildren = dirMap.get(item.path);
         if (dirWithChildren) {
           item.children = buildTree(item.path, items);
@@ -164,7 +163,7 @@ function buildFileTree(items: FileItem[], rootPath: string): FileItem[] {
           sensitivity: "base",
         });
       }
-      return a.type === "directory" ? -1 : 1;
+      return a.type === FileItemType.Directory ? -1 : 1;
     });
   };
 

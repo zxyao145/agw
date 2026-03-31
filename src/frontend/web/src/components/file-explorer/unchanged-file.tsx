@@ -1,5 +1,5 @@
 import FileViewer from "./file-viewer";
-import { UnChangedFileProps } from "../../app/(app)/(external-agents)/claude-code/types";
+import { CommentSide, UnChangedFileProps } from "./types";
 
 export default function UnChangedFile({
   diffContentData,
@@ -19,7 +19,7 @@ export default function UnChangedFile({
           comments={comments}
           setComments={setComments}
           isDiffView={true}
-          isOriginal={true}
+          commentSide={CommentSide.Original}
         />
       )}
     </div>

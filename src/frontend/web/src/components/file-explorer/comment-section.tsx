@@ -1,8 +1,7 @@
 import { Trash2 } from "lucide-react";
-import { LineComment } from "../../app/(app)/(external-agents)/claude-code/types";
 import React from "react";
-import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
+import { CommentSide, CommentSideLabel, LineComment } from "./types";
 
 interface CommentInputProps {
   value: string;
@@ -56,11 +55,8 @@ export interface CommentSectionProps {
   onAddComment: (content: string) => void;
   onDeleteComment: (commentId: string) => void;
   onUpdateComment: (commentId: string, newContent: string) => void;
-  onSetActiveCommentLine: (lineNumber: number | null) => void;
-  lineNumber: number;
   isDiffView?: boolean;
-  isOriginal?: boolean;
-  filePath?: string;
+  commentSide?: CommentSide;
 }
 
 export function CommentSection({
@@ -69,11 +65,8 @@ export function CommentSection({
   onAddComment,
   onDeleteComment,
   onUpdateComment,
-  onSetActiveCommentLine,
-  lineNumber,
   isDiffView = false,
-  isOriginal = false,
-  filePath = "",
+  commentSide = CommentSide.Current,
 }: CommentSectionProps) {
   const [editingCommentId, setEditingCommentId] = React.useState<string | null>(null);
   const [editContent, setEditContent] = React.useState("");
@@ -109,7 +102,7 @@ export function CommentSection({
   const placeholder = editingCommentId
     ? ""
     : isDiffView
-      ? `Write a comment for ${isOriginal ? "Original" : "Modified"}...`
+      ? `Write a comment for ${CommentSideLabel[commentSide]}...`
       : "Write a comment...";
 
   return (
@@ -123,18 +116,6 @@ export function CommentSection({
                 <span className="text-xs text-muted-foreground font-medium">
                   {comment.timestamp.toLocaleTimeString()}
                 </span>
-                {/* {isDiffView && (
-                  <span
-                    className={cn(
-                      "text-xs font-semibold px-1.5 py-0.5 rounded",
-                      isOriginal
-                        ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
-                        : "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400",
-                    )}
-                  >
-                    {isOriginal ? "Original" : "Modified"}
-                  </span>
-                )} */}
               </div>
               {editingCommentId === comment.id ? (
                 <CommentInput
