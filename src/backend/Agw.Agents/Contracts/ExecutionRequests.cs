@@ -12,30 +12,23 @@ namespace Agw.Api.Contracts;
 [JsonDerivedType(typeof(InterruptCommand), nameof(InterruptCommand))]
 public abstract class AgentRunCommand;
 
-public class SettingCommand : AgentRunCommand
+public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
 {
     [JsonConstructor]
     [SetsRequiredMembers]
     public SettingCommand(
         Guid projectId,
-        Guid? taskId = null,
+        Guid taskId,
         string? sessionId = null,
-        string settingContent = "{}",
-        bool resume = false)
+        string settingContent = "{}")
     {
-        if (resume && !taskId.HasValue)
-        {
-            throw new ArgumentException("taskId cannot be null when resume is true", nameof(taskId));
-        }
-        taskId ??= Guid.NewGuid();
-
         SettingContent = settingContent;
         ProjectId = projectId;
         TaskId = taskId;
-        Resume = resume;
-        if (string.IsNullOrEmpty(sessionId) && TaskId.HasValue)
+
+        if (string.IsNullOrEmpty(sessionId))
         {
-            SessionId = TaskId.Value.Normalize();
+            SessionId = TaskId.Normalize();
         }
         else
         {
@@ -47,11 +40,39 @@ public class SettingCommand : AgentRunCommand
 
     public required Guid ProjectId { get; set; }
 
-    public Guid? TaskId { get; set; }
+    public Guid TaskId { get; set; }
 
     public string? SessionId { get; set; }
 
+    [JsonIgnore]
     public bool Resume { get; set; }
+
+    public static bool operator ==(SettingCommand? left, SettingCommand? right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left is null || right is null)
+        {
+            return false;
+        }
+
+        return left.SettingContent == right.SettingContent
+            && left.ProjectId == right.ProjectId
+            && left.TaskId == right.TaskId
+            && left.SessionId == right.SessionId;
+    }
+
+    public static bool operator !=(SettingCommand? left, SettingCommand? right) => !(left == right);
+
+    public bool Equals(SettingCommand? other) => this == other;
+
+    public override bool Equals(object? obj) => obj is SettingCommand other && Equals(other);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(SettingContent, ProjectId, TaskId, SessionId, Resume);
 }
 
 public class ExecCommand : AgentRunCommand

@@ -60,20 +60,10 @@ public class TaskAppService : ITaskAppService
     }
 
     public async Task<bool> HasTaskAsync(
-        string taskId,
+        Guid taskId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(taskId))
-        {
-            return false;
-        }
-
-        if (!Guid.TryParse(taskId, out var taskGuid))
-        {
-            return false;
-        }
-
-        var exist = await _taskRepository.Queryable.AnyAsync(r => r.Id == taskGuid, cancellationToken);
+        var exist = await _taskRepository.Queryable.AnyAsync(r => r.Id == taskId, cancellationToken);
         return exist;
     }
 

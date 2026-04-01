@@ -68,11 +68,11 @@ export const handleSystemMessage = (
 
     actions.push({ type: "setInitContent", content: initContent });
   } else if (msgType === "result") {
-    actions.push({
-      type: "notify",
-      variant: "info",
-      message: "Execution completed",
-    });
+    // actions.push({
+    //   type: "notify",
+    //   variant: "info",
+    //   message: "Execution completed",
+    // });
     actions.push({ type: "setIsExecuting", value: false });
     if (context.isInitStatus) {
       actions.push({ type: "setIsInitStatus", value: false });

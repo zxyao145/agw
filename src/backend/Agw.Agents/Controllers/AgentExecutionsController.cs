@@ -8,6 +8,7 @@ using Agw.Shared.Models;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
+using ClaudeCodeSdk.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -77,16 +78,30 @@ public partial class AgentExecutionsController : ControllerBase
                     case SettingCommand settingRequest:
                         if (!IsJsonObject(settingRequest.SettingContent))
                         {
-                            await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData,
-                                "SettingContent must be a JSON object string.");
-                            return;
+                            await SendErrorAsync(
+                                webSocket,
+                                "SettingContent must be a JSON object string.",
+                                sendLock,
+                                cancellationToken
+                                );
+                            break;
                         }
-                        settings = settingRequest;
-                        if (agentSession != null)
+
+                        if(settingRequest != settings)
                         {
-                            await agentSession.DisposeAsync();
-                            agentSession = null;
+                            settings = settingRequest;
+                            if (await _taskAppService.HasTaskAsync(settings.TaskId))
+                            {
+                                settings.Resume = true;
+                            }
+
+                            if (agentSession != null)
+                            {
+                                await agentSession.DisposeAsync();
+                                agentSession = null;
+                            }
                         }
+                        
                         break;
 
                     case ExecCommand executionRequest:
@@ -189,7 +204,7 @@ public partial class AgentExecutionsController : ControllerBase
                 if (task.IsCanceled) return;
                 if (task.Exception != null)
                 {
-                    _logger.LogError(task.Exception, "Unhandled error while processing ClaudeCode input");
+                    _logger.LogError(task.Exception, "Unhandled error while processing agent input");
                 }
             },
             TaskScheduler.Default);
@@ -297,7 +312,6 @@ public partial class AgentExecutionsController : ControllerBase
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             session.CancellationToken);
-
         await foreach (var message in _agentRuntimeService.ExecuteStreamingAsync(
                            session,
                            input,
@@ -319,7 +333,7 @@ public partial class AgentExecutionsController : ControllerBase
     {
         await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
                            id,
-                           settings.TaskId?.Normalize() ?? string.Empty,
+                           settings.TaskId.Normalize(),
                            ExtractAgentflowInputText(request.Input),
                            cancellationToken,
                            ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId),
@@ -373,7 +387,7 @@ public partial class AgentExecutionsController : ControllerBase
 
             return request;
         }
-        catch (JsonException e)
+        catch (Exception e)
         {
             _logger.LogError(e, "Failed to deserialize WebSocket message: {Message}.", json);
             await TryCloseAsync(webSocket, WebSocketCloseStatus.InvalidPayloadData, "Invalid request payload");
@@ -492,7 +506,7 @@ public partial class AgentExecutionsController : ControllerBase
             return false;
         }
 
-        var requestedSessionId = settings.TaskId?.Normalize() ?? settings.SessionId;
+        var requestedSessionId = settings.TaskId.Normalize() ?? settings.SessionId;
 
         var requestedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);
         var requestedContextId = string.IsNullOrWhiteSpace(contextId) ? requestedSessionId : contextId;

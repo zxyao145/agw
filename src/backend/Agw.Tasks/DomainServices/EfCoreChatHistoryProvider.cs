@@ -173,11 +173,6 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         foreach (var message in newMessages)
         {
             // user input
-            if (message.AuthorName != null
-                && message.AuthorName == Constants.DefaultAuthor)
-            {
-                continue;
-            }
             nextSequence++;
 
             dbContext.Set<TaskRecord>().Add(new TaskRecord
