@@ -51,7 +51,7 @@ export const handleSystemMessage = (
     return actions;
   }
 
-  console.info("handleSystem:", data, "msgType", msgType);
+  console.debug("handleSystem:", data, "msgType", msgType);
   if (msgType === "init") {
     const content = JSON.parse(data.contents[0].content);
     const initContent: InitMessageContent = {

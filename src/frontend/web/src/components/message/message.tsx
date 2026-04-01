@@ -9,19 +9,21 @@ import remarkGfm from "remark-gfm";
 type MessageNode = { type: string; content: string };
 
 const stripCommandTags = (str: string) =>
-  str.replace("<local-command-stdout>", "").replace("</local-command-stdout>", "");
+  str
+    .replace("<local-command-stdout>", "")
+    .replace("</local-command-stdout>", "");
 
 const getNodePrefix = (type: string): string =>
   type === MessageContentType.ErrorContent
     ? "ERROR: "
-    : type === MessageContentType.FunctionCallContent
-      ? "Tool use: "
+    : type === MessageContentType.UsageContent
+      ? "Usage"
       : type === MessageContentType.FunctionResultContent
-        ? "Tool result: "
+        ? ""
         : type === MessageContentType.TextReasoningContent
-          ? "Thinking:"
-          : type === MessageContentType.UsageContent
-            ? "Usage:"
+          ? ""
+          : type === MessageContentType.FunctionCallContent
+            ? ""
             : "";
 
 const isTextNode = (type: string) =>
@@ -32,24 +34,23 @@ const isTextNode = (type: string) =>
       MessageContentType.FunctionCallContent,
       MessageContentType.FunctionResultContent,
       MessageContentType.TextContent,
-      MessageContentType.TextReasoningContent,
     ] as string[]
   ).includes(type);
 
 const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
   if (isTextNode(node.type)) {
     return (
-      <div className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+      <div className="text-sm whitespace-pre-wrap wrap-anywhere">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
             pre: ({ children }) => (
-              <pre className="max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              <pre className="max-w-full whitespace-pre-wrap wrap-anywhere">
                 {children}
               </pre>
             ),
             code: ({ children }) => (
-              <code className="max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              <code className="max-w-full whitespace-pre-wrap wrap-anywhere">
                 {children}
               </code>
             ),
@@ -61,9 +62,41 @@ const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
     );
   }
 
+  if (node.type === MessageContentType.TextReasoningContent) {
+    return (
+      <div className="text-sm text-muted-foreground whitespace-pre-wrap wrap-anywhere">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            pre: ({ children }) => (
+              <pre className="max-w-full whitespace-pre-wrap wrap-anywhere">
+                {children}
+              </pre>
+            ),
+            code: ({ children }) => (
+              <code className="max-w-full whitespace-pre-wrap wrap-anywhere">
+                {children}
+              </code>
+            ),
+            ol: ({ children }) => (
+              <ol className="list-disc list-inside leading-none">{children}</ol>
+            ),
+            ul: ({ children }) => (
+              <ul className="list-decimal list-inside leading-none">
+                {children}
+              </ul>
+            ),
+          }}
+        >
+          {node.content}
+        </ReactMarkdown>
+      </div>
+    );
+  }
+
   if (node.type === MessageContentType.UriContent) {
     return (
-      <div className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+      <div className="text-sm whitespace-pre-wrap wrap-anywhere">
         <Image src={node.content} alt="Image content" />
       </div>
     );
@@ -71,9 +104,12 @@ const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
 
   if (node.type === MessageContentType.UsageContent) {
     return (
-      <div className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere] w-full relative">
+      <div className="text-sm whitespace-pre-wrap wrap-anywhere w-full relative">
         <div className="w-full flex justify-center relative z-1">
-          <Badge variant="secondary" className="bg-blue-500 text-white dark:bg-blue-600">
+          <Badge
+            variant="secondary"
+            className="bg-blue-500 text-white dark:bg-blue-600"
+          >
             {node.content}
           </Badge>
         </div>
@@ -85,13 +121,21 @@ const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
   return null;
 };
 
-const buildContentNode = (content: AiMessageContent, message: AiMessage): string => {
+const buildContentNode = (
+  content: AiMessageContent,
+  message: AiMessage,
+): string => {
   const { type, content: value } = content;
 
   if (type === MessageContentType.UsageContent) {
-    const contentAny = value as unknown as { inputTokenCount: number; outputTokenCount: number };
+    const contentAny = value as unknown as {
+      inputTokenCount: number;
+      outputTokenCount: number;
+    };
     let result = `inputToken: ${contentAny.inputTokenCount} • outputToken: ${contentAny.outputTokenCount}`;
-    const usd = message?.additionalProperties?.totalCostUsd as number | undefined;
+    const usd = message?.additionalProperties?.totalCostUsd as
+      | number
+      | undefined;
     if (usd !== undefined) result += ` • totalCost: ${usd} (USD)`;
     return result;
   }
@@ -111,7 +155,10 @@ const buildContentNode = (content: AiMessageContent, message: AiMessage): string
   ) {
     if (processed.startsWith("{") && processed.endsWith("}")) {
       try {
-        processed = "\n```json\n" + JSON.stringify(JSON.parse(processed), null, 2) + "\n```";
+        processed =
+          "\n```json\n" +
+          JSON.stringify(JSON.parse(processed), null, 2) +
+          "\n```";
       } catch {
         // Keep original if invalid JSON
       }
@@ -121,7 +168,10 @@ const buildContentNode = (content: AiMessageContent, message: AiMessage): string
   return processed;
 };
 
-const groupContentsByType = (contents: AiMessageContent[], message: AiMessage): MessageNode[] => {
+const groupContentsByType = (
+  contents: AiMessageContent[],
+  message: AiMessage,
+): MessageNode[] => {
   const nodes: MessageNode[] = [];
   let currentContent = "";
   let lastType = "";
@@ -135,7 +185,8 @@ const groupContentsByType = (contents: AiMessageContent[], message: AiMessage): 
     }
 
     currentContent +=
-      (currentContent ? "" : getNodePrefix(type)) + buildContentNode(content, message);
+      (currentContent ? "" : getNodePrefix(type)) +
+      buildContentNode(content, message);
     lastType = type;
   }
 
@@ -147,31 +198,60 @@ const groupContentsByType = (contents: AiMessageContent[], message: AiMessage): 
 };
 
 export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
-  // const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
-  const isUser = message.role === "user";
-  const isResult = message.role === "system" && message.additionalProperties?.type === "result";
-  const contentNodes = React.useMemo(
-    () => groupContentsByType(message.contents, message),
-    [message],
-  );
+  // claude
+  const isResult =
+    message.role === "system" &&
+    message.additionalProperties?.type === "result";
 
   if (isResult) {
     return null;
     // return <div className="flex justify-center">{contentNodes.map((n, i) => <React.Fragment key={i}>{renderNode(n, message)}</React.Fragment>)}</div>;
   }
 
-  console.debug("AiMessageComponent isUser", isUser, message);
+  const contentNodes = React.useMemo(
+    () => groupContentsByType(message.contents, message),
+    [message],
+  );
+
+  // const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
+  const isUser = message.role === "user";
+  const isToolResult = message.contents.some(
+    (c) => c.type === MessageContentType.FunctionResultContent,
+  );
+  const isToolUse = message.contents.some(
+    (c) => c.type === MessageContentType.FunctionCallContent,
+  );
+
+  const IsSideRight = isUser && !isToolResult;
+  let title = "";
+  if (isToolResult) {
+    title = "Tool result";
+  } else if (isToolUse) {
+    title = "Tool use";
+  } else if (isUser) {
+    title = "You";
+  } else {
+    title = `${message.role} (${message.author ?? "-"})`;
+  }
+
+  console.debug(
+    "AiMessageComponent isUser",
+    isUser,
+    isToolResult,
+    IsSideRight,
+    JSON.stringify(message),
+  );
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className={`flex ${IsSideRight ? "justify-end" : "justify-start"}`}>
       <div
-        className={`min-w-0 max-w-full rounded-lg px-4 py-3 ${isUser ? "bg-primary text-primary-foreground ml-12" : "bg-secondary mr-12"}`}
+        className={`min-w-0 max-w-full rounded-lg px-4 py-3 ${IsSideRight ? "bg-primary text-primary-foreground ml-12" : "bg-secondary mr-12"}`}
       >
-        <div className={`flex items-center gap-2 mb-1 ${isUser ? "justify-end" : ""}`}>
-          <span className="text-xs font-semibold opacity-70">
-            {isUser ? "You" : `${message.role} (${message.author ?? "-"})`}
-          </span>
+        <div
+          className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}
+        >
+          <span className="text-xs font-semibold opacity-70">{title}</span>
         </div>
-        <div className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+        <div className="text-sm whitespace-pre-wrap wrap-anywhere">
           {contentNodes.map((n, i) => (
             <React.Fragment key={i}>{renderNode(n, message)}</React.Fragment>
           ))}

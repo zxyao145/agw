@@ -741,116 +741,6 @@ export default function ClaudeCodePage() {
     );
   };
 
-  // Process messages to identify FunctionCall + FunctionResult(s) groups by callId
-  const processMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
-    const items: ProcessedMessageItem[] = [];
-
-    // Track which message indices have been processed
-    const processedIndices = new Set<number>();
-    const msgLength = msgs?.length ?? 0;
-    for (let i = 0; i < msgLength; i++) {
-      if (processedIndices.has(i)) {
-        continue; // Skip already processed messages
-      }
-
-      const currentMsg = msgs[i];
-      if (!currentMsg.author) {
-        continue;
-      }
-
-      // Check if current message is a FunctionCall
-      const isFunctionCall =
-        currentMsg?.contents?.length === 1 &&
-        currentMsg.contents[0].type === MessageContentType.FunctionCallContent;
-
-      if (isFunctionCall) {
-        const callId = currentMsg.contents[0].additionalProperties
-          ?.callId as string;
-
-        if (callId) {
-          // Find all FunctionResults with matching callId (anywhere in the message list)
-          const matchingResults: { msg: AiMessage; index: number }[] = [];
-
-          for (let j = 0; j < msgs.length; j++) {
-            if (j === i || processedIndices.has(j)) continue;
-
-            const msg = msgs[j];
-            const isFunctionResult =
-              msg?.contents?.length === 1 &&
-              msg.contents[0].type === MessageContentType.FunctionResultContent;
-
-            if (isFunctionResult) {
-              const resultCallId = msg.contents[0].additionalProperties
-                ?.callId as string;
-              if (resultCallId === callId) {
-                matchingResults.push({ msg, index: j });
-              }
-            }
-          }
-
-          // If we found matching results, create an accordion group
-          if (matchingResults.length > 0) {
-            const toolName =
-              (currentMsg.contents[0].additionalProperties
-                ?.toolName as string) ?? "";
-            const groupedMessages = [
-              currentMsg,
-              ...matchingResults.map((r) => r.msg),
-            ];
-
-            items.push({
-              type: "accordion",
-              messages: groupedMessages,
-              toolName,
-            });
-
-            // Mark all these messages as processed
-            processedIndices.add(i);
-            matchingResults.forEach((r) => processedIndices.add(r.index));
-          } else {
-            // FunctionCall without matching results, treat as normal
-            items.push({
-              type: "normal",
-              message: currentMsg,
-            });
-            processedIndices.add(i);
-          }
-        } else {
-          // FunctionCall without callId, treat as normal
-          items.push({
-            type: "normal",
-            message: currentMsg,
-          });
-          processedIndices.add(i);
-        }
-      } else {
-        // Check if it's an orphaned FunctionResult
-        const isFunctionResult =
-          currentMsg?.contents?.length === 1 &&
-          currentMsg.contents[0].type ===
-            MessageContentType.FunctionResultContent;
-
-        if (isFunctionResult) {
-          // This FunctionResult wasn't matched to any FunctionCall
-          // (either no callId, or FunctionCall hasn't appeared yet, or already processed)
-          items.push({
-            type: "normal",
-            message: currentMsg,
-          });
-        } else {
-          // Normal message (user, assistant, etc.)
-          items.push({
-            type: "normal",
-            message: currentMsg,
-          });
-        }
-        processedIndices.add(i);
-      }
-    }
-
-    return items;
-  };
-
   const handleTabChange = (value: string) => {
     // If switching from files to chat and there are unsent comments
     if (value === "chat" && comments && comments.length > 0) {
@@ -983,7 +873,6 @@ export default function ClaudeCodePage() {
                       messages={messages}
                       messagesStartRef={messagesStartRef}
                       messagesEndRef={messagesEndRef}
-                      processMessages={processMessages}
                     />
                   </div>
                 </TabsContent>
