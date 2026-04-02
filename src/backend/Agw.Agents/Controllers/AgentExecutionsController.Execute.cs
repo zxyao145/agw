@@ -1,4 +1,5 @@
 using Agw.Api.Contracts;
+using Agw.Api.Execution;
 using Agw.Shared.Enums;
 using Microsoft.AspNetCore.Mvc;
 
@@ -25,12 +26,18 @@ public partial class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
-        var (task, contextError) = await ResolveTaskAsync(
-            id,
-            request.AgentType,
-            request.TaskId,
-            request.ProjectId,
-            request.Input);
+        var taskResolution = await _agentExecutionCoordinator.ResolveTaskAsync(
+            new ExecutionTaskRequest(
+                ExecutionId: id,
+                AgentType: request.AgentType,
+                TaskId: request.TaskId,
+                ProjectId: request.ProjectId,
+                Input: request.Input,
+                Resume: false,
+                User: User?.Identity?.Name ?? "system"),
+            cancellationToken);
+        var task = taskResolution.Task;
+        var contextError = taskResolution.Error;
         if (contextError != null)
         {
             return contextError;
@@ -57,12 +64,18 @@ public partial class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
-        var (task, contextError) = await ResolveTaskAsync(
-            id,
-            request.AgentType,
-            request.TaskId,
-            request.ProjectId,
-            request.Input);
+        var taskResolution = await _agentExecutionCoordinator.ResolveTaskAsync(
+            new ExecutionTaskRequest(
+                ExecutionId: id,
+                AgentType: request.AgentType,
+                TaskId: request.TaskId,
+                ProjectId: request.ProjectId,
+                Input: request.Input,
+                Resume: false,
+                User: User?.Identity?.Name ?? "system"),
+            cancellationToken);
+        var task = taskResolution.Task;
+        var contextError = taskResolution.Error;
         if (contextError != null)
         {
             return contextError;

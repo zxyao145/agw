@@ -1,4 +1,5 @@
 using Agw.Agents.ExternalAgents;
+using Agw.Api.Execution;
 using Agw.Appliaction.Services.Agentflows;
 using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Services.Agentflows;
@@ -18,6 +19,11 @@ public static class DependencyInjection
         services.AddScoped<McpToolServerDomainService>();
         services.AddScoped<AgentDomainService>();
         services.AddScoped<AgentRuntimeService>();
+        services.AddScoped<IAgentExecutionCoordinator, AgentExecutionCoordinator>();
+        services.AddScoped<IExecutionCommandStrategy, SettingCommandStrategy>();
+        services.AddScoped<IExecutionCommandStrategy, ExecCommandStrategy>();
+        services.AddScoped<IExecutionCommandStrategy, InterruptCommandStrategy>();
+        services.AddScoped<ExecutionCommandDispatcher>();
 
         return services;
     }
