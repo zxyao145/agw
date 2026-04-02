@@ -149,34 +149,34 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                     return;
                 }
 
-                var next = await taskService.GetNextPendingAsync(projectId);
-                if (next == null)
+                var nextTask = await taskService.GetNextPendingAsync(projectId);
+                if (nextTask == null)
                 {
                     activity?.SetTag("skip.reason", "no_pending_tasks");
                     return;
                 }
 
-                var taskRecord = await taskService.GetLatestRecordAsync(next.Id.Normalize());
+                var taskRecord = await taskService.GetLatestRecordAsync(nextTask.Id.Normalize());
                 if (taskRecord == null)
                 {
-                    await taskService.MarkFailedAsync(next.Id, "Task has no TaskRecord to execute.", "scheduler");
+                    await taskService.MarkFailedAsync(nextTask.Id, "Task has no TaskRecord to execute.", "scheduler");
                     activity?.SetTag("skip.reason", "missing_task_record");
                     return;
                 }
 
-                activity?.SetTag("task.id", next.Id);
-                activity?.SetTag("task.context_id", next.ContextId);
-                activity?.SetTag("task.agent_type", next.AgentType.ToString());
-                if (next.AgentType == AgentRuntimeType.Agentflow && next.AgentId.HasValue)
+                activity?.SetTag("task.id", nextTask.Id);
+                activity?.SetTag("task.context_id", nextTask.ContextId);
+                activity?.SetTag("task.agent_type", nextTask.AgentType.ToString());
+                if (nextTask.AgentType == AgentRuntimeType.Agentflow && nextTask.AgentId.HasValue)
                 {
-                    activity?.SetTag("agentflow.id", next.AgentId.Value);
+                    activity?.SetTag("agentflow.id", nextTask.AgentId.Value);
                 }
-                if (next.AgentType == AgentRuntimeType.Agent && next.AgentId.HasValue)
+                if (nextTask.AgentType == AgentRuntimeType.Agent && nextTask.AgentId.HasValue)
                 {
-                    activity?.SetTag("agent.id", next.AgentId.Value);
+                    activity?.SetTag("agent.id", nextTask.AgentId.Value);
                 }
 
-                var marked = await taskService.TryMarkRunningAsync(next.Id, user: "scheduler");
+                var marked = await taskService.TryMarkRunningAsync(nextTask.Id, user: "scheduler");
                 if (marked == null)
                 {
                     activity?.SetTag("skip.reason", "mark_running_failed");
@@ -189,20 +189,20 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                 var stopwatch = Stopwatch.StartNew();
                 try
                 {
-                    var activityName = next.AgentType == AgentRuntimeType.Agent
+                    var activityName = nextTask.AgentType == AgentRuntimeType.Agent
                         ? "ExecuteAgent"
                         : "ExecuteAgentflow";
                     using var taskActivity = ActivitySource.StartActivity(activityName, ActivityKind.Internal);
                     taskActivity?.SetTag("task.id", marked.Id);
                     taskActivity?.SetTag("task.context_id", marked.ContextId);
-                    taskActivity?.SetTag("task.agent_type", next.AgentType.ToString());
-                    if (next.AgentType == AgentRuntimeType.Agentflow && next.AgentId.HasValue)
+                    taskActivity?.SetTag("task.agent_type", nextTask.AgentType.ToString());
+                    if (nextTask.AgentType == AgentRuntimeType.Agentflow && nextTask.AgentId.HasValue)
                     {
-                        taskActivity?.SetTag("agentflow.id", next.AgentId.Value);
+                        taskActivity?.SetTag("agentflow.id", nextTask.AgentId.Value);
                     }
-                    if (next.AgentType == AgentRuntimeType.Agent && next.AgentId.HasValue)
+                    if (nextTask.AgentType == AgentRuntimeType.Agent && nextTask.AgentId.HasValue)
                     {
-                        taskActivity?.SetTag("agent.id", next.AgentId.Value);
+                        taskActivity?.SetTag("agent.id", nextTask.AgentId.Value);
                     }
 
                     var chatMessage = GetInputMessage(taskRecord);
@@ -210,7 +210,7 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                     {
                         return;
                     }
-                    var traceId = ActivityTraceId.CreateFromString(Guid.Parse(next.ContextId)!.Normalize().AsSpan());
+                    var traceId = ActivityTraceId.CreateFromString(Guid.Parse(nextTask.ContextId)!.Normalize().AsSpan());
                     var spanId = ActivitySpanId.CreateRandom();
                     var context = new ActivityContext(
                         traceId,
@@ -221,20 +221,20 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                     agentTaskRunActivity.SetParentId(context.TraceId, context.SpanId, context.TraceFlags);
                     agentTaskRunActivity.Start();
 
-                    object? execution = next.AgentType switch
+                    object? execution = nextTask.AgentType switch
                     {
-                        AgentRuntimeType.Agentflow when next.AgentId.HasValue =>
+                        AgentRuntimeType.Agentflow when nextTask.AgentId.HasValue =>
                             await agentflowRuntime.ExecuteAsync(
-                                next.AgentId.Value,
-                                taskRecord.SessionId,
+                                nextTask.AgentId.Value,
+                                nextTask.Id,
                                 [chatMessage],
                                 stoppingToken,
                                 marked.ProjectId,
                                 marked.ContextId),
-                        AgentRuntimeType.Agent when next.AgentId.HasValue =>
+                        AgentRuntimeType.Agent when nextTask.AgentId.HasValue =>
                             await agentRuntime.ExecuteAsync(
-                                next.AgentId.Value,
-                                taskRecord.SessionId,
+                                nextTask.AgentId.Value,
+                                nextTask.Id,
                                 [chatMessage],
                                 stoppingToken,
                                 marked.ProjectId,
@@ -247,12 +247,12 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
                     if (execution == null)
                     {
-                        var targetText = next.AgentType == AgentRuntimeType.Agent ? "Agent" : "Agentflow";
+                        var targetText = nextTask.AgentType == AgentRuntimeType.Agent ? "Agent" : "Agentflow";
                         await taskService.MarkFailedAsync(marked.Id, $"{targetText} execution failed (target disabled/missing or runtime unavailable).", "scheduler");
                         _tasksFailedCounter.Add(1,
                             new KeyValuePair<string, object?>("task.id", marked.Id),
-                            new KeyValuePair<string, object?>("target.id", next.AgentId),
-                            new KeyValuePair<string, object?>("target.type", next.AgentType.ToString()),
+                            new KeyValuePair<string, object?>("target.id", nextTask.AgentId),
+                            new KeyValuePair<string, object?>("target.type", nextTask.AgentType.ToString()),
                             new KeyValuePair<string, object?>("reason", "target_unavailable"));
                         taskActivity?.SetStatus(ActivityStatusCode.Error, "Target unavailable");
                         return;
@@ -262,12 +262,12 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
 
                     _tasksExecutedCounter.Add(1,
                         new KeyValuePair<string, object?>("task.id", marked.Id),
-                        new KeyValuePair<string, object?>("target.id", next.AgentId),
-                        new KeyValuePair<string, object?>("target.type", next.AgentType.ToString()));
+                        new KeyValuePair<string, object?>("target.id", nextTask.AgentId),
+                        new KeyValuePair<string, object?>("target.type", nextTask.AgentType.ToString()));
                     _taskExecutionDuration.Record(stopwatch.ElapsedMilliseconds,
                         new KeyValuePair<string, object?>("task.id", marked.Id),
-                        new KeyValuePair<string, object?>("target.id", next.AgentId),
-                        new KeyValuePair<string, object?>("target.type", next.AgentType.ToString()),
+                        new KeyValuePair<string, object?>("target.id", nextTask.AgentId),
+                        new KeyValuePair<string, object?>("target.type", nextTask.AgentType.ToString()),
                         new KeyValuePair<string, object?>("status", "success"));
                     taskActivity?.SetStatus(ActivityStatusCode.Ok);
                 }
@@ -278,13 +278,13 @@ public class ProjectTaskSchedulerHostedService : BackgroundService
                     await taskService.MarkFailedAsync(marked.Id, ex.Message, "scheduler");
                     _tasksFailedCounter.Add(1,
                         new KeyValuePair<string, object?>("task.id", marked.Id),
-                        new KeyValuePair<string, object?>("target.id", next.AgentId),
-                        new KeyValuePair<string, object?>("target.type", next.AgentType.ToString()),
+                        new KeyValuePair<string, object?>("target.id", nextTask.AgentId),
+                        new KeyValuePair<string, object?>("target.type", nextTask.AgentType.ToString()),
                         new KeyValuePair<string, object?>("reason", "execution_exception"));
                     _taskExecutionDuration.Record(stopwatch.ElapsedMilliseconds,
                         new KeyValuePair<string, object?>("task.id", marked.Id),
-                        new KeyValuePair<string, object?>("target.id", next.AgentId),
-                        new KeyValuePair<string, object?>("target.type", next.AgentType.ToString()),
+                        new KeyValuePair<string, object?>("target.id", nextTask.AgentId),
+                        new KeyValuePair<string, object?>("target.type", nextTask.AgentType.ToString()),
                         new KeyValuePair<string, object?>("status", "failed"));
                     activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 }

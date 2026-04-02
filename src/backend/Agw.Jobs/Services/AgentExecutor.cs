@@ -43,7 +43,6 @@ public class AgentExecutor(
                 AgentId: job.AgentType == AgentRuntimeType.Agent ? job.AgentId : null,
                 Description: description,
                 Input: prompt,
-                SessionId: null,
                 Title: title,
                 SystemPrompt: null,
                 ContextId: contextId),
@@ -56,7 +55,6 @@ public class AgentExecutor(
         }
 
         var projectTaskId = createResult.Value.Id;
-        var sessionId = createResult.Value.SessionId;
 
         try
         {
@@ -64,14 +62,14 @@ public class AgentExecutor(
             {
                 AgentRuntimeType.Agent => await agentRuntimeService.ExecuteAsync(
                     job.AgentId.Value,
-                    sessionId,
+                    projectTaskId,
                     prompt,
                     cancellationToken,
                     job.ProjectId,
                     contextId),
                 AgentRuntimeType.Agentflow => await agentflowRuntimeService.ExecuteAsync(
                     job.AgentId.Value,
-                    sessionId,
+                    projectTaskId,
                     prompt,
                     cancellationToken,
                     job.ProjectId,

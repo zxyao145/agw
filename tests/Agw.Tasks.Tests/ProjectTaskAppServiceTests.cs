@@ -58,7 +58,6 @@ public class ProjectTaskAppServiceTests
                 AgentId: agentId,
                 Description: "Nightly sync",
                 Input: "Run scheduled sync",
-                SessionId: "session-1",
                 Title: "Nightly sync",
                 SystemPrompt: null,
                 ContextId: "context-1"),

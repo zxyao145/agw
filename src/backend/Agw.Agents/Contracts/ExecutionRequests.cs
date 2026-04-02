@@ -19,21 +19,11 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public SettingCommand(
         Guid projectId,
         Guid taskId,
-        string? sessionId = null,
         string settingContent = "{}")
     {
         SettingContent = settingContent;
         ProjectId = projectId;
         TaskId = taskId;
-
-        if (string.IsNullOrEmpty(sessionId))
-        {
-            SessionId = TaskId.Normalize();
-        }
-        else
-        {
-            SessionId = sessionId;
-        }
     }
 
     public required string SettingContent { get; set; }
@@ -61,8 +51,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
 
         return left.SettingContent == right.SettingContent
             && left.ProjectId == right.ProjectId
-            && left.TaskId == right.TaskId
-            && left.SessionId == right.SessionId;
+            && left.TaskId == right.TaskId;
     }
 
     public static bool operator !=(SettingCommand? left, SettingCommand? right) => !(left == right);
@@ -72,7 +61,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public override bool Equals(object? obj) => obj is SettingCommand other && Equals(other);
 
     public override int GetHashCode() =>
-        HashCode.Combine(SettingContent, ProjectId, TaskId, SessionId, Resume);
+        HashCode.Combine(SettingContent, ProjectId, TaskId);
 }
 
 public class ExecCommand : AgentRunCommand

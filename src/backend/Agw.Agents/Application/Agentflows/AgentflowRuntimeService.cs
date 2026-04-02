@@ -207,7 +207,6 @@ public class AgentflowRuntimeService : RuntimService
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         Guid agentflowId,
-        string sessionId,
         string input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default,
         Guid? projectId = null,
@@ -217,11 +216,6 @@ public class AgentflowRuntimeService : RuntimService
         if (agentflow == null || !agentflow.Enable)
         {
             yield break;
-        }
-
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            sessionId = Guid.NewGuid().Normalize();
         }
 
         var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
@@ -278,7 +272,7 @@ public class AgentflowRuntimeService : RuntimService
 
     public async Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
-        string sessionId,
+        Guid taskId,
         string input,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
@@ -292,18 +286,18 @@ public class AgentflowRuntimeService : RuntimService
             }
         };
 
-        return await ExecuteAsync(agentflowId, sessionId, messages, cancellationToken, projectId, contextId).ConfigureAwait(false);
+        return await ExecuteAsync(agentflowId, taskId, messages, cancellationToken, projectId, contextId).ConfigureAwait(false);
     }
 
     public async Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
-        string sessionId,
+        Guid taskId,
         List<ChatMessage> messages,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
         string? contextId = null)
     {
-        return await ExecuteAsync(agentflowId, ProjectDefaults.GetDefaultProjectIdentifier(projectId), sessionId, messages, cancellationToken).ConfigureAwait(false);
+        return await ExecuteAsync(agentflowId, ProjectDefaults.GetDefaultProjectIdentifier(projectId), taskId, messages, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<Workflow?> CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken = default)
@@ -320,7 +314,7 @@ public class AgentflowRuntimeService : RuntimService
     private async Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
         Guid projectId,
-        string sessionId,
+        Guid? taskId,
         List<ChatMessage> messages,
         CancellationToken cancellationToken)
     {
@@ -330,9 +324,9 @@ public class AgentflowRuntimeService : RuntimService
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(sessionId))
+        if (taskId == null)
         {
-            sessionId = Guid.NewGuid().Normalize();
+            taskId = Guid.NewGuid();
         }
 
         var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
@@ -366,7 +360,7 @@ public class AgentflowRuntimeService : RuntimService
             outputs.Add(chatMsg);
         }
 
-        return new AgentflowExecutionResult(sessionId, outputs);
+        return new AgentflowExecutionResult(taskId.Value.Normalize(), outputs);
     }
 
     private async Task<Workflow?> CreateAiWorkflow(Agentflow agentflow, CancellationToken cancellationToken)

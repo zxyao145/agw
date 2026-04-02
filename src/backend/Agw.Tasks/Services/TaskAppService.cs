@@ -35,7 +35,6 @@ public class TaskAppService : ITaskAppService
         AgentRuntimeType agentType,
         Guid executionId,
         string input,
-        string? sessionId,
         string user,
         CancellationToken cancellationToken = default)
     {
@@ -47,7 +46,6 @@ public class TaskAppService : ITaskAppService
             agentType == AgentRuntimeType.Agent ? executionId : null,
             normalizedInput,
             normalizedInput,
-            sessionId,
             title);
 
         var result = await _projectTaskAppService.CreateForExecutionAsync(projectId, taskId, request, user);

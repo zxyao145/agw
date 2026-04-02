@@ -9,7 +9,6 @@ public record ProjectTaskCreateRequest(
     Guid? AgentId,
     string Description,
     string Input,
-    string? SessionId = null,
     string? Title = null,
     string? SystemPrompt = null,
     string? ContextId = null);

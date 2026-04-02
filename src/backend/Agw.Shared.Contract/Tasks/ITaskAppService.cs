@@ -13,7 +13,6 @@ public interface ITaskAppService
         AgentRuntimeType agentType,
         Guid executionId,
         string input,
-        string? sessionId,
         string user,
         CancellationToken cancellationToken = default);
 

@@ -39,7 +39,7 @@ public partial class AgentExecutionsController : ControllerBase
 
         var result = await _agentRuntimeService.ExecuteAsync(
             id,
-            request.SessionId ?? string.Empty,
+            task!.Id,
             request.Input,
             cancellationToken,
             request.ProjectId,
@@ -72,7 +72,7 @@ public partial class AgentExecutionsController : ControllerBase
 
         var result = await _agentflowRuntimeService.ExecuteAsync(
             id,
-            request.SessionId ?? string.Empty,
+            task!.Id,
             request.Input,
             cancellationToken,
             request.ProjectId,

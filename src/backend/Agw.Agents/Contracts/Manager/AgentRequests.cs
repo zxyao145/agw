@@ -37,5 +37,5 @@ public record AgentExecuteResponse(
     IReadOnlyList<AgwMessage> Messages)
 {
     public static AgentExecuteResponse FromDomain(AgentExecutionResult result) =>
-        new(result.SessionId, result.Messages);
+        new(result.TaskId, result.Messages);
 }

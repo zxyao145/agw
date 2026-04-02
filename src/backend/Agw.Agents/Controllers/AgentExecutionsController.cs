@@ -333,7 +333,6 @@ public partial class AgentExecutionsController : ControllerBase
     {
         await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
                            id,
-                           settings.TaskId.Normalize(),
                            ExtractAgentflowInputText(request.Input),
                            cancellationToken,
                            ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId),
@@ -438,8 +437,8 @@ public partial class AgentExecutionsController : ControllerBase
                 agentType,
                 resolvedProjectId.Value,
                 null,
-                input,
-                sessionId);
+                input
+                );
         }
 
         var task = await _taskAppService.GetTaskAsync(taskId.Value);
@@ -450,8 +449,8 @@ public partial class AgentExecutionsController : ControllerBase
                 agentType,
                 resolvedProjectId.Value,
                 taskId,
-                input,
-                sessionId);
+                input
+                );
         }
         else if (task.ProjectId != resolvedProjectId.Value)
         {
@@ -466,8 +465,7 @@ public partial class AgentExecutionsController : ControllerBase
         AgentRuntimeType agentType,
         Guid projectId,
         Guid? taskId,
-        string input,
-        string? sessionId)
+        string input)
     {
         var user = User?.Identity?.Name ?? "system";
         var task = await _taskAppService.CreateTaskForExecutionAsync(
@@ -476,7 +474,6 @@ public partial class AgentExecutionsController : ControllerBase
             agentType,
             executionId,
             input,
-            sessionId,
             user);
         if (task == null)
         {
@@ -506,14 +503,11 @@ public partial class AgentExecutionsController : ControllerBase
             return false;
         }
 
-        var requestedSessionId = settings.TaskId.Normalize() ?? settings.SessionId;
-
+        var requestedTaskId = settings.TaskId.Normalize();
         var requestedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);
-        var requestedContextId = string.IsNullOrWhiteSpace(contextId) ? requestedSessionId : contextId;
 
-        return session._taskId == requestedSessionId
-            && session._projectId == requestedProjectId
-            && session._contextId == requestedContextId;
+        return session._taskId == requestedTaskId
+            && session._projectId == requestedProjectId;
     }
 
     private static bool IsJsonObject(string settingContent)

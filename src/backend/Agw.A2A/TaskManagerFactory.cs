@@ -98,7 +98,7 @@ public class TaskManagerFactory
         try
         {
             var agentExecutionResult = await agentRunService
-                .ExecuteByNameAsync(agentName, "", userText);
+                .ExecuteByNameAsync(agentName, taskId: null, userText);
 
             AgentMessage responseMessage;
             if (agentExecutionResult == null)

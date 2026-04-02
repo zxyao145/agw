@@ -33,7 +33,7 @@ using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 namespace Agw.Appliaction.Services.Agents;
 
 public record AgentExecutionResult(
-    string SessionId,
+    string TaskId,
     IReadOnlyList<AgwMessage> Messages);
 
 public class AgentRuntimeService: RuntimService
@@ -57,7 +57,6 @@ public class AgentRuntimeService: RuntimService
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
     private readonly IWebHostEnvironment _webHostEnvironment;
-    private readonly ClaudeCodeService _claudeCodeService;
 
     public AgentRuntimeService(
         IRepository<Agent> agentRepository,
@@ -78,8 +77,7 @@ public class AgentRuntimeService: RuntimService
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
         IWebHostEnvironment webHostEnvironment,
-        ILogger<AgentRuntimeService> logger,
-        ClaudeCodeService claudeCodeService)
+        ILogger<AgentRuntimeService> logger)
     {
         _agentRepository = agentRepository;
         _modelProviderRepository = modelProviderRepository;
@@ -100,7 +98,6 @@ public class AgentRuntimeService: RuntimService
         _providerSessionState = providerSessionState;
         _webHostEnvironment = webHostEnvironment;
         _logger = logger;
-        _claudeCodeService = claudeCodeService;
     }
 
     public Task<IReadOnlyList<Agent>> ListAgentsAsync() =>
@@ -380,7 +377,7 @@ public class AgentRuntimeService: RuntimService
 
     public async Task<AgentExecutionResult?> ExecuteByNameAsync(
         string agentName,
-        string sessionId,
+        Guid? taskId,
         string input,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
@@ -396,12 +393,12 @@ public class AgentRuntimeService: RuntimService
         {
             AuthorName = Constants.DefaultAuthor
         };
-        return await ExecuteAsync(sessionId, [chatMsg], projectId, contextId, agent);
+        return await ExecuteAsync(taskId, [chatMsg], projectId, contextId, agent);
     }
 
     public async Task<AgentExecutionResult?> ExecuteAsync(
         Guid agentId,
-        string sessionId,
+        Guid taskId,
         string input,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
@@ -412,12 +409,12 @@ public class AgentRuntimeService: RuntimService
             AuthorName = Constants.DefaultAuthor
         };
 
-        return await ExecuteAsync(agentId, sessionId, [chatMsg], cancellationToken, projectId, contextId);
+        return await ExecuteAsync(agentId, taskId, [chatMsg], cancellationToken, projectId, contextId);
     }
 
     public async Task<AgentExecutionResult?> ExecuteAsync(
         Guid agentId,
-        string sessionId,
+        Guid taskId,
         List<ChatMessage> input,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
@@ -429,12 +426,12 @@ public class AgentRuntimeService: RuntimService
             return null;
         }
 
-        return await ExecuteAsync(sessionId, input, projectId, contextId, agent);
+        return await ExecuteAsync(taskId, input, projectId, contextId, agent);
     }
 
 
     private async Task<AgentExecutionResult?> ExecuteAsync(
-     string sessionId,
+     Guid? taskId,
      List<ChatMessage> chatMsg,
      Guid? projectId,
      string? contextId,
@@ -452,14 +449,14 @@ public class AgentRuntimeService: RuntimService
         try
         {
             AgentSession session;
-            if (string.IsNullOrWhiteSpace(sessionId))
+            if (taskId == null)
             {
-                sessionId = Guid.NewGuid().Normalize();
+                taskId = Guid.NewGuid();
                 session = await aiAgent.CreateSessionAsync();
             }
             else
             {
-                var value = await _cache.GetOrCreateAsync<string>(sessionId, _ => ValueTask.FromResult(string.Empty));
+                var value = await _cache.GetOrCreateAsync<string>(taskId.Value.Normalize(), _ => ValueTask.FromResult(string.Empty));
                 if (string.IsNullOrWhiteSpace(value))
                 {
                     session = await aiAgent.CreateSessionAsync();
@@ -470,11 +467,12 @@ public class AgentRuntimeService: RuntimService
                     session = await aiAgent.DeserializeSessionAsync(serializedThread);
                 }
             }
+            string taskIdValue = taskId.Value.Normalize();
 
             _providerSessionState.InitializeSessionState(
                 session,
-                string.IsNullOrWhiteSpace(contextId) ? sessionId : contextId,
-                sessionId,
+                string.IsNullOrWhiteSpace(contextId) ? taskIdValue : contextId,
+                taskIdValue,
                 ProjectDefaults.GetDefaultProjectIdentifier(projectId)
                 );
 
@@ -489,7 +487,7 @@ public class AgentRuntimeService: RuntimService
                 }
             }
 
-            return new AgentExecutionResult(sessionId, messages);
+            return new AgentExecutionResult(taskIdValue, messages);
         }
         finally
         {

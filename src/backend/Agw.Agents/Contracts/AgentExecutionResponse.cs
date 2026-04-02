@@ -7,7 +7,7 @@ namespace Agw.Api.Contracts;
 public record AgentExecutionResponse(string? SessionId, IReadOnlyList<AgwMessage> Messages)
 {
     public static AgentExecutionResponse FromAgentResult(AgentExecutionResult result) =>
-        new(result.SessionId, result.Messages);
+        new(result.TaskId, result.Messages);
 
     public static AgentExecutionResponse FromAgentflowResult(AgentflowExecutionResult result) =>
         new(result.SessionId, result.Messages);

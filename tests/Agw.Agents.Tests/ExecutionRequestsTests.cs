@@ -17,8 +17,7 @@ public class ExecutionRequestsTests
                               "type": "SettingCommand",
                               "settingContent": "{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}",
                               "projectId": "__PROJECT_ID__",
-                              "taskId": "__TASK_ID__",
-                              "resume": true
+                              "taskId": "__TASK_ID__"
                             }
                             """;
         var payload = json
@@ -31,8 +30,6 @@ public class ExecutionRequestsTests
         Assert.Equal("{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}", settingRequest.SettingContent);
         Assert.Equal(projectId, settingRequest.ProjectId);
         Assert.Equal(taskId, settingRequest.TaskId);
-        Assert.Equal(taskId.ToString(), settingRequest.SessionId);
-        Assert.True(settingRequest.Resume);
     }
 
     [Fact]
