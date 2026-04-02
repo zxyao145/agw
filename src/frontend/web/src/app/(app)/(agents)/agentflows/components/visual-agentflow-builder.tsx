@@ -534,7 +534,7 @@ export function VisualAgentflowBuilder({
 
   // Auto-layout nodes based on pattern
   const handleAutoLayout = React.useCallback(
-    async (selectedPattern: number) => {
+    async (_: number) => {
       if (nodes.length === 0) return;
 
       const result = await createGraphLayout(nodes, edges);
@@ -939,55 +939,4 @@ export function VisualAgentflowBuilder({
       </TabsContent>
     </Tabs>
   );
-}
-
-// Topological sort helper for sequential agentflows
-function topologicalSort(nodes: Node[], edges: Edge[]): Node[] {
-  const adjList = new Map<string, string[]>();
-  const inDegree = new Map<string, number>();
-
-  // Initialize
-  nodes.forEach((node) => {
-    adjList.set(node.id, []);
-    inDegree.set(node.id, 0);
-  });
-
-  // Build adjacency list and in-degree count
-  edges.forEach((edge) => {
-    adjList.get(edge.source)?.push(edge.target);
-    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
-  });
-
-  // Find all nodes with in-degree 0
-  const queue: string[] = [];
-  nodes.forEach((node) => {
-    if (inDegree.get(node.id) === 0) {
-      queue.push(node.id);
-    }
-  });
-
-  const sorted: Node[] = [];
-
-  while (queue.length > 0) {
-    const nodeId = queue.shift()!;
-    const node = nodes.find((n) => n.id === nodeId);
-    if (node) sorted.push(node);
-
-    const neighbors = adjList.get(nodeId) || [];
-    neighbors.forEach((neighbor) => {
-      const degree = inDegree.get(neighbor)! - 1;
-      inDegree.set(neighbor, degree);
-      if (degree === 0) {
-        queue.push(neighbor);
-      }
-    });
-  }
-
-  // If sorted length doesn't match nodes length, there's a cycle
-  // In that case, fall back to original node order
-  if (sorted.length !== nodes.length) {
-    return nodes;
-  }
-
-  return sorted;
 }

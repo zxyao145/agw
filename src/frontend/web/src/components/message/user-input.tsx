@@ -7,7 +7,6 @@ import { KeyboardEvent, ReactNode, useRef, useImperativeHandle, forwardRef } fro
 import React from "react";
 import {
   Item,
-  ItemActions,
   ItemContent,
   ItemDescription,
   ItemGroup,

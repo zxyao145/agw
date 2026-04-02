@@ -23,7 +23,7 @@ public class ProjectTaskDomainServiceTests
         };
         var initialRecord = new TaskRecord
         {
-            SessionId = "session",
+            TaskId = Guid.NewGuid(),
             ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, "hello"), JsonOptions),
         };
 
@@ -48,7 +48,7 @@ public class ProjectTaskDomainServiceTests
         };
         var initialRecord = new TaskRecord
         {
-            SessionId = "session-1",
+            TaskId = Guid.NewGuid(),
             ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, "hello"), JsonOptions),
         };
 
@@ -65,7 +65,7 @@ public class ProjectTaskDomainServiceTests
         Assert.Equal(task.CreateTime, task.UpdateTime);
 
         Assert.NotEqual(Guid.Empty, initialRecord.Id);
-        Assert.Equal(task.Id.Normalize(), initialRecord.SessionId);
+        Assert.Equal(task.Id, initialRecord.TaskId);
         Assert.Equal(Constants.DefaultAuthor, initialRecord.AgentName);
         Assert.Equal(task.CreateTime, initialRecord.CreateTime);
         Assert.Equal(task.CreateTime, initialRecord.UpdateTime);
@@ -75,7 +75,7 @@ public class ProjectTaskDomainServiceTests
     public void TryApplyUpdate_BlankInput_ReturnsFalse()
     {
         var task = new ProjectTask { ContextId = "context", Description = "existing" };
-        var latestRecord = new TaskRecord { SessionId = "session", AgentName = "agent" };
+        var latestRecord = new TaskRecord { TaskId = Guid.NewGuid(), AgentName = "agent" };
 
         var result = _service.TryApplyUpdate(task, latestRecord, "Updated description", "   ", out var record);
 
@@ -87,7 +87,7 @@ public class ProjectTaskDomainServiceTests
     public void TryApplyUpdate_BlankDescriptionAfterTrim_ReturnsFalse()
     {
         var task = new ProjectTask { ContextId = "context", Description = "existing" };
-        var latestRecord = new TaskRecord { SessionId = "session", AgentName = "agent" };
+        var latestRecord = new TaskRecord { TaskId = Guid.NewGuid(), AgentName = "agent" };
 
         var result = _service.TryApplyUpdate(task, latestRecord, "   ", "input", out var record);
 
@@ -106,7 +106,7 @@ public class ProjectTaskDomainServiceTests
         };
         var latestRecord = new TaskRecord
         {
-            SessionId = "session-1",
+            TaskId = Guid.NewGuid(),
             AgentName = "agent-a",
             ConversationSequence = 3,
         };
@@ -118,7 +118,7 @@ public class ProjectTaskDomainServiceTests
         Assert.NotNull(record);
         Assert.Equal("Updated description", task.Description);
         Assert.InRange(task.UpdateTime!.Value, before, DateTime.UtcNow);
-        Assert.Equal(task.Id.Normalize(), record!.SessionId);
+        Assert.Equal(task.Id.Normalize(), record!.TaskId.Normalize());
         Assert.Equal(latestRecord.AgentName, record.AgentName);
         Assert.Equal(4, record.ConversationSequence);
         Assert.Equal("user input", record.GetText());

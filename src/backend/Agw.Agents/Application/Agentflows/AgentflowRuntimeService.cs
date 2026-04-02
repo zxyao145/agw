@@ -20,7 +20,7 @@ namespace Agw.Appliaction.Services.Agentflows;
 
 public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
 
-public record AgentflowExecutionResult(string SessionId, IReadOnlyList<AgwMessage> Messages);
+public record AgentflowExecutionResult(string TaskId, IReadOnlyList<AgwMessage> Messages);
 
 public class AgentflowRuntimeService : RuntimService
 {

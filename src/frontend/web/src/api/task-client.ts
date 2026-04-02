@@ -36,7 +36,6 @@ export type ProjectTaskSummaryResponse = {
 };
 
 type ProjectTaskHistoryResponse = ProjectTaskSummaryResponse & {
-  sessionId: string;
   input?: string;
   messageCount: number;
   messages?: AiMessage[] | null;

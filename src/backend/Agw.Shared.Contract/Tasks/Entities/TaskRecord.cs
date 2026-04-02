@@ -7,9 +7,9 @@ public class TaskRecord
     public Guid Id { get; set; }
 
     /// <summary>
-    /// TaskRecord session id, unified as ProjectTask.Id
+    /// unified as ProjectTask.Id
     /// </summary>
-    public string SessionId { get; set; } = string.Empty;
+    public Guid TaskId { get; set; }
 
     public string? AgentName { get; set; }
 

@@ -30,8 +30,7 @@ public partial class AgentExecutionsController : ControllerBase
             request.AgentType,
             request.TaskId,
             request.ProjectId,
-            request.Input,
-            request.SessionId);
+            request.Input);
         if (contextError != null)
         {
             return contextError;
@@ -63,8 +62,7 @@ public partial class AgentExecutionsController : ControllerBase
             request.AgentType,
             request.TaskId,
             request.ProjectId,
-            request.Input,
-            request.SessionId);
+            request.Input);
         if (contextError != null)
         {
             return contextError;

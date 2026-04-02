@@ -51,8 +51,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             _ =>
             {
                 var contextId = TaskUtil.GenContextId();
-                var sessionId = Guid.NewGuid().Normalize();
-                return new State(contextId, sessionId, ProjectDefaults.DefaultBuiltId);
+                var taskId = Guid.NewGuid().Normalize();
+                return new State(contextId, taskId, ProjectDefaults.DefaultBuiltId);
             },
             nameof(EfCoreChatHistoryProvider),
             _jsonSerializerOptions);
@@ -61,7 +61,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     public void InitializeSessionState(
         AgentSession session,
         string contextId,
-        string? sessionId,
+        string? taskId,
         Guid projectId)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -73,7 +73,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         var state = new State(
             contextId.Trim(),
-            string.IsNullOrWhiteSpace(sessionId) ? contextId.Trim() : sessionId.Trim(),
+            string.IsNullOrWhiteSpace(taskId) ? contextId.Trim() : taskId.Trim(),
             projectId);
         _state.SaveState(session, state);
     }
@@ -88,9 +88,11 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
+        Guid taskGuid = Guid.Parse(state.TaskId);
+
         var payloads = await dbContext.Set<TaskRecord>()
             .AsNoTracking()
-            .Where(record => record.SessionId == state.SessionId
+            .Where(record => record.TaskId == taskGuid
                 && record.ConversationPayload != null)
             .OrderBy(record => record.ConversationSequence)
             .ThenBy(record => record.CreateTime)
@@ -134,13 +136,13 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         var now = DateTime.UtcNow;
         var projectTask = await dbContext.Set<ProjectTask>()
-            .SingleOrDefaultAsync(x => x.Id == ParseSessionTaskId(state.SessionId), cancellationToken)
+            .SingleOrDefaultAsync(x => x.Id == ParseSessionTaskId(state.TaskId), cancellationToken)
             .ConfigureAwait(false);
 
         if (projectTask == null)
         {
             var firstUserText = ExtractFirstText(newMessages.FirstOrDefault(message => message.Role == ChatRole.User));
-            var taskId = ParseSessionTaskId(state.SessionId) ?? Guid.NewGuid();
+            var taskId = ParseSessionTaskId(state.TaskId) ?? Guid.NewGuid();
             projectTask = new ProjectTask
             {
                 Id = taskId,
@@ -156,7 +158,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 UpdateTime = now
             };
             dbContext.Set<ProjectTask>().Add(projectTask);
-            state = state with { SessionId = projectTask.Id.Normalize() };
+            state = state with { TaskId = projectTask.Id.Normalize() };
         }
         else
         {
@@ -164,8 +166,10 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             projectTask.UpdateTime = now;
         }
 
+        Guid taskGuid = Guid.Parse(state.TaskId);
+
         var nextSequence = await dbContext.Set<TaskRecord>()
-            .Where(x => x.SessionId == state.SessionId)
+            .Where(x => x.TaskId == taskGuid)
             .Select(x => x.ConversationSequence)
             .MaxAsync(cancellationToken)
             .ConfigureAwait(false) ?? -1;
@@ -178,7 +182,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             dbContext.Set<TaskRecord>().Add(new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                SessionId = state.SessionId,
+                TaskId = taskGuid,
                 AgentName = message.AuthorName,
                 ConversationSequence = nextSequence,
                 ConversationPayload = JsonSerializer.Serialize(message, _jsonSerializerOptions),
@@ -216,8 +220,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .Trim();
     }
 
-    private static Guid? ParseSessionTaskId(string sessionId) =>
-        Guid.TryParse(sessionId, out var taskId) ? taskId : null;
+    private static Guid? ParseSessionTaskId(string taskIdString) =>
+        Guid.TryParse(taskIdString, out var taskId) ? taskId : null;
 
-    public sealed record State(string ContextId, string SessionId, Guid ProjectId);
+    public sealed record State(string ContextId, string TaskId, Guid ProjectId);
 }

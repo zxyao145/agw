@@ -131,7 +131,6 @@ public partial class AgentExecutionsController : ControllerBase
                             settings.TaskId,
                             settings.ProjectId,
                             ExtractAgentflowInputText(executionRequest.Input),
-                            settings.SessionId,
                             settings.Resume);
                         if (contextError != null)
                         {
@@ -400,7 +399,6 @@ public partial class AgentExecutionsController : ControllerBase
         Guid? taskId,
         Guid? projectId,
         string input,
-        string? sessionId,
         bool resume = false)
     {
         var resolvedProjectId = await _projectAppService.ResolveProjectIdAsync(projectId);

@@ -1,46 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookKey, KeyRound, Trash2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { apiDelete, apiPost, apiPut } from "@/api/client";
+import { apiDelete } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription as UiDialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle as UiDialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { getApiErrorMessage, listKeysByPair } from "./utils";
-import { Switch } from "./switch";
 
 type ModelProviderActionsProps = {
   modelProviderId: string;
-  modelId: string;
-  providerId: string;
 };
 
 export function ModelProviderActions({
   modelProviderId,
-  modelId,
-  providerId,
 }: ModelProviderActionsProps) {
   const queryClient = useQueryClient();
 

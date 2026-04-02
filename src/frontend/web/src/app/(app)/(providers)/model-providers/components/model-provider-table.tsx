@@ -3,7 +3,6 @@
 import * as React from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -12,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ModelProviderDto, ModelDto, ProviderDto } from "./types";
+import type { ModelProviderDto } from "./types";
 import { getApiErrorMessage } from "./utils";
 import { ModelProviderActions } from "./model-provider-actions";
 
@@ -93,8 +92,6 @@ export function ModelProviderTable({
                     <TableCell className="whitespace-nowrap text-right">
                       <ModelProviderActions
                         modelProviderId={item.id}
-                        modelId={item.modelId}
-                        providerId={item.providerId}
                       />
                     </TableCell>
                   </TableRow>

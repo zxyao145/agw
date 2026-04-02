@@ -41,7 +41,6 @@ public record ProjectTaskResponse(
     Guid? AgentflowId,
     Guid? AgentId,
     ProjectTaskStatus Status,
-    string SessionId,
     string Title,
     string Description,
     string Input,

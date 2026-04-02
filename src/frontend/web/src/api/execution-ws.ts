@@ -7,7 +7,6 @@ export type ExecutionWsRequest = {
   input: ExecutionWsUserInput;
   projectId: string;
   settingContent?: string;
-  sessionId?: string | null;
   taskId?: string | null;
   resume?: boolean;
 };
@@ -78,7 +77,6 @@ function openExecutionWebSocket(
           settingContent: request.settingContent ?? "{}",
           projectId: request.projectId,
           taskId: request.taskId ?? null,
-          sessionId: request.sessionId ?? null,
           resume: request.resume ?? false,
         }),
       );

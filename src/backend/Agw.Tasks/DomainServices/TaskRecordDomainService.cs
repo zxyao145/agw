@@ -15,22 +15,22 @@ public class TaskRecordDomainService
     public TaskRecord? GetLatest(IEnumerable<TaskRecord> records) =>
         Order(records).LastOrDefault();
 
-    public Dictionary<string, List<TaskRecord>> GroupBySessionId(IEnumerable<TaskRecord> records) =>
+    public Dictionary<string, List<TaskRecord>> GroupByTaskId(IEnumerable<TaskRecord> records) =>
         Order(records)
-            .GroupBy(record => record.SessionId, StringComparer.Ordinal)
+            .GroupBy(record => record.TaskId.Normalize(), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
 
     public ProjectTask? FindTask(
-        string sessionId,
+        string taskId,
         IReadOnlyList<ProjectTask> tasks,
         IReadOnlyList<TaskRecord> records)
     {
-        if (string.IsNullOrWhiteSpace(sessionId) || tasks.Count == 0)
+        if (string.IsNullOrWhiteSpace(taskId) || tasks.Count == 0)
         {
             return null;
         }
 
-        var directTask = tasks.FirstOrDefault(task => string.Equals(task.Id.Normalize(), sessionId, StringComparison.OrdinalIgnoreCase));
+        var directTask = tasks.FirstOrDefault(task => string.Equals(task.Id.Normalize(), taskId, StringComparison.OrdinalIgnoreCase));
         if (directTask != null)
         {
             return directTask;
@@ -38,14 +38,14 @@ public class TaskRecordDomainService
 
         var taskById = tasks.ToDictionary(task => task.Id.Normalize(), StringComparer.OrdinalIgnoreCase);
         var latestMatch = records
-            .Where(record => taskById.ContainsKey(record.SessionId))
+            .Where(record => taskById.ContainsKey(record.TaskId.Normalize()))
             .OrderByDescending(record => record.UpdateTime ?? record.CreateTime)
             .ThenByDescending(record => record.CreateTime)
             .FirstOrDefault();
 
         return latestMatch == null
             ? null
-            : taskById.GetValueOrDefault(latestMatch.SessionId);
+            : taskById.GetValueOrDefault(latestMatch.TaskId.Normalize());
     }
 
     public bool ShouldDeleteTask(ProjectTask task) => false;

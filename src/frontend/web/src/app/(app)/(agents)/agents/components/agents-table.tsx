@@ -2,7 +2,6 @@ import { UseQueryResult } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,

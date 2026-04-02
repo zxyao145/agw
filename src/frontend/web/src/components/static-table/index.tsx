@@ -31,7 +31,7 @@ export function StaticTable({
   let renderedHeader = header;
   if (header && React.isValidElement(header)) {
     renderedHeader = React.cloneElement(header, {
-      className: `${(header?.props as SlotProps).className ?? ""} bg-muted/30`,
+      className: `${(header?.props as SlotProps)?.className ?? ""} bg-muted/30`,
     });
   }
 

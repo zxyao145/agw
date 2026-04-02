@@ -70,7 +70,6 @@ type ProjectTaskSummaryDto = {
 };
 
 type ProjectTaskResponse = ProjectTaskSummaryDto & {
-  // sessionId: string;
   input: string;
   messageCount: number;
 };

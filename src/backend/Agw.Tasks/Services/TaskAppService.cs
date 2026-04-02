@@ -59,44 +59,25 @@ public class TaskAppService : ITaskAppService
 
     public async Task<bool> HasTaskAsync(
         Guid taskId,
-        CancellationToken cancellationToken = default)
-    {
-        var exist = await _taskRepository.Queryable.AnyAsync(r => r.Id == taskId, cancellationToken);
-        return exist;
-    }
-
-    public async Task<bool> HasSessionAsync(
-        string sessionId,
         Guid? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(sessionId))
+        if (projectId != null)
         {
-            return false;
+            var project = await _projectResolver.ResolveAsync(projectId, cancellationToken);
+            if (project == null)
+            {
+                return false;
+            }
+            var existInProject = await _taskRepository.Queryable
+                .AnyAsync(
+                r => r.Id == taskId && r.ProjectId == project.Id,
+                cancellationToken
+                );
+            return existInProject;
         }
 
-        var records = await _recordRepository.ListAsync(r => r.SessionId == sessionId);
-        if (records.Count == 0)
-        {
-            return false;
-        }
-
-        if (projectId == null)
-        {
-            return false;
-        }
-
-        var project = await _projectResolver.ResolveAsync(projectId, cancellationToken);
-        if (project == null)
-        {
-            return false;
-        }
-
-        var tasks = await _taskRepository.ListAsync(t => t.ProjectId == project.Id);
-        var knownTaskIds = tasks
-            .Select(t => t.Id.Normalize())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        return records.Any(record => knownTaskIds.Contains(record.SessionId));
+        var exist = await _taskRepository.Queryable.AnyAsync(r => r.Id == taskId, cancellationToken);
+        return exist;
     }
 }

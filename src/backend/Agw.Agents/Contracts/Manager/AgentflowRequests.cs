@@ -42,11 +42,11 @@ public record AgentflowExecutionAgentResultResponse(Guid AgentId, string AgentNa
 }
 
 public record AgentflowExecuteResponse(
-    string? SessionId,
+    string? TaskId,
     IReadOnlyList<AgwMessage> Messages)
 {
     public static AgentflowExecuteResponse FromDomain(AgentflowExecutionResult result) =>
         new(
-            result.SessionId,
+            result.TaskId,
             result.Messages);
 }

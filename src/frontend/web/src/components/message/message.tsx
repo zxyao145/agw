@@ -35,7 +35,7 @@ const isTextNode = (type: string) =>
     ] as string[]
   ).includes(type);
 
-const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
+const renderNode = (node: MessageNode, _: AiMessage): React.ReactNode => {
   if (isTextNode(node.type)) {
     return (
       <div className="text-sm whitespace-pre-wrap wrap-anywhere">

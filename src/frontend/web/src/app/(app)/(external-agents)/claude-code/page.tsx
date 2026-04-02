@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InitMessageContent, DirectoryMode, PermissionMode, EnvVar } from "./types";
 
-import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
+import { AiMessage } from "@/types";
 import { createUserTextMessage, toExecutionWsUserInput } from "@/lib/execution-stream";
 
 import { Uuid4 } from "id128";

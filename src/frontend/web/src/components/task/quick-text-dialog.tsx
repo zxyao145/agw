@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Flashlight, Zap } from "lucide-react";
+import { Zap } from "lucide-react";
 import { useState } from "react";
 
 export interface QuickTextOption {

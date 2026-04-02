@@ -7,9 +7,7 @@ import { toast } from "sonner";
 
 import { apiDelete } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,

@@ -131,7 +131,7 @@ public sealed class AgentExecSession : IAsyncDisposable
             }
         }
 
-        _logger.LogDebug("Saved thread state for session: {SessionId}", _taskId);
+        _logger.LogDebug("Saved thread state for task: {TaskId}", _taskId);
     }
 
     public void UpdateThread(AgentSession newThread) => Session = newThread;

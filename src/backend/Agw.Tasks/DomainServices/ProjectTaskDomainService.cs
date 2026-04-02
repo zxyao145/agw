@@ -18,7 +18,6 @@ public class ProjectTaskDomainService
     {
         if (string.IsNullOrWhiteSpace(task.Description)
             || string.IsNullOrWhiteSpace(task.ContextId)
-            || string.IsNullOrWhiteSpace(initialRecord.SessionId)
             || string.IsNullOrWhiteSpace(initialRecord.GetText()))
         {
             return false;
@@ -39,7 +38,7 @@ public class ProjectTaskDomainService
         task.UpdateTime = task.CreateTime;
 
         initialRecord.Id = initialRecord.Id == Guid.Empty ? Guid.NewGuid() : initialRecord.Id;
-        initialRecord.SessionId = task.Id.Normalize();
+        initialRecord.TaskId = task.Id;
         initialRecord.AgentName = Constants.DefaultAuthor;
         initialRecord.CreateTime = task.CreateTime;
         initialRecord.UpdateTime = task.CreateTime;
@@ -70,7 +69,7 @@ public class ProjectTaskDomainService
         record = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            SessionId = task.Id.Normalize(),
+            TaskId = task.Id,
             AgentName = latestRecord.AgentName,
             ConversationSequence = (latestRecord.ConversationSequence ?? -1) + 1,
             ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, input.Trim()), JsonOptions),

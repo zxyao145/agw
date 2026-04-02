@@ -16,7 +16,7 @@ public class TaskRecordDomainServiceTests
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                SessionId = "task-a",
+                TaskId = Guid.NewGuid(),
                 ConversationSequence = 2,
                 CreateTime = new DateTime(2024, 1, 1, 3, 0, 0, DateTimeKind.Utc),
                 UpdateTime = new DateTime(2024, 1, 1, 3, 0, 1, DateTimeKind.Utc),
@@ -24,14 +24,14 @@ public class TaskRecordDomainServiceTests
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                SessionId = "task-a",
+                TaskId = Guid.NewGuid(),
                 ConversationSequence = null,
                 CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
             },
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                SessionId = "task-a",
+                TaskId = Guid.NewGuid(),
                 ConversationSequence = 2,
                 CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
                 UpdateTime = new DateTime(2024, 1, 1, 2, 0, 1, DateTimeKind.Utc),
@@ -49,14 +49,14 @@ public class TaskRecordDomainServiceTests
         var first = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            SessionId = "task-a",
+            TaskId = Guid.NewGuid(),
             ConversationSequence = 1,
             CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
         };
         var second = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            SessionId = "task-a",
+            TaskId = Guid.NewGuid(),
             ConversationSequence = 2,
             CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
         };
@@ -67,34 +67,37 @@ public class TaskRecordDomainServiceTests
     }
 
     [Fact]
-    public void GroupBySessionId_GroupsOrderedRecordsPerSessionId()
+    public void GroupByTaskId_GroupsOrderedRecordsPerTaskId()
     {
+        var taskIdA = Guid.NewGuid();
+        var taskIdB = Guid.NewGuid();
+
         var earlier = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            SessionId = "task-a",
+            TaskId = taskIdA,
             ConversationSequence = 1,
             CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
         };
         var later = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            SessionId = "task-a",
+            TaskId = taskIdA,
             ConversationSequence = 2,
             CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
         };
         var other = new TaskRecord
         {
             Id = Guid.NewGuid(),
-            SessionId = "task-b",
+            TaskId = taskIdB,
             ConversationSequence = 1,
             CreateTime = new DateTime(2024, 1, 1, 3, 0, 0, DateTimeKind.Utc),
         };
 
-        var groups = _service.GroupBySessionId([later, other, earlier]);
+        var groups = _service.GroupByTaskId([later, other, earlier]);
 
-        Assert.Equal([earlier.Id, later.Id], groups["task-a"].Select(record => record.Id));
-        Assert.Equal([other.Id], groups["task-b"].Select(record => record.Id));
+        Assert.Equal([earlier.Id, later.Id], groups[taskIdA.Normalize()].Select(record => record.Id));
+        Assert.Equal([other.Id], groups[taskIdB.Normalize()].Select(record => record.Id));
     }
 
     [Fact]
@@ -127,14 +130,14 @@ public class TaskRecordDomainServiceTests
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                SessionId = olderTask.Id.Normalize(),
+                TaskId = olderTask.Id,
                 CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
                 UpdateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
             },
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                SessionId = newerTask.Id.Normalize(),
+                TaskId = newerTask.Id,
                 CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
                 UpdateTime = new DateTime(2024, 1, 1, 3, 0, 0, DateTimeKind.Utc),
             },
@@ -146,7 +149,7 @@ public class TaskRecordDomainServiceTests
     }
 
     [Fact]
-    public void FindTask_BlankSessionId_ReturnsNull()
+    public void FindTask_BlankTaskId_ReturnsNull()
     {
         var task = new ProjectTask { Id = Guid.NewGuid(), ContextId = "context-1" };
 

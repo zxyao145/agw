@@ -213,12 +213,12 @@ public class LlmDbContext : DbContext
         modelBuilder.Entity<TaskRecord>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.SessionId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.TaskId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.AgentName).HasMaxLength(200);
             entity.Property(e => e.ConversationPayload).HasColumnType("text");
             entity.Property(e => e.Error).HasColumnType("text");
-            entity.HasIndex(e => new { e.SessionId, e.CreateTime });
-            entity.HasIndex(e => new { e.SessionId, e.ConversationSequence }).IsUnique(false);
+            entity.HasIndex(e => new { e.TaskId, e.CreateTime });
+            entity.HasIndex(e => new { e.TaskId, e.ConversationSequence }).IsUnique(false);
 
             entity.Property(e => e.Metadata)
                 .HasColumnType("jsonb")

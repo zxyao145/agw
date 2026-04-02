@@ -2,8 +2,19 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": null,
   "categories": {},
-  "rules": {},
+  "rules": {
+    "no-unused-vars": "warn",
+  },
   "settings": {
+    "no-unused-vars": {
+      "vars": "all",
+      "args": "none",
+      "ignoreRestSiblings": true,
+      "fix": {
+        "imports": "fix",
+        "variables": "suggestion"
+      }
+    },
     "jsx-a11y": {
       "polymorphicPropName": null,
       "components": {},
@@ -41,5 +52,6 @@
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "src/components/ui/**",
   ]
 }

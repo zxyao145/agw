@@ -16,7 +16,5 @@ public interface ITaskAppService
         string user,
         CancellationToken cancellationToken = default);
 
-    Task<bool> HasSessionAsync(string sessionId, Guid? projectId = null, CancellationToken cancellationToken = default);
-
-    Task<bool> HasTaskAsync(Guid taskId, CancellationToken cancellationToken = default);
+    Task<bool> HasTaskAsync(Guid taskId, Guid? projectId = null, CancellationToken cancellationToken = default);
 }

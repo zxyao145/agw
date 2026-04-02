@@ -32,8 +32,6 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
 
     public Guid TaskId { get; set; }
 
-    public string? SessionId { get; set; }
-
     [JsonIgnore]
     public bool Resume { get; set; }
 

@@ -245,7 +245,7 @@ public class AgentRuntimeService: RuntimService
     public async Task<AIAgent?> CreateAiAgentAsync(
         Agent agent,
         string? extraOverride = null,
-        string? sessionId = null,
+        Guid? taskId = null,
         Guid? projectId = null,
         bool resume = false,
         CancellationToken cancellationToken = default)
@@ -268,23 +268,22 @@ public class AgentRuntimeService: RuntimService
                     return null;
                 }
 
-                if (!string.IsNullOrWhiteSpace(sessionId))
+                if (taskId != null)
                 {
                     if (resume)
                     {
                         ccOptions = ccOptions with
                         {
-                            Resume = sessionId,
+                            Resume = taskId.Value.Normalize(),
                             SessionId = null
                         };
                     }
                     else
                     {
-                        var sessionGuid = Guid.Parse(sessionId);
                         ccOptions = ccOptions with
                         {
                             Resume = null,
-                            SessionId = sessionGuid
+                            SessionId = taskId
                         };
                     }
                 }
@@ -328,23 +327,23 @@ public class AgentRuntimeService: RuntimService
         Guid projectId = task.ProjectId;
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, settings.SettingContent);
-        string taskId = task.Id.Normalize();
+        string taskIdString = task.Id.Normalize();
 
         var resolvedContextId = TaskUtil.GenContextId();
-        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, taskId, projectId, resume: settings.Resume, cancellationToken);
+        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, task.Id, projectId, resume: settings.Resume, cancellationToken);
         if (aiAgent == null)
         {
             return null;
         }
 
-        var agentSession = await GetOrCreateThreadAsync(agent, aiAgent, taskId, cancellationToken);
-        _providerSessionState.InitializeSessionState(agentSession, resolvedContextId, taskId, ProjectDefaults.GetDefaultProjectIdentifier(projectId));
+        var agentSession = await GetOrCreateThreadAsync(agent, aiAgent, taskIdString, cancellationToken);
+        _providerSessionState.InitializeSessionState(agentSession, resolvedContextId, taskIdString, ProjectDefaults.GetDefaultProjectIdentifier(projectId));
         return new AgentExecSession(
             aiAgent,
             agentSession,
             projectId: projectId,
             contextId: resolvedContextId,
-            taskId,
+            taskIdString,
             AgentRuntimeType.Agent,
             agentId,
             agent.Name,
@@ -770,15 +769,11 @@ public class AgentRuntimeService: RuntimService
         return new HttpClientTransport(options);
     }
 
-    private async Task<bool> HasSessionRecordAsync(string sessionId, Guid? projectId)
-    {
-        return await _taskRecordApplication.HasSessionAsync(sessionId, projectId);
-    }
 
     private async Task<AgentSession> GetOrCreateThreadAsync(
         Agent agent,
         AIAgent aiAgent,
-        string sessionId,
+        string taskId,
         CancellationToken cancellationToken)
     {
         if(agent.Type == AgentType.External)
@@ -787,7 +782,7 @@ public class AgentRuntimeService: RuntimService
         }
 
         var value = await _cache.GetOrCreateAsync<string>(
-            sessionId,
+            taskId,
             _ => ValueTask.FromResult(string.Empty),
             cancellationToken: cancellationToken);
         if (string.IsNullOrWhiteSpace(value))
@@ -802,16 +797,16 @@ public class AgentRuntimeService: RuntimService
         }
         catch (JsonException)
         {
-            _logger.LogWarning("Thread cache deserialization failed for sessionId: {SessionId}. A new thread will be created.", sessionId);
+            _logger.LogWarning("Thread cache deserialization failed for task: {TaskId}. A new thread will be created.", taskId);
             return await aiAgent.CreateSessionAsync(cancellationToken);
         }
     }
 
-    private async Task SaveSessionThreadStateAsync(string sessionId, AIAgent aiAgent, AgentSession session, CancellationToken cancellationToken)
+    private async Task SaveSessionThreadStateAsync(string taskId, AIAgent aiAgent, AgentSession session, CancellationToken cancellationToken)
     {
         var ele = await aiAgent.SerializeSessionAsync(session);
         var serialized = JsonSerializer.Serialize(ele);
-        await _cache.SetAsync(sessionId, serialized, cancellationToken: cancellationToken);
+        await _cache.SetAsync(taskId, serialized, cancellationToken: cancellationToken);
     }
 
  

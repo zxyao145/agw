@@ -4,6 +4,7 @@ namespace Agw.Shared.Tasks.Entities;
 
 public class ProjectTask : BaseEntity
 {
+    // as session id
     public Guid Id { get; set; }
 
     public Guid ProjectId { get; set; }

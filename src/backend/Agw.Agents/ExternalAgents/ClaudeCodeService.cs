@@ -51,8 +51,8 @@ public class ClaudeCodeService
 
         await EnsureGitRepositoryAsync(initRequest, cancellationToken);
         var projectId = ProjectDefaults.ClaudeCodeId;
-        var hasTaskRecord = await _taskRecordAppService.HasSessionAsync(
-            initRequest.SessionId,
+        var hasTaskRecord = await _taskRecordAppService.HasTaskAsync(
+            Guid.Parse(initRequest.SessionId),
             projectId,
             cancellationToken);
 
@@ -86,15 +86,15 @@ public class ClaudeCodeService
 
     private async Task<AgentSession> GetOrCreateAgentSessionAsync(
         ClaudeCodeAIAgent agent,
-        string sessionId,
+        string taskId,
         bool hasTaskRecord,
         CancellationToken cancellationToken)
     {
         _logger.LogDebug(
             hasTaskRecord
-                ? "Resuming thread for session: {SessionId}"
-                : "Creating new thread for session: {SessionId}",
-            sessionId);
+                ? "Resuming thread for session: {TaskId}"
+                : "Creating new thread for session: {TaskId}",
+            taskId);
 
         return await agent.CreateSessionAsync(cancellationToken);
     }
