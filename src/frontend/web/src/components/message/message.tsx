@@ -9,9 +9,7 @@ import remarkGfm from "remark-gfm";
 type MessageNode = { type: string; content: string };
 
 const stripCommandTags = (str: string) =>
-  str
-    .replace("<local-command-stdout>", "")
-    .replace("</local-command-stdout>", "");
+  str.replace("<local-command-stdout>", "").replace("</local-command-stdout>", "");
 
 const getNodePrefix = (type: string): string =>
   type === MessageContentType.ErrorContent
@@ -45,14 +43,10 @@ const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
           remarkPlugins={[remarkGfm]}
           components={{
             pre: ({ children }) => (
-              <pre className="max-w-full whitespace-pre-wrap wrap-anywhere">
-                {children}
-              </pre>
+              <pre className="max-w-full whitespace-pre-wrap wrap-anywhere">{children}</pre>
             ),
             code: ({ children }) => (
-              <code className="max-w-full whitespace-pre-wrap wrap-anywhere">
-                {children}
-              </code>
+              <code className="max-w-full whitespace-pre-wrap wrap-anywhere">{children}</code>
             ),
           }}
         >
@@ -69,22 +63,16 @@ const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
           remarkPlugins={[remarkGfm]}
           components={{
             pre: ({ children }) => (
-              <pre className="max-w-full whitespace-pre-wrap wrap-anywhere">
-                {children}
-              </pre>
+              <pre className="max-w-full whitespace-pre-wrap wrap-anywhere">{children}</pre>
             ),
             code: ({ children }) => (
-              <code className="max-w-full whitespace-pre-wrap wrap-anywhere">
-                {children}
-              </code>
+              <code className="max-w-full whitespace-pre-wrap wrap-anywhere">{children}</code>
             ),
             ol: ({ children }) => (
               <ol className="list-disc list-inside leading-none">{children}</ol>
             ),
             ul: ({ children }) => (
-              <ul className="list-decimal list-inside leading-none">
-                {children}
-              </ul>
+              <ul className="list-decimal list-inside leading-none">{children}</ul>
             ),
           }}
         >
@@ -106,10 +94,7 @@ const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
     return (
       <div className="text-sm whitespace-pre-wrap wrap-anywhere w-full relative">
         <div className="w-full flex justify-center relative z-1">
-          <Badge
-            variant="secondary"
-            className="bg-blue-500 text-white dark:bg-blue-600"
-          >
+          <Badge variant="secondary" className="bg-blue-500 text-white dark:bg-blue-600">
             {node.content}
           </Badge>
         </div>
@@ -121,10 +106,7 @@ const renderNode = (node: MessageNode, message: AiMessage): React.ReactNode => {
   return null;
 };
 
-const buildContentNode = (
-  content: AiMessageContent,
-  message: AiMessage,
-): string => {
+const buildContentNode = (content: AiMessageContent, message: AiMessage): string => {
   const { type, content: value } = content;
 
   if (type === MessageContentType.UsageContent) {
@@ -133,9 +115,7 @@ const buildContentNode = (
       outputTokenCount: number;
     };
     let result = `inputToken: ${contentAny.inputTokenCount} • outputToken: ${contentAny.outputTokenCount}`;
-    const usd = message?.additionalProperties?.totalCostUsd as
-      | number
-      | undefined;
+    const usd = message?.additionalProperties?.totalCostUsd as number | undefined;
     if (usd !== undefined) result += ` • totalCost: ${usd} (USD)`;
     return result;
   }
@@ -155,10 +135,7 @@ const buildContentNode = (
   ) {
     if (processed.startsWith("{") && processed.endsWith("}")) {
       try {
-        processed =
-          "\n```json\n" +
-          JSON.stringify(JSON.parse(processed), null, 2) +
-          "\n```";
+        processed = "\n```json\n" + JSON.stringify(JSON.parse(processed), null, 2) + "\n```";
       } catch {
         // Keep original if invalid JSON
       }
@@ -168,10 +145,7 @@ const buildContentNode = (
   return processed;
 };
 
-const groupContentsByType = (
-  contents: AiMessageContent[],
-  message: AiMessage,
-): MessageNode[] => {
+const groupContentsByType = (contents: AiMessageContent[], message: AiMessage): MessageNode[] => {
   const nodes: MessageNode[] = [];
   let currentContent = "";
   let lastType = "";
@@ -185,8 +159,7 @@ const groupContentsByType = (
     }
 
     currentContent +=
-      (currentContent ? "" : getNodePrefix(type)) +
-      buildContentNode(content, message);
+      (currentContent ? "" : getNodePrefix(type)) + buildContentNode(content, message);
     lastType = type;
   }
 
@@ -199,9 +172,7 @@ const groupContentsByType = (
 
 export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
   // claude
-  const isResult =
-    message.role === "system" &&
-    message.additionalProperties?.type === "result";
+  const isResult = message.role === "system" && message.additionalProperties?.type === "result";
 
   if (isResult) {
     return null;
@@ -218,9 +189,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
   const isToolResult = message.contents.some(
     (c) => c.type === MessageContentType.FunctionResultContent,
   );
-  const isToolUse = message.contents.some(
-    (c) => c.type === MessageContentType.FunctionCallContent,
-  );
+  const isToolUse = message.contents.some((c) => c.type === MessageContentType.FunctionCallContent);
 
   const IsSideRight = isUser && !isToolResult;
   let title = "";
@@ -246,9 +215,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
       <div
         className={`min-w-0 max-w-full rounded-lg px-4 py-3 ${IsSideRight ? "bg-primary text-primary-foreground ml-12" : "bg-secondary mr-12"}`}
       >
-        <div
-          className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}
-        >
+        <div className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}>
           <span className="text-xs font-semibold opacity-70">{title}</span>
         </div>
         <div className="text-sm whitespace-pre-wrap wrap-anywhere">

@@ -56,7 +56,8 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
     }
 
     // Check if it's an orphaned FunctionResult
-    const isFunctionResult = currentMsg.contents[0].type === MessageContentType.FunctionResultContent;
+    const isFunctionResult =
+      currentMsg.contents[0].type === MessageContentType.FunctionResultContent;
     if (isFunctionResult) {
       // This FunctionResult wasn't matched to any FunctionCall
       // (either no callId, or FunctionCall hasn't appeared yet, or already processed)
@@ -88,8 +89,7 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
   return items;
 
   function handleFunctionCall(currentMsg: AiMessage, i: number) {
-    const callId = currentMsg.contents[0].additionalProperties
-      ?.callId as string;
+    const callId = currentMsg.contents[0].additionalProperties?.callId as string;
 
     if (callId) {
       // Find all FunctionResults with matching callId (anywhere in the message list)
@@ -104,8 +104,7 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
           msg.contents[0].type === MessageContentType.FunctionResultContent;
 
         if (isFunctionResult) {
-          const resultCallId = msg.contents[0].additionalProperties
-            ?.callId as string;
+          const resultCallId = msg.contents[0].additionalProperties?.callId as string;
           if (resultCallId === callId) {
             matchingResults.push({ msg, index: j });
           }
@@ -114,13 +113,8 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
 
       // If we found matching results, create an accordion group
       if (matchingResults.length > 0) {
-        const toolName =
-          (currentMsg.contents[0].additionalProperties?.toolName as string) ??
-          "";
-        const groupedMessages = [
-          currentMsg,
-          ...matchingResults.map((r) => r.msg),
-        ];
+        const toolName = (currentMsg.contents[0].additionalProperties?.toolName as string) ?? "";
+        const groupedMessages = [currentMsg, ...matchingResults.map((r) => r.msg)];
 
         items.push({
           type: "accordion",
@@ -182,9 +176,7 @@ export function Conversation({
           <div className="flex items-center justify-center h-40">
             <div className="text-center text-muted-foreground ">
               <p className="text-lg mb-2">No messages yet</p>
-              <p className="text-sm">
-                Start a conversation by typing a message below
-              </p>
+              <p className="text-sm">Start a conversation by typing a message below</p>
             </div>
           </div>
         )}
@@ -194,10 +186,7 @@ export function Conversation({
             return (
               <div className="mx-4 max-w-[80%]" key={index}>
                 <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem
-                    value="item-1"
-                    className="border rounded-lg px-2 last:border-b"
-                  >
+                  <AccordionItem value="item-1" className="border rounded-lg px-2 last:border-b">
                     <AccordionTrigger>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="text-xs">
@@ -223,10 +212,7 @@ export function Conversation({
               !item.message.additionalProperties;
             console.debug("isUser", isUser, item.message);
             return (
-              <div
-                className={cn("mx-4", isUser ? "max-w-full" : "max-w-[80%]")}
-                key={index}
-              >
+              <div className={cn("mx-4", isUser ? "max-w-full" : "max-w-[80%]")} key={index}>
                 <AiMessageComponent message={item.message} />
               </div>
             );

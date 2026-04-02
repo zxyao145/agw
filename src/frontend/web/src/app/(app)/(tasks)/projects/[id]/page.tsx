@@ -53,7 +53,7 @@ type ProjectDto = {
 };
 
 type ProjectTaskSummaryDto = {
-  id: string;
+  id: string; // taskId
   projectId: string;
   contextId: string;
   agentType?: number;
@@ -69,8 +69,8 @@ type ProjectTaskSummaryDto = {
   finishedTime?: string | null;
 };
 
-type ProjectTaskDto = ProjectTaskSummaryDto & {
-  sessionId: string;
+type ProjectTaskResponse = ProjectTaskSummaryDto & {
+  // sessionId: string;
   input: string;
   messageCount: number;
 };
@@ -358,7 +358,7 @@ export default function ProjectDetailsPage() {
       try {
         const detail = (await apiGet("/api/projects/{projectId}/tasks/{taskId}", {
           params: { path: { projectId, taskId: task.id } },
-        } as never)) as unknown as ProjectTaskDto;
+        } as never)) as unknown as ProjectTaskResponse;
 
         setEditTaskId(detail.id);
         setEditTaskDescription(detail.description ?? task.description ?? "");

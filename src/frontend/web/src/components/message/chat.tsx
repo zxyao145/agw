@@ -26,7 +26,6 @@ export interface ChatProps {
   agentType: number;
   projectId: string;
   taskId?: string | null;
-  sessionId?: string | null;
   resume?: boolean;
   resetSignal?: string | number | boolean;
   placeholder?: string;
@@ -35,13 +34,13 @@ export interface ChatProps {
   onExecutionError?: (error: unknown) => void;
 }
 
-function nextSessionId(): string {
+function nextTaskId(): string {
   return Uuid4.generate().toCanonical();
 }
 
 export function Chat({
   executionId, // agent executionId
-  agentType,   // agent type
+  agentType, // agent type
   projectId,
   taskId,
   resume = false,
@@ -53,9 +52,7 @@ export function Chat({
 }: ChatProps) {
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
-  const [curSessionId, setSessionId] = React.useState<string>(
-    taskId ?? nextSessionId(),
-  );
+  const [curTaskId, setTaskId] = React.useState<string>(taskId ?? nextTaskId());
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
   const userInputRef = React.useRef<UserInputRef | null>(null);
@@ -66,22 +63,19 @@ export function Chat({
     [],
   );
 
-  const isTurnFinishedMessage = React.useCallback(
-    (message: AiMessage): boolean => {
-      if (message.role?.toLowerCase() !== "system") {
-        return false;
-      }
+  const isTurnFinishedMessage = React.useCallback((message: AiMessage): boolean => {
+    if (message.role?.toLowerCase() !== "system") {
+      return false;
+    }
 
-      if (message.author !== "$agw-server") {
-        return false;
-      }
+    if (message.author !== "$agw-server") {
+      return false;
+    }
 
-      return message.contents.some(
-        (content) => content.additionalProperties?.type === "turn-finished",
-      );
-    },
-    [],
-  );
+    return message.contents.some(
+      (content) => content.additionalProperties?.type === "turn-finished",
+    );
+  }, []);
 
   const sessionQuery = useQuery({
     queryKey: ["projects", projectId, "tasks", taskId, "task-record"],
@@ -93,7 +87,7 @@ export function Chat({
   });
 
   React.useEffect(() => {
-    setSessionId(taskId ?? nextSessionId());
+    setTaskId(taskId ?? nextTaskId());
     setMessages([]);
   }, [resetSignal, taskId]);
 
@@ -142,9 +136,7 @@ export function Chat({
             if (isTurnFinishedMessage(message)) {
               setIsExecuting(false);
             } else {
-              setMessages((prev) =>
-                mergeStreamingMessagesById([...prev, message]),
-              );
+              setMessages((prev) => mergeStreamingMessagesById([...prev, message]));
             }
           },
         });
@@ -172,7 +164,7 @@ export function Chat({
       projectId,
       resume,
       taskId,
-      curSessionId,
+      curTaskId,
     ],
   );
 
@@ -216,16 +208,9 @@ export function Chat({
           {/* <UserInput.TopLeft></UserInput.TopLeft> */}
 
           <UserInput.TopRight>
-            <QuickTextDialog
-              onCommandSelect={handleQuickCommand}
-            />
+            <QuickTextDialog onCommandSelect={handleQuickCommand} />
             <Separator orientation="vertical" />
-            <Button
-              onClick={handleClear}
-              disabled={isExecuting}
-              variant="ghost"
-              size="sm"
-            >
+            <Button onClick={handleClear} disabled={isExecuting} variant="ghost" size="sm">
               <Eraser width={16} />
             </Button>
 
