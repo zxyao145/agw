@@ -1,1 +1,0 @@
-Interfaces and Models for cross module/domain interaction

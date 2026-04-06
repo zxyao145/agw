@@ -15,7 +15,6 @@
     <Project Path="src/backend/Agw.Tools/Agw.Tools.csproj" Id="ba592b35-3c77-47d7-b977-396f0fa9acba" />
   </Folder>
   <Folder Name="/Shared/">
-    <Project Path="src/backend/Agw.Shared.Contract/Agw.Shared.Contract.csproj" />
     <Project Path="src/backend/Agw.Shared/Agw.Shared.csproj" />
   </Folder>
   <Folder Name="/Tests/">
