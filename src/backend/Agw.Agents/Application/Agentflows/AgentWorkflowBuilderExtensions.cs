@@ -23,7 +23,9 @@ public static class DxAgentWorkflowBuilder
             return MsAgentWorkflowBuilder.BuildSequential(orderedAgents);
         }
 
+#pragma warning disable MAAIW001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
         var builder = MsAgentWorkflowBuilder.CreateHandoffBuilderWith(startAgent);
+#pragma warning restore MAAIW001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
         var edgesBySource = edges
             .Where(e => nodeIdToAgent.ContainsKey(e.SourceNodeId) && nodeIdToAgent.ContainsKey(e.TargetNodeId))
             .GroupBy(e => e.SourceNodeId)

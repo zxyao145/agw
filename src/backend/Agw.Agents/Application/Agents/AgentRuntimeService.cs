@@ -868,7 +868,7 @@ public class AgentRuntimeService: RuntimService
             return null;
         }
 
-        return new FileAgentSkillsProvider(skillPaths: skillPaths);
+        return new AgentSkillsProvider(skillPaths: skillPaths);
     }
 
     private string GetSkillAbsolutePath(Skill skill)
