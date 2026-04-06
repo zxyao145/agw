@@ -93,7 +93,7 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
     private static SettingCommand CreateDefaultSettings()
     {
         return new SettingCommand(
-            projectId: ProjectDefaults.DefaultBuiltId,
+            projectId: ProjectDefaults.DefaultBuiltInId,
             taskId: Guid.NewGuid());
     }
 

@@ -14,6 +14,7 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
+	  <ProjectReference Include="..\Agw.Tasks\Agw.Tasks.csproj" />
 	</ItemGroup>
 
 </Project>

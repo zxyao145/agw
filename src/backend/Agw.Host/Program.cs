@@ -1,4 +1,5 @@
 using Agw.A2A;
+using Agw.A2A.Extensions;
 using Agw.Api.Controllers;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;

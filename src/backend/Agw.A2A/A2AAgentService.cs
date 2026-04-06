@@ -69,7 +69,6 @@ public class A2AAgentService
                             ? agent.SystemPrompt.Substring(0, 200) + "..."
                             : agent.SystemPrompt,
             Version = "1.0",
-            Url = $"{_a2AServerOptions.Prefix}/{agent.Name}​/",
             Capabilities = new AgentCapabilities
             {
                 Streaming = true

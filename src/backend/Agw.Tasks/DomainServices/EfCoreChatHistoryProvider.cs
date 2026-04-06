@@ -52,7 +52,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             {
                 var contextId = TaskUtil.GenContextId();
                 var taskId = Guid.NewGuid().Normalize();
-                return new State(contextId, taskId, ProjectDefaults.DefaultBuiltId);
+                return new State(contextId, taskId, ProjectDefaults.DefaultBuiltInId);
             },
             nameof(EfCoreChatHistoryProvider),
             _jsonSerializerOptions);
