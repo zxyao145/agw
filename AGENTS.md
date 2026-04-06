@@ -25,7 +25,7 @@ Agw.Tools/             # Tool discovery, metadata, and runtime registration
 ```
 
 Notes:
-- `Agw.slnx` includes the backend modules above plus `tests/Agw.Agents.Tests`, `tests/Agw.Tasks.Tests`, and `tests/Agw.Skills.Tests`.
+- `Agw.slnx` includes the backend modules above plus `tests/Agw.A2A.Tests`, `tests/Agw.Agents.Tests`, `tests/Agw.Tasks.Tests`, and `tests/Agw.Skills.Tests`.
 - Claude Code integration is provided through the `ClaudeCodeSdk.MAF` package referenced by backend projects.
 
 ### Frontend Organization (`src/frontend/web/`)
@@ -162,7 +162,7 @@ Guidance:
 - Prefer `tests/Agw.*.Tests/` with namespaces mirroring production code.
 - Name test methods like `Method_Condition_ExpectedResult`.
 - Run `dotnet test Agw.slnx` before handing off backend changes.
-- Current in-repo test projects are `Agw.Agents.Tests`, `Agw.Tasks.Tests`, and `Agw.Skills.Tests`.
+- Current in-repo test projects are `Agw.A2A.Tests`, `Agw.Agents.Tests`, `Agw.Tasks.Tests`, and `Agw.Skills.Tests`.
 
 ## Frontend Architecture
 

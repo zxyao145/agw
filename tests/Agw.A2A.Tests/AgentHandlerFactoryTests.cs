@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.Json;
 using A2A;
 using Agw.A2A;
 using Agw.Appliaction.Services.Agents;
@@ -8,9 +9,8 @@ using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-using System.Text.Json;
 
-namespace Agw.Agents.Tests;
+namespace Agw.A2A.Tests;
 
 public class AgentHandlerFactoryTests
 {

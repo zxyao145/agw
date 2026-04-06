@@ -147,7 +147,7 @@ public class ProjectTaskAppServiceTests
         var response = Assert.Single(responses);
         Assert.IsType<ProjectTaskSummaryResponse>(response);
         Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("Messages"));
-        Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("Id"));
+        Assert.NotNull(typeof(ProjectTaskSummaryResponse).GetProperty("Id"));
         Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("Input"));
         Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("MessageCount"));
         Assert.Equal("Nightly sync", response.Description);
