@@ -1,6 +1,7 @@
 ﻿using A2A;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,24 +24,28 @@ public static class A2ARoutesBuilderExtensions
     /// Enables JSON-RPC A2A endpoints for the specified path.
     /// </summary>
     /// <param name="endpoints">The endpoint route builder to configure.</param>
-    /// <param name="agentPath">The base path for the A2A endpoints.</param>
+    /// <param name="agentPathPrefix">The base path for the A2A endpoints.</param>
     /// <returns>An endpoint convention builder for further configuration.</returns>
-    public static IEndpointConventionBuilder MapAgwA2A(this IEndpointRouteBuilder endpoints, [StringSyntax("Route")] string agentPath)
+    public static IEndpointConventionBuilder MapAgwA2A(this IEndpointRouteBuilder endpoints, [StringSyntax("Route")] string agentPathPrefix)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
-        ArgumentException.ThrowIfNullOrEmpty(agentPath);
+        ArgumentException.ThrowIfNullOrEmpty(agentPathPrefix);
+
+        var agentHandlerFactory = endpoints.ServiceProvider.GetRequiredService<AgentHandlerFactory>();
+        var agwA2ARequestHandler = endpoints.ServiceProvider.GetRequiredService<IAgwA2ARequestHandler>();
 
         var loggerFactory = endpoints.ServiceProvider.GetRequiredService<ILoggerFactory>();
         var logger = loggerFactory.CreateLogger<IEndpointRouteBuilder>();
 
-        if (!agentPath.Contains(PathPlaceholder))
+        if (!agentPathPrefix.Contains(PathPlaceholder))
         {
-            if (!agentPath.EndsWith("/"))
+            if (!agentPathPrefix.EndsWith("/"))
             {
-                agentPath += "/";
+                agentPathPrefix += "/";
             }
-            agentPath += PathPlaceholder;
+            agentPathPrefix += PathPlaceholder;
         }
+
         var routeGroup = endpoints.MapGroup("");
         routeGroup.MapGet("/.well-known/agents.json",
             async delegate (A2AAgentService a2aService, CancellationToken cancellationToken)
@@ -49,21 +54,30 @@ public static class A2ARoutesBuilderExtensions
                 return Results.Ok(cards);
             });
 
-        //routeGroup.MapGet(agentPath + "/.well-known/agent-card.json",
-        //    async delegate (HttpRequest request, string agentName, CancellationToken cancellationToken)
-        //{
-        //    var taskManager = await GetTaskManager(request);
-        //    var agentUrl = $"{request.Scheme}://{request.Host}{agentPath}";
-        //    var agentCard = await taskManager.OnAgentCardQuery(agentUrl, cancellationToken);
-        //    return Results.Ok(agentCard);
-        //});
+        routeGroup.MapGet(
+            agentPathPrefix + "/.well-known/{agentName}/agent-card.json",
+            async delegate (HttpRequest request, string agentName, CancellationToken cancellationToken)
+            {
+                var agentHandler = await agentHandlerFactory.CreateAsync(agentName);
+                if (agentHandler is CommonAgentHandler commonAgentHandler)
+                {
+                    var agentCard = await commonAgentHandler.GetAgentCardAsync();
+                    if (agentCard is null)
+                    {
+                        return Results.NotFound("Agent not found");
+                    }
+                    return Results.Ok(agentCard);
+                }
+                return Results.InternalServerError("AgentHandler not found");
+            }
+        );
 
-        //routeGroup.MapPost(agentPath, async (HttpRequest request, CancellationToken cancellationToken) =>
-        //    {
-        //        var taskManager = await GetTaskManager(request);
-        //        return await DA2AJsonRpcProcessor.ProcessRequestAsync(taskManager, request, cancellationToken);
-        //    }
-        //);
+        routeGroup.MapPost(agentPathPrefix + "{agentName}",
+            async delegate (HttpRequest request, string agentName, CancellationToken cancellationToken)
+            {                
+                return await AgwA2AJsonRpcProcessor.ProcessRequestAsync(agwA2ARequestHandler, request, agentName, cancellationToken);
+            }
+        );
 
         return routeGroup;
     }

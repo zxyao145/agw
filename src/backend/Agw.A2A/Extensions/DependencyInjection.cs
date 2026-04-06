@@ -1,4 +1,5 @@
 using A2A;
+using A2A.AspNetCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -8,9 +9,12 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddA2A(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddSingleton<IAgentExecutionBridge, AgentExecutionBridge>();
+        services.AddSingleton<AgentHandlerFactory>();
         services.AddScoped<A2AAgentService>();
         services.AddScoped<ITaskStore, TaskStore>();
-        services.Configure<A2AServerOptions>(o =>
+        services.AddScoped<IAgwA2ARequestHandler, AgwA2ARequestHandler>();
+        services.Configure<AgwA2AServerOptions>(o =>
         {
         });
 

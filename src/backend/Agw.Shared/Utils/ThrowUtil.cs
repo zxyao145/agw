@@ -47,4 +47,11 @@ public class ThrowUtil
     {
         throw new ArgumentException(message, paramName);
     }
+
+    [DoesNotReturn]
+    internal static void ArgumentNullException(string message, string paramName)
+    {
+        throw new ArgumentNullException(message, paramName);
+
+    }
 }

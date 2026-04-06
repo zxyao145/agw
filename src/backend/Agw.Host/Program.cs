@@ -1,5 +1,3 @@
-using Agw.A2A;
-using Agw.A2A.Extensions;
 using Agw.Api.Controllers;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
@@ -97,7 +95,8 @@ try
 
     // add module
     builder.Services
-        .AddA2A(builder.Configuration)
+        // TODO
+        //.AddA2A(builder.Configuration)
         .AddAgents(builder.Configuration)
         .AddInfrastructure(builder.Configuration)
         .AddJobs(builder.Configuration)
@@ -142,10 +141,11 @@ try
     app.UseWebSockets();
     app.UseStaticFiles();
 
-    var a2AServerOptions = app.Services
-        .GetRequiredService<Microsoft.Extensions.Options.IOptions<A2AServerOptions>>()
-        .Value;
-    app.MapAgwA2A(a2AServerOptions.Prefix);
+    // TODO: A2A
+    //var a2AServerOptions = app.Services
+    //    .GetRequiredService<Microsoft.Extensions.Options.IOptions<AgwA2AServerOptions>>()
+    //    .Value;
+    //app.MapAgwA2A(a2AServerOptions.Prefix);
     app.MapControllers();
 
     Log.Information("Agw Host configured successfully");

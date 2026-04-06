@@ -329,7 +329,9 @@ public class AgentRuntimeService: RuntimService
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, settings.SettingContent);
         string taskIdString = task.Id.Normalize();
 
-        var resolvedContextId = TaskUtil.GenContextId();
+        var resolvedContextId = string.IsNullOrWhiteSpace(task.ContextId)
+            ? TaskUtil.GenContextId()
+            : task.ContextId;
         var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, task.Id, projectId, resume: settings.Resume, cancellationToken);
         if (aiAgent == null)
         {

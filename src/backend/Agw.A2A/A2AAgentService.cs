@@ -12,26 +12,13 @@ namespace Agw.A2A;
 /// </summary>
 public class A2AAgentService
 {
-    private readonly AgentRuntimeService _agentRuntimeService;
     private readonly IRepository<Agent> _agentRepository;
-    private readonly A2AServerOptions _a2AServerOptions;
 
     public A2AAgentService(
         AgentRuntimeService agentRuntimeService,
-        IRepository<Agent> agentRepository,
-        IOptions<A2AServerOptions> a2AServerOptions)
+        IRepository<Agent> agentRepository)
     {
-        _agentRuntimeService = agentRuntimeService;
         _agentRepository = agentRepository;
-        _a2AServerOptions = a2AServerOptions.Value;
-    }
-
-    /// <summary>
-    /// Gets an agent by ID for A2A protocol communication.
-    /// </summary>
-    public async Task<AIAgent?> GetAgentAsync(Guid agentId)
-    {
-        return await _agentRuntimeService.CreateAiAgentAsync(agentId);
     }
 
     public async Task<List<AgentCard>> ListAgentCardsAsync()
