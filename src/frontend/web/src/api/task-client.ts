@@ -23,7 +23,7 @@ export type ProjectTaskSummaryResponse = {
   projectId: string;
   contextId: string;
   jobId?: string | null;
-  status?: number;
+  status: number;
   title: string;
   errorMessage?: string | null;
   createTime: string;
@@ -32,8 +32,8 @@ export type ProjectTaskSummaryResponse = {
   finishedTime?: string | null;
 };
 
-type ProjectTaskHistoryResponse = ProjectTaskSummaryResponse & {
-  input?: string;
+export type ProjectTaskHistoryResponse = ProjectTaskSummaryResponse & {
+  input: string;
   messageCount: number;
   messages?: AiMessage[] | null;
 };

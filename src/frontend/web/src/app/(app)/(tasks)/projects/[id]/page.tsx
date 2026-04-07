@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
+import type { ProjectTaskSummaryResponse } from "@/api/task-client";
 import { ApiError, apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -18,20 +19,6 @@ type ProjectDto = {
   enable: boolean;
   createTime?: string | null;
   updateTime?: string | null;
-};
-
-type ProjectTaskSummaryDto = {
-  id: string;
-  projectId: string;
-  contextId: string;
-  jobId?: string | null;
-  status: number;
-  title: string;
-  errorMessage?: string | null;
-  createTime?: string | null;
-  updateTime?: string | null;
-  startedTime?: string | null;
-  finishedTime?: string | null;
 };
 
 function formatDate(value?: string | null): string {
@@ -115,7 +102,7 @@ export default function ProjectDetailsPage() {
     queryFn: async () => {
       return (await apiGet("/api/projects/{projectId}/tasks", {
         params: { path: { projectId } },
-      } as never)) as unknown as ProjectTaskSummaryDto[];
+      } as never)) as unknown as ProjectTaskSummaryResponse[];
     },
   });
 
@@ -188,10 +175,9 @@ export default function ProjectDetailsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Task History</CardTitle>
+          <CardTitle>Tasks</CardTitle>
           <CardDescription>
-            Tasks are listed newest first by <code>updateTime</code> with <code>createTime</code>{" "}
-            as fallback.
+            Read-only history for chat sessions and job runs.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -219,6 +205,10 @@ export default function ProjectDetailsPage() {
                       </div>
 
                       <div className="grid gap-1 text-xs text-muted-foreground">
+                        <div>
+                          Source:{" "}
+                          <span className="font-mono">{task.jobId ? `job:${task.jobId}` : "chat"}</span>
+                        </div>
                         <div>
                           Task ID: <span className="font-mono">{task.id}</span>
                         </div>

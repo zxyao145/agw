@@ -97,7 +97,7 @@ export default function TaskDetailsPage() {
             ) : null}
           </div>
           <div className="text-sm text-muted-foreground">
-            Read-only task history view. Live execution controls were removed from this route.
+            {task?.jobId ? `Source job: ${task.jobId}` : "Source: chat"}
           </div>
           {task ? (
             <div className="text-xs text-muted-foreground">
@@ -107,6 +107,9 @@ export default function TaskDetailsPage() {
         </div>
 
         <ButtonGroup>
+          <Button asChild size="sm">
+            <Link href={`/chat?projectId=${projectId}&taskId=${taskId}`}>Continue In Chat</Link>
+          </Button>
           <Button asChild variant="outline" size="sm">
             <Link href={`/projects/${projectId}`}>Back</Link>
           </Button>
@@ -136,6 +139,10 @@ export default function TaskDetailsPage() {
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">Job ID</div>
                 <div className="break-all font-mono text-xs">{task.jobId ?? "-"}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Source</div>
+                <div>{task.jobId ? "Job run" : "Chat session"}</div>
               </div>
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">
