@@ -13,6 +13,14 @@ public class ProjectTaskDomainServiceTests
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
+    public void ProjectTask_RemovesLegacyTargetAndDescriptionProperties()
+    {
+        Assert.Null(typeof(ProjectTask).GetProperty("AgentType"));
+        Assert.Null(typeof(ProjectTask).GetProperty("AgentId"));
+        Assert.Null(typeof(ProjectTask).GetProperty("Description"));
+    }
+
+    [Fact]
     public void TryPrepareForCreate_MissingRequiredFields_ReturnsFalse()
     {
         var task = new ProjectTask

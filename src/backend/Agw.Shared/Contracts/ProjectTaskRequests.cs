@@ -1,5 +1,5 @@
-using Agw.Shared.Models;
 using Agw.Shared.Enums;
+using Agw.Shared.Models;
 
 namespace Agw.Shared.Contracts;
 
@@ -7,21 +7,7 @@ public record ProjectTaskCreateRequest(
     Guid? JobId,
     string Input,
     string? Title = null,
-    string? ContextId = null)
-{
-    [Obsolete("Project tasks no longer persist task-level target bindings.")]
-    public ProjectTaskCreateRequest(
-        AgentRuntimeType AgentType,
-        Guid? AgentflowId,
-        Guid? AgentId,
-        string Description,
-        string Input,
-        string? Title = null,
-        string? ContextId = null)
-        : this(null, Input, Title, ContextId)
-    {
-    }
-}
+    string? ContextId = null);
 
 public record ProjectTaskSummaryResponse(
     Guid Id,

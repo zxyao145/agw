@@ -30,18 +30,12 @@ public class AgentExecutor(
         var title = string.IsNullOrWhiteSpace(job.Name)
             ? "Scheduled Job"
             : job.Name.Trim();
-        var description = string.IsNullOrWhiteSpace(job.Name)
-            ? prompt
-            : job.Name.Trim();
         var contextId = TaskUtil.GenContextId();
 
         var createResult = await projectTaskAppService.CreateRunningAsync(
             job.ProjectId,
             new ProjectTaskCreateRequest(
-                AgentType: job.AgentType.Value,
-                AgentflowId: job.AgentType == AgentRuntimeType.Agentflow ? job.AgentId : null,
-                AgentId: job.AgentType == AgentRuntimeType.Agent ? job.AgentId : null,
-                Description: description,
+                JobId: job.Id,
                 Input: prompt,
                 Title: title,
                 ContextId: contextId),

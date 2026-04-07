@@ -223,16 +223,6 @@ public class ProjectTaskAppService
         return running.Count > 0;
     }
 
-    public async Task<ProjectTask?> GetNextPendingAsync(Guid projectId)
-    {
-        var pending = await _taskRepository.ListAsync(task =>
-            task.ProjectId == projectId && task.Status == ProjectTaskStatus.Pending);
-        return pending
-            .OrderBy(task => task.UpdateTime ?? task.CreateTime)
-            .ThenBy(task => task.CreateTime)
-            .FirstOrDefault();
-    }
-
     public async Task<TaskRecord?> GetLatestRecordAsync(Guid taskId)
     {
         var records = await GetOrderedRecordsByTaskIdAsync(taskId);

@@ -55,8 +55,7 @@ public class AgentExecutionCoordinatorTests
         {
             Id = Guid.NewGuid(),
             ProjectId = projectId,
-            ContextId = "ctx-1",
-            AgentType = AgentRuntimeType.Agent
+            ContextId = "ctx-1"
         };
         var taskAppService = new FakeTaskAppService
         {
@@ -110,8 +109,6 @@ public class AgentExecutionCoordinatorTests
         public Task<ProjectTask?> CreateTaskForExecutionAsync(
             Guid projectId,
             Guid? taskId,
-            AgentRuntimeType agentType,
-            Guid executionId,
             string input,
             string user,
             CancellationToken cancellationToken = default)

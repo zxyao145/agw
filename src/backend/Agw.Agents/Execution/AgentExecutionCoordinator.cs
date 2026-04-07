@@ -73,8 +73,6 @@ public sealed class AgentExecutionCoordinator(
         if (!request.TaskId.HasValue || request.TaskId.Value == Guid.Empty)
         {
             return await CreateTaskAsync(
-                request.ExecutionId,
-                request.AgentType,
                 resolvedProjectId.Value,
                 null,
                 request.Input,
@@ -86,8 +84,6 @@ public sealed class AgentExecutionCoordinator(
         if (task == null)
         {
             return await CreateTaskAsync(
-                request.ExecutionId,
-                request.AgentType,
                 resolvedProjectId.Value,
                 request.TaskId,
                 request.Input,
@@ -164,8 +160,6 @@ public sealed class AgentExecutionCoordinator(
     }
 
     private async Task<ExecutionTaskResolutionResult> CreateTaskAsync(
-        Guid executionId,
-        AgentRuntimeType agentType,
         Guid projectId,
         Guid? taskId,
         string input,
@@ -175,8 +169,6 @@ public sealed class AgentExecutionCoordinator(
         var task = await _taskAppService.CreateTaskForExecutionAsync(
             projectId,
             taskId,
-            agentType,
-            executionId,
             input,
             user,
             cancellationToken);

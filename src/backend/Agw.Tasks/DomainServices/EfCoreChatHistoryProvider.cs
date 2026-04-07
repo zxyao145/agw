@@ -149,7 +149,6 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 ProjectId = state.ProjectId,
                 ContextId = state.ContextId,
                 Title = string.IsNullOrWhiteSpace(firstUserText) ? "New Chat" : firstUserText[..Math.Min(firstUserText.Length, 80)],
-                Description = firstUserText ?? string.Empty,
                 Status = ProjectTaskStatus.Succeeded,
                 FinishedTime = now,
                 CreateBy = DefaultUser,

@@ -14,6 +14,28 @@ namespace Agw.Tasks.Tests;
 public class ProjectTaskAppServiceTests
 {
     [Fact]
+    public void ProjectTaskCreateRequest_RemovesLegacyTargetBindingConstructor()
+    {
+        Assert.DoesNotContain(
+            typeof(ProjectTaskCreateRequest).GetConstructors(),
+            constructor =>
+            {
+                var parameters = constructor.GetParameters();
+                return parameters.Length == 7
+                    && parameters[0].Name == "AgentType"
+                    && parameters[1].Name == "AgentflowId"
+                    && parameters[2].Name == "AgentId"
+                    && parameters[3].Name == "Description";
+            });
+    }
+
+    [Fact]
+    public void ProjectTaskAppService_RemovesGetNextPendingAsync()
+    {
+        Assert.Null(typeof(ProjectTaskAppService).GetMethod("GetNextPendingAsync"));
+    }
+
+    [Fact]
     public async Task CreateRunningAsync_PersistsJobIdAndReturnsTitleOnlySummary()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

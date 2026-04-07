@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Enums;
+using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Agw.Tasks.Services;
 using Microsoft.Data.Sqlite;
@@ -10,6 +11,26 @@ namespace Agw.Tasks.Tests;
 
 public class TaskAppServiceTests
 {
+    [Fact]
+    public void ITaskAppService_ExposesOnlyReducedCreateTaskForExecutionSignature()
+    {
+        var methods = typeof(ITaskAppService)
+            .GetMethods()
+            .Where(method => method.Name == nameof(ITaskAppService.CreateTaskForExecutionAsync))
+            .ToArray();
+
+        var method = Assert.Single(methods);
+        var parameters = method.GetParameters();
+
+        Assert.Collection(
+            parameters,
+            parameter => Assert.Equal("projectId", parameter.Name),
+            parameter => Assert.Equal("taskId", parameter.Name),
+            parameter => Assert.Equal("input", parameter.Name),
+            parameter => Assert.Equal("user", parameter.Name),
+            parameter => Assert.Equal("cancellationToken", parameter.Name));
+    }
+
     [Fact]
     public async Task CreateTaskForExecutionAsync_CreatesChatTaskWithoutTargetBinding()
     {

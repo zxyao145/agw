@@ -1,5 +1,4 @@
 using Agw.Shared.Enums;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Shared.Tasks.Entities;
 
@@ -29,16 +28,4 @@ public class ProjectTask : BaseEntity
     public string? ErrorMessage { get; set; }
 
     public DateTime? FinishedTime { get; set; }
-
-    [NotMapped]
-    [Obsolete("Project tasks no longer persist task-level target bindings.")]
-    public AgentRuntimeType AgentType { get; set; } = AgentRuntimeType.Agent;
-
-    [NotMapped]
-    [Obsolete("Project tasks no longer persist task-level target bindings.")]
-    public Guid? AgentId { get; set; }
-
-    [NotMapped]
-    [Obsolete("Project tasks no longer persist descriptions.")]
-    public string Description { get; set; } = string.Empty;
 }
