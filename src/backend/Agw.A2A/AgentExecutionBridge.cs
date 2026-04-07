@@ -4,7 +4,6 @@ using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Entities;
 using Agw.Shared;
 using Agw.Shared.Abstractions.Repositories;
-using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
@@ -84,10 +83,7 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
             Id = taskId,
             ProjectId = ProjectDefaults.A2AId,
             ContextId = context.ContextId,
-            AgentType = AgentRuntimeType.Agent,
-            AgentId = agent.Id,
             Title = agent.Name,
-            Description = agent.Description,
             CreateBy = Constants.DefaultAuthor,
             CreateTime = DateTime.UtcNow
         };
