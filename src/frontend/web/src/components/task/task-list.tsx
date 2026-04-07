@@ -3,8 +3,6 @@
 import * as React from "react";
 import { Trash2, Plus, Edit2, Check, X, Info, RotateCw } from "lucide-react";
 import { toast } from "sonner";
-import { SettingsDialog } from "@/components/task/claude-code/settings-dialog";
-import type { SettingsDialogProps } from "@/components/task/claude-code/type";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,13 +20,14 @@ import {
 } from "@/api/task-client";
 import { cn } from "@/lib/utils";
 
-interface TaskHistoryListProps extends SettingsDialogProps {
+interface TaskHistoryListProps {
   projectId: string;
   currentTaskId: string | null;
   onTaskSelect: (taskId: string) => void;
   onNewTask: () => void;
   onTaskDeleted: (taskId: string) => void;
   onAllTasksDeleted: () => void;
+  headerActions?: React.ReactNode;
 }
 
 export function TaskHistoryList({
@@ -38,20 +37,7 @@ export function TaskHistoryList({
   onNewTask,
   onTaskDeleted,
   onAllTasksDeleted,
-  workingDirectory,
-  setWorkingDirectory,
-  gitAddress,
-  setGitAddress,
-  directoryMode,
-  setDirectoryMode,
-  apiKey,
-  setApiKey,
-  apiBaseUrl,
-  setApiBaseUrl,
-  permissionMode,
-  setPermissionMode,
-  envVars,
-  setEnvVars,
+  headerActions,
 }: TaskHistoryListProps) {
   const [tasks, setTasks] = React.useState<TaskSummary[]>([]);
   const [editingTaskId, setEditingTaskId] = React.useState<string | null>(null);
@@ -62,6 +48,10 @@ export function TaskHistoryList({
   const refreshTasks = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
+      if (!projectId) {
+        setTasks([]);
+        return;
+      }
       const latestTasks = await getAllTasks(projectId);
       setTasks(latestTasks);
     } catch (error) {
@@ -208,22 +198,7 @@ export function TaskHistoryList({
           >
             <Info className="h-4 w-4 " />
           </Button>
-          <SettingsDialog
-            workingDirectory={workingDirectory}
-            setWorkingDirectory={setWorkingDirectory}
-            gitAddress={gitAddress}
-            setGitAddress={setGitAddress}
-            directoryMode={directoryMode}
-            setDirectoryMode={setDirectoryMode}
-            apiKey={apiKey}
-            setApiKey={setApiKey}
-            apiBaseUrl={apiBaseUrl}
-            setApiBaseUrl={setApiBaseUrl}
-            permissionMode={permissionMode}
-            setPermissionMode={setPermissionMode}
-            envVars={envVars}
-            setEnvVars={setEnvVars}
-          />
+          {headerActions}
         </div>
       </div>
 
