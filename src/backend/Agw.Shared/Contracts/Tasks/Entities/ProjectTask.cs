@@ -29,11 +29,6 @@ public class ProjectTask : BaseEntity
     public string Description { get; set; } = string.Empty;
 
     /// <summary>
-    /// The system prompt used by the orchestrator/router for this request.
-    /// </summary>
-    public string? SystemPrompt { get; set; }
-
-    /// <summary>
     /// Task execution status.
     /// </summary>
     public ProjectTaskStatus Status { get; set; } = ProjectTaskStatus.Pending;

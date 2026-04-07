@@ -25,13 +25,14 @@ public class ModelProviderAppService : IModelProviderAppService
     {
         if (!modelId.HasValue && !providerId.HasValue)
         {
-            return _repository.ListAsync(null, modelProvider => modelProvider.Model!, modelProvider => modelProvider.Provider!);
+            return _repository.ListAsync(null, modelProvider => modelProvider.OrderByDescending(x => x.CreateTime), modelProvider => modelProvider.Model!, modelProvider => modelProvider.Provider!);
         }
 
         return _repository.ListAsync(
             modelProvider =>
                 (!modelId.HasValue || modelProvider.ModelId == modelId.Value) &&
                 (!providerId.HasValue || modelProvider.ProviderId == providerId.Value),
+            modelProvider => modelProvider.OrderByDescending(x => x.CreateTime),
             modelProvider => modelProvider.Model!,
             modelProvider => modelProvider.Provider!);
     }

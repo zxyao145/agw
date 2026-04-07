@@ -59,7 +59,6 @@ public class ProjectTaskAppServiceTests
                 Description: "Nightly sync",
                 Input: "Run scheduled sync",
                 Title: "Nightly sync",
-                SystemPrompt: null,
                 ContextId: "context-1"),
             "job-executor");
 

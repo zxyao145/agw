@@ -323,10 +323,31 @@ public class AgentHandlerFactoryTests
         }
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy)
+        {
+            return Task.FromResult((IReadOnlyList<TEntity>)orderBy(ApplyQuery(predicate: null)).ToList());
+        }
+
+        public Task<IReadOnlyList<TEntity>> ListAsync(
+            Expression<Func<TEntity, bool>>? predicate,
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy)
+        {
+            return Task.FromResult((IReadOnlyList<TEntity>)orderBy(ApplyQuery(predicate)).ToList());
+        }
+
+        public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate = null,
             params Expression<Func<TEntity, object>>[] includes)
         {
             return Task.FromResult((IReadOnlyList<TEntity>)ApplyPredicate(predicate));
+        }
+
+        public Task<IReadOnlyList<TEntity>> ListAsync(
+            Expression<Func<TEntity, bool>>? predicate,
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy,
+            params Expression<Func<TEntity, object>>[] includes)
+        {
+            return Task.FromResult((IReadOnlyList<TEntity>)orderBy(ApplyQuery(predicate)).ToList());
         }
 
         public Task AddAsync(TEntity entity)
@@ -352,9 +373,14 @@ public class AgentHandlerFactoryTests
 
         private List<TEntity> ApplyPredicate(Expression<Func<TEntity, bool>>? predicate)
         {
+            return [.. ApplyQuery(predicate)];
+        }
+
+        private IQueryable<TEntity> ApplyQuery(Expression<Func<TEntity, bool>>? predicate)
+        {
             return predicate is null
-                ? [.. _entities]
-                : [.. _entities.AsQueryable().Where(predicate)];
+                ? _entities.AsQueryable()
+                : _entities.AsQueryable().Where(predicate);
         }
     }
 

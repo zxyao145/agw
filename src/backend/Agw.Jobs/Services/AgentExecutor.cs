@@ -44,7 +44,6 @@ public class AgentExecutor(
                 Description: description,
                 Input: prompt,
                 Title: title,
-                SystemPrompt: null,
                 ContextId: contextId),
             JobExecutorUser);
 

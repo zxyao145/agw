@@ -193,7 +193,6 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.AgentType).HasConversion<int>();
             entity.Property(e => e.Description).IsRequired().HasMaxLength(1024);
-            entity.Property(e => e.SystemPrompt).HasMaxLength(4000);
             entity.Property(e => e.Status).HasConversion<int>();
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue("Untitled");
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);

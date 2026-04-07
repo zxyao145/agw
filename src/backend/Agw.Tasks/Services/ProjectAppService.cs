@@ -26,7 +26,7 @@ public class ProjectAppService : IProjectAppService
     }
 
     public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
-        _projectRepository.ListAsync(predicate);
+        _projectRepository.ListAsync(predicate, p => p.OrderByDescending(p => p.CreateTime).ThenBy(p=>p.Name));
 
     public Task<Project?> GetAsync(Guid id) => _projectRepository.GetByIdAsync(id);
 

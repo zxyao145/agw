@@ -22,7 +22,7 @@ public class ProviderAppService : IProviderAppService
         _providerDomainService = providerDomainService;
     }
 
-    public Task<IReadOnlyList<Provider>> ListAsync() => _providerRepository.ListAsync(null, provider => provider.AuthConfigs);
+    public Task<IReadOnlyList<Provider>> ListAsync() => _providerRepository.ListAsync(null, e => e.OrderByDescending(x => x.CreateTime), provider => provider.AuthConfigs);
 
     public Task<Provider?> GetAsync(Guid id) => _providerRepository.Queryable
         .Include(provider => provider.AuthConfigs)

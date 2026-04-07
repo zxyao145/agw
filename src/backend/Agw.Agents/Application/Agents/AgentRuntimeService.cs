@@ -101,12 +101,13 @@ public class AgentRuntimeService : RuntimService
     }
 
     public Task<IReadOnlyList<Agent>> ListAgentsAsync() =>
-        _agentRepository.ListAsync(null, x => x.AgentMcpToolServers, x => x.AgentSkillRelations);
+        _agentRepository.ListAsync(null, e => e.OrderBy(x => x.Name).ThenByDescending(x => x.CreateTime), x => x.AgentMcpToolServers, x => x.AgentSkillRelations);
 
     public async Task<Agent?> GetAgentAsync(Guid id)
     {
         var matches = await _agentRepository.ListAsync(
             x => x.Id == id,
+            null,
             x => x.AgentMcpToolServers,
             x => x.AgentSkillRelations);
         return matches.FirstOrDefault();

@@ -32,18 +32,20 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
         return _dbSet.SingleOrDefaultAsync(predicate);
     }
 
-    public async Task<IReadOnlyList<TEntity>> ListAsync(Expression<Func<TEntity, bool>>? predicate = null)
+    public async Task<IReadOnlyList<TEntity>> ListAsync(
+        Expression<Func<TEntity, bool>>? predicate = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        )
     {
-        IQueryable<TEntity> query = _dbSet;
-        if (predicate != null)
-        {
-            query = query.Where(predicate);
-        }
-
+        var query = BuildQuery(predicate, orderBy);
         return await query.AsNoTracking().ToListAsync();
     }
 
-    public async Task<IReadOnlyList<TEntity>> ListAsync(Expression<Func<TEntity, bool>>? predicate = null, params Expression<Func<TEntity, object>>[] includes)
+    public async Task<IReadOnlyList<TEntity>> ListAsync(
+        Expression<Func<TEntity, bool>>? predicate = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
+        params Expression<Func<TEntity, object>>[] includes
+        )
     {
         IQueryable<TEntity> query = _dbSet;
 
@@ -52,10 +54,7 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
             query = query.Include(include);
         }
 
-        if (predicate != null)
-        {
-            query = query.Where(predicate);
-        }
+        query = BuildQuery(query, predicate, orderBy);
 
         return await query.AsNoTracking().ToListAsync();
     }
@@ -78,5 +77,30 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
     public async Task SaveChangesAsync(CancellationToken cancellationToken)
     {
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private IQueryable<TEntity> BuildQuery(
+        Expression<Func<TEntity, bool>>? predicate,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy)
+    {
+        return BuildQuery(_dbSet, predicate, orderBy);
+    }
+
+    private static IQueryable<TEntity> BuildQuery(
+        IQueryable<TEntity> query,
+        Expression<Func<TEntity, bool>>? predicate,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy)
+    {
+        if (predicate != null)
+        {
+            query = query.Where(predicate);
+        }
+
+        if (orderBy != null)
+        {
+            query = orderBy(query);
+        }
+
+        return query;
     }
 }

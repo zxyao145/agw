@@ -10,7 +10,6 @@ public record ProjectTaskCreateRequest(
     string Description,
     string Input,
     string? Title = null,
-    string? SystemPrompt = null,
     string? ContextId = null);
 
 public record ProjectTaskUpdateRequest(string Description, string Input);

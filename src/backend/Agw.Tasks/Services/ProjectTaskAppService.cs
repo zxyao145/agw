@@ -136,8 +136,7 @@ public class ProjectTaskAppService
                 ? request.AgentflowId
                 : request.AgentId,
             Title = request.Title ?? string.Empty,
-            Description = request.Description,
-            SystemPrompt = request.SystemPrompt
+            Description = request.Description
         };
 
         var inputMessage = new ChatMessage(ChatRole.User, request.Input.Trim())
