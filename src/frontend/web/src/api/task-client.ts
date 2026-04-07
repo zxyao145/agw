@@ -22,12 +22,9 @@ export type ProjectTaskSummaryResponse = {
   id: string;
   projectId: string;
   contextId: string;
-  agentType?: number;
-  agentflowId?: string | null;
-  agentId?: string | null;
+  jobId?: string | null;
   status?: number;
   title: string;
-  description?: string;
   errorMessage?: string | null;
   createTime: string;
   updateTime?: string | null;

@@ -1,19 +1,33 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProjectTaskDto } from "./types";
-import { Chat } from "@/components/message/chat";
+
+function formatDate(value?: string | null): string {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
+}
 
 function getApiErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) {
+    return error.message;
+  }
+
   return "Unknown error";
 }
 
@@ -66,47 +80,37 @@ export default function TaskDetailsPage() {
   });
 
   const task = taskQuery.data;
-  const targetType = task?.agentType === 0 ? "agent" : "agentflow";
-  const targetId = targetType === "agent" ? (task?.agentId ?? null) : (task?.agentflowId ?? null);
+  const messages = task?.messages ?? [];
 
   return (
-    <div className="space-y-3 w-full min-w-0 max-w-full overflow-x-hidden flex flex-col">
+    <div className="space-y-6 w-full min-w-0 max-w-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-xl font-semibold">
-              {taskQuery.isLoading ? "Loading task..." : (task?.description ?? "Task")}
+              {taskQuery.isLoading ? "Loading task..." : (task?.title ?? "Task")}
             </h1>
             {task ? (
-              <>
-                <span className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(task.status)}`}>
-                  {task?.id}
-                </span>
-                <span className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(task.status)}`}>
-                  {statusLabel(task.status)}
-                </span>
-              </>
+              <span className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(task.status)}`}>
+                {statusLabel(task.status)}
+              </span>
             ) : null}
           </div>
-          <div className="text-sm text-muted-foreground">{task?.description ?? ""}</div>
+          <div className="text-sm text-muted-foreground">
+            Read-only task history view. Live execution controls were removed from this route.
+          </div>
+          {task ? (
+            <div className="text-xs text-muted-foreground">
+              <span className="font-mono">{task.id}</span>
+            </div>
+          ) : null}
         </div>
 
-        <div className="flex flex-wrap gap-2 sm:justify-end">
-          <ButtonGroup>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/projects/${projectId}`}>Back</Link>
-            </Button>
-            {task && targetId && (
-              <Button asChild variant="outline" size="sm">
-                <Link
-                  href={task.agentType === 0 ? `/agents/${targetId}` : `/agentflows/${targetId}`}
-                >
-                  {task.agentType === 0 ? "Agent" : "Agentflow"}
-                </Link>
-              </Button>
-            )}
-          </ButtonGroup>
-        </div>
+        <ButtonGroup>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/projects/${projectId}`}>Back</Link>
+          </Button>
+        </ButtonGroup>
       </div>
 
       {taskQuery.isLoading ? (
@@ -116,25 +120,67 @@ export default function TaskDetailsPage() {
           Failed to load task: {getApiErrorMessage(taskQuery.error)}
         </div>
       ) : task ? (
-        <div className="space-y-6 flex-1 min-w-0">
-          {/* <Conversation task={task} /> */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Task Overview</CardTitle>
+              <CardDescription>Execution metadata captured for this task session.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
+              <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Context ID
+                </div>
+                <div className="break-all font-mono text-xs">{task.contextId}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Job ID</div>
+                <div className="break-all font-mono text-xs">{task.jobId ?? "-"}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Message Count
+                </div>
+                <div>{task.messageCount}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Created</div>
+                <div>{formatDate(task.createTime)}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Started</div>
+                <div>{formatDate(task.startedTime)}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Updated</div>
+                <div>{formatDate(task.updateTime)}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Finished
+                </div>
+                <div>{formatDate(task.finishedTime)}</div>
+              </div>
+            </CardContent>
+          </Card>
 
-          <Chat
-            className="h-[calc(100vh-100px)]"
-            executionId={targetId}
-            agentType={targetType === "agent" ? 0 : 1}
-            projectId={projectId}
-            taskId={task?.id ?? taskId}
-            resume={true}
-            resetSignal={`${taskId}:${targetId ?? "none"}`}
-            placeholder="请输入要发送给任务执行器的内容..."
-          />
+          <Card>
+            <CardHeader>
+              <CardTitle>Input</CardTitle>
+              <CardDescription>The initial user input stored for this task.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/40 p-3 text-sm">
+                {task.input || "-"}
+              </pre>
+            </CardContent>
+          </Card>
 
           {task.errorMessage ? (
             <Card className="border-destructive/50">
               <CardHeader>
                 <CardTitle className="text-destructive">Error</CardTitle>
-                <CardDescription>Task execution error details.</CardDescription>
+                <CardDescription>Terminal error recorded for this task.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -143,6 +189,49 @@ export default function TaskDetailsPage() {
               </CardContent>
             </Card>
           ) : null}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Message History</CardTitle>
+              <CardDescription>Conversation records attached to this task session.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {messages.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No messages recorded.</div>
+              ) : (
+                <div className="space-y-3">
+                  {messages.map((message) => (
+                    <div key={message.messageId} className="rounded-lg border p-4">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          {message.author || message.role || "Unknown"}
+                        </span>
+                        {message.role ? <span>{message.role}</span> : null}
+                        {message.type ? <span>{message.type}</span> : null}
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        {message.contents.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">No content recorded.</div>
+                        ) : (
+                          message.contents.map((content, index) => (
+                            <div key={`${message.messageId}:${index}`} className="space-y-1">
+                              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                {content.type}
+                              </div>
+                              <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/40 p-3 text-sm">
+                                {content.content || "-"}
+                              </pre>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       ) : null}
     </div>

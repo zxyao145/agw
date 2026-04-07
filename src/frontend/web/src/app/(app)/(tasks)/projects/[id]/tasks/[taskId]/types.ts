@@ -1,16 +1,18 @@
+import type { AiMessage } from "@/types";
+
 export type ProjectTaskDto = {
   id: string;
   projectId: string;
   contextId: string;
-  agentType?: number;
-  agentflowId?: string | null;
-  agentId?: string | null;
+  jobId?: string | null;
   status: number;
-  description: string;
+  title: string;
   input: string;
   errorMessage?: string | null;
   createTime?: string | null;
   updateTime?: string | null;
   startedTime?: string | null;
   finishedTime?: string | null;
+  messageCount: number;
+  messages?: AiMessage[] | null;
 };

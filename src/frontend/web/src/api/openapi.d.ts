@@ -2052,33 +2052,7 @@ export interface paths {
         };
       };
     };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          projectId: string;
-          taskId: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ProjectTaskUpdateRequest"];
-          "text/json": components["schemas"]["ProjectTaskUpdateRequest"];
-          "application/*+json": components["schemas"]["ProjectTaskUpdateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
+    put?: never;
     post?: never;
     delete: {
       parameters: {
@@ -2178,84 +2152,6 @@ export interface paths {
       };
     };
     post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/projects/{projectId}/tasks/{taskId}/cancel": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          projectId: string;
-          taskId: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/projects/{projectId}/tasks/{taskId}/reorder": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          projectId: string;
-          taskId: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ProjectTaskReorderRequest"];
-          "text/json": components["schemas"]["ProjectTaskReorderRequest"];
-          "application/*+json": components["schemas"]["ProjectTaskReorderRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
     delete?: never;
     options?: never;
     head?: never;
@@ -2451,25 +2347,11 @@ export interface components {
       extraSetting: null | string;
     };
     ProjectTaskCreateRequest: {
-      agentType: components["schemas"]["AgentRuntimeType"];
       /** Format: uuid */
-      agentflowId: null | string;
-      /** Format: uuid */
-      agentId: null | string;
-      description: string;
+      jobId?: null | string;
       input: string;
-      sessionId?: null | string;
       title?: null | string;
-      systemPrompt?: null | string;
       contextId?: null | string;
-    };
-    ProjectTaskReorderRequest: {
-      /** Format: date-time */
-      updateTimeUtc: string;
-    };
-    ProjectTaskUpdateRequest: {
-      description: string;
-      input: string;
     };
     ProjectUpdateRequest: {
       name: string;
