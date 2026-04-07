@@ -45,6 +45,42 @@ type AgentflowDto = {
   enable?: boolean;
 };
 
+function getTargetValueFromMetadata(targetType: unknown, targetId: unknown): string | null {
+  if ((targetType !== "agent" && targetType !== "agentflow") || typeof targetId !== "string") {
+    return null;
+  }
+
+  const trimmedTargetId = targetId.trim();
+  if (!trimmedTargetId) {
+    return null;
+  }
+
+  return `${targetType}:${trimmedTargetId}`;
+}
+
+function getRestoredTargetValue(messages: AiMessage[]): string | null {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = messages[messageIndex];
+    if (message.role !== "user") {
+      continue;
+    }
+
+    for (let contentIndex = message.contents.length - 1; contentIndex >= 0; contentIndex -= 1) {
+      const content = message.contents[contentIndex];
+      const restoredValue = getTargetValueFromMetadata(
+        content.additionalProperties?.targetType,
+        content.additionalProperties?.targetId,
+      );
+
+      if (restoredValue) {
+        return restoredValue;
+      }
+    }
+  }
+
+  return null;
+}
+
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (typeof error.body === "string" && error.body.trim().length > 0) {
@@ -297,25 +333,34 @@ export default function ChatPage() {
     return nextId;
   }, [selectedProjectId, syncRoute, taskId]);
 
-  const resetSession = React.useCallback(() => {
+  const clearActiveSessionState = React.useCallback(() => {
     closeSocket("Session cleared");
     hydratedTaskKeyRef.current = null;
     setIsExecuting(false);
     setMessages([]);
     setTaskId(null);
-    syncRoute(selectedProjectId, null);
     userInputRef.current?.setInput("");
-  }, [closeSocket, selectedProjectId, syncRoute]);
+  }, [closeSocket]);
+
+  const resetSession = React.useCallback(() => {
+    clearActiveSessionState();
+    syncRoute(selectedProjectId, null);
+  }, [clearActiveSessionState, selectedProjectId, syncRoute]);
 
   const loadTaskHistory = React.useCallback(
     async (projectId: string, nextTaskIdValue: string) => {
       const details = await getTaskDetails(projectId, nextTaskIdValue);
+      const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
+
       closeSocket("Session switched");
       hydratedTaskKeyRef.current = `${projectId}:${details.taskId}`;
       setSelectedProjectId(projectId);
       setIsExecuting(false);
       setTaskId(details.taskId);
       setMessages(details.messages ?? []);
+      if (restoredTargetValue) {
+        setSelectedTargetValue(restoredTargetValue);
+      }
       syncRoute(projectId, details.taskId);
     },
     [closeSocket, syncRoute],
@@ -357,7 +402,7 @@ export default function ChatPage() {
     }
 
     setSelectedTargetValue((current) => {
-      if (current && targetOptions.some((option) => getTargetValue(option) === current)) {
+      if (current) {
         return current;
       }
 
@@ -367,13 +412,13 @@ export default function ChatPage() {
 
   React.useEffect(() => {
     if (!queryProjectId) {
-      hydratedTaskKeyRef.current = null;
+      clearActiveSessionState();
       return;
     }
 
     if (!queryTaskId) {
+      clearActiveSessionState();
       setSelectedProjectId(queryProjectId);
-      hydratedTaskKeyRef.current = null;
       return;
     }
 
@@ -387,6 +432,7 @@ export default function ChatPage() {
     void (async () => {
       try {
         const details = await getTaskDetails(queryProjectId, queryTaskId);
+        const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
         if (cancelled) {
           return;
         }
@@ -397,6 +443,9 @@ export default function ChatPage() {
         setIsExecuting(false);
         setTaskId(details.taskId);
         setMessages(details.messages ?? []);
+        if (restoredTargetValue) {
+          setSelectedTargetValue(restoredTargetValue);
+        }
       } catch (error) {
         if (!cancelled) {
           toast.error(`Failed to load task history: ${getApiErrorMessage(error)}`);
@@ -407,7 +456,7 @@ export default function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [closeSocket, queryProjectId, queryTaskId]);
+  }, [clearActiveSessionState, closeSocket, queryProjectId, queryTaskId]);
 
   const handleProjectChange = React.useCallback(
     (nextProjectId: string) => {

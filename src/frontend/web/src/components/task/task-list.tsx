@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Trash2, Plus, Edit2, Check, X, Info, RotateCw } from "lucide-react";
+import { Trash2, Plus, Info, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   deleteTaskById,
-  updateTaskTitle,
   deleteAllTasks,
   getAllTasks,
   type TaskSummary,
@@ -40,8 +39,6 @@ export function TaskHistoryList({
   headerActions,
 }: TaskHistoryListProps) {
   const [tasks, setTasks] = React.useState<TaskSummary[]>([]);
-  const [editingTaskId, setEditingTaskId] = React.useState<string | null>(null);
-  const [editTitle, setEditTitle] = React.useState("");
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
@@ -102,42 +99,6 @@ export function TaskHistoryList({
     } catch (error) {
       console.error("Clear all error:", error);
       toast.error("Error clearing chats");
-    }
-  };
-
-  const startEditing = (task: TaskSummary, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingTaskId(task.taskId);
-    setEditTitle(task.title);
-  };
-
-  const cancelEditing = (e: React.SyntheticEvent<HTMLElement>) => {
-    e.stopPropagation();
-    setEditingTaskId(null);
-    setEditTitle("");
-  };
-
-  const saveEdit = async (taskId: string, e: React.SyntheticEvent<HTMLElement>) => {
-    e.stopPropagation();
-
-    if (!editTitle.trim()) {
-      toast.error("Title cannot be empty");
-      return;
-    }
-
-    try {
-      const success = await updateTaskTitle(taskId, editTitle.trim(), projectId);
-      if (success) {
-        toast.success("Title updated");
-        setEditingTaskId(null);
-        setEditTitle("");
-        await refreshTasks();
-      } else {
-        toast.error("Failed to update title");
-      }
-    } catch (error) {
-      console.error("Update title error:", error);
-      toast.error("Error updating title");
     }
   };
 
@@ -209,12 +170,11 @@ export function TaskHistoryList({
         ) : (
           tasks.map((task) => {
             const isActive = task.taskId === currentTaskId;
-            const isEditing = editingTaskId === task.taskId;
 
             return (
               <div
                 key={task.taskId}
-                onClick={() => !isEditing && onTaskSelect(task.taskId)}
+                onClick={() => onTaskSelect(task.taskId)}
                 className={cn(
                   "group p-3 rounded-md cursor-pointer transition-colors border",
                   isActive ? "bg-blue-50" : "bg-card hover:bg-accent/50 border-transparent",
@@ -222,68 +182,21 @@ export function TaskHistoryList({
               >
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
-                    {isEditing ? (
-                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="text"
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          className="flex-1 px-2 py-1 text-sm border rounded bg-background"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              saveEdit(task.taskId, e);
-                            } else if (e.key === "Escape") {
-                              cancelEditing(e);
-                            }
-                          }}
-                        />
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0"
-                          onClick={(e) => saveEdit(task.taskId, e)}
-                        >
-                          <Check className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0"
-                          onClick={cancelEditing}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="font-medium text-sm truncate">{task.title}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {formatDate(task.updateTime ?? task.createTime)}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  {!isEditing && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 w-6 p-0"
-                        onClick={(e) => startEditing(task, e)}
-                      >
-                        <Edit2 className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 w-6 p-0 text-destructive"
-                        onClick={(e) => handleDelete(task, e)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                    <div className="font-medium text-sm truncate">{task.title}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {formatDate(task.updateTime ?? task.createTime)}
                     </div>
-                  )}
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 text-destructive"
+                      onClick={(e) => handleDelete(task, e)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             );
