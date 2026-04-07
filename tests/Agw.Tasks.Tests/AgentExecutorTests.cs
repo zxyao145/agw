@@ -8,7 +8,7 @@ namespace Agw.Tasks.Tests;
 public class AgentExecutorTests
 {
     [Theory]
-    [InlineData("  Nightly Sync  ", "  ignored prompt  ", "Run job: Nightly Sync", "Nightly Sync")]
+    [InlineData("  Nightly Sync  ", "  explicit prompt  ", "explicit prompt", "Nightly Sync")]
     [InlineData("   ", "  synchronize data  ", "synchronize data", "synchronize data")]
     [InlineData("   ", "   ", "Scheduled Job", "Scheduled Job")]
     public void BuildPromptAndTitle_UsesExpectedFallbacks(

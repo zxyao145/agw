@@ -99,14 +99,18 @@ public class AgentExecutor(
         var trimmedName = job.Name.Trim();
         var trimmedPrompt = job.Prompt?.Trim();
 
+        if (!string.IsNullOrWhiteSpace(trimmedPrompt))
+        {
+            var title = !string.IsNullOrWhiteSpace(trimmedName)
+                ? trimmedName
+                : ProjectTaskTitleFactory.Create(trimmedPrompt, "Scheduled Job");
+
+            return (trimmedPrompt, title);
+        }
+
         if (!string.IsNullOrWhiteSpace(trimmedName))
         {
             return ($"Run job: {trimmedName}", trimmedName);
-        }
-
-        if (!string.IsNullOrWhiteSpace(trimmedPrompt))
-        {
-            return (trimmedPrompt, ProjectTaskTitleFactory.Create(trimmedPrompt, "Scheduled Job"));
         }
 
         return ("Scheduled Job", "Scheduled Job");
