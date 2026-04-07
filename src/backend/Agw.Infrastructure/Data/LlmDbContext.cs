@@ -191,14 +191,12 @@ public class LlmDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
-            entity.Property(e => e.AgentType).HasConversion<int>();
-            entity.Property(e => e.Description).IsRequired().HasMaxLength(1024);
+            entity.Property(e => e.JobId);
             entity.Property(e => e.Status).HasConversion<int>();
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue("Untitled");
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
 
             entity.HasIndex(e => e.ContextId).IsUnique();
-            entity.HasIndex(e => e.AgentId).IsUnique(false);
             entity.HasIndex(e => e.ProjectId);
             entity.HasIndex(e => new { e.ProjectId, e.Status, e.UpdateTime });
 

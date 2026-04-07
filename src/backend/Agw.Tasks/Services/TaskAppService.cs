@@ -1,6 +1,5 @@
 using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Contracts;
-using Agw.Shared.Enums;
 using Agw.Shared;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
@@ -32,8 +31,6 @@ public class TaskAppService : ITaskAppService
     public async Task<ProjectTask?> CreateTaskForExecutionAsync(
         Guid projectId,
         Guid? taskId,
-        AgentRuntimeType agentType,
-        Guid executionId,
         string input,
         string user,
         CancellationToken cancellationToken = default)
@@ -41,10 +38,7 @@ public class TaskAppService : ITaskAppService
         var normalizedInput = input.Trim();
         var title = normalizedInput[..Math.Min(normalizedInput.Length, 80)];
         var request = new ProjectTaskCreateRequest(
-            agentType,
-            agentType == AgentRuntimeType.Agentflow ? executionId : null,
-            agentType == AgentRuntimeType.Agent ? executionId : null,
-            normalizedInput,
+            null,
             normalizedInput,
             title);
 

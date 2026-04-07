@@ -1,4 +1,5 @@
 using Agw.Shared.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Shared.Tasks.Entities;
 
@@ -16,17 +17,9 @@ public class ProjectTask : BaseEntity
     /// </summary>
     public string ContextId { get; set; } = string.Empty;
 
-    public AgentRuntimeType AgentType { get; set; } = AgentRuntimeType.Agent;
-
-    /// <summary>
-    /// if AgentType == Agent, AgentId == entity Agent.Id；
-    /// if AgentType == Agentflow, AgentId == entity Agentflow.Id；
-    /// </summary>
-    public Guid? AgentId { get; set; }
+    public Guid? JobId { get; set; }
 
     public string Title { get; set; } = "Untitled";
-
-    public string Description { get; set; } = string.Empty;
 
     /// <summary>
     /// Task execution status.
@@ -37,4 +30,15 @@ public class ProjectTask : BaseEntity
 
     public DateTime? FinishedTime { get; set; }
 
+    [NotMapped]
+    [Obsolete("Project tasks no longer persist task-level target bindings.")]
+    public AgentRuntimeType AgentType { get; set; } = AgentRuntimeType.Agent;
+
+    [NotMapped]
+    [Obsolete("Project tasks no longer persist task-level target bindings.")]
+    public Guid? AgentId { get; set; }
+
+    [NotMapped]
+    [Obsolete("Project tasks no longer persist descriptions.")]
+    public string Description { get; set; } = string.Empty;
 }
