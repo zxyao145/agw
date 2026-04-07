@@ -100,7 +100,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     /// <param name="options">Optional configuration options.</param>
     public AgwA2ARequestHandler(
         ITaskStore taskStore,
-        ChannelEventNotifier notifier, 
+        ChannelEventNotifier notifier,
         ILogger<A2AServer> logger,
         IServiceScopeFactory serviceScopeFactory,
         A2AServerOptions? options = null)

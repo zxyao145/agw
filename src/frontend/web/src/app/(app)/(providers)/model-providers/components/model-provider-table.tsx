@@ -90,9 +90,7 @@ export function ModelProviderTable({
                       {String(item.rpsLimit)}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right">
-                      <ModelProviderActions
-                        modelProviderId={item.id}
-                      />
+                      <ModelProviderActions modelProviderId={item.id} />
                     </TableCell>
                   </TableRow>
                 );

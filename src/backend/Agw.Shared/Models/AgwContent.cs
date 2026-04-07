@@ -280,7 +280,7 @@ public class AgwDataContent : AgwContent
     //     The data, lazily initialized if the data is provided in a data URI.
     private ReadOnlyMemory<byte>? _data;
 
- 
+
     private const string DefaultMediaType = "application/octet-stream";
 
     [StringSyntax("Uri")]
@@ -316,7 +316,7 @@ public class AgwDataContent : AgwContent
     [JsonIgnore]
     public string MediaType { get; }
 
-   
+
     public string? Name { get; set; }
 
 

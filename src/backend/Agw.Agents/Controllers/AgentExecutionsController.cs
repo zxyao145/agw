@@ -286,7 +286,7 @@ public partial class AgentExecutionsController : ControllerBase
     }
 
     private Task SendErrorAsync(
-        WebSocket webSocket, 
+        WebSocket webSocket,
         string errorMessage,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken

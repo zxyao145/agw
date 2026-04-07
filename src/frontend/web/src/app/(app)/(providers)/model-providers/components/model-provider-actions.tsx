@@ -14,9 +14,7 @@ type ModelProviderActionsProps = {
   modelProviderId: string;
 };
 
-export function ModelProviderActions({
-  modelProviderId,
-}: ModelProviderActionsProps) {
+export function ModelProviderActions({ modelProviderId }: ModelProviderActionsProps) {
   const queryClient = useQueryClient();
 
   const deleteModelProviderMutation = useMutation({

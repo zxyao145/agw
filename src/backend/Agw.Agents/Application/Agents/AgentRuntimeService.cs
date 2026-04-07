@@ -36,7 +36,7 @@ public record AgentExecutionResult(
     string TaskId,
     IReadOnlyList<AgwMessage> Messages);
 
-public class AgentRuntimeService: RuntimService
+public class AgentRuntimeService : RuntimService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;
@@ -778,7 +778,7 @@ public class AgentRuntimeService: RuntimService
         string taskId,
         CancellationToken cancellationToken)
     {
-        if(agent.Type == AgentType.External)
+        if (agent.Type == AgentType.External)
         {
             return await aiAgent.CreateSessionAsync(cancellationToken);
         }
@@ -811,7 +811,7 @@ public class AgentRuntimeService: RuntimService
         await _cache.SetAsync(taskId, serialized, cancellationToken: cancellationToken);
     }
 
- 
+
     private string? MergeExtraSettings(string? agentExtra, string? projectExtraSetting, string? requestExtraSetting)
     {
         JsonObject? merged = null;

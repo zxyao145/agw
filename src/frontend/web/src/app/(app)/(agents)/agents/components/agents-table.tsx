@@ -1,13 +1,7 @@
 import { UseQueryResult } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import {
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Trash2, Play } from "lucide-react";
 import type { AgentDto } from "./types";
 import { getApiErrorMessage } from "./utils";

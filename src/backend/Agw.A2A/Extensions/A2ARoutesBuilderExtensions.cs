@@ -74,7 +74,7 @@ public static class A2ARoutesBuilderExtensions
 
         routeGroup.MapPost(agentPathPrefix + "{agentName}",
             async delegate (HttpRequest request, string agentName, CancellationToken cancellationToken)
-            {                
+            {
                 return await AgwA2AJsonRpcProcessor.ProcessRequestAsync(agwA2ARequestHandler, request, agentName, cancellationToken);
             }
         );

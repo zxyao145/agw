@@ -6,13 +6,7 @@ import { toast } from "sonner";
 
 import { apiDelete } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import {
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 import { getModelTypeLabel } from "./types";
 import type { ModelDto } from "./types";
