@@ -8,6 +8,7 @@ using Agw.Shared.Tasks.Entities;
 using Agw.Tasks.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Reflection;
 
 namespace Agw.Tasks.Tests;
 
@@ -35,12 +36,32 @@ public class ProjectTaskAppServiceTests
         Assert.Null(typeof(ProjectTaskAppService).GetMethod("GetNextPendingAsync"));
     }
 
-    [Theory]
-    [InlineData("HasRunningTaskAsync")]
-    [InlineData("TryMarkRunningAsync")]
-    public void ProjectTaskAppService_RemovesSchedulerOnlyHelpers(string methodName)
+    [Fact]
+    public void ProjectTaskAppService_ExposesOnlyCurrentPublicSurface()
     {
-        Assert.Null(typeof(ProjectTaskAppService).GetMethod(methodName));
+        string[] expectedMethods =
+        [
+            "CreateAsync",
+            "CreateForExecutionAsync",
+            "CreateRunningAsync",
+            "DeleteAsync",
+            "GetLatestRecordAsync",
+            "GetResponseAsync",
+            "GetTaskAsync",
+            "ListAsync",
+            "ListResponsesAsync",
+            "MarkFailedAsync",
+            "MarkSucceededAsync",
+            "UpdateTitleAsync"
+        ];
+
+        var methodNames = typeof(ProjectTaskAppService)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Select(method => method.Name)
+            .OrderBy(name => name)
+            .ToArray();
+
+        Assert.Equal(expectedMethods, methodNames);
     }
 
     [Fact]

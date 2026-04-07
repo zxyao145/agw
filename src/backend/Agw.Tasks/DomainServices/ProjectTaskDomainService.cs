@@ -46,19 +46,6 @@ public class ProjectTaskDomainService
         return true;
     }
 
-    public bool TryMarkRunning(ProjectTask task, string user)
-    {
-        if (task.Status != ProjectTaskStatus.Pending)
-        {
-            return false;
-        }
-
-        task.Status = ProjectTaskStatus.Running;
-        task.UpdateBy = user;
-        task.UpdateTime = DateTime.UtcNow;
-        return true;
-    }
-
     public bool TryMarkSucceeded(ProjectTask task, string user)
     {
         if (task.Status != ProjectTaskStatus.Running)

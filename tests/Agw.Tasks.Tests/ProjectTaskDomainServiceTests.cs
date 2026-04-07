@@ -3,6 +3,7 @@ using Agw.Shared;
 using Agw.Shared.Enums;
 using Agw.Shared.Tasks.Entities;
 using Microsoft.Extensions.AI;
+using System.Reflection;
 using System.Text.Json;
 
 namespace Agw.Tasks.Tests;
@@ -92,27 +93,22 @@ public class ProjectTaskDomainServiceTests
     }
 
     [Fact]
-    public void TryMarkRunning_PendingTask_Succeeds()
+    public void ProjectTaskDomainService_ExposesOnlyCurrentPublicHelpers()
     {
-        var before = DateTime.UtcNow;
-        var task = new ProjectTask { Status = ProjectTaskStatus.Pending };
+        var methodNames = typeof(ProjectTaskDomainService)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Select(method => method.Name)
+            .OrderBy(name => name)
+            .ToArray();
 
-        var result = _service.TryMarkRunning(task, "tester");
-
-        Assert.True(result);
-        Assert.Equal(ProjectTaskStatus.Running, task.Status);
-        Assert.Equal("tester", task.UpdateBy);
-        Assert.InRange(task.UpdateTime!.Value, before, DateTime.UtcNow);
-    }
-
-    [Fact]
-    public void TryMarkRunning_NonPendingTask_ReturnsFalse()
-    {
-        var task = new ProjectTask { Status = ProjectTaskStatus.Succeeded };
-
-        var result = _service.TryMarkRunning(task, "tester");
-
-        Assert.False(result);
+        Assert.Equal(
+            [
+                "TryMarkFailed",
+                "TryMarkSucceeded",
+                "TryPrepareForCreate",
+                "TryUpdateTitle"
+            ],
+            methodNames);
     }
 
     [Fact]
