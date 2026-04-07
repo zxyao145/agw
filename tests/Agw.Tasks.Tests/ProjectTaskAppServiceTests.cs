@@ -35,6 +35,14 @@ public class ProjectTaskAppServiceTests
         Assert.Null(typeof(ProjectTaskAppService).GetMethod("GetNextPendingAsync"));
     }
 
+    [Theory]
+    [InlineData("HasRunningTaskAsync")]
+    [InlineData("TryMarkRunningAsync")]
+    public void ProjectTaskAppService_RemovesSchedulerOnlyHelpers(string methodName)
+    {
+        Assert.Null(typeof(ProjectTaskAppService).GetMethod(methodName));
+    }
+
     [Fact]
     public async Task CreateRunningAsync_PersistsJobIdAndReturnsTitleOnlySummary()
     {

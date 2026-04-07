@@ -216,30 +216,10 @@ public class ProjectTaskAppService
         return ApplicationResult.Success();
     }
 
-    public async Task<bool> HasRunningTaskAsync(Guid projectId)
-    {
-        var running = await _taskRepository.ListAsync(task =>
-            task.ProjectId == projectId && task.Status == ProjectTaskStatus.Running);
-        return running.Count > 0;
-    }
-
     public async Task<TaskRecord?> GetLatestRecordAsync(Guid taskId)
     {
         var records = await GetOrderedRecordsByTaskIdAsync(taskId);
         return _taskRecordDomainService.GetLatest(records);
-    }
-
-    public async Task<ProjectTask?> TryMarkRunningAsync(Guid id, string user)
-    {
-        var task = await _taskRepository.GetByIdAsync(id);
-        if (task == null || !_projectTaskDomainService.TryMarkRunning(task, user))
-        {
-            return null;
-        }
-
-        _taskRepository.Update(task);
-        await _unitOfWork.SaveChangesAsync();
-        return task;
     }
 
     public async Task<ProjectTask?> MarkSucceededAsync(Guid id, string user)
