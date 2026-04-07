@@ -1992,32 +1992,7 @@ export interface paths {
       };
     };
     put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          projectId: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ProjectTaskCreateRequest"];
-          "text/json": components["schemas"]["ProjectTaskCreateRequest"];
-          "application/*+json": components["schemas"]["ProjectTaskCreateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -2345,13 +2320,6 @@ export interface components {
       workspace: null | string;
       enable: boolean;
       extraSetting: null | string;
-    };
-    ProjectTaskCreateRequest: {
-      /** Format: uuid */
-      jobId?: null | string;
-      input: string;
-      title?: null | string;
-      contextId?: null | string;
     };
     ProjectUpdateRequest: {
       name: string;
