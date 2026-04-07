@@ -148,7 +148,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 Id = taskId,
                 ProjectId = state.ProjectId,
                 ContextId = state.ContextId,
-                Title = string.IsNullOrWhiteSpace(firstUserText) ? "New Chat" : firstUserText[..Math.Min(firstUserText.Length, 80)],
+                JobId = null,
+                Title = ProjectTaskTitleFactory.Create(firstUserText),
                 Status = ProjectTaskStatus.Succeeded,
                 FinishedTime = now,
                 CreateBy = DefaultUser,
@@ -185,6 +186,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 AgentName = message.AuthorName,
                 ConversationSequence = nextSequence,
                 ConversationPayload = JsonSerializer.Serialize(message, _jsonSerializerOptions),
+                Metadata = TaskRecordMetadataFactory.FromMessage(message),
                 CreateTime = now,
                 UpdateTime = now
             });

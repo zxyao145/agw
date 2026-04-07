@@ -3,6 +3,7 @@ using Agw.Shared.Contracts;
 using Agw.Shared;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
+using Agw.Domain.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Tasks.Services;
@@ -36,11 +37,10 @@ public class TaskAppService : ITaskAppService
         CancellationToken cancellationToken = default)
     {
         var normalizedInput = input.Trim();
-        var title = normalizedInput[..Math.Min(normalizedInput.Length, 80)];
         var request = new ProjectTaskCreateRequest(
-            null,
-            normalizedInput,
-            title);
+            JobId: null,
+            Input: normalizedInput,
+            Title: ProjectTaskTitleFactory.Create(normalizedInput));
 
         var result = await _projectTaskAppService.CreateForExecutionAsync(projectId, taskId, request, user);
         if (result.Value == null)

@@ -189,18 +189,30 @@ public sealed class AgentExecSession : IAsyncDisposable
 
         foreach (var item in contents)
         {
-            if (item is AgwTextContent agwTextContent)
+            switch (item)
             {
-                aiContents.Add(new TextContent(agwTextContent.Content));
-                continue;
-            }
+                case AgwTextContent text:
+                    aiContents.Add(new TextContent(text.Content)
+                    {
+                        AdditionalProperties = CloneAdditionalProperties(text.AdditionalProperties)
+                    });
+                    break;
 
-            if (item is AgwUriContent agwUriContent)
-            {
-                aiContents.Add(new UriContent(agwUriContent.Uri, agwUriContent.MediaType));
+                case AgwUriContent uri:
+                    aiContents.Add(new UriContent(uri.Uri, uri.MediaType)
+                    {
+                        AdditionalProperties = CloneAdditionalProperties(uri.AdditionalProperties)
+                    });
+                    break;
             }
         }
 
         return aiContents;
     }
+
+    private static AdditionalPropertiesDictionary? CloneAdditionalProperties(
+        AdditionalPropertiesDictionary? additionalProperties) =>
+        additionalProperties == null
+            ? null
+            : new AdditionalPropertiesDictionary(additionalProperties);
 }

@@ -1,6 +1,7 @@
 using Agw.Appliaction.Services.Agentflows;
 using Agw.Appliaction.Services.Agents;
 using Agw.Domain.Entities;
+using Agw.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Contracts;
 using Agw.Shared.Enums;
@@ -27,9 +28,6 @@ public class AgentExecutor(
             ? $"Run job: {job.Name}"
             : job.Prompt;
 
-        var title = string.IsNullOrWhiteSpace(job.Name)
-            ? "Scheduled Job"
-            : job.Name.Trim();
         var contextId = TaskUtil.GenContextId();
 
         var createResult = await projectTaskAppService.CreateRunningAsync(
@@ -37,7 +35,9 @@ public class AgentExecutor(
             new ProjectTaskCreateRequest(
                 JobId: job.Id,
                 Input: prompt,
-                Title: title,
+                Title: string.IsNullOrWhiteSpace(job.Name)
+                    ? ProjectTaskTitleFactory.Create(prompt, "Scheduled Job")
+                    : job.Name.Trim(),
                 ContextId: contextId),
             JobExecutorUser);
 
