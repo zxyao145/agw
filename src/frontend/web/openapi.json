@@ -10,52 +10,6 @@
     }
   ],
   "paths": {
-    "/.well-known/agents.json": {
-      "get": {
-        "tags": [
-          "Agw.Host"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/a2a/{agentName}/.well-known/agent-card.json": {
-      "get": {
-        "tags": [
-          "Agw.Host"
-        ],
-        "parameters": [
-          {
-            "name": "agentName",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/a2a/{agentName}": {
-      "post": {
-        "tags": [
-          "Agw.Host"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/integrations/oauth/callback": {
       "get": {
         "tags": [
@@ -1670,47 +1624,6 @@
             "description": "OK"
           }
         }
-      },
-      "post": {
-        "tags": [
-          "ProjectTasks"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskCreateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskCreateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
       }
     },
     "/api/projects/{projectId}/tasks/{taskId}": {
@@ -1744,56 +1657,6 @@
           }
         }
       },
-      "put": {
-        "tags": [
-          "ProjectTasks"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskUpdateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskUpdateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
       "delete": {
         "tags": [
           "ProjectTasks"
@@ -1818,174 +1681,6 @@
             }
           }
         ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/tasks/{taskId}/session": {
-      "delete": {
-        "tags": [
-          "ProjectTasks"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/tasks/{taskId}/title": {
-      "put": {
-        "tags": [
-          "ProjectTasks"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionRecordTitleUpdateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionRecordTitleUpdateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionRecordTitleUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/tasks/{taskId}/cancel": {
-      "post": {
-        "tags": [
-          "ProjectTasks"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/tasks/{taskId}/reorder": {
-      "post": {
-        "tags": [
-          "ProjectTasks"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskReorderRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskReorderRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectTaskReorderRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "description": "OK"
@@ -2065,12 +1760,6 @@
           },
           "input": {
             "type": "string"
-          },
-          "sessionId": {
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "projectId": {
             "type": [
@@ -2793,92 +2482,6 @@
           }
         }
       },
-      "ProjectTaskCreateRequest": {
-        "required": [
-          "agentType",
-          "agentflowId",
-          "agentId",
-          "description",
-          "input"
-        ],
-        "type": "object",
-        "properties": {
-          "agentType": {
-            "$ref": "#/components/schemas/AgentRuntimeType"
-          },
-          "agentflowId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "agentId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "description": {
-            "type": "string"
-          },
-          "input": {
-            "type": "string"
-          },
-          "sessionId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "title": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "systemPrompt": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "contextId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "ProjectTaskReorderRequest": {
-        "required": [
-          "updateTimeUtc"
-        ],
-        "type": "object",
-        "properties": {
-          "updateTimeUtc": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "ProjectTaskUpdateRequest": {
-        "required": [
-          "description",
-          "input"
-        ],
-        "type": "object",
-        "properties": {
-          "description": {
-            "type": "string"
-          },
-          "input": {
-            "type": "string"
-          }
-        }
-      },
       "ProjectUpdateRequest": {
         "required": [
           "name",
@@ -3028,26 +2631,12 @@
           }
         }
       },
-      "SessionRecordTitleUpdateRequest": {
-        "required": [
-          "title"
-        ],
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string"
-          }
-        }
-      },
       "TriggerType": {
         "type": "integer"
       }
     }
   },
   "tags": [
-    {
-      "name": "Agw.Host"
-    },
     {
       "name": "Integrations"
     },

@@ -2,9 +2,6 @@ import type { AiMessage } from "@/types";
 
 import { ApiError } from "./client";
 import * as client from "./client";
-import type { components } from "./openapi";
-
-type SessionRecordTitleUpdateRequest = components["schemas"]["SessionRecordTitleUpdateRequest"];
 
 export interface TaskSummary {
   taskId: string;
@@ -22,12 +19,9 @@ export type ProjectTaskSummaryResponse = {
   id: string;
   projectId: string;
   contextId: string;
-  agentType?: number;
-  agentflowId?: string | null;
-  agentId?: string | null;
-  status?: number;
+  jobId?: string | null;
+  status: number;
   title: string;
-  description?: string;
   errorMessage?: string | null;
   createTime: string;
   updateTime?: string | null;
@@ -35,8 +29,8 @@ export type ProjectTaskSummaryResponse = {
   finishedTime?: string | null;
 };
 
-type ProjectTaskHistoryResponse = ProjectTaskSummaryResponse & {
-  input?: string;
+export type ProjectTaskHistoryResponse = ProjectTaskSummaryResponse & {
+  input: string;
   messageCount: number;
   messages?: AiMessage[] | null;
 };
@@ -89,33 +83,6 @@ export async function deleteTaskById(taskId: string, projectId: string): Promise
   try {
     await client.apiDelete("/api/projects/{projectId}/tasks/{taskId}", {
       params: { path: { projectId, taskId } },
-    });
-    return true;
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return false;
-    }
-    throw error;
-  }
-}
-
-export async function updateTaskTitle(
-  taskId: string,
-  newTitle: string,
-  projectId: string,
-): Promise<boolean> {
-  if (!taskId || !newTitle.trim()) {
-    return false;
-  }
-
-  const body: SessionRecordTitleUpdateRequest = {
-    title: newTitle.trim(),
-  };
-
-  try {
-    await client.apiPut("/api/projects/{projectId}/tasks/{taskId}/title", {
-      params: { path: { projectId, taskId } },
-      body,
     });
     return true;
   } catch (error) {

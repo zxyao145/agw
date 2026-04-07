@@ -4,28 +4,18 @@ using Agw.Shared.Models;
 namespace Agw.Shared.Contracts;
 
 public record ProjectTaskCreateRequest(
-    AgentRuntimeType AgentType,
-    Guid? AgentflowId,
-    Guid? AgentId,
-    string Description,
+    Guid? JobId,
     string Input,
     string? Title = null,
     string? ContextId = null);
-
-public record ProjectTaskUpdateRequest(string Description, string Input);
-
-public record ProjectTaskReorderRequest(DateTime UpdateTimeUtc);
 
 public record ProjectTaskSummaryResponse(
     Guid Id,
     string ProjectId,
     string ContextId,
-    AgentRuntimeType AgentType,
-    Guid? AgentflowId,
-    Guid? AgentId,
+    Guid? JobId,
     ProjectTaskStatus Status,
     string Title,
-    string Description,
     string? ErrorMessage,
     DateTime CreateTime,
     DateTime? UpdateTime,
@@ -36,12 +26,9 @@ public record ProjectTaskResponse(
     Guid Id,
     string ProjectId,
     string ContextId,
-    AgentRuntimeType AgentType,
-    Guid? AgentflowId,
-    Guid? AgentId,
+    Guid? JobId,
     ProjectTaskStatus Status,
     string Title,
-    string Description,
     string Input,
     string? ErrorMessage,
     DateTime CreateTime,

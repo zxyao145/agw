@@ -32,6 +32,7 @@ import ColResizeSplit from "./components/split-layout";
 
 import { Explorer, FileContent } from "@/components/file-explorer";
 import type { LineComment } from "@/components/file-explorer";
+import { SettingsDialog } from "@/components/task/claude-code/settings-dialog";
 
 import "./page.css";
 import { claudeSettingsStorage } from "@/components/task/claude-code/settings-storage";
@@ -762,20 +763,24 @@ export default function ClaudeCodePage() {
                   onNewTask={handleNewTask}
                   onTaskDeleted={handleTaskDeleted}
                   onAllTasksDeleted={handleAllTasksDeleted}
-                  workingDirectory={workingDirectory}
-                  setWorkingDirectory={setWorkingDirectory}
-                  gitAddress={gitAddress}
-                  setGitAddress={setGitAddress}
-                  directoryMode={directoryMode}
-                  setDirectoryMode={setDirectoryMode}
-                  apiKey={apiKey}
-                  setApiKey={setApiKey}
-                  apiBaseUrl={apiBaseUrl}
-                  setApiBaseUrl={setApiBaseUrl}
-                  permissionMode={permissionMode}
-                  setPermissionMode={setPermissionMode}
-                  envVars={envVars}
-                  setEnvVars={setEnvVars}
+                  headerActions={
+                    <SettingsDialog
+                      workingDirectory={workingDirectory}
+                      setWorkingDirectory={setWorkingDirectory}
+                      gitAddress={gitAddress}
+                      setGitAddress={setGitAddress}
+                      directoryMode={directoryMode}
+                      setDirectoryMode={setDirectoryMode}
+                      apiKey={apiKey}
+                      setApiKey={setApiKey}
+                      apiBaseUrl={apiBaseUrl}
+                      setApiBaseUrl={setApiBaseUrl}
+                      permissionMode={permissionMode}
+                      setPermissionMode={setPermissionMode}
+                      envVars={envVars}
+                      setEnvVars={setEnvVars}
+                    />
+                  }
                 />
               </ColResizeSplit.Left>
             )}
@@ -871,20 +876,24 @@ export default function ClaudeCodePage() {
                 onNewTask={handleNewTask}
                 onTaskDeleted={handleTaskDeleted}
                 onAllTasksDeleted={handleAllTasksDeleted}
-                workingDirectory={workingDirectory}
-                setWorkingDirectory={setWorkingDirectory}
-                gitAddress={gitAddress}
-                setGitAddress={setGitAddress}
-                directoryMode={directoryMode}
-                setDirectoryMode={setDirectoryMode}
-                apiKey={apiKey}
-                setApiKey={setApiKey}
-                apiBaseUrl={apiBaseUrl}
-                setApiBaseUrl={setApiBaseUrl}
-                permissionMode={permissionMode}
-                setPermissionMode={setPermissionMode}
-                envVars={envVars}
-                setEnvVars={setEnvVars}
+                headerActions={
+                  <SettingsDialog
+                    workingDirectory={workingDirectory}
+                    setWorkingDirectory={setWorkingDirectory}
+                    gitAddress={gitAddress}
+                    setGitAddress={setGitAddress}
+                    directoryMode={directoryMode}
+                    setDirectoryMode={setDirectoryMode}
+                    apiKey={apiKey}
+                    setApiKey={setApiKey}
+                    apiBaseUrl={apiBaseUrl}
+                    setApiBaseUrl={setApiBaseUrl}
+                    permissionMode={permissionMode}
+                    setPermissionMode={setPermissionMode}
+                    envVars={envVars}
+                    setEnvVars={setEnvVars}
+                  />
+                }
               />
             )}
             {drawerContent === "files" && (

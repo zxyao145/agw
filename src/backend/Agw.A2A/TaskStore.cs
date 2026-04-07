@@ -150,9 +150,7 @@ public class TaskStore : ITaskStore
                 Id = taskGuid,
                 ProjectId = ProjectDefaults.A2AId,
                 ContextId = string.IsNullOrWhiteSpace(task.ContextId) ? taskGuid.Normalize() : task.ContextId.Trim(),
-                AgentType = AgentRuntimeType.Agent,
                 Title = BuildTitle(firstUserText),
-                Description = firstUserText ?? string.Empty,
                 Status = coarseStatus,
                 ErrorMessage = statusMessageText,
                 CreateBy = SystemUser,
@@ -168,7 +166,6 @@ public class TaskStore : ITaskStore
         {
             existingTask.ContextId = string.IsNullOrWhiteSpace(task.ContextId) ? existingTask.ContextId : task.ContextId.Trim();
             existingTask.Title = BuildTitle(firstUserText, existingTask.Title);
-            existingTask.Description = firstUserText ?? existingTask.Description;
             existingTask.Status = coarseStatus;
             existingTask.ErrorMessage = statusMessageText;
             existingTask.UpdateBy = SystemUser;

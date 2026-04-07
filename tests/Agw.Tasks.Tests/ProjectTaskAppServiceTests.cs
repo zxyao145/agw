@@ -8,13 +8,64 @@ using Agw.Shared.Tasks.Entities;
 using Agw.Tasks.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Reflection;
 
 namespace Agw.Tasks.Tests;
 
 public class ProjectTaskAppServiceTests
 {
     [Fact]
-    public async Task CreateRunningAsync_CreatesRunningTaskWithInitialRecord()
+    public void ProjectTaskCreateRequest_RemovesLegacyTargetBindingConstructor()
+    {
+        Assert.DoesNotContain(
+            typeof(ProjectTaskCreateRequest).GetConstructors(),
+            constructor =>
+            {
+                var parameters = constructor.GetParameters();
+                return parameters.Length == 7
+                    && parameters[0].Name == "AgentType"
+                    && parameters[1].Name == "AgentflowId"
+                    && parameters[2].Name == "AgentId"
+                    && parameters[3].Name == "Description";
+            });
+    }
+
+    [Fact]
+    public void ProjectTaskAppService_RemovesGetNextPendingAsync()
+    {
+        Assert.Null(typeof(ProjectTaskAppService).GetMethod("GetNextPendingAsync"));
+    }
+
+    [Fact]
+    public void ProjectTaskAppService_ExposesOnlyCurrentPublicSurface()
+    {
+        string[] expectedMethods =
+        [
+            "CreateAsync",
+            "CreateForExecutionAsync",
+            "CreateRunningAsync",
+            "DeleteAsync",
+            "GetLatestRecordAsync",
+            "GetResponseAsync",
+            "GetTaskAsync",
+            "ListAsync",
+            "ListResponsesAsync",
+            "MarkFailedAsync",
+            "MarkSucceededAsync",
+            "UpdateTitleAsync"
+        ];
+
+        var methodNames = typeof(ProjectTaskAppService)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Select(method => method.Name)
+            .OrderBy(name => name)
+            .ToArray();
+
+        Assert.Equal(expectedMethods, methodNames);
+    }
+
+    [Fact]
+    public async Task CreateRunningAsync_PersistsJobIdAndReturnsTitleOnlySummary()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
@@ -48,15 +99,12 @@ public class ProjectTaskAppServiceTests
 
         await using var dbContext = new LlmDbContext(options);
         var service = CreateService(dbContext);
-        var agentId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
 
         var result = await service.CreateRunningAsync(
             projectId,
             new ProjectTaskCreateRequest(
-                AgentType: AgentRuntimeType.Agent,
-                AgentflowId: null,
-                AgentId: agentId,
-                Description: "Nightly sync",
+                JobId: jobId,
                 Input: "Run scheduled sync",
                 Title: "Nightly sync",
                 ContextId: "context-1"),
@@ -64,12 +112,14 @@ public class ProjectTaskAppServiceTests
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
         var response = Assert.IsType<ProjectTaskResponse>(result.Value);
+        Assert.Equal(jobId, response.JobId);
         Assert.Equal(ProjectTaskStatus.Running, response.Status);
         Assert.Equal(projectId.Normalize(), response.ProjectId);
         Assert.Equal("context-1", response.ContextId);
         Assert.Equal("Nightly sync", response.Title);
-        Assert.Equal("Nightly sync", response.Description);
         Assert.Equal("Run scheduled sync", response.Input);
+        Assert.Null(typeof(ProjectTaskResponse).GetProperty("Description"));
+        Assert.Null(typeof(ProjectTaskResponse).GetProperty("AgentType"));
         Assert.NotNull(response.StartedTime);
 
         var task = await dbContext.ProjectTasks.SingleAsync(
@@ -123,10 +173,8 @@ public class ProjectTaskAppServiceTests
                 Id = Guid.NewGuid(),
                 ProjectId = projectId,
                 ContextId = "context-1",
-                AgentType = AgentRuntimeType.Agent,
-                AgentId = Guid.NewGuid(),
+                JobId = Guid.NewGuid(),
                 Title = "Nightly sync",
-                Description = "Nightly sync",
                 Status = ProjectTaskStatus.Succeeded,
                 CreateBy = "tester",
                 CreateTime = DateTime.UtcNow,
@@ -149,7 +197,8 @@ public class ProjectTaskAppServiceTests
         Assert.NotNull(typeof(ProjectTaskSummaryResponse).GetProperty("Id"));
         Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("Input"));
         Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("MessageCount"));
-        Assert.Equal("Nightly sync", response.Description);
+        Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("Description"));
+        Assert.Null(typeof(ProjectTaskSummaryResponse).GetProperty("AgentType"));
         Assert.Equal(ProjectTaskStatus.Succeeded, response.Status);
     }
 

@@ -1,16 +1,8 @@
-export type ProjectTaskDto = {
-  id: string;
-  projectId: string;
-  contextId: string;
-  agentType?: number;
-  agentflowId?: string | null;
-  agentId?: string | null;
-  status: number;
-  description: string;
+import type { AiMessage } from "@/types";
+import type { ProjectTaskSummaryResponse } from "@/api/task-client";
+
+export type ProjectTaskDto = ProjectTaskSummaryResponse & {
   input: string;
-  errorMessage?: string | null;
-  createTime?: string | null;
-  updateTime?: string | null;
-  startedTime?: string | null;
-  finishedTime?: string | null;
+  messageCount: number;
+  messages?: AiMessage[] | null;
 };

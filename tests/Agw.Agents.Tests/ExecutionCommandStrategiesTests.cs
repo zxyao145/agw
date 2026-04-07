@@ -195,8 +195,7 @@ public class ExecutionCommandStrategiesTests
                 {
                     Id = request.TaskId ?? Guid.NewGuid(),
                     ProjectId = request.ProjectId ?? Guid.NewGuid(),
-                    ContextId = "ctx-1",
-                    AgentType = request.AgentType
+                    ContextId = "ctx-1"
                 },
                 null));
 

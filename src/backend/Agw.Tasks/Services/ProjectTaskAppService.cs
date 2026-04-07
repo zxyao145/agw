@@ -131,12 +131,8 @@ public class ProjectTaskAppService
             Id = taskId,
             ProjectId = project.Id,
             ContextId = contextId,
-            AgentType = request.AgentType,
-            AgentId = request.AgentType == AgentRuntimeType.Agentflow
-                ? request.AgentflowId
-                : request.AgentId,
+            JobId = request.JobId,
             Title = request.Title ?? string.Empty,
-            Description = request.Description
         };
 
         var inputMessage = new ChatMessage(ChatRole.User, request.Input.Trim())
@@ -164,46 +160,6 @@ public class ProjectTaskAppService
         await _unitOfWork.SaveChangesAsync();
 
         return ApplicationResult<ProjectTaskResponse>.Success(ToResponse(task, [initialRecord], null));
-    }
-
-    public async Task<ApplicationResult<ProjectTaskResponse>> UpdateAsync(
-        Guid projectId,
-        Guid taskId,
-        ProjectTaskUpdateRequest request,
-        string user)
-    {
-        var project = await _projectResolver.ResolveRequiredAsync(projectId);
-        if (project == null)
-        {
-            return ApplicationResult<ProjectTaskResponse>.NotFound();
-        }
-
-        var existing = await _taskRepository.GetByIdAsync(taskId);
-        if (existing == null || existing.ProjectId != project.Id)
-        {
-            return ApplicationResult<ProjectTaskResponse>.NotFound();
-        }
-
-        if (existing.Status != ProjectTaskStatus.Pending)
-        {
-            return ApplicationResult<ProjectTaskResponse>.Invalid("Only pending tasks can be updated.");
-        }
-
-        var records = await GetOrderedRecordsByTaskIdAsync(existing.Id);
-        var latestRecord = _taskRecordDomainService.GetLatest(records);
-        if (latestRecord == null
-            || !_projectTaskDomainService.TryApplyUpdate(existing, latestRecord, request.Description, request.Input, out var newRecord)
-            || newRecord == null)
-        {
-            return ApplicationResult<ProjectTaskResponse>.Invalid("Failed to update task.");
-        }
-
-        _taskRepository.Update(existing);
-        await _recordRepository.AddAsync(newRecord);
-        await _unitOfWork.SaveChangesAsync();
-
-        var updatedRecords = _taskRecordDomainService.Order(records.Concat([newRecord]));
-        return ApplicationResult<ProjectTaskResponse>.Success(ToResponse(existing, updatedRecords, null));
     }
 
     public async Task<ApplicationResult> UpdateTitleAsync(
@@ -234,93 +190,6 @@ public class ProjectTaskAppService
         return ApplicationResult.Success();
     }
 
-    public async Task<ApplicationResult> DeleteSessionAsync(Guid projectId, Guid taskId)
-    {
-        var project = await _projectResolver.ResolveRequiredAsync(projectId);
-        if (project == null)
-        {
-            return ApplicationResult.NotFound();
-        }
-
-        var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null || task.ProjectId != project.Id)
-        {
-            return ApplicationResult.NotFound();
-        }
-
-        var records = await GetOrderedRecordsByTaskIdAsync(task.Id);
-        foreach (var record in records)
-        {
-            _recordRepository.Remove(record);
-        }
-
-        if (_taskRecordDomainService.ShouldDeleteTask(task))
-        {
-            _taskRepository.Remove(task);
-        }
-
-        await _unitOfWork.SaveChangesAsync();
-        return ApplicationResult.Success();
-    }
-
-    public async Task<ApplicationResult<ProjectTaskResponse>> ReorderAsync(
-        Guid projectId,
-        Guid taskId,
-        DateTime updateTimeUtc,
-        string user)
-    {
-        var project = await _projectResolver.ResolveRequiredAsync(projectId);
-        if (project == null)
-        {
-            return ApplicationResult<ProjectTaskResponse>.NotFound();
-        }
-
-        var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null || task.ProjectId != project.Id)
-        {
-            return ApplicationResult<ProjectTaskResponse>.NotFound();
-        }
-
-        if (!_projectTaskDomainService.TryReorder(task, updateTimeUtc, user))
-        {
-            return ApplicationResult<ProjectTaskResponse>.Invalid("Only pending tasks can be reordered.");
-        }
-
-        _taskRepository.Update(task);
-        await _unitOfWork.SaveChangesAsync();
-
-        var records = await GetOrderedRecordsByTaskIdAsync(task.Id);
-        return ApplicationResult<ProjectTaskResponse>.Success(ToResponse(task, records, null));
-    }
-
-    public async Task<ApplicationResult<ProjectTaskResponse>> CancelAsync(
-        Guid projectId,
-        Guid taskId,
-        string user)
-    {
-        var project = await _projectResolver.ResolveRequiredAsync(projectId);
-        if (project == null)
-        {
-            return ApplicationResult<ProjectTaskResponse>.NotFound();
-        }
-
-        var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null || task.ProjectId != project.Id)
-        {
-            return ApplicationResult<ProjectTaskResponse>.NotFound();
-        }
-
-        if (!_projectTaskDomainService.TryCancel(task, user))
-        {
-            return ApplicationResult<ProjectTaskResponse>.Invalid("Task cannot be canceled in its current state.");
-        }
-
-        _taskRepository.Update(task);
-        await _unitOfWork.SaveChangesAsync();
-
-        var records = await GetOrderedRecordsByTaskIdAsync(task.Id);
-        return ApplicationResult<ProjectTaskResponse>.Success(ToResponse(task, records, null));
-    }
 
     public async Task<ApplicationResult> DeleteAsync(Guid projectId, Guid taskId)
     {
@@ -347,37 +216,10 @@ public class ProjectTaskAppService
         return ApplicationResult.Success();
     }
 
-    public async Task<bool> HasRunningTaskAsync(Guid projectId)
-    {
-        var running = await _taskRepository.ListAsync(task =>
-            task.ProjectId == projectId && task.Status == ProjectTaskStatus.Running);
-        return running.Count > 0;
-    }
-
-    public async Task<ProjectTask?> GetNextPendingAsync(Guid projectId)
-    {
-        var pending = await _taskRepository.ListAsync(task =>
-            task.ProjectId == projectId && task.Status == ProjectTaskStatus.Pending);
-        return _projectTaskDomainService.GetNextPending(pending);
-    }
-
     public async Task<TaskRecord?> GetLatestRecordAsync(Guid taskId)
     {
         var records = await GetOrderedRecordsByTaskIdAsync(taskId);
         return _taskRecordDomainService.GetLatest(records);
-    }
-
-    public async Task<ProjectTask?> TryMarkRunningAsync(Guid id, string user)
-    {
-        var task = await _taskRepository.GetByIdAsync(id);
-        if (task == null || !_projectTaskDomainService.TryMarkRunning(task, user))
-        {
-            return null;
-        }
-
-        _taskRepository.Update(task);
-        await _unitOfWork.SaveChangesAsync();
-        return task;
     }
 
     public async Task<ProjectTask?> MarkSucceededAsync(Guid id, string user)
@@ -412,32 +254,19 @@ public class ProjectTaskAppService
         return _taskRecordDomainService.Order(records);
     }
 
-    private static ProjectTaskSummaryResponse ToSummaryResponse(
-        ProjectTask task)
-    {
-        var responseAgentId = task.AgentType == AgentRuntimeType.Agent
-            ? task.AgentId
-            : null;
-        var responseAgentflowId = task.AgentType == AgentRuntimeType.Agentflow
-            ? task.AgentId
-            : null;
-
-        return new ProjectTaskSummaryResponse(
+    private static ProjectTaskSummaryResponse ToSummaryResponse(ProjectTask task) =>
+        new(
             task.Id,
             task.ProjectId.Normalize(),
             task.ContextId,
-            task.AgentType,
-            responseAgentflowId,
-            responseAgentId,
+            task.JobId,
             task.Status,
             task.Title,
-            task.Description,
             task.ErrorMessage,
             task.CreateTime,
             task.UpdateTime,
             task.FinishedTime,
             GetStartedTime(task));
-    }
 
     private static ProjectTaskResponse ToResponse(
         ProjectTask task,
@@ -450,12 +279,9 @@ public class ProjectTaskAppService
             summary.Id,
             summary.ProjectId,
             summary.ContextId,
-            summary.AgentType,
-            summary.AgentflowId,
-            summary.AgentId,
+            summary.JobId,
             summary.Status,
             summary.Title,
-            summary.Description,
             GetInputText(records.LastOrDefault(record => record.ToChatMessage()?.Role == ChatRole.User)),
             task.ErrorMessage ?? records.LastOrDefault()?.Error,
             summary.CreateTime,
