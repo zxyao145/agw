@@ -24,9 +24,7 @@ public class AgentExecutor(
             throw new InvalidOperationException("Job agent target is required.");
         }
 
-        var prompt = string.IsNullOrWhiteSpace(job.Prompt)
-            ? $"Run job: {job.Name}"
-            : job.Prompt;
+        var (prompt, title) = BuildPromptAndTitle(job);
 
         var contextId = TaskUtil.GenContextId();
 
@@ -35,9 +33,7 @@ public class AgentExecutor(
             new ProjectTaskCreateRequest(
                 JobId: job.Id,
                 Input: prompt,
-                Title: string.IsNullOrWhiteSpace(job.Name)
-                    ? ProjectTaskTitleFactory.Create(prompt, "Scheduled Job")
-                    : job.Name.Trim(),
+                Title: title,
                 ContextId: contextId),
             JobExecutorUser);
 
@@ -94,5 +90,25 @@ public class AgentExecutor(
                 JobExecutorUser);
             throw;
         }
+    }
+
+    private static (string Prompt, string Title) BuildPromptAndTitle(Job job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+
+        var trimmedName = job.Name.Trim();
+        var trimmedPrompt = job.Prompt?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(trimmedName))
+        {
+            return ($"Run job: {trimmedName}", trimmedName);
+        }
+
+        if (!string.IsNullOrWhiteSpace(trimmedPrompt))
+        {
+            return (trimmedPrompt, ProjectTaskTitleFactory.Create(trimmedPrompt, "Scheduled Job"));
+        }
+
+        return ("Scheduled Job", "Scheduled Job");
     }
 }
