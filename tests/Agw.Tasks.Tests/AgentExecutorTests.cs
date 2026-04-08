@@ -1,5 +1,5 @@
-using Agw.Domain.Entities;
-using Agw.Jobs.Services;
+using Agw.Jobs.Application.Services;
+using Agw.Jobs.Domain.Entities;
 using Agw.Shared.Enums;
 using System.Reflection;
 

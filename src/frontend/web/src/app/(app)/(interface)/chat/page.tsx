@@ -60,6 +60,7 @@ import {
   normalizeExtraSettingTextForStorage,
   tryParseJsonObjectText,
 } from "./lib/chat-settings";
+import { buildChatTargetOptions } from "./lib/target-options";
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
 
 type ProjectDto = {
@@ -415,27 +416,15 @@ export default function ChatPage() {
     [projectsQuery.data],
   );
 
-  const targetOptions = React.useMemo<ChatTargetOption[]>(() => {
-    const agentOptions =
-      agentsQuery.data?.map((agent) => ({
-        id: agent.id,
-        label: agent.displayName?.trim() || agent.name,
-        type: "agent" as const,
-      })) ?? [];
-
-    const agentflowOptions =
-      agentflowsQuery.data
-        ?.filter((agentflow) => agentflow.enable ?? true)
-        .map((agentflow) => ({
-          id: agentflow.id,
-          label: agentflow.name,
-          type: "agentflow" as const,
-        })) ?? [];
-
-    return [...agentOptions, ...agentflowOptions].sort((left, right) =>
-      left.label.localeCompare(right.label),
-    );
-  }, [agentflowsQuery.data, agentsQuery.data]);
+  const targetOptions = React.useMemo<ChatTargetOption[]>(
+    () =>
+      buildChatTargetOptions({
+        projectId: selectedProjectId,
+        agents: agentsQuery.data ?? [],
+        agentflows: agentflowsQuery.data ?? [],
+      }),
+    [agentflowsQuery.data, agentsQuery.data, selectedProjectId],
+  );
 
   const selectedTarget = React.useMemo(
     () => targetOptions.find((option) => getTargetValue(option) === selectedTargetValue) ?? null,

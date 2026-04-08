@@ -1,8 +1,8 @@
+using Agw.Jobs.Application.Services;
 using Agw.Jobs.Contracts;
-using Agw.Jobs.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Agw.Api.Controllers;
+namespace Agw.Jobs.Controllers;
 
 [ApiController]
 [Route("api/jobs")]

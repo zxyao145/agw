@@ -39,7 +39,7 @@ public class McpToolServersController : ControllerBase
     public async Task<IActionResult> CreateAsync([FromBody] McpToolServerCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var server = new McpToolServer
+        var server = new McpServer
         {
             Name = request.Name,
             Description = request.Description,

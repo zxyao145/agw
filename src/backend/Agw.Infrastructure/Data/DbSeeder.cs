@@ -1,5 +1,6 @@
+using Agw.Agents.Domain.Entities;
 using Agw.Agents.ExternalAgents;
-using Agw.Domain.Entities;
+using Agw.Providers.Domain.Entities;
 using Agw.Shared.Enums;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;

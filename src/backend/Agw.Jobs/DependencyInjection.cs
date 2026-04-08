@@ -1,5 +1,5 @@
+using Agw.Jobs.Application.Services;
 using Agw.Jobs.HostedService;
-using Agw.Jobs.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 

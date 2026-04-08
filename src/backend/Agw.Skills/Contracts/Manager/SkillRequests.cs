@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Http;
 
-namespace Agw.Manager.Api.Contracts;
+namespace Agw.Skills.Contracts.Manager;
 
 public sealed class SkillCreateRequest
 {

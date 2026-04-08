@@ -1,5 +1,5 @@
+using Agw.Agents.Domain.Services;
 using Agw.Domain.Entities;
-using Agw.Domain.Services.Agents;
 
 namespace Agw.Agents.Tests;
 
@@ -11,7 +11,7 @@ public class McpToolServerDomainServiceTests
     public void PrepareForCreate_InitializesOptionalCollectionsAndCreateMetadata()
     {
         var before = DateTime.UtcNow;
-        var server = new McpToolServer
+        var server = new McpServer
         {
             Name = "stdio-server",
             Arguments = null!,
@@ -32,7 +32,7 @@ public class McpToolServerDomainServiceTests
     [Fact]
     public void ApplyUpdate_NormalizesCollectionsAndSetsUpdateMetadata()
     {
-        var server = new McpToolServer
+        var server = new McpServer
         {
             Id = Guid.NewGuid(),
             Name = "server",

@@ -1,5 +1,5 @@
-using Agw.Domain.Entities;
-using Agw.Manager.Api.Contracts;
+using Agw.Providers.Contracts.Manager;
+using Agw.Providers.Domain.Entities;
 
 namespace Agw.Providers.Application;
 

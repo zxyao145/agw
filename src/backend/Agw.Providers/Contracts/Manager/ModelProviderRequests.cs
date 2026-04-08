@@ -1,4 +1,4 @@
-namespace Agw.Manager.Api.Contracts;
+namespace Agw.Providers.Contracts.Manager;
 
 public record ModelProviderCreateRequest(
     Guid ModelId,

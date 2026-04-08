@@ -1,5 +1,5 @@
-using Agw.Domain.Services;
 using Agw.Providers.Application;
+using Agw.Providers.Domain.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 

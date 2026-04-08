@@ -1,5 +1,7 @@
+using Agw.Agents.Domain.Entities;
 using Agw.Domain.Entities;
-using Agw.Jobs.Enums;
+using Agw.Jobs.Domain.Entities;
+using Agw.Providers.Domain.Entities;
 using Agw.Shared.Tasks.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -38,8 +40,8 @@ public class LlmDbContext : DbContext
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<AgentSkillRelation> AgentSkillRelations => Set<AgentSkillRelation>();
 
-    public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
-    public DbSet<AgentMcpToolServerRelation> AgentMcpToolServers => Set<AgentMcpToolServerRelation>();
+    public DbSet<McpServer> McpToolServers => Set<McpServer>();
+    public DbSet<AgentMcpServerRelation> AgentMcpToolServers => Set<AgentMcpServerRelation>();
 
 
     public DbSet<Agentflow> Agentflows => Set<Agentflow>();
@@ -159,7 +161,7 @@ public class LlmDbContext : DbContext
             entity.HasIndex(e => e.SkillId);
         });
 
-        modelBuilder.Entity<McpToolServer>(entity =>
+        modelBuilder.Entity<McpServer>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
@@ -188,7 +190,7 @@ public class LlmDbContext : DbContext
                     : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new Dictionary<string, string>());
         });
 
-        modelBuilder.Entity<AgentMcpToolServerRelation>(entity =>
+        modelBuilder.Entity<AgentMcpServerRelation>(entity =>
         {
             entity.HasKey(e => new { e.AgentId, e.McpToolServerId });
 

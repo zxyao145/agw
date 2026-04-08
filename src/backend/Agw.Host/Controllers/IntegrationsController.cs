@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Agw.Domain.Entities;
+using Agw.Providers.Domain.Entities;
 using Agw.Shared.Abstractions.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;

@@ -1,4 +1,4 @@
-﻿using Agw.Domain.Entities;
+﻿using Agw.Agents.Domain.Entities;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 using Agw.Shared.Tasks.Entities;

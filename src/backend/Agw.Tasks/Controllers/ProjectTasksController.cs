@@ -1,7 +1,7 @@
-using Agw.Tasks.Services;
+using Agw.Tasks.Application;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Agw.Api.Controllers;
+namespace Agw.Tasks.Controllers;
 
 [ApiController]
 [Route("api/projects/{projectId}/tasks")]

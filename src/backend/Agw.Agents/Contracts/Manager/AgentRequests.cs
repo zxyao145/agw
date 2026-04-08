@@ -24,7 +24,7 @@ public record AgentUpdateRequest(
 
 public record AiAgentResponse(Guid Id, string Name, string SystemPrompt, string ProviderName, string ModelName, string Endpoint, string ApiKey)
 {
-    public static AiAgentResponse FromDomain(AiAgent agent) =>
+    public static AiAgentResponse FromDomain(AgentDefinitionDto agent) =>
         new(agent.Id, agent.Name, agent.SystemPrompt, agent.ProviderName, agent.ModelName, agent.Endpoint, agent.ApiKey);
 }
 

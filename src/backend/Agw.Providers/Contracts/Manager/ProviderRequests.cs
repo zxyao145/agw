@@ -1,6 +1,6 @@
-using Agw.Domain.Entities;
+using Agw.Providers.Domain.Entities;
 
-namespace Agw.Manager.Api.Contracts;
+namespace Agw.Providers.Contracts.Manager;
 
 public record ProviderAuthConfigRequest(ProviderAuthType AuthType, string? ApiKey, string? EnvKey, bool Enable = true);
 

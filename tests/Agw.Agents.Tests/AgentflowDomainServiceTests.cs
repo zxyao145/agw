@@ -1,5 +1,4 @@
-using Agw.Domain.Entities;
-using Agw.Domain.Services.Agentflows;
+using Agw.Agents.Domain.Services;
 using Agw.Shared.Enums;
 
 namespace Agw.Agents.Tests;

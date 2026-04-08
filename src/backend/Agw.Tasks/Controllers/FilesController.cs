@@ -3,7 +3,7 @@ using Agw.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Api.Controllers;
+namespace Agw.Tasks.Controllers;
 
 [ApiController]
 [Route("api/files")]

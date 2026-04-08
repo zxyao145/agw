@@ -1,4 +1,4 @@
-using Agw.Jobs.Enums;
+using Agw.Jobs.Domain.Enums;
 using Agw.Shared.Enums;
 
 namespace Agw.Jobs.Contracts;

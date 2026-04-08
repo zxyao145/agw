@@ -1,11 +1,13 @@
-using Agw.Api.Controllers;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
 using Agw.Jobs;
+using Agw.Jobs.Controllers;
 using Agw.Manager.Api.Controllers;
 using Agw.Providers;
 using Agw.Skills;
+using Agw.Skills.Controllers;
 using Agw.Tasks;
+using Agw.Tasks.Controllers;
 using Agw.Tools;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;

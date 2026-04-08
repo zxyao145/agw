@@ -1,9 +1,9 @@
 using Agw.Domain.Entities;
-using Agw.Manager.Api.Contracts;
-using Agw.Skills.Services;
+using Agw.Skills.Application;
+using Agw.Skills.Contracts.Manager;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Agw.Manager.Api.Controllers;
+namespace Agw.Skills.Controllers;
 
 [ApiController]
 [Route("api/skills")]

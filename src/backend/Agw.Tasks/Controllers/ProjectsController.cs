@@ -1,10 +1,9 @@
 using Agw.Shared.Contracts;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
-using Agw.Tasks.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Agw.Api.Controllers;
+namespace Agw.Tasks.Controllers;
 
 [ApiController]
 [Route("api/projects")]

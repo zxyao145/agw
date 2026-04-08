@@ -1,4 +1,4 @@
-namespace Agw.Manager.Api.Contracts;
+namespace Agw.Providers.Contracts.Manager;
 
 public record ApiKeyCreateRequest(Guid ModelProviderId, string ApiKey, bool Enable = true);
 

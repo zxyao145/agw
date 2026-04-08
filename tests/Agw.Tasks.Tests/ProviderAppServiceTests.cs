@@ -1,9 +1,11 @@
-using Agw.Domain.Entities;
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Manager.Api.Contracts;
 using Agw.Providers.Application;
+using Agw.Providers.Contracts.Manager;
+using Agw.Providers.Domain.Entities;
+using Agw.Providers.Domain.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 

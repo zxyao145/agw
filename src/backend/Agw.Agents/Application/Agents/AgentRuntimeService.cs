@@ -1,10 +1,10 @@
 using Agw.Agents.Application;
+using Agw.Agents.Domain.Entities;
 using Agw.Agents.ExternalAgents;
 using Agw.Api.Contracts;
-using Agw.Appliaction.ExternalAgents;
 using Agw.Domain.Entities;
 using Agw.Domain.Services;
-using Agw.Domain.Services.Agents;
+using Agw.Providers.Domain.Entities;
 using Agw.Shared;
 using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Enums;
@@ -59,8 +59,8 @@ public class AgentRuntimeService : RuntimService
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;
     private readonly IRepository<ModelProviderRelation> _modelProviderRepository;
-    private readonly IRepository<McpToolServer> _mcpToolServerRepository;
-    private readonly IRepository<AgentMcpToolServerRelation> _agentMcpToolServerRepository;
+    private readonly IRepository<McpServer> _mcpToolServerRepository;
+    private readonly IRepository<AgentMcpServerRelation> _agentMcpToolServerRepository;
     private readonly IRepository<Skill> _skillRepository;
     private readonly IRepository<AgentSkillRelation> _agentSkillRelationRepository;
     private readonly IRepository<LlmModel> _modelRepository;
@@ -79,8 +79,8 @@ public class AgentRuntimeService : RuntimService
     public AgentRuntimeService(
         IRepository<Agent> agentRepository,
         IRepository<ModelProviderRelation> modelProviderRepository,
-        IRepository<McpToolServer> mcpToolServerRepository,
-        IRepository<AgentMcpToolServerRelation> agentMcpToolServerRepository,
+        IRepository<McpServer> mcpToolServerRepository,
+        IRepository<AgentMcpServerRelation> agentMcpToolServerRepository,
         IRepository<Skill> skillRepository,
         IRepository<AgentSkillRelation> agentSkillRelationRepository,
         IRepository<LlmModel> modelRepository,
@@ -195,11 +195,11 @@ public class AgentRuntimeService : RuntimService
         return true;
     }
 
-    public Task<IReadOnlyList<McpToolServer>> ListMcpToolServersAsync() => _mcpToolServerRepository.ListAsync();
+    public Task<IReadOnlyList<McpServer>> ListMcpToolServersAsync() => _mcpToolServerRepository.ListAsync();
 
-    public Task<McpToolServer?> GetMcpToolServerAsync(Guid id) => _mcpToolServerRepository.GetByIdAsync(id);
+    public Task<McpServer?> GetMcpToolServerAsync(Guid id) => _mcpToolServerRepository.GetByIdAsync(id);
 
-    public async Task<McpToolServer> CreateMcpToolServerAsync(McpToolServer server, IEnumerable<Guid>? agentIds, string user)
+    public async Task<McpServer> CreateMcpToolServerAsync(McpServer server, IEnumerable<Guid>? agentIds, string user)
     {
         _mcpToolServerDomainService.PrepareForCreate(server, user);
         await _mcpToolServerRepository.AddAsync(server);
@@ -208,7 +208,7 @@ public class AgentRuntimeService : RuntimService
         return server;
     }
 
-    public async Task<McpToolServer?> UpdateMcpToolServerAsync(Guid id, Action<McpToolServer> updateAction, string user)
+    public async Task<McpServer?> UpdateMcpToolServerAsync(Guid id, Action<McpServer> updateAction, string user)
     {
         var existing = await _mcpToolServerRepository.GetByIdAsync(id);
         if (existing == null)
@@ -738,7 +738,7 @@ public class AgentRuntimeService : RuntimService
     }
 
     private static async Task<IReadOnlyList<McpClientTool>> ListToolsAsync(
-        McpToolServer server,
+        McpServer server,
         CancellationToken cancellationToken = default)
     {
         var transport = CreateTransport(server);
@@ -747,7 +747,7 @@ public class AgentRuntimeService : RuntimService
         return tools.AsReadOnly();
     }
 
-    private static IClientTransport CreateTransport(McpToolServer server)
+    private static IClientTransport CreateTransport(McpServer server)
     {
         return server.TransportType.ToLowerInvariant() switch
         {
@@ -757,7 +757,7 @@ public class AgentRuntimeService : RuntimService
         };
     }
 
-    private static StdioClientTransport CreateStdioTransport(McpToolServer server)
+    private static StdioClientTransport CreateStdioTransport(McpServer server)
     {
         if (string.IsNullOrWhiteSpace(server.Command))
         {
@@ -785,7 +785,7 @@ public class AgentRuntimeService : RuntimService
         return new StdioClientTransport(options);
     }
 
-    private static HttpClientTransport CreateHttpTransport(McpToolServer server)
+    private static HttpClientTransport CreateHttpTransport(McpServer server)
     {
         if (string.IsNullOrWhiteSpace(server.Url))
         {
@@ -956,7 +956,7 @@ public class AgentRuntimeService : RuntimService
         var existingServers = await _mcpToolServerRepository.ListAsync(x => requestedIds.Contains(x.Id));
         foreach (var serverId in existingServers.Select(x => x.Id))
         {
-            await _agentMcpToolServerRepository.AddAsync(new AgentMcpToolServerRelation
+            await _agentMcpToolServerRepository.AddAsync(new AgentMcpServerRelation
             {
                 AgentId = agentId,
                 McpToolServerId = serverId
@@ -1009,7 +1009,7 @@ public class AgentRuntimeService : RuntimService
         var existingAgents = await _agentRepository.ListAsync(x => requestedIds.Contains(x.Id));
         foreach (var agentId in existingAgents.Select(x => x.Id))
         {
-            await _agentMcpToolServerRepository.AddAsync(new AgentMcpToolServerRelation
+            await _agentMcpToolServerRepository.AddAsync(new AgentMcpServerRelation
             {
                 AgentId = agentId,
                 McpToolServerId = mcpToolServerId

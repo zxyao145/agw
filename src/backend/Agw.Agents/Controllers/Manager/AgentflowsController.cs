@@ -1,5 +1,5 @@
+using Agw.Agents.Domain.Entities;
 using Agw.Appliaction.Services.Agentflows;
-using Agw.Domain.Entities;
 using Agw.Manager.Api.Contracts;
 using Microsoft.AspNetCore.Mvc;
 

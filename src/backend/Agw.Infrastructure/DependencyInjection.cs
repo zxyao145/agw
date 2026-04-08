@@ -2,7 +2,7 @@ using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Infrastructure.Services;
-using Agw.Jobs.Services;
+using Agw.Jobs.Application.Services;
 using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Services;
 using Microsoft.EntityFrameworkCore;

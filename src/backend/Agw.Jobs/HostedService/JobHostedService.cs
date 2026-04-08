@@ -1,6 +1,6 @@
-using Agw.Domain.Entities;
-using Agw.Jobs.Models;
-using Agw.Jobs.Services;
+using Agw.Jobs.Application.Services;
+using Agw.Jobs.Domain.Entities;
+using Agw.Jobs.Dtos;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

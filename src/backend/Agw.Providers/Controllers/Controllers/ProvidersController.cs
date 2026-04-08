@@ -1,8 +1,8 @@
-using Agw.Manager.Api.Contracts;
 using Agw.Providers.Application;
+using Agw.Providers.Contracts.Manager;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Agw.Manager.Api.Controllers;
+namespace Agw.Providers.Controllers.Controllers;
 
 [ApiController]
 [Route("api/providers")]
