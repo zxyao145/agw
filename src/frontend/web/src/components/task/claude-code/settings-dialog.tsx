@@ -142,7 +142,7 @@ export function SettingsDialog({
       <DialogContent size="xl" className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>Configure ClaudeCode settings</DialogDescription>
+          <DialogDescription>Configure settings</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-3 py-2">

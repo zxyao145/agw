@@ -246,7 +246,6 @@ export default function ChatPage() {
         ws.removeEventListener("error", onError);
         resolve();
       };
-
       const onError = () => {
         ws.removeEventListener("open", onOpen);
         ws.removeEventListener("error", onError);

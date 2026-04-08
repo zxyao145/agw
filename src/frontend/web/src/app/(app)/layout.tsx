@@ -18,6 +18,8 @@ import {
   // Link2,
   Hammer,
   Cable,
+  MessagesSquare,
+  Clock,
 } from "lucide-react";
 
 import {
@@ -55,6 +57,12 @@ const navItems: SidebarMenuGroupProps[] = [
     groupLable: "Projects",
     menus: [
       {
+        url: "/chat",
+        title: "chat",
+        isActive: true,
+        icon: <MessagesSquare />,
+      },
+      {
         url: "/projects",
         title: "Projects",
         isActive: true,
@@ -64,7 +72,7 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/jobs",
         title: "Jobs",
         isActive: true,
-        icon: <LayoutDashboard />,
+        icon: <Clock />,
       },
     ],
   },
