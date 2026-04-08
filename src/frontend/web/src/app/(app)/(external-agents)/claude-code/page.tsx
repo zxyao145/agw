@@ -343,7 +343,7 @@ export default function ClaudeCodePage() {
     return envObj;
   };
 
-  const buildSettingRequest = (taskId: string) => {
+  const buildSettingCommand = (taskId: string) => {
     const settingContent = {
       workingDirectory: getResolvedWorkingDirectory(taskId),
       gitAddress: directoryMode === DirectoryMode.gitAddress ? gitAddress.trim() || null : null,
@@ -358,6 +358,7 @@ export default function ClaudeCodePage() {
 
     return {
       type: "SettingCommand",
+      workspace: getResolvedWorkingDirectory(taskId),
       settingContent: JSON.stringify(settingContent),
       projectId: CLAUDE_CODE_PROJECT_ID,
       taskId,
@@ -383,8 +384,8 @@ export default function ClaudeCodePage() {
     if (settingsRequestSessionRef.current === taskId) {
       return;
     }
-    const settingRequest = buildSettingRequest(taskId);
-    ws.send(JSON.stringify(settingRequest));
+    const settingCommand = buildSettingCommand(taskId);
+    ws.send(JSON.stringify(settingCommand));
     settingsRequestSessionRef.current = taskId;
   };
 

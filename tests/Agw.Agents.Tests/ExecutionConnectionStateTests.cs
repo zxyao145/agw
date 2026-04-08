@@ -97,6 +97,7 @@ public class ExecutionConnectionStateTests
         return new SettingCommand(
             projectId: projectId,
             taskId: taskId,
+            null,
             settingContent: """{"workingDirectory":"D:/source/repos/agw"}""");
     }
 }

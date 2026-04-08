@@ -94,7 +94,9 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
     {
         return new SettingCommand(
             projectId: ProjectDefaults.DefaultBuiltInId,
-            taskId: Guid.NewGuid());
+            taskId: Guid.NewGuid(),
+            null
+            );
     }
 
     private static async Task<AgentExecSession?> DisposeSessionAsync(AgentExecSession? agentSession)

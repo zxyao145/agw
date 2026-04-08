@@ -19,18 +19,24 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public SettingCommand(
         Guid projectId,
         Guid taskId,
+        string? workspace,
         string settingContent = "{}")
     {
-        SettingContent = settingContent;
         ProjectId = projectId;
         TaskId = taskId;
+        Workspace = workspace;
+        SettingContent = settingContent;
     }
 
-    public required string SettingContent { get; set; }
 
     public required Guid ProjectId { get; set; }
 
     public Guid TaskId { get; set; }
+
+    public string? Workspace { get; set; }
+
+    public required string SettingContent { get; set; }
+
 
     [JsonIgnore]
     public bool Resume { get; set; }

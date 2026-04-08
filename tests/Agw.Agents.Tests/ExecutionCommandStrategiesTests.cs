@@ -34,7 +34,7 @@ public class ExecutionCommandStrategiesTests
             });
 
         await strategy.ExecuteAsync(
-            new SettingCommand(Guid.NewGuid(), Guid.NewGuid(), "[]"),
+            new SettingCommand(Guid.NewGuid(), Guid.NewGuid(), null, "[]"),
             context);
 
         Assert.Equal("SettingContent must be a JSON object string.", errorMessage);
@@ -46,7 +46,7 @@ public class ExecutionCommandStrategiesTests
     public async Task SettingStrategy_WhenSettingContentValid_UpdatesCurrentSettings()
     {
         var strategy = new SettingCommandStrategy();
-        var normalizedSetting = new SettingCommand(Guid.NewGuid(), Guid.NewGuid(), """{"cwd":"D:/source/repos/agw"}""")
+        var normalizedSetting = new SettingCommand(Guid.NewGuid(), Guid.NewGuid(), null, """{"cwd":"D:/source/repos/agw"}""")
         {
             Resume = true
         };
@@ -60,7 +60,7 @@ public class ExecutionCommandStrategiesTests
             coordinator: coordinator);
 
         await strategy.ExecuteAsync(
-            new SettingCommand(Guid.NewGuid(), Guid.NewGuid(), """{"cwd":"D:/source/repos/agw"}"""),
+            new SettingCommand(Guid.NewGuid(), Guid.NewGuid(), null, """{"cwd":"D:/source/repos/agw"}"""),
             context);
 
         Assert.NotNull(state.CurrentSettings);

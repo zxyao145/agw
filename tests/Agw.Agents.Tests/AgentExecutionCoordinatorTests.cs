@@ -18,7 +18,7 @@ public class AgentExecutionCoordinatorTests
             HasTaskResult = true
         };
         var coordinator = CreateCoordinator(taskAppService: taskAppService);
-        var settings = new SettingCommand(Guid.NewGuid(), Guid.NewGuid(), "{}");
+        var settings = new SettingCommand(Guid.NewGuid(), Guid.NewGuid(), null, "{}");
 
         var normalized = await coordinator.NormalizeSettingsAsync(settings, CancellationToken.None);
 

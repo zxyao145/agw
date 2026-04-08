@@ -36,6 +36,24 @@ public record AgentExecutionResult(
     string TaskId,
     IReadOnlyList<AgwMessage> Messages);
 
+public sealed class CreateAiAgentRequest
+{
+    public Guid? ProjectId { get; init; }
+
+    public Guid? TaskId { get; init; }
+
+    public required Agent Agent { get; init; }
+
+    public string? ExtraOverride { get; init; }
+
+    public string? Workspace { get; init; }
+
+
+    public bool Resume { get; init; }
+
+    public CancellationToken CancellationToken { get; init; }
+}
+
 public class AgentRuntimeService : RuntimService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
@@ -240,21 +258,29 @@ public class AgentRuntimeService : RuntimService
             return null;
         }
 
-        return await CreateAiAgentAsync(agent, extraOverride, cancellationToken: cancellationToken);
+        return await CreateAiAgentAsync(new CreateAiAgentRequest
+        {
+            Agent = agent,
+            ExtraOverride = extraOverride,
+            CancellationToken = cancellationToken
+        });
     }
 
-    public async Task<AIAgent?> CreateAiAgentAsync(
-        Agent agent,
-        string? extraOverride = null,
-        Guid? taskId = null,
-        Guid? projectId = null,
-        bool resume = false,
-        CancellationToken cancellationToken = default)
+    public async Task<AIAgent?> CreateAiAgentAsync(CreateAiAgentRequest request)
     {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Agent);
+
+        var agent = request.Agent;
+        var extraOverride = request.ExtraOverride;
+        var taskId = request.TaskId;
+        var resume = request.Resume;
+        var cancellationToken = request.CancellationToken;
+
         if (agent.Type == AgentType.External)
         {
             var extra = extraOverride ?? agent.Extra;
-            if (agent.Name == "ClaudeCode")
+            if (agent.Name == AgentNames.ClaudeCode)
             {
                 if (string.IsNullOrWhiteSpace(extra))
                 {
@@ -267,6 +293,13 @@ public class AgentRuntimeService : RuntimService
                 {
                     _logger.LogError("agent.Extra Deserialize to options error");
                     return null;
+                }
+                if (!string.IsNullOrWhiteSpace(request.Workspace))
+                {
+                    ccOptions = ccOptions with
+                    {
+                        WorkingDirectory = request.Workspace
+                    };
                 }
 
                 if (taskId != null)
@@ -312,18 +345,6 @@ public class AgentRuntimeService : RuntimService
             return null;
         }
 
-        //if(agent.Name == "ClaudeCode")
-        //{
-        //    var request = JsonUtil.Deserialize<ClaudeCodeSettingRequest>(extraSetting ?? "")
-        //        ?? new ClaudeCodeSettingRequest();
-        //    request = request with
-        //    {
-        //        SessionId = task.Id.ToString()
-        //    };
-        //    var session = await _claudeCodeService.InitializeSessionAsync(request, cancellationToken);
-        //    return session;
-        //}
-
 
         Guid projectId = task.ProjectId;
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
@@ -333,7 +354,16 @@ public class AgentRuntimeService : RuntimService
         var resolvedContextId = string.IsNullOrWhiteSpace(task.ContextId)
             ? TaskUtil.GenContextId()
             : task.ContextId;
-        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra, task.Id, projectId, resume: settings.Resume, cancellationToken);
+        var aiAgent = await CreateAiAgentAsync(new CreateAiAgentRequest
+        {
+            Agent = agent,
+            ExtraOverride = mergedExtra,
+            Workspace = settings.Workspace,
+            TaskId = task.Id,
+            ProjectId = projectId,
+            Resume = settings.Resume,
+            CancellationToken = cancellationToken
+        });
         if (aiAgent == null)
         {
             return null;
@@ -442,7 +472,11 @@ public class AgentRuntimeService : RuntimService
         projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, null);
-        var aiAgent = await CreateAiAgentAsync(agent, mergedExtra);
+        var aiAgent = await CreateAiAgentAsync(new CreateAiAgentRequest
+        {
+            Agent = agent,
+            ExtraOverride = mergedExtra
+        });
         if (aiAgent == null)
         {
             throw new Exception("aiAgent not found");

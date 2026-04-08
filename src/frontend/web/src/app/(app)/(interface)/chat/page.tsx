@@ -654,7 +654,7 @@ export default function ChatPage() {
     }
 
     if (resolvedWorkspace) {
-      settingContent.workingDirectory = resolvedWorkspace;
+      settingContent.workspace = resolvedWorkspace;
     }
 
     const environmentVariables = buildEnvironmentVariables();
@@ -732,9 +732,10 @@ export default function ChatPage() {
     [isMobile, loadFileContent, selectedFile],
   );
 
-  const buildSettingRequest = React.useCallback(
+  const buildSettingCommand = React.useCallback(
     (nextTaskIdValue: string) => ({
       type: "SettingCommand",
+      workspace: resolvedWorkspace ?? "",
       settingContent: buildSettingContent(),
       projectId: selectedProjectId,
       taskId: nextTaskIdValue,
@@ -1012,7 +1013,7 @@ export default function ChatPage() {
         setMessages((prev) => [...prev, userMessage]);
 
         const nextTaskIdValue = ensureTaskId();
-        ws.send(JSON.stringify(buildSettingRequest(nextTaskIdValue)));
+        ws.send(JSON.stringify(buildSettingCommand(nextTaskIdValue)));
         ws.send(JSON.stringify(buildExecRequest(userMessage)));
       } catch (error) {
         toast.error(`Execute failed: ${getApiErrorMessage(error)}`);
@@ -1021,7 +1022,7 @@ export default function ChatPage() {
     },
     [
       buildExecRequest,
-      buildSettingRequest,
+      buildSettingCommand,
       ensureTaskId,
       selectedProjectId,
       selectedTarget,
@@ -1279,12 +1280,12 @@ export default function ChatPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="flex-1" />
 
           <TabsList className="w-fit">
             <TabsTrigger value="chat">Chat</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
           </TabsList>
-          <div className="flex-1" />
           <Button
             variant="ghost"
             className="cursor-pointer"

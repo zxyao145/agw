@@ -78,7 +78,7 @@ public class ClaudeCodeService
             taskId: initRequest.SessionId,
             AgentRuntimeType.Agent,
             null,
-            "ClaudeCode",
+            AgentNames.ClaudeCode,
             _logger,
             taskTitle: "New Chat",
             systemPrompt: initRequest.SystemPrompt);

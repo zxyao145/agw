@@ -19,7 +19,7 @@ public class AgentNames
     public static readonly Guid ClaudeCodeId = Guid.Parse("11111111-1111-1111-2222-000000000001");
     public static readonly Guid CodexId = Guid.Parse("11111111-1111-1111-2222-000000000002");
     public static readonly Guid GithubCopilotId = Guid.Parse("11111111-1111-1111-2222-000000000003");
-    
+
 
 
     public static IReadOnlyList<Agent> ExternalAgentNames { get; } =

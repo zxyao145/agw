@@ -328,7 +328,7 @@ public class AgwDataContent : AgwContent
             ReadOnlyMemory<byte>? data = _data;
             if (!data.HasValue)
             {
-                _data = _dataUri.ToByteArray();
+                _data = _dataUri?.ToByteArray();
             }
 
             return _data.GetValueOrDefault();

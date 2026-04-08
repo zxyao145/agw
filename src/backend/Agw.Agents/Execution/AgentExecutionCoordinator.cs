@@ -30,7 +30,7 @@ public sealed class AgentExecutionCoordinator(
 
     public async Task<SettingCommand> NormalizeSettingsAsync(SettingCommand settings, CancellationToken cancellationToken)
     {
-        var normalizedSettings = new SettingCommand(settings.ProjectId, settings.TaskId, settings.SettingContent);
+        var normalizedSettings = new SettingCommand(settings.ProjectId, settings.TaskId, settings.Workspace, settings.SettingContent);
         if (await _taskAppService.HasTaskAsync(normalizedSettings.TaskId, cancellationToken: cancellationToken))
         {
             normalizedSettings.Resume = true;

@@ -68,7 +68,7 @@ public sealed class ExecutionConnectionState
 
     private static SettingCommand CloneSettings(SettingCommand settings)
     {
-        return new SettingCommand(settings.ProjectId, settings.TaskId, settings.SettingContent)
+        return new SettingCommand(settings.ProjectId, settings.TaskId, settings.Workspace, settings.SettingContent)
         {
             Resume = settings.Resume
         };
