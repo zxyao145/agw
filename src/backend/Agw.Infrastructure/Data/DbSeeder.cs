@@ -4,7 +4,9 @@ using Agw.Shared.Enums;
 using Agw.Shared.Tasks;
 using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
+using ClaudeCodeSdk;
 using ClaudeCodeSdk.MAF;
+using ClaudeCodeSdk.Types;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Numerics;
@@ -16,6 +18,40 @@ namespace Agw.Infrastructure.Data;
 /// </summary>
 public class DbSeeder
 {
+    public static IReadOnlyList<Project> BuiltInProjects { get; } =
+    [
+        new Project
+        {
+            Id = ProjectDefaults.DefaultBuiltInId,
+            Name = ProjectDefaults.DefaultBuiltInName,
+            Description = "Default built-in project for general task execution.",
+            Type = ProjectType.DefaultBuiltIn,
+            Enable = true
+        },
+        new Project
+        {
+            Id = ProjectDefaults.ClaudeCodeId,
+            Name = ProjectDefaults.ClaudeCodeName,
+            Description = "Built-in project for Claude Code task execution.",
+            Type = ProjectType.DefaultBuiltIn,
+            Enable = true,
+            ExtraSetting = JsonUtil.Serialize(
+                new ClaudeCodeAIAgentOptions()
+                    {
+                        PermissionMode = PermissionMode.bypassPermissions,
+                    }
+                ),
+        },
+        new Project
+        {
+            Id = ProjectDefaults.A2AId,
+            Name = ProjectDefaults.A2AName,
+            Description = "Built-in project for A2A task execution.",
+            Type = ProjectType.DefaultBuiltIn,
+            Enable = true
+        }
+    ];
+
     private readonly LlmDbContext _context;
     private readonly ILogger<DbSeeder> _logger;
 
@@ -53,7 +89,7 @@ public class DbSeeder
 
     private async Task SeedBuiltInProjectsAsync()
     {
-        foreach (var definition in ProjectDefaults.BuiltInProjects)
+        foreach (var definition in BuiltInProjects)
         {
             var existingProject = await _context.Projects
                 .FirstOrDefaultAsync(project => project.Id == definition.Id || project.Name == definition.Name);

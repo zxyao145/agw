@@ -52,6 +52,14 @@ import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
 import { InputArea } from "./components/user-input/input-area";
 import { handleAiMessage, type AiMessageAction } from "./lib/ai-message-handlers";
+import {
+  CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME,
+  CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME,
+  EMPTY_EXTRA_SETTING_TEXT,
+  formatJsonObjectText,
+  normalizeExtraSettingTextForStorage,
+  tryParseJsonObjectText,
+} from "./lib/chat-settings";
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
 
 type ProjectDto = {
@@ -134,8 +142,6 @@ function nextTaskId(): string {
   return Uuid4.generate().toCanonical();
 }
 
-const EMPTY_EXTRA_SETTING_TEXT = "{\n  \n}";
-
 type ChatSettingsDraft = {
   workspace: string;
   envVars: EnvVar[];
@@ -149,37 +155,6 @@ function normalizeEnvVars(envVars: EnvVar[]): EnvVar[] {
       value: envVar.value,
     }))
     .filter((envVar) => envVar.key.length > 0 || envVar.value.trim().length > 0);
-}
-
-function formatJsonObjectText(value?: string | null): string {
-  const trimmedValue = value?.trim();
-  if (!trimmedValue) {
-    return EMPTY_EXTRA_SETTING_TEXT;
-  }
-
-  try {
-    return JSON.stringify(JSON.parse(trimmedValue), null, 2);
-  } catch {
-    return trimmedValue;
-  }
-}
-
-function tryParseJsonObjectText(value: string): Record<string, unknown> | null {
-  const trimmedValue = value.trim();
-  if (!trimmedValue) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(trimmedValue) as unknown;
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
-      return null;
-    }
-
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
 }
 
 type ChatSettingsDialogProps = {
@@ -256,7 +231,7 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
           <Settings className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent size="md">
+      <DialogContent size="md" className={CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME}>
         <DialogHeader>
           <DialogTitle>Chat Settings</DialogTitle>
           <DialogDescription>
@@ -264,84 +239,87 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
-          <div className="grid gap-2">
-            <Label htmlFor="chat-settings-workspace">Workspace</Label>
-            <Input
-              id="chat-settings-workspace"
-              value={draftWorkspace}
-              onChange={(event) => setDraftWorkspace(event.target.value)}
-              placeholder="Leave blank to fall back to the project workspace"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between">
-              <Label>Environment Variables</Label>
-              <Button type="button" variant="ghost" size="sm" onClick={handleAddEnvVar}>
-                <Plus className="h-4 w-4" />
-                Add
-              </Button>
+        <div className={CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME}>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label htmlFor="chat-settings-workspace">Workspace</Label>
+              <Input
+                id="chat-settings-workspace"
+                value={draftWorkspace}
+                onChange={(event) => setDraftWorkspace(event.target.value)}
+                placeholder="Leave blank to fall back to the project workspace"
+              />
             </div>
 
-            {draftEnvVars.length === 0 ? (
-              <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
-                No environment variables configured.
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Environment Variables</Label>
+                <Button type="button" variant="ghost" size="sm" onClick={handleAddEnvVar}>
+                  <Plus className="h-4 w-4" />
+                  Add
+                </Button>
               </div>
-            ) : (
-              <div className="rounded-md border">
-                <div className="grid grid-cols-12 gap-2 border-b bg-muted/50 p-2 text-xs font-medium text-muted-foreground">
-                  <div className="col-span-5">Key</div>
-                  <div className="col-span-6">Value</div>
-                  <div className="col-span-1" />
-                </div>
-                {draftEnvVars.map((envVar, index) => (
-                  <div
-                    key={`${selectedProjectId ?? "chat"}-env-${index}`}
-                    className="grid grid-cols-12 gap-2 border-b p-2 last:border-b-0"
-                  >
-                    <Input
-                      value={envVar.key}
-                      onChange={(event) => handleUpdateEnvVar(index, "key", event.target.value)}
-                      placeholder="KEY"
-                      className="col-span-5 h-8 text-xs md:text-xs"
-                    />
-                    <Input
-                      value={envVar.value}
-                      onChange={(event) => handleUpdateEnvVar(index, "value", event.target.value)}
-                      placeholder="value"
-                      className="col-span-6 h-8 text-xs md:text-xs"
-                    />
-                    <div className="col-span-1 flex items-center">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveEnvVar(index)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="chat-settings-extra-setting">Extra Setting JSON</Label>
-            <Textarea
-              id="chat-settings-extra-setting"
-              value={draftExtraSettingText}
-              onChange={(event) => setDraftExtraSettingText(event.target.value)}
-              placeholder={EMPTY_EXTRA_SETTING_TEXT}
-              className="min-h-40 font-mono text-xs"
-            />
-            <p className="text-xs text-muted-foreground">
-              Saved per project in local storage and merged into{" "}
-              <code>SettingCommand.settingContent</code> at execution time.
-            </p>
+              {draftEnvVars.length === 0 ? (
+                <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                  No environment variables configured.
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <div className="grid grid-cols-12 gap-2 border-b bg-muted/50 p-2 text-xs font-medium text-muted-foreground">
+                    <div className="col-span-5">Key</div>
+                    <div className="col-span-6">Value</div>
+                    <div className="col-span-1" />
+                  </div>
+                  {draftEnvVars.map((envVar, index) => (
+                    <div
+                      key={`${selectedProjectId ?? "chat"}-env-${index}`}
+                      className="grid grid-cols-12 gap-2 border-b p-2 last:border-b-0"
+                    >
+                      <Input
+                        value={envVar.key}
+                        onChange={(event) => handleUpdateEnvVar(index, "key", event.target.value)}
+                        placeholder="KEY"
+                        className="col-span-5 h-8 text-xs md:text-xs"
+                      />
+                      <Input
+                        value={envVar.value}
+                        onChange={(event) => handleUpdateEnvVar(index, "value", event.target.value)}
+                        placeholder="value"
+                        className="col-span-6 h-8 text-xs md:text-xs"
+                      />
+                      <div className="col-span-1 flex items-center">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveEnvVar(index)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="chat-settings-extra-setting">Extra Setting JSON</Label>
+              <Textarea
+                id="chat-settings-extra-setting"
+                value={draftExtraSettingText}
+                onChange={(event) => setDraftExtraSettingText(event.target.value)}
+                placeholder={EMPTY_EXTRA_SETTING_TEXT}
+                className="min-h-40 font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank to fall back to the project extra setting. Saved per project in local
+                storage and merged into{" "}
+                <code>SettingCommand.settingContent</code> at execution time.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -1147,21 +1125,22 @@ export default function ChatPage() {
             ? undefined
             : normalizedWorkspace,
         envVars: normalizeEnvVars(draft.envVars),
-        extraSettingText:
-          Object.keys(normalizedExtraSetting).length === 0
-            ? EMPTY_EXTRA_SETTING_TEXT
-            : JSON.stringify(normalizedExtraSetting, null, 2),
+        extraSettingText: normalizeExtraSettingTextForStorage(
+          draft.extraSettingText,
+          selectedProject?.extraSetting,
+        ),
       };
 
       chatSettingsStorage.set(selectedProjectId, normalizedSettings);
-      setWorkspaceOverride(normalizedSettings.workspace ?? "");
-      setEnvVars(normalizedSettings.envVars ?? []);
-      setExtraSettingText(normalizedSettings.extraSettingText ?? EMPTY_EXTRA_SETTING_TEXT);
+      const nextDraft = getProjectSettingsDraft(selectedProjectId);
+      setWorkspaceOverride(nextDraft.workspace);
+      setEnvVars(nextDraft.envVars);
+      setExtraSettingText(nextDraft.extraSettingText);
 
       toast.success("Chat settings saved");
       return true;
     },
-    [selectedProject, selectedProjectId],
+    [getProjectSettingsDraft, selectedProject, selectedProjectId],
   );
 
   const renderTaskHistory = React.useCallback(

@@ -1,5 +1,6 @@
 ﻿using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.Unicode;
 
 namespace Agw.Shared.Utils;
@@ -16,8 +17,10 @@ public static class JsonUtil
             WriteIndented = false,
             //Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
             Encoder = JavaScriptEncoder.Create(UnicodeRanges.BasicLatin, UnicodeRanges.CjkUnifiedIdeographs),
-            AllowOutOfOrderMetadataProperties = true
+            AllowOutOfOrderMetadataProperties = true,
         };
+
+        OPTIONS.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
     }
 
     public static string Serialize<T>(T value)

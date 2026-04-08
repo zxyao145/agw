@@ -1,5 +1,6 @@
 using Agw.Shared.Enums;
 using Agw.Shared.Tasks.Entities;
+using Agw.Shared.Utils;
 
 namespace Agw.Shared.Tasks;
 
@@ -12,34 +13,6 @@ public static class ProjectDefaults
     public const string DefaultBuiltInName = "default-built-in";
     public const string ClaudeCodeName = "claude-code";
     public const string A2AName = "a2a";
-
-    public static IReadOnlyList<Project> BuiltInProjects { get; } =
-    [
-        new Project
-        {
-            Id = DefaultBuiltInId,
-            Name = DefaultBuiltInName,
-            Description = "Default built-in project for general task execution.",
-            Type = ProjectType.DefaultBuiltIn,
-            Enable = true
-        },
-        new Project
-        {
-            Id = ClaudeCodeId,
-            Name = ClaudeCodeName,
-            Description = "Built-in project for Claude Code task execution.",
-            Type = ProjectType.DefaultBuiltIn,
-            Enable = true
-        },
-        new Project
-        {
-            Id = A2AId,
-            Name = A2AName,
-            Description = "Built-in project for A2A task execution.",
-            Type = ProjectType.DefaultBuiltIn,
-            Enable = true
-        }
-    ];
 
     public static Guid GetDefaultProjectIdentifier(Guid? projectId) =>
         projectId == null ? DefaultBuiltInId : projectId.Value;
