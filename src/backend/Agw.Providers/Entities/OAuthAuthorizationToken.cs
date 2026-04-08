@@ -1,11 +1,14 @@
 using Agw.Shared;
+using Agw.Shared.Abstractions;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
 /// <summary>
 /// Persists provider-issued OAuth tokens for a specific authenticated subject.
 /// </summary>
-public class OAuthAuthorizationToken : BaseEntity
+[Table("oauth_authorization")]
+public class OAuthAuthorizationToken : BaseEntity, IAggregateRoot
 {
     /// <summary>
     /// Gets or sets the unique identifier for the stored token record.

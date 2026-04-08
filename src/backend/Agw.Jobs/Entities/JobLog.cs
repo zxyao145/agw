@@ -1,7 +1,9 @@
 using Agw.Shared;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
+[Table("job_log")]
 public class JobLog : BaseEntity
 {
     public Guid Id { get; set; }

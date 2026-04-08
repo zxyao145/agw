@@ -1,10 +1,13 @@
 using Agw.Jobs.Enums;
 using Agw.Shared;
+using Agw.Shared.Abstractions;
 using Agw.Shared.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
-public class Job : BaseEntity
+[Table("job")]
+public class Job : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }
 

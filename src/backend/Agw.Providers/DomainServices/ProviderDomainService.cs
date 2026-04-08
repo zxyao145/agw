@@ -37,7 +37,6 @@ public class ProviderDomainService
 
         foreach (var authConfig in authConfigs)
         {
-            authConfig.Id = authConfig.Id == Guid.Empty ? Guid.NewGuid() : authConfig.Id;
             authConfig.ProviderId = providerId;
             authConfig.CreateBy ??= user;
             authConfig.CreateTime = authConfig.CreateTime == default ? now : authConfig.CreateTime;

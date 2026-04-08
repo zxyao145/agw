@@ -1,7 +1,9 @@
 using Agw.Shared;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
+[Table("agentflow_edge")]
 public class AgentflowEdge : BaseEntity
 {
     public Guid AgentflowId { get; set; }

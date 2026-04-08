@@ -1,8 +1,10 @@
 using Agw.Shared;
 using Agw.Shared.Abstractions;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
+[Table("provider")]
 public class Provider : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }
@@ -11,6 +13,6 @@ public class Provider : BaseEntity, IAggregateRoot
     public string Endpoint { get; set; } = string.Empty;
     public string? Description { get; set; }
 
-    public ICollection<ModelProvider> Models { get; set; } = new List<ModelProvider>();
+    public ICollection<ModelProviderRelation> Models { get; set; } = new List<ModelProviderRelation>();
     public ICollection<ProviderAuthConfig> AuthConfigs { get; set; } = new List<ProviderAuthConfig>();
 }

@@ -1,9 +1,11 @@
 using Agw.Shared;
 using Agw.Shared.Abstractions;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
-public class ModelProvider : BaseEntity, IAggregateRoot
+[Table("model_provider_relation")]
+public class ModelProviderRelation : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }
     public Guid ModelId { get; set; }

@@ -5,13 +5,13 @@ namespace Agw.Providers.Application;
 
 public interface IModelProviderAppService
 {
-    Task<IReadOnlyList<ModelProvider>> ListAsync(Guid? modelId = null, Guid? providerId = null);
+    Task<IReadOnlyList<ModelProviderRelation>> ListAsync(Guid? modelId = null, Guid? providerId = null);
 
-    Task<ModelProvider?> GetAsync(Guid id);
+    Task<ModelProviderRelation?> GetAsync(Guid id);
 
-    Task<ModelProvider> CreateAsync(ModelProviderCreateRequest request, string user);
+    Task<ModelProviderRelation> CreateAsync(ModelProviderCreateRequest request, string user);
 
-    Task<ModelProvider?> UpdateAsync(Guid id, ModelProviderUpdateRequest request, string user);
+    Task<ModelProviderRelation?> UpdateAsync(Guid id, ModelProviderUpdateRequest request, string user);
 
     Task<bool> DeleteAsync(Guid id);
 }

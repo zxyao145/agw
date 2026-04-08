@@ -1,5 +1,8 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Agw.Domain.Entities;
 
+[Table("agent_skill_relation")]
 public class AgentSkillRelation
 {
     public Guid AgentId { get; set; }

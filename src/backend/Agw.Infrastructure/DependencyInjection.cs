@@ -41,13 +41,12 @@ public static class DependencyInjection
         });
 
         // Register database seeder
-        services.AddScoped<ClaudeCodeAgentDbSeeder>();
+        services.AddScoped<DbSeeder>();
 
         services.AddScoped<DbContext, LlmDbContext>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IGitCommandService, GitCommandService>();
-        services.AddScoped<IProjectLeaseService, ProjectLeaseService>();
         services.AddScoped<IJobStore, JobStore>();
 
         return services;

@@ -1,8 +1,11 @@
+using Agw.Shared.Abstractions;
 using Agw.Shared.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Shared.Tasks.Entities;
 
-public class Project : BaseEntity
+[Table("project")]
+public class Project : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;

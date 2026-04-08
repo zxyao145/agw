@@ -25,27 +25,35 @@ public class LlmDbContext : DbContext
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
-    public DbSet<LlmModel> Models => Set<LlmModel>();
     public DbSet<Provider> Providers => Set<Provider>();
-    public DbSet<ModelProvider> ModelProviders => Set<ModelProvider>();
     public DbSet<ProviderAuthConfig> ProviderAuthConfigs => Set<ProviderAuthConfig>();
-    public DbSet<OAuthAuthorizationToken> OAuthAuthorizationTokens => Set<OAuthAuthorizationToken>();
+
+
+    public DbSet<LlmModel> Models => Set<LlmModel>();
+    public DbSet<ModelProviderRelation> ModelProviders => Set<ModelProviderRelation>();
+
+
     public DbSet<Agent> Agents => Set<Agent>();
+
+    public DbSet<Skill> Skills => Set<Skill>();
+    public DbSet<AgentSkillRelation> AgentSkillRelations => Set<AgentSkillRelation>();
+
+    public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
+    public DbSet<AgentMcpToolServerRelation> AgentMcpToolServers => Set<AgentMcpToolServerRelation>();
+
 
     public DbSet<Agentflow> Agentflows => Set<Agentflow>();
     public DbSet<AgentflowNode> AgentflowNodes => Set<AgentflowNode>();
     public DbSet<AgentflowEdge> AgentflowEdges => Set<AgentflowEdge>();
 
+
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
     public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
-    public DbSet<ProjectLease> ProjectLeases => Set<ProjectLease>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobLog> JobLogs => Set<JobLog>();
-    public DbSet<McpToolServer> McpToolServers => Set<McpToolServer>();
-    public DbSet<AgentMcpToolServer> AgentMcpToolServers => Set<AgentMcpToolServer>();
-    public DbSet<Skill> Skills => Set<Skill>();
-    public DbSet<AgentSkillRelation> AgentSkillRelations => Set<AgentSkillRelation>();
+
+    public DbSet<OAuthAuthorizationToken> OAuthAuthorizationTokens => Set<OAuthAuthorizationToken>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -55,6 +63,29 @@ public class LlmDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Provider>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.Name, e.ProviderType }).IsUnique();
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Endpoint).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+        });
+
+        modelBuilder.Entity<ProviderAuthConfig>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.AuthType).HasConversion<int>();
+            entity.Property(e => e.ApiKey).HasMaxLength(2000);
+            entity.Property(e => e.EnvName).HasMaxLength(200);
+
+            entity.HasOne(e => e.Provider)
+                .WithMany(p => p.AuthConfigs)
+                .HasForeignKey(e => e.ProviderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+
         modelBuilder.Entity<LlmModel>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -64,16 +95,8 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.Description).HasMaxLength(1000);
         });
 
-        modelBuilder.Entity<Provider>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.Name).IsUnique();
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.Endpoint).IsRequired().HasMaxLength(500);
-            entity.Property(e => e.Description).HasMaxLength(1000);
-        });
 
-        modelBuilder.Entity<ModelProvider>(entity =>
+        modelBuilder.Entity<ModelProviderRelation>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.InputPrice).HasColumnType("decimal(18,4)");
@@ -90,33 +113,6 @@ public class LlmDbContext : DbContext
                 .WithMany(p => p.Models)
                 .HasForeignKey(e => e.ProviderId)
                 .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<ProviderAuthConfig>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.AuthType).HasConversion<int>();
-            entity.Property(e => e.ApiKey).HasMaxLength(2000);
-            entity.Property(e => e.EnvName).HasMaxLength(200);
-
-            entity.HasOne(e => e.Provider)
-                .WithMany(p => p.AuthConfigs)
-                .HasForeignKey(e => e.ProviderId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<OAuthAuthorizationToken>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.Provider);
-            entity.HasIndex(e => new { e.Provider, e.Subject });
-            entity.HasIndex(e => e.ExpiresAtUtc);
-            entity.Property(e => e.Provider).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Subject).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.AccessToken).IsRequired().HasMaxLength(4000);
-            entity.Property(e => e.RefreshToken).HasMaxLength(4000);
-            entity.Property(e => e.TokenType).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Scope).HasMaxLength(2000);
         });
 
         modelBuilder.Entity<Agent>(entity =>
@@ -145,6 +141,71 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.Description).IsRequired().HasMaxLength(1024);
             entity.Property(e => e.ContentPath).IsRequired().HasMaxLength(500);
         });
+
+        modelBuilder.Entity<AgentSkillRelation>(entity =>
+        {
+            entity.HasKey(e => new { e.AgentId, e.SkillId });
+
+            entity.HasOne(e => e.Agent)
+                .WithMany(a => a.AgentSkillRelations)
+                .HasForeignKey(e => e.AgentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<Skill>()
+                .WithMany()
+                .HasForeignKey(e => e.SkillId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.SkillId);
+        });
+
+        modelBuilder.Entity<McpToolServer>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.TransportType).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Command).HasMaxLength(200);
+            entity.Property(e => e.WorkingDirectory).HasMaxLength(500);
+            entity.Property(e => e.Url).HasMaxLength(1000);
+            entity.Property(e => e.Arguments)
+            .HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? new List<string>()
+                    : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null)
+                    ?? new List<string>()
+                    );
+            entity.Property(e => e.EnvironmentVariables).HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? new Dictionary<string, string>()
+                    : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new Dictionary<string, string>());
+            entity.Property(e => e.Headers).HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? new Dictionary<string, string>()
+                    : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new Dictionary<string, string>());
+        });
+
+        modelBuilder.Entity<AgentMcpToolServerRelation>(entity =>
+        {
+            entity.HasKey(e => new { e.AgentId, e.McpToolServerId });
+
+            entity.HasOne(e => e.Agent)
+                .WithMany(a => a.AgentMcpToolServers)
+                .HasForeignKey(e => e.AgentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.McpToolServer)
+                .WithMany(s => s.AgentMcpToolServers)
+                .HasForeignKey(e => e.McpToolServerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.McpToolServerId);
+        });
+
+
 
         modelBuilder.Entity<Agentflow>(entity =>
         {
@@ -175,6 +236,8 @@ public class LlmDbContext : DbContext
                 .HasForeignKey(e => new { e.AgentflowId, e.TargetNodeId })
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+
 
         modelBuilder.Entity<Project>(entity =>
         {
@@ -226,17 +289,7 @@ public class LlmDbContext : DbContext
                         : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null));
         });
 
-        modelBuilder.Entity<ProjectLease>(entity =>
-        {
-            entity.HasKey(e => e.ProjectId);
-            entity.Property(e => e.LockedBy).IsRequired().HasMaxLength(200);
-            entity.HasIndex(e => e.LockedUntilUtc);
 
-            //entity.HasOne(e => e.Project)
-            //    .WithOne()
-            //    .HasForeignKey<ProjectLease>(e => e.ProjectId)
-            //    .OnDelete(DeleteBehavior.Cascade);
-        });
 
 
         modelBuilder.Entity<Job>(entity =>
@@ -266,69 +319,21 @@ public class LlmDbContext : DbContext
             entity.HasIndex(e => new { e.TaskId, e.StartTime });
         });
 
-        modelBuilder.Entity<McpToolServer>(entity =>
+
+
+
+        modelBuilder.Entity<OAuthAuthorizationToken>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.Description).HasMaxLength(1000);
-            entity.Property(e => e.TransportType).IsRequired().HasMaxLength(20);
-            entity.Property(e => e.Command).HasMaxLength(200);
-            entity.Property(e => e.WorkingDirectory).HasMaxLength(500);
-            entity.Property(e => e.Url).HasMaxLength(1000);
-            entity.Property(e => e.Arguments)
-            .HasConversion(
-                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-                v => string.IsNullOrWhiteSpace(v)
-                    ? new List<string>()
-                    : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null)
-                    ?? new List<string>()
-                    );
-            entity.Property(e => e.EnvironmentVariables).HasConversion(
-                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-                v => string.IsNullOrWhiteSpace(v)
-                    ? new Dictionary<string, string>()
-                    : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new Dictionary<string, string>());
-            entity.Property(e => e.Headers).HasConversion(
-                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-                v => string.IsNullOrWhiteSpace(v)
-                    ? new Dictionary<string, string>()
-                    : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new Dictionary<string, string>());
-        });
-
-        modelBuilder.Entity<AgentMcpToolServer>(entity =>
-        {
-            entity.ToTable("agent_mcp_tool_servers");
-            entity.HasKey(e => new { e.AgentId, e.McpToolServerId });
-
-            entity.HasOne(e => e.Agent)
-                .WithMany(a => a.AgentMcpToolServers)
-                .HasForeignKey(e => e.AgentId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.McpToolServer)
-                .WithMany(s => s.AgentMcpToolServers)
-                .HasForeignKey(e => e.McpToolServerId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => e.McpToolServerId);
-        });
-
-        modelBuilder.Entity<AgentSkillRelation>(entity =>
-        {
-            entity.ToTable("agent_skill_relations");
-            entity.HasKey(e => new { e.AgentId, e.SkillId });
-
-            entity.HasOne(e => e.Agent)
-                .WithMany(a => a.AgentSkillRelations)
-                .HasForeignKey(e => e.AgentId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne<Skill>()
-                .WithMany()
-                .HasForeignKey(e => e.SkillId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => e.SkillId);
+            entity.HasIndex(e => e.Provider);
+            entity.HasIndex(e => new { e.Provider, e.Subject });
+            entity.HasIndex(e => e.ExpiresAtUtc);
+            entity.Property(e => e.Provider).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Subject).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.AccessToken).IsRequired().HasMaxLength(4000);
+            entity.Property(e => e.RefreshToken).HasMaxLength(4000);
+            entity.Property(e => e.TokenType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Scope).HasMaxLength(2000);
         });
     }
 

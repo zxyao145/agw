@@ -1,9 +1,12 @@
 using Agw.Shared;
+using Agw.Shared.Abstractions;
 using Agw.Shared.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
-public class Agent : BaseEntity
+[Table("agent")]
+public class Agent : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }
     public string DisplayName { get; set; } = string.Empty;
@@ -28,9 +31,9 @@ public class Agent : BaseEntity
     /// </summary>
     public string? Extra { get; set; }
 
-    public ModelProvider? ModelProvider { get; set; }
+    public ModelProviderRelation? ModelProvider { get; set; }
 
     public ICollection<AgentflowNode> Agentflows { get; set; } = new List<AgentflowNode>();
-    public ICollection<AgentMcpToolServer> AgentMcpToolServers { get; set; } = new List<AgentMcpToolServer>();
+    public ICollection<AgentMcpToolServerRelation> AgentMcpToolServers { get; set; } = new List<AgentMcpToolServerRelation>();
     public ICollection<AgentSkillRelation> AgentSkillRelations { get; set; } = new List<AgentSkillRelation>();
 }

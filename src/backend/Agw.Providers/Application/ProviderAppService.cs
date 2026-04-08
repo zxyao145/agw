@@ -74,7 +74,8 @@ public class ProviderAppService : IProviderAppService
             }
         }, user);
 
-        _providerRepository.Update(existing);
+        // `existing` is already tracked from the query above, so SaveChanges will
+        // persist both the scalar updates and the auth-config collection changes.
         await _unitOfWork.SaveChangesAsync();
         return existing;
     }

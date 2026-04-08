@@ -1,7 +1,11 @@
+using Agw.Shared.Abstractions;
 using Agw.Shared.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Shared.Tasks.Entities;
 
+
+[Table("project_task")]
 public class ProjectTask : BaseEntity
 {
     // as session id

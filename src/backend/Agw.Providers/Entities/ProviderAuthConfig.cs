@@ -1,7 +1,10 @@
 using Agw.Shared;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
+
+[Table("provider_auth_config")]
 public class ProviderAuthConfig : BaseEntity
 {
     public Guid Id { get; set; }

@@ -82,19 +82,19 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_agents");
+                        .HasName("pk_agent");
 
                     b.HasIndex("ModelProviderId")
-                        .HasDatabaseName("ix_agents_model_provider_id");
+                        .HasDatabaseName("ix_agent_model_provider_id");
 
                     b.HasIndex("Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_agents_name");
+                        .HasDatabaseName("ix_agent_name");
 
-                    b.ToTable("agents", (string)null);
+                    b.ToTable("agent", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.AgentMcpToolServer", b =>
+            modelBuilder.Entity("Agw.Domain.Entities.AgentMcpToolServerRelation", b =>
                 {
                     b.Property<Guid>("AgentId")
                         .HasColumnType("TEXT")
@@ -105,12 +105,12 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("mcp_tool_server_id");
 
                     b.HasKey("AgentId", "McpToolServerId")
-                        .HasName("pk_agent_mcp_tool_servers");
+                        .HasName("pk_agent_mcp_server_relation");
 
                     b.HasIndex("McpToolServerId")
-                        .HasDatabaseName("ix_agent_mcp_tool_servers_mcp_tool_server_id");
+                        .HasDatabaseName("ix_agent_mcp_server_relation_mcp_tool_server_id");
 
-                    b.ToTable("agent_mcp_tool_servers", (string)null);
+                    b.ToTable("agent_mcp_server_relation", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.AgentSkillRelation", b =>
@@ -124,12 +124,12 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("skill_id");
 
                     b.HasKey("AgentId", "SkillId")
-                        .HasName("pk_agent_skill_relations");
+                        .HasName("pk_agent_skill_relation");
 
                     b.HasIndex("SkillId")
-                        .HasDatabaseName("ix_agent_skill_relations_skill_id");
+                        .HasDatabaseName("ix_agent_skill_relation_skill_id");
 
-                    b.ToTable("agent_skill_relations", (string)null);
+                    b.ToTable("agent_skill_relation", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.Agentflow", b =>
@@ -231,15 +231,15 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("AgentflowId", "EdgeId")
-                        .HasName("pk_agentflow_edges");
+                        .HasName("pk_agentflow_edge");
 
                     b.HasIndex("AgentflowId", "SourceNodeId")
-                        .HasDatabaseName("ix_agentflow_edges_agentflow_id_source_node_id");
+                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_source_node_id");
 
                     b.HasIndex("AgentflowId", "TargetNodeId")
-                        .HasDatabaseName("ix_agentflow_edges_agentflow_id_target_node_id");
+                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_target_node_id");
 
-                    b.ToTable("agentflow_edges", (string)null);
+                    b.ToTable("agentflow_edge", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.AgentflowNode", b =>
@@ -281,16 +281,16 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("AgentflowId", "NodeId")
-                        .HasName("pk_agentflow_nodes");
+                        .HasName("pk_agentflow_node");
 
                     b.HasIndex("AgentId")
-                        .HasDatabaseName("ix_agentflow_nodes_agent_id");
+                        .HasDatabaseName("ix_agentflow_node_agent_id");
 
                     b.HasIndex("AgentflowId", "Type", "RelateId")
                         .IsUnique()
-                        .HasDatabaseName("ix_agentflow_nodes_agentflow_id_type_relate_id");
+                        .HasDatabaseName("ix_agentflow_node_agentflow_id_type_relate_id");
 
-                    b.ToTable("agentflow_nodes", (string)null);
+                    b.ToTable("agentflow_node", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.Job", b =>
@@ -381,7 +381,7 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_jobs");
+                        .HasName("pk_job");
 
                     b.HasIndex("ProjectId")
                         .HasDatabaseName("ix_task_project");
@@ -389,7 +389,7 @@ namespace Agw.Infrastructure.Migrations
                     b.HasIndex("IsEnabled", "Status", "NextRunTime")
                         .HasDatabaseName("ix_task_next_run_time");
 
-                    b.ToTable("jobs", (string)null);
+                    b.ToTable("job", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.JobLog", b =>
@@ -441,12 +441,12 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_job_logs");
+                        .HasName("pk_job_log");
 
                     b.HasIndex("TaskId", "StartTime")
-                        .HasDatabaseName("ix_job_logs_task_id_start_time");
+                        .HasDatabaseName("ix_job_log_task_id_start_time");
 
-                    b.ToTable("job_logs", (string)null);
+                    b.ToTable("job_log", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.LlmModel", b =>
@@ -492,13 +492,13 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_models");
+                        .HasName("pk_model");
 
                     b.HasIndex("Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_models_name");
+                        .HasDatabaseName("ix_model_name");
 
-                    b.ToTable("models", (string)null);
+                    b.ToTable("model", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.McpToolServer", b =>
@@ -576,12 +576,12 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("working_directory");
 
                     b.HasKey("Id")
-                        .HasName("pk_mcp_tool_servers");
+                        .HasName("pk_mcp_server");
 
-                    b.ToTable("mcp_tool_servers", (string)null);
+                    b.ToTable("mcp_server", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.ModelProvider", b =>
+            modelBuilder.Entity("Agw.Domain.Entities.ModelProviderRelation", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -633,15 +633,15 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_model_providers");
+                        .HasName("pk_model_provider_relation");
 
                     b.HasIndex("ModelId")
-                        .HasDatabaseName("ix_model_providers_model_id");
+                        .HasDatabaseName("ix_model_provider_relation_model_id");
 
                     b.HasIndex("ProviderId")
-                        .HasDatabaseName("ix_model_providers_provider_id");
+                        .HasDatabaseName("ix_model_provider_relation_provider_id");
 
-                    b.ToTable("model_providers", (string)null);
+                    b.ToTable("model_provider_relation", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.OAuthAuthorizationToken", b =>
@@ -706,60 +706,18 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_o_auth_authorization_tokens");
+                        .HasName("pk_oauth_authorization");
 
                     b.HasIndex("ExpiresAtUtc")
-                        .HasDatabaseName("ix_o_auth_authorization_tokens_expires_at_utc");
+                        .HasDatabaseName("ix_oauth_authorization_expires_at_utc");
 
                     b.HasIndex("Provider")
-                        .HasDatabaseName("ix_o_auth_authorization_tokens_provider");
+                        .HasDatabaseName("ix_oauth_authorization_provider");
 
                     b.HasIndex("Provider", "Subject")
-                        .HasDatabaseName("ix_o_auth_authorization_tokens_provider_subject");
+                        .HasDatabaseName("ix_oauth_authorization_provider_subject");
 
-                    b.ToTable("o_auth_authorization_tokens", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Domain.Entities.ProjectLease", b =>
-                {
-                    b.Property<Guid>("ProjectId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_id");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTime>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("LockedBy")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("locked_by");
-
-                    b.Property<DateTime>("LockedUntilUtc")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("locked_until_utc");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_by");
-
-                    b.Property<DateTime?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.HasKey("ProjectId")
-                        .HasName("pk_project_leases");
-
-                    b.HasIndex("LockedUntilUtc")
-                        .HasDatabaseName("ix_project_leases_locked_until_utc");
-
-                    b.ToTable("project_leases", (string)null);
+                    b.ToTable("oauth_authorization", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.Provider", b =>
@@ -790,7 +748,7 @@ namespace Agw.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
@@ -807,13 +765,13 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_providers");
+                        .HasName("pk_provider");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("Name", "ProviderType")
                         .IsUnique()
-                        .HasDatabaseName("ix_providers_name");
+                        .HasDatabaseName("ix_provider_name_provider_type");
 
-                    b.ToTable("providers", (string)null);
+                    b.ToTable("provider", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.ProviderAuthConfig", b =>
@@ -862,12 +820,12 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_provider_auth_configs");
+                        .HasName("pk_provider_auth_config");
 
                     b.HasIndex("ProviderId")
-                        .HasDatabaseName("ix_provider_auth_configs_provider_id");
+                        .HasDatabaseName("ix_provider_auth_config_provider_id");
 
-                    b.ToTable("provider_auth_configs", (string)null);
+                    b.ToTable("provider_auth_config", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.Skill", b =>
@@ -912,13 +870,13 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_skills");
+                        .HasName("pk_skill");
 
                     b.HasIndex("Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_skills_name");
+                        .HasDatabaseName("ix_skill_name");
 
-                    b.ToTable("skills", (string)null);
+                    b.ToTable("skill", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Tasks.Entities.Project", b =>
@@ -974,13 +932,13 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("workspace");
 
                     b.HasKey("Id")
-                        .HasName("pk_projects");
+                        .HasName("pk_project");
 
                     b.HasIndex("Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_projects_name");
+                        .HasDatabaseName("ix_project_name");
 
-                    b.ToTable("projects", (string)null);
+                    b.ToTable("project", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Tasks.Entities.ProjectTask", b =>
@@ -1042,19 +1000,19 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_project_tasks");
+                        .HasName("pk_project_task");
 
                     b.HasIndex("ContextId")
                         .IsUnique()
-                        .HasDatabaseName("ix_project_tasks_context_id");
+                        .HasDatabaseName("ix_project_task_context_id");
 
                     b.HasIndex("ProjectId")
-                        .HasDatabaseName("ix_project_tasks_project_id");
+                        .HasDatabaseName("ix_project_task_project_id");
 
                     b.HasIndex("ProjectId", "Status", "UpdateTime")
-                        .HasDatabaseName("ix_project_tasks_project_id_status_update_time");
+                        .HasDatabaseName("ix_project_task_project_id_status_update_time");
 
-                    b.ToTable("project_tasks", (string)null);
+                    b.ToTable("project_task", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Tasks.Entities.TaskRecord", b =>
@@ -1099,42 +1057,42 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_task_records");
+                        .HasName("pk_project_task_record");
 
                     b.HasIndex("TaskId", "ConversationSequence")
-                        .HasDatabaseName("ix_task_records_task_id_conversation_sequence");
+                        .HasDatabaseName("ix_project_task_record_task_id_conversation_sequence");
 
                     b.HasIndex("TaskId", "CreateTime")
-                        .HasDatabaseName("ix_task_records_task_id_create_time");
+                        .HasDatabaseName("ix_project_task_record_task_id_create_time");
 
-                    b.ToTable("task_records", (string)null);
+                    b.ToTable("project_task_record", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.Agent", b =>
                 {
-                    b.HasOne("Agw.Domain.Entities.ModelProvider", "ModelProvider")
+                    b.HasOne("Agw.Domain.Entities.ModelProviderRelation", "ModelProvider")
                         .WithMany()
                         .HasForeignKey("ModelProviderId")
-                        .HasConstraintName("fk_agents_model_providers_model_provider_id");
+                        .HasConstraintName("fk_agent_model_provider_relation_model_provider_id");
 
                     b.Navigation("ModelProvider");
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.AgentMcpToolServer", b =>
+            modelBuilder.Entity("Agw.Domain.Entities.AgentMcpToolServerRelation", b =>
                 {
                     b.HasOne("Agw.Domain.Entities.Agent", "Agent")
                         .WithMany("AgentMcpToolServers")
                         .HasForeignKey("AgentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_mcp_tool_servers_agents_agent_id");
+                        .HasConstraintName("fk_agent_mcp_server_relation_agent_agent_id");
 
                     b.HasOne("Agw.Domain.Entities.McpToolServer", "McpToolServer")
                         .WithMany("AgentMcpToolServers")
                         .HasForeignKey("McpToolServerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_mcp_tool_servers_mcp_tool_servers_mcp_tool_server_id");
+                        .HasConstraintName("fk_agent_mcp_server_relation_mcp_server_mcp_tool_server_id");
 
                     b.Navigation("Agent");
 
@@ -1148,14 +1106,14 @@ namespace Agw.Infrastructure.Migrations
                         .HasForeignKey("AgentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_skill_relations_agents_agent_id");
+                        .HasConstraintName("fk_agent_skill_relation_agent_agent_id");
 
                     b.HasOne("Agw.Domain.Entities.Skill", null)
                         .WithMany()
                         .HasForeignKey("SkillId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_skill_relations_skills_skill_id");
+                        .HasConstraintName("fk_agent_skill_relation_skill_skill_id");
 
                     b.Navigation("Agent");
                 });
@@ -1167,21 +1125,21 @@ namespace Agw.Infrastructure.Migrations
                         .HasForeignKey("AgentflowId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_edges_agentflow_agentflow_id");
+                        .HasConstraintName("fk_agentflow_edge_agentflow_agentflow_id");
 
                     b.HasOne("Agw.Domain.Entities.AgentflowNode", "SourceNode")
                         .WithMany("SourceEdges")
                         .HasForeignKey("AgentflowId", "SourceNodeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_edges_agentflow_nodes_agentflow_id_source_node_id");
+                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_source_node_id");
 
                     b.HasOne("Agw.Domain.Entities.AgentflowNode", "TargetNode")
                         .WithMany("TargetEdges")
                         .HasForeignKey("AgentflowId", "TargetNodeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_edges_agentflow_nodes_agentflow_id_target_node_id");
+                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_target_node_id");
 
                     b.Navigation("SourceNode");
 
@@ -1193,31 +1151,31 @@ namespace Agw.Infrastructure.Migrations
                     b.HasOne("Agw.Domain.Entities.Agent", null)
                         .WithMany("Agentflows")
                         .HasForeignKey("AgentId")
-                        .HasConstraintName("fk_agentflow_nodes_agents_agent_id");
+                        .HasConstraintName("fk_agentflow_node_agent_agent_id");
 
                     b.HasOne("Agw.Domain.Entities.Agentflow", null)
                         .WithMany("Nodes")
                         .HasForeignKey("AgentflowId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_nodes_agentflow_agentflow_id");
+                        .HasConstraintName("fk_agentflow_node_agentflow_agentflow_id");
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.ModelProvider", b =>
+            modelBuilder.Entity("Agw.Domain.Entities.ModelProviderRelation", b =>
                 {
                     b.HasOne("Agw.Domain.Entities.LlmModel", "Model")
                         .WithMany("Providers")
                         .HasForeignKey("ModelId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_model_providers_models_model_id");
+                        .HasConstraintName("fk_model_provider_relation_model_model_id");
 
                     b.HasOne("Agw.Domain.Entities.Provider", "Provider")
                         .WithMany("Models")
                         .HasForeignKey("ProviderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_model_providers_providers_provider_id");
+                        .HasConstraintName("fk_model_provider_relation_provider_provider_id");
 
                     b.Navigation("Model");
 
@@ -1231,7 +1189,7 @@ namespace Agw.Infrastructure.Migrations
                         .HasForeignKey("ProviderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_provider_auth_configs_providers_provider_id");
+                        .HasConstraintName("fk_provider_auth_config_provider_provider_id");
 
                     b.Navigation("Provider");
                 });
@@ -1243,7 +1201,7 @@ namespace Agw.Infrastructure.Migrations
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_project_tasks_projects_project_id");
+                        .HasConstraintName("fk_project_task_project_project_id");
 
                     b.Navigation("Project");
                 });

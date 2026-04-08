@@ -7,12 +7,12 @@ namespace Agw.Providers.Application;
 
 public class ModelProviderAppService : IModelProviderAppService
 {
-    private readonly IRepository<ModelProvider> _repository;
+    private readonly IRepository<ModelProviderRelation> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ModelProviderDomainService _domainService;
 
     public ModelProviderAppService(
-        IRepository<ModelProvider> repository,
+        IRepository<ModelProviderRelation> repository,
         IUnitOfWork unitOfWork,
         ModelProviderDomainService domainService)
     {
@@ -21,7 +21,7 @@ public class ModelProviderAppService : IModelProviderAppService
         _domainService = domainService;
     }
 
-    public Task<IReadOnlyList<ModelProvider>> ListAsync(Guid? modelId = null, Guid? providerId = null)
+    public Task<IReadOnlyList<ModelProviderRelation>> ListAsync(Guid? modelId = null, Guid? providerId = null)
     {
         if (!modelId.HasValue && !providerId.HasValue)
         {
@@ -37,15 +37,15 @@ public class ModelProviderAppService : IModelProviderAppService
             modelProvider => modelProvider.Provider!);
     }
 
-    public async Task<ModelProvider?> GetAsync(Guid id)
+    public async Task<ModelProviderRelation?> GetAsync(Guid id)
     {
         var results = await _repository.ListAsync(modelProvider => modelProvider.Id == id);
         return results.Count > 0 ? results[0] : null;
     }
 
-    public async Task<ModelProvider> CreateAsync(ModelProviderCreateRequest request, string user)
+    public async Task<ModelProviderRelation> CreateAsync(ModelProviderCreateRequest request, string user)
     {
-        var entity = new ModelProvider
+        var entity = new ModelProviderRelation
         {
             ModelId = request.ModelId,
             ProviderId = request.ProviderId,
@@ -62,7 +62,7 @@ public class ModelProviderAppService : IModelProviderAppService
         return entity;
     }
 
-    public async Task<ModelProvider?> UpdateAsync(Guid id, ModelProviderUpdateRequest request, string user)
+    public async Task<ModelProviderRelation?> UpdateAsync(Guid id, ModelProviderUpdateRequest request, string user)
     {
         var existing = await GetAsync(id);
         if (existing == null)

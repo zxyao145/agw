@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Agw.Infrastructure.Migrations
 {
     [DbContext(typeof(LlmDbContext))]
-    [Migration("20260315133621_RemoveTaskUnuseRecordField")]
-    partial class RemoveTaskUnuseRecordField
+    [Migration("20260408130144_UpdateTableName")]
+    partial class UpdateTableName
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -85,19 +85,19 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_agents");
+                        .HasName("pk_agent");
 
                     b.HasIndex("ModelProviderId")
-                        .HasDatabaseName("ix_agents_model_provider_id");
+                        .HasDatabaseName("ix_agent_model_provider_id");
 
                     b.HasIndex("Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_agents_name");
+                        .HasDatabaseName("ix_agent_name");
 
-                    b.ToTable("agents", (string)null);
+                    b.ToTable("agent", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.AgentMcpToolServer", b =>
+            modelBuilder.Entity("Agw.Domain.Entities.AgentMcpToolServerRelation", b =>
                 {
                     b.Property<Guid>("AgentId")
                         .HasColumnType("TEXT")
@@ -108,12 +108,31 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("mcp_tool_server_id");
 
                     b.HasKey("AgentId", "McpToolServerId")
-                        .HasName("pk_agent_mcp_tool_servers");
+                        .HasName("pk_agent_mcp_server_relation");
 
                     b.HasIndex("McpToolServerId")
-                        .HasDatabaseName("ix_agent_mcp_tool_servers_mcp_tool_server_id");
+                        .HasDatabaseName("ix_agent_mcp_server_relation_mcp_tool_server_id");
 
-                    b.ToTable("agent_mcp_tool_servers", (string)null);
+                    b.ToTable("agent_mcp_server_relation", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Domain.Entities.AgentSkillRelation", b =>
+                {
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_id");
+
+                    b.Property<Guid>("SkillId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("skill_id");
+
+                    b.HasKey("AgentId", "SkillId")
+                        .HasName("pk_agent_skill_relation");
+
+                    b.HasIndex("SkillId")
+                        .HasDatabaseName("ix_agent_skill_relation_skill_id");
+
+                    b.ToTable("agent_skill_relation", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.Agentflow", b =>
@@ -215,15 +234,15 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("AgentflowId", "EdgeId")
-                        .HasName("pk_agentflow_edges");
+                        .HasName("pk_agentflow_edge");
 
                     b.HasIndex("AgentflowId", "SourceNodeId")
-                        .HasDatabaseName("ix_agentflow_edges_agentflow_id_source_node_id");
+                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_source_node_id");
 
                     b.HasIndex("AgentflowId", "TargetNodeId")
-                        .HasDatabaseName("ix_agentflow_edges_agentflow_id_target_node_id");
+                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_target_node_id");
 
-                    b.ToTable("agentflow_edges", (string)null);
+                    b.ToTable("agentflow_edge", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.AgentflowNode", b =>
@@ -265,16 +284,172 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("AgentflowId", "NodeId")
-                        .HasName("pk_agentflow_nodes");
+                        .HasName("pk_agentflow_node");
 
                     b.HasIndex("AgentId")
-                        .HasDatabaseName("ix_agentflow_nodes_agent_id");
+                        .HasDatabaseName("ix_agentflow_node_agent_id");
 
                     b.HasIndex("AgentflowId", "Type", "RelateId")
                         .IsUnique()
-                        .HasDatabaseName("ix_agentflow_nodes_agentflow_id_type_relate_id");
+                        .HasDatabaseName("ix_agentflow_node_agentflow_id_type_relate_id");
 
-                    b.ToTable("agentflow_nodes", (string)null);
+                    b.ToTable("agentflow_node", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Domain.Entities.Job", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AgentId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_id");
+
+                    b.Property<int?>("AgentType")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("agent_type");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_error");
+
+                    b.Property<int>("MaxRetryCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("max_retry_count");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("NextRunTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("next_run_time");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Prompt")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("prompt");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("retry_count");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("BLOB")
+                        .HasColumnName("row_version");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TriggerType")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("trigger_type");
+
+                    b.Property<string>("TriggerValue")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("trigger_value");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTime?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_job");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_task_project");
+
+                    b.HasIndex("IsEnabled", "Status", "NextRunTime")
+                        .HasDatabaseName("ix_task_next_run_time");
+
+                    b.ToTable("job", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Domain.Entities.JobLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempt");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<DateTimeOffset?>("EndTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("end_time");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error_message");
+
+                    b.Property<DateTimeOffset>("StartTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("start_time");
+
+                    b.Property<bool>("Success")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("success");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("task_id");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTime?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_job_log");
+
+                    b.HasIndex("TaskId", "StartTime")
+                        .HasDatabaseName("ix_job_log_task_id_start_time");
+
+                    b.ToTable("job_log", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.LlmModel", b =>
@@ -320,9 +495,13 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_models");
+                        .HasName("pk_model");
 
-                    b.ToTable("models", (string)null);
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_model_name");
+
+                    b.ToTable("model", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.McpToolServer", b =>
@@ -400,12 +579,12 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("working_directory");
 
                     b.HasKey("Id")
-                        .HasName("pk_mcp_tool_servers");
+                        .HasName("pk_mcp_server");
 
-                    b.ToTable("mcp_tool_servers", (string)null);
+                    b.ToTable("mcp_server", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.ModelProvider", b =>
+            modelBuilder.Entity("Agw.Domain.Entities.ModelProviderRelation", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -457,178 +636,69 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_model_providers");
+                        .HasName("pk_model_provider_relation");
 
                     b.HasIndex("ModelId")
-                        .HasDatabaseName("ix_model_providers_model_id");
+                        .HasDatabaseName("ix_model_provider_relation_model_id");
 
                     b.HasIndex("ProviderId")
-                        .HasDatabaseName("ix_model_providers_provider_id");
+                        .HasDatabaseName("ix_model_provider_relation_provider_id");
 
-                    b.ToTable("model_providers", (string)null);
+                    b.ToTable("model_provider_relation", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.Project", b =>
+            modelBuilder.Entity("Agw.Domain.Entities.OAuthAuthorizationToken", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTime>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("description");
-
-                    b.Property<bool>("Enable")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("enable");
-
-                    b.Property<string>("ExtraSetting")
-                        .HasMaxLength(16000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("extra_setting");
-
-                    b.Property<string>("Name")
+                    b.Property<string>("AccessToken")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("name");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_by");
-
-                    b.Property<DateTime?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.Property<string>("Workspace")
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("workspace");
-
-                    b.HasKey("Id")
-                        .HasName("pk_projects");
-
-                    b.ToTable("projects", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Domain.Entities.ProjectLease", b =>
-                {
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_id");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTime>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("LockedBy")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("locked_by");
-
-                    b.Property<DateTime>("LockedUntilUtc")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("locked_until_utc");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_by");
-
-                    b.Property<DateTime?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.HasKey("ProjectId")
-                        .HasName("pk_project_leases");
-
-                    b.HasIndex("LockedUntilUtc")
-                        .HasDatabaseName("ix_project_leases_locked_until_utc");
-
-                    b.ToTable("project_leases", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Domain.Entities.ProjectTask", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("id");
-
-                    b.Property<Guid?>("AgentId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_id");
-
-                    b.Property<int>("AgentType")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("agent_type");
-
-                    b.Property<string>("ContextId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("context_id");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTime>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("description");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("error_message");
-
-                    b.Property<DateTime?>("FinishedTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("finished_time");
-
-                    b.Property<string>("ProjectId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_id");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("status");
-
-                    b.Property<string>("SystemPrompt")
                         .HasMaxLength(4000)
                         .HasColumnType("TEXT")
-                        .HasColumnName("system_prompt");
+                        .HasColumnName("access_token");
 
-                    b.Property<string>("Title")
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<DateTimeOffset?>("ExpiresAtUtc")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<string>("Provider")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("RefreshToken")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("refresh_token");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("scope");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
-                        .HasDefaultValue("Untitled")
-                        .HasColumnName("title");
+                        .HasColumnName("subject");
+
+                    b.Property<string>("TokenType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("token_type");
 
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT")
@@ -639,25 +709,18 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_project_tasks");
+                        .HasName("pk_oauth_authorization");
 
-                    b.HasAlternateKey("ContextId")
-                        .HasName("ak_project_tasks_context_id");
+                    b.HasIndex("ExpiresAtUtc")
+                        .HasDatabaseName("ix_oauth_authorization_expires_at_utc");
 
-                    b.HasIndex("AgentId")
-                        .HasDatabaseName("ix_project_tasks_agent_id");
+                    b.HasIndex("Provider")
+                        .HasDatabaseName("ix_oauth_authorization_provider");
 
-                    b.HasIndex("ContextId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_project_tasks_context_id");
+                    b.HasIndex("Provider", "Subject")
+                        .HasDatabaseName("ix_oauth_authorization_provider_subject");
 
-                    b.HasIndex("ProjectId")
-                        .HasDatabaseName("ix_project_tasks_project_id");
-
-                    b.HasIndex("ProjectId", "Status", "UpdateTime")
-                        .HasDatabaseName("ix_project_tasks_project_id_status_update_time");
-
-                    b.ToTable("project_tasks", (string)null);
+                    b.ToTable("oauth_authorization", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.Provider", b =>
@@ -688,7 +751,7 @@ namespace Agw.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
@@ -705,9 +768,13 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_providers");
+                        .HasName("pk_provider");
 
-                    b.ToTable("providers", (string)null);
+                    b.HasIndex("Name", "ProviderType")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_name_provider_type");
+
+                    b.ToTable("provider", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.ProviderAuthConfig", b =>
@@ -756,15 +823,202 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_provider_auth_configs");
+                        .HasName("pk_provider_auth_config");
 
                     b.HasIndex("ProviderId")
-                        .HasDatabaseName("ix_provider_auth_configs_provider_id");
+                        .HasDatabaseName("ix_provider_auth_config_provider_id");
 
-                    b.ToTable("provider_auth_configs", (string)null);
+                    b.ToTable("provider_auth_config", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.TaskRecord", b =>
+            modelBuilder.Entity("Agw.Domain.Entities.Skill", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentPath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("content_path");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTime?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_skill");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_skill_name");
+
+                    b.ToTable("skill", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Tasks.Entities.Project", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("Enable")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enable");
+
+                    b.Property<string>("ExtraSetting")
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("extra_setting");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("type");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTime?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.Property<string>("Workspace")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("workspace");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_project_name");
+
+                    b.ToTable("project", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Tasks.Entities.ProjectTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContextId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("context_id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTime>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error_message");
+
+                    b.Property<DateTime?>("FinishedTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("finished_time");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("job_id");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Untitled")
+                        .HasColumnName("title");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTime?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_task");
+
+                    b.HasIndex("ContextId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_project_task_context_id");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_project_task_project_id");
+
+                    b.HasIndex("ProjectId", "Status", "UpdateTime")
+                        .HasDatabaseName("ix_project_task_project_id_status_update_time");
+
+                    b.ToTable("project_task", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Tasks.Entities.TaskRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -775,12 +1029,6 @@ namespace Agw.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
                         .HasColumnName("agent_name");
-
-                    b.Property<string>("ContextId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("context_id");
 
                     b.Property<string>("ConversationPayload")
                         .HasColumnType("text")
@@ -802,61 +1050,75 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("metadata");
 
-                    b.Property<string>("SessionId")
-                        .IsRequired()
+                    b.Property<Guid>("TaskId")
                         .HasMaxLength(64)
                         .HasColumnType("TEXT")
-                        .HasColumnName("session_id");
+                        .HasColumnName("task_id");
 
                     b.Property<DateTime?>("UpdateTime")
                         .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_task_records");
+                        .HasName("pk_project_task_record");
 
-                    b.HasIndex("ContextId", "ConversationSequence")
-                        .HasDatabaseName("ix_task_records_context_id_conversation_sequence");
+                    b.HasIndex("TaskId", "ConversationSequence")
+                        .HasDatabaseName("ix_project_task_record_task_id_conversation_sequence");
 
-                    b.HasIndex("ContextId", "CreateTime")
-                        .HasDatabaseName("ix_task_records_context_id_create_time");
+                    b.HasIndex("TaskId", "CreateTime")
+                        .HasDatabaseName("ix_project_task_record_task_id_create_time");
 
-                    b.HasIndex("ContextId", "SessionId", "CreateTime")
-                        .HasDatabaseName("ix_task_records_context_id_session_id_create_time");
-
-                    b.ToTable("task_records", (string)null);
+                    b.ToTable("project_task_record", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.Agent", b =>
                 {
-                    b.HasOne("Agw.Domain.Entities.ModelProvider", "ModelProvider")
-                        .WithMany("Agents")
+                    b.HasOne("Agw.Domain.Entities.ModelProviderRelation", "ModelProvider")
+                        .WithMany()
                         .HasForeignKey("ModelProviderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .HasConstraintName("fk_agents_model_providers_model_provider_id");
+                        .HasConstraintName("fk_agent_model_provider_relation_model_provider_id");
 
                     b.Navigation("ModelProvider");
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.AgentMcpToolServer", b =>
+            modelBuilder.Entity("Agw.Domain.Entities.AgentMcpToolServerRelation", b =>
                 {
                     b.HasOne("Agw.Domain.Entities.Agent", "Agent")
                         .WithMany("AgentMcpToolServers")
                         .HasForeignKey("AgentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_mcp_tool_servers_agents_agent_id");
+                        .HasConstraintName("fk_agent_mcp_server_relation_agent_agent_id");
 
                     b.HasOne("Agw.Domain.Entities.McpToolServer", "McpToolServer")
                         .WithMany("AgentMcpToolServers")
                         .HasForeignKey("McpToolServerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_mcp_tool_servers_mcp_tool_servers_mcp_tool_server_id");
+                        .HasConstraintName("fk_agent_mcp_server_relation_mcp_server_mcp_tool_server_id");
 
                     b.Navigation("Agent");
 
                     b.Navigation("McpToolServer");
+                });
+
+            modelBuilder.Entity("Agw.Domain.Entities.AgentSkillRelation", b =>
+                {
+                    b.HasOne("Agw.Domain.Entities.Agent", "Agent")
+                        .WithMany("AgentSkillRelations")
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_agent_skill_relation_agent_agent_id");
+
+                    b.HasOne("Agw.Domain.Entities.Skill", null)
+                        .WithMany()
+                        .HasForeignKey("SkillId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_agent_skill_relation_skill_skill_id");
+
+                    b.Navigation("Agent");
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.AgentflowEdge", b =>
@@ -866,21 +1128,21 @@ namespace Agw.Infrastructure.Migrations
                         .HasForeignKey("AgentflowId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_edges_agentflow_agentflow_id");
+                        .HasConstraintName("fk_agentflow_edge_agentflow_agentflow_id");
 
                     b.HasOne("Agw.Domain.Entities.AgentflowNode", "SourceNode")
                         .WithMany("SourceEdges")
                         .HasForeignKey("AgentflowId", "SourceNodeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_edges_agentflow_nodes_agentflow_id_source_node_id");
+                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_source_node_id");
 
                     b.HasOne("Agw.Domain.Entities.AgentflowNode", "TargetNode")
                         .WithMany("TargetEdges")
                         .HasForeignKey("AgentflowId", "TargetNodeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_edges_agentflow_nodes_agentflow_id_target_node_id");
+                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_target_node_id");
 
                     b.Navigation("SourceNode");
 
@@ -892,47 +1154,35 @@ namespace Agw.Infrastructure.Migrations
                     b.HasOne("Agw.Domain.Entities.Agent", null)
                         .WithMany("Agentflows")
                         .HasForeignKey("AgentId")
-                        .HasConstraintName("fk_agentflow_nodes_agents_agent_id");
+                        .HasConstraintName("fk_agentflow_node_agent_agent_id");
 
                     b.HasOne("Agw.Domain.Entities.Agentflow", null)
                         .WithMany("Nodes")
                         .HasForeignKey("AgentflowId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_nodes_agentflow_agentflow_id");
+                        .HasConstraintName("fk_agentflow_node_agentflow_agentflow_id");
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.ModelProvider", b =>
+            modelBuilder.Entity("Agw.Domain.Entities.ModelProviderRelation", b =>
                 {
                     b.HasOne("Agw.Domain.Entities.LlmModel", "Model")
                         .WithMany("Providers")
                         .HasForeignKey("ModelId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_model_providers_models_model_id");
+                        .HasConstraintName("fk_model_provider_relation_model_model_id");
 
                     b.HasOne("Agw.Domain.Entities.Provider", "Provider")
                         .WithMany("Models")
                         .HasForeignKey("ProviderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_model_providers_providers_provider_id");
+                        .HasConstraintName("fk_model_provider_relation_provider_provider_id");
 
                     b.Navigation("Model");
 
                     b.Navigation("Provider");
-                });
-
-            modelBuilder.Entity("Agw.Domain.Entities.ProjectLease", b =>
-                {
-                    b.HasOne("Agw.Domain.Entities.Project", "Project")
-                        .WithOne()
-                        .HasForeignKey("Agw.Domain.Entities.ProjectLease", "ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_project_leases_projects_project_id");
-
-                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.ProviderAuthConfig", b =>
@@ -942,25 +1192,28 @@ namespace Agw.Infrastructure.Migrations
                         .HasForeignKey("ProviderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_provider_auth_configs_providers_provider_id");
+                        .HasConstraintName("fk_provider_auth_config_provider_provider_id");
 
                     b.Navigation("Provider");
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.TaskRecord", b =>
+            modelBuilder.Entity("Agw.Shared.Tasks.Entities.ProjectTask", b =>
                 {
-                    b.HasOne("Agw.Domain.Entities.ProjectTask", null)
-                        .WithMany("ConversationList")
-                        .HasForeignKey("ContextId")
-                        .HasPrincipalKey("ContextId")
+                    b.HasOne("Agw.Shared.Tasks.Entities.Project", "Project")
+                        .WithMany("Tasks")
+                        .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_task_records_project_tasks_context_id");
+                        .HasConstraintName("fk_project_task_project_project_id");
+
+                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("Agw.Domain.Entities.Agent", b =>
                 {
                     b.Navigation("AgentMcpToolServers");
+
+                    b.Navigation("AgentSkillRelations");
 
                     b.Navigation("Agentflows");
                 });
@@ -989,21 +1242,16 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("AgentMcpToolServers");
                 });
 
-            modelBuilder.Entity("Agw.Domain.Entities.ModelProvider", b =>
-                {
-                    b.Navigation("Agents");
-                });
-
-            modelBuilder.Entity("Agw.Domain.Entities.ProjectTask", b =>
-                {
-                    b.Navigation("ConversationList");
-                });
-
             modelBuilder.Entity("Agw.Domain.Entities.Provider", b =>
                 {
                     b.Navigation("AuthConfigs");
 
                     b.Navigation("Models");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Tasks.Entities.Project", b =>
+                {
+                    b.Navigation("Tasks");
                 });
 #pragma warning restore 612, 618
         }

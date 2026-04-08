@@ -1,11 +1,12 @@
 using Agw.Shared;
+using Agw.Shared.Abstractions;
 using Agw.Shared.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
 [Table("agentflow")]
-public class Agentflow : BaseEntity
+public class Agentflow : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;

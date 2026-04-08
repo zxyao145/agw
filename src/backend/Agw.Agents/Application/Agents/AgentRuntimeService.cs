@@ -40,9 +40,9 @@ public class AgentRuntimeService : RuntimService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;
-    private readonly IRepository<ModelProvider> _modelProviderRepository;
+    private readonly IRepository<ModelProviderRelation> _modelProviderRepository;
     private readonly IRepository<McpToolServer> _mcpToolServerRepository;
-    private readonly IRepository<AgentMcpToolServer> _agentMcpToolServerRepository;
+    private readonly IRepository<AgentMcpToolServerRelation> _agentMcpToolServerRepository;
     private readonly IRepository<Skill> _skillRepository;
     private readonly IRepository<AgentSkillRelation> _agentSkillRelationRepository;
     private readonly IRepository<LlmModel> _modelRepository;
@@ -60,9 +60,9 @@ public class AgentRuntimeService : RuntimService
 
     public AgentRuntimeService(
         IRepository<Agent> agentRepository,
-        IRepository<ModelProvider> modelProviderRepository,
+        IRepository<ModelProviderRelation> modelProviderRepository,
         IRepository<McpToolServer> mcpToolServerRepository,
-        IRepository<AgentMcpToolServer> agentMcpToolServerRepository,
+        IRepository<AgentMcpToolServerRelation> agentMcpToolServerRepository,
         IRepository<Skill> skillRepository,
         IRepository<AgentSkillRelation> agentSkillRelationRepository,
         IRepository<LlmModel> modelRepository,
@@ -922,7 +922,7 @@ public class AgentRuntimeService : RuntimService
         var existingServers = await _mcpToolServerRepository.ListAsync(x => requestedIds.Contains(x.Id));
         foreach (var serverId in existingServers.Select(x => x.Id))
         {
-            await _agentMcpToolServerRepository.AddAsync(new AgentMcpToolServer
+            await _agentMcpToolServerRepository.AddAsync(new AgentMcpToolServerRelation
             {
                 AgentId = agentId,
                 McpToolServerId = serverId
@@ -975,7 +975,7 @@ public class AgentRuntimeService : RuntimService
         var existingAgents = await _agentRepository.ListAsync(x => requestedIds.Contains(x.Id));
         foreach (var agentId in existingAgents.Select(x => x.Id))
         {
-            await _agentMcpToolServerRepository.AddAsync(new AgentMcpToolServer
+            await _agentMcpToolServerRepository.AddAsync(new AgentMcpToolServerRelation
             {
                 AgentId = agentId,
                 McpToolServerId = mcpToolServerId

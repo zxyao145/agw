@@ -1,8 +1,11 @@
 using Agw.Shared;
+using Agw.Shared.Abstractions;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
-public sealed class McpToolServer : BaseEntity
+[Table("mcp_server")]
+public sealed class McpToolServer : BaseEntity, IAggregateRoot
 {
     /// <summary>
     /// Unique identifier for the MCP server (e.g., "github-mcp").
@@ -62,5 +65,5 @@ public sealed class McpToolServer : BaseEntity
     /// </summary>
     public bool Enabled { get; set; } = true;
 
-    public ICollection<AgentMcpToolServer> AgentMcpToolServers { get; set; } = new List<AgentMcpToolServer>();
+    public ICollection<AgentMcpToolServerRelation> AgentMcpToolServers { get; set; } = new List<AgentMcpToolServerRelation>();
 }

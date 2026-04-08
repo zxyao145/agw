@@ -1,7 +1,9 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 
 namespace Agw.Shared.Tasks.Entities;
 
+[Table("project_task_record")]
 public class TaskRecord
 {
     public Guid Id { get; set; }

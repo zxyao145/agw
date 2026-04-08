@@ -1,8 +1,10 @@
 using Agw.Shared;
 using Agw.Shared.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Agw.Domain.Entities;
 
+[Table("agentflow_node")]
 public class AgentflowNode : BaseEntity
 {
     public Guid AgentflowId { get; set; }
