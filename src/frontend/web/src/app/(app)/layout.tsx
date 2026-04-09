@@ -16,7 +16,6 @@ import {
   // Gauge,
   // Waypoints,
   // Link2,
-  Hammer,
   Cable,
   MessagesSquare,
   Clock,
