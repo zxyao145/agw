@@ -1,9 +1,10 @@
-﻿using A2A;
-using A2A.AspNetCore;
-using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore.ValueGeneration.Internal;
 using System.Diagnostics;
 using System.Text.Json;
+
+using A2A;
+using A2A.AspNetCore;
+
+using Microsoft.AspNetCore.Http;
 
 namespace Agw.A2A;
 

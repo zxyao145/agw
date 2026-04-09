@@ -1,9 +1,12 @@
-﻿using Agw.Tools.Abstractions;
-using DiffPlex.DiffBuilder;
-using DiffPlex.DiffBuilder.Model;
-using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using System.Text;
+
+using Agw.Tools.Abstractions;
+
+using DiffPlex.DiffBuilder;
+using DiffPlex.DiffBuilder.Model;
+
+using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Impl.Files;
 

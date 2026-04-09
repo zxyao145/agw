@@ -155,7 +155,9 @@ export default function ProjectDetailsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Project Details</CardTitle>
-          <CardDescription>Project metadata only. Task execution controls were removed.</CardDescription>
+          <CardDescription>
+            Project metadata only. Task execution controls were removed.
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
           <div className="space-y-1">
@@ -176,9 +178,7 @@ export default function ProjectDetailsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Tasks</CardTitle>
-          <CardDescription>
-            Read-only history for chat sessions and job runs.
-          </CardDescription>
+          <CardDescription>Read-only history for chat sessions and job runs.</CardDescription>
         </CardHeader>
         <CardContent>
           {tasksQuery.isLoading ? (
@@ -207,7 +207,9 @@ export default function ProjectDetailsPage() {
                       <div className="grid gap-1 text-xs text-muted-foreground">
                         <div>
                           Source:{" "}
-                          <span className="font-mono">{task.jobId ? `job:${task.jobId}` : "chat"}</span>
+                          <span className="font-mono">
+                            {task.jobId ? `job:${task.jobId}` : "chat"}
+                          </span>
                         </div>
                         <div>
                           Task ID: <span className="font-mono">{task.id}</span>

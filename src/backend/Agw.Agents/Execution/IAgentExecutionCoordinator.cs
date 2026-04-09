@@ -1,9 +1,10 @@
+using System.Net.WebSockets;
+
 using Agw.Agents.Application;
 using Agw.Api.Contracts;
-using Agw.Shared.Enums;
-using Agw.Shared.Tasks.Entities;
+using Agw.Shared.Data.Entities.Tasks;
+
 using Microsoft.AspNetCore.Mvc;
-using System.Net.WebSockets;
 
 namespace Agw.Api.Execution;
 

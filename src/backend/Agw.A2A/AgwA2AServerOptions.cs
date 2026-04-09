@@ -1,4 +1,4 @@
-﻿namespace Agw.A2A;
+namespace Agw.A2A;
 
 public class AgwA2AServerOptions
 {

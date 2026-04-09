@@ -1,8 +1,7 @@
-using Agw.Shared;
-using Agw.Shared.Enums;
-using Agw.Shared.Models;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
+
+using Agw.Shared.Models;
 
 namespace Agw.Api.Contracts;
 
@@ -28,15 +27,13 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         SettingContent = settingContent;
     }
 
-
-    public required Guid ProjectId { get; set; }
+    public Guid ProjectId { get; set; }
 
     public Guid TaskId { get; set; }
 
     public string? Workspace { get; set; }
 
-    public required string SettingContent { get; set; }
-
+    public string SettingContent { get; set; }
 
     [JsonIgnore]
     public bool Resume { get; set; }
@@ -80,9 +77,9 @@ public class ExecCommand : AgentRunCommand
         Input = input;
     }
 
-    public required AgentRuntimeType AgentType { get; set; }
+    public AgentRuntimeType AgentType { get; set; }
 
-    public required AgwUserInput Input { get; set; }
+    public AgwUserInput Input { get; set; }
 }
 
 public class InterruptCommand : AgentRunCommand

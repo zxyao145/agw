@@ -1,6 +1,6 @@
 using Agw.Appliaction.Services.Agents;
-using Agw.Domain.Entities;
 using Agw.Manager.Api.Contracts;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Manager.Api.Controllers;

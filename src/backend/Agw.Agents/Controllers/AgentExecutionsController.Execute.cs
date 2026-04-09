@@ -1,6 +1,6 @@
 using Agw.Api.Contracts;
 using Agw.Api.Execution;
-using Agw.Shared.Enums;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Api.Controllers;
@@ -57,7 +57,6 @@ public partial class AgentExecutionsController : ControllerBase
 
         return Ok(AgentExecutionResponse.FromAgentResult(result));
     }
-
 
     private async Task<IActionResult> ExecuteAgentflowAsync(
         Guid id,

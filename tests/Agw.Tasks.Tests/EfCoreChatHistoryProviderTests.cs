@@ -1,16 +1,18 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
+using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Enums;
-using Agw.Shared.Tasks.Entities;
+
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Reflection;
-using System.Text.Json;
-using System.Runtime.CompilerServices;
 
 namespace Agw.Tasks.Tests;
 

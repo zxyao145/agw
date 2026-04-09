@@ -1,8 +1,8 @@
-using Agw.Shared.Abstractions;
-using Agw.Shared.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Agw.Shared.Tasks.Entities;
+using Agw.Shared.Enums;
+
+namespace Agw.Shared.Data.Entities.Tasks;
 
 [Table("project")]
 public class Project : BaseEntity, IAggregateRoot

@@ -1,10 +1,12 @@
 using System.Text.Json;
+
 using A2A;
+
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Enums;
-using Agw.Shared.Tasks;
-using Agw.Shared.Tasks.Entities;
+
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,5 +1,5 @@
-using Agw.Domain.Entities;
 using Agw.Domain.Services.Skills;
+using Agw.Shared.Data.Entities.Skills;
 
 namespace Agw.Skills.Tests;
 

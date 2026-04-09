@@ -1,7 +1,8 @@
 using Agw.Jobs.Contracts;
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Domain.Enums;
-using Agw.Shared.Abstractions.Repositories;
+using Agw.Shared.Data.Repositories;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Jobs.Application.Services;

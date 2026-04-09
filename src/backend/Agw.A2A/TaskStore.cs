@@ -1,11 +1,11 @@
 using System.Globalization;
 using System.Text.Json;
+
 using A2A;
+
 using Agw.Shared;
-using Agw.Shared.Abstractions.Repositories;
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Enums;
-using Agw.Shared.Tasks;
-using Agw.Shared.Tasks.Entities;
 
 namespace Agw.A2A;
 

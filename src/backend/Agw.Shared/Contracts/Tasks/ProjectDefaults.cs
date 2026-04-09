@@ -1,8 +1,4 @@
-using Agw.Shared.Enums;
-using Agw.Shared.Tasks.Entities;
-using Agw.Shared.Utils;
-
-namespace Agw.Shared.Tasks;
+namespace Agw.Shared.Contracts.Tasks;
 
 public static class ProjectDefaults
 {
@@ -16,8 +12,6 @@ public static class ProjectDefaults
 
     public static Guid GetDefaultProjectIdentifier(Guid? projectId) =>
         projectId == null ? DefaultBuiltInId : projectId.Value;
-
-
 
     public static string GetDefaultProjectIdentifier(string? projectId) =>
         string.IsNullOrWhiteSpace(projectId) ? DefaultBuiltInId.ToString("D") : projectId.Trim();

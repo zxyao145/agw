@@ -1,4 +1,4 @@
-namespace Agw.Shared.Contracts;
+namespace Agw.Shared.Contracts.Tasks;
 
 public class FileListResponse
 {

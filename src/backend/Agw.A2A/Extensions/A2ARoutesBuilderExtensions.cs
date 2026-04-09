@@ -1,13 +1,11 @@
-﻿using A2A;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Agw.A2A.Extensions;
 

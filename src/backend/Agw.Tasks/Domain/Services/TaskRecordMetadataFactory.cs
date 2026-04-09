@@ -1,5 +1,6 @@
-using Microsoft.Extensions.AI;
 using System.Text.Json;
+
+using Microsoft.Extensions.AI;
 
 namespace Agw.Tasks.Domain.Services;
 

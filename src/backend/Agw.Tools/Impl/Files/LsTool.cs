@@ -1,6 +1,8 @@
-﻿using Agw.Tools.Abstractions;
-using Microsoft.Extensions.AI;
 using System.ComponentModel;
+
+using Agw.Tools.Abstractions;
+
+using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Impl.Files;
 

@@ -1,12 +1,6 @@
-﻿using Agw.Agents.Domain.Entities;
-using Agw.Shared.Enums;
-using Agw.Shared.Models;
-using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
+
 using ClaudeCodeSdk.MAF;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Agw.Agents.ExternalAgents;
 
@@ -19,8 +13,6 @@ public class AgentNames
     public static readonly Guid ClaudeCodeId = Guid.Parse("11111111-1111-1111-2222-000000000001");
     public static readonly Guid CodexId = Guid.Parse("11111111-1111-1111-2222-000000000002");
     public static readonly Guid GithubCopilotId = Guid.Parse("11111111-1111-1111-2222-000000000003");
-
-
 
     public static IReadOnlyList<Agent> ExternalAgentNames { get; } =
         [

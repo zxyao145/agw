@@ -1,5 +1,6 @@
-using Agw.Shared.Contracts;
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Services;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 

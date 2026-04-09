@@ -1,4 +1,4 @@
-﻿namespace Agw.Shared.Contracts;
+namespace Agw.Shared.Contracts.Providers;
 
 public class ModelProviderApiKeyDto
 {

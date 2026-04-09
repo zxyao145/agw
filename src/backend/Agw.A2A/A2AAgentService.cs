@@ -1,9 +1,6 @@
 using A2A;
+
 using Agw.Appliaction.Services.Agents;
-using Agw.Domain.Entities;
-using Agw.Shared.Abstractions.Repositories;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.Options;
 
 namespace Agw.A2A;
 

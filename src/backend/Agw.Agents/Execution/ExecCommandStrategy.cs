@@ -1,8 +1,8 @@
+using System.Net.WebSockets;
+
 using Agw.Agents.Application;
 using Agw.Api.Contracts;
-using Agw.Shared.Enums;
-using Agw.Shared.Tasks;
-using System.Net.WebSockets;
+using Agw.Shared.Contracts.Tasks;
 
 namespace Agw.Api.Execution;
 

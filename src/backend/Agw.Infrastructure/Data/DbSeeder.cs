@@ -1,16 +1,16 @@
 using Agw.Agents.Domain.Entities;
 using Agw.Agents.ExternalAgents;
 using Agw.Providers.Domain.Entities;
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Enums;
-using Agw.Shared.Tasks;
-using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
-using ClaudeCodeSdk;
+
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using System.Numerics;
 
 namespace Agw.Infrastructure.Data;
 

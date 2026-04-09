@@ -1,5 +1,3 @@
-using Agw.Shared.Enums;
-
 namespace Agw.Api.Contracts;
 
 public record AgentExecutionRequest(

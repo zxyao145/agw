@@ -1,5 +1,6 @@
-using Agw.Shared;
 using System.ComponentModel.DataAnnotations.Schema;
+
+using Agw.Shared.Data;
 
 namespace Agw.Jobs.Domain.Entities;
 

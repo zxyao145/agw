@@ -1,4 +1,5 @@
 using Agw.Tasks.Domain.Services;
+
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tasks.Tests;

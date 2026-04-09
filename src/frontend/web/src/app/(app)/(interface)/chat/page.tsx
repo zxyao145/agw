@@ -317,8 +317,8 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
               />
               <p className="text-xs text-muted-foreground">
                 Leave blank to fall back to the project extra setting. Saved per project in local
-                storage and merged into{" "}
-                <code>SettingCommand.settingContent</code> at execution time.
+                storage and merged into <code>SettingCommand.settingContent</code> at execution
+                time.
               </p>
             </div>
           </div>

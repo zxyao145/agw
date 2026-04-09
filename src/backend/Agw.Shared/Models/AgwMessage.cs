@@ -1,9 +1,8 @@
-using Microsoft.Extensions.AI;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Agw.Shared.Models;
+using Microsoft.Extensions.AI;
 
+namespace Agw.Shared.Models;
 
 /// <summary>
 /// AI message with role, author, and content blocks.

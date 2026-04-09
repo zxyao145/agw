@@ -1,14 +1,14 @@
 using A2A;
+
 using Agw.Api.Contracts;
 using Agw.Appliaction.Services.Agents;
-using Agw.Domain.Entities;
 using Agw.Shared;
-using Agw.Shared.Abstractions.Repositories;
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Models;
-using Agw.Shared.Tasks;
-using Agw.Shared.Tasks.Entities;
+
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.A2A;

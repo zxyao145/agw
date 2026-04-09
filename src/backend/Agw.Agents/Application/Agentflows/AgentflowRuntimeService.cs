@@ -1,14 +1,17 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+
 using Agw.Agents.Application;
 using Agw.Appliaction.Services.Agents;
-using Agw.Shared.Abstractions.Repositories;
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Repositories;
 using Agw.Shared.Models;
-using Agw.Shared.Tasks;
+
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
+
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 using MsAgentWorkflowBuilder = Microsoft.Agents.AI.Workflows.AgentWorkflowBuilder;
 

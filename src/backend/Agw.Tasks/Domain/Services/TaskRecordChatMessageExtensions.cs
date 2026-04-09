@@ -1,6 +1,8 @@
-using Agw.Shared.Tasks.Entities;
-using Microsoft.Extensions.AI;
 using System.Text.Json;
+
+using Agw.Shared.Data.Entities.Tasks;
+
+using Microsoft.Extensions.AI;
 
 namespace Agw.Tasks.Domain.Services;
 

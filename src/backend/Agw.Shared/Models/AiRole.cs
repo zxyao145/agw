@@ -1,13 +1,12 @@
-﻿using Microsoft.Extensions.AI;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Diagnostics.Metrics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Agw.Shared.Models;
+using Microsoft.Extensions.AI;
 
+namespace Agw.Shared.Models;
 
 /// <summary>
 /// copy from ChatRole
@@ -90,12 +89,12 @@ public readonly struct AiRole : IEquatable<AiRole>
         }
     }
 
-
     // operator implicit
     public static implicit operator AiRole(string value)
     {
         return new AiRole(value);
     }
+
     public static implicit operator string(AiRole aiRole)
     {
         return aiRole.Value;

@@ -1,33 +1,37 @@
+using System.ClientModel;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 using Agw.Agents.Application;
-using Agw.Agents.Domain.Entities;
 using Agw.Agents.ExternalAgents;
 using Agw.Api.Contracts;
-using Agw.Domain.Entities;
 using Agw.Domain.Services;
 using Agw.Providers.Domain.Entities;
-using Agw.Shared;
-using Agw.Shared.Abstractions.Repositories;
-using Agw.Shared.Enums;
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Repositories;
 using Agw.Shared.Models;
-using Agw.Shared.Tasks;
-using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
+
 using Anthropic;
+
 using ClaudeCodeSdk.MAF;
+
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
+
 using ModelContextProtocol.Client;
+
 using OpenAI;
 using OpenAI.Chat;
-using System.ClientModel;
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using System.Text.Json.Nodes;
+
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Appliaction.Services.Agents;
@@ -47,7 +51,6 @@ public sealed class CreateAiAgentRequest
     public string? ExtraOverride { get; init; }
 
     public string? Workspace { get; init; }
-
 
     public bool Resume { get; init; }
 
@@ -345,7 +348,6 @@ public class AgentRuntimeService : RuntimService
             return null;
         }
 
-
         Guid projectId = task.ProjectId;
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, settings.SettingContent);
@@ -461,7 +463,6 @@ public class AgentRuntimeService : RuntimService
         return await ExecuteAsync(taskId, input, projectId, contextId, agent);
     }
 
-
     private async Task<AgentExecutionResult?> ExecuteAsync(
      Guid? taskId,
      List<ChatMessage> chatMsg,
@@ -537,7 +538,6 @@ public class AgentRuntimeService : RuntimService
             }
         }
     }
-
 
     private async Task<AIAgent?> CreateDefinitionAgent(Agent agentDefinition, CancellationToken cancellationToken)
     {
@@ -806,7 +806,6 @@ public class AgentRuntimeService : RuntimService
         return new HttpClientTransport(options);
     }
 
-
     private async Task<AgentSession> GetOrCreateThreadAsync(
         Agent agent,
         AIAgent aiAgent,
@@ -845,7 +844,6 @@ public class AgentRuntimeService : RuntimService
         var serialized = JsonSerializer.Serialize(ele);
         await _cache.SetAsync(taskId, serialized, cancellationToken: cancellationToken);
     }
-
 
     private string? MergeExtraSettings(string? agentExtra, string? projectExtraSetting, string? requestExtraSetting)
     {

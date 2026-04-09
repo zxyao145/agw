@@ -1,11 +1,13 @@
+using System.Collections.Concurrent;
+using System.Text.Json;
+
 using A2A;
+
 using Agw.Shared;
 using Agw.Shared.Models;
+
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
-using System.Collections.Concurrent;
-using System.Runtime.InteropServices;
-using System.Text.Json;
 
 namespace Agw.A2A;
 

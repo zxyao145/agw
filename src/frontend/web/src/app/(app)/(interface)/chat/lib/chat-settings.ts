@@ -28,7 +28,9 @@ function getJsonObjectSignature(value?: string | null): string | null {
 }
 
 export function formatParsedJsonObjectText(value: Record<string, unknown>): string {
-  return Object.keys(value).length === 0 ? EMPTY_EXTRA_SETTING_TEXT : JSON.stringify(value, null, 2);
+  return Object.keys(value).length === 0
+    ? EMPTY_EXTRA_SETTING_TEXT
+    : JSON.stringify(value, null, 2);
 }
 
 export function formatJsonObjectText(value?: string | null): string {

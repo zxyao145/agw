@@ -1,7 +1,8 @@
 using Agw.Domain.Services;
-using Agw.Shared.Tasks;
+using Agw.Shared.Contracts.Tasks;
 using Agw.Tasks.Application;
 using Agw.Tasks.Domain.Services;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

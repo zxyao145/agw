@@ -1,8 +1,9 @@
-﻿using Agw.Shared.Abstractions.Repositories;
-using Agw.Shared.Tasks;
-using Agw.Shared.Tasks.Entities;
-using Agw.Tasks.Domain.Services;
 using System.Linq.Expressions;
+
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Repositories;
+using Agw.Tasks.Domain.Services;
 
 namespace Agw.Tasks.Application;
 

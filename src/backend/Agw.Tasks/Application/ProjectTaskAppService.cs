@@ -1,13 +1,15 @@
+using System.Linq.Expressions;
+
 using Agw.Shared;
-using Agw.Shared.Abstractions.Repositories;
-using Agw.Shared.Contracts;
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Repositories;
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
-using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
+
 using Microsoft.Extensions.AI;
-using System.Linq.Expressions;
 
 namespace Agw.Tasks.Application;
 
@@ -189,7 +191,6 @@ public class ProjectTaskAppService
         await _unitOfWork.SaveChangesAsync();
         return ApplicationResult.Success();
     }
-
 
     public async Task<ApplicationResult> DeleteAsync(Guid projectId, Guid taskId)
     {

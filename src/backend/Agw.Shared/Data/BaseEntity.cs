@@ -1,4 +1,4 @@
-namespace Agw.Shared;
+namespace Agw.Shared.Data;
 
 public abstract class BaseEntity
 {

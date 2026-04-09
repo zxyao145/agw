@@ -1,8 +1,6 @@
-using Agw.Shared;
-using Agw.Shared.Abstractions;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Agw.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Skills;
 
 [Table("skill")]
 public class Skill : BaseEntity, IAggregateRoot

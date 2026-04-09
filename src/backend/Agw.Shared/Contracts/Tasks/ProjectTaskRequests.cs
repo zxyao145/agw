@@ -1,7 +1,7 @@
 using Agw.Shared.Enums;
 using Agw.Shared.Models;
 
-namespace Agw.Shared.Contracts;
+namespace Agw.Shared.Contracts.Tasks;
 
 public record ProjectTaskCreateRequest(
     Guid? JobId,

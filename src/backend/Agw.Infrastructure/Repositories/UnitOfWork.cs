@@ -1,4 +1,5 @@
-using Agw.Shared.Abstractions.Repositories;
+using Agw.Shared.Data.Repositories;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Repositories;

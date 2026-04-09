@@ -1,18 +1,19 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+
 using Agw.Shared;
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Enums;
-using Agw.Shared.Tasks;
-using Agw.Shared.Tasks.Entities;
 using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
+
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 
 namespace Agw.Domain.Services;
 
@@ -196,7 +197,6 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         _state.SaveState(context.Session, state);
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
-
 
     private static Task<Project?> ResolveProjectAsync(DbContext dbContext, string projectId, CancellationToken cancellationToken)
     {

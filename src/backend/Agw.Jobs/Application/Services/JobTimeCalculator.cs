@@ -1,5 +1,6 @@
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Domain.Enums;
+
 using Cronos;
 
 namespace Agw.Jobs.Application.Services;
@@ -17,6 +18,7 @@ public class JobTimeCalculator : IJobTimeCalculator
                 }
 
                 return onceRunTime > now ? onceRunTime : null;
+
             case TriggerType.Interval:
                 if (!TimeSpan.TryParse(task.TriggerValue, out var interval) || interval <= TimeSpan.Zero)
                 {
@@ -24,9 +26,11 @@ public class JobTimeCalculator : IJobTimeCalculator
                 }
 
                 return now.Add(interval);
+
             case TriggerType.Cron:
                 var cron = CronExpression.Parse(task.TriggerValue, CronFormat.Standard);
                 return cron.GetNextOccurrence(now, TimeZoneInfo.Utc);
+
             default:
                 throw new NotSupportedException($"Unsupported trigger type: {task.TriggerType}");
         }

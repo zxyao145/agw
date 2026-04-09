@@ -1,6 +1,7 @@
-using Agw.Domain.Entities;
+using Agw.Shared.Data.Entities.Skills;
 using Agw.Skills.Application;
 using Agw.Skills.Contracts.Manager;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Skills.Controllers;

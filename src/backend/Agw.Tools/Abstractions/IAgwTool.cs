@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.AI;
+using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Abstractions;
 

@@ -1,10 +1,11 @@
-﻿using Microsoft.EntityFrameworkCore.Metadata;
+using System.Diagnostics.CodeAnalysis;
+
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Internal;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update.Internal;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Agw.Infrastructure.Data;
 

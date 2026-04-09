@@ -1,5 +1,3 @@
-using Agw.Shared;
-
 namespace Agw.Shared.Models;
 
 public class AgwUserInput

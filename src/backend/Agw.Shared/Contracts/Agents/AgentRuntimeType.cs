@@ -1,7 +1,5 @@
 namespace Agw.Shared.Enums;
 
-
-
 /// <summary>
 /// Agent Runtime Type
 /// </summary>

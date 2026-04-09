@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Agw.Shared.Utils;
@@ -52,6 +52,5 @@ public class ThrowUtil
     internal static void ArgumentNullException(string message, string paramName)
     {
         throw new ArgumentNullException(message, paramName);
-
     }
 }

@@ -1,8 +1,8 @@
-using Agw.Shared;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Agw.Providers.Domain.Entities;
+using Agw.Shared.Data;
 
+namespace Agw.Providers.Domain.Entities;
 
 [Table("provider_auth_config")]
 public class ProviderAuthConfig : BaseEntity

@@ -26,7 +26,12 @@ export function InputArea({
   };
 
   return (
-    <UserInput ref={userInputRef} isExecuting={isExecuting} onExecute={onExecute} onStop={onInterrupt}>
+    <UserInput
+      ref={userInputRef}
+      isExecuting={isExecuting}
+      onExecute={onExecute}
+      onStop={onInterrupt}
+    >
       <UserInput.TopRight>
         <QuickTextDialog onCommandSelect={handleQuickCommand} />
         <Separator orientation="vertical" />

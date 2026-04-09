@@ -1,11 +1,11 @@
-using Agw.Agents.Application;
+using System.Net.WebSockets;
+
 using Agw.Api.Contracts;
 using Agw.Api.Execution;
-using Agw.Shared.Enums;
+using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Models;
-using Agw.Shared.Tasks.Entities;
+
 using Microsoft.AspNetCore.Mvc;
-using System.Net.WebSockets;
 
 namespace Agw.Agents.Tests;
 
@@ -224,11 +224,19 @@ public class ExecutionCommandStrategiesTests
         public override string? CloseStatusDescription => null;
         public override WebSocketState State => WebSocketState.Open;
         public override string SubProtocol => string.Empty;
-        public override void Abort() { }
+
+        public override void Abort()
+        { }
+
         public override Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) => Task.CompletedTask;
+
         public override Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) => Task.CompletedTask;
-        public override void Dispose() { }
+
+        public override void Dispose()
+        { }
+
         public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken) => throw new NotSupportedException();
+
         public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

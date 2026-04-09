@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 
-namespace Agw.Shared.Tasks.Entities;
+namespace Agw.Shared.Data.Entities.Tasks;
 
 [Table("project_task_record")]
 public class TaskRecord

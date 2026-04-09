@@ -1,7 +1,7 @@
-using Agw.Shared;
-using Agw.Shared.Abstractions.Repositories;
-using Agw.Shared.Tasks;
-using Agw.Shared.Tasks.Entities;
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Repositories;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Tasks.Application;

@@ -1,13 +1,11 @@
-using Agw.Shared;
-using Agw.Shared.Enums;
+using System.Runtime.CompilerServices;
+
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Models;
-using Agw.Shared.Tasks;
-using Agw.Shared.Utils;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using System.Net.WebSockets;
-using System.Runtime.CompilerServices;
 
 namespace Agw.Agents.Application;
 

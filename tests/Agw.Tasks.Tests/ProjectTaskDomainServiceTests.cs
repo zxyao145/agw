@@ -1,10 +1,12 @@
-using Agw.Shared;
-using Agw.Shared.Enums;
-using Agw.Shared.Tasks.Entities;
-using Agw.Tasks.Domain.Services;
-using Microsoft.Extensions.AI;
 using System.Reflection;
 using System.Text.Json;
+
+using Agw.Shared;
+using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Enums;
+using Agw.Tasks.Domain.Services;
+
+using Microsoft.Extensions.AI;
 
 namespace Agw.Tasks.Tests;
 

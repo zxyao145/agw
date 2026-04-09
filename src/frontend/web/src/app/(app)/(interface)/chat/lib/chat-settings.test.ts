@@ -9,7 +9,10 @@ import {
 } from "./chat-settings.ts";
 
 test("chat settings dialog content uses a capped flex layout", () => {
-  assert.equal(CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME, "max-h-[90vh] flex flex-col overflow-hidden");
+  assert.equal(
+    CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME,
+    "max-h-[90vh] flex flex-col overflow-hidden",
+  );
 });
 
 test("chat settings dialog body is the dedicated scroll region", () => {
@@ -25,10 +28,13 @@ test("normalizeExtraSettingTextForStorage returns undefined for blank draft text
 
 test("normalizeExtraSettingTextForStorage returns undefined when draft matches project JSON", () => {
   assert.equal(
-    normalizeExtraSettingTextForStorage('{ "model": "gpt-5.4", "workspace": "/repo" }', `{
+    normalizeExtraSettingTextForStorage(
+      '{ "model": "gpt-5.4", "workspace": "/repo" }',
+      `{
   "workspace": "/repo",
   "model": "gpt-5.4"
-}`),
+}`,
+    ),
     undefined,
   );
 });
@@ -42,10 +48,13 @@ test("normalizeExtraSettingTextForStorage keeps an explicit empty object overrid
 
 test("normalizeExtraSettingTextForStorage keeps project-different settings", () => {
   assert.equal(
-    normalizeExtraSettingTextForStorage('{ "workspace": "/repo", "model": "gpt-5.4-mini" }', `{
+    normalizeExtraSettingTextForStorage(
+      '{ "workspace": "/repo", "model": "gpt-5.4-mini" }',
+      `{
   "workspace": "/repo",
   "model": "gpt-5.4"
-}`),
+}`,
+    ),
     '{\n  "workspace": "/repo",\n  "model": "gpt-5.4-mini"\n}',
   );
 });

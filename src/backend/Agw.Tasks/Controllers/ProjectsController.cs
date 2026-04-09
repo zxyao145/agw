@@ -1,6 +1,6 @@
-using Agw.Shared.Contracts;
-using Agw.Shared.Tasks;
-using Agw.Shared.Tasks.Entities;
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Tasks;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Tasks.Controllers;

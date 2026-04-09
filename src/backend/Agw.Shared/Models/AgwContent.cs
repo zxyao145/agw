@@ -1,15 +1,16 @@
-using Agw.Shared.Utils;
-using Microsoft.Extensions.AI;
 using System.Buffers;
 using System.Buffers.Text;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
+
+using Agw.Shared.Utils;
+
+using Microsoft.Extensions.AI;
 
 namespace Agw.Shared.Models;
 
@@ -97,7 +98,6 @@ public class AgwUriContent : AgwContent
         }
     }
 
-
     public string MediaType
     {
         get
@@ -126,10 +126,9 @@ public class AgwUriContent : AgwContent
         _uri = ThrowUtil.IfNull(uri, "uri");
         _mediaType = AgwDataUriParser.ThrowIfInvalidMediaType(mediaType, "mediaType");
     }
-
 }
 
-class AgwDataUriParser
+internal class AgwDataUriParser
 {
     public static string Scheme => "data:";
 
@@ -188,8 +187,6 @@ class AgwDataUriParser
         mediaType ??= mediaTypeSpan.ToString();
         return MediaTypeHeaderValue.TryParse(mediaType, out _);
     }
-
-
 
     public sealed class AgwDataUri(ReadOnlyMemory<char> data, bool isBase64, string? mediaType)
     {
@@ -270,7 +267,6 @@ public class AgwDataContent : AgwContent
 {
     public override string Kind => AiMessageContentType.DataContent;
 
-
     private readonly AgwDataUriParser.AgwDataUri? _dataUri;
 
     private string? _uri;
@@ -279,7 +275,6 @@ public class AgwDataContent : AgwContent
     // ummary:
     //     The data, lazily initialized if the data is provided in a data URI.
     private ReadOnlyMemory<byte>? _data;
-
 
     private const string DefaultMediaType = "application/octet-stream";
 
@@ -316,9 +311,7 @@ public class AgwDataContent : AgwContent
     [JsonIgnore]
     public string MediaType { get; }
 
-
     public string? Name { get; set; }
-
 
     [JsonIgnore]
     public ReadOnlyMemory<byte> Data

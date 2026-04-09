@@ -1,10 +1,12 @@
+using System.Collections.Concurrent;
+
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Dtos;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Collections.Concurrent;
 
 namespace Agw.Jobs.HostedService;
 

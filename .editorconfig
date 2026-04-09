@@ -2,8 +2,9 @@ root = true
 
 # All files
 [*]
+charset = utf-8
 indent_style = space
-csharp_using_directive_placement = outside_namespace:silent
+csharp_using_directive_placement = outside_namespace:warning
 csharp_prefer_simple_using_statement = true:suggestion
 csharp_prefer_braces = true:silent
 csharp_style_namespace_declarations = file_scoped:silent
@@ -20,6 +21,7 @@ csharp_style_expression_bodied_indexers = true:silent
 csharp_style_expression_bodied_accessors = true:silent
 csharp_style_expression_bodied_lambdas = true:silent
 csharp_style_expression_bodied_local_functions = false:silent
+csharp_style_allow_blank_lines_between_consecutive_braces_experimental = true:silent
 
 # Xml files
 [*.xml]
@@ -81,3 +83,131 @@ dotnet_style_prefer_inferred_tuple_names = true:suggestion
 dotnet_style_prefer_inferred_anonymous_type_member_names = true:suggestion
 dotnet_style_namespace_match_folder = true:suggestion
 insert_final_newline = true
+
+
+##########
+# using 规则
+##########
+
+# IDE0005：未使用的 using（using directive is unnecessary）
+# 设为 warning，这样 dotnet format / IDE 才会自动清理
+dotnet_diagnostic.IDE0005.severity = warning
+
+# using 放在 namespace 外部（文件顶部，而不是 namespace {} 内）
+csharp_using_directive_placement = outside_namespace:warning
+
+# System.* 命名空间的 using 排在最前面
+# 例如：using System; 会在 using MyApp; 之前
+dotnet_sort_system_directives_first = true
+
+# using 分组（System 一组，其他一组，中间空一行）
+# 提升可读性（大项目推荐开启）
+dotnet_separate_import_directive_groups = true
+
+
+##########
+# var 使用规则
+##########
+
+# 内置类型（int/string 等）不使用 var（例如：int x = 1;）
+csharp_style_var_for_built_in_types = false:suggestion
+
+# 类型明显时使用 var（例如：var x = new MyClass();）
+csharp_style_var_when_type_is_apparent = true:suggestion
+
+# 其他情况不使用 var（避免可读性下降）
+csharp_style_var_elsewhere = false:suggestion
+
+
+##########
+# 表达式体成员（=> 写法）
+##########
+
+# 方法不使用表达式体（保持传统 {} 风格）
+csharp_style_expression_bodied_methods = false:silent
+
+# 构造函数不使用表达式体
+csharp_style_expression_bodied_constructors = false:silent
+
+# 运算符重载不使用表达式体
+csharp_style_expression_bodied_operators = false:silent
+
+# 属性：单行时允许使用表达式体（推荐）
+csharp_style_expression_bodied_properties = when_on_single_line:suggestion
+
+# 索引器：单行时允许表达式体
+csharp_style_expression_bodied_indexers = when_on_single_line:suggestion
+
+# getter/setter：单行时允许表达式体
+csharp_style_expression_bodied_accessors = when_on_single_line:suggestion
+
+
+##########
+# null / 初始化优化
+##########
+
+# 推荐使用 ?? 运算符（例如：x ?? y）
+dotnet_style_coalesce_expression = true:suggestion
+
+# 推荐使用 ?. 空值传播（例如：obj?.Method()）
+dotnet_style_null_propagation = true:suggestion
+
+# 推荐使用对象初始化器（例如：new A { X = 1 }）
+dotnet_style_object_initializer = true:suggestion
+
+# 推荐使用集合初始化器（例如：new List<int> { 1, 2 }）
+dotnet_style_collection_initializer = true:suggestion
+
+
+##########
+# this. 使用规则
+##########
+
+# 字段访问时不强制使用 this._field
+dotnet_style_qualification_for_field = false:silent
+
+# 属性访问时不强制 this.Property
+dotnet_style_qualification_for_property = false:silent
+
+# 方法调用不强制 this.Method()
+dotnet_style_qualification_for_method = false:silent
+
+# 事件访问不强制 this.Event
+dotnet_style_qualification_for_event = false:silent
+
+
+##########
+# 可见性（public/private 等）
+##########
+
+# 非接口成员必须显式声明访问修饰符（public/private 等）
+# 避免隐式 internal 导致歧义
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+
+
+##########
+# 命名风格（简版）
+##########
+
+# 规则名称：私有字段必须使用 _camelCase
+dotnet_naming_rule.private_fields_should_be_camel_case_with_underscore.severity = suggestion
+
+# 应用对象：private 字段
+dotnet_naming_rule.private_fields_should_be_camel_case_with_underscore.symbols = private_fields
+
+# 使用的命名风格：camel_case_with_underscore
+dotnet_naming_rule.private_fields_should_be_camel_case_with_underscore.style = camel_case_with_underscore
+
+
+# 定义 private_fields：仅匹配字段
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+
+# 仅匹配 private 访问级别
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+
+# 命名风格定义：必须以下划线开头（_）
+dotnet_naming_style.camel_case_with_underscore.required_prefix = _
+
+# 使用 camelCase（例如：_myField）
+dotnet_naming_style.camel_case_with_underscore.capitalization = camel_case

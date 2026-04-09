@@ -1,6 +1,6 @@
-using Agw.Shared.Tasks.Entities;
+using Agw.Shared.Data.Entities.Tasks;
 
-namespace Agw.Shared.Tasks;
+namespace Agw.Shared.Contracts.Tasks;
 
 public interface ITaskAppService
 {

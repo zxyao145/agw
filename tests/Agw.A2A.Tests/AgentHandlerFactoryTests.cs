@@ -1,14 +1,13 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
+
 using A2A;
-using Agw.A2A;
+
 using Agw.Appliaction.Services.Agents;
-using Agw.Domain.Entities;
-using Agw.Shared.Abstractions.Repositories;
 using Agw.Shared.Models;
+
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Options;
 
 namespace Agw.A2A.Tests;
 

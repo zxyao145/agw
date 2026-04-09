@@ -1,16 +1,18 @@
-using Agw.Agents.Application;
-using Microsoft.AspNetCore.Mvc;
 using System.Net.WebSockets;
+
+using Agw.Agents.Application;
+
+using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Api.Execution;
 
 public sealed class ExecutionCommandContext
 {
-    public required Guid AgentId { get; init; }
+    public Guid AgentId { get; init; }
 
     public required ExecutionConnectionState ConnectionState { get; init; }
 
-    public required CancellationToken CancellationToken { get; init; }
+    public CancellationToken CancellationToken { get; init; }
 
     public required string CurrentUser { get; init; }
 
@@ -22,13 +24,13 @@ public sealed class ExecutionCommandContext
 
     public AgentExecSession? AgentSession { get; set; }
 
-    public required Func<string, Task> SendErrorAsync { get; init; }
+    public Func<string, Task>? SendErrorAsync { get; init; }
 
-    public required Func<string, Task> SendSystemMessageAsync { get; init; }
+    public Func<string, Task>? SendSystemMessageAsync { get; init; }
 
-    public required Func<WebSocketCloseStatus, string, Task> CloseConnectionAsync { get; init; }
+    public Func<WebSocketCloseStatus, string, Task>? CloseConnectionAsync { get; init; }
 
-    public required Func<IActionResult, string> ExtractReason { get; init; }
+    public Func<IActionResult, string>? ExtractReason { get; init; }
 
-    public required Action<Task> ObserveExecution { get; init; }
+    public Action<Task>? ObserveExecution { get; init; }
 }

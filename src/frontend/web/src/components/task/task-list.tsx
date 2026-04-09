@@ -11,12 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  deleteTaskById,
-  deleteAllTasks,
-  getAllTasks,
-  type TaskSummary,
-} from "@/api/task-client";
+import { deleteTaskById, deleteAllTasks, getAllTasks, type TaskSummary } from "@/api/task-client";
 import { cn } from "@/lib/utils";
 
 interface TaskHistoryListProps {

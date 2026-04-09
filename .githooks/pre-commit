@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+# 有格式问题 提交失败，开发者先手动执行：dotnet format
+set -e
+
+echo "Running dotnet format..."
+dotnet format Agw.slnf --verify-no-changes 
+echo "Backend checks passed."
+
+
+FRONTEND_DIR="src/frontend/web"
+
+# 检查前端目录是否存在
+if [ -d "$FRONTEND_DIR" ]; then
+  echo "🎨 Running frontend checks in $FRONTEND_DIR..."
+
+  cd "$FRONTEND_DIR"
+
+  # 检查 pnpm 是否存在
+  if ! command -v pnpm >/dev/null 2>&1; then
+    echo "❌ pnpm not found. Please install pnpm."
+    exit 1
+  fi
+
+  echo "🔎 Lint (oxlint)..."
+  pnpm exec oxlint ./src
+
+  echo "✨ Format (oxfmt)..."
+  pnpm exec oxfmt --check ./src
+
+  cd - >/dev/null
+else
+  echo "ℹ️ Frontend directory not found, skipping frontend checks."
+fi
+
+echo "✅ All checks passed."

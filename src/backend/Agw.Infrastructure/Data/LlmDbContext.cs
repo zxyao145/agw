@@ -1,11 +1,13 @@
+using System.Text.Json;
+
 using Agw.Agents.Domain.Entities;
-using Agw.Domain.Entities;
 using Agw.Jobs.Domain.Entities;
 using Agw.Providers.Domain.Entities;
-using Agw.Shared.Tasks.Entities;
+using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tasks;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
-using System.Text.Json;
 
 namespace Agw.Infrastructure.Data;
 
@@ -30,10 +32,8 @@ public class LlmDbContext : DbContext
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ProviderAuthConfig> ProviderAuthConfigs => Set<ProviderAuthConfig>();
 
-
     public DbSet<LlmModel> Models => Set<LlmModel>();
     public DbSet<ModelProviderRelation> ModelProviders => Set<ModelProviderRelation>();
-
 
     public DbSet<Agent> Agents => Set<Agent>();
 
@@ -43,11 +43,9 @@ public class LlmDbContext : DbContext
     public DbSet<McpServer> McpToolServers => Set<McpServer>();
     public DbSet<AgentMcpServerRelation> AgentMcpToolServers => Set<AgentMcpServerRelation>();
 
-
     public DbSet<Agentflow> Agentflows => Set<Agentflow>();
     public DbSet<AgentflowNode> AgentflowNodes => Set<AgentflowNode>();
     public DbSet<AgentflowEdge> AgentflowEdges => Set<AgentflowEdge>();
-
 
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
@@ -87,7 +85,6 @@ public class LlmDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-
         modelBuilder.Entity<LlmModel>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -96,7 +93,6 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.Type).HasConversion<int>();
             entity.Property(e => e.Description).HasMaxLength(1000);
         });
-
 
         modelBuilder.Entity<ModelProviderRelation>(entity =>
         {
@@ -207,8 +203,6 @@ public class LlmDbContext : DbContext
             entity.HasIndex(e => e.McpToolServerId);
         });
 
-
-
         modelBuilder.Entity<Agentflow>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -239,8 +233,6 @@ public class LlmDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-
-
         modelBuilder.Entity<Project>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -269,7 +261,6 @@ public class LlmDbContext : DbContext
                 .WithMany(project => project.Tasks)
                 .HasForeignKey(e => e.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
-
         });
 
         modelBuilder.Entity<TaskRecord>(entity =>
@@ -290,9 +281,6 @@ public class LlmDbContext : DbContext
                         ? null
                         : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null));
         });
-
-
-
 
         modelBuilder.Entity<Job>(entity =>
         {
@@ -320,9 +308,6 @@ public class LlmDbContext : DbContext
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
             entity.HasIndex(e => new { e.TaskId, e.StartTime });
         });
-
-
-
 
         modelBuilder.Entity<OAuthAuthorizationToken>(entity =>
         {

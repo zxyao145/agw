@@ -1,4 +1,4 @@
-using Agw.Shared.Tasks.Entities;
+using Agw.Shared.Data.Entities.Tasks;
 
 namespace Agw.Tasks.Domain.Services;
 

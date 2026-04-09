@@ -1,7 +1,6 @@
-using Agw.Shared;
-using Agw.Shared.Abstractions;
-using Agw.Shared.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
+
+using Agw.Shared.Data;
 
 namespace Agw.Agents.Domain.Entities;
 
