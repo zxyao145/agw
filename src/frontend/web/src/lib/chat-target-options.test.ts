@@ -40,3 +40,26 @@ test("buildChatTargetOptions preserves restricted-project filtering and sorting"
     [{ id: "agent-2", label: "Claude Code", type: "agent" }],
   );
 });
+
+test("buildChatTargetOptions includes enabled agentflows and sorts normal projects by label", () => {
+  assert.deepEqual(
+    buildChatTargetOptions({
+      projectId: "11111111-1111-1111-1111-000000000099",
+      agents: [
+        { id: "agent-2", name: "ClaudeCode", displayName: "Claude Code" },
+        { id: "agent-1", name: "GeneralAgent", displayName: "General Agent" },
+      ],
+      agentflows: [
+        { id: "flow-2", name: "Zeta Flow", enable: true },
+        { id: "flow-1", name: "Alpha Flow", enable: false },
+        { id: "flow-3", name: "Beta Flow", enable: true },
+      ],
+    }),
+    [
+      { id: "flow-3", label: "Beta Flow", type: "agentflow" },
+      { id: "agent-2", label: "Claude Code", type: "agent" },
+      { id: "agent-1", label: "General Agent", type: "agent" },
+      { id: "flow-2", label: "Zeta Flow", type: "agentflow" },
+    ],
+  );
+});

@@ -47,11 +47,6 @@ import {
   mergeStreamingMessagesById,
   toExecutionWsUserInput,
 } from "@/lib/execution-stream";
-import {
-  buildChatTargetOptions,
-  getTargetValue,
-  getTargetValueFromMetadata,
-} from "@/lib/chat-target-options";
 import type { AiMessage } from "@/types";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
@@ -65,6 +60,11 @@ import {
   normalizeExtraSettingTextForStorage,
   tryParseJsonObjectText,
 } from "./lib/chat-settings";
+import {
+  buildChatTargetOptions,
+  getTargetValue,
+  getTargetValueFromMetadata,
+} from "./lib/target-options";
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
 
 type ProjectDto = {

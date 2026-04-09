@@ -19,6 +19,7 @@ import {
   Cable,
   MessagesSquare,
   Clock,
+  Hammer,
 } from "lucide-react";
 
 import {
@@ -102,19 +103,6 @@ const navItems: SidebarMenuGroupProps[] = [
         title: "Skills",
         isActive: true,
         icon: <Package />,
-      },
-      {
-        url: "/skills",
-        title: "ExternalAgents",
-        isActive: true,
-        icon: <Hammer />,
-        subMenuItems: [
-          {
-            title: "ClaudeCode",
-            url: "/claude-code",
-            // icon: <Terminal />,
-          },
-        ],
       },
     ],
   },
