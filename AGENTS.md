@@ -1,34 +1,33 @@
 # AGENTS.md
 
-This file provides guidance to coding agents working in this repository.
+This file gives coding agents the minimum repo context needed to work safely in this repository.
 
 ## Project Overview
 
-Agw is an ASP.NET Core + EF Core backend with a Next.js frontend for managing LLM agents, models, providers, and multi-agent workflows. It follows a modular architecture and integrates Microsoft.Agents.AI, MCP tool servers, A2A endpoints, and external agents such as Claude Code SDK.
+Agw is a modular ASP.NET Core backend plus a Next.js frontend for managing agents, agentflows, providers, tools, skills, projects/tasks, jobs, and external-agent/chat execution. The backend targets `.NET 10.0`, uses EF Core for persistence, and wires modules together from `src/backend/Agw.Host/Program.cs`.
 
-## Architecture And Project Structure
+## Repository Map
 
-### Backend Organization (`src/backend/`)
+### Backend (`src/backend/`)
 
 ```text
-Agw.Host/              # ASP.NET Core entry point, DI registration, hosted services
-Agw.Infrastructure/    # EF Core DbContext, repositories, migrations
-Agw.Shared/            # Base entities, enums, shared models, repository interfaces
-Agw.Shared.Contract/   # Interfaces for cross-module interaction
-Agw.Agents/            # Agent definitions, workflows, MCP tools, runtime services
-Agw.Providers/         # LLM models, providers, model-providers, auth configs
-Agw.Tasks/             # Projects, tasks, session records, chat history
-Agw.Jobs/              # Background jobs and project leases
-Agw.A2A/               # A2A protocol implementation for agent discovery and messaging
-Agw.Skills/            # Skill archive management and agent-skill relationships
-Agw.Tools/             # Tool discovery, metadata, and runtime registration
+Agw.Host/            # ASP.NET Core entry point, OpenAPI, static files, websockets, DI, DB seeding
+Agw.A2A/             # A2A protocol types and route builders
+Agw.Agents/          # Agents, agentflows, runtime execution services
+Agw.Infrastructure/  # EF Core DbContext, repositories, migrations, seeding
+Agw.Jobs/            # Scheduled jobs, execution logs, hosted scheduler
+Agw.Providers/       # Models, providers, model-provider links, auth configs
+Agw.Shared/          # Shared entities, contracts, repository abstractions, utilities
+Agw.Skills/          # Skill archive validation, storage, and agent-skill relations
+Agw.Tasks/           # Projects, project tasks, task records, file/task APIs
+Agw.Tools/           # Tool discovery, metadata, and AI tool factory/registry
 ```
 
 Notes:
-- `Agw.slnx` includes the backend modules above plus `tests/Agw.A2A.Tests`, `tests/Agw.Agents.Tests`, `tests/Agw.Tasks.Tests`, and `tests/Agw.Skills.Tests`.
-- Claude Code integration is provided through the `ClaudeCodeSdk.MAF` package referenced by backend projects.
+- `Agw.slnx` includes all backend projects above plus `tests/Agw.A2A.Tests`, `tests/Agw.Agents.Tests`, `tests/Agw.Tasks.Tests`, and `tests/Agw.Skills.Tests`.
+- `tests/Agw.Jobs.Tests` exists in the repo but is not currently included in `Agw.slnx`.
 
-### Frontend Organization (`src/frontend/web/`)
+### Frontend (`src/frontend/web/`)
 
 ```text
 src/app/(app)/
@@ -37,6 +36,7 @@ src/app/(app)/
   (agents)/mcp-tool-servers  # MCP server management
   (agents)/skills            # Skill archive management
   (external-agents)/claude-code
+  (interface)/chat
   (overview)/dashboard
   (overview)/traces
   (providers)/models
@@ -45,35 +45,41 @@ src/app/(app)/
   (tasks)/projects
   (tasks)/jobs
   integrations
-src/api/                     # Typed API helpers and generated OpenAPI types
+src/api/                     # Typed fetch helpers and generated OpenAPI types
 src/components/              # Shared UI components
+src/hooks/                   # Shared React hooks
+src/lib/                     # Shared frontend utilities
+src/types/                   # Shared frontend types
 ```
 
-### Repository Layout
+### Other Top-Level Paths
 
 - `docs/` contains project documentation.
 - `scripts/` contains helper scripts such as API smoke tests.
-- `tests/` contains the current xUnit test projects.
-- Treat `bin/`, `obj/`, `.next/`, and `node_modules/` as generated artifacts.
+- `tests/` contains xUnit projects.
+- Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated artifacts.
 
-## Key Domain Concepts
+## Key Runtime Entry Points
 
-- `Agent`: AI agent with prompt, type, model-provider linkage, and MCP tool bindings.
-- `Agentflow`: Multi-agent workflow with nodes, edges, and orchestration pattern.
+- `src/backend/Agw.Host/Program.cs`: bootstraps logging, OpenTelemetry, DI modules, OpenAPI/Scalar, websockets, static files, and DB seeding.
+- `src/backend/Agw.Agents/Application/Agents/AgentRuntimeService.cs`: builds runtime agents from persisted agent, provider, skill, and tool configuration.
+- `src/backend/Agw.Agents/Application/Agentflows/AgentflowRuntimeService.cs`: executes multi-agent workflows for the supported orchestration patterns.
+- `src/backend/Agw.Jobs/HostedService/JobHostedService.cs`: in-memory scheduler backed by persistent job state and execution logs.
+- `src/backend/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and manages extracted skill content under `wwwroot/skills/`.
+- `src/backend/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations and exposes them as runtime AI tools.
+- `src/backend/Agw.Tasks/Application/ProjectTaskAppService.cs`: coordinates project task persistence, chat history, and task lifecycle operations.
+
+## Important Domain Concepts
+
+- `Agent`: persisted AI agent configuration with prompt, runtime type, model-provider linkage, tool bindings, and optional skill assignments.
+- `Agentflow`: multi-agent workflow graph with nodes, edges, and orchestration pattern.
 - `McpToolServer`: MCP server configuration for stdio, HTTP, or SSE transport.
-- `LlmModel`, `Provider`, `ModelProvider`, `ProviderAuthConfig`: model and provider catalog plus auth configuration.
-- `Skill`: uploaded skill archive with validated `SKILL.md` metadata and agent assignments.
-- `Project`, `ProjectTask`, `TaskRecord`, `ProjectLease`: task execution, conversation persistence, and concurrency control.
+- `LlmModel`, `Provider`, `ModelProvider`, `ProviderAuthConfig`: provider/model catalog and authentication setup.
+- `Skill`: uploaded skill archive with validated `SKILL.md` metadata plus agent-skill relations.
+- `Project`, `ProjectTask`, `TaskRecord`: project-scoped execution, persisted task state, and chat history.
+- `Job`, `JobLog`: scheduled background execution and per-run logging.
 
-## Core Runtime Services
-
-- `src/backend/Agw.Agents/Application/Agents/AgentRuntimeService.cs`: creates runtime agents, hydrates provider configuration, wires tools, and supports external agent session resumption.
-- `src/backend/Agw.Agents/Application/Agentflows/AgentflowRuntimeService.cs`: executes workflows with `Concurrent`, `Sequential`, `GroupChat`, `Handoff`, and `Magentic` orchestration patterns.
-- `src/backend/Agw.Jobs/HostedService/ProjectTaskSchedulerHostedService.cs`: polls pending tasks, limits cross-project concurrency, and coordinates lease-based execution.
-- `src/backend/Agw.Tools/ToolRegistryService.cs`: discovers tools from `[AiTool]` methods and `IAgwTool` implementations, then exposes runtime metadata/functions.
-- `src/backend/Agw.Skills/Services/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and manages the `wwwroot/skills/<name>/` content path.
-
-## Build And Development Commands
+## Build, Run, And Test
 
 ### Backend
 
@@ -89,7 +95,7 @@ dotnet format
 ```
 
 Notes:
-- The development host launches on `http://localhost:5015` by default via `src/backend/Agw.Host/Properties/launchSettings.json`.
+- The development host runs on `http://localhost:5015` by default via `src/backend/Agw.Host/Properties/launchSettings.json`.
 - Do not add or apply EF Core migrations automatically. When needed, use:
 
 ```bash
@@ -110,22 +116,30 @@ Run from `src/frontend/web`:
 pnpm install
 pnpm dev
 pnpm build
+pnpm start
 pnpm lint
 pnpm lint:fix
 pnpm format
+pnpm format:check
 pnpm gen:openapi
 ```
 
 Notes:
 - The Next.js dev server runs on `http://localhost:3000` by default.
-- `src/frontend/web/next.config.ts` rewrites `/api/*` and `/openapi/*` to `BACKEND_API_BASE_URL` (default `http://localhost:5015`).
+- Linting and formatting use `oxlint` and `oxfmt`, not ESLint/Prettier.
+- `src/frontend/web/next.config.ts` rewrites `/api/*` and `/openapi/*` to `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015`.
 - Regenerate `src/frontend/web/src/api/openapi.d.ts` after backend contract changes.
+
+### Tests
+
+- Backend tests use xUnit.
+- Run `dotnet test Agw.slnx` for the normal repo-wide backend test pass.
+- If you touch `Agw.Jobs`, also run `dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj` because that project is not currently part of `Agw.slnx`.
+- Prefer test namespaces that mirror production namespaces and method names like `Method_Condition_ExpectedResult`.
 
 ## Configuration
 
-### Backend Configuration
-
-Primary settings live in `src/backend/Agw.Host/appsettings.json`:
+Primary backend settings live in `src/backend/Agw.Host/appsettings.json`:
 
 ```json
 {
@@ -144,51 +158,35 @@ Primary settings live in `src/backend/Agw.Host/appsettings.json`:
 Guidance:
 - Supported database providers are `sqlite` and `postgres`.
 - Keep secrets out of `appsettings*.json` and frontend env files; prefer environment-variable overrides.
-- Register new backend services in `src/backend/Agw.Host/Program.cs` alongside the existing DI setup.
-- A2A agent-card and JSON-RPC message endpoints are mounted under `/api/a2a/`; the global discovery list is `/.well-known/agents.json`.
+- Register new backend services in the relevant module `DependencyInjection.cs` and wire the module into `src/backend/Agw.Host/Program.cs`.
 
-## Coding Style
+## Frontend Integration Notes
 
-- Use 4-space indentation and standard C# naming: `PascalCase` for types and members, `camelCase` for locals and parameters, `I` prefix for interfaces.
-- Keep request and response DTOs in `Contracts/` folders within the relevant backend module.
+- Prefer the typed helpers in `src/frontend/web/src/api/client.ts` for REST calls.
+- Use `src/frontend/web/src/api/task-client.ts` for project-task history/session helpers.
+- Use `src/frontend/web/src/api/execution-ws.ts` for task execution websocket flows.
+- Use `src/frontend/web/src/api/files.ts` for backend file-management endpoints used by the UI.
+- Keep route-specific UI inside the matching `src/app/(app)/...` segment and shared UI in `src/components/`.
+
+## A2A Status
+
+- The `Agw.A2A` module is present in the codebase, including `src/backend/Agw.A2A/Extensions/A2ARoutesBuilderExtensions.cs`.
+- In the current host wiring, `.AddA2A(...)` and `app.MapAgwA2A(...)` are commented out in `src/backend/Agw.Host/Program.cs`.
+- Do not assume A2A endpoints are live until that wiring is re-enabled.
+
+## Coding Conventions
+
+- Use 4-space indentation and normal C# naming: `PascalCase` for types/members and `camelCase` for locals/parameters.
+- Use the `I` prefix for interfaces.
+- Keep request/response DTOs in `Contracts/` folders inside the owning module when adding new API contracts.
 - Controllers should end with `Controller`.
 - Prefer async methods for I/O and constructor injection for dependencies.
 - Frontend code should use TypeScript, React function components, and kebab-case filenames.
 - Do not edit generated artifacts unless the task is explicitly about generated output.
 
-## Testing Guidance
-
-- Use xUnit for backend tests when adding coverage.
-- Prefer `tests/Agw.*.Tests/` with namespaces mirroring production code.
-- Name test methods like `Method_Condition_ExpectedResult`.
-- Run `dotnet test Agw.slnx` before handing off backend changes.
-- Current in-repo test projects are `Agw.A2A.Tests`, `Agw.Agents.Tests`, `Agw.Tasks.Tests`, and `Agw.Skills.Tests`.
-
-## Frontend Architecture
-
-- Stack: Next.js 16 App Router, React 19, Tailwind CSS 4, Radix UI, TanStack React Query 5, `openapi-fetch`.
-- Prefer the typed helpers in `src/frontend/web/src/api/client.ts` for HTTP calls.
-- Use `src/frontend/web/src/api/execution-ws.ts` for task execution websocket flows.
-- Use `src/frontend/web/src/api/files.ts` for backend file-management endpoints used by the Claude Code UI.
-- Keep route-specific UI inside the relevant `src/app/(app)/...` segment and shared UI in `src/components/`.
-
-## A2A Protocol
-
-Agw maps JSON-RPC A2A endpoints by default:
-
-- `GET /.well-known/agents.json`
-- `GET /api/a2a/{agentName}/.well-known/agent-card.json`
-- `POST /api/a2a/{agentName}`
-
-Example:
-
-```bash
-curl http://localhost:5015/.well-known/agents.json
-```
-
 ## Workflow Expectations
 
 - Follow Conventional Commits such as `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, and `test:`.
 - Keep pull requests focused and include summary, linked issue, testing notes, and migration impact when applicable.
-- Include screenshots for UI changes and example payloads or endpoint notes for API changes.
-- Preserve unrelated user changes in a dirty worktree; do not revert or rewrite them unless explicitly asked.
+- Include screenshots for UI changes and sample payloads or endpoint notes for API changes.
+- Preserve unrelated local changes in a dirty worktree; do not revert or rewrite them unless explicitly asked.

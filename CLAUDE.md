@@ -9,11 +9,11 @@ Agw is an ASP.NET Core + EF Core backend with a Next.js frontend for managing LL
 ## Architecture & Project Structure
 
 ### Backend Organization (`src/backend/`)
+
 ```
 Agw.Host/              # ASP.NET Core entry point, DI registration, hosted services
 Agw.Infrastructure/    # EF Core DbContext, repositories, migrations
-Agw.Shared/            # Base entities, enums, shared models, repository interfaces
-Agw.Shared.Contract/   # Interfaces for cross-module interaction
+Agw.Shared/            # Base entities, enums, shared models, repository interfaces, contracts
 Agw.Agents/            # Agent definitions, agentflows, MCP tools, execution services
 Agw.Providers/         # LLM models, providers, model-providers, auth configs
 Agw.Tasks/             # Projects, tasks, session records, chat history
@@ -23,11 +23,12 @@ Agw.Skills/            # Skill archive management (ZIP uploads, SKILL.md format)
 Agw.Tools/             # Tool discovery and registration system
 ```
 
-`Agw.slnx` currently includes these backend projects plus `tests/Agw.Agents.Tests`, `tests/Agw.Tasks.Tests`, and `tests/Agw.Skills.Tests`.
+`Agw.slnx` includes these backend projects plus test projects: `Agw.A2A.Tests`, `Agw.Agents.Tests`, `Agw.Tasks.Tests`, and `Agw.Skills.Tests`.
 
 ### Key Domain Entities
 
 **Agent System:**
+
 - `Agent` - AI agent with SystemPrompt, ModelProviderId, Type (System/External), MCP tool bindings
 - `Agentflow` - Multi-agent workflow with nodes, edges, orchestration pattern
 - `AgentflowNode` - Node in workflow graph (references Agent or nested Agentflow)
@@ -35,18 +36,21 @@ Agw.Tools/             # Tool discovery and registration system
 - `McpToolServer` - MCP server configuration (stdio/HTTP/SSE transport)
 
 **Provider System:**
+
 - `LlmModel` - LLM model definition
 - `Provider` - API provider (OpenAI, Anthropic) with endpoint and auth configs
 - `ModelProvider` - Links model to provider with pricing metadata
 - `ProviderAuthConfig` - Authentication (ApiKey or Environment variable)
 
 **Task System:**
+
 - `Project` - Workspace with ExtraSetting for agent configuration
 - `ProjectTask` - Execution unit with ContextId, AgentType, Status
 - `TaskRecord` - Conversation persistence with session tracking
 - `ProjectLease` - Distributed lock for concurrent task execution
 
 ### Entity Relationships
+
 ```
 LlmModel ←→ ModelProvider ←→ Provider
                                ↓
@@ -68,6 +72,7 @@ Project → ProjectTask → TaskRecord
 ### Core Services
 
 **AgentRuntimeService** (`Agw.Agents/Application/Agents/AgentRuntimeService.cs`):
+
 - Creates `AIAgent` instances from persisted `Agent` entities
 - Hydrates provider config, selects random enabled auth config
 - Builds tool list from registered functions + MCP tools
@@ -75,15 +80,18 @@ Project → ProjectTask → TaskRecord
 - Handles Claude Code external agents with session resumption
 
 **AgentflowRuntimeService** (`Agw.Agents/Application/Agentflows/AgentflowRuntimeService.cs`):
+
 - Executes multi-agent workflows with different orchestration patterns
 - Patterns: Concurrent, Sequential, GroupChat, Handoff, Magentic
 
 **ProjectTaskSchedulerHostedService** (`Agw.Jobs/HostedService/ProjectTaskSchedulerHostedService.cs`):
+
 - Background service polling for pending tasks every 2 seconds
 - Max 4 projects executing in parallel, one task per project at a time
 - DB-backed `ProjectLease` with 30-second TTL for distributed locking
 
 **ToolRegistryService** (`Agw.Tools/ToolRegistryService.cs`):
+
 - Discovers AI tools from `[AiTool]` attributes and `IAgwTool` implementations
 - Singleton service that caches tool metadata on startup
 - Creates `AITool` instances for agent execution via `AgwToolFactory`
@@ -91,6 +99,7 @@ Project → ProjectTask → TaskRecord
 - Integrates with Microsoft.Extensions.AI for tool registration
 
 **SkillAppService** (`Agw.Skills/Services/SkillAppService.cs`):
+
 - Manages skill archives uploaded as ZIP files
 - Extracts archives and validates SKILL.md frontmatter
 - Rewrites SKILL.md metadata (name/description) to match database values
@@ -100,6 +109,7 @@ Project → ProjectTask → TaskRecord
 ## Build & Development Commands
 
 ### Backend
+
 ```bash
 # Restore and build
 dotnet restore Agw.slnx
@@ -125,6 +135,7 @@ dotnet ef database update \
 ```
 
 ### Frontend
+
 ```bash
 cd src/frontend/web
 
@@ -149,6 +160,7 @@ pnpm gen:openapi
 The frontend dev server runs on `http://localhost:3000`. `src/frontend/web/next.config.ts` rewrites `/api/*` and `/openapi/*` to `BACKEND_API_BASE_URL`, which defaults to `http://localhost:5015`.
 
 ### Tests
+
 ```bash
 # Run all tests
 dotnet test Agw.slnx
@@ -157,11 +169,13 @@ dotnet test Agw.slnx
 dotnet test tests/Agw.Agents.Tests
 dotnet test tests/Agw.Tasks.Tests
 dotnet test tests/Agw.Skills.Tests
+dotnet test tests/Agw.A2A.Tests
 ```
 
-Current test projects use xUnit v3.
+Test projects use xUnit v3.
 
 ### Code Formatting
+
 ```bash
 dotnet format
 ```
@@ -169,6 +183,7 @@ dotnet format
 ## Configuration
 
 ### Backend (`appsettings.json`)
+
 ```json
 {
   "Database": {
@@ -186,6 +201,7 @@ dotnet format
 Database providers: `sqlite`, `postgres`. Switch by changing `Provider` and providing appropriate connection string. Store sensitive values in environment variables.
 
 ### Service Registration (`Program.cs`)
+
 Domain services are manually registered as `Scoped` or `Singleton`. When adding new services, register them in the same section.
 
 ## Coding Style
@@ -199,6 +215,7 @@ Domain services are manually registered as `Scoped` or `Singleton`. When adding 
 ## Commit Conventions
 
 Follow Conventional Commits:
+
 - `feat:` new features
 - `fix:` bug fixes
 - `refactor:` code restructuring
@@ -216,12 +233,14 @@ Follow Conventional Commits:
 ## Frontend Architecture
 
 ### Tech Stack
+
 - Next.js 16 with App Router
 - React 19, Tailwind CSS 4, Radix UI components
 - TanStack React Query 5 for data fetching
 - openapi-fetch with auto-generated types
 
 ### Route Structure
+
 ```
 src/app/(app)/
 ├── (agents)/
@@ -231,6 +250,8 @@ src/app/(app)/
 │   └── skills/           # Skill archive management
 ├── (external-agents)/
 │   └── claude-code/      # Claude Code integration UI
+├── (interface)/
+│   └── chat/             # Chat interface
 ├── (overview)/
 │   ├── dashboard/        # Dashboard
 │   └── traces/           # Trace viewer
@@ -246,6 +267,7 @@ src/app/(app)/integrations/ # OAuth-backed integrations UI
 ```
 
 ### API Integration
+
 - Run `pnpm gen:openapi` after backend schema changes
 - Use typed `apiGet()`, `apiPost()`, `apiPut()`, `apiDelete()` from `api/client.ts`
 - OpenAPI types in `api/openapi.d.ts`
@@ -257,11 +279,13 @@ src/app/(app)/integrations/ # OAuth-backed integrations UI
 Agw exposes JSON-RPC A2A endpoints by default. The mapped prefix is `/api/a2a/`.
 
 **Endpoints:**
+
 - `GET /.well-known/agents.json` - List available agents
 - `GET /api/a2a/{agentName}/.well-known/agent-card.json` - Get agent metadata (AgentCard)
 - `POST /api/a2a/{agentName}` - JSON-RPC request entrypoint
 
 **Client Example:**
+
 ```bash
 curl http://localhost:5015/.well-known/agents.json
 ```
@@ -284,16 +308,19 @@ curl http://localhost:5015/.well-known/agents.json
 The `Agw.Tools` module provides a tool discovery and registration mechanism for AI agents.
 
 **Tool Registration Methods:**
+
 - **Attribute-based**: Mark public static methods with `[AiTool]` attribute
 - **Interface-based**: Implement `IAgwTool` interface with `ExecuteAsync` method
 
 **Tool Metadata:**
+
 - `[AiTool("name", Category = "...")]` - Tool name and category
 - `[Description("...")]` - Tool description (also on parameters)
 - `[AiToolParameterSchema("string", Format = "...")]` - JSON Schema type hints
 - `[AiToolRequired]` - Mark required parameters
 
 **Example:**
+
 ```csharp
 [AiTool("read_file", Category = "Files", RequiresConfirmation = false, TimeoutMs = 5000)]
 [Description("Reads a file from the filesystem")]
