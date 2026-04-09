@@ -69,3 +69,20 @@ test("buildCreateTaskJobRequest maps an agentflow target to agentType 1", async 
     },
   );
 });
+
+test("getProjectDetailItems keeps the existing project detail fields and placeholders", async () => {
+  const { getProjectDetailItems } = await importProjectDetailsModule();
+
+  assert.deepEqual(
+    getProjectDetailItems({
+      description: "  Demo project  ",
+      workspace: "",
+      extraSetting: null,
+    }),
+    [
+      { label: "Description", value: "Demo project" },
+      { label: "Workspace", value: "-", mono: true },
+      { label: "Extra Setting", value: "-", mono: true },
+    ],
+  );
+});
