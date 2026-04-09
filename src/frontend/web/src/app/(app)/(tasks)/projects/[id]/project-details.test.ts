@@ -45,8 +45,7 @@ test("buildCreateTaskJobRequest maps an agent target to agentType 0", async () =
 });
 
 test("buildCreateTaskJobRequest maps an agentflow target to agentType 1", async () => {
-  const { QUICK_TASK_TRIGGER_TYPE, buildCreateTaskJobRequest } =
-    await importProjectDetailsModule();
+  const { QUICK_TASK_TRIGGER_TYPE, buildCreateTaskJobRequest } = await importProjectDetailsModule();
   const now = new Date("2026-04-09T10:20:30.000Z");
 
   assert.deepEqual(
