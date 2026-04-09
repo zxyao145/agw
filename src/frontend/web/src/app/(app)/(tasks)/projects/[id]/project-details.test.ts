@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const PAGE_URL = new URL("./page.tsx", import.meta.url);
 const PROJECT_DETAILS_MODULE_URL = new URL("./project-details.ts", import.meta.url);
 
 async function importProjectDetailsModule() {
@@ -13,24 +11,31 @@ async function importProjectDetailsModule() {
   }
 }
 
-test("buildQuickTaskJobRequest creates an enabled one-shot job scheduled immediately", async () => {
-  const { QUICK_TASK_TRIGGER_TYPE, buildQuickTaskJobRequest } = await importProjectDetailsModule();
+test("createDefaultTaskJobName returns the expected timestamp-and-random shape", async () => {
+  const { createDefaultTaskJobName } = await importProjectDetailsModule();
+  const now = new Date("2026-04-09T11:22:33.000Z");
+
+  assert.equal(createDefaultTaskJobName(now, 4821), "Job-20260409-112233-4821");
+});
+
+test("buildCreateTaskJobRequest maps an agent target to agentType 0", async () => {
+  const { QUICK_TASK_TRIGGER_TYPE, buildCreateTaskJobRequest } = await importProjectDetailsModule();
   const now = new Date("2026-04-09T10:20:30.000Z");
 
   assert.deepEqual(
-    buildQuickTaskJobRequest(
-      {
-        id: "11111111-1111-1111-1111-000000000001",
-        name: "Alpha Project",
-      },
+    buildCreateTaskJobRequest({
+      projectId: "11111111-1111-1111-1111-000000000001",
+      targetValue: "agent:agent-1",
+      jobName: "  Job-20260409-102030-4821  ",
+      prompt: "  Summarize recent work  ",
       now,
-    ),
+    }),
     {
       projectId: "11111111-1111-1111-1111-000000000001",
-      agentType: null,
-      agentId: null,
-      name: "Alpha Project - Quick Task - 2026-04-09T10:20:30Z",
-      prompt: null,
+      agentType: 0,
+      agentId: "agent-1",
+      name: "Job-20260409-102030-4821",
+      prompt: "Summarize recent work",
       triggerType: QUICK_TASK_TRIGGER_TYPE,
       triggerValue: "2026-04-09T10:20:40.000Z",
       maxRetryCount: 0,
@@ -39,33 +44,17 @@ test("buildQuickTaskJobRequest creates an enabled one-shot job scheduled immedia
   );
 });
 
-test("getProjectDetailItems keeps the existing project detail fields and placeholders", async () => {
-  const { getProjectDetailItems } = await importProjectDetailsModule();
+test("buildCreateTaskJobRequest maps an agentflow target to agentType 1", async () => {
+  const { buildCreateTaskJobRequest } = await importProjectDetailsModule();
 
-  assert.deepEqual(
-    getProjectDetailItems({
-      description: "  Demo project  ",
-      workspace: "",
-      extraSetting: null,
-    }),
-    [
-      { label: "Description", value: "Demo project" },
-      { label: "Workspace", value: "-", mono: true },
-      { label: "Extra Setting", value: "-", mono: true },
-    ],
+  assert.equal(
+    buildCreateTaskJobRequest({
+      projectId: "11111111-1111-1111-1111-000000000001",
+      targetValue: "agentflow:flow-7",
+      jobName: "Job-20260409-102030-4821",
+      prompt: "Run the workflow",
+      now: new Date("2026-04-09T10:20:30.000Z"),
+    }).agentType,
+    1,
   );
-});
-
-test("project page wires the details dialog and quick-create actions through shared labels", async () => {
-  const { CREATE_TASK_BUTTON_LABEL, DETAILS_BUTTON_LABEL, PROJECT_DETAILS_DIALOG_TITLE } =
-    await importProjectDetailsModule();
-  const source = await readFile(PAGE_URL, "utf8");
-
-  assert.equal(DETAILS_BUTTON_LABEL, "Details");
-  assert.equal(CREATE_TASK_BUTTON_LABEL, "Create Task");
-  assert.equal(PROJECT_DETAILS_DIALOG_TITLE, "Project Details");
-
-  assert.match(source, /DETAILS_BUTTON_LABEL/);
-  assert.match(source, /CREATE_TASK_BUTTON_LABEL/);
-  assert.match(source, /PROJECT_DETAILS_DIALOG_TITLE/);
 });
