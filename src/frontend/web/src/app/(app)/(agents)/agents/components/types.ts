@@ -39,6 +39,7 @@ export type ModelProviderDto = {
   modelId: string;
   providerId: string;
   providerName: string;
+  providerType: string;
   modelName: string;
 };
 

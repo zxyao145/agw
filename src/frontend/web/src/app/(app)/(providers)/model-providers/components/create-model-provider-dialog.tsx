@@ -57,7 +57,7 @@ export function CreateModelProviderDialog({
   const providerOptions = React.useMemo<SearchableSelectOption[]>(() => {
     return (providersQuery.data ?? []).map((p) => ({
       value: p.id,
-      title: p.name,
+      title: `${p.name} - ${p.providerType}`,
       subtitle: p.id,
     }));
   }, [providersQuery.data]);

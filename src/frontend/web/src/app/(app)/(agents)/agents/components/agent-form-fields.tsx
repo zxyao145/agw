@@ -236,7 +236,7 @@ export function AgentFormFields({
               ) : modelProvidersQuery.data && modelProvidersQuery.data.length > 0 ? (
                 modelProvidersQuery.data.map((mp) => (
                   <SelectItem key={mp.id} value={mp.id}>
-                    {mp.modelName} ({mp.providerName})
+                    {mp.modelName} ({mp.providerName}-{mp.providerType})
                   </SelectItem>
                 ))
               ) : (

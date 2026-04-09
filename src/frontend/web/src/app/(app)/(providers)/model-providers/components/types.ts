@@ -44,6 +44,7 @@ export type ModelDto = {
 export type ProviderDto = {
   id: string;
   name: string;
+  providerType: string;
   description: string | null;
   endpoint: string;
   createBy?: string | null;

@@ -874,7 +874,7 @@ function JobDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="2xl" className="max-h-[90vh] overflow-hidden">
+      <DialogContent size="2xl" className="flex max-h-[90vh] flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -1175,7 +1175,7 @@ function JobDetailsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 overflow-y-auto pr-1">
+        <div className="min-h-0 max-h-[65vh] flex-1 space-y-6 overflow-y-auto pr-1">
           {detailLoading && !job ? (
             <div className="text-sm text-muted-foreground">Loading details...</div>
           ) : detailError ? (

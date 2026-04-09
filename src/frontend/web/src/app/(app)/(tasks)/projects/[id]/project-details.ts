@@ -49,15 +49,18 @@ function padNumber(value: number, length = 2): string {
 
 export function createDefaultTaskJobName(now = new Date(), randomNumber?: number): string {
   const safeRandomNumber = randomNumber ?? Math.floor(Math.random() * 10_000);
+  const randomSuffix = padNumber(Math.max(0, safeRandomNumber) % 10_000, 4);
+
   const year = now.getUTCFullYear();
   const month = padNumber(now.getUTCMonth() + 1);
   const day = padNumber(now.getUTCDate());
-  const hour = padNumber(now.getUTCHours());
-  const minute = padNumber(now.getUTCMinutes());
-  const second = padNumber(now.getUTCSeconds());
-  const randomSuffix = padNumber(Math.max(0, safeRandomNumber) % 10_000, 4);
 
-  return `Job-${year}${month}${day}-${hour}${minute}${second}-${randomSuffix}`;
+  // const hour = padNumber(now.getUTCHours());
+  // const minute = padNumber(now.getUTCMinutes());
+  // const second = padNumber(now.getUTCSeconds());
+  // return `Job-${year}${month}${day}-${hour}${minute}${second}-${randomSuffix}`;
+
+  return `Job-${year}${month}${day}-${randomSuffix}`;
 }
 
 export function createQuickTaskTriggerValue(now = new Date()): string {

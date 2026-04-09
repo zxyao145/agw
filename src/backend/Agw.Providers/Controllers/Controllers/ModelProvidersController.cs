@@ -27,6 +27,7 @@ public class ModelProvidersController : ControllerBase
             mp.ProviderId,
             ModelName = mp.Model?.Name ?? string.Empty,
             ProviderName = mp.Provider?.Name ?? string.Empty,
+            ProviderType = mp.Provider?.ProviderType,
             mp.InputPrice,
             mp.OutputPrice,
             mp.CacheRead,
