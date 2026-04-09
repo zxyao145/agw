@@ -30,8 +30,7 @@ export type CreateTaskJobRequest = {
 };
 
 export const CREATE_TASK_DIALOG_TITLE = "Create Task";
-export const CREATE_TASK_DIALOG_DESCRIPTION =
-  "Create a one-time job for the current project.";
+export const CREATE_TASK_DIALOG_DESCRIPTION = "Create a one-time job for the current project.";
 export const CREATE_TASK_PROMPT_HELPER_TEXT = "Prompt is required for task execution.";
 export const QUICK_TASK_TRIGGER_TYPE = 1;
 export const QUICK_TASK_DELAY_MS = 10_000;
