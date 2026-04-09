@@ -47,6 +47,11 @@ import {
   mergeStreamingMessagesById,
   toExecutionWsUserInput,
 } from "@/lib/execution-stream";
+import {
+  buildChatTargetOptions,
+  getTargetValue,
+  getTargetValueFromMetadata,
+} from "@/lib/chat-target-options";
 import type { AiMessage } from "@/types";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
@@ -60,7 +65,6 @@ import {
   normalizeExtraSettingTextForStorage,
   tryParseJsonObjectText,
 } from "./lib/chat-settings";
-import { buildChatTargetOptions } from "./lib/target-options";
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
 
 type ProjectDto = {
@@ -82,19 +86,6 @@ type AgentflowDto = {
   name: string;
   enable?: boolean;
 };
-
-function getTargetValueFromMetadata(targetType: unknown, targetId: unknown): string | null {
-  if ((targetType !== "agent" && targetType !== "agentflow") || typeof targetId !== "string") {
-    return null;
-  }
-
-  const trimmedTargetId = targetId.trim();
-  if (!trimmedTargetId) {
-    return null;
-  }
-
-  return `${targetType}:${trimmedTargetId}`;
-}
 
 function getRestoredTargetValue(messages: AiMessage[]): string | null {
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
@@ -133,10 +124,6 @@ function getApiErrorMessage(error: unknown): string {
   }
 
   return "Unknown error";
-}
-
-function getTargetValue(target: ChatTargetOption): string {
-  return `${target.type}:${target.id}`;
 }
 
 function nextTaskId(): string {

@@ -1,14 +1,7 @@
 "use client";
 
 import type { UserInputRef } from "@/components/message/user-input";
-
-export type ChatTargetType = "agent" | "agentflow";
-
-export type ChatTargetOption = {
-  id: string;
-  label: string;
-  type: ChatTargetType;
-};
+export type { ChatTargetOption, ChatTargetType } from "@/types/chat-target";
 
 export interface EnvVar {
   key: string;
