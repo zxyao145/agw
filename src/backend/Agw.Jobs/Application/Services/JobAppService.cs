@@ -1,6 +1,7 @@
 using Agw.Jobs.Contracts;
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Domain.Enums;
+using Agw.Jobs.Domain.Events;
 using Agw.Shared.Data.Repositories;
 
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,8 @@ public class JobAppService(
     IRepository<Job> jobTaskRepository,
     IRepository<JobLog> jobExecutionLogRepository,
     IUnitOfWork unitOfWork,
-    IJobTimeCalculator jobTimeCalculator)
+    IJobTimeCalculator jobTimeCalculator,
+    IJobDomainEventDispatcher jobDomainEventDispatcher)
 {
     public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
     {
@@ -65,6 +67,7 @@ public class JobAppService(
 
         await jobTaskRepository.AddAsync(entity);
         await unitOfWork.SaveChangesAsync();
+        await jobDomainEventDispatcher.DispatchAsync(new JobCreatedDomainEvent(entity));
         return entity;
     }
 

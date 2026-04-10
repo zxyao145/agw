@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Domain.Entities;
+using Agw.Jobs.Domain.Events;
 using Agw.Jobs.Dtos;
 
 using Microsoft.Extensions.DependencyInjection;
@@ -16,25 +17,37 @@ namespace Agw.Jobs.HostedService;
 /// </summary>
 public class JobHostedService(
     IServiceScopeFactory scopeFactory,
-    ILogger<JobHostedService> logger) : BackgroundService
+    ILogger<JobHostedService> logger,
+    IJobDomainEventDispatcher jobDomainEventDispatcher) : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly ILogger<JobHostedService> _logger = logger;
+    private readonly IJobDomainEventDispatcher _jobDomainEventDispatcher = jobDomainEventDispatcher;
 
     private readonly PriorityQueue<InMemoryJob, DateTimeOffset> _queue = new();
     private readonly ConcurrentDictionary<Guid, InMemoryJob> _taskMap = new();
     private readonly object _queueLock = new();
     private readonly SemaphoreSlim _wakeSignal = new(0, int.MaxValue);
+    private readonly SemaphoreSlim _prefetchSignal = new(0, int.MaxValue);
 
     private readonly TimeSpan _prefetchInterval = TimeSpan.FromMinutes(1);
     private readonly TimeSpan _prefetchWindow = TimeSpan.FromMinutes(10);
     private readonly TimeSpan _retryDelay = TimeSpan.FromSeconds(30);
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var prefetchTask = RunPrefetchLoopAsync(stoppingToken);
-        var executeTask = RunExecuteLoopAsync(stoppingToken);
-        return Task.WhenAll(prefetchTask, executeTask);
+        _jobDomainEventDispatcher.DomainEventDispatched += HandleDomainEventAsync;
+
+        try
+        {
+            var prefetchTask = RunPrefetchLoopAsync(stoppingToken);
+            var executeTask = RunExecuteLoopAsync(stoppingToken);
+            await Task.WhenAll(prefetchTask, executeTask);
+        }
+        finally
+        {
+            _jobDomainEventDispatcher.DomainEventDispatched -= HandleDomainEventAsync;
+        }
     }
 
     private async Task RunPrefetchLoopAsync(CancellationToken cancellationToken)
@@ -60,13 +73,44 @@ public class JobHostedService(
 
             try
             {
-                await Task.Delay(_prefetchInterval, cancellationToken);
+                var delayTask = Task.Delay(_prefetchInterval, cancellationToken);
+                var signalTask = _prefetchSignal.WaitAsync(cancellationToken);
+                await Task.WhenAny(delayTask, signalTask);
             }
             catch (OperationCanceledException)
             {
                 break;
             }
         }
+    }
+
+
+    private Task HandleDomainEventAsync(IJobDomainEvent domainEvent, CancellationToken _)
+    {
+        if (domainEvent is not JobCreatedDomainEvent createdEvent)
+        {
+            return Task.CompletedTask;
+        }
+
+        var job = createdEvent.Job;
+        var now = DateTimeOffset.UtcNow;
+        if (job.TriggerType != Agw.Jobs.Domain.Enums.TriggerType.Once)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (!job.IsEnabled || job.Status != Agw.Jobs.Domain.Enums.JobStatus.Pending)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (job.NextRunTime >= now.Add(_prefetchInterval))
+        {
+            return Task.CompletedTask;
+        }
+
+        _prefetchSignal.Release();
+        return Task.CompletedTask;
     }
 
     private async Task RunExecuteLoopAsync(CancellationToken cancellationToken)
