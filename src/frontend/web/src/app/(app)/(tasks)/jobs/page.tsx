@@ -55,8 +55,9 @@ type JobDto = {
   lastError: string | null;
 };
 
-type TaskExecutionLogDto = {
+type JobExecutionLogDto = {
   id: string;
+  jobId: string;
   taskId: string;
   startTime: string;
   endTime: string | null;
@@ -435,7 +436,7 @@ export default function JobsPage() {
     queryFn: async () =>
       (await apiGet(jobLogsPath, {
         params: { path: { id: viewingJobId as string } },
-      } as never)) as TaskExecutionLogDto[],
+      } as never)) as JobExecutionLogDto[],
   });
 
   const createMutation = useMutation({
@@ -1163,7 +1164,7 @@ function JobDetailsDialog({
   detailJob: JobDto | null | undefined;
   detailLoading: boolean;
   detailError: string | null;
-  logs: TaskExecutionLogDto[];
+  logs: JobExecutionLogDto[];
   logsLoading: boolean;
   logsError: string | null;
   onEdit: (job: JobDto) => void;

@@ -4,5 +4,5 @@ namespace Agw.Jobs.Application.Services;
 
 public interface IAgentExecutor
 {
-    Task ExecuteAsync(Job task, CancellationToken cancellationToken);
+    Task<Guid> ExecuteAsync(Job task, CancellationToken cancellationToken);
 }

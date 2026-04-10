@@ -28,10 +28,10 @@ public class JobAppService(
         return jobTaskRepository.GetByIdAsync(id);
     }
 
-    public async Task<IReadOnlyList<JobLog>> ListLogsAsync(Guid taskId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<JobLog>> ListLogsAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
         var logs = await jobExecutionLogRepository.Queryable
-            .Where(log => log.TaskId == taskId)
+            .Where(log => log.JobId == jobId)
             .ToListAsync(cancellationToken);
 
         return logs

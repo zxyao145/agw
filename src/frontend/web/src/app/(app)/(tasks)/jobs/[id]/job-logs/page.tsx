@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Empty } from "@/components/ui/empty";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getApiErrorMessage } from "@/api/utils";
+import { isNonEmptyGuid } from "@/lib/guid";
 
 type JobDto = {
   id: string;
@@ -22,6 +23,7 @@ type JobDto = {
 
 type JobLogDto = {
   id: string;
+  jobId: string;
   taskId: string;
   startTime: string;
   endTime: string | null;
@@ -121,46 +123,50 @@ export default function JobLogsPage() {
             <TableRow>
               <TableHead>Status</TableHead>
               <TableHead>Attempt</TableHead>
-              <TableHead>Task ID</TableHead>
+              <TableHead>Job ID</TableHead>
               <TableHead>Time</TableHead>
               <TableHead>Error</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {logsQuery.data?.map((log) => (
-              <TableRow key={log.id}>
-                <TableCell>
-                  <Badge variant={log.success ? "default" : "destructive"}>
-                    {log.success ? "Succeeded" : "Failed"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="font-medium">#{log.attempt}</TableCell>
-                <TableCell className="font-mono text-xs break-all">{log.taskId}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {formatDateTime(log.startTime)}
-                  {log.endTime ? ` -> ${formatDateTime(log.endTime)}` : ""}
-                </TableCell>
-                <TableCell className="max-w-90 text-sm text-muted-foreground">
-                  <div className="line-clamp-2 wrap-break-word">{log.errorMessage ?? "-"}</div>
-                </TableCell>
-                <TableCell className="text-right">
-                  {job ? (
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <Link href={`/projects/${job.projectId}/tasks/${log.taskId}`}>
+            {logsQuery.data?.map((log) => {
+              const canOpenTask = job && isNonEmptyGuid(log.taskId);
+
+              return (
+                <TableRow key={log.id}>
+                  <TableCell>
+                    <Badge variant={log.success ? "default" : "destructive"}>
+                      {log.success ? "Succeeded" : "Failed"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-medium">#{log.attempt}</TableCell>
+                  <TableCell className="font-mono text-xs break-all">{log.jobId}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {formatDateTime(log.startTime)}
+                    {log.endTime ? ` -> ${formatDateTime(log.endTime)}` : ""}
+                  </TableCell>
+                  <TableCell className="max-w-90 text-sm text-muted-foreground">
+                    <div className="line-clamp-2 wrap-break-word">{log.errorMessage ?? "-"}</div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {canOpenTask ? (
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <Link href={`/projects/${job.projectId}/tasks/${log.taskId}`}>
+                          <MessageSquareText className="mr-2 h-4 w-4" />
+                          Go to Task
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="outline" size="sm" disabled>
                         <MessageSquareText className="mr-2 h-4 w-4" />
-                        Task Record
-                      </Link>
-                    </Button>
-                  ) : (
-                    <Button type="button" variant="outline" size="sm" disabled>
-                      <MessageSquareText className="mr-2 h-4 w-4" />
-                      Task Record
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+                        Go to Task
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </StaticTable>
       )}

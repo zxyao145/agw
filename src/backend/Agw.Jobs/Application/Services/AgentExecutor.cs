@@ -16,7 +16,15 @@ public class AgentExecutor(
 {
     private const string JobExecutorUser = "job-executor";
 
-    public async Task ExecuteAsync(Job job, CancellationToken cancellationToken)
+    /// <summary>
+    /// return task ID
+    /// </summary>
+    /// <param name="job"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="InvalidOperationException"></exception>
+    /// <exception cref="NotSupportedException"></exception>
+    public async Task<Guid> ExecuteAsync(Job job, CancellationToken cancellationToken)
     {
         if (job.AgentId == null || job.AgentType == null)
         {
@@ -80,6 +88,7 @@ public class AgentExecutor(
                 throw new InvalidOperationException(
                     $"Failed to mark project task {projectTaskId} as succeeded.");
             }
+            return projectTaskId;
         }
         catch (Exception ex)
         {

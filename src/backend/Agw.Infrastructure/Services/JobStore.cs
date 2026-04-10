@@ -110,11 +110,12 @@ public class JobStore(LlmDbContext dbContext) : IJobStore
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task AddExecutionLogAsync(Guid taskId, DateTimeOffset startTime, DateTimeOffset endTime, bool success, int attempt, string? errorMessage, CancellationToken cancellationToken)
+    public async Task AddExecutionLogAsync(Guid jobId, Guid taskId, DateTimeOffset startTime, DateTimeOffset endTime, bool success, int attempt, string? errorMessage, CancellationToken cancellationToken)
     {
         var log = new JobLog
         {
             Id = Guid.NewGuid(),
+            JobId = jobId,
             TaskId = taskId,
             StartTime = startTime,
             EndTime = endTime,

@@ -8,6 +8,7 @@ namespace Agw.Jobs.Domain.Entities;
 public class JobLog : BaseEntity
 {
     public Guid Id { get; set; }
+    public Guid JobId { get; set; }
     public Guid TaskId { get; set; }
 
     public DateTimeOffset StartTime { get; set; }

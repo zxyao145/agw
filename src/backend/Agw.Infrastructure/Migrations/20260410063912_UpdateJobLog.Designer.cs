@@ -3,6 +3,7 @@ using System;
 using Agw.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Agw.Infrastructure.Migrations
 {
     [DbContext(typeof(LlmDbContext))]
-    partial class LlmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260410063912_UpdateJobLog")]
+    partial class UpdateJobLog
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.5");
@@ -511,10 +514,6 @@ namespace Agw.Infrastructure.Migrations
                     b.Property<bool>("Success")
                         .HasColumnType("INTEGER")
                         .HasColumnName("success");
-
-                    b.Property<Guid>("TaskId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("task_id");
 
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT")

@@ -107,6 +107,7 @@ public class JobHostedService(
         var timeCalculator = scope.ServiceProvider.GetRequiredService<IJobTimeCalculator>();
         var agentExecutor = scope.ServiceProvider.GetRequiredService<IAgentExecutor>();
 
+        Guid taskId = Guid.Empty;
         try
         {
             var markedRunning = await jobTaskStore.MarkRunningAsync(inMemoryTask.JobId, cancellationToken);
@@ -120,12 +121,13 @@ public class JobHostedService(
             }
 
             var job = ToJob(inMemoryTask);
-            await agentExecutor.ExecuteAsync(job, cancellationToken);
+            taskId = await agentExecutor.ExecuteAsync(job, cancellationToken);
 
             var nextRunTime = timeCalculator.GetNextRunTime(job, DateTimeOffset.UtcNow);
             await jobTaskStore.MarkSucceededAsync(inMemoryTask.JobId, nextRunTime, cancellationToken);
             await jobTaskStore.AddExecutionLogAsync(
                 inMemoryTask.JobId,
+                taskId,
                 start,
                 DateTimeOffset.UtcNow,
                 success: true,
@@ -165,6 +167,7 @@ public class JobHostedService(
                     await jobTaskStore.MarkRetryAsync(inMemoryTask.JobId, nextRunTime, retryCount, ex.Message, cancellationToken);
                     await jobTaskStore.AddExecutionLogAsync(
                         inMemoryTask.JobId,
+                        taskId,
                         start,
                         DateTimeOffset.UtcNow,
                         success: false,
@@ -191,6 +194,7 @@ public class JobHostedService(
                     await jobTaskStore.MarkFailedAsync(inMemoryTask.JobId, retryCount, ex.Message, cancellationToken);
                     await jobTaskStore.AddExecutionLogAsync(
                         inMemoryTask.JobId,
+                        taskId,
                         start,
                         DateTimeOffset.UtcNow,
                         success: false,

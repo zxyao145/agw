@@ -274,21 +274,19 @@ public class ProjectTaskAppService
         IReadOnlyList<TaskRecord> records,
         IReadOnlyList<AgwMessage>? messages)
     {
-        var summary = ToSummaryResponse(task);
-
         return new ProjectTaskResponse(
-            summary.Id,
-            summary.ProjectId,
-            summary.ContextId,
-            summary.JobId,
-            summary.Status,
-            summary.Title,
+            task.Id,
+            task.ProjectId.Normalize(),
+            task.ContextId,
+            task.JobId,
+            task.Status,
+            task.Title,
             GetInputText(records.LastOrDefault(record => record.ToChatMessage()?.Role == ChatRole.User)),
             task.ErrorMessage ?? records.LastOrDefault()?.Error,
-            summary.CreateTime,
-            summary.UpdateTime,
+            task.CreateTime,
+            task.UpdateTime,
             GetStartedTime(task),
-            summary.FinishedTime,
+            task.FinishedTime,
             CountMessages(records),
             messages);
     }

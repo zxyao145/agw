@@ -305,8 +305,10 @@ public class LlmDbContext : DbContext
         modelBuilder.Entity<JobLog>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.JobId);
+            entity.Property(e => e.TaskId);
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
-            entity.HasIndex(e => new { e.TaskId, e.StartTime });
+            entity.HasIndex(e => new { e.JobId, e.StartTime });
         });
 
         modelBuilder.Entity<OAuthAuthorizationToken>(entity =>

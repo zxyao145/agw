@@ -60,7 +60,7 @@ public class JsonInitializationStateStore : IInitializationStateStore
         };
 
         var settingsDirectory = Path.GetDirectoryName(_settingsPath);
-        if (!string.IsNullOrWhiteSpace(settingsDirectory))
+        if (!string.IsNullOrWhiteSpace(settingsDirectory) && !Directory.Exists(settingsDirectory))
         {
             Directory.CreateDirectory(settingsDirectory);
         }
