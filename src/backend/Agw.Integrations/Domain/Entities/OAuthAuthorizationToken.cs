@@ -1,24 +1,19 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Shared.Data;
-
-namespace Agw.Providers.Domain.Entities;
+namespace Agw.Integrations.Domain.Entities;
 
 /// <summary>
 /// Persists provider-issued OAuth tokens for a specific authenticated subject.
 /// </summary>
 [Table("oauth_authorization")]
-public class OAuthAuthorizationToken : BaseEntity, IAggregateRoot
+public class OAuthAuthorizationToken
 {
     /// <summary>
     /// Gets or sets the unique identifier for the stored token record.
     /// </summary>
     public Guid Id { get; set; }
 
-    /// <summary>
-    /// Gets or sets the provider name that issued the OAuth token.
-    /// </summary>
-    public string Provider { get; set; } = string.Empty;
+    public Guid AppInstanceId { get; set; }
 
     /// <summary>
     /// Gets or sets the provider-specific subject or account identifier the token belongs to.
@@ -39,11 +34,6 @@ public class OAuthAuthorizationToken : BaseEntity, IAggregateRoot
     /// Gets or sets the token type returned by the provider, such as Bearer.
     /// </summary>
     public string TokenType { get; set; } = "Bearer";
-
-    /// <summary>
-    /// Gets or sets the optional space-delimited scopes granted to the token.
-    /// </summary>
-    public string? Scope { get; set; }
 
     /// <summary>
     /// Gets or sets the UTC timestamp when the access token expires, if known.

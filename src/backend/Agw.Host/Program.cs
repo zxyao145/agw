@@ -1,5 +1,7 @@
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
+using Agw.Integrations.Controllers;
+using Agw.Integrations.Extensions;
 using Agw.Jobs;
 using Agw.Jobs.Controllers;
 using Agw.Manager.Api.Controllers;
@@ -7,6 +9,7 @@ using Agw.Providers;
 using Agw.Setup.Controllers;
 using Agw.Setup.Middleware;
 using Agw.Setup.Services;
+using Agw.Shared.Utils;
 using Agw.Skills;
 using Agw.Skills.Controllers;
 using Agw.Tasks;
@@ -99,10 +102,14 @@ try
         .AddApplicationPart(typeof(ProjectsController).Assembly)
         .AddApplicationPart(typeof(SkillsController).Assembly)
         .AddApplicationPart(typeof(JobsController).Assembly)
-        .AddApplicationPart(typeof(SetupController).Assembly);
+        .AddApplicationPart(typeof(SetupController).Assembly)
+        .AddApplicationPart(typeof(OauthController).Assembly)
+        .AddApplicationPart(typeof(ToolsController).Assembly)
+        ;
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
     builder.Services.AddHttpClient();
+    builder.Services.AddSingleton<IocUtil>();
 
     // add module
     builder.Services
@@ -116,6 +123,7 @@ try
         .AddTasks(builder.Configuration)
         .AddTools(builder.Configuration)
         .AddSetup(builder.Configuration)
+        .AddIntegrations(builder.Configuration)
         ;
 
     builder.Services.AddHybridCache();

@@ -24,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/backend/Agw.Integrations/Agw.Integrations.csproj" />
     <ProjectReference Include="../../src/backend/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/backend/Agw.Jobs/Agw.Jobs.csproj" />
     <ProjectReference Include="../../src/backend/Agw.Providers/Agw.Providers.csproj" />

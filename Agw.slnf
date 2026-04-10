@@ -5,6 +5,7 @@
       "src\\backend\\Agw.Agents\\Agw.Agents.csproj",
       "src\\backend\\Agw.Host\\Agw.Host.csproj",
       "src\\backend\\Agw.Infrastructure\\Agw.Infrastructure.csproj",
+      "src\\backend\\Agw.Integrations\\Agw.Integrations.csproj",
       "src\\backend\\Agw.Jobs\\Agw.Jobs.csproj",
       "src\\backend\\Agw.Providers\\Agw.Providers.csproj",
       "src\\backend\\Agw.Setup\\Agw.Setup.csproj",

@@ -2,6 +2,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
+		<ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
 		<ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
 		<ProjectReference Include="..\Agw.Tasks\Agw.Tasks.csproj" />
 		<ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />

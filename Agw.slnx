@@ -15,6 +15,7 @@
   <Folder Name="/3.Core/">
     <Project Path="src/backend/Agw.Agents/Agw.Agents.csproj" />
     <Project Path="src/backend/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <Project Path="src/backend/Agw.Integrations/Agw.Integrations.csproj" />
     <Project Path="src/backend/Agw.Jobs/Agw.Jobs.csproj" />
     <Project Path="src/backend/Agw.Providers/Agw.Providers.csproj" />
     <Project Path="src/backend/Agw.Skills/Agw.Skills.csproj" />

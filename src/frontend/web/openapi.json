@@ -6,22 +6,10 @@
   },
   "servers": [
     {
-      "url": "http://localhost:5015/"
+      "url": "http://localhost:5017/"
     }
   ],
   "paths": {
-    "/api/integrations/oauth/callback": {
-      "get": {
-        "tags": [
-          "Integrations"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/agentflows": {
       "get": {
         "tags": [
@@ -504,52 +492,6 @@
         }
       }
     },
-    "/api/tools": {
-      "get": {
-        "tags": [
-          "Tools"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/tools/by-category": {
-      "get": {
-        "tags": [
-          "Tools"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/tools/{name}": {
-      "get": {
-        "tags": [
-          "Tools"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/executions/{agentId}/ws": {
       "get": {
         "tags": [
@@ -616,10 +558,110 @@
         }
       }
     },
-    "/api/external-agents/claude-code/ws": {
+    "/api/integrations/app-definitions": {
       "get": {
         "tags": [
-          "ClaudeCode"
+          "Integrations"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/integrations/app-instances": {
+      "get": {
+        "tags": [
+          "Integrations"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Integrations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppInstanceCreateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppInstanceCreateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppInstanceCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/integrations/app-instances/{id}/authorize-start": {
+      "post": {
+        "tags": [
+          "Integrations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/integrations/app-instances/{id}": {
+      "delete": {
+        "tags": [
+          "Integrations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/integrations/oauth/callback": {
+      "get": {
+        "tags": [
+          "Oauth"
         ],
         "responses": {
           "200": {
@@ -1687,6 +1729,52 @@
           }
         }
       }
+    },
+    "/api/tools": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tools/by-category": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tools/{name}": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1973,6 +2061,29 @@
               "type": "string",
               "format": "uuid"
             }
+          }
+        }
+      },
+      "AppInstanceCreateRequest": {
+        "required": [
+          "appName",
+          "clientId",
+          "clientSecret",
+          "usePkce"
+        ],
+        "type": "object",
+        "properties": {
+          "appName": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "clientSecret": {
+            "type": "string"
+          },
+          "usePkce": {
+            "type": "boolean"
           }
         }
       },
@@ -2638,9 +2749,6 @@
   },
   "tags": [
     {
-      "name": "Integrations"
-    },
-    {
       "name": "Agentflows"
     },
     {
@@ -2650,13 +2758,13 @@
       "name": "McpToolServers"
     },
     {
-      "name": "Tools"
-    },
-    {
       "name": "AgentExecutions"
     },
     {
-      "name": "ClaudeCode"
+      "name": "Integrations"
+    },
+    {
+      "name": "Oauth"
     },
     {
       "name": "Jobs"
@@ -2681,6 +2789,9 @@
     },
     {
       "name": "ProjectTasks"
+    },
+    {
+      "name": "Tools"
     }
   ]
 }

@@ -1,39 +1,44 @@
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 
-using Agw.Providers.Domain.Entities;
+using Agw.Integrations.Domain.Entities;
 using Agw.Shared.Data.Repositories;
 
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 
-namespace Agw.Api.Controllers;
+
+namespace Agw.Integrations.Controllers;
 
 [ApiController]
 [Route("api/integrations/oauth")]
-public class IntegrationsController : ControllerBase
+public class OauthController : ControllerBase
 {
     private static readonly JsonSerializerOptions JsonSerializerOptions = new(JsonSerializerDefaults.Web);
-    private const string CallbackPath = "/integrations/callback";
-    private const string SystemActor = "integrations/oauth-callback";
 
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IRepository<AppDefinition> _appDefinitionRepository;
+    private readonly IRepository<AppInstance> _appInstanceRepository;
     private readonly IRepository<OAuthAuthorizationToken> _oAuthAuthorizationTokenRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly ILogger<IntegrationsController> _logger;
+    private readonly ILogger<OauthController> _logger;
 
-    public IntegrationsController(
+    public OauthController(
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
+        IRepository<AppDefinition> appDefinitionRepository,
+        IRepository<AppInstance> appInstanceRepository,
         IRepository<OAuthAuthorizationToken> oAuthAuthorizationTokenRepository,
         IUnitOfWork unitOfWork,
-        ILogger<IntegrationsController> logger)
+        ILogger<OauthController> logger)
     {
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
+        _appDefinitionRepository = appDefinitionRepository;
+        _appInstanceRepository = appInstanceRepository;
         _oAuthAuthorizationTokenRepository = oAuthAuthorizationTokenRepository;
         _unitOfWork = unitOfWork;
         _logger = logger;
@@ -56,9 +61,10 @@ public class IntegrationsController : ControllerBase
             queryParameters.AddRange(exchangeResult.ToQueryParameters());
         }
 
+        var uiCallbackUrl = ResolveUiCallbackUrl(callbackState);
         var redirectUrl = queryParameters.Count == 0
-            ? CallbackPath
-            : QueryHelpers.AddQueryString(CallbackPath, queryParameters);
+            ? uiCallbackUrl
+            : QueryHelpers.AddQueryString(uiCallbackUrl, queryParameters);
 
         return Redirect(redirectUrl);
     }
@@ -99,14 +105,16 @@ public class IntegrationsController : ControllerBase
             return OAuthExchangeResult.Failed("missing_provider");
         }
 
-        var providerConfiguration = ResolveProviderConfiguration(providerKey);
+        var providerConfiguration = await ResolveProviderConfigurationAsync(providerKey, callbackState, cancellationToken);
         if (providerConfiguration == null)
         {
             _logger.LogWarning("OAuth callback for provider {Provider} skipped because configuration is missing.", providerKey);
             return OAuthExchangeResult.Failed("provider_not_configured", providerKey);
         }
 
-        if (string.IsNullOrWhiteSpace(providerConfiguration.ClientId) || string.IsNullOrWhiteSpace(providerConfiguration.TokenEndpoint))
+        if (providerConfiguration.AppInstanceId == Guid.Empty
+            || string.IsNullOrWhiteSpace(providerConfiguration.ClientId)
+            || string.IsNullOrWhiteSpace(providerConfiguration.TokenEndpoint))
         {
             _logger.LogWarning("OAuth callback for provider {Provider} skipped because configuration is incomplete.", providerKey);
             return OAuthExchangeResult.Failed("provider_configuration_incomplete", providerKey);
@@ -145,7 +153,7 @@ public class IntegrationsController : ControllerBase
             var now = DateTime.UtcNow;
             var tokenEntity = await _oAuthAuthorizationTokenRepository.Queryable
                 .FirstOrDefaultAsync(
-                    token => token.Provider == providerConfiguration.StorageProviderName && token.Subject == subject,
+                    token => token.AppInstanceId == providerConfiguration.AppInstanceId,
                     cancellationToken);
 
             if (tokenEntity == null)
@@ -153,10 +161,8 @@ public class IntegrationsController : ControllerBase
                 tokenEntity = new OAuthAuthorizationToken
                 {
                     Id = Guid.NewGuid(),
-                    Provider = providerConfiguration.StorageProviderName,
+                    AppInstanceId = providerConfiguration.AppInstanceId,
                     Subject = subject,
-                    CreateBy = SystemActor,
-                    CreateTime = now
                 };
 
                 await _oAuthAuthorizationTokenRepository.AddAsync(tokenEntity);
@@ -166,17 +172,16 @@ public class IntegrationsController : ControllerBase
                 _oAuthAuthorizationTokenRepository.Update(tokenEntity);
             }
 
+            tokenEntity.Subject = subject;
             tokenEntity.AccessToken = accessToken;
             tokenEntity.RefreshToken = TryGetString(root, "refresh_token");
             tokenEntity.TokenType = TryGetString(root, "token_type") ?? "Bearer";
-            tokenEntity.Scope = TryGetString(root, "scope");
+            //tokenEntity.Scope = TryGetString(root, "scope");
             tokenEntity.ExpiresAtUtc = ResolveExpiresAtUtc(root, now);
-            tokenEntity.UpdateBy = SystemActor;
-            tokenEntity.UpdateTime = now;
 
             await _unitOfWork.SaveChangesAsync();
 
-            return OAuthExchangeResult.Succeeded(providerConfiguration.StorageProviderName, subject);
+            return OAuthExchangeResult.Succeeded(providerKey, subject);
         }
         catch (Exception ex)
         {
@@ -264,8 +269,36 @@ public class IntegrationsController : ControllerBase
         });
     }
 
-    private OAuthProviderConfiguration? ResolveProviderConfiguration(string providerKey)
+    private async Task<OAuthProviderConfiguration?> ResolveProviderConfigurationAsync(
+        string providerKey,
+        OAuthCallbackState? callbackState,
+        CancellationToken cancellationToken)
     {
+        var appInstanceId = callbackState?.AppInstanceId;
+        if (appInstanceId.HasValue && appInstanceId.Value != Guid.Empty)
+        {
+            var appInstance = await _appInstanceRepository.GetByIdAsync(appInstanceId.Value);
+            if (appInstance == null)
+            {
+                return null;
+            }
+
+            var appDefinition = await _appDefinitionRepository.GetByIdAsync(appInstance.AppName);
+            if (appDefinition == null)
+            {
+                return null;
+            }
+
+            return new OAuthProviderConfiguration
+            {
+                ClientId = appInstance.ClientId,
+                ClientSecret = appInstance.ClientSecret,
+                TokenEndpoint = appDefinition.TokenEndpoint,
+                SubjectField = appDefinition.SubjectField,
+                AppInstanceId = appInstance.Id
+            };
+        }
+
         var section = _configuration.GetSection($"Integrations:OAuthProviders:{providerKey}");
         if (!section.Exists())
         {
@@ -278,9 +311,6 @@ public class IntegrationsController : ControllerBase
             return null;
         }
 
-        configuration.StorageProviderName = string.IsNullOrWhiteSpace(configuration.StorageProviderName)
-            ? providerKey
-            : configuration.StorageProviderName;
 
         return configuration;
     }
@@ -390,6 +420,22 @@ public class IntegrationsController : ControllerBase
         return $"agw_oauth2_{WebEncoders.Base64UrlEncode(bytes)}";
     }
 
+    private string ResolveUiCallbackUrl(OAuthCallbackState? callbackState)
+    {
+        if (!string.IsNullOrWhiteSpace(callbackState?.UiCallbackUrl))
+        {
+            return callbackState.UiCallbackUrl;
+        }
+
+        var configuredUiCallbackUrl = _configuration["Integrations:UiCallbackUrl"];
+        if (!string.IsNullOrWhiteSpace(configuredUiCallbackUrl))
+        {
+            return configuredUiCallbackUrl;
+        }
+
+        return $"{Request.Scheme}://{Request.Host}{Request.PathBase}{IntegrationConstants.UiCallbackPath}";
+    }
+
     private static string? TryGetString(JsonElement element, string? path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -485,7 +531,9 @@ public class IntegrationsController : ControllerBase
     private sealed record OAuthCallbackState
     {
         public string? State { get; init; }
+        public Guid AppInstanceId { get; init; }
         public string? IntegrationId { get; init; }
+        public string? UiCallbackUrl { get; init; }
         public string? Verifier { get; init; }
         public string? CreatedAt { get; init; }
     }
@@ -497,7 +545,7 @@ public class IntegrationsController : ControllerBase
         public string TokenEndpoint { get; set; } = string.Empty;
         public string? RedirectUri { get; set; }
         public string? SubjectField { get; set; }
-        public string StorageProviderName { get; set; } = string.Empty;
+        public Guid AppInstanceId { get; set; } 
     }
 
     private sealed record OAuthExchangeResult(string Status, string? Provider = null, string? Subject = null, string? Error = null)

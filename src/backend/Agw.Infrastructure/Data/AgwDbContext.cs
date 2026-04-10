@@ -1,6 +1,7 @@
 using System.Text.Json;
 
 using Agw.Agents.Domain.Entities;
+using Agw.Integrations.Domain.Entities;
 using Agw.Jobs.Domain.Entities;
 using Agw.Providers.Domain.Entities;
 using Agw.Shared.Data.Entities.Skills;
@@ -52,6 +53,8 @@ public class AgwDbContext : DbContext
     public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobLog> JobLogs => Set<JobLog>();
+
+    public DbSet<AppInstance> AppInstances => Set<AppInstance>();
 
     public DbSet<OAuthAuthorizationToken> OAuthAuthorizationTokens => Set<OAuthAuthorizationToken>();
 
@@ -311,18 +314,31 @@ public class AgwDbContext : DbContext
             entity.HasIndex(e => new { e.JobId, e.StartTime });
         });
 
+        modelBuilder.Entity<AppInstance>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.AppName).IsUnique(false);
+            entity.HasIndex(e => e.ClientId).IsUnique();
+            entity.Property(e => e.AppName).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.ClientId).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ClientSecret).IsRequired().HasMaxLength(2000);
+
+            entity.HasOne(e => e.AuthorizationToken)
+                .WithOne()
+                .HasForeignKey<OAuthAuthorizationToken>(e => e.AppInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<OAuthAuthorizationToken>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.Provider);
-            entity.HasIndex(e => new { e.Provider, e.Subject });
+            entity.HasIndex(e => e.AppInstanceId).IsUnique();
             entity.HasIndex(e => e.ExpiresAtUtc);
-            entity.Property(e => e.Provider).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.AppInstanceId).IsRequired();
             entity.Property(e => e.Subject).IsRequired().HasMaxLength(200);
             entity.Property(e => e.AccessToken).IsRequired().HasMaxLength(4000);
             entity.Property(e => e.RefreshToken).HasMaxLength(4000);
             entity.Property(e => e.TokenType).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Scope).HasMaxLength(2000);
         });
     }
 
