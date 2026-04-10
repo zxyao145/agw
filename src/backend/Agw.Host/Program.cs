@@ -9,6 +9,9 @@ using Agw.Skills.Controllers;
 using Agw.Tasks;
 using Agw.Tasks.Controllers;
 using Agw.Tools;
+using Agw.Setup.Controllers;
+using Agw.Setup.Middleware;
+using Agw.Setup.Services;
 
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
@@ -39,6 +42,8 @@ try
     Log.Information("Starting Agw Host");
 
     var builder = WebApplication.CreateBuilder(args);
+
+    builder.Configuration.AddJsonFile("appsettings.setup.json", optional: true, reloadOnChange: true);
 
     // Use Serilog for logging
     builder.Host.UseSerilog();
@@ -85,7 +90,7 @@ try
     });
 
     builder.Services
-        .AddControllers()
+        .AddControllersWithViews()
         .AddJsonOptions(options =>
         {
             options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
@@ -93,7 +98,8 @@ try
         .AddApplicationPart(typeof(AgentsController).Assembly)
         .AddApplicationPart(typeof(ProjectsController).Assembly)
         .AddApplicationPart(typeof(SkillsController).Assembly)
-        .AddApplicationPart(typeof(JobsController).Assembly);
+        .AddApplicationPart(typeof(JobsController).Assembly)
+        .AddApplicationPart(typeof(SetupController).Assembly);
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
     builder.Services.AddHttpClient();
@@ -109,17 +115,22 @@ try
         .AddSkills(builder.Configuration)
         .AddTasks(builder.Configuration)
         .AddTools(builder.Configuration)
+        .AddSetup(builder.Configuration)
         ;
 
     builder.Services.AddHybridCache();
 
     var app = builder.Build();
 
-    // Seed database on startup
+    // Seed database on startup after initialization has been completed.
     using (var scope = app.Services.CreateScope())
     {
-        var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
-        await seeder.SeedAsync();
+        var stateStore = scope.ServiceProvider.GetRequiredService<IInitializationStateStore>();
+        if (stateStore.GetSnapshot().IsInitialized)
+        {
+            var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
+            await seeder.SeedAsync();
+        }
     }
 
     if (app.Environment.IsDevelopment())
@@ -145,6 +156,8 @@ try
     // Enable WebSocket support
     app.UseWebSockets();
     app.UseStaticFiles();
+    app.UseMiddleware<InitializationGuardMiddleware>();
+    app.UseMiddleware<ApiKeyGuardMiddleware>();
 
     // TODO: A2A
     //var a2AServerOptions = app.Services

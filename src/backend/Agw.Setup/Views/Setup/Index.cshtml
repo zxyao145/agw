@@ -1,0 +1,38 @@
+@model SetupRequest
+@{
+    ViewData["Title"] = "系统初始化";
+}
+
+<h1>Agw 初始化向导</h1>
+<p>首次运行需要先完成初始化。初始化完成前，所有 API 接口将不可访问。</p>
+
+<div asp-validation-summary="ModelOnly" class="error"></div>
+
+<form method="post">
+    @Html.AntiForgeryToken()
+
+    <div class="field">
+        <label asp-for="Provider"></label>
+        <select asp-for="Provider">
+            <option value="sqlite">SQLite</option>
+            <option value="mysql">MySQL</option>
+            <option value="postgresql">PostgreSQL</option>
+        </select>
+        <div class="hint">后续可扩展更多数据库类型。</div>
+    </div>
+
+    <div class="field">
+        <label asp-for="ConnectionString"></label>
+        <input asp-for="ConnectionString" />
+        <div class="hint">示例：SQLite = Data Source=agw.db；MySQL/PostgreSQL 请填写完整连接字符串。</div>
+        <span asp-validation-for="ConnectionString" class="error"></span>
+    </div>
+
+    <div class="field">
+        <label asp-for="ApiKey"></label>
+        <input asp-for="ApiKey" placeholder="留空表示不启用统一 API Key" />
+        <div class="hint">配置后调用所有 /api 接口需携带请求头 X-API-Key。</div>
+    </div>
+
+    <button type="submit" class="button">初始化系统</button>
+</form>
