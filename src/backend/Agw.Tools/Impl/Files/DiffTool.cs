@@ -1,7 +1,6 @@
-using System.ComponentModel;
 using System.Text;
 
-using Agw.Tools.Abstractions;
+using Agw.Shared.Contracts.Tools.Abstractions;
 
 using DiffPlex.DiffBuilder;
 using DiffPlex.DiffBuilder.Model;

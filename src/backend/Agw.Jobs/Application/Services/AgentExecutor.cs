@@ -1,8 +1,8 @@
 using Agw.Appliaction.Services.Agentflows;
 using Agw.Appliaction.Services.Agents;
 using Agw.Jobs.Domain.Entities;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
-using Agw.Shared.Enums;
 using Agw.Shared.Utils;
 using Agw.Tasks.Application;
 using Agw.Tasks.Domain.Services;

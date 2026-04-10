@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Models;
 
 namespace Agw.Api.Contracts;

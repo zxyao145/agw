@@ -1,4 +1,4 @@
-namespace Agw.Tools.Attributes;
+namespace Agw.Shared.Contracts.Tools.Attributes;
 
 /// <summary>
 /// Marks a method as an AI tool that can be used by agents.

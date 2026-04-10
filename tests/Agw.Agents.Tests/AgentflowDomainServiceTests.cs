@@ -1,3 +1,5 @@
+using Agw.Shared.Contracts.Agents;
+
 namespace Agw.Agents.Tests;
 
 public class AgentflowDomainServiceTests

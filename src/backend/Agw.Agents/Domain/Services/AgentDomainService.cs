@@ -1,3 +1,6 @@
+using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Extensions;
+
 namespace Agw.Agents.Domain.Services;
 
 public class AgentDomainService

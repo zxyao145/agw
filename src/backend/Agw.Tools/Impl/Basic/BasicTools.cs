@@ -1,7 +1,4 @@
-using System.ComponentModel;
 using System.Globalization;
-
-using Agw.Tools.Attributes;
 
 namespace Agw.Tools.Impl.Basic;
 

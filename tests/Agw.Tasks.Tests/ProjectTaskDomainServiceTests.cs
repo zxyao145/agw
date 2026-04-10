@@ -2,8 +2,8 @@ using System.Reflection;
 using System.Text.Json;
 
 using Agw.Shared;
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
-using Agw.Shared.Enums;
 using Agw.Tasks.Domain.Services;
 
 using Microsoft.Extensions.AI;

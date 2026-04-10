@@ -1,6 +1,6 @@
 using Agw.Shared;
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
-using Agw.Shared.Enums;
 
 namespace Agw.Tasks.Domain.Services;
 

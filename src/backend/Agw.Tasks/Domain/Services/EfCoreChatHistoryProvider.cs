@@ -2,10 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 
-using Agw.Shared;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
-using Agw.Shared.Enums;
+using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
 

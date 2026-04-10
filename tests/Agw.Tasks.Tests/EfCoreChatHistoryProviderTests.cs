@@ -4,8 +4,8 @@ using System.Text.Json;
 
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
-using Agw.Shared.Enums;
 
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;

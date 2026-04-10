@@ -39,18 +39,13 @@ export function AppInstanceCard({
             <CardTitle>
               <div className="flex gap-2 justify-start items-center">
                 <span className="text-base">{instance.displayName}</span>
-                <Badge
-                  className="font-mono text-xs"
-                  variant={authorizationState.variant}
-                >
+                <Badge className="font-mono text-xs" variant={authorizationState.variant}>
                   {authorizationState.label}
                 </Badge>
               </div>
             </CardTitle>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">
-                {formatIntegrationCategory(instance.category)}
-              </Badge>
+              <Badge variant="secondary">{formatIntegrationCategory(instance.category)}</Badge>
               <Badge variant="outline">{instance.provider}</Badge>
             </div>
           </div>
@@ -65,9 +60,7 @@ export function AppInstanceCard({
           <dl className="space-y-2 text-sm">
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Client ID</dt>
-              <dd className="truncate font-mono text-xs">
-                {instance.clientId}
-              </dd>
+              <dd className="truncate font-mono text-xs">{instance.clientId}</dd>
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Client secret</dt>
@@ -88,9 +81,7 @@ export function AppInstanceCard({
               </dt>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <dd className="truncate">
-                    {instance.authorizationSubject ?? "Not granted yet"}
-                  </dd>
+                  <dd className="truncate">{instance.authorizationSubject ?? "Not granted yet"}</dd>
                 </TooltipTrigger>
                 <TooltipContent>
                   {instance.authorizationSubject ?? "Not granted yet"}
@@ -120,9 +111,7 @@ export function AppInstanceCard({
             onClick={() => onReconnect(instance)}
             disabled={isReconnectPending || isDeletePending}
           >
-            <RefreshCw
-              className={isReconnectPending ? "size-4 animate-spin" : "size-4"}
-            />
+            <RefreshCw className={isReconnectPending ? "size-4 animate-spin" : "size-4"} />
             Reconnect
           </Button>
           <Button

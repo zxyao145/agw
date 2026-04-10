@@ -1,5 +1,5 @@
-using Agw.Shared;
 using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Extensions;
 using Agw.Tasks.Domain.Services;
 
 namespace Agw.Tasks.Tests;

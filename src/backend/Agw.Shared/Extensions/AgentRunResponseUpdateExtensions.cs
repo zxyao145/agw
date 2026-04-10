@@ -4,7 +4,7 @@ using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace Agw.Shared;
+namespace Agw.Shared.Extensions;
 
 public static class AgentRunResponseUpdateExtensions
 {

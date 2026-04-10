@@ -1,6 +1,6 @@
 using Microsoft.Extensions.AI;
 
-namespace Agw.Tools.Abstractions;
+namespace Agw.Shared.Contracts.Tools.Abstractions;
 
 public interface IAgwTool
 {

@@ -1,3 +1,5 @@
+using Agw.Shared.Contracts.Agents;
+
 namespace Agw.Agents.Domain.Services;
 
 public class AgentflowDomainService

@@ -1,9 +1,9 @@
 using Agw.Agents.Domain.Entities;
 using Agw.Agents.ExternalAgents;
 using Agw.Providers.Domain.Entities;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
-using Agw.Shared.Enums;
 using Agw.Shared.Utils;
 
 using ClaudeCodeSdk.MAF;

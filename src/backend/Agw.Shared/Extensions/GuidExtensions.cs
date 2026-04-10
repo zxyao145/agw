@@ -1,4 +1,4 @@
-namespace Agw.Shared;
+namespace Agw.Shared.Extensions;
 
 public static class GuidExtensions
 {

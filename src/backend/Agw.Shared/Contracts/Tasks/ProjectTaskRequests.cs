@@ -1,4 +1,3 @@
-using Agw.Shared.Enums;
 using Agw.Shared.Models;
 
 namespace Agw.Shared.Contracts.Tasks;

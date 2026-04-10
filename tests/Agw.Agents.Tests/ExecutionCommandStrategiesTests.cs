@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 
 using Agw.Api.Contracts;
 using Agw.Api.Execution;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Models;
 

@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+
 using Agw.Integrations.Contracts.Manager;
 using Agw.Integrations.Domain.Entities;
 using Agw.Shared.Data.Repositories;
@@ -6,8 +9,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
-using System.Text.Json;
 
 namespace Agw.Integrations.Controllers;
 

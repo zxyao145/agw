@@ -3,9 +3,7 @@ using System.Reflection;
 
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Integrations;
 using Agw.Integrations.Contracts.Manager;
-using Agw.Integrations.Controllers;
 using Agw.Integrations.Domain.Entities;
 using Agw.Shared.Data.Repositories;
 

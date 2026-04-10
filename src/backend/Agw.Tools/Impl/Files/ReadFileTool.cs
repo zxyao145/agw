@@ -1,6 +1,4 @@
-using System.ComponentModel;
-
-using Agw.Tools.Abstractions;
+using Agw.Shared.Contracts.Tools.Abstractions;
 
 using Microsoft.Extensions.AI;
 

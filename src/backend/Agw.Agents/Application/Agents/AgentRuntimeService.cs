@@ -9,10 +9,12 @@ using Agw.Agents.ExternalAgents;
 using Agw.Api.Contracts;
 using Agw.Domain.Services;
 using Agw.Providers.Domain.Entities;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Extensions;
 using Agw.Shared.Models;
 using Agw.Shared.Utils;
 

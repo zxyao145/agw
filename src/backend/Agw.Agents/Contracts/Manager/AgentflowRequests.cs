@@ -1,4 +1,5 @@
 using Agw.Appliaction.Services.Agentflows;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Models;
 
 namespace Agw.Manager.Api.Contracts;

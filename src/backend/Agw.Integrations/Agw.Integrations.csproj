@@ -7,6 +7,6 @@
     </ItemGroup>
     <ItemGroup>
         <Folder Include="Data\" />
-        <Folder Include="Git\" />
+        <Folder Include="Tools\GitHub\" />
     </ItemGroup>
 </Project>

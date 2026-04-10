@@ -1,3 +1,5 @@
+using Agw.Shared.Contracts.Agents;
+
 namespace Agw.Api.Contracts;
 
 public record AgentExecutionRequest(

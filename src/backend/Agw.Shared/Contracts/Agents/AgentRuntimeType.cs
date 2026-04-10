@@ -1,4 +1,4 @@
-namespace Agw.Shared.Enums;
+namespace Agw.Shared.Contracts.Agents;
 
 /// <summary>
 /// Agent Runtime Type

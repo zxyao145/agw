@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Shared.Enums;
+using Agw.Shared.Contracts.Tasks;
 
 namespace Agw.Shared.Data.Entities.Tasks;
 

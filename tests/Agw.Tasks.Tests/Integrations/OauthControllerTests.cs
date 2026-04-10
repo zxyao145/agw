@@ -1,14 +1,10 @@
 using System.Net;
-using System.Net.Http;
-using System.Security.Cryptography;
 using System.Text;
 
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Contracts.Manager;
-using Agw.Integrations.Controllers;
 using Agw.Integrations.Domain.Entities;
-using Agw.Shared.Data.Repositories;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;

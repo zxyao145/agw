@@ -1,4 +1,4 @@
-namespace Agw.Tools.Attributes;
+namespace Agw.Shared.Contracts.Tools.Attributes;
 
 /// <summary>
 /// Provides JSON schema information for a parameter.

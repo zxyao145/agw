@@ -2,7 +2,7 @@ using System.Reflection;
 
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Domain.Entities;
-using Agw.Shared.Enums;
+using Agw.Shared.Contracts.Agents;
 
 namespace Agw.Tasks.Tests;
 

@@ -1,8 +1,6 @@
-using System.ComponentModel;
 using System.Reflection;
 
-using Agw.Tools.Abstractions;
-using Agw.Tools.Attributes;
+using Agw.Shared.Contracts.Tools.Abstractions;
 
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;

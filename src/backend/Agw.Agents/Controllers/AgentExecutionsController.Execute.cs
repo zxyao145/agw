@@ -1,5 +1,6 @@
 using Agw.Api.Contracts;
 using Agw.Api.Execution;
+using Agw.Shared.Contracts.Agents;
 
 using Microsoft.AspNetCore.Mvc;
 

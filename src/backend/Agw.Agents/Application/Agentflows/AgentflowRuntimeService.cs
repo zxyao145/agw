@@ -3,8 +3,10 @@ using System.Text.Json;
 
 using Agw.Agents.Application;
 using Agw.Appliaction.Services.Agents;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Extensions;
 using Agw.Shared.Models;
 
 using Microsoft.Agents.AI;

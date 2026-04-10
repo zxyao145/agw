@@ -545,7 +545,7 @@ public class OauthController : ControllerBase
         public string TokenEndpoint { get; set; } = string.Empty;
         public string? RedirectUri { get; set; }
         public string? SubjectField { get; set; }
-        public Guid AppInstanceId { get; set; } 
+        public Guid AppInstanceId { get; set; }
     }
 
     private sealed record OAuthExchangeResult(string Status, string? Provider = null, string? Subject = null, string? Error = null)

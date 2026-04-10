@@ -2,10 +2,9 @@ using System.Reflection;
 
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Shared;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
-using Agw.Shared.Enums;
+using Agw.Shared.Extensions;
 using Agw.Tasks.Application;
 using Agw.Tasks.Domain.Services;
 

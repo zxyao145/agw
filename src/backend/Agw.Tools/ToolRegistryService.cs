@@ -1,13 +1,12 @@
-using System.ComponentModel;
 using System.Reflection;
 
 using Agw.Domain.Tools;
+using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Models;
-using Agw.Tools.Abstractions;
-using Agw.Tools.Attributes;
 
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Agw.Domain.Services;
 
@@ -22,12 +21,14 @@ public class ToolRegistryService
     private readonly Dictionary<string, IAgwTool> _toolInstances = new(StringComparer.OrdinalIgnoreCase);
     private readonly AgwToolFactory _toolFactory;
     private readonly IServiceProvider? _serviceProvider;
+    private readonly ILogger<ToolRegistryService> _logger;
 
-    public ToolRegistryService(IServiceProvider? serviceProvider = null)
+    public ToolRegistryService(ILogger<ToolRegistryService> logger, IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
         _toolFactory = new AgwToolFactory(serviceProvider);
         DiscoverTools();
+        _logger = logger;
     }
 
     /// <summary>
@@ -35,9 +36,18 @@ public class ToolRegistryService
     /// </summary>
     private void DiscoverTools()
     {
-        var assembly = typeof(AiToolAttribute).Assembly;
-        DiscoverAttributedMethods(assembly);
-        DiscoverToolImplementations(assembly);
+        var assemblies = AppDomain.CurrentDomain
+            .GetAssemblies()
+            .Where(a => a.GetName().Name?.StartsWith("Agw.") ?? false)
+            .ToList();
+
+        foreach (var asm in assemblies)
+        {
+            _logger.LogInformation("Discovering tools in assembly: {AssemblyName}", asm.FullName);
+
+            DiscoverAttributedMethods(asm);
+            DiscoverToolImplementations(asm);
+        }
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Utils;
 
 using ClaudeCodeSdk.MAF;

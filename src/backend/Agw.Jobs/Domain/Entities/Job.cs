@@ -1,8 +1,8 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
 using Agw.Jobs.Domain.Enums;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data;
-using Agw.Shared.Enums;
 
 namespace Agw.Jobs.Domain.Entities;
 

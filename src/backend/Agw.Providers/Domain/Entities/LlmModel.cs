@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Agw.Shared.Contracts.Providers;
 using Agw.Shared.Data;
-using Agw.Shared.Enums;
 
 namespace Agw.Providers.Domain.Entities;
 

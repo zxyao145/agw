@@ -1,4 +1,4 @@
-using Agw.Shared.Enums;
+using Agw.Shared.Contracts.Providers;
 
 namespace Agw.Providers.Contracts.Manager;
 

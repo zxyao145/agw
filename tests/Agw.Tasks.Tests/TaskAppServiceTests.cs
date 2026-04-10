@@ -2,7 +2,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
-using Agw.Shared.Enums;
 using Agw.Tasks.Application;
 
 using Microsoft.Data.Sqlite;

@@ -1,5 +1,3 @@
-using Agw.Tools.Attributes;
-
 namespace Agw.Domain.Attributes;
 
 /// <summary>

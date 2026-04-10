@@ -1,8 +1,8 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Integrations.Domain.Entities;
 using Agw.Infrastructure.Services;
+using Agw.Integrations.Domain.Entities;
 using Agw.Jobs.Application.Services;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Services;
