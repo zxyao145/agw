@@ -1,4 +1,3 @@
-using Agw.Infrastructure;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Setup.Contracts;

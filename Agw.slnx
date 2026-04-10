@@ -1,34 +1,36 @@
 <Solution>
-  <Folder Name="/1Host/">
+  <Folder Name="/0.Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitignore" />
+    <File Path="CLAUDE.md" />
+    <File Path="src/backend/Directory.Build.props" />
+    <File Path="src/backend/Directory.Packages.props" />
+  </Folder>
+  <Folder Name="/1.Host/">
     <Project Path="src/backend/Agw.Host/Agw.Host.csproj" />
   </Folder>
-  <Folder Name="/2Api/">
+  <Folder Name="/2.Api/">
     <Project Path="src/backend/Agw.A2A/Agw.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
   </Folder>
-  <Folder Name="/Core/">
+  <Folder Name="/3.Core/">
     <Project Path="src/backend/Agw.Agents/Agw.Agents.csproj" />
     <Project Path="src/backend/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <Project Path="src/backend/Agw.Jobs/Agw.Jobs.csproj" />
     <Project Path="src/backend/Agw.Providers/Agw.Providers.csproj" />
-    <Project Path="src/backend/Agw.Tasks/Agw.Tasks.csproj" />
     <Project Path="src/backend/Agw.Skills/Agw.Skills.csproj" />
+    <Project Path="src/backend/Agw.Tasks/Agw.Tasks.csproj" />
     <Project Path="src/backend/Agw.Tools/Agw.Tools.csproj" Id="ba592b35-3c77-47d7-b977-396f0fa9acba" />
-    <Project Path="src/backend/Agw.Setup/Agw.Setup.csproj" />
   </Folder>
-  <Folder Name="/Shared/">
+  <Folder Name="/4.Shared/">
     <Project Path="src/backend/Agw.Shared/Agw.Shared.csproj" />
+  </Folder>
+  <Folder Name="/5.Assistant/">
+    <Project Path="src/backend/Agw.Setup/Agw.Setup.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/Agw.A2A.Tests/Agw.A2A.Tests.csproj" />
     <Project Path="tests/Agw.Agents.Tests/Agw.Agents.Tests.csproj" />
     <Project Path="tests/Agw.Tasks.Tests/Agw.Tasks.Tests.csproj" />
     <Project Path="tests/Agw.Skills.Tests/Agw.Skills.Tests.csproj" />
-  </Folder>
-  <Folder Name="/Solution Items/">
-    <File Path=".editorconfig" />
-    <File Path=".gitignore" />
-    <File Path="CLAUDE.md" />
-    <File Path="src/backend/Directory.Build.props" />
-    <File Path="src/backend/Directory.Packages.props" />
   </Folder>
 </Solution>

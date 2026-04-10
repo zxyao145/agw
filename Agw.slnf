@@ -7,6 +7,7 @@
       "src\\backend\\Agw.Infrastructure\\Agw.Infrastructure.csproj",
       "src\\backend\\Agw.Jobs\\Agw.Jobs.csproj",
       "src\\backend\\Agw.Providers\\Agw.Providers.csproj",
+      "src\\backend\\Agw.Setup\\Agw.Setup.csproj",
       "src\\backend\\Agw.Shared\\Agw.Shared.csproj",
       "src\\backend\\Agw.Skills\\Agw.Skills.csproj",
       "src\\backend\\Agw.Tasks\\Agw.Tasks.csproj",

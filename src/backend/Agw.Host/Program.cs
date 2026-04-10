@@ -4,14 +4,14 @@ using Agw.Jobs;
 using Agw.Jobs.Controllers;
 using Agw.Manager.Api.Controllers;
 using Agw.Providers;
+using Agw.Setup.Controllers;
+using Agw.Setup.Middleware;
+using Agw.Setup.Services;
 using Agw.Skills;
 using Agw.Skills.Controllers;
 using Agw.Tasks;
 using Agw.Tasks.Controllers;
 using Agw.Tools;
-using Agw.Setup.Controllers;
-using Agw.Setup.Middleware;
-using Agw.Setup.Services;
 
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;

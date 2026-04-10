@@ -1,7 +1,7 @@
 
 @echo off
 
-echo Running dotnet format check...
+echo Running dotnet format Agw.slnf check...
 dotnet format Agw.slnf --verify-no-changes 
 if errorlevel 1 exit /b 1
 
