@@ -59,8 +59,46 @@ public class JsonInitializationStateStore : IInitializationStateStore
             }
         };
 
-        await using var stream = File.Create(_settingsPath);
-        await JsonSerializer.SerializeAsync(stream, payload, _serializerOptions, cancellationToken);
+        var settingsDirectory = Path.GetDirectoryName(_settingsPath);
+        if (!string.IsNullOrWhiteSpace(settingsDirectory))
+        {
+            Directory.CreateDirectory(settingsDirectory);
+        }
+
+        var tempPath = $"{_settingsPath}.{Guid.NewGuid():N}.tmp";
+
+        try
+        {
+            await using (var stream = new FileStream(
+                             tempPath,
+                             FileMode.CreateNew,
+                             FileAccess.Write,
+                             FileShare.None,
+                             bufferSize: 4096,
+                             options: FileOptions.WriteThrough))
+            {
+                await JsonSerializer.SerializeAsync(stream, payload, _serializerOptions, cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+            }
+
+            if (File.Exists(_settingsPath))
+            {
+                File.Replace(tempPath, _settingsPath, destinationBackupFileName: null);
+            }
+            else
+            {
+                File.Move(tempPath, _settingsPath);
+            }
+        }
+        catch
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+
+            throw;
+        }
 
         lock (_sync)
         {
