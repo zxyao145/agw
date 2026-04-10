@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   useMutation,
   useQuery,
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
-import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
@@ -653,6 +654,11 @@ export default function JobsPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <Link href={`/jobs/${job.id}/job-logs`} aria-label={`View ${job.name} logs`}>
+                        <ListChecks className="h-4 w-4" />
+                      </Link>
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
