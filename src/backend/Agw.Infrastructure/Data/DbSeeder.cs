@@ -53,10 +53,10 @@ public class DbSeeder
         }
     ];
 
-    private readonly LlmDbContext _context;
+    private readonly AgwDbContext _context;
     private readonly ILogger<DbSeeder> _logger;
 
-    public DbSeeder(LlmDbContext context, ILogger<DbSeeder> logger)
+    public DbSeeder(AgwDbContext context, ILogger<DbSeeder> logger)
     {
         _context = context;
         _logger = logger;

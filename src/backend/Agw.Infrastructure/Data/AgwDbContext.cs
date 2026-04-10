@@ -11,9 +11,9 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Agw.Infrastructure.Data;
 
-public class LlmDbContext : DbContext
+public class AgwDbContext : DbContext
 {
-    public LlmDbContext(DbContextOptions<LlmDbContext> options) : base(options)
+    public AgwDbContext(DbContextOptions<AgwDbContext> options) : base(options)
     {
     }
 

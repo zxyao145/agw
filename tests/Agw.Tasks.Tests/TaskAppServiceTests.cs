@@ -40,18 +40,18 @@ public class TaskAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
 
-        var options = new DbContextOptionsBuilder<LlmDbContext>()
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
             .UseSnakeCaseNamingConvention()
             .Options;
 
-        await using (var setupContext = new LlmDbContext(options))
+        await using (var setupContext = new AgwDbContext(options))
         {
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
         var projectId = Guid.NewGuid();
-        await using (var seedContext = new LlmDbContext(options))
+        await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
             {
@@ -65,7 +65,7 @@ public class TaskAppServiceTests
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
-        await using var dbContext = new LlmDbContext(options);
+        await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
 
         var task = await service.CreateTaskForExecutionAsync(
@@ -80,7 +80,7 @@ public class TaskAppServiceTests
         Assert.Equal("hello world", task.Title);
     }
 
-    private static TaskAppService CreateService(LlmDbContext dbContext)
+    private static TaskAppService CreateService(AgwDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
         var projectTaskAppService = new ProjectTaskAppService(

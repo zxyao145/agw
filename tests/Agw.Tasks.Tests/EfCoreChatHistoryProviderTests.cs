@@ -26,18 +26,18 @@ public class EfCoreChatHistoryProviderTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
 
-        var options = new DbContextOptionsBuilder<LlmDbContext>()
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
             .UseSnakeCaseNamingConvention()
             .Options;
 
-        await using (var setupContext = new LlmDbContext(options))
+        await using (var setupContext = new AgwDbContext(options))
         {
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
         var projectId = Guid.NewGuid();
-        await using (var seedContext = new LlmDbContext(options))
+        await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
             {
@@ -52,7 +52,7 @@ public class EfCoreChatHistoryProviderTests
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new LlmDbContext(options));
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
 
         var provider = new EfCoreChatHistoryProvider(
@@ -88,7 +88,7 @@ public class EfCoreChatHistoryProviderTests
 
         await InvokeStoreChatHistoryAsync(provider, context, cancellationToken);
 
-        await using var verifyContext = new LlmDbContext(options);
+        await using var verifyContext = new AgwDbContext(options);
         var record = await verifyContext.TaskRecords.SingleAsync(
             x => x.TaskId == taskId,
             cancellationToken);

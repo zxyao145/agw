@@ -20,17 +20,17 @@ public class SetupInitializationService : ISetupInitializationService
 
     public async Task InitializeAsync(SetupRequest request, CancellationToken cancellationToken = default)
     {
-        var dbOptions = new DbContextOptionsBuilder<LlmDbContext>();
+        var dbOptions = new DbContextOptionsBuilder<AgwDbContext>();
         ConfigureDatabaseProvider(dbOptions, request);
 
-        await using var context = new LlmDbContext(dbOptions.Options);
+        await using var context = new AgwDbContext(dbOptions.Options);
         var seeder = new DbSeeder(context, _loggerFactory.CreateLogger<DbSeeder>());
         await seeder.SeedAsync();
 
         await _stateStore.PersistAsync(request, cancellationToken);
     }
 
-    private static void ConfigureDatabaseProvider(DbContextOptionsBuilder<LlmDbContext> dbOptions, SetupRequest request)
+    private static void ConfigureDatabaseProvider(DbContextOptionsBuilder<AgwDbContext> dbOptions, SetupRequest request)
     {
         var settings = new DatabaseSettings
         {

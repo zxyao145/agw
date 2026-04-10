@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Services;
 
-public class JobStore(LlmDbContext dbContext) : IJobStore
+public class JobStore(AgwDbContext dbContext) : IJobStore
 {
     public async Task<IReadOnlyList<Job>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken)
     {

@@ -17,12 +17,12 @@ public class JobRowVersionTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
 
-        var options = new DbContextOptionsBuilder<LlmDbContext>()
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
             .UseSnakeCaseNamingConvention()
             .Options;
 
-        await using (var setupContext = new LlmDbContext(options))
+        await using (var setupContext = new AgwDbContext(options))
         {
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
@@ -30,7 +30,7 @@ public class JobRowVersionTests
         var jobId = Guid.NewGuid();
         byte[] createdRowVersion;
 
-        await using (var createContext = new LlmDbContext(options))
+        await using (var createContext = new AgwDbContext(options))
         {
             var job = new Job
             {
@@ -56,7 +56,7 @@ public class JobRowVersionTests
 
         Assert.Equal(16, createdRowVersion.Length);
 
-        await using (var updateContext = new LlmDbContext(options))
+        await using (var updateContext = new AgwDbContext(options))
         {
             var job = await updateContext.Jobs.SingleAsync(x => x.Id == jobId, cancellationToken);
             var originalRowVersion = job.RowVersion.ToArray();

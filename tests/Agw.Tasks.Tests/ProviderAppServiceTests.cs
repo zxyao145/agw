@@ -20,18 +20,18 @@ public class ProviderAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
 
-        var options = new DbContextOptionsBuilder<LlmDbContext>()
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
             .UseSnakeCaseNamingConvention()
             .Options;
 
-        await using (var setupContext = new LlmDbContext(options))
+        await using (var setupContext = new AgwDbContext(options))
         {
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
         var providerId = Guid.NewGuid();
-        await using (var seedContext = new LlmDbContext(options))
+        await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Providers.Add(new Provider
             {
@@ -60,7 +60,7 @@ public class ProviderAppServiceTests
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
-        await using (var updateContext = new LlmDbContext(options))
+        await using (var updateContext = new AgwDbContext(options))
         {
             var service = CreateService(updateContext);
 
@@ -84,7 +84,7 @@ public class ProviderAppServiceTests
             Assert.NotNull(updated);
         }
 
-        await using var verifyContext = new LlmDbContext(options);
+        await using var verifyContext = new AgwDbContext(options);
         var provider = await verifyContext.Providers
             .Include(x => x.AuthConfigs)
             .SingleAsync(x => x.Id == providerId, cancellationToken);
@@ -96,7 +96,7 @@ public class ProviderAppServiceTests
         Assert.Null(authConfig.ApiKey);
     }
 
-    private static ProviderAppService CreateService(LlmDbContext dbContext)
+    private static ProviderAppService CreateService(AgwDbContext dbContext)
     {
         return new ProviderAppService(
             new EfRepository<Provider>(dbContext),
