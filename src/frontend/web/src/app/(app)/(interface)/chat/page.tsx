@@ -9,7 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
-import { apiGet, ApiError } from "@/api/client";
+import { apiGet } from "@/api/client";
 import { getTaskDetails } from "@/api/task-client";
 import { Explorer, FileContent } from "@/components/file-explorer";
 import type { LineComment } from "@/components/file-explorer";
@@ -108,22 +108,6 @@ function getRestoredTargetValue(messages: AiMessage[]): string | null {
   }
 
   return null;
-}
-
-function getApiErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (typeof error.body === "string" && error.body.trim().length > 0) {
-      return error.body;
-    }
-
-    return `${error.status} ${error.statusText}`;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unknown error";
 }
 
 function nextTaskId(): string {

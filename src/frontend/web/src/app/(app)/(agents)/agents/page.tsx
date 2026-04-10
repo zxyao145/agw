@@ -16,7 +16,7 @@ import type {
   McpToolServerDto,
   SkillDto,
 } from "./components/types";
-import { getApiErrorMessage } from "./components/utils";
+import { getApiErrorMessage } from "@/api/utils";
 import { CreateAgentDialog } from "./components/create-agent-dialog";
 import { EditAgentDialog } from "./components/edit-agent-dialog";
 import { DeleteAgentDialog } from "./components/delete-agent-dialog";

@@ -1,4 +1,3 @@
-import { ApiError } from "@/api/client";
 import type { AiMessage } from "@/types";
 import type { AgentflowDetailDto, AgentflowNodeDto, AgentflowEdgeDto } from "@/types/agentflow";
 import { apiGet } from "@/api/client";
@@ -7,17 +6,6 @@ import {
   mergeStreamingMessage,
   mergeStreamingMessagesById,
 } from "@/lib/execution-stream";
-
-export function getApiErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (typeof error.body === "string" && error.body.trim().length) {
-      return error.body;
-    }
-    return `${error.status} ${error.statusText}`;
-  }
-  if (error instanceof Error) return error.message;
-  return "Unknown error";
-}
 
 export function getPatternName(pattern: number): string {
   const PATTERN_NAMES: Record<number, string> = {

@@ -27,7 +27,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 import type { ProviderAuthConfigRequest, ProviderCreateRequest, ProviderType } from "./types";
-import { getApiErrorMessage } from "./utils";
+import { getApiErrorMessage } from "@/api/utils";
 import { ProviderAuthConfigEditor } from "./provider-auth-config-editor";
 
 const providerTypeOptions: ProviderType[] = ["OpenAI", "Anthropic"];

@@ -1,16 +1,4 @@
-import { ApiError } from "@/api/client";
 import type { ModelProviderApiKeyDto } from "./types";
-
-export function getApiErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (typeof error.body === "string" && error.body.trim().length) {
-      return error.body;
-    }
-    return `${error.status} ${error.statusText}`;
-  }
-  if (error instanceof Error) return error.message;
-  return "Unknown error";
-}
 
 export function parseIntOrNull(value: string): number | null {
   const trimmed = value.trim();

@@ -26,8 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-
-import { getApiErrorMessage } from "../agents/components/utils";
+import { getApiErrorMessage } from "@/api/utils";
 
 type SkillDto = {
   id: string;

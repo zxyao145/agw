@@ -12,8 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty } from "@/components/ui/empty";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-import { getApiErrorMessage } from "../../../(agents)/agents/components/utils";
+import { getApiErrorMessage } from "@/api/utils";
 
 type JobDto = {
   id: string;
@@ -55,18 +54,24 @@ export default function JobLogsPage() {
     queryKey: ["job", jobId],
     enabled: Boolean(jobId),
     queryFn: async () =>
-      (await apiGet("/api/jobs/{id}" as never, {
-        params: { path: { id: jobId } },
-      } as never)) as JobDto,
+      (await apiGet(
+        "/api/jobs/{id}" as never,
+        {
+          params: { path: { id: jobId } },
+        } as never,
+      )) as JobDto,
   });
 
   const logsQuery = useQuery({
     queryKey: ["job-logs", jobId],
     enabled: Boolean(jobId),
     queryFn: async () =>
-      (await apiGet("/api/jobs/{id}/logs" as never, {
-        params: { path: { id: jobId } },
-      } as never)) as JobLogDto[],
+      (await apiGet(
+        "/api/jobs/{id}/logs" as never,
+        {
+          params: { path: { id: jobId } },
+        } as never,
+      )) as JobLogDto[],
   });
 
   const job = jobQuery.data;
@@ -77,7 +82,9 @@ export default function JobLogsPage() {
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">Job Logs</h1>
           <p className="text-sm text-muted-foreground">
-            {job ? `All execution records for ${job.name}.` : "View all execution records for this job."}
+            {job
+              ? `All execution records for ${job.name}.`
+              : "View all execution records for this job."}
           </p>
         </div>
 
@@ -106,7 +113,9 @@ export default function JobLogsPage() {
       ) : (
         <StaticTable isEmpty={logsQuery.data === undefined || logsQuery.data.length === 0}>
           <Empty>
-            <div className="text-sm text-muted-foreground">No execution logs found for this job.</div>
+            <div className="text-sm text-muted-foreground">
+              No execution logs found for this job.
+            </div>
           </Empty>
           <TableHeader>
             <TableRow>
@@ -132,8 +141,8 @@ export default function JobLogsPage() {
                   {formatDateTime(log.startTime)}
                   {log.endTime ? ` -> ${formatDateTime(log.endTime)}` : ""}
                 </TableCell>
-                <TableCell className="max-w-[360px] text-sm text-muted-foreground">
-                  <div className="line-clamp-2 break-words">{log.errorMessage ?? "-"}</div>
+                <TableCell className="max-w-90 text-sm text-muted-foreground">
+                  <div className="line-clamp-2 wrap-break-word">{log.errorMessage ?? "-"}</div>
                 </TableCell>
                 <TableCell className="text-right">
                   {job ? (

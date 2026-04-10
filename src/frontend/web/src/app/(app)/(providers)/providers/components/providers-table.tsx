@@ -11,7 +11,7 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 
 import { EditProviderDialog } from "./edit-provider-dialog";
 import type { ProviderDto } from "./types";
-import { getApiErrorMessage } from "./utils";
+import { getApiErrorMessage } from "@/api/utils";
 import { StaticTable } from "@/components/static-table";
 import { Empty } from "@/components/ui/empty";
 

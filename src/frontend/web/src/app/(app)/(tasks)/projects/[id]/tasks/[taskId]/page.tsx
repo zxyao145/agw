@@ -23,14 +23,6 @@ function formatDate(value?: string | null): string {
   return date.toLocaleString();
 }
 
-function getApiErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unknown error";
-}
-
 function statusLabel(status: number): string {
   switch (status) {
     case 0:

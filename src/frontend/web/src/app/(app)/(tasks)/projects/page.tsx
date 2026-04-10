@@ -6,7 +6,7 @@ import Editor from "@monaco-editor/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import type { components } from "@/api/openapi";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,24 +51,6 @@ function formatDate(value?: string | null): string {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleString();
-}
-
-function getApiErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (typeof error.body === "string" && error.body.trim().length) {
-      return error.body;
-    }
-    if (error.body && typeof error.body === "object") {
-      try {
-        return JSON.stringify(error.body);
-      } catch {
-        // ignore
-      }
-    }
-    return `${error.status} ${error.statusText}`;
-  }
-  if (error instanceof Error) return error.message;
-  return "Unknown error";
 }
 
 function isValidJsonPayload(value: string): boolean {

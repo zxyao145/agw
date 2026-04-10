@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ModelProviderDto } from "./types";
-import { getApiErrorMessage } from "./utils";
+import { getApiErrorMessage } from "@/api/utils";
 import { ModelProviderActions } from "./model-provider-actions";
 
 type ModelProviderTableProps = {

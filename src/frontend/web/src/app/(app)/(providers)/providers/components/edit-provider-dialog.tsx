@@ -33,7 +33,7 @@ import type {
   ProviderDto,
   ProviderUpdateRequest,
 } from "./types";
-import { getApiErrorMessage } from "./utils";
+import { getApiErrorMessage } from "@/api/utils";
 
 const providerTypeOptions: ProviderType[] = ["OpenAI", "Anthropic"];
 
