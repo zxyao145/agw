@@ -26,7 +26,7 @@ public static class IntegrationConstants
                 UsePkce = true,
 
                 Tags = ["Git", "Coding"],
-                ToolNames = ["git_clone"],
+                ToolNames = ["github_list_repository", "github_clone"],
             },
             new AppDefinition
             {

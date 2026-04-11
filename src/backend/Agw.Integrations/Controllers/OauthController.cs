@@ -14,7 +14,7 @@ namespace Agw.Integrations.Controllers;
 
 [ApiController]
 [Route("api/integrations/oauth")]
-public class OauthController : ControllerBase
+public class OAuthController : ControllerBase
 {
     private static readonly JsonSerializerOptions JsonSerializerOptions = new(JsonSerializerDefaults.Web);
 
@@ -24,16 +24,16 @@ public class OauthController : ControllerBase
     private readonly IRepository<AppInstance> _appInstanceRepository;
     private readonly IRepository<OAuthAuthorizationToken> _oAuthAuthorizationTokenRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly ILogger<OauthController> _logger;
+    private readonly ILogger<OAuthController> _logger;
 
-    public OauthController(
+    public OAuthController(
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
         IRepository<AppDefinition> appDefinitionRepository,
         IRepository<AppInstance> appInstanceRepository,
         IRepository<OAuthAuthorizationToken> oAuthAuthorizationTokenRepository,
         IUnitOfWork unitOfWork,
-        ILogger<OauthController> logger)
+        ILogger<OAuthController> logger)
     {
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
@@ -129,6 +129,7 @@ public class OauthController : ControllerBase
                 cancellationToken);
 
             var responseContent = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogDebug("OAuth token exchange response for provider {Provider}: {ResponseContent}", providerKey, responseContent);
             if (!tokenResponse.IsSuccessStatusCode)
             {
                 var exchangeError = ExtractErrorDescription(responseContent) ?? $"token_exchange_failed_{(int)tokenResponse.StatusCode}";

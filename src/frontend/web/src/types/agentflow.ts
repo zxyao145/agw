@@ -10,7 +10,7 @@ export interface AgentDto extends BaseDto {
   displayName: string;
   name: string;
   systemPrompt: string;
-  modelProviderId: string;
+  modelProviderId: string | null;
 
   description: string;
   tools?: string | null;
@@ -23,6 +23,10 @@ export interface AgentDto extends BaseDto {
   agentSkillRelations?: Array<{
     agentId: string;
     skillId: string;
+  }> | null;
+  agentAppRelations?: Array<{
+    agentId: string;
+    appInstanceId: string;
   }> | null;
 }
 

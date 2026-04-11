@@ -9,6 +9,7 @@
         <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
         <PackageReference Include="Microsoft.Agents.AI.Anthropic" />
         <PackageReference Include="ModelContextProtocol" />
+        <ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
         <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
         <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
         <ProjectReference Include="..\Agw.Tools\Agw.Tools.csproj" />

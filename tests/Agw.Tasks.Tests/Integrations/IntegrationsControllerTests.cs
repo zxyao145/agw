@@ -264,7 +264,7 @@ public class IntegrationsControllerTests
 
         public object CreateController()
         {
-            var controllerType = typeof(OauthController).Assembly.GetType("Agw.Integrations.Controllers.IntegrationsController");
+            var controllerType = typeof(OAuthController).Assembly.GetType("Agw.Integrations.Controllers.IntegrationsController");
             Assert.NotNull(controllerType);
 
             var appDefinitionRepository = new AppDefinitionRepo();

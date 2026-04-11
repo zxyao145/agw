@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -22,6 +23,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  buildAppOptionLabel,
+  getAppAuthorizationState,
+  type AppInstanceOption,
+} from "./app-selector";
 import type { ToolInfo, ModelProviderDto, McpToolServerDto, SkillDto } from "./types";
 
 interface AgentFormFieldsProps {
@@ -40,6 +46,12 @@ interface AgentFormFieldsProps {
   extra: string;
   setExtra: (value: string) => void;
   selectedSkillIds: string[];
+  appOptions: AppInstanceOption[];
+  selectedAppInstanceIds: string[];
+  appSearchTerm: string;
+  setAppSearchTerm: (value: string) => void;
+  filteredAppOptions: AppInstanceOption[];
+  toggleAppInstance: (appInstanceId: string) => void;
   selectedTools: string[];
   setSelectedTools: React.Dispatch<React.SetStateAction<string[]>>;
   toolSearchTerm: string;
@@ -62,6 +74,7 @@ interface AgentFormFieldsProps {
     name?: boolean;
     description?: boolean;
     systemPrompt?: boolean;
+    apps?: boolean;
     modelProviderId?: boolean;
     agentType?: boolean;
     extra?: boolean;
@@ -74,6 +87,7 @@ interface AgentFormFieldsProps {
     name?: boolean;
     description?: boolean;
     systemPrompt?: boolean;
+    apps?: boolean;
     modelProviderId?: boolean;
     agentType?: boolean;
     extra?: boolean;
@@ -99,6 +113,12 @@ export function AgentFormFields({
   extra,
   setExtra,
   selectedSkillIds,
+  appOptions,
+  selectedAppInstanceIds,
+  appSearchTerm,
+  setAppSearchTerm,
+  filteredAppOptions,
+  toggleAppInstance,
   selectedTools,
   modelProvidersQuery,
   skillsQuery,
@@ -112,7 +132,9 @@ export function AgentFormFields({
   disabledFields = {},
   hiddenFields = {},
 }: AgentFormFieldsProps) {
+  const [appPopoverOpen, setAppPopoverOpen] = React.useState(false);
   const selectedSkills = skillsQuery.data?.filter((skill) => selectedSkillIds.includes(skill.id));
+  const selectedApps = appOptions.filter((app) => selectedAppInstanceIds.includes(app.id));
   const groupedTools = React.useMemo(() => {
     if (!toolsQuery.data) {
       return [];
@@ -339,6 +361,82 @@ export function AgentFormFields({
               <p className="text-xs text-muted-foreground">No skills selected</p>
             )}
           </div>
+        </div>
+      )}
+
+      {!hiddenFields.apps && (
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}appInstances`}>App</Label>
+          <Popover open={appPopoverOpen} onOpenChange={setAppPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                id={`${idPrefix}appInstances`}
+                type="button"
+                variant="outline"
+                className="w-full justify-between font-normal"
+                disabled={disabledFields.apps || appOptions.length === 0}
+              >
+                <span className="truncate">
+                  {selectedAppInstanceIds.length > 0
+                    ? `${selectedAppInstanceIds.length} app${selectedAppInstanceIds.length === 1 ? "" : "s"} selected`
+                    : "Select apps..."}
+                </span>
+                <ChevronDown className="size-4 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+              <div className="border-b p-2">
+                <Input
+                  value={appSearchTerm}
+                  onChange={(event) => setAppSearchTerm(event.target.value)}
+                  placeholder="Search apps..."
+                />
+              </div>
+              <div className="max-h-72 overflow-y-auto p-1">
+                {filteredAppOptions.length > 0 ? (
+                  filteredAppOptions.map((app) => (
+                    <button
+                      key={app.id}
+                      type="button"
+                      className="flex w-full items-start justify-between rounded-md px-2 py-2 text-left hover:bg-muted"
+                      onClick={() => toggleAppInstance(app.id)}
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{buildAppOptionLabel(app)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {app.provider} · {getAppAuthorizationState(app)}
+                        </div>
+                      </div>
+                      <input
+                        tabIndex={-1}
+                        type="checkbox"
+                        checked={selectedAppInstanceIds.includes(app.id)}
+                        readOnly
+                      />
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-2 py-3 text-sm text-muted-foreground">No apps found</div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+          <div className="flex flex-wrap gap-2">
+            {selectedApps.length > 0 ? (
+              selectedApps.map((app) => (
+                <Badge key={app.id} variant="secondary">
+                  {buildAppOptionLabel(app)}
+                </Badge>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground">No apps selected</p>
+            )}
+          </div>
+          {appOptions.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No app connections found. Create one on the integrations page first.
+            </p>
+          ) : null}
         </div>
       )}
 

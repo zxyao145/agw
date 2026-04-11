@@ -35,6 +35,7 @@ public class Agent : BaseEntity, IAggregateRoot
     public ModelProviderRelation? ModelProvider { get; set; }
 
     public ICollection<AgentflowNode> Agentflows { get; set; } = new List<AgentflowNode>();
+    public ICollection<AgentAppRelation> AgentAppRelations { get; set; } = new List<AgentAppRelation>();
     public ICollection<AgentMcpServerRelation> AgentMcpToolServers { get; set; } = new List<AgentMcpServerRelation>();
     public ICollection<AgentSkillRelation> AgentSkillRelations { get; set; } = new List<AgentSkillRelation>();
 }

@@ -103,7 +103,7 @@ try
         .AddApplicationPart(typeof(SkillsController).Assembly)
         .AddApplicationPart(typeof(JobsController).Assembly)
         .AddApplicationPart(typeof(SetupController).Assembly)
-        .AddApplicationPart(typeof(OauthController).Assembly)
+        .AddApplicationPart(typeof(OAuthController).Assembly)
         .AddApplicationPart(typeof(ToolsController).Assembly)
         ;
     builder.Services.AddEndpointsApiExplorer();
@@ -129,6 +129,7 @@ try
     builder.Services.AddHybridCache();
 
     var app = builder.Build();
+    var iocUtil = app.Services.GetRequiredService<IocUtil>();
 
     // Seed database on startup after initialization has been completed.
     using (var scope = app.Services.CreateScope())

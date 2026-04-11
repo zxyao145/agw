@@ -218,17 +218,17 @@ public class OauthControllerTests
             return controller;
         }
 
-        public OauthController CreateOauthController(Action<DefaultHttpContext>? configure = null)
+        public OAuthController CreateOauthController(Action<DefaultHttpContext>? configure = null)
         {
             var dbContext = CreateDbContext();
-            var controller = new OauthController(
+            var controller = new OAuthController(
                 new ConfigurationBuilder().Build(),
                 _httpClientFactory,
                 new AppDefinitionRepo(),
                 new EfRepository<AppInstance>(dbContext),
                 new EfRepository<OAuthAuthorizationToken>(dbContext),
                 new UnitOfWork(dbContext),
-                NullLogger<OauthController>.Instance);
+                NullLogger<OAuthController>.Instance);
 
             controller.ControllerContext = new ControllerContext
             {

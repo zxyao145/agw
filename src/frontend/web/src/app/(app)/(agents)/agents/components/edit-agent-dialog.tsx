@@ -19,6 +19,7 @@ import type {
   McpToolServerDto,
   SkillDto,
 } from "./types";
+import type { AppInstanceOption } from "./app-selector";
 
 interface EditAgentDialogProps {
   open: boolean;
@@ -39,6 +40,11 @@ interface EditAgentDialogProps {
   extra: string;
   setExtra: (value: string) => void;
   selectedSkillIds: string[];
+  appOptions: AppInstanceOption[];
+  selectedAppInstanceIds: string[];
+  appSearchTerm: string;
+  setAppSearchTerm: (value: string) => void;
+  filteredAppOptions: AppInstanceOption[];
   selectedTools: string[];
   setSelectedTools: React.Dispatch<React.SetStateAction<string[]>>;
   toolSearchTerm: string;
@@ -59,6 +65,7 @@ interface EditAgentDialogProps {
     unknown
   >;
   toggleSkill: (skillId: string) => void;
+  toggleAppInstance: (appInstanceId: string) => void;
   toggleTool: (toolName: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
 }
@@ -82,6 +89,11 @@ export function EditAgentDialog({
   extra,
   setExtra,
   selectedSkillIds,
+  appOptions,
+  selectedAppInstanceIds,
+  appSearchTerm,
+  setAppSearchTerm,
+  filteredAppOptions,
   selectedTools,
   setSelectedTools,
   toolSearchTerm,
@@ -97,6 +109,7 @@ export function EditAgentDialog({
   filteredMcpToolServers,
   updateAgentMutation,
   toggleSkill,
+  toggleAppInstance,
   toggleTool,
   toggleMcpToolServer,
 }: EditAgentDialogProps) {
@@ -124,6 +137,12 @@ export function EditAgentDialog({
           extra={extra}
           setExtra={setExtra}
           selectedSkillIds={selectedSkillIds}
+          appOptions={appOptions}
+          selectedAppInstanceIds={selectedAppInstanceIds}
+          appSearchTerm={appSearchTerm}
+          setAppSearchTerm={setAppSearchTerm}
+          filteredAppOptions={filteredAppOptions}
+          toggleAppInstance={toggleAppInstance}
           selectedTools={selectedTools}
           setSelectedTools={setSelectedTools}
           toolSearchTerm={toolSearchTerm}
@@ -190,6 +209,8 @@ export function EditAgentDialog({
                     skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
                     mcpToolServerIds:
                       selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
+                    appInstanceIds:
+                      selectedAppInstanceIds.length > 0 ? selectedAppInstanceIds : null,
                   },
                 });
               }

@@ -19,6 +19,7 @@ import type {
   McpToolServerDto,
   SkillDto,
 } from "./types";
+import type { AppInstanceOption } from "./app-selector";
 
 interface CreateAgentDialogProps {
   open: boolean;
@@ -38,6 +39,11 @@ interface CreateAgentDialogProps {
   extra: string;
   setExtra: (value: string) => void;
   selectedSkillIds: string[];
+  appOptions: AppInstanceOption[];
+  selectedAppInstanceIds: string[];
+  appSearchTerm: string;
+  setAppSearchTerm: (value: string) => void;
+  filteredAppOptions: AppInstanceOption[];
   selectedTools: string[];
   setSelectedTools: React.Dispatch<React.SetStateAction<string[]>>;
   toolSearchTerm: string;
@@ -53,6 +59,7 @@ interface CreateAgentDialogProps {
   filteredMcpToolServers: McpToolServerDto[];
   createAgentMutation: UseMutationResult<unknown, Error, AgentCreateRequest, unknown>;
   toggleSkill: (skillId: string) => void;
+  toggleAppInstance: (appInstanceId: string) => void;
   toggleTool: (toolName: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
 }
@@ -75,6 +82,11 @@ export function CreateAgentDialog({
   extra,
   setExtra,
   selectedSkillIds,
+  appOptions,
+  selectedAppInstanceIds,
+  appSearchTerm,
+  setAppSearchTerm,
+  filteredAppOptions,
   selectedTools,
   setSelectedTools,
   toolSearchTerm,
@@ -90,6 +102,7 @@ export function CreateAgentDialog({
   filteredMcpToolServers,
   createAgentMutation,
   toggleSkill,
+  toggleAppInstance,
   toggleTool,
   toggleMcpToolServer,
 }: CreateAgentDialogProps) {
@@ -123,6 +136,12 @@ export function CreateAgentDialog({
           extra={extra}
           setExtra={setExtra}
           selectedSkillIds={selectedSkillIds}
+          appOptions={appOptions}
+          selectedAppInstanceIds={selectedAppInstanceIds}
+          appSearchTerm={appSearchTerm}
+          setAppSearchTerm={setAppSearchTerm}
+          filteredAppOptions={filteredAppOptions}
+          toggleAppInstance={toggleAppInstance}
           selectedTools={selectedTools}
           setSelectedTools={setSelectedTools}
           toolSearchTerm={toolSearchTerm}
@@ -160,6 +179,7 @@ export function CreateAgentDialog({
                 skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
                 mcpToolServerIds:
                   selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
+                appInstanceIds: selectedAppInstanceIds.length > 0 ? selectedAppInstanceIds : null,
               })
             }
             disabled={

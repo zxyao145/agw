@@ -265,7 +265,11 @@ export interface paths {
           headers: {
             [name: string]: unknown;
           };
-          content?: never;
+          content: {
+            "text/plain": components["schemas"]["AgentResponse"][];
+            "application/json": components["schemas"]["AgentResponse"][];
+            "text/json": components["schemas"]["AgentResponse"][];
+          };
         };
       };
     };
@@ -290,7 +294,11 @@ export interface paths {
           headers: {
             [name: string]: unknown;
           };
-          content?: never;
+          content: {
+            "text/plain": components["schemas"]["AgentResponse"];
+            "application/json": components["schemas"]["AgentResponse"];
+            "text/json": components["schemas"]["AgentResponse"];
+          };
         };
       };
     };
@@ -323,7 +331,11 @@ export interface paths {
           headers: {
             [name: string]: unknown;
           };
-          content?: never;
+          content: {
+            "text/plain": components["schemas"]["AgentResponse"];
+            "application/json": components["schemas"]["AgentResponse"];
+            "text/json": components["schemas"]["AgentResponse"];
+          };
         };
       };
     };
@@ -349,7 +361,11 @@ export interface paths {
           headers: {
             [name: string]: unknown;
           };
-          content?: never;
+          content: {
+            "text/plain": components["schemas"]["AgentResponse"];
+            "application/json": components["schemas"]["AgentResponse"];
+            "text/json": components["schemas"]["AgentResponse"];
+          };
         };
       };
     };
@@ -2084,6 +2100,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    AgentAppRelationResponse: {
+      /** Format: uuid */
+      agentId: string;
+      /** Format: uuid */
+      appInstanceId: string;
+    };
     AgentCreateRequest: {
       displayName: string;
       name: string;
@@ -2094,6 +2116,7 @@ export interface components {
       tools?: null | string;
       mcpToolServerIds?: null | string[];
       skillIds?: null | string[];
+      appInstanceIds?: null | string[];
     };
     AgentExecutionRequest: {
       agentType: components["schemas"]["AgentRuntimeType"];
@@ -2135,7 +2158,42 @@ export interface components {
       nodes: components["schemas"]["AgentflowNodeRequest"][];
       edges: components["schemas"]["AgentflowEdgeRequest"][];
     };
+    AgentMcpToolServerRelationResponse: {
+      /** Format: uuid */
+      agentId: string;
+      /** Format: uuid */
+      mcpToolServerId: string;
+    };
+    AgentResponse: {
+      /** Format: uuid */
+      id: string;
+      displayName: string;
+      name: string;
+      description: string;
+      systemPrompt: string;
+      /** Format: uuid */
+      modelProviderId: null | string;
+      tools: null | string;
+      type: components["schemas"]["AgentType"];
+      extra: null | string;
+      agentMcpToolServers: components["schemas"]["AgentMcpToolServerRelationResponse"][];
+      agentSkillRelations: components["schemas"]["AgentSkillRelationResponse"][];
+      agentAppRelations: components["schemas"]["AgentAppRelationResponse"][];
+      /** Format: date-time */
+      createTime: string;
+      createBy: null | string;
+      /** Format: date-time */
+      updateTime: null | string;
+      updateBy: null | string;
+    };
     AgentRuntimeType: number;
+    AgentSkillRelationResponse: {
+      /** Format: uuid */
+      agentId: string;
+      /** Format: uuid */
+      skillId: string;
+    };
+    AgentType: number;
     AgentUpdateRequest: {
       displayName: string;
       description: string;
@@ -2145,6 +2203,7 @@ export interface components {
       tools?: null | string;
       mcpToolServerIds?: null | string[];
       skillIds?: null | string[];
+      appInstanceIds?: null | string[];
     };
     AppInstanceCreateRequest: {
       appName: string;

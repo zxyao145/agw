@@ -26,9 +26,9 @@ public class ToolRegistryService
     public ToolRegistryService(ILogger<ToolRegistryService> logger, IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
+        _logger = logger;
         _toolFactory = new AgwToolFactory(serviceProvider);
         DiscoverTools();
-        _logger = logger;
     }
 
     /// <summary>

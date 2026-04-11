@@ -17,21 +17,21 @@ public class AgentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> ListAsync()
+    public async Task<ActionResult<IReadOnlyList<AgentResponse>>> ListAsync()
     {
         var agents = await _agentRuntimeService.ListAgentsAsync();
-        return Ok(agents);
+        return Ok(agents.Select(AgentResponse.FromDomain).ToArray());
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetAsync(Guid id)
+    public async Task<ActionResult<AgentResponse>> GetAsync(Guid id)
     {
         var agent = await _agentRuntimeService.GetAgentAsync(id);
-        return agent == null ? NotFound() : Ok(agent);
+        return agent == null ? NotFound() : Ok(AgentResponse.FromDomain(agent));
     }
 
     [HttpPost]
-    public async Task<IActionResult> CreateAsync([FromBody] AgentCreateRequest request)
+    public async Task<ActionResult<AgentResponse>> CreateAsync([FromBody] AgentCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
         var agent = new Agent
@@ -48,12 +48,13 @@ public class AgentsController : ControllerBase
             agent,
             request.McpToolServerIds,
             request.SkillIds,
+            request.AppInstanceIds,
             user);
-        return created == null ? BadRequest("Failed to create agent.") : Ok(created);
+        return created == null ? BadRequest("Failed to create agent.") : Ok(AgentResponse.FromDomain(created));
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
+    public async Task<ActionResult<AgentResponse>> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
         var updated = await _agentRuntimeService.UpdateAgentAsync(
@@ -68,9 +69,10 @@ public class AgentsController : ControllerBase
             },
             request.McpToolServerIds,
             request.SkillIds,
+            request.AppInstanceIds,
             user);
 
-        return updated == null ? NotFound() : Ok(updated);
+        return updated == null ? NotFound() : Ok(AgentResponse.FromDomain(updated));
     }
 
     [HttpDelete("{id:guid}")]

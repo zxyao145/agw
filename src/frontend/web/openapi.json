@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:5017/"
+      "url": "http://localhost:5016/"
     }
   ],
   "paths": {
@@ -213,7 +213,33 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentResponse"
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -243,7 +269,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -266,7 +309,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            }
           }
         }
       },
@@ -307,7 +367,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            }
           }
         }
       },
@@ -1779,6 +1856,23 @@
   },
   "components": {
     "schemas": {
+      "AgentAppRelationResponse": {
+        "required": [
+          "agentId",
+          "appInstanceId"
+        ],
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "appInstanceId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "AgentCreateRequest": {
         "required": [
           "displayName",
@@ -1825,6 +1919,16 @@
             }
           },
           "skillIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "appInstanceIds": {
             "type": [
               "null",
               "array"
@@ -2008,7 +2112,146 @@
           }
         }
       },
+      "AgentMcpToolServerRelationResponse": {
+        "required": [
+          "agentId",
+          "mcpToolServerId"
+        ],
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mcpToolServerId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "AgentResponse": {
+        "required": [
+          "id",
+          "displayName",
+          "name",
+          "description",
+          "systemPrompt",
+          "modelProviderId",
+          "tools",
+          "type",
+          "extra",
+          "agentMcpToolServers",
+          "agentSkillRelations",
+          "agentAppRelations",
+          "createTime",
+          "createBy",
+          "updateTime",
+          "updateBy"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "systemPrompt": {
+            "type": "string"
+          },
+          "modelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "tools": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "$ref": "#/components/schemas/AgentType"
+          },
+          "extra": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agentMcpToolServers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentMcpToolServerRelationResponse"
+            }
+          },
+          "agentSkillRelations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentSkillRelationResponse"
+            }
+          },
+          "agentAppRelations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentAppRelationResponse"
+            }
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "updateTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "updateBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "AgentRuntimeType": {
+        "type": "integer"
+      },
+      "AgentSkillRelationResponse": {
+        "required": [
+          "agentId",
+          "skillId"
+        ],
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "skillId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "AgentType": {
         "type": "integer"
       },
       "AgentUpdateRequest": {
@@ -2053,6 +2296,16 @@
             }
           },
           "skillIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "appInstanceIds": {
             "type": [
               "null",
               "array"

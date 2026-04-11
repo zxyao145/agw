@@ -1,3 +1,5 @@
+using Agw.Shared.Utils;
+
 using CliWrap;
 using CliWrap.Buffered;
 
@@ -181,7 +183,13 @@ public class GitCommandService : IGitCommandService
 
     public async Task<GitCloneResult> CloneRepositoryAsync(string gitAddress, string workingDirectory, CancellationToken cancellationToken = default)
     {
-        var result = await RunGitAsync(workingDirectory, ["clone", gitAddress, "."], cancellationToken);
+        var dirFullInfo = PathUtil.ExpandTilde(workingDirectory);
+        if (!Directory.Exists(dirFullInfo))
+        {
+            Directory.CreateDirectory(dirFullInfo);
+        }
+
+        var result = await RunGitAsync(dirFullInfo, ["clone", gitAddress, "."], cancellationToken);
         if (result.ExitCode != 0)
         {
             return new GitCloneResult(false, result.StandardError, result.StandardOutput, result.StandardError);

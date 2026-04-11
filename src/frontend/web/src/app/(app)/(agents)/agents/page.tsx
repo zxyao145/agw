@@ -17,6 +17,7 @@ import type {
   SkillDto,
 } from "./components/types";
 import { getApiErrorMessage } from "@/api/utils";
+import { filterAppOptions, type AppInstanceOption } from "./components/app-selector";
 import { CreateAgentDialog } from "./components/create-agent-dialog";
 import { EditAgentDialog } from "./components/edit-agent-dialog";
 import { DeleteAgentDialog } from "./components/delete-agent-dialog";
@@ -61,6 +62,13 @@ export default function AgentsPage() {
     },
   });
 
+  const appInstancesQuery = useQuery({
+    queryKey: ["appInstances"],
+    queryFn: async () => {
+      return (await apiGet("/api/integrations/app-instances")) as unknown as AppInstanceOption[];
+    },
+  });
+
   // Create dialog state
   const [createOpen, setCreateOpen] = React.useState(false);
   const [displayName, setDisplayName] = React.useState("");
@@ -69,6 +77,8 @@ export default function AgentsPage() {
   const [systemPrompt, setSystemPrompt] = React.useState("");
   const [modelProviderId, setModelProviderId] = React.useState("");
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
+  const [selectedAppInstanceIds, setSelectedAppInstanceIds] = React.useState<string[]>([]);
+  const [appSearchTerm, setAppSearchTerm] = React.useState("");
   const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
   const [toolSearchTerm, setToolSearchTerm] = React.useState("");
   const [selectedMcpToolServerIds, setSelectedMcpToolServerIds] = React.useState<string[]>([]);
@@ -85,6 +95,8 @@ export default function AgentsPage() {
   const [editSystemPrompt, setEditSystemPrompt] = React.useState("");
   const [editModelProviderId, setEditModelProviderId] = React.useState("");
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
+  const [editSelectedAppInstanceIds, setEditSelectedAppInstanceIds] = React.useState<string[]>([]);
+  const [editAppSearchTerm, setEditAppSearchTerm] = React.useState("");
   const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>([]);
   const [editToolSearchTerm, setEditToolSearchTerm] = React.useState("");
   const [editSelectedMcpToolServerIds, setEditSelectedMcpToolServerIds] = React.useState<string[]>(
@@ -115,6 +127,8 @@ export default function AgentsPage() {
       setSystemPrompt("");
       setModelProviderId("");
       setSelectedSkillIds([]);
+      setSelectedAppInstanceIds([]);
+      setAppSearchTerm("");
       setSelectedTools([]);
       setToolSearchTerm("");
       setSelectedMcpToolServerIds([]);
@@ -140,6 +154,8 @@ export default function AgentsPage() {
       setEditOpen(false);
       setEditingAgent(null);
       setEditSelectedSkillIds([]);
+      setEditSelectedAppInstanceIds([]);
+      setEditAppSearchTerm("");
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
     onError: (error) => {
@@ -170,10 +186,13 @@ export default function AgentsPage() {
     setEditName(agent.name);
     setEditDescription(agent.description);
     setEditSystemPrompt(agent.systemPrompt);
-    setEditModelProviderId(agent.modelProviderId);
+    setEditModelProviderId(agent.modelProviderId ?? "");
     setEditAgentType(agent.type.toString());
     setEditExtra(agent.extra || "");
     setEditSelectedSkillIds(agent.agentSkillRelations?.map((relation) => relation.skillId) ?? []);
+    setEditSelectedAppInstanceIds(
+      agent.agentAppRelations?.map((relation) => relation.appInstanceId) ?? [],
+    );
     try {
       const tools = agent.tools ? JSON.parse(agent.tools) : [];
       setEditSelectedTools(Array.isArray(tools) ? tools : []);
@@ -181,6 +200,7 @@ export default function AgentsPage() {
       setEditSelectedTools([]);
     }
     setEditSelectedMcpToolServerIds(agent.agentMcpToolServers?.map((x) => x.mcpToolServerId) ?? []);
+    setEditAppSearchTerm("");
     setEditToolSearchTerm("");
     setEditMcpToolServerSearchTerm("");
     setEditOpen(true);
@@ -221,6 +241,23 @@ export default function AgentsPage() {
     );
   };
 
+  const toggleAppInstance = (appInstanceId: string, isEdit: boolean = false) => {
+    if (isEdit) {
+      setEditSelectedAppInstanceIds((prev) =>
+        prev.includes(appInstanceId)
+          ? prev.filter((id) => id !== appInstanceId)
+          : [...prev, appInstanceId],
+      );
+      return;
+    }
+
+    setSelectedAppInstanceIds((prev) =>
+      prev.includes(appInstanceId)
+        ? prev.filter((id) => id !== appInstanceId)
+        : [...prev, appInstanceId],
+    );
+  };
+
   const toggleMcpToolServer = (mcpToolServerId: string, isEdit: boolean = false) => {
     if (isEdit) {
       setEditSelectedMcpToolServerIds((prev) =>
@@ -248,6 +285,10 @@ export default function AgentsPage() {
     );
   }, [toolsQuery.data, toolSearchTerm]);
 
+  const filteredAppOptions = React.useMemo(() => {
+    return filterAppOptions(appInstancesQuery.data ?? [], appSearchTerm);
+  }, [appInstancesQuery.data, appSearchTerm]);
+
   const filteredEditTools = React.useMemo(() => {
     if (!toolsQuery.data) return [];
     return toolsQuery.data.filter(
@@ -257,6 +298,10 @@ export default function AgentsPage() {
         tool.category.toLowerCase().includes(editToolSearchTerm.toLowerCase()),
     );
   }, [toolsQuery.data, editToolSearchTerm]);
+
+  const filteredEditAppOptions = React.useMemo(() => {
+    return filterAppOptions(appInstancesQuery.data ?? [], editAppSearchTerm);
+  }, [appInstancesQuery.data, editAppSearchTerm]);
 
   const filteredMcpToolServers = React.useMemo(() => {
     if (!mcpToolServersQuery.data) return [];
@@ -309,6 +354,11 @@ export default function AgentsPage() {
             extra={extra}
             setExtra={setExtra}
             selectedSkillIds={selectedSkillIds}
+            appOptions={appInstancesQuery.data ?? []}
+            selectedAppInstanceIds={selectedAppInstanceIds}
+            appSearchTerm={appSearchTerm}
+            setAppSearchTerm={setAppSearchTerm}
+            filteredAppOptions={filteredAppOptions}
             selectedTools={selectedTools}
             setSelectedTools={setSelectedTools}
             toolSearchTerm={toolSearchTerm}
@@ -324,6 +374,7 @@ export default function AgentsPage() {
             filteredMcpToolServers={filteredMcpToolServers}
             createAgentMutation={createAgentMutation}
             toggleSkill={(skillId) => toggleSkill(skillId, false)}
+            toggleAppInstance={(appInstanceId) => toggleAppInstance(appInstanceId, false)}
             toggleTool={(toolName) => toggleTool(toolName, false)}
             toggleMcpToolServer={(mcpToolServerId) => toggleMcpToolServer(mcpToolServerId, false)}
           />
@@ -356,6 +407,11 @@ export default function AgentsPage() {
         extra={editExtra}
         setExtra={setEditExtra}
         selectedSkillIds={editSelectedSkillIds}
+        appOptions={appInstancesQuery.data ?? []}
+        selectedAppInstanceIds={editSelectedAppInstanceIds}
+        appSearchTerm={editAppSearchTerm}
+        setAppSearchTerm={setEditAppSearchTerm}
+        filteredAppOptions={filteredEditAppOptions}
         selectedTools={editSelectedTools}
         setSelectedTools={setEditSelectedTools}
         toolSearchTerm={editToolSearchTerm}
@@ -371,6 +427,7 @@ export default function AgentsPage() {
         filteredMcpToolServers={filteredEditMcpToolServers}
         updateAgentMutation={updateAgentMutation}
         toggleSkill={(skillId) => toggleSkill(skillId, true)}
+        toggleAppInstance={(appInstanceId) => toggleAppInstance(appInstanceId, true)}
         toggleTool={(toolName) => toggleTool(toolName, true)}
         toggleMcpToolServer={(mcpToolServerId) => toggleMcpToolServer(mcpToolServerId, true)}
       />

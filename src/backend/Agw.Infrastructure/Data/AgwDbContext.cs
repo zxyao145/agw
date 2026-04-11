@@ -20,12 +20,14 @@ public class AgwDbContext : DbContext
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        PruneDeletedAgentAppRelations();
         StampJobRowVersions();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        PruneDeletedAgentAppRelations();
         StampJobRowVersions();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
@@ -37,6 +39,7 @@ public class AgwDbContext : DbContext
     public DbSet<ModelProviderRelation> ModelProviders => Set<ModelProviderRelation>();
 
     public DbSet<Agent> Agents => Set<Agent>();
+    public DbSet<AgentAppRelation> AgentAppRelations => Set<AgentAppRelation>();
 
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<AgentSkillRelation> AgentSkillRelations => Set<AgentSkillRelation>();
@@ -132,6 +135,23 @@ public class AgwDbContext : DbContext
             //    .HasForeignKey(e => e.ModelProviderId)
             //    .OnDelete(DeleteBehavior.Cascade)
             //    .IsRequired(false);
+        });
+
+        modelBuilder.Entity<AgentAppRelation>(entity =>
+        {
+            entity.HasKey(e => new { e.AgentId, e.AppInstanceId });
+
+            entity.HasOne(e => e.Agent)
+                .WithMany(agent => agent.AgentAppRelations)
+                .HasForeignKey(e => e.AgentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.AppInstance)
+                .WithMany()
+                .HasForeignKey(e => e.AppInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.AppInstanceId);
         });
 
         modelBuilder.Entity<Skill>(entity =>
@@ -350,6 +370,34 @@ public class AgwDbContext : DbContext
             {
                 entry.Entity.RowVersion = Guid.NewGuid().ToByteArray();
             }
+        }
+    }
+
+    private void PruneDeletedAgentAppRelations()
+    {
+        var deletedAgentIds = ChangeTracker.Entries<Agent>()
+            .Where(entry => entry.State == EntityState.Deleted)
+            .Select(entry => entry.Entity.Id)
+            .ToHashSet();
+        var deletedAppInstanceIds = ChangeTracker.Entries<AppInstance>()
+            .Where(entry => entry.State == EntityState.Deleted)
+            .Select(entry => entry.Entity.Id)
+            .ToHashSet();
+
+        if (deletedAgentIds.Count == 0 && deletedAppInstanceIds.Count == 0)
+        {
+            return;
+        }
+
+        var relationsToRemove = AgentAppRelations
+            .Where(relation =>
+                deletedAgentIds.Contains(relation.AgentId)
+                || deletedAppInstanceIds.Contains(relation.AppInstanceId))
+            .ToList();
+
+        if (relationsToRemove.Count > 0)
+        {
+            AgentAppRelations.RemoveRange(relationsToRemove);
         }
     }
 }

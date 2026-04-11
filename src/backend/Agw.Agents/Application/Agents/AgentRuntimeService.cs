@@ -8,6 +8,7 @@ using Agw.Agents.Application;
 using Agw.Agents.ExternalAgents;
 using Agw.Api.Contracts;
 using Agw.Domain.Services;
+using Agw.Integrations.Domain.Entities;
 using Agw.Providers.Domain.Entities;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
@@ -63,6 +64,9 @@ public class AgentRuntimeService : RuntimService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;
+    private readonly IRepository<AgentAppRelation> _agentAppRelationRepository;
+    private readonly IRepository<AppInstance> _appInstanceRepository;
+    private readonly IRepository<AppDefinition> _appDefinitionRepository;
     private readonly IRepository<ModelProviderRelation> _modelProviderRepository;
     private readonly IRepository<McpServer> _mcpToolServerRepository;
     private readonly IRepository<AgentMcpServerRelation> _agentMcpToolServerRepository;
@@ -83,6 +87,9 @@ public class AgentRuntimeService : RuntimService
 
     public AgentRuntimeService(
         IRepository<Agent> agentRepository,
+        IRepository<AgentAppRelation> agentAppRelationRepository,
+        IRepository<AppInstance> appInstanceRepository,
+        IRepository<AppDefinition> appDefinitionRepository,
         IRepository<ModelProviderRelation> modelProviderRepository,
         IRepository<McpServer> mcpToolServerRepository,
         IRepository<AgentMcpServerRelation> agentMcpToolServerRepository,
@@ -103,6 +110,9 @@ public class AgentRuntimeService : RuntimService
         ILogger<AgentRuntimeService> logger)
     {
         _agentRepository = agentRepository;
+        _agentAppRelationRepository = agentAppRelationRepository;
+        _appInstanceRepository = appInstanceRepository;
+        _appDefinitionRepository = appDefinitionRepository;
         _modelProviderRepository = modelProviderRepository;
         _mcpToolServerRepository = mcpToolServerRepository;
         _agentMcpToolServerRepository = agentMcpToolServerRepository;
@@ -124,7 +134,12 @@ public class AgentRuntimeService : RuntimService
     }
 
     public Task<IReadOnlyList<Agent>> ListAgentsAsync() =>
-        _agentRepository.ListAsync(null, e => e.OrderBy(x => x.Name).ThenByDescending(x => x.CreateTime), x => x.AgentMcpToolServers, x => x.AgentSkillRelations);
+        _agentRepository.ListAsync(
+            null,
+            e => e.OrderBy(x => x.Name).ThenByDescending(x => x.CreateTime),
+            x => x.AgentMcpToolServers,
+            x => x.AgentSkillRelations,
+            x => x.AgentAppRelations);
 
     public async Task<Agent?> GetAgentAsync(Guid id)
     {
@@ -132,7 +147,8 @@ public class AgentRuntimeService : RuntimService
             x => x.Id == id,
             null,
             x => x.AgentMcpToolServers,
-            x => x.AgentSkillRelations);
+            x => x.AgentSkillRelations,
+            x => x.AgentAppRelations);
         return matches.FirstOrDefault();
     }
 
@@ -140,6 +156,7 @@ public class AgentRuntimeService : RuntimService
         Agent agent,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
+        IEnumerable<Guid>? appInstanceIds,
         string user)
     {
         if (await HasInvalidModelProviderAsync(agent.ModelProviderId))
@@ -151,6 +168,7 @@ public class AgentRuntimeService : RuntimService
         await _agentRepository.AddAsync(agent);
         await SyncAgentMcpToolServerRelationsAsync(agent.Id, mcpToolServerIds);
         await SyncAgentSkillRelationsAsync(agent.Id, skillIds);
+        await SyncAgentAppRelationsAsync(agent.Id, appInstanceIds);
         await _unitOfWork.SaveChangesAsync();
         return agent;
     }
@@ -160,6 +178,7 @@ public class AgentRuntimeService : RuntimService
         Action<Agent> updateAction,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
+        IEnumerable<Guid>? appInstanceIds,
         string user)
     {
         var existing = await _agentRepository.GetByIdAsync(id);
@@ -177,6 +196,7 @@ public class AgentRuntimeService : RuntimService
         _agentRepository.Update(existing);
         await SyncAgentMcpToolServerRelationsAsync(existing.Id, mcpToolServerIds);
         await SyncAgentSkillRelationsAsync(existing.Id, skillIds);
+        await SyncAgentAppRelationsAsync(existing.Id, appInstanceIds);
         await _unitOfWork.SaveChangesAsync();
         return existing;
     }
@@ -193,6 +213,12 @@ public class AgentRuntimeService : RuntimService
         foreach (var relation in skillRelations)
         {
             _agentSkillRelationRepository.Remove(relation);
+        }
+
+        var appRelations = await _agentAppRelationRepository.ListAsync(x => x.AgentId == id);
+        foreach (var relation in appRelations)
+        {
+            _agentAppRelationRepository.Remove(relation);
         }
 
         _agentRepository.Remove(existing);
@@ -681,18 +707,52 @@ public class AgentRuntimeService : RuntimService
     private async Task<IList<AITool>?> CreateAgentTools(Agent agent, CancellationToken cancellationToken)
     {
         var mergedTools = new List<AITool>();
-        if (!string.IsNullOrWhiteSpace(agent.Tools))
+        var registeredToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var toolNames = await CollectNamedToolNamesAsync(agent.Id, agent.Tools).ConfigureAwait(false);
+        if (toolNames.Length > 0)
+        {
+            var functions = _toolRegistry.CreateAIFunctions(toolNames);
+            if (functions.Count > 0)
+            {
+                AddUniqueTools(mergedTools, registeredToolNames, functions);
+            }
+        }
+
+        var mcpTools = await ListToolsByAgentAsync(agent.Id, cancellationToken).ConfigureAwait(false);
+        if (mcpTools.Count > 0)
+        {
+            AddUniqueTools(mergedTools, registeredToolNames, mcpTools);
+        }
+
+        return mergedTools.Count > 0 ? mergedTools : null;
+    }
+
+    private static void AddUniqueTools(ICollection<AITool> destination, ISet<string> registeredToolNames, IEnumerable<AITool> tools)
+    {
+        foreach (var tool in tools)
+        {
+            if (string.IsNullOrWhiteSpace(tool.Name) || !registeredToolNames.Add(tool.Name))
+            {
+                continue;
+            }
+
+            destination.Add(tool);
+        }
+    }
+
+    private async Task<string[]> CollectNamedToolNamesAsync(Guid agentId, string? rawAgentTools)
+    {
+        var mergedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(rawAgentTools))
         {
             try
             {
-                var toolNames = JsonSerializer.Deserialize<string[]>(agent.Tools);
-                if (toolNames != null && toolNames.Length > 0)
+                var directTools = JsonSerializer.Deserialize<string[]>(rawAgentTools) ?? [];
+                foreach (var toolName in directTools.Where(static name => !string.IsNullOrWhiteSpace(name)))
                 {
-                    var functions = _toolRegistry.CreateAIFunctions(toolNames);
-                    if (functions.Count > 0)
-                    {
-                        mergedTools.AddRange(functions.Cast<AITool>());
-                    }
+                    mergedNames.Add(toolName);
                 }
             }
             catch (JsonException)
@@ -700,13 +760,41 @@ public class AgentRuntimeService : RuntimService
             }
         }
 
-        var mcpTools = await ListToolsByAgentAsync(agent.Id, cancellationToken).ConfigureAwait(false);
-        if (mcpTools.Count > 0)
+        var appRelations = await _agentAppRelationRepository.ListAsync(x => x.AgentId == agentId);
+        var appInstanceIds = appRelations.Select(x => x.AppInstanceId).Distinct().ToList();
+        if (appInstanceIds.Count == 0)
         {
-            mergedTools.AddRange(mcpTools.Cast<AITool>());
+            return [.. mergedNames.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)];
         }
 
-        return mergedTools.Count > 0 ? mergedTools : null;
+        var appInstances = await _appInstanceRepository.ListAsync(x => appInstanceIds.Contains(x.Id));
+        var appNames = appInstances.Select(x => x.AppName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (appNames.Count == 0)
+        {
+            return [.. mergedNames.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)];
+        }
+
+        var appDefinitions = await _appDefinitionRepository.ListAsync(x => appNames.Contains(x.Name));
+        foreach (var appInstance in appInstances)
+        {
+            var appDefinition = appDefinitions.FirstOrDefault(x =>
+                string.Equals(x.Name, appInstance.AppName, StringComparison.OrdinalIgnoreCase));
+            if (appDefinition == null)
+            {
+                _logger.LogWarning(
+                    "Skipping app instance {AppInstanceId} because app definition {AppName} was not found.",
+                    appInstance.Id,
+                    appInstance.AppName);
+                continue;
+            }
+
+            foreach (var toolName in appDefinition.ToolNames.Where(static name => !string.IsNullOrWhiteSpace(name)))
+            {
+                mergedNames.Add(toolName);
+            }
+        }
+
+        return [.. mergedNames.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)];
     }
 
     private async Task<IReadOnlyList<McpClientTool>> ListToolsByAgentAsync(Guid agentId, CancellationToken cancellationToken)
@@ -988,6 +1076,34 @@ public class AgentRuntimeService : RuntimService
             {
                 AgentId = agentId,
                 SkillId = skillId
+            });
+        }
+    }
+
+    private async Task SyncAgentAppRelationsAsync(Guid agentId, IEnumerable<Guid>? appInstanceIds)
+    {
+        var existingLinks = await _agentAppRelationRepository.ListAsync(x => x.AgentId == agentId);
+        foreach (var link in existingLinks)
+        {
+            _agentAppRelationRepository.Remove(link);
+        }
+
+        var requestedIds = (appInstanceIds ?? [])
+            .Where(static id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (requestedIds.Count == 0)
+        {
+            return;
+        }
+
+        var appInstances = await _appInstanceRepository.ListAsync(x => requestedIds.Contains(x.Id));
+        foreach (var appInstanceId in appInstances.Select(x => x.Id))
+        {
+            await _agentAppRelationRepository.AddAsync(new AgentAppRelation
+            {
+                AgentId = agentId,
+                AppInstanceId = appInstanceId
             });
         }
     }

@@ -1,5 +1,7 @@
+using Agw.Agents.Domain.Entities;
 using Agw.Infrastructure.Data;
 using Agw.Integrations.Domain.Entities;
+using Agw.Shared.Contracts.Agents;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +10,131 @@ namespace Agw.Infrastructure.Tests;
 
 public class AgwDbContextIntegrationTests
 {
+    [Fact]
+    public async Task AgentAppRelation_WhenDuplicatePairInserted_RejectsInsert()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var agentId = Guid.NewGuid();
+        var appInstanceId = Guid.NewGuid();
+
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Agents.Add(new Agent
+            {
+                Id = agentId,
+                Name = "agent-1",
+                DisplayName = "Agent 1",
+                Description = "desc",
+                SystemPrompt = "prompt",
+                Type = AgentType.System,
+                CreateBy = "tester",
+                CreateTime = DateTime.UtcNow
+            });
+            seedContext.AppInstances.Add(new AppInstance
+            {
+                Id = appInstanceId,
+                AppName = "github",
+                ClientId = "client-1",
+                ClientSecret = "secret-1",
+                CreateBy = "tester",
+                CreateTime = DateTime.UtcNow
+            });
+            seedContext.Set<AgentAppRelation>().Add(new AgentAppRelation
+            {
+                AgentId = agentId,
+                AppInstanceId = appInstanceId
+            });
+
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        dbContext.Set<AgentAppRelation>().Add(new AgentAppRelation
+        {
+            AgentId = agentId,
+            AppInstanceId = appInstanceId
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync(cancellationToken));
+    }
+
+    [Fact]
+    public async Task AgentAppRelation_WhenAppInstanceDeleted_RemovesRelations()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var agentId = Guid.NewGuid();
+        var appInstanceId = Guid.NewGuid();
+
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Agents.Add(new Agent
+            {
+                Id = agentId,
+                Name = "agent-1",
+                DisplayName = "Agent 1",
+                Description = "desc",
+                SystemPrompt = "prompt",
+                Type = AgentType.System,
+                CreateBy = "tester",
+                CreateTime = DateTime.UtcNow
+            });
+            seedContext.AppInstances.Add(new AppInstance
+            {
+                Id = appInstanceId,
+                AppName = "github",
+                ClientId = "client-1",
+                ClientSecret = "secret-1",
+                CreateBy = "tester",
+                CreateTime = DateTime.UtcNow
+            });
+            seedContext.Set<AgentAppRelation>().Add(new AgentAppRelation
+            {
+                AgentId = agentId,
+                AppInstanceId = appInstanceId
+            });
+
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using (var deleteContext = new AgwDbContext(options))
+        {
+            var appInstance = await deleteContext.AppInstances.FindAsync([appInstanceId], cancellationToken);
+            deleteContext.AppInstances.Remove(appInstance!);
+            await deleteContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var assertContext = new AgwDbContext(options);
+        Assert.False(await assertContext.Set<AgentAppRelation>().AnyAsync(cancellationToken));
+    }
+
     [Fact]
     public async Task AppInstance_WhenAppNameDuplicatesAndClientIdDiffers_AllowsInsert()
     {

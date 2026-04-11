@@ -173,6 +173,7 @@ public partial class AgentExecutionsController : ControllerBase
     }
 
     private async Task<T?> ReceiveRequestAsync<T>(WebSocket webSocket, CancellationToken cancellationToken)
+        where T : AgentRunCommand
     {
         var buffer = new byte[BufferSize];
         using var stream = new MemoryStream();
