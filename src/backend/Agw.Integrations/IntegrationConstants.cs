@@ -28,22 +28,6 @@ public static class IntegrationConstants
                 Tags = ["Git", "Coding"],
                 ToolNames = ["github_list_repository", "github_clone"],
             },
-            new AppDefinition
-            {
-                Name = "google-workspace",
-                DisplayName = "Google Workspace",
-                Category = CategoryType.Other,
-                Provider = "Google OAuth 2.0",
-                Description = "Connect calendars, files, and docs so workflows can act on shared organizational context.",
-                AuthUrl = "https://accounts.google.com/o/oauth2/v2/auth",
-                TokenEndpoint = "https://oauth2.googleapis.com/token",
-                SubjectField = "sub",
-                Scopes = ["repo", "read:user", "read:org"],
-                UsePkce = true,
-
-                Tags = ["Git", "Coding"],
-                ToolNames = [],
-            },
         ];
 }
 

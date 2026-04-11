@@ -39,6 +39,7 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
     processedIndices.add(i);
 
     const currentMsg = msgs[i];
+    // console.debug("Processing message", i, JSON.stringify(currentMsg));
     // Skip messages without an author (could be system metadata or similar)
     if (!currentMsg.author) {
       continue;
@@ -68,15 +69,15 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
       continue;
     }
 
-    const isReasoning = currentMsg.contents[0].type === MessageContentType.TextReasoningContent;
-    if (isReasoning) {
-      items.push({
-        type: "accordion",
-        messages: [currentMsg],
-        toolName: "Thinking",
-      });
-      continue;
-    }
+    // const isReasoning = currentMsg.contents[0].type === MessageContentType.TextReasoningContent;
+    // if (isReasoning) {
+    //   items.push({
+    //     type: "accordion",
+    //     messages: [currentMsg],
+    //     toolName: "Thinking",
+    //   });
+    //   continue;
+    // }
 
     // Normal message (user, assistant, etc.)
     items.push({

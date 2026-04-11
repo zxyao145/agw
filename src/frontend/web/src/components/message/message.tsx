@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { AiMessage, AiMessageContent, MessageContentType } from "@/types";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Button } from "../ui/button";
+import { layoutWithLines, prepareWithSegments } from "@chenglou/pretext";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 type MessageNode = { type: string; content: string };
 
@@ -15,7 +16,7 @@ const getNodePrefix = (type: string): string =>
   type === MessageContentType.ErrorContent
     ? "ERROR: "
     : type === MessageContentType.UsageContent
-      ? "Usage"
+      ? "Usage: "
       : type === MessageContentType.FunctionResultContent
         ? ""
         : type === MessageContentType.TextReasoningContent
@@ -27,81 +28,119 @@ const getNodePrefix = (type: string): string =>
 const isTextNode = (type: string) =>
   (
     [
-      MessageContentType.DataContent,
-      MessageContentType.ErrorContent,
+      MessageContentType.TextContent,
       MessageContentType.FunctionCallContent,
       MessageContentType.FunctionResultContent,
-      MessageContentType.TextContent,
+
+      MessageContentType.DataContent,
+      MessageContentType.ErrorContent,
     ] as string[]
   ).includes(type);
 
-const renderNode = (node: MessageNode, _: AiMessage): React.ReactNode => {
+const MdCard = ({ mdText: content }: { mdText: string }) => (
+  <ReactMarkdown
+    remarkPlugins={[remarkGfm]}
+    components={{
+      pre: ({ children }) => <pre className="msg-content-md-code">{children}</pre>,
+      code: ({ children }) => <code className="msg-content-md-code">{children}</code>,
+      ol: ({ children }) => <ol className="msg-content-md-ol">{children}</ol>,
+      ul: ({ children }) => <ul className="msg-content-md-ul">{children}</ul>,
+    }}
+  >
+    {content}
+  </ReactMarkdown>
+);
+
+const Reasoning = ({ node }: { node: MessageNode }) => {
+  const [expanded, setExpanded] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const preview = useMemo(() => {
+    console.debug("preview containerRef", containerRef);
+    if (!containerRef || !containerRef.current) {
+      return "...";
+    }
+    const el = containerRef.current;
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+
+    const paddingLeft = parseFloat(style.paddingLeft);
+    const paddingRight = parseFloat(style.paddingRight);
+
+    const contentWidth = rect.width - paddingLeft - paddingRight;
+
+    const maxWidth = contentWidth;
+
+    const lines = node.content.split("\n");
+    const firstLine = lines[0];
+    const prepared = prepareWithSegments(firstLine, "16px Arial");
+    console.debug("prepared", maxWidth, firstLine, JSON.stringify(prepared));
+    const result = layoutWithLines(prepared, maxWidth, 22);
+
+    //  const prepared = prepare(lines[0], "16px Inter");
+    //  const { height, lineCount } = layout(prepared, maxWidth, 20);
+    // console.log("prepared height, lineCount", height, lineCount);
+    console.debug("prepared result", result.lines[0].text);
+    return result.lines[0].text;
+  }, [node.content, containerRef]);
+
+  return (
+    <div className="msg-content text-muted-foreground ">
+      <div className="flex justify-between items-start">
+        <div ref={containerRef} className="flex flex-1 flex-col">
+          <MdCard mdText={expanded ? node.content : preview} />
+        </div>
+        <div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-[22] h-[22]"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? <ChevronDown size={4} /> : <ChevronUp size={4} />}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const renderContent = (node: MessageNode, _: AiMessage): React.ReactNode => {
   if (isTextNode(node.type)) {
     return (
-      <div className="text-sm whitespace-pre-wrap wrap-anywhere">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            pre: ({ children }) => (
-              <pre className="max-w-full whitespace-pre-wrap wrap-anywhere">{children}</pre>
-            ),
-            code: ({ children }) => (
-              <code className="max-w-full whitespace-pre-wrap wrap-anywhere">{children}</code>
-            ),
-          }}
-        >
-          {node.content}
-        </ReactMarkdown>
+      <div className="msg-content">
+        <MdCard mdText={node.content} />
       </div>
     );
   }
 
   if (node.type === MessageContentType.TextReasoningContent) {
-    return (
-      <div className="text-sm text-muted-foreground whitespace-pre-wrap wrap-anywhere">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            pre: ({ children }) => (
-              <pre className="max-w-full whitespace-pre-wrap wrap-anywhere">{children}</pre>
-            ),
-            code: ({ children }) => (
-              <code className="max-w-full whitespace-pre-wrap wrap-anywhere">{children}</code>
-            ),
-            ol: ({ children }) => (
-              <ol className="list-disc list-inside leading-none">{children}</ol>
-            ),
-            ul: ({ children }) => (
-              <ul className="list-decimal list-inside leading-none">{children}</ul>
-            ),
-          }}
-        >
-          {node.content}
-        </ReactMarkdown>
-      </div>
-    );
+    return <Reasoning node={node} />;
   }
 
   if (node.type === MessageContentType.UriContent) {
     return (
-      <div className="text-sm whitespace-pre-wrap wrap-anywhere">
+      <div className="msg-content">
         <Image src={node.content} alt="Image content" />
       </div>
     );
   }
 
-  if (node.type === MessageContentType.UsageContent) {
-    return (
-      <div className="text-sm whitespace-pre-wrap wrap-anywhere w-full relative">
-        <div className="w-full flex justify-center relative z-1">
-          <Badge variant="secondary" className="bg-blue-500 text-white dark:bg-blue-600">
-            {node.content}
-          </Badge>
-        </div>
-        <Separator className="w-full relative top-[-50%] z-0" />
-      </div>
-    );
-  }
+  // if (node.type === MessageContentType.UsageContent) {
+  //   return (
+  //     <div className="msg-content w-full relative">
+  //       <div className="w-full flex justify-center relative z-1">
+  //         <Badge
+  //           variant="secondary"
+  //           className="bg-blue-500 text-white dark:bg-blue-600"
+  //         >
+  //           {node.content}
+  //         </Badge>
+  //       </div>
+  //       <Separator className="w-full relative top-[-50%] z-0" />
+  //     </div>
+  //   );
+  // }
 
   return null;
 };
@@ -145,7 +184,8 @@ const buildContentNode = (content: AiMessageContent, message: AiMessage): string
   return processed;
 };
 
-const groupContentsByType = (contents: AiMessageContent[], message: AiMessage): MessageNode[] => {
+const groupContentsByType = (message: AiMessage): MessageNode[] => {
+  const contents = message.contents || [];
   const nodes: MessageNode[] = [];
   let currentContent = "";
   let lastType = "";
@@ -179,17 +219,21 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
     // return <div className="flex justify-center">{contentNodes.map((n, i) => <React.Fragment key={i}>{renderNode(n, message)}</React.Fragment>)}</div>;
   }
 
-  const contentNodes = React.useMemo(
-    () => groupContentsByType(message.contents, message),
-    [message],
-  );
+  // group contents by type
+  // To solve the problem of multiple returns of the same type in streaming mode
+  // A more appropriate approach is to group by messageId. Why wasn't that done? already forgotten
+  const groupContents = React.useMemo(() => groupContentsByType(message), [message]);
+
+  console.debug("Rendering message", message.messageId, "with content nodes", groupContents);
 
   // const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
   const isUser = message.role === "user";
+
+  // TODO: There are pits here that need to be optimized
+  const isToolUse = message.contents.some((c) => c.type === MessageContentType.FunctionCallContent);
   const isToolResult = message.contents.some(
     (c) => c.type === MessageContentType.FunctionResultContent,
   );
-  const isToolUse = message.contents.some((c) => c.type === MessageContentType.FunctionCallContent);
 
   const IsSideRight = isUser && !isToolResult;
   let title = "";
@@ -218,9 +262,10 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
         <div className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}>
           <span className="text-xs font-semibold opacity-70">{title}</span>
         </div>
-        <div className="text-sm whitespace-pre-wrap wrap-anywhere">
-          {contentNodes.map((n, i) => (
-            <React.Fragment key={i}>{renderNode(n, message)}</React.Fragment>
+
+        <div className="msg-content-container">
+          {groupContents.map((n, i) => (
+            <React.Fragment key={i}>{renderContent(n, message)}</React.Fragment>
           ))}
         </div>
       </div>

@@ -18,7 +18,7 @@ import { UserInput, UserInputRef } from "./user-input";
 import { ArrowUp, Eraser, Square } from "lucide-react";
 import { Separator } from "../ui/separator";
 import { useQuery } from "@tanstack/react-query";
-import { deleteTaskById, getTaskDetails } from "@/api/task-client";
+import { clearTaskRecords, getTaskDetails } from "@/api/task-client";
 import { QuickTextDialog } from "../task/quick-text-dialog";
 
 export interface ChatProps {
@@ -173,7 +173,7 @@ export function Chat({
       return;
     }
 
-    const success = await deleteTaskById(taskId, projectId);
+    const success = await clearTaskRecords(taskId, projectId);
     if (success) {
       setMessages([]);
     }

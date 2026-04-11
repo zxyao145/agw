@@ -93,6 +93,24 @@ export async function deleteTaskById(taskId: string, projectId: string): Promise
   }
 }
 
+export async function clearTaskRecords(taskId: string, projectId: string): Promise<boolean> {
+  if (!taskId || !projectId) {
+    return false;
+  }
+
+  try {
+    await client.apiDelete("/api/projects/{projectId}/tasks/{taskId}/clear-records", {
+      params: { path: { projectId, taskId } },
+    });
+    return true;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 export async function deleteAllTasks(projectId: string): Promise<void> {
   const tasks = await getAllTasks(projectId);
   await Promise.all(tasks.map((task) => deleteTaskById(task.taskId, projectId)));

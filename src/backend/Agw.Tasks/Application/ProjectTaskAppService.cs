@@ -9,6 +9,7 @@ using Agw.Shared.Models;
 using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tasks.Application;
@@ -192,7 +193,31 @@ public class ProjectTaskAppService
         return ApplicationResult.Success();
     }
 
-    public async Task<ApplicationResult> DeleteAsync(Guid projectId, Guid taskId)
+    public async Task<ApplicationResult> DeleteTaskAsync(Guid projectId, Guid taskId)
+    {
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return ApplicationResult.NotFound();
+        }
+
+        var task = await _taskRepository.GetByIdAsync(taskId);
+        if (task == null || task.ProjectId != project.Id)
+        {
+            return ApplicationResult.Success();
+        }
+
+        await _recordRepository.Queryable
+          .Where(x => x.TaskId == task.Id)
+          .ExecuteDeleteAsync();
+
+        _taskRepository.Remove(task);
+        await _unitOfWork.SaveChangesAsync();
+
+        return ApplicationResult.Success();
+    }
+
+    public async Task<ApplicationResult> ClearRecordsAsync(Guid projectId, Guid taskId)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
@@ -206,13 +231,10 @@ public class ProjectTaskAppService
             return ApplicationResult.NotFound();
         }
 
-        var records = await GetOrderedRecordsByTaskIdAsync(task.Id);
-        foreach (var record in records)
-        {
-            _recordRepository.Remove(record);
-        }
+        await _recordRepository.Queryable
+          .Where(x => x.TaskId == task.Id)
+          .ExecuteDeleteAsync();
 
-        _taskRepository.Remove(task);
         await _unitOfWork.SaveChangesAsync();
         return ApplicationResult.Success();
     }

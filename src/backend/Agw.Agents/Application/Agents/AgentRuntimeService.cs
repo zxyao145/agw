@@ -307,6 +307,7 @@ public class AgentRuntimeService : RuntimService
         var taskId = request.TaskId;
         var resume = request.Resume;
         var cancellationToken = request.CancellationToken;
+        var workspace = request.Workspace;
 
         if (agent.Type == AgentType.External)
         {
@@ -325,11 +326,11 @@ public class AgentRuntimeService : RuntimService
                     _logger.LogError("agent.Extra Deserialize to options error");
                     return null;
                 }
-                if (!string.IsNullOrWhiteSpace(request.Workspace))
+                if (!string.IsNullOrWhiteSpace(workspace))
                 {
                     ccOptions = ccOptions with
                     {
-                        WorkingDirectory = request.Workspace
+                        WorkingDirectory = workspace
                     };
                 }
 
@@ -361,7 +362,7 @@ public class AgentRuntimeService : RuntimService
             }
         }
 
-        return await CreateDefinitionAgent(agent, cancellationToken).ConfigureAwait(false);
+        return await CreateDefinitionAgent(agent, workspace, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<AgentExecSession?> CreateSessionAsync(
@@ -567,7 +568,7 @@ public class AgentRuntimeService : RuntimService
         }
     }
 
-    private async Task<AIAgent?> CreateDefinitionAgent(Agent agentDefinition, CancellationToken cancellationToken)
+    private async Task<AIAgent?> CreateDefinitionAgent(Agent agentDefinition, string? workspace, CancellationToken cancellationToken)
     {
         if (!agentDefinition.ModelProviderId.HasValue)
         {
@@ -602,8 +603,8 @@ public class AgentRuntimeService : RuntimService
 
         return provider.ProviderType switch
         {
-            ProviderType.OpenAI => CreateOpenAiAgent(agentDefinition, model, provider, authConfig, tools, skillsProvider),
-            ProviderType.Anthropic => CreateAnthropicAgent(agentDefinition, model, provider, authConfig, tools, skillsProvider),
+            ProviderType.OpenAI => CreateOpenAiAgent(agentDefinition, model, provider, authConfig, tools, skillsProvider, workspace),
+            ProviderType.Anthropic => CreateAnthropicAgent(agentDefinition, model, provider, authConfig, tools, skillsProvider, workspace),
             _ => throw new NotSupportedException($"Provider type '{provider.ProviderType}' is not supported")
         };
     }
@@ -614,7 +615,8 @@ public class AgentRuntimeService : RuntimService
         Provider provider,
         ProviderAuthConfig authConfig,
         IList<AITool>? tools,
-        AIContextProvider? skillsProvider)
+        AIContextProvider? skillsProvider,
+        string? workspace)
     {
         var apiKey = ResolveApiKey(authConfig);
         var credential = new ApiKeyCredential(apiKey);
@@ -632,7 +634,7 @@ public class AgentRuntimeService : RuntimService
             ChatOptions = new ChatOptions
             {
                 ModelId = model.Name,
-                Instructions = agentDefinition.SystemPrompt,
+                Instructions = GetInstructions(agentDefinition.SystemPrompt, workspace),
                 Tools = tools
             }
         };
@@ -654,7 +656,8 @@ public class AgentRuntimeService : RuntimService
         Provider provider,
         ProviderAuthConfig authConfig,
         IList<AITool>? tools,
-        AIContextProvider? skillsProvider)
+        AIContextProvider? skillsProvider,
+        string? workspace)
     {
         var anthropicClientOptions = new Anthropic.Core.ClientOptions
         {
@@ -670,7 +673,7 @@ public class AgentRuntimeService : RuntimService
             ChatOptions = new ChatOptions
             {
                 ModelId = model.Name,
-                Instructions = agentDefinition.SystemPrompt,
+                Instructions = GetInstructions(agentDefinition.SystemPrompt, workspace),
                 Tools = tools
             }
         };
@@ -684,6 +687,29 @@ public class AgentRuntimeService : RuntimService
             .AsBuilder()
             .UseOpenTelemetry(sourceName: provider.Name, configure: cfg => cfg.EnableSensitiveData = true)
             .Build();
+    }
+
+    private static string GetInstructions(string SystemPrompt, string? workspace)
+    {
+        if (string.IsNullOrWhiteSpace(SystemPrompt))
+        {
+            SystemPrompt = "You are an AI agent.";
+        }
+
+        if (string.IsNullOrWhiteSpace(workspace))
+        {
+            return SystemPrompt;
+        }
+        workspace = PathUtil.ExpandTilde(workspace);
+
+        var workspaceInstructions =
+            $"""
+            # others
+
+            - Your default workspace or working directory is '{workspace}'.
+            """;
+
+        return $"{SystemPrompt}{Environment.NewLine}{workspaceInstructions}";
     }
 
     private string ResolveApiKey(ProviderAuthConfig authConfig)

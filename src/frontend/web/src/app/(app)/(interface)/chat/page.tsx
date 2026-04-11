@@ -10,7 +10,7 @@ import { toast } from "sonner";
 
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
 import { apiGet } from "@/api/client";
-import { getTaskDetails } from "@/api/task-client";
+import { clearTaskRecords, getTaskDetails } from "@/api/task-client";
 import { Explorer, FileContent } from "@/components/file-explorer";
 import type { LineComment } from "@/components/file-explorer";
 import { Conversation } from "@/components/message/conversation";
@@ -705,10 +705,13 @@ export default function ChatPage() {
     closeSocket("Session cleared");
     hydratedTaskKeyRef.current = null;
     setIsExecuting(false);
+    if (selectedProjectId && taskId) {
+      clearTaskRecords(taskId, selectedProjectId);
+    }
     setMessages([]);
     setTaskId(null);
     userInputRef.current?.setInput("");
-  }, [closeSocket]);
+  }, [closeSocket, taskId, selectedProjectId]);
 
   const resetSession = React.useCallback(() => {
     clearActiveSessionState();

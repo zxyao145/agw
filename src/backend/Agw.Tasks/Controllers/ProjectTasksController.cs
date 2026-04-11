@@ -28,7 +28,14 @@ public class ProjectTasksController : ControllerBase
     [HttpDelete("{taskId:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid projectId, Guid taskId)
     {
-        var result = await _projectTaskAppService.DeleteAsync(projectId, taskId);
+        var result = await _projectTaskAppService.DeleteTaskAsync(projectId, taskId);
+        return result.Type == ApplicationResultType.Success ? Ok() : NotFound();
+    }
+
+    [HttpDelete("{taskId:guid}/clear-records")]
+    public async Task<IActionResult> ClearRecordsAsync(Guid projectId, Guid taskId)
+    {
+        var result = await _projectTaskAppService.ClearRecordsAsync(projectId, taskId);
         return result.Type == ApplicationResultType.Success ? Ok() : NotFound();
     }
 }

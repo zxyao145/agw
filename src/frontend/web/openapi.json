@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:5016/"
+      "url": "http://localhost:5015/"
     }
   ],
   "paths": {
@@ -738,7 +738,7 @@
     "/api/integrations/oauth/callback": {
       "get": {
         "tags": [
-          "Oauth"
+          "OAuth"
         ],
         "responses": {
           "200": {
@@ -1776,6 +1776,38 @@
           }
         }
       },
+      "delete": {
+        "tags": [
+          "ProjectTasks"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/tasks/{taskId}/clear-records": {
       "delete": {
         "tags": [
           "ProjectTasks"
@@ -3017,7 +3049,7 @@
       "name": "Integrations"
     },
     {
-      "name": "Oauth"
+      "name": "OAuth"
     },
     {
       "name": "Jobs"
