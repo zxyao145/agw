@@ -8,8 +8,8 @@ namespace Agw.Infrastructure.Repositories;
 
 public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
 {
-    private readonly DbContext _dbContext;
-    private readonly DbSet<TEntity> _dbSet;
+    protected readonly DbContext _dbContext;
+    protected readonly DbSet<TEntity> _dbSet;
 
     public EfRepository(DbContext dbContext)
     {

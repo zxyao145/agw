@@ -1,17 +1,22 @@
-using Agw.Infrastructure.Data;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Domain.Enums;
+using Agw.Shared.Data.Repositories;
 
 using Microsoft.EntityFrameworkCore;
 
-namespace Agw.Infrastructure.Services;
+namespace Agw.Infrastructure.Repositories;
 
-public class JobStore(AgwDbContext dbContext) : IJobStore
+public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
 {
+    public JobRepo(DbContext dbContext) : base(dbContext)
+    {
+    }
+
+
     public async Task<IReadOnlyList<Job>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken)
     {
-        var jobs = await dbContext.Jobs
+        var jobs = await _dbSet
             .Where(t => t.IsEnabled)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -25,12 +30,12 @@ public class JobStore(AgwDbContext dbContext) : IJobStore
     public async Task<bool> MarkRunningAsync(Guid jobId, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        var job = await dbContext.Jobs
+        var job = await _dbSet
             .FirstOrDefaultAsync(t => t.Id == jobId && t.IsEnabled, cancellationToken);
 
         if (job == null)
         {
-            var exists = await dbContext.Jobs
+            var exists = await _dbSet
                 .AsNoTracking()
                 .AnyAsync(t => t.Id == jobId, cancellationToken);
 
@@ -51,13 +56,13 @@ public class JobStore(AgwDbContext dbContext) : IJobStore
         job.UpdateTime = now;
         job.UpdateBy = "scheduler";
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }
 
     public async Task MarkSucceededAsync(Guid jobId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
     {
-        var task = await dbContext.Jobs.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
+        var task = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
             ?? throw new InvalidOperationException($"Job not found: {jobId}");
 
         task.RetryCount = 0;
@@ -77,12 +82,12 @@ public class JobStore(AgwDbContext dbContext) : IJobStore
         task.UpdateTime = DateTime.UtcNow;
         task.UpdateBy = "scheduler";
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task MarkRetryAsync(Guid jobId, DateTimeOffset nextRunTime, int retryCount, string errorMessage, CancellationToken cancellationToken)
     {
-        var task = await dbContext.Jobs.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
+        var task = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
             ?? throw new InvalidOperationException($"Job not found: {jobId}");
 
         task.Status = JobStatus.Pending;
@@ -92,12 +97,12 @@ public class JobStore(AgwDbContext dbContext) : IJobStore
         task.UpdateTime = DateTime.UtcNow;
         task.UpdateBy = "scheduler";
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task MarkFailedAsync(Guid jobId, int retryCount, string errorMessage, CancellationToken cancellationToken)
     {
-        var task = await dbContext.Jobs.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
+        var task = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
             ?? throw new InvalidOperationException($"Job not found: {jobId}");
 
         task.Status = JobStatus.Paused;
@@ -107,7 +112,7 @@ public class JobStore(AgwDbContext dbContext) : IJobStore
         task.UpdateTime = DateTime.UtcNow;
         task.UpdateBy = "scheduler";
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task AddExecutionLogAsync(Guid jobId, Guid taskId, DateTimeOffset startTime, DateTimeOffset endTime, bool success, int attempt, string? errorMessage, CancellationToken cancellationToken)
@@ -128,7 +133,8 @@ public class JobStore(AgwDbContext dbContext) : IJobStore
             UpdateTime = DateTime.UtcNow
         };
 
-        await dbContext.JobLogs.AddAsync(log, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.Set<JobLog>().AddAsync(log, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
+
 }

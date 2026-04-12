@@ -1,9 +1,9 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Infrastructure.Services;
 using Agw.Integrations.Domain.Entities;
 using Agw.Jobs.Application.Services;
+using Agw.Jobs.Domain.Entities;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Services;
 
@@ -36,8 +36,10 @@ public static class DependencyInjection
         services.AddScoped<DbContext, AgwDbContext>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IRepository<AppDefinition>, AppDefinitionRepo>();
+        services.AddScoped<JobRepo>();
+        services.AddScoped<IRepository<Job>, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
+        services.AddScoped<IJobStore, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-        services.AddScoped<IJobStore, JobStore>();
 
         services.AddSingleton<IGitCommandService, GitCommandService>();
 
