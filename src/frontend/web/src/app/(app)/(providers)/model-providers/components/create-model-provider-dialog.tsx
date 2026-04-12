@@ -24,8 +24,9 @@ import type {
   ProviderDto,
   SearchableSelectOption,
 } from "./types";
-import { getApiErrorMessage, parseFloatOrNull, parseIntOrNull } from "./utils";
+import { parseFloatOrNull, parseIntOrNull } from "./utils";
 import { SearchableSelect } from "./searchable-select";
+import { getApiErrorMessage } from "@/api/utils";
 
 type CreateModelProviderDialogProps = {
   modelsQuery: UseQueryResult<ModelDto[], Error>;

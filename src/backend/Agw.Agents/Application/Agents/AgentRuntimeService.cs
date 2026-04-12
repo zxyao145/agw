@@ -60,7 +60,7 @@ public sealed class CreateAiAgentRequest
     public CancellationToken CancellationToken { get; init; }
 }
 
-public class AgentRuntimeService : RuntimService
+public class AgentRuntimeService : RuntimServiceBase
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;

@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { apiDelete } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { getApiErrorMessage, listKeysByPair } from "./utils";
+import { listKeysByPair } from "./utils";
+import { getApiErrorMessage } from "@/api/utils";
 
 type ModelProviderActionsProps = {
   modelProviderId: string;

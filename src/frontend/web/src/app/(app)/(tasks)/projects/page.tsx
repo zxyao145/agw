@@ -28,6 +28,7 @@ import {
   resolveCreateProjectWorkspace,
   syncDefaultProjectWorkspace,
 } from "./project-form";
+import { getApiErrorMessage } from "@/api/utils";
 
 type ProjectCreateRequest = components["schemas"]["ProjectCreateRequest"] & {
   workspace?: string | null;

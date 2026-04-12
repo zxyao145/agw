@@ -5,7 +5,7 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Application;
 
-public class RuntimService
+public class RuntimServiceBase
 {
     protected static AgwMessage CreateTurnFinishedMessage(CancellationToken cancellationToken)
     {

@@ -21,7 +21,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 
 import { MODEL_TYPE_OPTIONS, getModelTypeLabel } from "./types";
 import type { ModelCreateRequest } from "./types";
-import { getApiErrorMessage, parseIntOrNull } from "./utils";
+import { parseIntOrNull } from "./utils";
+import { getApiErrorMessage } from "@/api/utils";
 
 interface CreateModelDialogProps {
   open: boolean;
