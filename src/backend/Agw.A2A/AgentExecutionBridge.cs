@@ -1,9 +1,7 @@
 using A2A;
 
-using Agw.Agents.Application.AgentRun;
-using Agw.Api.Contracts;
-using Agw.Shared;
-using Agw.Shared.Contracts.Tasks;
+using Agw.Agents.Application.AgentRun.Dtos;
+using Agw.Agents.Contracts;
 using Agw.Shared.Models;
 
 using Microsoft.Extensions.AI;
@@ -49,15 +47,15 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
         }
 
         return await agentRuntimeService
-            .ExecuteAsync(new AgentExecuteRequest
-            {
-                AgentId = agent.Id,
-                TaskId = ParseRequiredTaskId(context.TaskId),
-                Input = [CreateChatMessage(input)],
-                CancellationToken = cancellationToken,
-                ProjectId = ProjectDefaults.A2AId,
-                ContextId = context.ContextId
-            })
+            .ExecuteByIdAsync(new AgentExecuteByIdRequest
+            (
+                [CreateChatMessage(input)],
+                agent.Id,
+                ParseRequiredTaskId(context.TaskId),
+                ProjectDefaults.A2AId,
+                context.ContextId
+                )
+            , cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -142,21 +140,27 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
                 case AgwTextContent textContent:
                     aiContents.Add(new TextContent(textContent.Content));
                     break;
+
                 case AgwTextReasoningContent reasoningContent:
                     aiContents.Add(new TextContent(reasoningContent.Content));
                     break;
+
                 case AgwUriContent uriContent:
                     aiContents.Add(new UriContent(uriContent.Uri, uriContent.MediaType));
                     break;
+
                 case AgwFunctionCallContent functionCallContent:
                     aiContents.Add(new TextContent(functionCallContent.Content));
                     break;
+
                 case AgwFunctionResultContent functionResultContent:
                     aiContents.Add(new TextContent(functionResultContent.Content));
                     break;
+
                 case AgwErrorContent errorContent:
                     aiContents.Add(new TextContent(errorContent.Content));
                     break;
+
                 case AgwUsageContent usageContent:
                     aiContents.Add(new TextContent(System.Text.Json.JsonSerializer.Serialize(usageContent.Content)));
                     break;

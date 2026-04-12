@@ -3,7 +3,6 @@ using System.Text.Json;
 
 using A2A;
 
-using Agw.Shared;
 using Agw.Shared.Models;
 
 using Microsoft.Extensions.AI;
@@ -38,7 +37,6 @@ public class CommonAgentHandler : IAgentHandler
         _executionBridge = executionBridge;
         _serviceScopeFactory = serviceScopeFactory;
     }
-
 
     public async Task<AgentCard?> GetAgentCardAsync()
     {
@@ -140,10 +138,13 @@ public class CommonAgentHandler : IAgentHandler
 
             case PartContentCase.Url:
                 return new AgwUriContent(part.Url!, string.IsNullOrWhiteSpace(part.MediaType) ? "text/plain" : part.MediaType);
+
             case PartContentCase.Raw:
                 return new AgwTextContent { Content = Convert.ToBase64String(part.Raw!) };
+
             case PartContentCase.Data:
                 return new AgwTextContent { Content = part.Data!.Value.GetRawText() };
+
             default:
                 return null;
         }
@@ -181,24 +182,31 @@ public class CommonAgentHandler : IAgentHandler
                 case AgwTextContent textContent when !string.IsNullOrWhiteSpace(textContent.Content):
                     parts.Add(Part.FromText(textContent.Content));
                     break;
+
                 case AgwTextReasoningContent reasoningContent when !string.IsNullOrWhiteSpace(reasoningContent.Content):
                     parts.Add(Part.FromText(reasoningContent.Content));
                     break;
+
                 case AgwFunctionCallContent functionCallContent when !string.IsNullOrWhiteSpace(functionCallContent.Content):
                     parts.Add(Part.FromText(functionCallContent.Content));
                     break;
+
                 case AgwFunctionResultContent functionResultContent when !string.IsNullOrWhiteSpace(functionResultContent.Content):
                     parts.Add(Part.FromText(functionResultContent.Content));
                     break;
+
                 case AgwErrorContent errorContent when !string.IsNullOrWhiteSpace(errorContent.Content):
                     parts.Add(Part.FromText(errorContent.Content));
                     break;
+
                 case AgwUsageContent usageContent:
                     parts.Add(Part.FromText(JsonSerializer.Serialize(usageContent.Content)));
                     break;
+
                 case AgwUriContent uriContent:
                     parts.Add(Part.FromUrl(uriContent.Uri.ToString(), uriContent.MediaType, null));
                     break;
+
                 case AgwDataContent dataContent:
                     parts.Add(Part.FromUrl(dataContent.Uri, dataContent.MediaType, null));
                     break;
@@ -223,7 +231,6 @@ public class CommonAgentHandler : IAgentHandler
         TaskId = context.TaskId,
         Parts = [Part.FromText(text)]
     };
-
 }
 
 public class AgentHandlerFactory

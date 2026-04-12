@@ -5,7 +5,7 @@ using A2A;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Contracts.Tasks;
-using Agw.Shared.Enums;
+using Agw.Shared.Data.Entities.Tasks;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +28,7 @@ public class TaskStoreTests
         await EnsureCreatedAsync(options, cancellationToken);
         await SeedA2AProjectAsync(options, cancellationToken);
 
-        await using var dbContext = new LlmDbContext(options);
+        await using var dbContext = new AgwDbContext(options);
         var store = CreateStore(dbContext);
         var taskId = Guid.NewGuid().ToString("D");
 
@@ -72,7 +72,7 @@ public class TaskStoreTests
         await EnsureCreatedAsync(options, cancellationToken);
         await SeedA2AProjectAsync(options, cancellationToken);
 
-        await using var dbContext = new LlmDbContext(options);
+        await using var dbContext = new AgwDbContext(options);
         var store = CreateStore(dbContext);
 
         var firstTaskId = Guid.NewGuid().ToString("D");
@@ -162,31 +162,31 @@ public class TaskStoreTests
     [Fact]
     public void BuiltInProjects_ContainsA2AProjectDefinition()
     {
-        var project = Assert.Single(ProjectDefaults.BuiltInProjects, x => x.Id == A2AProjectId);
+        var project = Assert.Single(DbSeeder.BuiltInProjects, x => x.Id == A2AProjectId);
 
         Assert.Equal("a2a", project.Name);
         Assert.Equal(ProjectType.DefaultBuiltIn, project.Type);
     }
 
-    private static DbContextOptions<LlmDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<LlmDbContext>()
+    private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
+        new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
             .UseSnakeCaseNamingConvention()
             .Options;
 
     private static async Task EnsureCreatedAsync(
-        DbContextOptions<LlmDbContext> options,
+        DbContextOptions<AgwDbContext> options,
         CancellationToken cancellationToken)
     {
-        await using var setupContext = new LlmDbContext(options);
+        await using var setupContext = new AgwDbContext(options);
         await setupContext.Database.EnsureCreatedAsync(cancellationToken);
     }
 
     private static async Task SeedA2AProjectAsync(
-        DbContextOptions<LlmDbContext> options,
+        DbContextOptions<AgwDbContext> options,
         CancellationToken cancellationToken)
     {
-        await using var seedContext = new LlmDbContext(options);
+        await using var seedContext = new AgwDbContext(options);
         seedContext.Projects.Add(new Project
         {
             Id = A2AProjectId,
@@ -200,7 +200,7 @@ public class TaskStoreTests
         await seedContext.SaveChangesAsync(cancellationToken);
     }
 
-    private static TaskStore CreateStore(LlmDbContext dbContext) =>
+    private static TaskStore CreateStore(AgwDbContext dbContext) =>
         new(
             new EfRepository<ProjectTask>(dbContext),
             new EfRepository<TaskRecord>(dbContext),

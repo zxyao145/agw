@@ -11,13 +11,14 @@ public static class DependencyInjection
     {
         services.AddSingleton<IAgentExecutionBridge, AgentExecutionBridge>();
         services.AddSingleton<AgentHandlerFactory>();
+        services.AddSingleton<AgwChannelEventNotifier>();
+
         services.AddScoped<A2AAgentService>();
         services.AddScoped<ITaskStore, TaskStore>();
         services.AddScoped<IAgwA2ARequestHandler, AgwA2ARequestHandler>();
         services.Configure<AgwA2AServerOptions>(o =>
         {
         });
-
 
         return services;
     }

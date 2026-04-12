@@ -12,87 +12,23 @@ using Microsoft.Extensions.Logging;
 
 namespace Agw.A2A;
 
-public interface IAgwA2ARequestHandler
-{
-    /// <summary>Handles a send message request.</summary>
-    /// <param name="request">The send message request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The send message response.</returns>
-    Task<SendMessageResponse> SendMessageAsync(string agentName, SendMessageRequest request, CancellationToken cancellationToken = default);
 
-    /// <summary>Handles a streaming send message request.</summary>
-    /// <param name="request">The send message request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>An asynchronous enumerable of streaming responses.</returns>
-    IAsyncEnumerable<StreamResponse> SendStreamingMessageAsync(string agentName, SendMessageRequest request, CancellationToken cancellationToken = default);
-
-    /// <summary>Gets a task by ID.</summary>
-    /// <param name="request">The get task request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The agent task.</returns>
-    Task<AgentTask> GetTaskAsync(GetTaskRequest request, CancellationToken cancellationToken = default);
-
-    /// <summary>Lists tasks with pagination.</summary>
-    /// <param name="request">The list tasks request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The list tasks response.</returns>
-    Task<ListTasksResponse> ListTasksAsync(string agentName, ListTasksRequest request, CancellationToken cancellationToken = default);
-
-    /// <summary>Cancels a task.</summary>
-    /// <param name="request">The cancel task request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The canceled agent task.</returns>
-    Task<AgentTask> CancelTaskAsync(string agentName, CancelTaskRequest request, CancellationToken cancellationToken = default);
-
-    /// <summary>Subscribes to task updates.</summary>
-    /// <param name="request">The subscribe to task request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>An asynchronous enumerable of streaming responses.</returns>
-    IAsyncEnumerable<StreamResponse> SubscribeToTaskAsync(SubscribeToTaskRequest request, CancellationToken cancellationToken = default);
-
-    /// <summary>Creates a push notification configuration.</summary>
-    /// <param name="request">The create push notification config request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The created push notification configuration.</returns>
-    Task<TaskPushNotificationConfig> CreateTaskPushNotificationConfigAsync(CreateTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default);
-
-    /// <summary>Gets a push notification configuration.</summary>
-    /// <param name="request">The get push notification config request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The push notification configuration.</returns>
-    Task<TaskPushNotificationConfig> GetTaskPushNotificationConfigAsync(GetTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default);
-
-    /// <summary>Lists push notification configurations.</summary>
-    /// <param name="request">The list push notification configs request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The list push notification config response.</returns>
-    Task<ListTaskPushNotificationConfigResponse> ListTaskPushNotificationConfigAsync(ListTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default);
-
-    /// <summary>Deletes a push notification configuration.</summary>
-    /// <param name="request">The delete push notification config request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    Task DeleteTaskPushNotificationConfigAsync(DeleteTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default);
-
-    /// <summary>Gets the extended agent card.</summary>
-    /// <param name="request">The get extended agent card request.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The extended agent card.</returns>
-    Task<AgentCard> GetExtendedAgentCardAsync(GetExtendedAgentCardRequest request, CancellationToken cancellationToken = default);
-}
-
-
+/// <summary>
+/// copy from A2AServer
+/// </summary>
 public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 {
     private readonly ITaskStore _taskStore;
     private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly ChannelEventNotifier _notifier;
+    private readonly AgwChannelEventNotifier _notifier;
     private readonly ILogger<A2AServer> _logger;
     private readonly A2AServerOptions _options;
+
     // NOTE: Concurrent SendMessage requests for the same TaskId is not a supported
     // scenario by the A2A protocol or this SDK. The atomic GetOrAdd/AddOrUpdate
     // patterns used below are defense-in-depth to prevent silent resource leaks.
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _backgroundCancellations = new();
+
     private readonly ConcurrentDictionary<string, Task> _backgroundTasks = new();
 
     /// <summary>Initializes a new instance of the <see cref="A2AServer"/> class.</summary>
@@ -103,7 +39,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     /// <param name="options">Optional configuration options.</param>
     public AgwA2ARequestHandler(
         ITaskStore taskStore,
-        ChannelEventNotifier notifier,
+        AgwChannelEventNotifier notifier,
         ILogger<A2AServer> logger,
         IServiceScopeFactory serviceScopeFactory,
         A2AServerOptions? options = null)
@@ -707,7 +643,6 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
             "Agent handler did not produce any response events.",
             A2AErrorCode.InvalidAgentResponse);
     }
-
 
     private async Task<IAgentHandler> GetAgentHandler(string agentName)
     {

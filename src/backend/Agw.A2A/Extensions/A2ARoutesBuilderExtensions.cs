@@ -79,5 +79,4 @@ public static class A2ARoutesBuilderExtensions
 
         return routeGroup;
     }
-
 }

@@ -3,10 +3,6 @@ using System.Text.Json;
 
 using A2A;
 
-using Agw.Shared;
-using Agw.Shared.Contracts.Tasks;
-using Agw.Shared.Enums;
-
 namespace Agw.A2A;
 
 public class TaskStore : ITaskStore

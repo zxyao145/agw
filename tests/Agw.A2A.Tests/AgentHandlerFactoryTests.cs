@@ -4,7 +4,9 @@ using System.Text.Json;
 
 using A2A;
 
-using Agw.Agents.Application.AgentRun;
+using Agw.Agents.Application.AgentRun.Dtos;
+using Agw.Agents.Domain.Entities;
+using Agw.Shared.Data.Repositories;
 using Agw.Shared.Models;
 
 using Microsoft.Extensions.AI;
@@ -297,7 +299,8 @@ public class AgentHandlerFactoryTests
         }
     }
 
-    private sealed class InMemoryRepository<TEntity>(IEnumerable<TEntity>? entities = null) : IRepository<TEntity>
+    private sealed class InMemoryRepository<TEntity>(IEnumerable<TEntity>? entities = null)
+        : IRepository<TEntity>
         where TEntity : class
     {
         private readonly List<TEntity> _entities = entities?.ToList() ?? [];

@@ -11,8 +11,6 @@ internal static class AgwA2ADiagnostics
     /// <summary>Activity source for HTTP/JSON-RPC protocol processing.</summary>
     internal static readonly ActivitySource Source = new("Agw.A2A", Version);
 
-
-
     /// <summary>Meter for all A2A core library metrics.</summary>
     internal static readonly Meter Meter = new("A2A", Version);
 
@@ -56,4 +54,3 @@ internal static class AgwA2ADiagnostics
         Meter.CreateHistogram<double>("a2a.client.stream.event.count",
             description: "Events per streaming client request");
 }
-
