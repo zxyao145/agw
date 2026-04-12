@@ -14,4 +14,7 @@ public interface ITaskAppService
         CancellationToken cancellationToken = default);
 
     Task<bool> HasTaskAsync(Guid taskId, Guid? projectId = null, CancellationToken cancellationToken = default);
+
+
+    Task<ExecutionTaskResolutionResult> ResolveTaskAsync(ExecutionTaskRequest request, CancellationToken cancellationToken);
 }

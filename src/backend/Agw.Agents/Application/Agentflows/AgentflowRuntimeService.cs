@@ -1,8 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
-using Agw.Agents.Application;
-using Agw.Appliaction.Services.Agents;
+using Agw.Agents.Application.AgentRun;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Repositories;
@@ -17,7 +16,7 @@ using Microsoft.Extensions.Logging;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 using MsAgentWorkflowBuilder = Microsoft.Agents.AI.Workflows.AgentWorkflowBuilder;
 
-namespace Agw.Appliaction.Services.Agentflows;
+namespace Agw.Agents.Application.Agentflows;
 
 public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
 
@@ -32,7 +31,7 @@ public class AgentflowRuntimeService : RuntimServiceBase
     private readonly IRepository<Agent> _agentRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly AgentflowDomainService _agentflowDomainService;
-    private readonly AgentRuntimeService _agentRuntimeService;
+    private readonly IAgentRuntimeService _agentRuntimeService;
 
     public AgentflowRuntimeService(
         ILogger<AgentflowRuntimeService> logger,
@@ -42,7 +41,7 @@ public class AgentflowRuntimeService : RuntimServiceBase
         IRepository<Agent> agentRepository,
         IUnitOfWork unitOfWork,
         AgentflowDomainService agentflowDomainService,
-        AgentRuntimeService agentRuntimeService)
+        IAgentRuntimeService agentRuntimeService)
     {
         _logger = logger;
         _agentflowRepository = agentflowRepository;

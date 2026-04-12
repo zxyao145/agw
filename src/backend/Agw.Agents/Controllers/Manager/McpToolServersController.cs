@@ -1,37 +1,37 @@
-using Agw.Appliaction.Services.Agents;
-using Agw.Manager.Api.Contracts;
+using Agw.Agents.Application.Agents;
+using Agw.Agents.Contracts.Manager;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Manager.Api.Controllers;
+namespace Agw.Agents.Controllers.Manager;
 
 [ApiController]
 [Route("api/mcp-tool-servers")]
 public class McpToolServersController : ControllerBase
 {
-    private readonly AgentRuntimeService _agentRuntimeService;
+    private readonly McpToolServerAppService _mcpToolServerAppService;
     private readonly ILogger<McpToolServersController> _logger;
 
     public McpToolServersController(
-        AgentRuntimeService agentRuntimeService,
+        McpToolServerAppService mcpToolServerAppService,
         ILogger<McpToolServersController> logger)
     {
-        _agentRuntimeService = agentRuntimeService;
+        _mcpToolServerAppService = mcpToolServerAppService;
         _logger = logger;
     }
 
     [HttpGet]
     public async Task<IActionResult> ListAsync()
     {
-        var servers = await _agentRuntimeService.ListMcpToolServersAsync();
+        var servers = await _mcpToolServerAppService.ListMcpToolServersAsync();
         return Ok(servers);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetAsync(Guid id)
     {
-        var server = await _agentRuntimeService.GetMcpToolServerAsync(id);
+        var server = await _mcpToolServerAppService.GetMcpToolServerAsync(id);
         return server == null ? NotFound() : Ok(server);
     }
 
@@ -53,7 +53,7 @@ public class McpToolServersController : ControllerBase
             Enabled = request.Enabled
         };
 
-        var created = await _agentRuntimeService.CreateMcpToolServerAsync(server, request.AgentIds, user);
+        var created = await _mcpToolServerAppService.CreateMcpToolServerAsync(server, request.AgentIds, user);
         return Ok(created);
     }
 
@@ -61,7 +61,7 @@ public class McpToolServersController : ControllerBase
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] McpToolServerUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var updated = await _agentRuntimeService.UpdateMcpToolServerAsync(
+        var updated = await _mcpToolServerAppService.UpdateMcpToolServerAsync(
             id,
             server =>
             {
@@ -84,7 +84,7 @@ public class McpToolServersController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
-        var deleted = await _agentRuntimeService.DeleteMcpToolServerAsync(id);
+        var deleted = await _mcpToolServerAppService.DeleteMcpToolServerAsync(id);
         return deleted ? NoContent() : NotFound();
     }
 
@@ -95,7 +95,7 @@ public class McpToolServersController : ControllerBase
     {
         try
         {
-            var tools = await _agentRuntimeService.ListMcpToolsAsync(request.McpToolServerId, cancellationToken);
+            var tools = await _mcpToolServerAppService.ListMcpToolsAsync(request.McpToolServerId, cancellationToken);
             var toolItems = tools
                 .Where(x => !string.IsNullOrWhiteSpace(x.Name))
                 .Select(x => new McpToolItem(x.Name))

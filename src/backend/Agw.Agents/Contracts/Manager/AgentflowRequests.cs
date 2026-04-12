@@ -1,8 +1,8 @@
-using Agw.Appliaction.Services.Agentflows;
+using Agw.Agents.Application.Agentflows;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Models;
 
-namespace Agw.Manager.Api.Contracts;
+namespace Agw.Agents.Contracts.Manager;
 
 public record AgentflowNodeRequest(
     string NodeId,

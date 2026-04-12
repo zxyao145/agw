@@ -1,5 +1,6 @@
-using Agw.Appliaction.Services.Agentflows;
-using Agw.Appliaction.Services.Agents;
+using Agw.Agents.Application.Agentflows;
+using Agw.Agents.Application.AgentRun;
+using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Jobs.Domain.Entities;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
@@ -10,7 +11,7 @@ using Agw.Tasks.Domain.Services;
 namespace Agw.Jobs.Application.Services;
 
 public class AgentExecutor(
-    AgentRuntimeService agentRuntimeService,
+    IAgentRuntimeService agentRuntimeService,
     AgentflowRuntimeService agentflowRuntimeService,
     ProjectTaskAppService projectTaskAppService) : IAgentExecutor
 {
@@ -56,13 +57,11 @@ public class AgentExecutor(
         {
             object? execution = job.AgentType.Value switch
             {
-                AgentRuntimeType.Agent => await agentRuntimeService.ExecuteAsync(
-                    job.AgentId.Value,
-                    projectTaskId,
-                    prompt,
-                    cancellationToken,
-                    job.ProjectId,
-                    contextId),
+                AgentRuntimeType.Agent => await agentRuntimeService.ExecuteByIdAsync
+                (
+                    new AgentExecuteByIdRequest(prompt, job.AgentId.Value, projectTaskId, job.ProjectId, contextId),
+                    cancellationToken
+                ),
                 AgentRuntimeType.Agentflow => await agentflowRuntimeService.ExecuteAsync(
                     job.AgentId.Value,
                     projectTaskId,

@@ -2,7 +2,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
-namespace Agw.Appliaction.Services.Agentflows;
+namespace Agw.Agents.Application.Agentflows;
 
 public class MagenticOrchestrationManager : RoundRobinGroupChatManager
 {

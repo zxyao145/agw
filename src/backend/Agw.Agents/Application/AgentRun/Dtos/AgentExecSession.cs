@@ -9,7 +9,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Agents.Application;
+namespace Agw.Agents.Application.AgentRun.Dtos;
 
 public sealed class AgentExecSession : IAsyncDisposable
 {

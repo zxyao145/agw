@@ -1,7 +1,7 @@
 using A2A;
 
+using Agw.Agents.Application.AgentRun;
 using Agw.Api.Contracts;
-using Agw.Appliaction.Services.Agents;
 using Agw.Shared;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Models;
@@ -49,13 +49,15 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
         }
 
         return await agentRuntimeService
-            .ExecuteAsync(
-                agent.Id,
-                ParseRequiredTaskId(context.TaskId),
-                [CreateChatMessage(input)],
-                cancellationToken,
-                projectId: ProjectDefaults.A2AId,
-                contextId: context.ContextId)
+            .ExecuteAsync(new AgentExecuteRequest
+            {
+                AgentId = agent.Id,
+                TaskId = ParseRequiredTaskId(context.TaskId),
+                Input = [CreateChatMessage(input)],
+                CancellationToken = cancellationToken,
+                ProjectId = ProjectDefaults.A2AId,
+                ContextId = context.ContextId
+            })
             .ConfigureAwait(false);
     }
 

@@ -1,11 +1,12 @@
 using System.Net.WebSockets;
 
-using Agw.Agents.Application;
-using Agw.Api.Contracts;
-using Agw.Api.Execution;
-using Agw.Appliaction.Services.Agentflows;
-using Agw.Appliaction.Services.Agents;
-using Agw.Shared.Models;
+using Agw.Agents.Application.Agentflows;
+using Agw.Agents.Application.AgentRun;
+using Agw.Agents.Application.AgentRun.Dtos;
+using Agw.Agents.Application.Execution;
+using Agw.Agents.Application.Execution.CommandStrategies;
+using Agw.Agents.Contracts;
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Utils;
 
 using Microsoft.AspNetCore.Http;
@@ -20,24 +21,24 @@ public partial class AgentExecutionsController : ControllerBase
 {
     private const int BufferSize = 1024 * 4;
     private const int MaxRequestBytes = 1024 * 64;
-    private readonly ExecutionCommandDispatcher _commandDispatcher;
-    private readonly IAgentExecutionCoordinator _agentExecutionCoordinator;
-    private readonly AgentRuntimeService _agentRuntimeService;
+    private readonly CommandDispatcher _commandDispatcher;
+    private readonly IAgentRuntimeService _agentRuntimeService;
     private readonly AgentflowRuntimeService _agentflowRuntimeService;
     private readonly ILogger<AgentExecutionsController> _logger;
+    private readonly ITaskAppService _taskAppService;
 
     public AgentExecutionsController(
-        ExecutionCommandDispatcher commandDispatcher,
-        IAgentExecutionCoordinator agentExecutionCoordinator,
-        AgentRuntimeService agentRuntimeService,
+        CommandDispatcher commandDispatcher,
+        IAgentRuntimeService agentRuntimeService,
         AgentflowRuntimeService agentflowRuntimeService,
-        ILogger<AgentExecutionsController> logger)
+        ILogger<AgentExecutionsController> logger,
+        ITaskAppService taskAppService)
     {
         _commandDispatcher = commandDispatcher;
-        _agentExecutionCoordinator = agentExecutionCoordinator;
         _agentRuntimeService = agentRuntimeService;
         _agentflowRuntimeService = agentflowRuntimeService;
         _logger = logger;
+        _taskAppService = taskAppService;
     }
 
     [HttpGet("{agentId:guid}/ws")]
@@ -52,19 +53,18 @@ public partial class AgentExecutionsController : ControllerBase
         using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
         using var sendLock = new SemaphoreSlim(1, 1);
 
-        var connectionState = new ExecutionConnectionState();
-        var commandContext = CreateCommandContext(
-            agentId,
-            connectionState,
-            webSocket,
-            sendLock,
-            cancellationToken);
+        var commandContext = new ExecutionCommandContext(agentId, User?.Identity?.Name ?? "system", cancellationToken, webSocket, sendLock)
+        {
+            AgentSession = null,
+            CloseConnectionAsync = (status, reason) => TryCloseAsync(webSocket, status, reason),
+            ObserveTurn = ObserveActiveExecTask
+        };
 
         try
         {
             while (webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
             {
-                await connectionState.ReleaseCompletedExecutionAsync();
+                await commandContext.ConnectionState.ReleaseCompletedExecutionAsync();
 
                 var command = await ReceiveRequestAsync<AgentRunCommand>(webSocket, cancellationToken);
                 if (command == null)
@@ -93,16 +93,20 @@ public partial class AgentExecutionsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error in WebSocket handler");
-            await SendErrorAsync(webSocket, $"Unexpected error: {ex.Message}", sendLock, cancellationToken);
+            await commandContext.SendErrorAsync($"Unexpected error: {ex.Message}");
             await TryCloseAsync(webSocket, WebSocketCloseStatus.InternalServerError, "Unexpected error");
         }
         finally
         {
-            await DisposeConnectionResourcesAsync(connectionState, commandContext.AgentSession);
+            await DisposeConnectionResourcesAsync(commandContext.ConnectionState, commandContext.AgentSession);
             _logger.LogDebug("WebSocket connection closed");
         }
     }
 
+    /// <summary>
+    /// Avoid WebSocket execution tasks when they are fire-and-forget
+    /// </summary>
+    /// <param name="inputTask"></param>
     private void ObserveActiveExecTask(Task inputTask)
     {
         _ = inputTask.ContinueWith(
@@ -125,51 +129,6 @@ public partial class AgentExecutionsController : ControllerBase
         {
             _logger.LogError(ex, "Error while awaiting ClaudeCode input task");
         }
-    }
-
-    private ExecutionCommandContext CreateCommandContext(
-        Guid agentId,
-        ExecutionConnectionState connectionState,
-        WebSocket webSocket,
-        SemaphoreSlim sendLock,
-        CancellationToken cancellationToken)
-    {
-        return new ExecutionCommandContext
-        {
-            AgentId = agentId,
-            AgentSession = null,
-            CancellationToken = cancellationToken,
-            CurrentUser = User?.Identity?.Name ?? "system",
-            ConnectionState = connectionState,
-            ExecutionCoordinator = _agentExecutionCoordinator,
-            WebSocket = webSocket,
-            SendLock = sendLock,
-            SendErrorAsync = errorMessage => SendErrorAsync(webSocket, errorMessage, sendLock, cancellationToken),
-            SendSystemMessageAsync = message => SendSystemMessageAsync(webSocket, sendLock, message, cancellationToken),
-            CloseConnectionAsync = (status, reason) => TryCloseAsync(webSocket, status, reason),
-            ExtractReason = ExtractReason,
-            ObserveExecution = ObserveActiveExecTask
-        };
-    }
-
-    private async Task DisposeConnectionResourcesAsync(
-        ExecutionConnectionState connectionState,
-        AgentExecSession? agentSession)
-    {
-        if (connectionState.ActiveExecution != null)
-        {
-            connectionState.ActiveExecution.RequestInterrupt(null);
-            await AwaitActiveExecTaskAsync(connectionState.ActiveExecution.ExecutionTask);
-            await connectionState.ActiveExecution.DisposeAsync();
-        }
-
-        if (agentSession == null)
-        {
-            return;
-        }
-
-        agentSession.CancelActiveRequest();
-        await agentSession.DisposeAsync();
     }
 
     private async Task<T?> ReceiveRequestAsync<T>(WebSocket webSocket, CancellationToken cancellationToken)
@@ -224,54 +183,25 @@ public partial class AgentExecutionsController : ControllerBase
         }
     }
 
-    private static string ExtractReason(IActionResult result)
+
+    private async Task DisposeConnectionResourcesAsync(
+        ExecutionConnectionState connectionState,
+        AgentExecSession? agentSession)
     {
-        return result switch
+        if (connectionState.ActiveExecution != null)
         {
-            ObjectResult objectResult when objectResult.Value is string message => message,
-            StatusCodeResult statusCodeResult => $"Request failed with status {statusCodeResult.StatusCode}.",
-            _ => "Invalid request payload"
-        };
-    }
-
-    private static Task SendSystemMessageAsync(
-        WebSocket webSocket,
-        SemaphoreSlim sendLock,
-        string message,
-        CancellationToken cancellationToken)
-    {
-        var payload = new AgwMessage(
-            Guid.NewGuid().ToString("D"),
-            "$agw-server",
-            AiRole.System,
-            new List<AgwContent> { new AgwTextContent { Content = message } });
-        return SendJsonAsync(webSocket, JsonUtil.Serialize(payload), sendLock, cancellationToken);
-    }
-
-    private static async Task SendJsonAsync(
-        WebSocket webSocket,
-        string json,
-        SemaphoreSlim sendLock,
-        CancellationToken cancellationToken)
-    {
-        if (webSocket.State != WebSocketState.Open) return;
-
-        await sendLock.WaitAsync(cancellationToken);
-        try
-        {
-            if (webSocket.State != WebSocketState.Open) return;
-
-            var data = Encoding.UTF8.GetBytes(json);
-            await webSocket.SendAsync(
-                new ArraySegment<byte>(data),
-                WebSocketMessageType.Text,
-                endOfMessage: true,
-                cancellationToken);
+            connectionState.ActiveExecution.RequestInterrupt(null);
+            await AwaitActiveExecTaskAsync(connectionState.ActiveExecution.ExecutionTask);
+            await connectionState.ActiveExecution.DisposeAsync();
         }
-        finally
+
+        if (agentSession == null)
         {
-            sendLock.Release();
+            return;
         }
+
+        agentSession.CancelActiveRequest();
+        await agentSession.DisposeAsync();
     }
 
     private static Task TryCloseAsync(WebSocket webSocket, WebSocketCloseStatus status, string reason)
@@ -282,30 +212,5 @@ public partial class AgentExecutionsController : ControllerBase
             WebSocketState.CloseReceived => webSocket.CloseOutputAsync(status, reason, CancellationToken.None),
             _ => Task.CompletedTask
         };
-    }
-
-    private Task SendErrorAsync(
-        WebSocket webSocket,
-        string errorMessage,
-        SemaphoreSlim sendLock,
-        CancellationToken cancellationToken
-        ) =>
-        SendJsonAsync(webSocket, JsonUtil.Serialize(CreateErrorMessage(errorMessage)), sendLock, cancellationToken);
-
-    private static AgwMessage CreateErrorMessage(string errorMessage)
-    {
-        var content = new AgwErrorContent
-        {
-            Content = errorMessage
-        };
-
-        var payload = new AgwMessage
-            (
-                Guid.NewGuid().ToString("D"),
-                "$agw-server",
-                AiRole.System,
-                new List<AgwContent> { content }
-            );
-        return payload;
     }
 }

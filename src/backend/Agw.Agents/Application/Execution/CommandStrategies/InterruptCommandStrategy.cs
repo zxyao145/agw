@@ -1,6 +1,6 @@
-using Agw.Api.Contracts;
+using Agw.Agents.Contracts;
 
-namespace Agw.Api.Execution;
+namespace Agw.Agents.Application.Execution.CommandStrategies;
 
 internal sealed class InterruptCommandStrategy : IExecutionCommandStrategy
 {

@@ -1,8 +1,8 @@
-using Agw.Appliaction.Services.Agents;
+using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Models;
 
-namespace Agw.Manager.Api.Contracts;
+namespace Agw.Agents.Contracts.Manager;
 
 public record AgentCreateRequest(
     string DisplayName,

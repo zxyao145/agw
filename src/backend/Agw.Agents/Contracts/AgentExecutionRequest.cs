@@ -1,6 +1,6 @@
 using Agw.Shared.Contracts.Agents;
 
-namespace Agw.Api.Contracts;
+namespace Agw.Agents.Contracts;
 
 public record AgentExecutionRequest(
     AgentRuntimeType AgentType,

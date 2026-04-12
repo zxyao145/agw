@@ -1,5 +1,5 @@
-using Agw.Api.Contracts;
-using Agw.Api.Execution;
+using Agw.Agents.Application.Execution;
+using Agw.Agents.Contracts;
 
 namespace Agw.Agents.Tests;
 
@@ -16,7 +16,7 @@ public class ExecutionConnectionStateTests
 
         state.ApplySettings(originalSettings);
         state.MarkSessionReady(originalSettings);
-        state.TryStartExecution(new ActiveExecution(pendingExecution.Task, executionCts));
+        state.TryStartExecution(new ActiveTurn(pendingExecution.Task, executionCts));
 
         state.ApplySettings(changedSettings);
 
@@ -65,8 +65,8 @@ public class ExecutionConnectionStateTests
         var firstExecution = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var state = new ExecutionConnectionState();
 
-        var firstStarted = state.TryStartExecution(new ActiveExecution(firstExecution.Task, firstCts));
-        var secondStarted = state.TryStartExecution(new ActiveExecution(Task.CompletedTask, secondCts));
+        var firstStarted = state.TryStartExecution(new ActiveTurn(firstExecution.Task, firstCts));
+        var secondStarted = state.TryStartExecution(new ActiveTurn(Task.CompletedTask, secondCts));
 
         Assert.True(firstStarted);
         Assert.False(secondStarted);
@@ -79,7 +79,7 @@ public class ExecutionConnectionStateTests
         using var executionCts = new CancellationTokenSource();
         var state = new ExecutionConnectionState();
 
-        state.TryStartExecution(new ActiveExecution(Task.CompletedTask, executionCts));
+        state.TryStartExecution(new ActiveTurn(Task.CompletedTask, executionCts));
 
         await state.ReleaseCompletedExecutionAsync();
 

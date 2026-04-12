@@ -1,4 +1,4 @@
-namespace Agw.Manager.Api.Contracts;
+namespace Agw.Agents.Contracts.Manager;
 
 public record McpToolServerCreateRequest(
     string Name,

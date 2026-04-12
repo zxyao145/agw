@@ -7,7 +7,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="CliWrap" />
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <PackageReference Include="CliWrap" />
 		<PackageReference Include="Microsoft.Agents.AI" />
 		<PackageReference Include="Microsoft.Agents.AI.OpenAI" />
 		<PackageReference Include="Microsoft.Agents.AI.Workflows" />

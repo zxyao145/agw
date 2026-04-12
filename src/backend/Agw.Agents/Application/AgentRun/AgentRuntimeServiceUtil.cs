@@ -2,10 +2,38 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace Agw.Appliaction.Services.Agents;
+using Agw.Shared.Utils;
 
-public static class AgentRuntimeConfigurationMerger
+namespace Agw.Agents.Application.AgentRun;
+
+public static class AgentRuntimeServiceUtil
 {
+    public static string BuildInstructions(string? systemPrompt, string? workspace)
+    {
+        if (string.IsNullOrWhiteSpace(systemPrompt))
+        {
+            systemPrompt = "You are an AI agent.";
+        }
+
+        if (string.IsNullOrWhiteSpace(workspace))
+        {
+            return systemPrompt;
+        }
+
+        workspace = PathUtil.ExpandTilde(workspace);
+        var workspaceInstructions =
+            $"""
+            # others
+
+            - Your default workspace or working directory is '{workspace}'.
+            """;
+
+        return $"{systemPrompt}{Environment.NewLine}{workspaceInstructions}";
+    }
+
+
+    #region AgentRuntimeConfigurationMerger
+
     public static string? MergeExtraSettings(
         string? agentExtra,
         string? projectExtraSetting,
@@ -59,4 +87,5 @@ public static class AgentRuntimeConfigurationMerger
             return false;
         }
     }
+    #endregion
 }

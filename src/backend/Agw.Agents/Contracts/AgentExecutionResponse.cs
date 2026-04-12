@@ -1,8 +1,8 @@
-using Agw.Appliaction.Services.Agentflows;
-using Agw.Appliaction.Services.Agents;
+using Agw.Agents.Application.Agentflows;
+using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Shared.Models;
 
-namespace Agw.Api.Contracts;
+namespace Agw.Agents.Contracts;
 
 public record AgentExecutionResponse(string? TaskId, IReadOnlyList<AgwMessage> Messages)
 {

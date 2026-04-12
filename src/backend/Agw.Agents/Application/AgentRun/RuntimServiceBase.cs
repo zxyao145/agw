@@ -3,7 +3,7 @@ using Agw.Shared.Models;
 
 using Microsoft.Extensions.AI;
 
-namespace Agw.Agents.Application;
+namespace Agw.Agents.Application.AgentRun;
 
 public class RuntimServiceBase
 {

@@ -1,6 +1,7 @@
-using Agw.Api.Contracts;
-using Agw.Api.Execution;
+using Agw.Agents.Application.AgentRun.Dtos;
+using Agw.Agents.Contracts;
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Contracts.Tasks;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,7 +28,7 @@ public partial class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
-        var taskResolution = await _agentExecutionCoordinator.ResolveTaskAsync(
+        var taskResolution = await _taskAppService.ResolveTaskAsync(
             new ExecutionTaskRequest(
                 ExecutionId: id,
                 AgentType: request.AgentType,
@@ -44,13 +45,9 @@ public partial class AgentExecutionsController : ControllerBase
             return contextError;
         }
 
-        var result = await _agentRuntimeService.ExecuteAsync(
-            id,
-            task!.Id,
-            request.Input,
-            cancellationToken,
-            request.ProjectId,
-            task?.ContextId);
+        var req = new AgentExecuteByIdRequest(request.Input, id, request.TaskId, request.ProjectId, "");
+
+        var result = await _agentRuntimeService.ExecuteByIdAsync(req, cancellationToken);
         if (result == null)
         {
             return NotFound();
@@ -64,7 +61,7 @@ public partial class AgentExecutionsController : ControllerBase
         AgentExecutionRequest request,
         CancellationToken cancellationToken)
     {
-        var taskResolution = await _agentExecutionCoordinator.ResolveTaskAsync(
+        var taskResolution = await _taskAppService.ResolveTaskAsync(
             new ExecutionTaskRequest(
                 ExecutionId: id,
                 AgentType: request.AgentType,
@@ -82,12 +79,12 @@ public partial class AgentExecutionsController : ControllerBase
         }
 
         var result = await _agentflowRuntimeService.ExecuteAsync(
-            id,
-            task!.Id,
-            request.Input,
-            cancellationToken,
-            request.ProjectId,
-            task?.ContextId);
+             id,
+             request.TaskId!.Value,
+             request.Input,
+             cancellationToken,
+             request.ProjectId,
+             "");
         if (result == null)
         {
             return NotFound();

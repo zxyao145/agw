@@ -1,4 +1,4 @@
-using Agw.Appliaction.Services.Agents;
+using Agw.Agents.Application.AgentRun;
 
 namespace Agw.Agents.Tests;
 
@@ -7,7 +7,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void MergeExtraSettings_WhenMultipleSourcesProvided_MergesInExpectedOverrideOrder()
     {
-        var merged = AgentRuntimeConfigurationMerger.MergeExtraSettings(
+        var merged = AgentRuntimeServiceUtil.MergeExtraSettings(
             """
             {"temperature":0.1,"source":"agent","agentOnly":true}
             """,
@@ -29,7 +29,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void MergeExtraSettings_WhenAllInputsInvalid_ReturnsNull()
     {
-        var merged = AgentRuntimeConfigurationMerger.MergeExtraSettings(
+        var merged = AgentRuntimeServiceUtil.MergeExtraSettings(
             "not-json",
             "[]",
             "   ");
@@ -40,7 +40,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void BuildInstructions_WhenPromptAndWorkspaceProvided_AppendsWorkspaceInstruction()
     {
-        var instructions = AgentRuntimeInstructions.BuildInstructions("System prompt", "/tmp/workspace");
+        var instructions = AgentRuntimeServiceUtil.BuildInstructions("System prompt", "/tmp/workspace");
 
         Assert.Contains("System prompt", instructions, StringComparison.Ordinal);
         Assert.Contains("default workspace or working directory", instructions, StringComparison.Ordinal);
@@ -50,7 +50,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void BuildInstructions_WhenPromptMissing_UsesDefaultPrompt()
     {
-        var instructions = AgentRuntimeInstructions.BuildInstructions("   ", null);
+        var instructions = AgentRuntimeServiceUtil.BuildInstructions("   ", null);
 
         Assert.Equal("You are an AI agent.", instructions);
     }

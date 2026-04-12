@@ -1,9 +1,9 @@
-using Agw.Appliaction.Services.Agentflows;
-using Agw.Manager.Api.Contracts;
+using Agw.Agents.Application.Agentflows;
+using Agw.Agents.Contracts.Manager;
 
 using Microsoft.AspNetCore.Mvc;
 
-namespace Agw.Manager.Api.Controllers;
+namespace Agw.Agents.Controllers.Manager;
 
 [ApiController]
 [Route("api/agentflows")]

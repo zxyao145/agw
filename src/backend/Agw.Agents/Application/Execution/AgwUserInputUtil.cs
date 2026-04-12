@@ -1,8 +1,8 @@
 using Agw.Shared.Models;
 
-namespace Agw.Api.Execution;
+namespace Agw.Agents.Application.Execution;
 
-internal static class ExecutionInputTextExtractor
+internal static class AgwUserInputUtil
 {
     public static string ExtractAgentflowInputText(AgwUserInput input)
     {

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Models;
 
-namespace Agw.Api.Contracts;
+namespace Agw.Agents.Contracts;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(SettingCommand), nameof(SettingCommand))]
@@ -19,7 +19,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public SettingCommand(
         Guid projectId,
         Guid taskId,
-        string? workspace,
+        string? workspace = "~/.agw/temp",
         string settingContent = "{}")
     {
         ProjectId = projectId;

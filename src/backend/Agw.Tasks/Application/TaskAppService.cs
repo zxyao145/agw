@@ -3,6 +3,7 @@ using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
 using Agw.Tasks.Domain.Services;
 
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Tasks.Application;
@@ -73,4 +74,92 @@ public class TaskAppService : ITaskAppService
         var exist = await _taskRepository.Queryable.AnyAsync(r => r.Id == taskId, cancellationToken);
         return exist;
     }
+
+
+
+    #region ResolveTaskAsync
+
+    public async Task<ExecutionTaskResolutionResult> ResolveTaskAsync(
+   ExecutionTaskRequest request,
+   CancellationToken cancellationToken)
+    {
+        var resolvedProjectId = await _projectResolver.ResolveProjectIdAsync(request.ProjectId);
+        if (!resolvedProjectId.HasValue)
+        {
+            return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Project not found."));
+        }
+
+        if (request.Resume)
+        {
+            if (!request.TaskId.HasValue || request.TaskId.Value == Guid.Empty)
+            {
+                return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("TaskId is required when resume is true."));
+            }
+
+            var existingTask = await GetTaskAsync(request.TaskId.Value);
+            if (existingTask == null)
+            {
+                return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Task not found."));
+            }
+
+            if (existingTask.ProjectId != resolvedProjectId.Value)
+            {
+                return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Task does not belong to the supplied projectId."));
+            }
+
+            return new ExecutionTaskResolutionResult(existingTask, null);
+        }
+
+        if (!request.TaskId.HasValue || request.TaskId.Value == Guid.Empty)
+        {
+            return await CreateTaskAsync(
+                resolvedProjectId.Value,
+                null,
+                request.Input,
+                request.User,
+                cancellationToken);
+        }
+
+        var task = await GetTaskAsync(request.TaskId.Value);
+        if (task == null)
+        {
+            return await CreateTaskAsync(
+                resolvedProjectId.Value,
+                request.TaskId,
+                request.Input,
+                request.User,
+                cancellationToken);
+        }
+
+        if (task.ProjectId != resolvedProjectId.Value)
+        {
+            return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Task does not belong to the supplied projectId."));
+        }
+
+        return new ExecutionTaskResolutionResult(task, null);
+    }
+
+
+    private async Task<ExecutionTaskResolutionResult> CreateTaskAsync(
+        Guid projectId,
+        Guid? taskId,
+        string input,
+        string user,
+        CancellationToken cancellationToken)
+    {
+        var task = await CreateTaskForExecutionAsync(
+            projectId,
+            taskId,
+            input,
+            user,
+            cancellationToken);
+        if (task == null)
+        {
+            return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Failed to create task."));
+        }
+
+        return new ExecutionTaskResolutionResult(task, null);
+    }
+
+    #endregion
 }

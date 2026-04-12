@@ -1,103 +1,158 @@
 using System.Net.WebSockets;
 
-using Agw.Agents.Application;
-using Agw.Api.Contracts;
-using Agw.Appliaction.Services.Agentflows;
-using Agw.Appliaction.Services.Agents;
+using Agw.Agents.Application.Agentflows;
+using Agw.Agents.Application.AgentRun;
+using Agw.Agents.Application.AgentRun.Dtos;
+using Agw.Agents.Contracts;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
 using Agw.Shared.Models;
 using Agw.Shared.Utils;
 
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Api.Execution;
+namespace Agw.Agents.Application.Execution.CommandStrategies;
 
-public sealed class AgentExecutionCoordinator(
-    AgentRuntimeService agentRuntimeService,
-    AgentflowRuntimeService agentflowRuntimeService,
-    ITaskAppService taskAppService,
-    IProjectAppService projectAppService,
-    ILogger<AgentExecutionCoordinator> logger) : IAgentExecutionCoordinator
+public readonly record struct ExecutionStartResult(AgentExecSession? AgentSession, ActiveTurn? ActiveTurn);
+
+public sealed record StreamingExecutionStartRequest(
+    Guid AgentId,
+    ProjectTask Task,
+    ExecCommand Command,
+    AgentExecSession? CurrentSession,
+    SettingCommand Settings,
+    WebSocket WebSocket,
+    SemaphoreSlim SendLock);
+
+
+internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
 {
-    private readonly AgentRuntimeService _agentRuntimeService = agentRuntimeService;
-    private readonly AgentflowRuntimeService _agentflowRuntimeService = agentflowRuntimeService;
-    private readonly ITaskAppService _taskAppService = taskAppService;
-    private readonly IProjectAppService _projectAppService = projectAppService;
-    private readonly ILogger<AgentExecutionCoordinator> _logger = logger;
+    private readonly ILogger<ExecCommandStrategy> _logger;
+    private readonly ITaskAppService _taskAppService;
 
-    public async Task<SettingCommand> NormalizeSettingsAsync(SettingCommand settings, CancellationToken cancellationToken)
+    private readonly IAgentRuntimeService _agentRuntimeService;
+    private readonly AgentflowRuntimeService _agentflowRuntimeService;
+
+
+    private const string BusyMessage = "The previous session is currently in progress, please wait and execute again.";
+
+
+    public ExecCommandStrategy(ILogger<ExecCommandStrategy> logger,
+        ITaskAppService taskAppService, IAgentRuntimeService agentRuntimeService, AgentflowRuntimeService agentflowRuntimeService)
     {
-        var normalizedSettings = new SettingCommand(settings.ProjectId, settings.TaskId, settings.Workspace, settings.SettingContent);
-        if (await _taskAppService.HasTaskAsync(normalizedSettings.TaskId, cancellationToken: cancellationToken))
-        {
-            normalizedSettings.Resume = true;
-        }
-
-        return normalizedSettings;
+        _logger = logger;
+        _taskAppService = taskAppService;
+        _agentRuntimeService = agentRuntimeService;
+        _agentflowRuntimeService = agentflowRuntimeService;
     }
 
-    public async Task<ExecutionTaskResolutionResult> ResolveTaskAsync(
-        ExecutionTaskRequest request,
-        CancellationToken cancellationToken)
+
+    public bool CanHandle(AgentRunCommand command) => command is ExecCommand;
+
+    public async Task<ExecutionCommandResult> ExecuteAsync(
+        AgentRunCommand command,
+        ExecutionCommandContext context)
     {
-        var resolvedProjectId = await _projectAppService.ResolveProjectIdAsync(request.ProjectId);
-        if (!resolvedProjectId.HasValue)
+        var execCommand = (ExecCommand)command;
+        if (context.ConnectionState.HasRunningExecution)
         {
-            return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Project not found."));
+            await context.SendErrorAsync(BusyMessage);
+            return default;
         }
 
-        if (request.Resume)
+        var settings = context.ConnectionState.CurrentSettings ?? CreateDefaultSettings();
+        if (context.ConnectionState.CurrentSettings == null)
         {
-            if (!request.TaskId.HasValue || request.TaskId.Value == Guid.Empty)
-            {
-                return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("TaskId is required when resume is true."));
-            }
-
-            var existingTask = await _taskAppService.GetTaskAsync(request.TaskId.Value);
-            if (existingTask == null)
-            {
-                return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Task not found."));
-            }
-
-            if (existingTask.ProjectId != resolvedProjectId.Value)
-            {
-                return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Task does not belong to the supplied projectId."));
-            }
-
-            return new ExecutionTaskResolutionResult(existingTask, null);
+            context.ConnectionState.ApplySettings(settings);
         }
 
-        if (!request.TaskId.HasValue || request.TaskId.Value == Guid.Empty)
+        if (context.ConnectionState.ShouldRefreshSessionImmediately)
         {
-            return await CreateTaskAsync(
-                resolvedProjectId.Value,
-                null,
-                request.Input,
-                request.User,
-                cancellationToken);
+            context.ConnectionState.ClearSession();
+            context.AgentSession = await DisposeSessionAsync(context.AgentSession);
         }
 
-        var task = await _taskAppService.GetTaskAsync(request.TaskId.Value);
-        if (task == null)
+        // get existing ProjectTask or create a new ProjectTask
+        var taskResolution = await _taskAppService.ResolveTaskAsync(
+            new ExecutionTaskRequest(
+                ExecutionId: context.AgentId,
+                AgentType: execCommand.AgentType,
+                TaskId: settings.TaskId,
+                ProjectId: settings.ProjectId,
+                Input: AgwUserInputUtil.ExtractAgentflowInputText(execCommand.Input),
+                Resume: settings.Resume,
+                User: context.CurrentUser),
+            context.CancellationToken);
+        var task = taskResolution.Task;
+        var contextError = taskResolution.Error;
+        if (contextError != null)
         {
-            return await CreateTaskAsync(
-                resolvedProjectId.Value,
-                request.TaskId,
-                request.Input,
-                request.User,
-                cancellationToken);
+            await context.CloseConnectionAsync(
+                WebSocketCloseStatus.InvalidPayloadData,
+                context.ExtractReason(contextError) ?? "Invalid request payload");
+            return new ExecutionCommandResult(CloseConnection: true);
         }
 
-        if (task.ProjectId != resolvedProjectId.Value)
+
+        // Start streaming execution based on agentType branch
+        var executionStartResult = await StartStreamingExecutionAsync(
+            new StreamingExecutionStartRequest(
+                AgentId: context.AgentId,
+                Task: task!,
+                Command: execCommand,
+                CurrentSession: context.AgentSession,
+                Settings: settings,
+                WebSocket: context.WebSocket,
+                SendLock: context.SendLock),
+            context.CancellationToken);
+        var updatedSession = executionStartResult.AgentSession;
+        var activeTurn = executionStartResult.ActiveTurn;
+        context.AgentSession = updatedSession;
+
+        if (activeTurn == null)
         {
-            return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Task does not belong to the supplied projectId."));
+            return default;
         }
 
-        return new ExecutionTaskResolutionResult(task, null);
+        if (!context.ConnectionState.TryStartExecution(activeTurn))
+        {
+            await activeTurn.DisposeAsync();
+            await context.SendErrorAsync(BusyMessage);
+            return default;
+        }
+
+        if (execCommand.AgentType == AgentRuntimeType.Agent && context.AgentSession != null)
+        {
+            context.ConnectionState.MarkSessionReady(settings);
+        }
+
+        context.ObserveTurn(activeTurn.ExecutionTask);
+        return default;
     }
+
+    private static SettingCommand CreateDefaultSettings()
+    {
+        return new SettingCommand(
+            projectId: ProjectDefaults.DefaultBuiltInId,
+            taskId: Guid.NewGuid()
+            );
+    }
+
+    private static async Task<AgentExecSession?> DisposeSessionAsync(AgentExecSession? agentSession)
+    {
+        if (agentSession == null)
+        {
+            return null;
+        }
+
+        agentSession.CancelActiveRequest();
+        await agentSession.DisposeAsync();
+        return null;
+    }
+
+    #region StartStreamingExecutionAsync
 
     public async Task<ExecutionStartResult> StartStreamingExecutionAsync(
         StreamingExecutionStartRequest request,
@@ -135,7 +190,7 @@ public sealed class AgentExecutionCoordinator(
                         executionCts.Token);
                     return new ExecutionStartResult(
                         session,
-                        new ActiveExecution(execTask, executionCts, session.CancelActiveRequest));
+                        new ActiveTurn(execTask, executionCts, session.CancelActiveRequest));
                 }
 
             case AgentRuntimeType.Agentflow:
@@ -150,46 +205,13 @@ public sealed class AgentExecutionCoordinator(
                         executionCts.Token);
                     return new ExecutionStartResult(
                         request.CurrentSession,
-                        new ActiveExecution(execTask, executionCts));
+                        new ActiveTurn(execTask, executionCts));
                 }
 
             default:
                 executionCts.Dispose();
                 return default;
         }
-    }
-
-    private async Task<ExecutionTaskResolutionResult> CreateTaskAsync(
-        Guid projectId,
-        Guid? taskId,
-        string input,
-        string user,
-        CancellationToken cancellationToken)
-    {
-        var task = await _taskAppService.CreateTaskForExecutionAsync(
-            projectId,
-            taskId,
-            input,
-            user,
-            cancellationToken);
-        if (task == null)
-        {
-            return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Failed to create task."));
-        }
-
-        return new ExecutionTaskResolutionResult(task, null);
-    }
-
-    private static async Task<AgentExecSession?> DisposeSessionAsync(AgentExecSession? agentSession)
-    {
-        if (agentSession == null)
-        {
-            return null;
-        }
-
-        agentSession.CancelActiveRequest();
-        await agentSession.DisposeAsync();
-        return null;
     }
 
     private static bool CanReuseAgentSession(AgentExecSession? session, SettingCommand settings)
@@ -238,7 +260,7 @@ public sealed class AgentExecutionCoordinator(
     {
         await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
                            id,
-                           ExecutionInputTextExtractor.ExtractAgentflowInputText(request.Input),
+                           AgwUserInputUtil.ExtractAgentflowInputText(request.Input),
                            cancellationToken,
                            ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId),
                            contextId))
@@ -279,4 +301,5 @@ public sealed class AgentExecutionCoordinator(
             sendLock.Release();
         }
     }
+    #endregion
 }

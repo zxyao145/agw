@@ -1,19 +1,12 @@
 using System.Net.WebSockets;
 
-using Agw.Api.Contracts;
+using Agw.Agents.Application.Execution.CommandStrategies;
+using Agw.Agents.Contracts;
 
-namespace Agw.Api.Execution;
+namespace Agw.Agents.Application.Execution;
 
-public readonly record struct ExecutionCommandResult(bool CloseConnection = false);
 
-public interface IExecutionCommandStrategy
-{
-    bool CanHandle(AgentRunCommand command);
-
-    Task<ExecutionCommandResult> ExecuteAsync(AgentRunCommand command, ExecutionCommandContext context);
-}
-
-public sealed class ExecutionCommandDispatcher(IEnumerable<IExecutionCommandStrategy> strategies)
+public sealed class CommandDispatcher(IEnumerable<IExecutionCommandStrategy> strategies)
 {
     private readonly IReadOnlyList<IExecutionCommandStrategy> _strategies = strategies.ToArray();
 

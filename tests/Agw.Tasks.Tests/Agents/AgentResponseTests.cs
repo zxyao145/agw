@@ -1,5 +1,5 @@
+using Agw.Agents.Contracts.Manager;
 using Agw.Agents.Domain.Entities;
-using Agw.Manager.Api.Contracts;
 using Agw.Shared.Contracts.Agents;
 
 namespace Agw.Agents.Tests;

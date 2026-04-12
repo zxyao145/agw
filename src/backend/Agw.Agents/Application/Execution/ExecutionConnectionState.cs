@@ -1,14 +1,20 @@
-using Agw.Api.Contracts;
+using Agw.Agents.Contracts;
 
-namespace Agw.Api.Execution;
+namespace Agw.Agents.Application.Execution;
 
 public sealed class ExecutionConnectionState
 {
+    /// <summary>
+    /// The latest SettingCommand
+    /// </summary>
     public SettingCommand? CurrentSettings { get; private set; }
 
+    /// <summary>
+    /// The SettingCommand of the currently executing session
+    /// </summary>
     public SettingCommand? SessionSettings { get; private set; }
 
-    public ActiveExecution? ActiveExecution { get; private set; }
+    public ActiveTurn? ActiveExecution { get; private set; }
 
     public bool HasRunningExecution => ActiveExecution is { IsCompleted: false };
 
@@ -42,7 +48,7 @@ public sealed class ExecutionConnectionState
         SessionSettings = null;
     }
 
-    public bool TryStartExecution(ActiveExecution activeExecution)
+    public bool TryStartExecution(ActiveTurn activeExecution)
     {
         ArgumentNullException.ThrowIfNull(activeExecution);
 
@@ -75,7 +81,13 @@ public sealed class ExecutionConnectionState
     }
 }
 
-public sealed class ActiveExecution(
+/// <summary>
+/// The turn currently being processed by the session
+/// </summary>
+/// <param name="executionTask"></param>
+/// <param name="cancellationTokenSource"></param>
+/// <param name="interruptAction"></param>
+public sealed class ActiveTurn(
     Task executionTask,
     CancellationTokenSource cancellationTokenSource,
     Action? interruptAction = null) : IAsyncDisposable

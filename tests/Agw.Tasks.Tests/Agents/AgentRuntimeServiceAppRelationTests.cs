@@ -1,8 +1,9 @@
 using System.Reflection;
 
+using Agw.Agents.Application.AgentRun;
+using Agw.Agents.Application.Agents;
 using Agw.Agents.Domain.Entities;
 using Agw.Agents.Domain.Services;
-using Agw.Appliaction.Services.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Domain.Entities;
@@ -23,7 +24,7 @@ public class AgentRuntimeServiceAppRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken);
-        var service = scope.CreateService();
+        var service = scope.CreateAgentAppService();
 
         var agent = new Agent
         {
@@ -58,7 +59,7 @@ public class AgentRuntimeServiceAppRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken);
-        var service = scope.CreateService();
+        var service = scope.CreateAgentAppService();
 
         var updated = await service.UpdateAgentAsync(
             scope.AgentId,
@@ -84,7 +85,7 @@ public class AgentRuntimeServiceAppRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken);
-        var service = scope.CreateService();
+        var service = scope.CreateAgentAppService();
 
         var agents = await service.ListAgentsAsync();
 
@@ -97,7 +98,7 @@ public class AgentRuntimeServiceAppRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken);
-        var service = scope.CreateService();
+        var service = scope.CreateAgentAppService();
 
         var agent = await service.GetAgentAsync(scope.AgentId);
 
@@ -110,7 +111,7 @@ public class AgentRuntimeServiceAppRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken);
-        var service = scope.CreateService();
+        var service = scope.CreateRuntimeService();
 
         var toolNames = await InvokeCollectNamedToolNamesAsync(service, scope.AgentId, """["git_status"]""");
 
@@ -124,7 +125,7 @@ public class AgentRuntimeServiceAppRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken, includeDuplicateGithubApp: true);
-        var service = scope.CreateService();
+        var service = scope.CreateRuntimeService();
 
         var toolNames = await InvokeCollectNamedToolNamesAsync(service, scope.AgentId, """["github_clone"]""");
 
@@ -136,16 +137,16 @@ public class AgentRuntimeServiceAppRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken, includeUnknownApp: true);
-        var service = scope.CreateService();
+        var service = scope.CreateRuntimeService();
 
         var toolNames = await InvokeCollectNamedToolNamesAsync(service, scope.AgentId, null);
 
         Assert.Equal(["github_clone", "github_list_repository"], toolNames);
     }
 
-    private static async Task<string[]> InvokeCollectNamedToolNamesAsync(AgentRuntimeService service, Guid agentId, string? rawAgentTools)
+    private static async Task<string[]> InvokeCollectNamedToolNamesAsync(IAgentRuntimeService service, Guid agentId, string? rawAgentTools)
     {
-        var method = typeof(AgentRuntimeService).GetMethod(
+        var method = typeof(IAgentRuntimeService).GetMethod(
             "CollectNamedToolNamesAsync",
             BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
@@ -291,26 +292,30 @@ public class AgentRuntimeServiceAppRelationTests
 
         public AgwDbContext CreateDbContext() => new(_options);
 
-        public AgentRuntimeService CreateService()
+        public AgentAppService CreateAgentAppService()
         {
             var dbContext = CreateDbContext();
 
-            return new AgentRuntimeService(
+            return new AgentAppService(
                 new EfRepository<Agent>(dbContext),
                 new EfRepository<AgentAppRelation>(dbContext),
                 new EfRepository<AppInstance>(dbContext),
                 new AppDefinitionRepo(),
                 new EfRepository<ModelProviderRelation>(dbContext),
+                new EfRepository<LlmModel>(dbContext),
+                new EfRepository<Provider>(dbContext),
                 new EfRepository<McpServer>(dbContext),
                 new EfRepository<AgentMcpServerRelation>(dbContext),
                 new EfRepository<Skill>(dbContext),
                 new EfRepository<AgentSkillRelation>(dbContext),
-                new EfRepository<LlmModel>(dbContext),
-                new EfRepository<Provider>(dbContext),
                 new UnitOfWork(dbContext),
-                new AgentDomainService(),
-                null!,
-                null!,
+                new AgentDomainService());
+        }
+
+        public IAgentRuntimeService CreateRuntimeService()
+        {
+            return new AgentRuntimeService(
+                CreateAgentAppService(),
                 null!,
                 null!,
                 null!,

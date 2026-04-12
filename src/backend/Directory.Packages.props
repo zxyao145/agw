@@ -12,8 +12,8 @@
     <PackageVersion Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.0.0-preview.260402.1" />
   </ItemGroup>
   <ItemGroup>
-    <PackageVersion Include="A2A" Version="1.0.0-preview" />
-    <PackageVersion Include="A2A.AspNetCore" Version="1.0.0-preview" />
+    <PackageVersion Include="A2A" Version="1.0.0-preview2" />
+    <PackageVersion Include="A2A.AspNetCore" Version="1.0.0-preview2" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />

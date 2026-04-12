@@ -1,32 +1,32 @@
-using Agw.Appliaction.Services.Agents;
-using Agw.Manager.Api.Contracts;
+using Agw.Agents.Application.Agents;
+using Agw.Agents.Contracts.Manager;
 
 using Microsoft.AspNetCore.Mvc;
 
-namespace Agw.Manager.Api.Controllers;
+namespace Agw.Agents.Controllers.Manager;
 
 [ApiController]
 [Route("api/agents")]
 public class AgentsController : ControllerBase
 {
-    private readonly AgentRuntimeService _agentRuntimeService;
+    private readonly AgentAppService _agentAppService;
 
-    public AgentsController(AgentRuntimeService agentRuntimeService)
+    public AgentsController(AgentAppService agentAppService)
     {
-        _agentRuntimeService = agentRuntimeService;
+        _agentAppService = agentAppService;
     }
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AgentResponse>>> ListAsync()
     {
-        var agents = await _agentRuntimeService.ListAgentsAsync();
+        var agents = await _agentAppService.ListAgentsAsync();
         return Ok(agents.Select(AgentResponse.FromDomain).ToArray());
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<AgentResponse>> GetAsync(Guid id)
     {
-        var agent = await _agentRuntimeService.GetAgentAsync(id);
+        var agent = await _agentAppService.GetAgentAsync(id);
         return agent == null ? NotFound() : Ok(AgentResponse.FromDomain(agent));
     }
 
@@ -44,7 +44,7 @@ public class AgentsController : ControllerBase
             Tools = request.Tools
         };
 
-        var created = await _agentRuntimeService.CreateAgentAsync(
+        var created = await _agentAppService.CreateAgentAsync(
             agent,
             request.McpToolServerIds,
             request.SkillIds,
@@ -57,7 +57,7 @@ public class AgentsController : ControllerBase
     public async Task<ActionResult<AgentResponse>> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
-        var updated = await _agentRuntimeService.UpdateAgentAsync(
+        var updated = await _agentAppService.UpdateAgentAsync(
             id,
             agent =>
             {
@@ -78,7 +78,7 @@ public class AgentsController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
-        var deleted = await _agentRuntimeService.DeleteAgentAsync(id);
+        var deleted = await _agentAppService.DeleteAgentAsync(id);
         return deleted ? NoContent() : NotFound();
     }
 }
