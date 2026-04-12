@@ -12,6 +12,7 @@ public static class DependencyInjection
     {
         services.AddHostedService<JobHostedService>();
         services.AddScoped<IAgentExecutor, AgentExecutor>();
+        services.AddSingleton<IJobDomainEventDispatcher, JobDomainEventDispatcher>();
         services.AddSingleton<IJobTimeCalculator, JobTimeCalculator>();
         services.AddScoped<JobAppService>();
         return services;
