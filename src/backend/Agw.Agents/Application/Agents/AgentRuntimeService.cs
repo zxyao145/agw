@@ -2,7 +2,6 @@ using System.ClientModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 using Agw.Agents.Application;
 using Agw.Agents.ExternalAgents;
@@ -60,7 +59,7 @@ public sealed class CreateAiAgentRequest
     public CancellationToken CancellationToken { get; init; }
 }
 
-public class AgentRuntimeService : RuntimService
+public class AgentRuntimeService : RuntimService, IAgentRuntimeService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly IRepository<Agent> _agentRepository;
@@ -302,67 +301,12 @@ public class AgentRuntimeService : RuntimService
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Agent);
 
-        var agent = request.Agent;
-        var extraOverride = request.ExtraOverride;
-        var taskId = request.TaskId;
-        var resume = request.Resume;
-        var cancellationToken = request.CancellationToken;
-        var workspace = request.Workspace;
-
-        if (agent.Type == AgentType.External)
+        if (TryCreateExternalAgent(request, out var externalAgent))
         {
-            var extra = extraOverride ?? agent.Extra;
-            if (agent.Name == AgentNames.ClaudeCode)
-            {
-                if (string.IsNullOrWhiteSpace(extra))
-                {
-                    _logger.LogError("agent.Extra is null or whitespace");
-                    return null;
-                }
-
-                var ccOptions = JsonUtil.Deserialize<ClaudeCodeAIAgentOptions>(extra);
-                if (ccOptions == null)
-                {
-                    _logger.LogError("agent.Extra Deserialize to options error");
-                    return null;
-                }
-                if (!string.IsNullOrWhiteSpace(workspace))
-                {
-                    ccOptions = ccOptions with
-                    {
-                        WorkingDirectory = workspace
-                    };
-                }
-
-                if (taskId != null)
-                {
-                    if (resume)
-                    {
-                        ccOptions = ccOptions with
-                        {
-                            Resume = taskId.Value.Normalize(),
-                            SessionId = null
-                        };
-                    }
-                    else
-                    {
-                        ccOptions = ccOptions with
-                        {
-                            Resume = null,
-                            SessionId = taskId
-                        };
-                    }
-                }
-                ccOptions = ccOptions with
-                {
-                    ChatHistoryProvider = _chatHistoryProvider,
-                };
-
-                return new ClaudeCodeAIAgent(ccOptions, _logger);
-            }
+            return externalAgent;
         }
 
-        return await CreateDefinitionAgent(agent, workspace, cancellationToken).ConfigureAwait(false);
+        return await CreateDefinitionAgentAsync(request.Agent, request.Workspace, request.CancellationToken).ConfigureAwait(false);
     }
 
     public async Task<AgentExecSession?> CreateSessionAsync(
@@ -514,25 +458,8 @@ public class AgentRuntimeService : RuntimService
 
         try
         {
-            AgentSession session;
-            if (taskId == null)
-            {
-                taskId = Guid.NewGuid();
-                session = await aiAgent.CreateSessionAsync();
-            }
-            else
-            {
-                var value = await _cache.GetOrCreateAsync<string>(taskId.Value.Normalize(), _ => ValueTask.FromResult(string.Empty));
-                if (string.IsNullOrWhiteSpace(value))
-                {
-                    session = await aiAgent.CreateSessionAsync();
-                }
-                else
-                {
-                    var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
-                    session = await aiAgent.DeserializeSessionAsync(serializedThread);
-                }
-            }
+            var session = await CreateOrRestoreSessionAsync(aiAgent, taskId).ConfigureAwait(false);
+            taskId ??= Guid.NewGuid();
             string taskIdValue = taskId.Value.Normalize();
 
             _providerSessionState.InitializeSessionState(
@@ -542,16 +469,7 @@ public class AgentRuntimeService : RuntimService
                 ProjectDefaults.GetDefaultProjectIdentifier(projectId)
                 );
 
-            var stream = aiAgent.RunStreamingAsync(chatMsg, session);
-            var messages = new List<AgwMessage>();
-            await foreach (var update in stream)
-            {
-                var msg = update.ToAiMessage();
-                if (msg != null)
-                {
-                    messages.Add(msg);
-                }
-            }
+            var messages = await CollectStreamingMessagesAsync(aiAgent, chatMsg, session).ConfigureAwait(false);
 
             return new AgentExecutionResult(taskIdValue, messages);
         }
@@ -568,7 +486,7 @@ public class AgentRuntimeService : RuntimService
         }
     }
 
-    private async Task<AIAgent?> CreateDefinitionAgent(Agent agentDefinition, string? workspace, CancellationToken cancellationToken)
+    private async Task<AIAgent?> CreateDefinitionAgentAsync(Agent agentDefinition, string? workspace, CancellationToken cancellationToken)
     {
         if (!agentDefinition.ModelProviderId.HasValue)
         {
@@ -634,7 +552,7 @@ public class AgentRuntimeService : RuntimService
             ChatOptions = new ChatOptions
             {
                 ModelId = model.Name,
-                Instructions = GetInstructions(agentDefinition.SystemPrompt, workspace),
+                Instructions = AgentRuntimeInstructions.BuildInstructions(agentDefinition.SystemPrompt, workspace),
                 Tools = tools
             }
         };
@@ -673,7 +591,7 @@ public class AgentRuntimeService : RuntimService
             ChatOptions = new ChatOptions
             {
                 ModelId = model.Name,
-                Instructions = GetInstructions(agentDefinition.SystemPrompt, workspace),
+                Instructions = AgentRuntimeInstructions.BuildInstructions(agentDefinition.SystemPrompt, workspace),
                 Tools = tools
             }
         };
@@ -687,29 +605,6 @@ public class AgentRuntimeService : RuntimService
             .AsBuilder()
             .UseOpenTelemetry(sourceName: provider.Name, configure: cfg => cfg.EnableSensitiveData = true)
             .Build();
-    }
-
-    private static string GetInstructions(string SystemPrompt, string? workspace)
-    {
-        if (string.IsNullOrWhiteSpace(SystemPrompt))
-        {
-            SystemPrompt = "You are an AI agent.";
-        }
-
-        if (string.IsNullOrWhiteSpace(workspace))
-        {
-            return SystemPrompt;
-        }
-        workspace = PathUtil.ExpandTilde(workspace);
-
-        var workspaceInstructions =
-            $"""
-            # others
-
-            - Your default workspace or working directory is '{workspace}'.
-            """;
-
-        return $"{SystemPrompt}{Environment.NewLine}{workspaceInstructions}";
     }
 
     private string ResolveApiKey(ProviderAuthConfig authConfig)
@@ -961,36 +856,12 @@ public class AgentRuntimeService : RuntimService
         await _cache.SetAsync(taskId, serialized, cancellationToken: cancellationToken);
     }
 
-    private string? MergeExtraSettings(string? agentExtra, string? projectExtraSetting, string? requestExtraSetting)
-    {
-        JsonObject? merged = null;
-
-        MergeExtraSetting(ref merged, agentExtra, "Agent.Extra");
-        MergeExtraSetting(ref merged, projectExtraSetting, "Project.ExtraSetting");
-        MergeExtraSetting(ref merged, requestExtraSetting, "SettingCommand.SettingContent");
-
-        return merged?.ToJsonString();
-    }
-
-    private void MergeExtraSetting(ref JsonObject? merged, string? rawSetting, string settingName)
-    {
-        if (string.IsNullOrWhiteSpace(rawSetting))
-        {
-            return;
-        }
-
-        if (!TryParseJsonObject(rawSetting, out var jsonObject))
-        {
-            _logger.LogWarning("{SettingName} is not a valid JSON object. Skipping it.", settingName);
-            return;
-        }
-
-        merged ??= new JsonObject();
-        foreach (var pair in jsonObject)
-        {
-            merged[pair.Key] = pair.Value?.DeepClone();
-        }
-    }
+    private string? MergeExtraSettings(string? agentExtra, string? projectExtraSetting, string? requestExtraSetting) =>
+        AgentRuntimeConfigurationMerger.MergeExtraSettings(
+            agentExtra,
+            projectExtraSetting,
+            requestExtraSetting,
+            settingName => _logger.LogWarning("{SettingName} is not a valid JSON object. Skipping it.", settingName));
 
     private Task<string?> GetProjectExtraSettingAsync(Guid? projectId)
     {
@@ -1159,18 +1030,88 @@ public class AgentRuntimeService : RuntimService
         }
     }
 
-    private static bool TryParseJsonObject(string json, [NotNullWhen(true)] out JsonObject? jsonObject)
+    private bool TryCreateExternalAgent(CreateAiAgentRequest request, [NotNullWhen(true)] out AIAgent? aiAgent)
     {
-        jsonObject = null;
-
-        try
-        {
-            jsonObject = JsonNode.Parse(json) as JsonObject;
-            return jsonObject != null;
-        }
-        catch (JsonException)
+        aiAgent = null;
+        if (request.Agent.Type != AgentType.External)
         {
             return false;
         }
+
+        var extra = request.ExtraOverride ?? request.Agent.Extra;
+        if (request.Agent.Name != AgentNames.ClaudeCode)
+        {
+            return false;
+        }
+
+        aiAgent = CreateClaudeCodeAgent(extra, request.Workspace, request.TaskId, request.Resume);
+        return aiAgent != null;
+    }
+
+    private AIAgent? CreateClaudeCodeAgent(string? extra, string? workspace, Guid? taskId, bool resume)
+    {
+        if (string.IsNullOrWhiteSpace(extra))
+        {
+            _logger.LogError("agent.Extra is null or whitespace");
+            return null;
+        }
+
+        var options = JsonUtil.Deserialize<ClaudeCodeAIAgentOptions>(extra);
+        if (options == null)
+        {
+            _logger.LogError("agent.Extra Deserialize to options error");
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(workspace))
+        {
+            options = options with { WorkingDirectory = workspace };
+        }
+
+        if (taskId != null)
+        {
+            options = resume
+                ? options with { Resume = taskId.Value.Normalize(), SessionId = null }
+                : options with { Resume = null, SessionId = taskId };
+        }
+
+        options = options with { ChatHistoryProvider = _chatHistoryProvider };
+        return new ClaudeCodeAIAgent(options, _logger);
+    }
+
+    private async Task<AgentSession> CreateOrRestoreSessionAsync(AIAgent aiAgent, Guid? taskId)
+    {
+        if (taskId == null)
+        {
+            return await aiAgent.CreateSessionAsync().ConfigureAwait(false);
+        }
+
+        var value = await _cache.GetOrCreateAsync<string>(taskId.Value.Normalize(), _ => ValueTask.FromResult(string.Empty)).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return await aiAgent.CreateSessionAsync().ConfigureAwait(false);
+        }
+
+        var serializedThread = JsonSerializer.Deserialize<JsonElement>(value);
+        return await aiAgent.DeserializeSessionAsync(serializedThread).ConfigureAwait(false);
+    }
+
+    private static async Task<List<AgwMessage>> CollectStreamingMessagesAsync(
+        AIAgent aiAgent,
+        IReadOnlyList<ChatMessage> chatMessages,
+        AgentSession session)
+    {
+        var stream = aiAgent.RunStreamingAsync(chatMessages, session);
+        var messages = new List<AgwMessage>();
+        await foreach (var update in stream)
+        {
+            var msg = update.ToAiMessage();
+            if (msg != null)
+            {
+                messages.Add(msg);
+            }
+        }
+
+        return messages;
     }
 }
