@@ -73,9 +73,12 @@ public class JobHostedService(
 
             try
             {
-                var delayTask = Task.Delay(_prefetchInterval, cancellationToken);
-                var signalTask = _prefetchSignal.WaitAsync(cancellationToken);
-                await Task.WhenAny(delayTask, signalTask);
+                using var waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var delayTask = Task.Delay(_prefetchInterval, waitCancellation.Token);
+                var signalTask = _prefetchSignal.WaitAsync(waitCancellation.Token);
+                var completedTask = await Task.WhenAny(delayTask, signalTask);
+                waitCancellation.Cancel();
+                await completedTask;
             }
             catch (OperationCanceledException)
             {
