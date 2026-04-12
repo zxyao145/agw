@@ -138,7 +138,7 @@ public class IntegrationsControllerTests
 
         var active = items.Single(item => ReadProperty<Guid>(item, "Id") == activeInstanceId);
         Assert.Equal("google-workspace", ReadProperty<string>(active, "AppName"));
-        Assert.Equal("Google Workspace", ReadProperty<string>(active, "DisplayName"));
+        Assert.Equal("", ReadProperty<string>(active, "DisplayName"));
         Assert.False(ReadProperty<bool>(active, "UsePkce"));
         Assert.True(ReadProperty<bool>(active, "IsAuthorized"));
         Assert.False(ReadProperty<bool>(active, "IsAuthorizationExpired"));

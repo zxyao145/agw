@@ -61,3 +61,10 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# Windows script
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Shell script
+*.sh text eol=lf

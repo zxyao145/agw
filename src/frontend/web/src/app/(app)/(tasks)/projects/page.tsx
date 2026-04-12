@@ -23,6 +23,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
+import {
+  formatProjectFolderName,
+  resolveCreateProjectWorkspace,
+  syncDefaultProjectWorkspace,
+} from "./project-form";
+
 type ProjectCreateRequest = components["schemas"]["ProjectCreateRequest"] & {
   workspace?: string | null;
   extraSetting?: string | null;
@@ -86,6 +92,21 @@ export default function ProjectsPage() {
   const [workspace, setWorkspace] = React.useState<string>("");
   const [enable, setEnable] = React.useState(true);
   const [extraSetting, setExtraSetting] = React.useState("{\n  \n}");
+  const createProjectName = formatProjectFolderName(name);
+
+  const handleCreateNameChange = React.useCallback(
+    (nextName: string) => {
+      setWorkspace((currentWorkspace) =>
+        syncDefaultProjectWorkspace({
+          previousName: name,
+          nextName,
+          currentWorkspace,
+        }),
+      );
+      setName(nextName);
+    },
+    [name],
+  );
 
   const createProjectMutation = useMutation({
     mutationFn: async (body: ProjectCreateRequest) => {
@@ -208,7 +229,7 @@ export default function ProjectsPage() {
                   <Input
                     id="name"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => handleCreateNameChange(e.target.value)}
                     placeholder="demo-project"
                   />
                 </div>
@@ -230,7 +251,7 @@ export default function ProjectsPage() {
                     id="workspace"
                     value={workspace}
                     onChange={(e) => setWorkspace(e.target.value)}
-                    placeholder="/path/to/workspace"
+                    placeholder="~/.agw/demo-project"
                   />
                 </div>
 
@@ -279,15 +300,19 @@ export default function ProjectsPage() {
                       toast.error("Settings must be valid JSON.");
                       return;
                     }
+                    if (!createProjectName) {
+                      toast.error("Project name must produce a valid folder name.");
+                      return;
+                    }
                     createProjectMutation.mutate({
-                      name,
+                      name: createProjectName,
                       description: description.length ? description : null,
-                      workspace: workspace.trim().length ? workspace.trim() : null,
+                      workspace: resolveCreateProjectWorkspace(createProjectName, workspace),
                       enable,
                       extraSetting: normalizeJsonPayload(extraSetting),
                     });
                   }}
-                  disabled={!name.trim() || createProjectMutation.isPending}
+                  disabled={!createProjectName || createProjectMutation.isPending}
                 >
                   {createProjectMutation.isPending ? "Creating..." : "Create"}
                 </Button>

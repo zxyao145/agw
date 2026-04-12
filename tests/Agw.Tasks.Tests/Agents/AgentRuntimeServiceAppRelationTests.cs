@@ -115,7 +115,7 @@ public class AgentRuntimeServiceAppRelationTests
         var toolNames = await InvokeCollectNamedToolNamesAsync(service, scope.AgentId, """["git_status"]""");
 
         Assert.Equal(
-            ["git_clone", "git_status"],
+            ["github_clone", "github_list_repository", "git_status"],
             toolNames.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray());
     }
 
@@ -126,9 +126,9 @@ public class AgentRuntimeServiceAppRelationTests
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken, includeDuplicateGithubApp: true);
         var service = scope.CreateService();
 
-        var toolNames = await InvokeCollectNamedToolNamesAsync(service, scope.AgentId, """["git_clone"]""");
+        var toolNames = await InvokeCollectNamedToolNamesAsync(service, scope.AgentId, """["github_clone"]""");
 
-        Assert.Equal(["git_clone"], toolNames);
+        Assert.Equal(["github_clone", "github_list_repository"], toolNames);
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public class AgentRuntimeServiceAppRelationTests
 
         var toolNames = await InvokeCollectNamedToolNamesAsync(service, scope.AgentId, null);
 
-        Assert.Equal(["git_clone"], toolNames);
+        Assert.Equal(["github_clone", "github_list_repository"], toolNames);
     }
 
     private static async Task<string[]> InvokeCollectNamedToolNamesAsync(AgentRuntimeService service, Guid agentId, string? rawAgentTools)

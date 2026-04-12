@@ -171,8 +171,8 @@ public class IntegrationsController : ControllerBase
         return new AppInstanceListItemResponse(
             instance.Id,
             instance.AppName,
-            definition?.DisplayName ?? instance.AppName,
-            definition?.Provider ?? string.Empty,
+            definition?.DisplayName ?? "",
+            definition?.Provider ?? "",
             definition?.Category,
             instance.UsePkce,
             instance.ClientId,

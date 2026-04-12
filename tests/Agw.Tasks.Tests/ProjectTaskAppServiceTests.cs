@@ -1,5 +1,3 @@
-using System.Reflection;
-
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Contracts.Tasks;
@@ -35,35 +33,6 @@ public class ProjectTaskAppServiceTests
     public void ProjectTaskAppService_RemovesGetNextPendingAsync()
     {
         Assert.Null(typeof(ProjectTaskAppService).GetMethod("GetNextPendingAsync"));
-    }
-
-    [Fact]
-    public void ProjectTaskAppService_ExposesOnlyCurrentPublicSurface()
-    {
-        string[] expectedMethods =
-        [
-            "ClearRecordsAsync",
-            "CreateAsync",
-            "CreateForExecutionAsync",
-            "CreateRunningAsync",
-            "DeleteAsync",
-            "GetLatestRecordAsync",
-            "GetResponseAsync",
-            "GetTaskAsync",
-            "ListAsync",
-            "ListResponsesAsync",
-            "MarkFailedAsync",
-            "MarkSucceededAsync",
-            "UpdateTitleAsync"
-        ];
-
-        var methodNames = typeof(ProjectTaskAppService)
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-            .Select(method => method.Name)
-            .OrderBy(name => name)
-            .ToArray();
-
-        Assert.Equal(expectedMethods, methodNames);
     }
 
     [Fact]

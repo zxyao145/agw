@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
 
 namespace Agw.Tasks.Application;
@@ -38,6 +39,7 @@ public class ProjectAppService : IProjectAppService
             return null;
         }
 
+        EnsureWorkspaceDirectory(project.Workspace);
         await _projectRepository.AddAsync(project);
         await _unitOfWork.SaveChangesAsync();
         return project;
@@ -56,6 +58,7 @@ public class ProjectAppService : IProjectAppService
             return null;
         }
 
+        EnsureWorkspaceDirectory(existing.Workspace);
         _projectRepository.Update(existing);
         await _unitOfWork.SaveChangesAsync();
         return existing;
@@ -84,5 +87,15 @@ public class ProjectAppService : IProjectAppService
     {
         var project = await _projectResolver.ResolveAsync(projectId);
         return project?.Id;
+    }
+
+    private static void EnsureWorkspaceDirectory(string? workspace)
+    {
+        if (string.IsNullOrWhiteSpace(workspace))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(PathUtil.ExpandTilde(workspace.Trim()));
     }
 }

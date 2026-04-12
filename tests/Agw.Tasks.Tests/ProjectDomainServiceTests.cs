@@ -34,6 +34,51 @@ public class ProjectDomainServiceTests
     }
 
     [Fact]
+    public void TryPrepareForCreate_NameWithSpecialCharacters_NormalizesNameAndDefaultWorkspace()
+    {
+        var project = new Project
+        {
+            Name = "  Demo Project: Alpha?  ",
+            Workspace = "  "
+        };
+
+        var result = _service.TryPrepareForCreate(project, "tester");
+
+        Assert.True(result);
+        Assert.Equal("Demo_Project_Alpha", project.Name);
+        Assert.Equal("~/.agw/Demo_Project_Alpha", project.Workspace);
+    }
+
+    [Fact]
+    public void TryPrepareForCreate_CustomWorkspace_PreservesTrimmedWorkspace()
+    {
+        var project = new Project
+        {
+            Name = "Project A",
+            Workspace = "  ~/custom/project-a  "
+        };
+
+        var result = _service.TryPrepareForCreate(project, "tester");
+
+        Assert.True(result);
+        Assert.Equal("Project_A", project.Name);
+        Assert.Equal("~/custom/project-a", project.Workspace);
+    }
+
+    [Fact]
+    public void TryPrepareForCreate_NameThatCannotBecomeFolderName_ReturnsFalse()
+    {
+        var project = new Project { Name = " <>:\"/\\|?* " };
+
+        var result = _service.TryPrepareForCreate(project, "tester");
+
+        Assert.False(result);
+        Assert.Equal(Guid.Empty, project.Id);
+        Assert.Null(project.CreateBy);
+        Assert.Null(project.Workspace);
+    }
+
+    [Fact]
     public void TryApplyUpdate_BlankNameAfterUpdate_ReturnsFalse()
     {
         var project = new Project { Id = Guid.NewGuid(), Name = "Project A" };
