@@ -66,6 +66,7 @@ import {
   getTargetValueFromMetadata,
 } from "./lib/target-options";
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
+import { getApiErrorMessage } from "@/api/utils";
 
 type ProjectDto = {
   id: string;

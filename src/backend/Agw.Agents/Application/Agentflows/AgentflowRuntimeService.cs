@@ -23,7 +23,7 @@ public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int 
 
 public record AgentflowExecutionResult(string TaskId, IReadOnlyList<AgwMessage> Messages);
 
-public class AgentflowRuntimeService : RuntimService
+public class AgentflowRuntimeService : RuntimServiceBase
 {
     private readonly ILogger<AgentflowRuntimeService> _logger;
     private readonly IRepository<Agentflow> _agentflowRepository;

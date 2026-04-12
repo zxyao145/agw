@@ -12,7 +12,8 @@ import {
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Pencil, Trash2, Play, Waypoints } from "lucide-react";
 import type { AgentflowDto, AgentflowDetailDto } from "@/types/agentflow";
-import { getPatternName, getApiErrorMessage } from "./utils";
+import { getPatternName } from "./utils";
+import { getApiErrorMessage } from "@/api/utils";
 
 interface AgentflowsTableProps {
   agentflows: AgentflowDto[];

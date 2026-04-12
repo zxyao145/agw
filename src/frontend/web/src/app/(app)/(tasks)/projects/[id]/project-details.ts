@@ -1,4 +1,4 @@
-import { parseTargetValue } from "../../../../../lib/chat-target-options.ts";
+import { parseTargetValue } from "@/lib/chat-target-options";
 
 export type ProjectDetails = {
   id: string;
