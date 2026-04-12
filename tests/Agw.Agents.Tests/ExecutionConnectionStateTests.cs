@@ -1,5 +1,6 @@
 using Agw.Agents.Application.Execution;
 using Agw.Agents.Contracts;
+using Agw.Shared.Data.Entities.Tasks;
 
 namespace Agw.Agents.Tests;
 
@@ -85,6 +86,41 @@ public class ExecutionConnectionStateTests
 
         Assert.False(state.HasRunningExecution);
         Assert.Null(state.ActiveExecution);
+    }
+
+    [Fact]
+    public void TryGetResolvedTask_WhenSettingsUnchanged_ReturnsCachedTask()
+    {
+        var projectId = Guid.NewGuid();
+        var settings = CreateSettings(projectId, Guid.NewGuid());
+        var equivalentSettings = CreateSettings(projectId, settings.TaskId);
+        var task = new ProjectTask { Id = settings.TaskId, ProjectId = projectId };
+        var state = new ExecutionConnectionState();
+
+        state.ApplySettings(settings);
+        state.MarkTaskResolved(settings, task);
+
+        var found = state.TryGetResolvedTask(equivalentSettings, out var cachedTask);
+
+        Assert.True(found);
+        Assert.Same(task, cachedTask);
+    }
+
+    [Fact]
+    public void ApplySettings_WhenSettingsChanged_ClearsCachedTask()
+    {
+        var originalSettings = CreateSettings(taskId: Guid.NewGuid());
+        var changedSettings = CreateSettings(taskId: Guid.NewGuid());
+        var task = new ProjectTask { Id = originalSettings.TaskId, ProjectId = originalSettings.ProjectId };
+        var state = new ExecutionConnectionState();
+
+        state.ApplySettings(originalSettings);
+        state.MarkTaskResolved(originalSettings, task);
+
+        state.ApplySettings(changedSettings);
+
+        Assert.Null(state.ResolvedTask);
+        Assert.False(state.TryGetResolvedTask(originalSettings, out _));
     }
 
     private static SettingCommand CreateSettings(Guid taskId)

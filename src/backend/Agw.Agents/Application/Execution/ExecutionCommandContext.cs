@@ -6,20 +6,38 @@ using Agw.Shared.Utils;
 
 using Microsoft.AspNetCore.Mvc;
 
-namespace Agw.Agents.Application.Execution.CommandStrategies;
+namespace Agw.Agents.Application.Execution;
 
 public sealed class ExecutionCommandContext
 {
+    /// <summary>
+    /// Agent or agentflow identifier bound to this WebSocket execution connection.
+    /// </summary>
     public Guid AgentId { get; private set; }
 
+    /// <summary>
+    /// User name captured when the socket was accepted; used when creating or resolving execution tasks.
+    /// </summary>
     public string CurrentUser { get; private set; }
 
+    /// <summary>
+    /// Request cancellation token for the lifetime of the WebSocket request.
+    /// </summary>
     public CancellationToken CancellationToken { get; private set; }
 
+    /// <summary>
+    /// Accepted WebSocket used by command strategies to stream messages back to the client.
+    /// </summary>
     public WebSocket WebSocket { get; private set; }
 
+    /// <summary>
+    /// Shared send gate for all writers on this socket.
+    /// </summary>
     public SemaphoreSlim SendLock { get; private set; }
 
+    /// <summary>
+    /// Mutable connection state shared by all command strategies for this socket.
+    /// </summary>
     public ExecutionConnectionState ConnectionState { get; private set; }
 
     public ExecutionCommandContext(
@@ -38,12 +56,18 @@ public sealed class ExecutionCommandContext
         ConnectionState = new ExecutionConnectionState();
     }
 
+    /// <summary>
+    /// Reusable agent runtime session for agent executions. Agentflow executions do not populate this.
+    /// </summary>
     public AgentExecSession? AgentSession { get; set; }
 
+    /// <summary>
+    /// Controller-owned close callback so strategies can terminate the socket without owning close semantics.
+    /// </summary>
     public required Func<WebSocketCloseStatus, string, Task> CloseConnectionAsync { get; init; }
 
     /// <summary>
-    /// Avoid WebSocket execution tasks when they are fire-and-forget
+    /// Observes background execution turns so fire-and-forget streaming tasks cannot fail silently.
     /// </summary>
     public required Action<Task> ObserveTurn { get; init; }
 
@@ -86,6 +110,7 @@ public sealed class ExecutionCommandContext
     {
         if (WebSocket.State != WebSocketState.Open) return;
 
+        // Command strategies and active turns can both write to the socket, so every send must take the lock.
         await SendLock.WaitAsync(cancellationToken);
         try
         {

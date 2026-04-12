@@ -50,7 +50,9 @@ public partial class AgentExecutionsController : ControllerBase
             return;
         }
 
+        // The socket carries both client commands and streamed execution output for a single agent run.
         using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+        // Server writes can happen from the dispatcher and from background execution tasks, so serialize them.
         using var sendLock = new SemaphoreSlim(1, 1);
 
         var commandContext = new ExecutionCommandContext(agentId, User?.Identity?.Name ?? "system", cancellationToken, webSocket, sendLock)
@@ -64,6 +66,7 @@ public partial class AgentExecutionsController : ControllerBase
         {
             while (webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
             {
+                // A completed turn is released before reading the next command so the connection state stays clean.
                 await commandContext.ConnectionState.ReleaseCompletedExecutionAsync();
 
                 var command = await ReceiveRequestAsync<AgentRunCommand>(webSocket, cancellationToken);
@@ -73,6 +76,7 @@ public partial class AgentExecutionsController : ControllerBase
                     break;
                 }
 
+                // The dispatcher may start streaming work, interrupt an active turn, or reply immediately.
                 var result = await _commandDispatcher.DispatchAsync(command, commandContext);
                 if (result.CloseConnection)
                 {
@@ -104,7 +108,7 @@ public partial class AgentExecutionsController : ControllerBase
     }
 
     /// <summary>
-    /// Avoid WebSocket execution tasks when they are fire-and-forget
+    /// Observe background execution tasks so socket-driven work does not surface as unobserved exceptions.
     /// </summary>
     /// <param name="inputTask"></param>
     private void ObserveActiveExecTask(Task inputTask)
@@ -140,6 +144,7 @@ public partial class AgentExecutionsController : ControllerBase
 
         do
         {
+            // WebSocket messages may arrive in multiple frames, so accumulate them until EndOfMessage.
             result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
 
             if (result.MessageType == WebSocketMessageType.Close)
@@ -156,6 +161,7 @@ public partial class AgentExecutionsController : ControllerBase
 
             if (stream.Length + result.Count > MaxRequestBytes)
             {
+                // Reject oversized requests before the payload is buffered completely.
                 await TryCloseAsync(webSocket, WebSocketCloseStatus.MessageTooBig, "Request payload too large");
                 return default;
             }
@@ -166,6 +172,7 @@ public partial class AgentExecutionsController : ControllerBase
         var json = Encoding.UTF8.GetString(stream.ToArray());
         try
         {
+            // Each inbound message is expected to be a single JSON command for the dispatcher.
             var request = JsonUtil.Deserialize<T>(json);
             if (request == null)
             {
@@ -188,6 +195,7 @@ public partial class AgentExecutionsController : ControllerBase
         ExecutionConnectionState connectionState,
         AgentExecSession? agentSession)
     {
+        // ActiveTurn is the execution task owned by the socket; finish it first so no background work keeps sending.
         if (connectionState.ActiveExecution != null)
         {
             connectionState.ActiveExecution.RequestInterrupt(null);
@@ -195,6 +203,7 @@ public partial class AgentExecutionsController : ControllerBase
             await connectionState.ActiveExecution.DisposeAsync();
         }
 
+        // Agent sessions carry model/runtime state and must be released independently of the WebSocket turn.
         if (agentSession == null)
         {
             return;
@@ -206,6 +215,7 @@ public partial class AgentExecutionsController : ControllerBase
 
     private static Task TryCloseAsync(WebSocket webSocket, WebSocketCloseStatus status, string reason)
     {
+        // Use the correct close API for the current socket state and ignore repeated close attempts.
         return webSocket.State switch
         {
             WebSocketState.Open => webSocket.CloseAsync(status, reason, CancellationToken.None),

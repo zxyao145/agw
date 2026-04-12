@@ -17,6 +17,9 @@ namespace Agw.Agents.Application.Execution.CommandStrategies;
 
 public readonly record struct ExecutionStartResult(AgentExecSession? AgentSession, ActiveTurn? ActiveTurn);
 
+/// <summary>
+/// Data needed to start an execution and stream its output back over the socket.
+/// </summary>
 public sealed record StreamingExecutionStartRequest(
     Guid AgentId,
     ProjectTask Task,
@@ -58,45 +61,53 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
         var execCommand = (ExecCommand)command;
         if (context.ConnectionState.HasRunningExecution)
         {
+            // Only one turn can stream on a connection at a time.
             await context.SendErrorAsync(BusyMessage);
             return default;
         }
 
+        // Reuse the latest client settings when available; otherwise initialize a default execution context.
         var settings = context.ConnectionState.CurrentSettings ?? CreateDefaultSettings();
         if (context.ConnectionState.CurrentSettings == null)
         {
             context.ConnectionState.ApplySettings(settings);
         }
 
+        // If settings changed while a session was idle, dispose the stale session before starting again.
         if (context.ConnectionState.ShouldRefreshSessionImmediately)
         {
             context.ConnectionState.ClearSession();
             context.AgentSession = await DisposeSessionAsync(context.AgentSession);
         }
 
-        // get existing ProjectTask or create a new ProjectTask
-        var taskResolution = await _taskAppService.ResolveTaskAsync(
-            new ExecutionTaskRequest(
-                ExecutionId: context.AgentId,
-                AgentType: execCommand.AgentType,
-                TaskId: settings.TaskId,
-                ProjectId: settings.ProjectId,
-                Input: AgwUserInputUtil.ExtractAgentflowInputText(execCommand.Input),
-                Resume: settings.Resume,
-                User: context.CurrentUser),
-            context.CancellationToken);
-        var task = taskResolution.Task;
-        var contextError = taskResolution.Error;
-        if (contextError != null)
+        if (!context.ConnectionState.TryGetResolvedTask(settings, out var task))
         {
-            await context.CloseConnectionAsync(
-                WebSocketCloseStatus.InvalidPayloadData,
-                context.ExtractReason(contextError) ?? "Invalid request payload");
-            return new ExecutionCommandResult(CloseConnection: true);
+            // Keep task resolution in ExecCommandStrategy rather than SettingCommandStrategy because resolving can
+            // create/validate execution state. A SettingCommand should only configure the socket; side effects belong
+            // to the command that actually starts a run.
+            // Resolve the project task once per unchanged SettingCommand, creating it when the client is starting fresh.
+            var taskResolution = await _taskAppService.ResolveTaskAsync(
+                new ExecutionTaskRequest(
+                    TaskId: settings.TaskId,
+                    ProjectId: settings.ProjectId,
+                    Input: "",
+                    Resume: settings.Resume,
+                    User: context.CurrentUser),
+                context.CancellationToken);
+            var contextError = taskResolution.Error;
+            if (contextError != null)
+            {
+                await context.CloseConnectionAsync(
+                    WebSocketCloseStatus.InvalidPayloadData,
+                    context.ExtractReason(contextError) ?? "Invalid request payload");
+                return new ExecutionCommandResult(CloseConnection: true);
+            }
+
+            task = taskResolution.Task!;
+            context.ConnectionState.MarkTaskResolved(settings, task);
         }
 
-
-        // Start streaming execution based on agentType branch
+        // Start the runtime and capture both the session and the active turn that will stream output.
         var executionStartResult = await StartStreamingExecutionAsync(
             new StreamingExecutionStartRequest(
                 AgentId: context.AgentId,
@@ -118,6 +129,7 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
 
         if (!context.ConnectionState.TryStartExecution(activeTurn))
         {
+            // Another command managed to claim the connection before this turn was registered.
             await activeTurn.DisposeAsync();
             await context.SendErrorAsync(BusyMessage);
             return default;
@@ -125,9 +137,11 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
 
         if (execCommand.AgentType == AgentRuntimeType.Agent && context.AgentSession != null)
         {
+            // For agent executions, mark the session snapshot that can be reused on the next request.
             context.ConnectionState.MarkSessionReady(settings);
         }
 
+        // Fire-and-forget observation keeps the socket loop responsive while the turn streams in the background.
         context.ObserveTurn(activeTurn.ExecutionTask);
         return default;
     }
@@ -158,6 +172,7 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
         StreamingExecutionStartRequest request,
         CancellationToken cancellationToken)
     {
+        // Each runtime type streams through the same socket but has slightly different session/cancellation rules.
         var executionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         switch (request.Command.AgentType)
@@ -167,6 +182,7 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
                     var session = request.CurrentSession;
                     if (!CanReuseAgentSession(request.CurrentSession, request.Settings))
                     {
+                        // Agent runs can reuse an existing session only when the task and project still match.
                         session = await DisposeSessionAsync(request.CurrentSession);
 
                         session = await _agentRuntimeService.CreateSessionAsync(
@@ -182,6 +198,7 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
                         return default;
                     }
 
+                    // The runtime owns the session lifetime; the ActiveTurn just tracks stream completion and cancel.
                     var execTask = ExecuteAgentStreamingAsync(
                         session,
                         request.Command.Input,
@@ -195,6 +212,7 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
 
             case AgentRuntimeType.Agentflow:
                 {
+                    // Agentflow does not carry a reusable agent session, so only the stream task and turn are tracked.
                     var execTask = ExecuteAgentflowStreamingAsync(
                         request.AgentId,
                         request.Command,

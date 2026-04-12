@@ -30,8 +30,6 @@ public partial class AgentExecutionsController : ControllerBase
     {
         var taskResolution = await _taskAppService.ResolveTaskAsync(
             new ExecutionTaskRequest(
-                ExecutionId: id,
-                AgentType: request.AgentType,
                 TaskId: request.TaskId,
                 ProjectId: request.ProjectId,
                 Input: request.Input,
@@ -63,8 +61,6 @@ public partial class AgentExecutionsController : ControllerBase
     {
         var taskResolution = await _taskAppService.ResolveTaskAsync(
             new ExecutionTaskRequest(
-                ExecutionId: id,
-                AgentType: request.AgentType,
                 TaskId: request.TaskId,
                 ProjectId: request.ProjectId,
                 Input: request.Input,
