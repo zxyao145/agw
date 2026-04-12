@@ -1,6 +1,128 @@
 # Agw
 
-Agw is a modular monolith for managing LLM agents, agentflows, providers, tools, skills, projects/tasks, jobs, and external-agent execution. It uses an ASP.NET Core + EF Core backend and a Next.js frontend.
+[中文文档](README.zh-CN.md) | [Documentation](README.md)
+
+
+
+Agw is an AssS (Agent as a Service) platform and agent gateway that allows users to create custom agents and integrate existing external agents (such as Claude Code and Codex).
+
+In addition, Agw offers Cron Job and Agent Workflow capabilities, which can be used to create scheduled tasks, recurring tasks, and orchestrate Agents (currently, only simple orchestration is supported).
+
+This project is primarily based on [MAF](https://github.com/microsoft/agent-framework).
+
+## Tech Stack
+
+Backend:
+
+- .NET 10
+- ASP.NET Core
+- Entity Framework Core
+- Microsoft.Agents.AI
+- Serilog + OpenTelemetry
+
+Frontend:
+
+- Next.js 16 App Router
+- React 19
+- Tailwind CSS 4
+- Shadcn 4 （Radix UI）
+
+## Architecture
+
+Agw uses a domain-based, modular monolithic architecture. `src/backend/Agw.Host` serves as the entry point for the ASP.NET Core application and is responsible for assembling the various modules; the frontend is located in the `src/frontend/web` directory.
+
+A typical backend flow is:
+
+```text
+Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUnitOfWork -> EF Core
+```
+
+Module Overview:
+
+```mermaid
+flowchart BT
+    Agw.Host
+    Agw.Infrastructure
+
+    subgraph Core
+        direction BT
+        Agw.Jobs
+        Agw.A2A
+        Agw.Agents
+        Agw.Providers
+        Agw.Skills
+        Agw.Tools
+        Agw.Integrations
+        Agw.Tasks
+
+        %% Relationships
+        Agw.Agents --> Agw.Jobs
+        Agw.Agents --> Agw.A2A
+
+
+        Agw.Providers --> Agw.Agents
+        Agw.Skills --> Agw.Agents
+        Agw.Tools --> Agw.Agents
+        Agw.Integrations --> Agw.Agents
+
+
+        Agw.Tasks --> Agw.Agents
+        Agw.Tasks --> Agw.Jobs
+        Agw.Tasks --> Agw.A2A
+
+    end
+
+    subgraph Support
+        Agw.Setup[Agw.Setup]
+    end
+
+    Agw.Shared 
+
+    Agw.Shared --> Core
+
+    Core --> Agw.Infrastructure
+    Support --> Agw.Infrastructure
+
+    Agw.Infrastructure --> Agw.Host
+
+
+    %% styles
+    style Core fill:none,stroke:#333,stroke-dasharray: 5 5
+    style Support fill:none,stroke:#333,stroke-dasharray: 5 5
+```
+
+- [x] Agw.Providers  
+  Used to manage models and their providers.
+
+- [x] Agw.Agents  
+  Integrate external agents (such as Claude Code and Codex) and manage custom agents. 
+  Custom agents can support the integration of tools, MCPs, and skills.
+
+- [x] Agw.Tools  
+  Includes built-in Tool and MCP Tool management modules.
+
+- [x] Agw.Skills  
+  Skill Management Module.
+
+- [x] Agw.Integrations  
+  External App Integration Module.
+
+- [x] Agw.Tasks  
+  Agent Conversation and Session Management Module. 
+  In AGW, each session corresponds to a task, and each task is associated with a project.
+
+- [x] Agw.Jobs  
+  Provides the ability to schedule recurring, periodic, and one-time tasks, with support for Cron expressions.
+  
+  - One-time task: Once created, it will be disabled after being executed once.
+  
+  - Scheduled task: Runs at a specified time and is disabled after execution.
+  
+  - Scheduled tasks: Tasks that are repeated at specified times on a regular basis.
+
+- [ ] Agw.A2A
+
+Provides an interface for the A2A protocol to external systems.
 
 ## Documentation
 
@@ -9,96 +131,6 @@ The detailed project docs live under [`docs/`](docs/):
 - [Development Guide](docs/1.%20Development.md): local setup, build/test/lint/format commands, and git hook configuration.
 - [Architecture](docs/2.%20Architecture.md): system overview, backend/frontend structure, and core domain concepts.
 - [Module Organization](docs/3.%20Module%20Organization.md): layering principles used inside modules.
-
-## Architecture Snapshot
-
-Agw is organized as a domain-oriented modular monolith. `src/backend/Agw.Host` is the composition root that wires the backend modules together, while the frontend lives under `src/frontend/web`.
-
-A typical backend flow is:
-
-```text
-Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUnitOfWork -> EF Core
-```
-
-Backend modules:
-
-```text
-src/backend/
-  Agw.Host/            # ASP.NET Core entry point, DI, OpenAPI, hosted services
-  Agw.A2A/             # A2A protocol types and route builders
-  Agw.Agents/          # Agents, agentflows, runtime execution services
-  Agw.Infrastructure/  # DbContext, repositories, migrations, seeding
-  Agw.Jobs/            # Scheduled jobs and execution logs
-  Agw.Providers/       # Models, providers, model-provider links, auth configs
-  Agw.Shared/          # Shared entities, contracts, repository abstractions, utilities
-  Agw.Skills/          # Skill archive validation, storage, and agent-skill relations
-  Agw.Tasks/           # Projects, project tasks, task records, file/task APIs
-  Agw.Tools/           # Tool discovery, metadata, and AI tool registry/factory
-```
-
-Frontend route groups:
-
-```text
-src/frontend/web/src/app/(app)/
-  (agents)/            # agents, agentflows, MCP servers, skills
-  (external-agents)/   # Claude Code UI
-  (interface)/         # chat UI
-  (overview)/          # dashboard, traces
-  (providers)/         # models, providers, model-providers
-  (tasks)/             # projects, jobs
-  integrations/        # integration management
-```
-
-## Quick Start
-
-### First clone
-
-Configure the repo hooks once:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-### Backend
-
-Run from the repo root:
-
-```bash
-dotnet restore Agw.slnx
-dotnet build Agw.slnx
-dotnet run --project src/backend/Agw.Host
-dotnet watch --project src/backend/Agw.Host
-dotnet test Agw.slnx
-dotnet format
-```
-
-Notes:
-
-- The development host runs on `http://localhost:5015` by default.
-- `Agw.slnx` includes `Agw.A2A.Tests`, `Agw.Agents.Tests`, `Agw.Tasks.Tests`, and `Agw.Skills.Tests`.
-- `tests/Agw.Jobs.Tests` exists in the repo but is not currently included in `Agw.slnx`; run it directly if you change jobs code.
-
-### Frontend
-
-Run from `src/frontend/web`:
-
-```bash
-pnpm install
-pnpm dev
-pnpm build
-pnpm start
-pnpm lint
-pnpm lint:fix
-pnpm format
-pnpm format:check
-pnpm gen:openapi
-```
-
-Notes:
-
-- The frontend dev server runs on `http://localhost:3000`.
-- `/api/*` and `/openapi/*` are proxied to the backend base URL from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015`.
-- Frontend linting/formatting use `oxlint` and `oxfmt`.
 
 ## Configuration
 
@@ -121,42 +153,3 @@ Primary backend settings are in [`src/backend/Agw.Host/appsettings.json`](src/ba
 - Supported database providers are `sqlite` and `postgres`.
 - Keep secrets out of committed config files; prefer environment-variable overrides.
 - After backend contract changes, regenerate `src/frontend/web/src/api/openapi.d.ts` with `pnpm gen:openapi`.
-
-## Development Notes
-
-### Migrations
-
-Do not add or apply EF Core migrations automatically. When needed:
-
-```bash
-dotnet ef migrations add <MigrationName> \
-  -p src/backend/Agw.Infrastructure \
-  -s src/backend/Agw.Host
-
-dotnet ef database update \
-  -p src/backend/Agw.Infrastructure \
-  -s src/backend/Agw.Host
-```
-
-### Current A2A Status
-
-The `Agw.A2A` module exists in the repository, but `.AddA2A(...)` and `app.MapAgwA2A(...)` are currently commented out in `src/backend/Agw.Host/Program.cs`. Do not assume the A2A endpoints are live until that wiring is enabled.
-
-## Tech Stack
-
-Backend:
-
-- .NET 10
-- ASP.NET Core
-- Entity Framework Core
-- Microsoft.Agents.AI
-- Serilog + OpenTelemetry
-
-Frontend:
-
-- Next.js 16 App Router
-- React 19
-- Tailwind CSS 4
-- Radix UI
-- TanStack React Query 5
-- `openapi-fetch`

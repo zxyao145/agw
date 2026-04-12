@@ -25,7 +25,7 @@
   <Folder Name="/4.Shared/">
     <Project Path="src/backend/Agw.Shared/Agw.Shared.csproj" />
   </Folder>
-  <Folder Name="/5.Assistant/">
+  <Folder Name="/5.Support/">
     <Project Path="src/backend/Agw.Setup/Agw.Setup.csproj" />
   </Folder>
   <Folder Name="/Tests/">

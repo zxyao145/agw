@@ -18,6 +18,7 @@ Agw.Agents/            # Agent definitions, agentflows, MCP tools, execution ser
 Agw.Providers/         # LLM models, providers, model-providers, auth configs
 Agw.Tasks/             # Projects, tasks, session records, chat history
 Agw.Jobs/              # Background jobs, project leases
+Agw.Integrations/      # OAuth integrations, app definitions/instances, integration tools
 Agw.A2A/               # A2A protocol implementation for agent discovery/communication
 Agw.Skills/            # Skill archive management (ZIP uploads, SKILL.md format)
 Agw.Tools/             # Tool discovery and registration system
@@ -49,6 +50,12 @@ Agw.Tools/             # Tool discovery and registration system
 - `TaskRecord` - Conversation persistence with session tracking
 - `ProjectLease` - Distributed lock for concurrent task execution
 
+**Integration System:**
+
+- `AppDefinition` - Registered integration app metadata and capability descriptor
+- `AppInstance` - User/workspace-scoped authorized integration connection
+- `OAuthAuthorizationToken` - OAuth state/token persistence for authorization flow
+
 ### Entity Relationships
 
 ```
@@ -67,6 +74,10 @@ AgentflowEdge (Source/Target)
 Project → ProjectTask → TaskRecord
              ↓
         ProjectLease
+
+AppDefinition → AppInstance
+                 ↓
+     OAuthAuthorizationToken
 ```
 
 ### Core Services

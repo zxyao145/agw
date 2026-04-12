@@ -4,7 +4,7 @@ This file gives coding agents the minimum repo context needed to work safely in 
 
 ## Project Overview
 
-Agw is a modular ASP.NET Core backend plus a Next.js frontend for managing agents, agentflows, providers, tools, skills, projects/tasks, jobs, and external-agent/chat execution. The backend targets `.NET 10.0`, uses EF Core for persistence, and wires modules together from `src/backend/Agw.Host/Program.cs`.
+Agw is a modular ASP.NET Core backend plus a Next.js frontend for managing agents, agentflows, providers, tools, skills, projects/tasks, jobs, integrations, and external-agent/chat execution. The backend targets `.NET 10.0`, uses EF Core for persistence, and wires modules together from `src/backend/Agw.Host/Program.cs`.
 
 ## Repository Map
 
@@ -15,6 +15,7 @@ Agw.Host/            # ASP.NET Core entry point, OpenAPI, static files, websocke
 Agw.A2A/             # A2A protocol types and route builders
 Agw.Agents/          # Agents, agentflows, runtime execution services
 Agw.Infrastructure/  # EF Core DbContext, repositories, migrations, seeding
+Agw.Integrations/    # OAuth integrations, app definitions/instances, integration tools
 Agw.Jobs/            # Scheduled jobs, execution logs, hosted scheduler
 Agw.Providers/       # Models, providers, model-provider links, auth configs
 Agw.Shared/          # Shared entities, contracts, repository abstractions, utilities
@@ -65,6 +66,8 @@ src/types/                   # Shared frontend types
 - `src/backend/Agw.Agents/Application/Agents/AgentRuntimeService.cs`: builds runtime agents from persisted agent, provider, skill, and tool configuration.
 - `src/backend/Agw.Agents/Application/Agentflows/AgentflowRuntimeService.cs`: executes multi-agent workflows for the supported orchestration patterns.
 - `src/backend/Agw.Jobs/HostedService/JobHostedService.cs`: in-memory scheduler backed by persistent job state and execution logs.
+- `src/backend/Agw.Integrations/Controllers/OauthController.cs`: OAuth authorization start/callback endpoints for integration connections.
+- `src/backend/Agw.Integrations/Tools/GitHub/GitHubTools.cs`: integration-backed GitHub tool implementations exposed to runtime agents.
 - `src/backend/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and manages extracted skill content under `wwwroot/skills/`.
 - `src/backend/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations and exposes them as runtime AI tools.
 - `src/backend/Agw.Tasks/Application/ProjectTaskAppService.cs`: coordinates project task persistence, chat history, and task lifecycle operations.
@@ -78,6 +81,7 @@ src/types/                   # Shared frontend types
 - `Skill`: uploaded skill archive with validated `SKILL.md` metadata plus agent-skill relations.
 - `Project`, `ProjectTask`, `TaskRecord`: project-scoped execution, persisted task state, and chat history.
 - `Job`, `JobLog`: scheduled background execution and per-run logging.
+- `AppDefinition`, `AppInstance`, `OAuthAuthorizationToken`: integration catalog, authorized app connections, and OAuth authorization state/token persistence.
 
 ## Build, Run, And Test
 
