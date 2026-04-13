@@ -1,5 +1,6 @@
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Services;
+using Agw.Tasks.Application.Files;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -12,26 +13,44 @@ public class FilesController : ControllerBase
 {
     private readonly ILogger<FilesController> _logger;
     private readonly IGitCommandService _gitCommandService;
+    private readonly IPathSecurityService _pathSecurityService;
 
-    public FilesController(ILogger<FilesController> logger, IGitCommandService gitCommandService)
+    public FilesController(
+        ILogger<FilesController> logger,
+        IGitCommandService gitCommandService,
+        IPathSecurityService pathSecurityService)
     {
         _logger = logger;
         _gitCommandService = gitCommandService;
+        _pathSecurityService = pathSecurityService;
+    }
+
+    private bool TryResolveRequiredPath(string? path, out string normalizedPath, out IActionResult? errorResult)
+    {
+        normalizedPath = string.Empty;
+        errorResult = null;
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            errorResult = BadRequest(new { error = "Path parameter is required" });
+            return false;
+        }
+
+        if (!_pathSecurityService.TryResolvePath(path, out normalizedPath))
+        {
+            errorResult = BadRequest(new { error = "Invalid path" });
+            return false;
+        }
+
+        return true;
     }
 
     [HttpGet("list")]
     public async Task<IActionResult> ListAsync([FromQuery] string? path, [FromQuery] bool diff = false, [FromQuery] bool recursive = false)
     {
-        if (string.IsNullOrEmpty(path))
+        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
         {
-            return BadRequest(new { error = "Path parameter is required" });
-        }
-
-        // Security: Prevent path traversal attacks
-        var normalizedPath = Path.GetFullPath(path);
-        if (normalizedPath.Contains(".."))
-        {
-            return BadRequest(new { error = "Invalid path" });
+            return errorResult!;
         }
 
         try
@@ -209,16 +228,9 @@ public class FilesController : ControllerBase
     [HttpGet("read")]
     public async Task<IActionResult> ReadAsync([FromQuery] string? path)
     {
-        if (string.IsNullOrEmpty(path))
+        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
         {
-            return BadRequest(new { error = "Path parameter is required" });
-        }
-
-        // Security: Prevent path traversal attacks
-        var normalizedPath = Path.GetFullPath(path);
-        if (normalizedPath.Contains(".."))
-        {
-            return BadRequest(new { error = "Invalid path" });
+            return errorResult!;
         }
 
         try
@@ -246,16 +258,9 @@ public class FilesController : ControllerBase
     [HttpGet("diff")]
     public async Task<IActionResult> DiffAsync([FromQuery] string? path)
     {
-        if (string.IsNullOrEmpty(path))
+        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
         {
-            return BadRequest(new { error = "Path parameter is required" });
-        }
-
-        // Security: Prevent path traversal attacks
-        var normalizedPath = Path.GetFullPath(path);
-        if (normalizedPath.Contains(".."))
-        {
-            return BadRequest(new { error = "Invalid path" });
+            return errorResult!;
         }
 
         try
@@ -299,16 +304,9 @@ public class FilesController : ControllerBase
     [HttpDelete("delete")]
     public async Task<IActionResult> DeleteAsync([FromQuery] string? path)
     {
-        if (string.IsNullOrEmpty(path))
+        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
         {
-            return BadRequest(new { error = "Path parameter is required" });
-        }
-
-        // Security: Prevent path traversal attacks
-        var normalizedPath = Path.GetFullPath(path);
-        if (normalizedPath.Contains(".."))
-        {
-            return BadRequest(new { error = "Invalid path" });
+            return errorResult!;
         }
 
         try
@@ -345,16 +343,9 @@ public class FilesController : ControllerBase
     [HttpPost("reset")]
     public async Task<IActionResult> ResetAsync([FromQuery] string? path)
     {
-        if (string.IsNullOrEmpty(path))
+        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
         {
-            return BadRequest(new { error = "Path parameter is required" });
-        }
-
-        // Security: Prevent path traversal attacks
-        var normalizedPath = Path.GetFullPath(path);
-        if (normalizedPath.Contains(".."))
-        {
-            return BadRequest(new { error = "Invalid path" });
+            return errorResult!;
         }
 
         try
@@ -515,47 +506,35 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("search")]
-    public async Task<IActionResult> SearchAsync(
-        [FromQuery] string path,
+    public Task<IActionResult> SearchAsync(
+        [FromQuery] string? path,
         [FromQuery] string? keyword,
         [FromQuery] int limit = 10,
         [FromQuery] bool recursive = true)
     {
-        if (string.IsNullOrEmpty(path))
+        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
         {
-            return BadRequest(new { error = "Path parameter is required" });
+            return Task.FromResult(errorResult!);
         }
+
         keyword ??= "";
-        // Security: Prevent path traversal attacks
-        var normalizedPath = Path.GetFullPath(path);
-        if (normalizedPath.Contains(".."))
-        {
-            return BadRequest(new { error = "Invalid path" });
-        }
 
         try
         {
             if (!Directory.Exists(normalizedPath))
             {
-                return NotFound(new { error = "Directory not found" });
+                return Task.FromResult<IActionResult>(NotFound(new { error = "Directory not found" }));
             }
 
             var results = new List<FileSearchResult>();
-
-            // Search for files and directories matching the keyword
-            await Task.Run(() =>
+            if (recursive)
             {
-                if (recursive)
-                {
-                    // Recursive search with dot-folder filtering
-                    SearchFilesRecursive(normalizedPath, normalizedPath, keyword, limit, results);
-                }
-                else
-                {
-                    // Non-recursive search: only direct children
-                    SearchFilesNonRecursive(normalizedPath, keyword, limit, results);
-                }
-            });
+                SearchFilesRecursive(normalizedPath, normalizedPath, keyword, limit, results);
+            }
+            else
+            {
+                SearchFilesNonRecursive(normalizedPath, keyword, limit, results);
+            }
 
             // Sort: directories first, then by relative path
             results = results
@@ -564,17 +543,17 @@ public class FilesController : ControllerBase
                 .Take(limit)
                 .ToList();
 
-            return Ok(new FileSearchResponse { Results = results });
+            return Task.FromResult<IActionResult>(Ok(new FileSearchResponse { Results = results }));
         }
         catch (UnauthorizedAccessException ex)
         {
             _logger.LogError(ex, "Access denied searching directory: {Path}", normalizedPath);
-            return StatusCode(403, new { error = "Access denied", details = ex.Message });
+            return Task.FromResult<IActionResult>(StatusCode(403, new { error = "Access denied", details = ex.Message }));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error searching directory: {Path}", normalizedPath);
-            return StatusCode(500, new { error = "Failed to search directory", details = ex.Message });
+            return Task.FromResult<IActionResult>(StatusCode(500, new { error = "Failed to search directory", details = ex.Message }));
         }
     }
 }

@@ -36,7 +36,7 @@ using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Application.AgentRun;
 
-public class AgentRuntimeService : RuntimServiceBase, IAgentRuntimeService
+public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly AgentAppService _agentAppService;
@@ -522,7 +522,7 @@ public class AgentRuntimeService : RuntimServiceBase, IAgentRuntimeService
         }, cancellationToken);
         if (aiAgent == null)
         {
-            throw new Exception("aiAgent not found");
+            throw new InvalidOperationException("AI agent could not be created for execution.");
         }
 
         try

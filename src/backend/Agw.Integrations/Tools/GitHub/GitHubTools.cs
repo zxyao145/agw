@@ -34,7 +34,7 @@ public class GitHubTools
         var appInstance = await GetAppInfoAsync();
         if (appInstance == null || appInstance.AuthorizationToken == null)
         {
-            throw new Exception("not found app oauth token");
+            throw new InvalidOperationException("GitHub OAuth token was not found.");
         }
 
         using var scope = IocUtil.ServiceProvider.CreateScope();

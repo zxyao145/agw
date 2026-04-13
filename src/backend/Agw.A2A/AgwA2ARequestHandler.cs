@@ -648,7 +648,9 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     {
         var sp = _serviceScopeFactory.CreateScope().ServiceProvider;
         var ahf = sp.GetRequiredService<AgentHandlerFactory>();
-        var ah = (await ahf.CreateAsync(agentName)) ?? throw new Exception($"No agent handler configured for agent '{agentName}'.");
+        var ah = (await ahf.CreateAsync(agentName)) ?? throw new A2AException(
+            $"No agent handler configured for agent '{agentName}'.",
+            A2AErrorCode.InvalidAgentResponse);
         return ah;
     }
 

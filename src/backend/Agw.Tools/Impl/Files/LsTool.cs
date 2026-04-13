@@ -51,11 +51,11 @@ internal class LsTool : IAgwTool
 
         if (string.IsNullOrWhiteSpace(toolParams.Directory))
         {
-            throw new Exception("toolParams.Directory IsNullOrWhiteSpace");
+            throw new ArgumentException("Directory is required.", nameof(toolParams.Directory));
         }
         if (!Directory.Exists(toolParams.Directory))
         {
-            throw new Exception("toolParams.Directory not exists");
+            throw new DirectoryNotFoundException($"Directory '{toolParams.Directory}' does not exist.");
         }
 
         var files = Directory.GetFiles(toolParams.Directory, toolParams.SearchPattern, toolParams.Recursion ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);

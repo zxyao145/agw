@@ -35,11 +35,11 @@ internal class ReadFileTool : IAgwTool
 
         if (string.IsNullOrWhiteSpace(readFileParam.FilePath))
         {
-            throw new Exception("readFileParam.FileName IsNullOrWhiteSpace");
+            throw new ArgumentException("File path is required.", nameof(readFileParam.FilePath));
         }
         if (!File.Exists(readFileParam.FilePath))
         {
-            throw new Exception($"file {readFileParam.FilePath} not exists");
+            throw new FileNotFoundException($"File '{readFileParam.FilePath}' does not exist.", readFileParam.FilePath);
         }
         var content = File.ReadAllText(readFileParam.FilePath);
 

@@ -1,6 +1,7 @@
 using Agw.Domain.Services;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Tasks.Application;
+using Agw.Tasks.Application.Files;
 using Agw.Tasks.Domain.Services;
 
 using Microsoft.Agents.AI;
@@ -20,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<ProjectTaskAppService>();
         services.AddScoped<ProjectResolver>();
         services.AddScoped<TaskRecordDomainService>();
+        services.AddSingleton<IPathSecurityService, PathSecurityService>();
 
         services.AddSingleton<EfCoreChatHistoryProvider>();
         services.AddSingleton<ChatHistoryProvider>(sp =>
