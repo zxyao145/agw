@@ -1,6 +1,6 @@
-using Agw.Tasks.Application.Files;
+using Agw.Files.Application.Files;
 
-namespace Agw.Tasks.Tests;
+namespace Agw.Files.Tests;
 
 public class PathSecurityServiceTests
 {

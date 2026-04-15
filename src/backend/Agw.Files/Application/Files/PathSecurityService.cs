@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 
-namespace Agw.Tasks.Application.Files;
+namespace Agw.Files.Application.Files;
 
 public sealed class PathSecurityService : IPathSecurityService
 {

@@ -12,6 +12,7 @@ Agw is a modular ASP.NET Core backend plus a Next.js frontend for managing agent
 
 ```text
 Agw.Host/            # ASP.NET Core entry point, OpenAPI, static files, websockets, DI, DB seeding
+Agw.Files/           # File-management APIs, path security, file request validation, error mapping
 Agw.A2A/             # A2A protocol types and route builders
 Agw.Agents/          # Agents, agentflows, runtime execution services
 Agw.Infrastructure/  # EF Core DbContext, repositories, migrations, seeding
@@ -20,7 +21,7 @@ Agw.Jobs/            # Scheduled jobs, execution logs, hosted scheduler
 Agw.Providers/       # Models, providers, model-provider links, auth configs
 Agw.Shared/          # Shared entities, contracts, repository abstractions, utilities
 Agw.Skills/          # Skill archive validation, storage, and agent-skill relations
-Agw.Tasks/           # Projects, project tasks, task records, file/task APIs
+Agw.Tasks/           # Projects, project tasks, task records, and task APIs
 Agw.Tools/           # Tool discovery, metadata, and AI tool factory/registry
 ```
 

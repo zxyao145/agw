@@ -1,4 +1,4 @@
-namespace Agw.Tasks.Application.Files;
+namespace Agw.Files.Application.Files;
 
 public interface IPathSecurityService
 {

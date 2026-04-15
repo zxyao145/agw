@@ -1,11 +1,11 @@
+using Agw.Files.Application.Files;
+using Agw.Files.Controllers;
 using Agw.Shared.Services;
-using Agw.Tasks.Application.Files;
-using Agw.Tasks.Controllers;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Agw.Tasks.Tests;
+namespace Agw.Files.Tests;
 
 public class FilesControllerPathSecurityTests
 {
@@ -36,7 +36,7 @@ public class FilesControllerPathSecurityTests
         return new FilesController(
             NullLogger<FilesController>.Instance,
             new FakeGitCommandService(),
-            pathSecurityService);
+            new FilePathRequestValidator(pathSecurityService));
     }
 
     private sealed class RejectingPathSecurityService : IPathSecurityService

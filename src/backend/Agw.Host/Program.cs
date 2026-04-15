@@ -2,6 +2,8 @@ using Agw.A2A;
 using Agw.A2A.Extensions;
 using Agw.Agents;
 using Agw.Agents.Controllers.Manager;
+using Agw.Files;
+using Agw.Files.Controllers;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
 using Agw.Integrations.Controllers;
@@ -104,6 +106,7 @@ try
         })
         .AddApplicationPart(typeof(AgentsController).Assembly)
         .AddApplicationPart(typeof(ProjectsController).Assembly)
+        .AddApplicationPart(typeof(FilesController).Assembly)
         .AddApplicationPart(typeof(SkillsController).Assembly)
         .AddApplicationPart(typeof(JobsController).Assembly)
         .AddApplicationPart(typeof(SetupController).Assembly)
@@ -119,6 +122,7 @@ try
     builder.Services
         .AddA2A(builder.Configuration)
         .AddAgents(builder.Configuration)
+        .AddFiles(builder.Configuration)
         .AddInfrastructure(builder.Configuration)
         .AddJobs(builder.Configuration)
         .AddProviders(builder.Configuration)
@@ -170,6 +174,7 @@ try
     app.UseStaticFiles();
     app.UseMiddleware<InitializationGuardMiddleware>();
     app.UseMiddleware<ApiKeyGuardMiddleware>();
+    app.UseMiddleware<FileEndpointExceptionMappingMiddleware>();
 
     var a2AServerOptions = app.Services
         .GetRequiredService<Microsoft.Extensions.Options.IOptions<AgwA2AServerOptions>>()
