@@ -1,3 +1,5 @@
+using Agw.Shared.Exceptions;
+
 using ModelContextProtocol.Client;
 
 namespace Agw.Agents.Application.Agents;
@@ -20,7 +22,7 @@ public static class McpToolServerToolClient
         {
             "stdio" => CreateStdioTransport(server),
             "http" or "sse" => CreateHttpTransport(server),
-            _ => throw new NotSupportedException($"Transport type '{server.TransportType}' is not supported")
+            _ => throw new AgwException(ErrorCodes.UnsupportedTransportType, $"Transport type '{server.TransportType}' is not supported")
         };
     }
 
@@ -28,7 +30,7 @@ public static class McpToolServerToolClient
     {
         if (string.IsNullOrWhiteSpace(server.Command))
         {
-            throw new InvalidOperationException($"MCP server '{server.Id}' uses stdio transport but has no command configured");
+            throw new AgwException(ErrorCodes.McpStdioCommandRequired, $"MCP server '{server.Id}' uses stdio transport but has no command configured");
         }
 
         var options = new StdioClientTransportOptions
@@ -56,7 +58,7 @@ public static class McpToolServerToolClient
     {
         if (string.IsNullOrWhiteSpace(server.Url))
         {
-            throw new InvalidOperationException($"MCP server '{server.Id}' uses HTTP/SSE transport but has no URL configured");
+            throw new AgwException(ErrorCodes.McpHttpUrlRequired, $"MCP server '{server.Id}' uses HTTP/SSE transport but has no URL configured");
         }
 
         var options = new HttpClientTransportOptions

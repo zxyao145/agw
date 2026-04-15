@@ -2,6 +2,7 @@ using System.Reflection;
 
 using Agw.Domain.Tools;
 using Agw.Shared.Contracts.Tools.Abstractions;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Models;
 
 using Microsoft.Extensions.AI;
@@ -218,7 +219,7 @@ public class ToolRegistryService
         else
         {
             instance = Activator.CreateInstance(type)
-                ?? throw new InvalidOperationException($"Cannot create instance of {type.FullName}");
+                ?? throw new AgwException(ErrorCodes.CannotCreateInstance, $"Cannot create instance of {type.FullName}");
         }
 
         return (IAgwTool)instance;

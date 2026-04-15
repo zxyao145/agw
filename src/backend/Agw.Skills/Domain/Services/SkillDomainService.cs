@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Exceptions;
 
 namespace Agw.Domain.Services.Skills;
 
@@ -59,18 +60,18 @@ public partial class SkillDomainService
     {
         if (string.IsNullOrWhiteSpace(name))
         {
-            throw new InvalidOperationException("Skill name is required.");
+            throw new AgwException(ErrorCodes.SkillNameRequired);
         }
 
         var trimmed = name.Trim();
         if (trimmed.Length > MaxNameLength)
         {
-            throw new InvalidOperationException($"Skill name must be {MaxNameLength} characters or fewer.");
+            throw new AgwException(ErrorCodes.SkillNameTooLong, $"Skill name must be {MaxNameLength} characters or fewer.");
         }
 
         if (!SkillNameRegex().IsMatch(trimmed))
         {
-            throw new InvalidOperationException("Skill name must contain only lowercase letters, numbers, and single hyphens.");
+            throw new AgwException(ErrorCodes.SkillNameInvalidFormat, "Skill name must contain only lowercase letters, numbers, and single hyphens.");
         }
     }
 
@@ -78,12 +79,12 @@ public partial class SkillDomainService
     {
         if (string.IsNullOrWhiteSpace(description))
         {
-            throw new InvalidOperationException("Skill description is required.");
+            throw new AgwException(ErrorCodes.SkillDescriptionRequired);
         }
 
         if (description.Trim().Length > MaxDescriptionLength)
         {
-            throw new InvalidOperationException($"Skill description must be {MaxDescriptionLength} characters or fewer.");
+            throw new AgwException(ErrorCodes.SkillDescriptionTooLong, $"Skill description must be {MaxDescriptionLength} characters or fewer.");
         }
     }
 }

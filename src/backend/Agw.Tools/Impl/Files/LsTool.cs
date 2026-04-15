@@ -1,4 +1,5 @@
 using Agw.Shared.Contracts.Tools.Abstractions;
+using Agw.Shared.Exceptions;
 
 using Microsoft.Extensions.AI;
 
@@ -51,11 +52,11 @@ internal class LsTool : IAgwTool
 
         if (string.IsNullOrWhiteSpace(toolParams.Directory))
         {
-            throw new ArgumentException("Directory is required.", nameof(toolParams.Directory));
+            throw new AgwException(ErrorCodes.DirectoryRequired);
         }
         if (!Directory.Exists(toolParams.Directory))
         {
-            throw new DirectoryNotFoundException($"Directory '{toolParams.Directory}' does not exist.");
+            throw new AgwException(ErrorCodes.DirectoryNotFound, $"Directory '{toolParams.Directory}' does not exist.");
         }
 
         var files = Directory.GetFiles(toolParams.Directory, toolParams.SearchPattern, toolParams.Recursion ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);

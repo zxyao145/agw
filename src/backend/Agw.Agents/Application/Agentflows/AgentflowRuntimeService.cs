@@ -5,6 +5,7 @@ using Agw.Agents.Application.AgentRun;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Models;
 
@@ -411,7 +412,7 @@ public class AgentflowRuntimeService : RuntimeServiceBase
                 .AddParticipants(aiAgents.ToArray())
                 .Build(),
             AgentflowOrchestrationPattern.Handoff => DxAgentWorkflowBuilder.BuildHandoff(aiAgents, agentflowEdges, nodeIdToAgent),
-            AgentflowOrchestrationPattern.Magentic => throw new NotSupportedException("Magentic not supported now"),
+            AgentflowOrchestrationPattern.Magentic => throw new AgwException(ErrorCodes.MagenticNotSupported, "Magentic not supported now"),
             _ => null
         };
     }

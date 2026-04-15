@@ -1,5 +1,6 @@
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Exceptions;
 
 namespace Agw.Skills.Tests;
 
@@ -31,9 +32,10 @@ public class SkillDomainServiceTests
     [InlineData("-expense")]
     [InlineData("expense-")]
     [InlineData("expense--report")]
-    public void Validate_InvalidSkillName_ThrowsInvalidOperationException(string name)
+    public void Validate_InvalidSkillName_ThrowsAgwException(string name)
     {
-        Assert.Throws<InvalidOperationException>(() => _service.Validate(name, "desc"));
+        var exception = Assert.Throws<AgwException>(() => _service.Validate(name, "desc"));
+        Assert.Equal(ErrorCodes.SkillNameInvalidFormat.Code, exception.Code);
     }
 
     [Fact]

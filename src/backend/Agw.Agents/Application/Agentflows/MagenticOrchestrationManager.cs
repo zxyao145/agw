@@ -1,3 +1,5 @@
+using Agw.Shared.Exceptions;
+
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -25,7 +27,7 @@ public class MagenticOrchestrationManager : RoundRobinGroupChatManager
     {
         if (agents.Count < 2)
         {
-            throw new ArgumentException("Magentic pattern requires at least 2 agents (orchestrator + workers)", nameof(agents));
+            throw new AgwException(ErrorCodes.MagenticRequiresAtLeastTwoAgents, "Magentic pattern requires at least 2 agents (orchestrator + workers)");
         }
 
         MaximumIterationCount = maxRounds;

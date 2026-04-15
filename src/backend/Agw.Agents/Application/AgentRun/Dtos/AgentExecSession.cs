@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Models;
 
@@ -45,15 +46,15 @@ public sealed class AgentExecSession : IAsyncDisposable
         string? taskDescription = null,
         string? systemPrompt = null)
     {
-        Agent = agent ?? throw new ArgumentNullException(nameof(agent));
-        Session = thread ?? throw new ArgumentNullException(nameof(thread));
+        Agent = agent ?? throw new AgwException(ErrorCodes.InvalidParam, "agent cannot be null.");
+        Session = thread ?? throw new AgwException(ErrorCodes.InvalidParam, "thread cannot be null.");
         _projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         _contextId = contextId;
         _taskId = taskId ?? Guid.NewGuid().ToString();
         _agentType = agentType;
         _agentId = agentId;
         _agentName = agentName;
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _logger = logger ?? throw new AgwException(ErrorCodes.InvalidParam, "logger cannot be null.");
         _taskTitle = taskTitle;
         _taskDescription = taskDescription;
         _systemPrompt = systemPrompt;

@@ -1,3 +1,5 @@
+using Agw.Shared.Exceptions;
+
 namespace Agw.Agents.Application.Execution;
 
 /// <summary>
@@ -11,14 +13,14 @@ public sealed class ActiveTurn(
     CancellationTokenSource cancellationTokenSource,
     Action? interruptAction = null) : IAsyncDisposable
 {
-    public Task ExecutionTask { get; } = executionTask ?? throw new ArgumentNullException(nameof(executionTask));
+    public Task ExecutionTask { get; } = executionTask ?? throw new AgwException(ErrorCodes.InvalidParam, "executionTask cannot be null.");
 
     public bool InterruptRequested { get; private set; }
 
     public bool IsCompleted => ExecutionTask.IsCompleted;
 
     private readonly CancellationTokenSource _cancellationTokenSource =
-        cancellationTokenSource ?? throw new ArgumentNullException(nameof(cancellationTokenSource));
+        cancellationTokenSource ?? throw new AgwException(ErrorCodes.InvalidParam, "cancellationTokenSource cannot be null.");
 
     private readonly Action? _interruptAction = interruptAction;
 

@@ -5,6 +5,7 @@ using Agw.Agents.Domain.Entities;
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -68,7 +69,7 @@ public class SkillAppService
 
         if (await _skillRepository.Queryable.AnyAsync(x => x.Name == skill.Name))
         {
-            throw new InvalidOperationException($"Skill '{skill.Name}' already exists.");
+            throw new AgwException(ErrorCodes.SkillAlreadyExists, $"Skill '{skill.Name}' already exists.");
         }
 
         _skillDomainService.PrepareForCreate(skill, user);
@@ -95,12 +96,12 @@ public class SkillAppService
         var normalizedName = name.Trim();
         if (!string.Equals(existing.Name, normalizedName, StringComparison.Ordinal) && archive == null)
         {
-            throw new InvalidOperationException("Updating the skill name requires uploading a new archive so SKILL.md can stay consistent.");
+            throw new AgwException(ErrorCodes.SkillNameUpdateRequiresArchive, "Updating the skill name requires uploading a new archive so SKILL.md can stay consistent.");
         }
 
         if (await _skillRepository.Queryable.AnyAsync(x => x.Id != id && x.Name == normalizedName))
         {
-            throw new InvalidOperationException($"Skill '{normalizedName}' already exists.");
+            throw new AgwException(ErrorCodes.SkillAlreadyExists, $"Skill '{normalizedName}' already exists.");
         }
 
         var originalName = existing.Name;
@@ -216,12 +217,12 @@ public class SkillAppService
     {
         if (archive.Length == 0)
         {
-            throw new InvalidOperationException("Skill archive cannot be empty.");
+            throw new AgwException(ErrorCodes.SkillArchiveCannotBeEmpty);
         }
 
         if (!string.Equals(Path.GetExtension(archive.FileName), ".zip", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Skill archive must be a .zip file.");
+            throw new AgwException(ErrorCodes.SkillArchiveMustBeZip);
         }
 
         var exeRootPath = _webHostEnvironment.ContentRootPath;
@@ -247,7 +248,7 @@ public class SkillAppService
             var extractedSkillRoot = FindSkillRoot(extractionRoot);
             if (extractedSkillRoot == null)
             {
-                throw new InvalidOperationException("The uploaded archive must contain a skill directory with a SKILL.md file.");
+                throw new AgwException(ErrorCodes.SkillArchiveMissingSkillMarkdown, "The uploaded archive must contain a skill directory with a SKILL.md file.");
             }
 
             var targetDirectory = Path.Combine(preparedRoot, skillName);
@@ -286,7 +287,7 @@ public class SkillAppService
             var destinationPath = Path.GetFullPath(Path.Combine(destinationRoot, normalizedPath));
             if (!destinationPath.StartsWith(Path.GetFullPath(destinationRoot), StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("Skill archive contains invalid paths.");
+                throw new AgwException(ErrorCodes.SkillArchiveContainsInvalidPaths);
             }
 
             if (normalizedPath.EndsWith('/'))
@@ -336,13 +337,13 @@ public class SkillAppService
         var normalized = content.Replace("\r\n", "\n");
         if (!normalized.StartsWith("---\n", StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("SKILL.md must start with YAML frontmatter.");
+            throw new AgwException(ErrorCodes.SkillMarkdownMissingFrontmatter);
         }
 
         var secondDelimiterIndex = normalized.IndexOf("\n---\n", 4, StringComparison.Ordinal);
         if (secondDelimiterIndex < 0)
         {
-            throw new InvalidOperationException("SKILL.md frontmatter is incomplete.");
+            throw new AgwException(ErrorCodes.SkillMarkdownIncompleteFrontmatter);
         }
 
         var frontmatter = normalized[4..secondDelimiterIndex];
@@ -417,7 +418,7 @@ public class SkillAppService
         var parentDirectory = Path.GetDirectoryName(targetDirectory);
         if (string.IsNullOrWhiteSpace(parentDirectory))
         {
-            throw new InvalidOperationException("Invalid skill directory path.");
+            throw new AgwException(ErrorCodes.InvalidSkillDirectoryPath);
         }
 
         Directory.CreateDirectory(parentDirectory);

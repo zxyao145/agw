@@ -1,5 +1,7 @@
 using System.Globalization;
 
+using Agw.Shared.Exceptions;
+
 namespace Agw.Tools.Impl.Basic;
 
 /// <summary>
@@ -57,7 +59,7 @@ public static class BasicTools
     {
         if (b == 0)
         {
-            throw new DivideByZeroException("Cannot divide by zero");
+            throw new AgwException(ErrorCodes.CannotDivideByZero);
         }
         return a / b;
     }

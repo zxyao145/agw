@@ -2,6 +2,7 @@ using Agw.Jobs.Application.Services;
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Domain.Enums;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -41,7 +42,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
 
             if (!exists)
             {
-                throw new InvalidOperationException($"Job not found: {jobId}");
+                throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
             }
 
             return false;
@@ -63,7 +64,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
     public async Task MarkSucceededAsync(Guid jobId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
     {
         var task = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
-            ?? throw new InvalidOperationException($"Job not found: {jobId}");
+            ?? throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
 
         task.RetryCount = 0;
         task.LastError = null;
@@ -88,7 +89,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
     public async Task MarkRetryAsync(Guid jobId, DateTimeOffset nextRunTime, int retryCount, string errorMessage, CancellationToken cancellationToken)
     {
         var task = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
-            ?? throw new InvalidOperationException($"Job not found: {jobId}");
+            ?? throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
 
         task.Status = JobStatus.Pending;
         task.RetryCount = retryCount;
@@ -103,7 +104,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
     public async Task MarkFailedAsync(Guid jobId, int retryCount, string errorMessage, CancellationToken cancellationToken)
     {
         var task = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
-            ?? throw new InvalidOperationException($"Job not found: {jobId}");
+            ?? throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
 
         task.Status = JobStatus.Paused;
         task.IsEnabled = false;

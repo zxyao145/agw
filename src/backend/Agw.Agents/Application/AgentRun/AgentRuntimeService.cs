@@ -13,6 +13,7 @@ using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Models;
 using Agw.Shared.Utils;
@@ -186,7 +187,7 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
         {
             ProviderType.OpenAI => CreateOpenAiAgent(agentDefinition, model, provider, authConfig, tools, skillsProvider, workspace),
             ProviderType.Anthropic => CreateAnthropicAgent(agentDefinition, model, provider, authConfig, tools, skillsProvider, workspace),
-            _ => throw new NotSupportedException($"Provider type '{provider.ProviderType}' is not supported")
+            _ => throw new AgwException(ErrorCodes.UnsupportedProviderType, $"Provider type '{provider.ProviderType}' is not supported")
         };
     }
 
@@ -282,7 +283,7 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
         if (string.IsNullOrWhiteSpace(apiKeyFromEnv))
         {
             _logger.LogError("Environment variable '{EnvName}' is not set or empty.", envVariableName);
-            throw new InvalidOperationException($"Environment variable '{envVariableName}' is not set or empty.");
+            throw new AgwException(ErrorCodes.EnvironmentVariableNotSet, $"Environment variable '{envVariableName}' is not set or empty.");
         }
 
         return apiKeyFromEnv;
@@ -522,7 +523,7 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
         }, cancellationToken);
         if (aiAgent == null)
         {
-            throw new InvalidOperationException("AI agent could not be created for execution.");
+            throw new AgwException(ErrorCodes.AiAgentCreationFailed);
         }
 
         try

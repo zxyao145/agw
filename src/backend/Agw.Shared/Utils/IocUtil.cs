@@ -1,4 +1,6 @@
 
+using Agw.Shared.Exceptions;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -19,7 +21,7 @@ public class IocUtil
     {
         if (LoggerFactory == null)
         {
-            throw new InvalidOperationException("LoggerFactory is not set.");
+            throw new AgwException(ErrorCodes.LoggerFactoryNotSet);
         }
         return LoggerFactory.CreateLogger<T>();
     }
@@ -29,7 +31,7 @@ public class IocUtil
     {
         if (ServiceProvider == null)
         {
-            throw new InvalidOperationException("ServiceProvider is not set.");
+            throw new AgwException(ErrorCodes.ServiceProviderNotSet);
         }
         return ServiceProvider.GetRequiredService<T>();
     }

@@ -4,6 +4,8 @@ using System.Text.Json;
 using A2A;
 using A2A.AspNetCore;
 
+using Agw.Shared.Exceptions;
+
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.A2A;
@@ -47,6 +49,12 @@ internal class AgwA2AJsonRpcProcessor
             var errorId = rpcRequest?.Id ?? new JsonRpcId(ex.GetRequestId());
             return new JsonRpcResponseResult(JsonRpcResponse.CreateJsonRpcErrorResponse(errorId, ex));
         }
+        catch (AgwException ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            var errorId = rpcRequest?.Id ?? new JsonRpcId((string?)null);
+            return new JsonRpcResponseResult(JsonRpcResponse.CreateJsonRpcErrorResponse(errorId, ToA2AException(ex)));
+        }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
@@ -77,6 +85,10 @@ internal class AgwA2AJsonRpcProcessor
             try
             {
                 await requestHandler.GetTaskPushNotificationConfigAsync(null!, cancellationToken).ConfigureAwait(false);
+            }
+            catch (AgwException ex) when (ex.Code == ErrorCodes.A2APushNotificationNotSupported.Code)
+            {
+                throw;
             }
             catch (A2AException ex) when (ex.ErrorCode == A2AErrorCode.PushNotificationNotSupported)
             {
@@ -109,17 +121,17 @@ internal class AgwA2AJsonRpcProcessor
                 // Validate pageSize: must be 1-100 if specified
                 if (listTasksRequest.PageSize is { } ps && (ps <= 0 || ps > 100))
                 {
-                    throw new A2AException(
-                        $"Invalid pageSize: {ps}. Must be between 1 and 100.",
-                        A2AErrorCode.InvalidParams);
+                    throw new AgwException(
+                        ErrorCodes.InvalidPageSize,
+                        $"Invalid pageSize: {ps}. Must be between 1 and 100.");
                 }
 
                 // Validate historyLength: must be >= 0 if specified
                 if (listTasksRequest.HistoryLength is { } hl && hl < 0)
                 {
-                    throw new A2AException(
-                        $"Invalid historyLength: {hl}. Must be non-negative.",
-                        A2AErrorCode.InvalidParams);
+                    throw new AgwException(
+                        ErrorCodes.InvalidHistoryLength,
+                        $"Invalid historyLength: {hl}. Must be non-negative.");
                 }
 
                 var listResult = await requestHandler.ListTasksAsync(agentName, listTasksRequest, cancellationToken).ConfigureAwait(false);
@@ -179,17 +191,17 @@ internal class AgwA2AJsonRpcProcessor
         }
         catch (JsonException ex)
         {
-            throw new A2AException($"Invalid parameters: request body could not be deserialized as {typeof(T).Name}.", ex, A2AErrorCode.InvalidParams);
+            throw new AgwException(ErrorCodes.InvalidParam, $"Invalid parameters: request body could not be deserialized as {typeof(T).Name}.", ex);
         }
 
         if (parms is null)
         {
-            throw new A2AException($"Failed to deserialize parameters as {typeof(T).Name}", A2AErrorCode.InvalidParams);
+            throw new AgwException(ErrorCodes.InvalidParam, $"Failed to deserialize parameters as {typeof(T).Name}");
         }
 
         if (parms is SendMessageRequest sendMsgRequest && sendMsgRequest.Message.Parts.Count == 0)
         {
-            throw new A2AException("Message parts cannot be empty", A2AErrorCode.InvalidParams);
+            throw new AgwException(ErrorCodes.MessagePartsCannotBeEmpty, "Message parts cannot be empty");
         }
 
         return parms;
@@ -222,5 +234,42 @@ internal class AgwA2AJsonRpcProcessor
                 activity?.SetStatus(ActivityStatusCode.Error, "Invalid method");
                 return new JsonRpcResponseResult(JsonRpcResponse.MethodNotFoundResponse(requestId));
         }
+    }
+
+    private static A2AException ToA2AException(AgwException exception)
+    {
+        var a2aErrorCode = A2AErrorCode.InvalidParams;
+
+        if (exception.Code == ErrorCodes.A2APushNotificationNotSupported.Code)
+        {
+            a2aErrorCode = A2AErrorCode.PushNotificationNotSupported;
+        }
+        else if (exception.Code == ErrorCodes.A2ATaskNotFound.Code)
+        {
+            a2aErrorCode = A2AErrorCode.TaskNotFound;
+        }
+        else if (exception.Code == ErrorCodes.A2ATaskNotCancelable.Code)
+        {
+            a2aErrorCode = A2AErrorCode.TaskNotCancelable;
+        }
+        else if (exception.Code == ErrorCodes.A2AUnsupportedOperation.Code
+            || exception.Code == ErrorCodes.A2ATerminalTaskCannotAcceptMessages.Code
+            || exception.Code == ErrorCodes.A2ATerminalTaskCannotBeSubscribed.Code)
+        {
+            a2aErrorCode = A2AErrorCode.UnsupportedOperation;
+        }
+        else if (exception.Code == ErrorCodes.A2AExtendedAgentCardNotConfigured.Code)
+        {
+            a2aErrorCode = A2AErrorCode.ExtendedAgentCardNotConfigured;
+        }
+        else if (exception.Code == ErrorCodes.A2AInvalidAgentResponse.Code
+            || exception.Code == ErrorCodes.AgentNotFound.Code
+            || exception.Code == ErrorCodes.AgentReturnedNoResult.Code
+            || exception.Code == ErrorCodes.UnableToCreateAgentSession.Code)
+        {
+            a2aErrorCode = A2AErrorCode.InvalidAgentResponse;
+        }
+
+        return new A2AException(exception.Message, a2aErrorCode);
     }
 }

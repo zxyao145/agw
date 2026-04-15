@@ -3,6 +3,8 @@ using System.Text.Json;
 
 using A2A;
 
+using Agw.Shared.Exceptions;
+
 namespace Agw.A2A;
 
 public class TaskStore : ITaskStore
@@ -124,7 +126,7 @@ public class TaskStore : ITaskStore
         var taskGuid = ParseRequiredTaskId(taskId);
         if (!string.Equals(task.Id, taskId, StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("Task id mismatch.", nameof(taskId));
+            throw new AgwException(ErrorCodes.TaskIdMismatch);
         }
 
         var now = DateTime.UtcNow;
@@ -132,7 +134,7 @@ public class TaskStore : ITaskStore
         var existingTask = await _taskRepository.GetByIdAsync(taskGuid);
         if (existingTask != null && existingTask.ProjectId != ProjectDefaults.A2AId)
         {
-            throw new InvalidOperationException("Task id is already used by a non-A2A task.");
+            throw new AgwException(ErrorCodes.A2ATaskIdAlreadyUsed);
         }
 
         var coarseStatus = ToProjectTaskStatus(task.Status?.State ?? TaskState.Unspecified);
@@ -278,7 +280,7 @@ public class TaskStore : ITaskStore
 
     private static AgentTask DeepClone(AgentTask task) =>
         JsonSerializer.Deserialize<AgentTask>(JsonSerializer.Serialize(task))
-        ?? throw new InvalidOperationException("Failed to clone A2A task snapshot.");
+        ?? throw new AgwException(ErrorCodes.A2ATaskSnapshotCloneFailed);
 
     private static bool MatchesStatus(AgentTask task, TaskState? requestedStatus) =>
         requestedStatus == null || task.Status?.State == requestedStatus.Value;
@@ -303,7 +305,7 @@ public class TaskStore : ITaskStore
     {
         if (!Guid.TryParse(taskId, out var taskGuid))
         {
-            throw new ArgumentException("A2A task id must be a GUID string.", nameof(taskId));
+            throw new AgwException(ErrorCodes.A2ATaskIdMustBeGuid);
         }
 
         return taskGuid;

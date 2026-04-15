@@ -3,6 +3,7 @@ using System.Text.Json;
 
 using A2A;
 
+using Agw.Shared.Exceptions;
 using Agw.Shared.Models;
 
 using Microsoft.Extensions.AI;
@@ -85,7 +86,7 @@ public class CommonAgentHandler : IAgentHandler
                     .ConfigureAwait(false);
                 if (result is null)
                 {
-                    throw new InvalidOperationException($"Agent '{_agentName}' returned no result.");
+                    throw new AgwException(ErrorCodes.AgentReturnedNoResult, $"Agent '{_agentName}' returned no result.");
                 }
 
                 foreach (var message in result.Messages)

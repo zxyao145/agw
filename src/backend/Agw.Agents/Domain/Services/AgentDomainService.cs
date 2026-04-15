@@ -1,4 +1,5 @@
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 
 namespace Agw.Agents.Domain.Services;
@@ -60,7 +61,7 @@ public class AgentDomainService
     {
         if (agent.Type == AgentType.System && !agent.ModelProviderId.HasValue)
         {
-            throw new InvalidOperationException("System agents must have a ModelProviderId.");
+            throw new AgwException(ErrorCodes.SystemAgentRequiresModelProvider, "System agents must have a ModelProviderId.");
         }
     }
 }

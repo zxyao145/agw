@@ -3,6 +3,8 @@ using System.Threading.Channels;
 
 using A2A;
 
+using Agw.Shared.Exceptions;
+
 namespace Agw.A2A;
 
 
@@ -58,7 +60,8 @@ public sealed class AgwChannelEventNotifier
     {
         if (!_subscribers.TryGetValue(taskId, out var set))
         {
-            throw new InvalidOperationException(
+            throw new AgwException(
+                ErrorCodes.A2ANoSubscriberSet,
                 $"No subscriber set found for task '{taskId}'. " +
                 "This indicates a bug: RemoveChannel was called without a matching CreateChannel, " +
                 "or the subscriber set was evicted by a concurrent call.");

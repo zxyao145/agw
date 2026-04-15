@@ -7,6 +7,7 @@ using A2A;
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Domain.Entities;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Models;
 
 using Microsoft.Extensions.AI;
@@ -204,18 +205,18 @@ public class AgentHandlerFactoryTests
     }
 
     [Fact]
-    public async Task ListTasksAsync_WhenAgentDoesNotExist_ThrowsInvalidAgentResponse()
+    public async Task ListTasksAsync_WhenAgentDoesNotExist_ThrowsAgwInvalidAgentResponse()
     {
         var requestHandler = CreateRequestHandler(
             CreateFactory(new InMemoryRepository<Agent>()));
 
-        var exception = await Assert.ThrowsAsync<A2AException>(() =>
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
             requestHandler.ListTasksAsync(
                 "missing-agent",
                 new ListTasksRequest(),
                 TestContext.Current.CancellationToken));
 
-        Assert.Equal(A2AErrorCode.InvalidAgentResponse, exception.ErrorCode);
+        Assert.Equal(ErrorCodes.A2AInvalidAgentResponse.Code, exception.Code);
     }
 
     private static AgentHandlerFactory CreateFactory(params Agent[] agents)

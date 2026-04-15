@@ -1,4 +1,5 @@
 using Agw.Shared.Contracts.Tools.Abstractions;
+using Agw.Shared.Exceptions;
 
 using Microsoft.Extensions.AI;
 
@@ -35,11 +36,11 @@ internal class ReadFileTool : IAgwTool
 
         if (string.IsNullOrWhiteSpace(readFileParam.FilePath))
         {
-            throw new ArgumentException("File path is required.", nameof(readFileParam.FilePath));
+            throw new AgwException(ErrorCodes.FilePathRequired);
         }
         if (!File.Exists(readFileParam.FilePath))
         {
-            throw new FileNotFoundException($"File '{readFileParam.FilePath}' does not exist.", readFileParam.FilePath);
+            throw new AgwException(ErrorCodes.FileNotFound, $"File '{readFileParam.FilePath}' does not exist.");
         }
         var content = File.ReadAllText(readFileParam.FilePath);
 

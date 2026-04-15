@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using Agw.Integrations.Domain.Entities;
 using Agw.Integrations.Tools.GitHub.Dtos;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Services;
 
 using Microsoft.EntityFrameworkCore;
@@ -34,7 +35,7 @@ public class GitHubTools
         var appInstance = await GetAppInfoAsync();
         if (appInstance == null || appInstance.AuthorizationToken == null)
         {
-            throw new InvalidOperationException("GitHub OAuth token was not found.");
+            throw new AgwException(ErrorCodes.GitHubOAuthTokenNotFound);
         }
 
         using var scope = IocUtil.ServiceProvider.CreateScope();
@@ -58,7 +59,7 @@ public class GitHubTools
                     response.ReasonPhrase,
                     responseContent);
 
-            throw new HttpRequestException($"Bad response status code:{response.StatusCode}");
+            throw new AgwException(ErrorCodes.GitHubBadResponseStatusCode, $"Bad response status code:{response.StatusCode}");
         }
 
         var gitHubRepoInfos = await response.Content
@@ -119,19 +120,19 @@ public class GitHubTools
     private static string BuildGitCloneUrl(string gitAddress, string username, string token)
     {
         if (string.IsNullOrWhiteSpace(gitAddress))
-            throw new ArgumentException("gitAddress 不能为空");
+            throw new AgwException(ErrorCodes.GitAddressRequired, "gitAddress 不能为空");
 
         if (string.IsNullOrWhiteSpace(username))
-            throw new ArgumentException("username 不能为空");
+            throw new AgwException(ErrorCodes.UsernameRequired, "username 不能为空");
 
         if (string.IsNullOrWhiteSpace(token))
-            throw new ArgumentException("token 不能为空");
+            throw new AgwException(ErrorCodes.TokenRequired, "token 不能为空");
 
         var uri = new Uri(gitAddress);
 
         // 只允许 https
         if (uri.Scheme != Uri.UriSchemeHttps)
-            throw new ArgumentException("只支持 https 地址");
+            throw new AgwException(ErrorCodes.HttpsGitAddressRequired, "只支持 https 地址");
 
         var builder = new UriBuilder(uri)
         {

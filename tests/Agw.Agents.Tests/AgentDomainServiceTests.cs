@@ -1,4 +1,5 @@
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Tests;
 
@@ -26,7 +27,7 @@ public class AgentDomainServiceTests
     }
 
     [Fact]
-    public void PrepareForCreate_SystemAgentWithoutModelProvider_ThrowsInvalidOperationException()
+    public void PrepareForCreate_SystemAgentWithoutModelProvider_ThrowsAgwException()
     {
         var agent = new Agent
         {
@@ -34,11 +35,12 @@ public class AgentDomainServiceTests
             ModelProviderId = null,
         };
 
-        Assert.Throws<InvalidOperationException>(() => _service.PrepareForCreate(agent, "tester"));
+        var exception = Assert.Throws<AgwException>(() => _service.PrepareForCreate(agent, "tester"));
+        Assert.Equal(ErrorCodes.SystemAgentRequiresModelProvider.Code, exception.Code);
     }
 
     [Fact]
-    public void ApplyUpdate_SystemAgentWithoutModelProviderAfterUpdate_ThrowsInvalidOperationException()
+    public void ApplyUpdate_SystemAgentWithoutModelProviderAfterUpdate_ThrowsAgwException()
     {
         var agent = new Agent
         {
@@ -48,8 +50,10 @@ public class AgentDomainServiceTests
             ModelProviderId = Guid.NewGuid(),
         };
 
-        Assert.Throws<InvalidOperationException>(() =>
+        var exception = Assert.Throws<AgwException>(() =>
             _service.ApplyUpdate(agent, current => current.ModelProviderId = null, "tester"));
+
+        Assert.Equal(ErrorCodes.SystemAgentRequiresModelProvider.Code, exception.Code);
     }
 
     [Fact]

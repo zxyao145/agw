@@ -2,6 +2,7 @@ using A2A;
 
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Models;
 
 using Microsoft.Extensions.AI;
@@ -74,7 +75,7 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
             .ConfigureAwait(false);
         if (agent is null)
         {
-            throw new InvalidOperationException($"Agent '{agentName}' not found.");
+            throw new AgwException(ErrorCodes.AgentNotFound, $"Agent '{agentName}' not found.");
         }
 
         var taskId = ParseRequiredTaskId(context.TaskId);
@@ -97,7 +98,7 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
             .ConfigureAwait(false);
         if (session is null)
         {
-            throw new InvalidOperationException($"Unable to create session for agent '{agentName}'.");
+            throw new AgwException(ErrorCodes.UnableToCreateAgentSession, $"Unable to create session for agent '{agentName}'.");
         }
 
         await foreach (var message in agentRuntimeService
@@ -112,7 +113,7 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
     {
         if (!Guid.TryParse(taskId, out var taskGuid))
         {
-            throw new ArgumentException("A2A task id must be a GUID string.", nameof(taskId));
+            throw new AgwException(ErrorCodes.A2ATaskIdMustBeGuid);
         }
 
         return taskGuid;

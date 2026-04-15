@@ -1,6 +1,7 @@
 using System.Reflection;
 
 using Agw.Shared.Contracts.Tools.Abstractions;
+using Agw.Shared.Exceptions;
 
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,7 +52,7 @@ public class AgwToolFactory
 
         if (!method.IsStatic)
         {
-            throw new ArgumentException("Method must be static. For instance methods, use CreateFromMethod with a target.", nameof(method));
+            throw new AgwException(ErrorCodes.MethodMustBeStatic, "Method must be static. For instance methods, use CreateFromMethod with a target.");
         }
 
         return AIFunctionFactory.Create(method, target: null, CreateOptions(method));
@@ -226,7 +227,7 @@ public class AgwToolFactory
             }
 
             return Activator.CreateInstance(type)
-                ?? throw new InvalidOperationException($"Cannot create instance of {type.FullName}");
+                ?? throw new AgwException(ErrorCodes.CannotCreateInstance, $"Cannot create instance of {type.FullName}");
         };
     }
 
@@ -240,7 +241,7 @@ public class AgwToolFactory
         else
         {
             instance = Activator.CreateInstance(type)
-                ?? throw new InvalidOperationException($"Cannot create instance of {type.FullName}");
+                ?? throw new AgwException(ErrorCodes.CannotCreateInstance, $"Cannot create instance of {type.FullName}");
         }
 
         return (IAgwTool)instance;

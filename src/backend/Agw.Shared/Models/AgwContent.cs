@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
 
+using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 
 using Microsoft.Extensions.AI;
@@ -206,7 +207,7 @@ internal class AgwDataUriParser
         // Validate, then trim off the "data:" scheme.
         if (!dataUri.Span.StartsWith(Scheme.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
-            throw new UriFormatException("Invalid data URI format: the data URI must start with 'data:'.");
+            throw new AgwException(ErrorCodes.InvalidDataUriFormat, "Invalid data URI format: the data URI must start with 'data:'.");
         }
 
         dataUri = dataUri.Slice(Scheme.Length);
@@ -215,7 +216,7 @@ internal class AgwDataUriParser
         int commaPos = dataUri.Span.IndexOf(',');
         if (commaPos < 0)
         {
-            throw new UriFormatException("Invalid data URI format: the data URI must contain a comma separating the metadata and the data.");
+            throw new AgwException(ErrorCodes.InvalidDataUriFormat, "Invalid data URI format: the data URI must contain a comma separating the metadata and the data.");
         }
 
         ReadOnlyMemory<char> metadata = dataUri.Slice(0, commaPos);
@@ -232,7 +233,7 @@ internal class AgwDataUriParser
             isBase64 = true;
             if (!IsValidBase64Data(data.Span))
             {
-                throw new UriFormatException("Invalid data URI format: the data URI is base64-encoded, but the data is not a valid base64 string.");
+                throw new AgwException(ErrorCodes.InvalidDataUriFormat, "Invalid data URI format: the data URI is base64-encoded, but the data is not a valid base64 string.");
             }
         }
 
@@ -246,7 +247,7 @@ internal class AgwDataUriParser
         }
         else if (!IsValidMediaType(span, ref mediaType))
         {
-            throw new UriFormatException("Invalid data URI format: the media type is not a valid.");
+            throw new AgwException(ErrorCodes.InvalidDataUriFormat, "Invalid data URI format: the media type is not a valid.");
         }
 
         return new AgwDataUri(data, isBase64, mediaType);

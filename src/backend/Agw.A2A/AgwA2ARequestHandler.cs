@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using A2A;
 
 using Agw.A2A.Extensions;
+using Agw.Shared.Exceptions;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -45,8 +46,8 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         A2AServerOptions? options = null)
     {
         _taskStore = taskStore;
-        _notifier = notifier ?? throw new ArgumentNullException(nameof(notifier));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _notifier = notifier ?? throw new AgwException(ErrorCodes.InvalidParam, "notifier cannot be null.");
+        _logger = logger ?? throw new AgwException(ErrorCodes.InvalidParam, "logger cannot be null.");
         _options = options ?? new A2AServerOptions();
         _serviceScopeFactory = serviceScopeFactory;
     }
@@ -280,13 +281,13 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     {
         if (request.HistoryLength is { } hl && hl < 0)
         {
-            throw new A2AException(
-                $"Invalid historyLength: {hl}. Must be non-negative.",
-                A2AErrorCode.InvalidParams);
+            throw new AgwException(
+                ErrorCodes.InvalidHistoryLength,
+                $"Invalid historyLength: {hl}. Must be non-negative.");
         }
 
         var task = await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
-            ?? throw new A2AException($"Task '{request.Id}' not found.", A2AErrorCode.TaskNotFound);
+            ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{request.Id}' not found.");
 
         return task.WithHistoryTrimmedTo(request.HistoryLength);
     }
@@ -310,11 +311,11 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         activity?.SetTag("a2a.task.id", request.Id);
 
         var task = await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
-            ?? throw new A2AException($"Task '{request.Id}' not found.", A2AErrorCode.TaskNotFound);
+            ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{request.Id}' not found.");
 
         if (task.Status.State.IsTerminal())
         {
-            throw new A2AException("Task is already in a terminal state.", A2AErrorCode.TaskNotCancelable);
+            throw new AgwException(ErrorCodes.A2ATaskNotCancelable, "Task is already in a terminal state.");
         }
 
         // Signal any background return-immediately work to stop.
@@ -355,7 +356,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         await agentTask.ConfigureAwait(false);
 
         return await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
-            ?? throw new A2AException($"Task '{request.Id}' not found.", A2AErrorCode.TaskNotFound);
+            ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{request.Id}' not found.");
     }
 
     /// <inheritdoc />
@@ -375,13 +376,13 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         using (await _notifier.AcquireTaskLockAsync(request.Id, cancellationToken).ConfigureAwait(false))
         {
             currentTask = await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
-                ?? throw new A2AException($"Task '{request.Id}' not found.", A2AErrorCode.TaskNotFound);
+                ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{request.Id}' not found.");
 
             if (currentTask.Status.State.IsTerminal())
             {
-                throw new A2AException(
-                    "Task is in a terminal state and cannot be subscribed to.",
-                    A2AErrorCode.UnsupportedOperation);
+                throw new AgwException(
+                    ErrorCodes.A2ATerminalTaskCannotBeSubscribed,
+                    "Task is in a terminal state and cannot be subscribed to.");
             }
 
             channel = _notifier.CreateChannel(request.Id);
@@ -409,35 +410,35 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     public virtual Task<TaskPushNotificationConfig> CreateTaskPushNotificationConfigAsync(
         CreateTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default)
     {
-        throw new A2AException("Push notifications not supported.", A2AErrorCode.PushNotificationNotSupported);
+        throw new AgwException(ErrorCodes.A2APushNotificationNotSupported, "Push notifications not supported.");
     }
 
     /// <inheritdoc />
     public virtual Task<TaskPushNotificationConfig> GetTaskPushNotificationConfigAsync(
         GetTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default)
     {
-        throw new A2AException("Push notifications not supported.", A2AErrorCode.PushNotificationNotSupported);
+        throw new AgwException(ErrorCodes.A2APushNotificationNotSupported, "Push notifications not supported.");
     }
 
     /// <inheritdoc />
     public virtual Task<ListTaskPushNotificationConfigResponse> ListTaskPushNotificationConfigAsync(
         ListTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default)
     {
-        throw new A2AException("Push notifications not supported.", A2AErrorCode.PushNotificationNotSupported);
+        throw new AgwException(ErrorCodes.A2APushNotificationNotSupported, "Push notifications not supported.");
     }
 
     /// <inheritdoc />
     public virtual Task DeleteTaskPushNotificationConfigAsync(
         DeleteTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default)
     {
-        throw new A2AException("Push notifications not supported.", A2AErrorCode.PushNotificationNotSupported);
+        throw new AgwException(ErrorCodes.A2APushNotificationNotSupported, "Push notifications not supported.");
     }
 
     /// <inheritdoc />
     public virtual Task<AgentCard> GetExtendedAgentCardAsync(
         GetExtendedAgentCardRequest request, CancellationToken cancellationToken = default)
     {
-        throw new A2AException("Extended agent card not configured.", A2AErrorCode.ExtendedAgentCardNotConfigured);
+        throw new AgwException(ErrorCodes.A2AExtendedAgentCardNotConfigured, "Extended agent card not configured.");
     }
 
     // ─── Private Helpers ───
@@ -452,7 +453,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         if (!string.IsNullOrEmpty(taskId))
         {
             existingTask = await _taskStore.GetTaskAsync(taskId, cancellationToken).ConfigureAwait(false)
-                ?? throw new A2AException($"Task '{taskId}' not found.", A2AErrorCode.TaskNotFound);
+                ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{taskId}' not found.");
             contextId ??= existingTask.ContextId;
         }
 
@@ -473,9 +474,9 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     {
         if (context.Task is not null && context.Task.Status.State.IsTerminal())
         {
-            throw new A2AException(
-                "Task is in a terminal state and cannot accept messages.",
-                A2AErrorCode.UnsupportedOperation);
+            throw new AgwException(
+                ErrorCodes.A2ATerminalTaskCannotAcceptMessages,
+                "Task is in a terminal state and cannot accept messages.");
         }
     }
 
@@ -593,7 +594,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 
             // Re-fetch from store to return the current persisted state
             result.Task = await _taskStore.GetTaskAsync(context.TaskId, CancellationToken.None).ConfigureAwait(false)
-                ?? throw new A2AException($"Task '{context.TaskId}' not found after processing.", A2AErrorCode.TaskNotFound);
+                ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{context.TaskId}' not found after processing.");
 
             return result;
         }
@@ -603,9 +604,9 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         await agentTask.ConfigureAwait(false);
 #pragma warning restore VSTHRD003
 
-        return result ?? throw new A2AException(
-            "Agent handler did not produce any response events.",
-            A2AErrorCode.InvalidAgentResponse);
+        return result ?? throw new AgwException(
+            ErrorCodes.A2AInvalidAgentResponse,
+            "Agent handler did not produce any response events.");
     }
 
     private async Task<SendMessageResponse> MaterializeResponseAsync(
@@ -636,21 +637,21 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         if (result?.Task is not null)
         {
             result.Task = await _taskStore.GetTaskAsync(context.TaskId, cancellationToken).ConfigureAwait(false)
-                ?? throw new A2AException($"Task '{context.TaskId}' not found after processing.", A2AErrorCode.TaskNotFound);
+                ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{context.TaskId}' not found after processing.");
         }
 
-        return result ?? throw new A2AException(
-            "Agent handler did not produce any response events.",
-            A2AErrorCode.InvalidAgentResponse);
+        return result ?? throw new AgwException(
+            ErrorCodes.A2AInvalidAgentResponse,
+            "Agent handler did not produce any response events.");
     }
 
     private async Task<IAgentHandler> GetAgentHandler(string agentName)
     {
         var sp = _serviceScopeFactory.CreateScope().ServiceProvider;
         var ahf = sp.GetRequiredService<AgentHandlerFactory>();
-        var ah = (await ahf.CreateAsync(agentName)) ?? throw new A2AException(
-            $"No agent handler configured for agent '{agentName}'.",
-            A2AErrorCode.InvalidAgentResponse);
+        var ah = (await ahf.CreateAsync(agentName)) ?? throw new AgwException(
+            ErrorCodes.A2AInvalidAgentResponse,
+            $"No agent handler configured for agent '{agentName}'.");
         return ah;
     }
 

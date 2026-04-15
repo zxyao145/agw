@@ -4,6 +4,7 @@ using Agw.Jobs.Application.Services;
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Domain.Events;
 using Agw.Jobs.Dtos;
+using Agw.Shared.Exceptions;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -261,8 +262,8 @@ public class JobHostedService(
 
     private static bool IsMissingTaskException(Exception exception)
     {
-        return exception is InvalidOperationException invalidOperationException
-            && invalidOperationException.Message.StartsWith("Job not found:", StringComparison.Ordinal);
+        return exception is AgwException agwException
+            && agwException.Code == ErrorCodes.JobNotFound.Code;
     }
 
     private void UpsertInMemoryTask(Job task)

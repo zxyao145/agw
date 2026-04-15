@@ -1,4 +1,5 @@
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Exceptions;
 using Agw.Skills.Application;
 using Agw.Skills.Contracts.Manager;
 
@@ -48,7 +49,7 @@ public class SkillsController : ControllerBase
             var created = await _skillAppService.CreateAsync(skill, request.Archive, user);
             return Ok(Map(created));
         }
-        catch (InvalidOperationException ex)
+        catch (AgwException ex)
         {
             return BadRequest(ex.Message);
         }
@@ -65,7 +66,7 @@ public class SkillsController : ControllerBase
             var updated = await _skillAppService.UpdateAsync(id, request.Name, request.Description, request.Archive, user);
             return updated == null ? NotFound() : Ok(Map(updated));
         }
-        catch (InvalidOperationException ex)
+        catch (AgwException ex)
         {
             return BadRequest(ex.Message);
         }

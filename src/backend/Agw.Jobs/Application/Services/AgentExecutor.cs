@@ -4,6 +4,7 @@ using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Jobs.Domain.Entities;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using Agw.Tasks.Application;
 using Agw.Tasks.Domain.Services;
@@ -23,13 +24,12 @@ public class AgentExecutor(
     /// <param name="job"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    /// <exception cref="InvalidOperationException"></exception>
-    /// <exception cref="NotSupportedException"></exception>
+    /// <exception cref="AgwException"></exception>
     public async Task<Guid> ExecuteAsync(Job job, CancellationToken cancellationToken)
     {
         if (job.AgentId == null || job.AgentType == null)
         {
-            throw new InvalidOperationException("Job agent target is required.");
+            throw new AgwException(ErrorCodes.JobAgentTargetRequired);
         }
 
         var (prompt, title) = BuildPromptAndTitle(job);
@@ -47,7 +47,8 @@ public class AgentExecutor(
 
         if (createResult.Type != ApplicationResultType.Success || createResult.Value == null)
         {
-            throw new InvalidOperationException(
+            throw new AgwException(
+                ErrorCodes.ProjectTaskCreationFailed,
                 createResult.Error ?? "Failed to create project task for job execution.");
         }
 
@@ -69,13 +70,14 @@ public class AgentExecutor(
                     cancellationToken,
                     job.ProjectId,
                     contextId),
-                _ => throw new NotSupportedException($"Unsupported agent type: {job.AgentType}")
+                _ => throw new AgwException(ErrorCodes.UnsupportedAgentType, $"Unsupported agent type: {job.AgentType}")
             };
 
             if (execution == null)
             {
                 var targetText = job.AgentType == AgentRuntimeType.Agent ? "Agent" : "Agentflow";
-                throw new InvalidOperationException(
+                throw new AgwException(
+                    ErrorCodes.AgentExecutionFailed,
                     $"{targetText} execution failed (target disabled/missing or runtime unavailable).");
             }
 
@@ -84,7 +86,8 @@ public class AgentExecutor(
                 JobExecutorUser);
             if (succeededTask == null)
             {
-                throw new InvalidOperationException(
+                throw new AgwException(
+                    ErrorCodes.ProjectTaskMarkSucceededFailed,
                     $"Failed to mark project task {projectTaskId} as succeeded.");
             }
             return projectTaskId;

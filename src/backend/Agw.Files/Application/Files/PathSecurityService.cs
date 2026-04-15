@@ -1,3 +1,5 @@
+using Agw.Shared.Exceptions;
+
 using Microsoft.AspNetCore.Hosting;
 
 namespace Agw.Files.Application.Files;
@@ -18,7 +20,7 @@ public sealed class PathSecurityService : IPathSecurityService
     {
         if (string.IsNullOrWhiteSpace(rootPath))
         {
-            throw new ArgumentException("Root path is required.", nameof(rootPath));
+            throw new AgwException(ErrorCodes.RootPathRequired);
         }
 
         RootPath = Path.GetFullPath(rootPath);

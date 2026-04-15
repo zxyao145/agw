@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
+using Agw.Shared.Exceptions;
+
 namespace Agw.Shared.Utils;
 
 public class ThrowUtil
@@ -20,7 +22,7 @@ public class ThrowUtil
     [DoesNotReturn]
     public static void ArgumentNullException(string paramName)
     {
-        throw new ArgumentNullException(paramName);
+        throw new AgwException(ErrorCodes.InvalidParam, $"Argument '{paramName}' cannot be null.");
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -45,12 +47,12 @@ public class ThrowUtil
     [DoesNotReturn]
     public static void ArgumentException(string paramName, string? message)
     {
-        throw new ArgumentException(message, paramName);
+        throw new AgwException(ErrorCodes.InvalidParam, message ?? $"Argument '{paramName}' is invalid.");
     }
 
     [DoesNotReturn]
     internal static void ArgumentNullException(string message, string paramName)
     {
-        throw new ArgumentNullException(message, paramName);
+        throw new AgwException(ErrorCodes.InvalidParam, message);
     }
 }
