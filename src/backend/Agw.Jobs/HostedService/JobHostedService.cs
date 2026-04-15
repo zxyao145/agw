@@ -19,14 +19,19 @@ namespace Agw.Jobs.HostedService;
 public class JobHostedService(
     IServiceScopeFactory scopeFactory,
     ILogger<JobHostedService> logger,
-    IJobDomainEventDispatcher jobDomainEventDispatcher) : BackgroundService
+    IJobDomainEventDispatcher jobDomainEventDispatcher,
+    IProjectExecutionLock projectExecutionLock) : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly ILogger<JobHostedService> _logger = logger;
     private readonly IJobDomainEventDispatcher _jobDomainEventDispatcher = jobDomainEventDispatcher;
+    private readonly IProjectExecutionLock _projectExecutionLock = projectExecutionLock;
 
     private readonly PriorityQueue<InMemoryJob, DateTimeOffset> _queue = new();
     private readonly ConcurrentDictionary<Guid, InMemoryJob> _taskMap = new();
+    private readonly ConcurrentDictionary<Guid, byte> _runningProjects = new();
+    private readonly Dictionary<Guid, Queue<InMemoryJob>> _projectBacklog = new();
+    private readonly ConcurrentDictionary<Guid, Task> _runningExecutions = new();
     private readonly object _queueLock = new();
     private readonly SemaphoreSlim _wakeSignal = new(0, int.MaxValue);
     private readonly SemaphoreSlim _prefetchSignal = new(0, int.MaxValue);
@@ -143,12 +148,100 @@ public class JobHostedService(
                 continue;
             }
 
-            await ExecuteOneAsync(dequeued, cancellationToken);
+            DispatchOrQueueByProject(dequeued, cancellationToken);
+        }
+    }
+
+    private void DispatchOrQueueByProject(InMemoryJob inMemoryTask, CancellationToken cancellationToken)
+    {
+        var shouldStartExecution = false;
+
+        lock (_queueLock)
+        {
+            if (_runningProjects.TryAdd(inMemoryTask.ProjectId, 0))
+            {
+                shouldStartExecution = true;
+            }
+            else
+            {
+                if (!_projectBacklog.TryGetValue(inMemoryTask.ProjectId, out var backlogQueue))
+                {
+                    backlogQueue = new Queue<InMemoryJob>();
+                    _projectBacklog[inMemoryTask.ProjectId] = backlogQueue;
+                }
+
+                backlogQueue.Enqueue(inMemoryTask);
+            }
+        }
+
+        if (!shouldStartExecution)
+        {
+            return;
+        }
+
+        StartProjectExecution(inMemoryTask, cancellationToken);
+    }
+
+    private void StartProjectExecution(InMemoryJob inMemoryTask, CancellationToken cancellationToken)
+    {
+        var executionTask = ExecuteProjectQueueAsync(inMemoryTask, cancellationToken);
+        _runningExecutions[inMemoryTask.JobId] = executionTask;
+
+        _ = executionTask.ContinueWith(
+            task =>
+            {
+                _runningExecutions.TryRemove(inMemoryTask.JobId, out _);
+                if (task.IsFaulted)
+                {
+                    _logger.LogError(task.Exception, "Project queue for job {JobId} failed unexpectedly.", inMemoryTask.JobId);
+                }
+            },
+            TaskScheduler.Default);
+    }
+
+    private async Task ExecuteProjectQueueAsync(InMemoryJob inMemoryTask, CancellationToken cancellationToken)
+    {
+        var current = inMemoryTask;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await ExecuteOneAsync(current, cancellationToken);
+
+            InMemoryJob? next = null;
+            lock (_queueLock)
+            {
+                if (_projectBacklog.TryGetValue(current.ProjectId, out var backlogQueue))
+                {
+                    while (backlogQueue.Count > 0)
+                    {
+                        var candidate = backlogQueue.Dequeue();
+                        if (_taskMap.TryGetValue(candidate.JobId, out var latest) && latest.Version == candidate.Version)
+                        {
+                            next = candidate;
+                            break;
+                        }
+                    }
+
+                    if (backlogQueue.Count == 0)
+                    {
+                        _projectBacklog.Remove(current.ProjectId);
+                    }
+                }
+
+                if (next == null)
+                {
+                    _runningProjects.TryRemove(current.ProjectId, out _);
+                    return;
+                }
+            }
+
+            current = next;
         }
     }
 
     private async Task ExecuteOneAsync(InMemoryJob inMemoryTask, CancellationToken cancellationToken)
     {
+        await using var projectLock = await _projectExecutionLock.AcquireAsync(inMemoryTask.ProjectId, cancellationToken);
+
         var start = DateTimeOffset.UtcNow;
         using var scope = _scopeFactory.CreateScope();
         var jobTaskStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
