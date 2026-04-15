@@ -1,4 +1,3 @@
-using Agw.Shared;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 
@@ -6,17 +5,11 @@ namespace Agw.Tasks.Domain.Services;
 
 public class ProjectTaskDomainService
 {
-    public bool TryPrepareForCreate(
+    public bool TryPrepareTaskForCreate(
         ProjectTask task,
-        TaskRecord initialRecord,
         string user,
         ProjectTaskStatus initialStatus = ProjectTaskStatus.Pending)
     {
-        if (string.IsNullOrWhiteSpace(task.ContextId)
-            || string.IsNullOrWhiteSpace(initialRecord.GetText()))
-        {
-            return false;
-        }
 
         task.Id = task.Id == Guid.Empty ? Guid.NewGuid() : task.Id;
         task.Title = string.IsNullOrWhiteSpace(task.Title) ? "Untitled" : task.Title.Trim();
@@ -26,10 +19,6 @@ public class ProjectTaskDomainService
         task.UpdateBy = user;
         task.UpdateTime = task.CreateTime;
 
-        initialRecord.TaskId = task.Id;
-        initialRecord.AgentName = Constants.DefaultAuthor;
-        initialRecord.CreateTime = task.CreateTime;
-        initialRecord.UpdateTime = task.CreateTime;
         return true;
     }
 

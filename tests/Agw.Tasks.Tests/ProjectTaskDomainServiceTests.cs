@@ -1,12 +1,9 @@
 using System.Reflection;
 using System.Text.Json;
 
-using Agw.Shared;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Tasks.Domain.Services;
-
-using Microsoft.Extensions.AI;
 
 namespace Agw.Tasks.Tests;
 
@@ -30,17 +27,11 @@ public class ProjectTaskDomainServiceTests
         {
             ContextId = " ",
         };
-        var initialRecord = new TaskRecord
-        {
-            TaskId = Guid.NewGuid(),
-            ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, "hello"), JsonOptions),
-        };
 
-        var result = _service.TryPrepareForCreate(task, initialRecord, "tester");
+        var result = _service.TryPrepareTaskForCreate(task, "tester");
 
         Assert.False(result);
         Assert.Equal(Guid.Empty, task.Id);
-        Assert.Equal(Guid.Empty, initialRecord.Id);
     }
 
     [Fact]
@@ -53,19 +44,11 @@ public class ProjectTaskDomainServiceTests
             Title = "  New task  ",
             ContextId = "context-1",
         };
-        var initialRecord = new TaskRecord
-        {
-            TaskId = Guid.NewGuid(),
-            ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, "hello"), JsonOptions),
-        };
-
-        var result = _service.TryPrepareForCreate(task, initialRecord, "tester");
+        var result = _service.TryPrepareTaskForCreate(task, "tester");
 
         Assert.True(result);
         Assert.Equal("New task", task.Title);
         Assert.Equal(ProjectTaskStatus.Pending, task.Status);
-        Assert.Equal(task.Id, initialRecord.TaskId);
-        Assert.Equal(Constants.DefaultAuthor, initialRecord.AgentName);
         Assert.InRange(task.CreateTime, before, DateTime.UtcNow);
     }
 

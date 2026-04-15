@@ -152,14 +152,13 @@ public class ProjectTaskAppService
             ConversationPayload = JsonUtil.Serialize(inputMessage)
         };
 
-        if (!_projectTaskDomainService.TryPrepareForCreate(task, initialRecord, user, initialStatus))
+        if (!_projectTaskDomainService.TryPrepareTaskForCreate(task, user, initialStatus))
         {
             return ApplicationResult<ProjectTaskResponse>.Invalid(
                 "Failed to create task (project/target invalid, target mismatch, or input missing).");
         }
 
         await _taskRepository.AddAsync(task);
-        await _recordRepository.AddAsync(initialRecord);
         await _unitOfWork.SaveChangesAsync();
 
         return ApplicationResult<ProjectTaskResponse>.Success(ToResponse(task, [initialRecord], null));
