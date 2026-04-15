@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Agw.A2A.Extensions;
 
@@ -30,19 +29,7 @@ public static class A2ARoutesBuilderExtensions
         ArgumentException.ThrowIfNullOrEmpty(agentPathPrefix);
 
         var agentHandlerFactory = endpoints.ServiceProvider.GetRequiredService<AgentHandlerFactory>();
-        var agwA2ARequestHandler = endpoints.ServiceProvider.GetRequiredService<IAgwA2ARequestHandler>();
-
-        var loggerFactory = endpoints.ServiceProvider.GetRequiredService<ILoggerFactory>();
-        var logger = loggerFactory.CreateLogger<IEndpointRouteBuilder>();
-
-        if (!agentPathPrefix.Contains(PathPlaceholder))
-        {
-            if (!agentPathPrefix.EndsWith("/"))
-            {
-                agentPathPrefix += "/";
-            }
-            agentPathPrefix += PathPlaceholder;
-        }
+        var agentRoute = BuildAgentRoute(agentPathPrefix);
 
         var routeGroup = endpoints.MapGroup("");
         routeGroup.MapGet("/.well-known/agents.json",
@@ -53,7 +40,7 @@ public static class A2ARoutesBuilderExtensions
             });
 
         routeGroup.MapGet(
-            agentPathPrefix + "/.well-known/{agentName}/agent-card.json",
+            agentRoute + "/.well-known/agent-card.json",
             async delegate (HttpRequest request, string agentName, CancellationToken cancellationToken)
             {
                 var agentHandler = await agentHandlerFactory.CreateAsync(agentName);
@@ -70,13 +57,27 @@ public static class A2ARoutesBuilderExtensions
             }
         );
 
-        routeGroup.MapPost(agentPathPrefix + "{agentName}",
-            async delegate (HttpRequest request, string agentName, CancellationToken cancellationToken)
+        routeGroup.MapPost(agentRoute,
+            async delegate (IAgwA2ARequestHandler requestHandler, HttpRequest request, string agentName, CancellationToken cancellationToken)
             {
-                return await AgwA2AJsonRpcProcessor.ProcessRequestAsync(agwA2ARequestHandler, request, agentName, cancellationToken);
+                return await AgwA2AJsonRpcProcessor.ProcessRequestAsync(requestHandler, request, agentName, cancellationToken);
             }
         );
 
         return routeGroup;
+    }
+
+    private static string BuildAgentRoute(string agentPathPrefix)
+    {
+        var route = agentPathPrefix.Trim();
+        if (route == "/")
+        {
+            return "/" + PathPlaceholder;
+        }
+
+        route = route.TrimEnd('/');
+        return route.Contains(PathPlaceholder, StringComparison.Ordinal)
+            ? route
+            : route + "/" + PathPlaceholder;
     }
 }

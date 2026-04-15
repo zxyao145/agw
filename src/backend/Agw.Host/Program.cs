@@ -1,3 +1,5 @@
+using Agw.A2A;
+using Agw.A2A.Extensions;
 using Agw.Agents;
 using Agw.Agents.Controllers.Manager;
 using Agw.Infrastructure;
@@ -115,8 +117,7 @@ try
 
     // add module
     builder.Services
-        // TODO
-        //.AddA2A(builder.Configuration)
+        .AddA2A(builder.Configuration)
         .AddAgents(builder.Configuration)
         .AddInfrastructure(builder.Configuration)
         .AddJobs(builder.Configuration)
@@ -170,11 +171,10 @@ try
     app.UseMiddleware<InitializationGuardMiddleware>();
     app.UseMiddleware<ApiKeyGuardMiddleware>();
 
-    // TODO: A2A
-    //var a2AServerOptions = app.Services
-    //    .GetRequiredService<Microsoft.Extensions.Options.IOptions<AgwA2AServerOptions>>()
-    //    .Value;
-    //app.MapAgwA2A(a2AServerOptions.Prefix);
+    var a2AServerOptions = app.Services
+        .GetRequiredService<Microsoft.Extensions.Options.IOptions<AgwA2AServerOptions>>()
+        .Value;
+    app.MapAgwA2A(a2AServerOptions.Prefix);
     app.MapControllers();
 
     Log.Information("Agw Host configured successfully");

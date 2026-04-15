@@ -10,6 +10,8 @@ using Agw.Shared.Data.Repositories;
 using Agw.Shared.Models;
 
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.A2A.Tests;
 
@@ -63,7 +65,10 @@ public class AgentHandlerFactoryTests
     [Fact]
     public async Task CommonAgentHandlerCreateAsync_WhenAgentExists_ReturnsHandlerWithAgentCard()
     {
-        var repository = new InMemoryRepository<Agent>();
+        var repository = new InMemoryRepository<Agent>(
+        [
+            new Agent { Id = Guid.NewGuid(), Name = "alpha", SystemPrompt = "Alpha prompt" }
+        ]);
         var factory = CreateFactory(repository);
         var handler = await factory.CreateAsync("alpha");
 
@@ -198,6 +203,21 @@ public class AgentHandlerFactoryTests
         Assert.Contains(events, response => response.StatusUpdate?.Status?.Message?.Parts?.Any(part => part.Text == "boom") == true);
     }
 
+    [Fact]
+    public async Task ListTasksAsync_WhenAgentDoesNotExist_ThrowsInvalidAgentResponse()
+    {
+        var requestHandler = CreateRequestHandler(
+            CreateFactory(new InMemoryRepository<Agent>()));
+
+        var exception = await Assert.ThrowsAsync<A2AException>(() =>
+            requestHandler.ListTasksAsync(
+                "missing-agent",
+                new ListTasksRequest(),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(A2AErrorCode.InvalidAgentResponse, exception.ErrorCode);
+    }
+
     private static AgentHandlerFactory CreateFactory(params Agent[] agents)
     {
         return CreateFactory(new InMemoryRepository<Agent>(agents));
@@ -228,6 +248,19 @@ public class AgentHandlerFactoryTests
             agentRuntimeService: null!,
             agentRepository: repository
             );
+    }
+
+    private static AgwA2ARequestHandler CreateRequestHandler(AgentHandlerFactory agentHandlerFactory)
+    {
+        var services = new ServiceCollection()
+            .AddSingleton(agentHandlerFactory)
+            .BuildServiceProvider();
+
+        return new AgwA2ARequestHandler(
+            new FakeTaskStore(),
+            new AgwChannelEventNotifier(),
+            NullLogger<A2AServer>.Instance,
+            services.GetRequiredService<IServiceScopeFactory>());
     }
 
     private static AgentCard CreateAgentCard(string name) => new()
@@ -332,9 +365,11 @@ public class AgentHandlerFactoryTests
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy)
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy)
         {
-            return Task.FromResult((IReadOnlyList<TEntity>)orderBy(ApplyQuery(predicate)).ToList());
+            var query = ApplyQuery(predicate);
+            var results = orderBy is null ? query.ToList() : orderBy(query).ToList();
+            return Task.FromResult((IReadOnlyList<TEntity>)results);
         }
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
@@ -346,10 +381,12 @@ public class AgentHandlerFactoryTests
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy,
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
             params Expression<Func<TEntity, object>>[] includes)
         {
-            return Task.FromResult((IReadOnlyList<TEntity>)orderBy(ApplyQuery(predicate)).ToList());
+            var query = ApplyQuery(predicate);
+            var results = orderBy is null ? query.ToList() : orderBy(query).ToList();
+            return Task.FromResult((IReadOnlyList<TEntity>)results);
         }
 
         public Task AddAsync(TEntity entity)
@@ -424,6 +461,29 @@ public class AgentHandlerFactoryTests
             CapturedContext = context;
             CapturedInput = input;
             return ExecuteStreamingAsyncImpl(agentName, context, input, cancellationToken);
+        }
+    }
+
+    private sealed class FakeTaskStore : ITaskStore
+    {
+        public Task DeleteTaskAsync(string taskId, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<AgentTask?> GetTaskAsync(string taskId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<AgentTask?>(null);
+        }
+
+        public Task<ListTasksResponse> ListTasksAsync(ListTasksRequest request, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new ListTasksResponse { Tasks = [] });
+        }
+
+        public Task SaveTaskAsync(string taskId, AgentTask task, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
     }
 }

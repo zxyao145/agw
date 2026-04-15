@@ -51,8 +51,8 @@ public class TaskStoreTests
         Assert.Equal(task.Status.Timestamp, loaded.Status.Timestamp);
         Assert.Equal(2, loaded.History!.Count);
         Assert.Equal("hello", loaded.History[0].Parts[0].Text);
-        Assert.Single(loaded.Artifacts!);
-        Assert.Equal("artifact-1", loaded.Artifacts[0].Parts[0].Text);
+        var loadedArtifact = Assert.Single(loaded.Artifacts!);
+        Assert.Equal("artifact-1", loadedArtifact.Parts![0].Text);
         Assert.Equal("trace-1", loaded.Metadata!["traceId"].GetString());
 
         var persistedTask = await dbContext.ProjectTasks.SingleAsync(x => x.Id == Guid.Parse(taskId), cancellationToken);
@@ -126,8 +126,8 @@ public class TaskStoreTests
         Assert.Equal(1, firstPage.PageSize);
         Assert.Single(firstPage.Tasks);
         Assert.Equal(secondTaskId, firstPage.Tasks[0].Id);
-        Assert.Single(firstPage.Tasks[0].History!);
-        Assert.Equal("two-c", firstPage.Tasks[0].History[0].Parts[0].Text);
+        var firstPageHistoryMessage = Assert.Single(firstPage.Tasks[0].History!);
+        Assert.Equal("two-c", firstPageHistoryMessage.Parts![0].Text);
         Assert.Empty(firstPage.Tasks[0].Artifacts!);
         Assert.False(string.IsNullOrWhiteSpace(firstPage.NextPageToken));
 

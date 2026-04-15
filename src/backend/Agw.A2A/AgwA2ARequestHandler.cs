@@ -296,8 +296,8 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         string agentName,
         ListTasksRequest request, CancellationToken cancellationToken = default)
     {
-        // TODO
-        // var ah = await GetAgentHandler(agentName);
+        // Verification is an effective agent
+        await GetAgentHandler(agentName).ConfigureAwait(false);
         return await _taskStore.ListTasksAsync(request, cancellationToken).ConfigureAwait(false);
     }
 

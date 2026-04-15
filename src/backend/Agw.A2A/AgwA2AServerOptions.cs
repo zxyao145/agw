@@ -2,7 +2,7 @@ namespace Agw.A2A;
 
 public class AgwA2AServerOptions
 {
-    private string _prefix = "/api/a2a";
+    private string _prefix = "/a2a";
 
     public string Prefix
     {

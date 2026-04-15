@@ -287,9 +287,9 @@ public class AgentHandlerFactory
         }
     }
 
-    private Task<IAgentHandler?> CreateHandlerAsync(string agentName)
+    private async Task<IAgentHandler?> CreateHandlerAsync(string agentName)
     {
-        IAgentHandler? handler = null;
+        CommonAgentHandler? handler = null;
         if (_a2aAgentService is not null)
         {
             handler = new CommonAgentHandler(agentName, _executionBridge, _a2aAgentService);
@@ -298,6 +298,12 @@ public class AgentHandlerFactory
         {
             handler = new CommonAgentHandler(agentName, _executionBridge, _serviceScopeFactory);
         }
-        return Task.FromResult(handler);
+        if (handler is null)
+        {
+            return null;
+        }
+
+        var agentCard = await handler.GetAgentCardAsync().ConfigureAwait(false);
+        return agentCard is null ? null : handler;
     }
 }
