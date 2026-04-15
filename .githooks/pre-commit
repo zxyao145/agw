@@ -3,8 +3,8 @@
 # 有格式问题 提交失败，开发者先手动执行：dotnet format
 set -e
 
-echo "Running dotnet format Agw.slnf..."
-dotnet format Agw.slnf --verify-no-changes 
+echo "Running dotnet format Agw.slnx..."
+dotnet format Agw.slnx --verify-no-changes 
 echo "Backend checks passed."
 
 
