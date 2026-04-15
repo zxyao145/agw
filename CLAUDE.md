@@ -13,7 +13,7 @@ Agw is an ASP.NET Core + EF Core backend with a Next.js frontend for managing LL
 ```
 Agw.Host/              # ASP.NET Core entry point, DI registration, hosted services
 Agw.Infrastructure/    # EF Core DbContext, repositories, migrations
-Agw.Shared/            # Base entities, enums, shared models, repository interfaces, contracts
+Agw.Shared/            # Base entities, enums, shared models, exceptions, repository interfaces, contracts
 Agw.Agents/            # Agent definitions, agentflows, MCP tools, execution services
 Agw.Providers/         # LLM models, providers, model-providers, auth configs
 Agw.Tasks/             # Projects, tasks, session records, chat history
@@ -24,7 +24,7 @@ Agw.Skills/            # Skill archive management (ZIP uploads, SKILL.md format)
 Agw.Tools/             # Tool discovery and registration system
 ```
 
-`Agw.slnx` includes these backend projects plus test projects: `Agw.A2A.Tests`, `Agw.Agents.Tests`, `Agw.Tasks.Tests`, and `Agw.Skills.Tests`.
+`Agw.slnx` includes these backend projects plus test projects: `Agw.A2A.Tests`, `Agw.Agents.Tests`, `Agw.Files.Tests`, `Agw.Shared.Tests`, `Agw.Tasks.Tests`, and `Agw.Skills.Tests`.
 
 ### Key Domain Entities
 
@@ -222,6 +222,17 @@ Domain services are manually registered as `Scoped` or `Singleton`. When adding 
 - DTOs under `Contracts/` folders in each module
 - Async methods for I/O, constructor injection for dependencies
 - Frontend: TypeScript + React function components, kebab-case filenames
+
+## Backend Exception Policy
+
+Intentional backend errors use the shared exception model in `src/backend/Agw.Shared/Exceptions/`:
+
+- Throw `AgwException` for validation, domain, application, tool, scheduler, and runtime failures in `src/backend`.
+- Pick an existing `ErrorCodes` entry before adding a new one. When adding one, use a 7-digit code whose first 3 digits match `HttpStatusCode` and whose last 4 digits increment within that status group, such as `400_0001`, `404_0001`, or `500_0001`.
+- Keep `ErrorCodes` messages stable and reusable. If an error needs runtime details, pass an override message: `new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}")`.
+- Do not introduce new explicit `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, `HttpRequestException`, or protocol exceptions in backend code for expected application failures.
+- Translate at boundaries when required. A2A internals throw `AgwException`; `AgwA2AJsonRpcProcessor` converts those exceptions to A2A JSON-RPC errors. Controllers that need custom responses should catch `AgwException`.
+- Update tests to assert `AgwException.Code` and, when relevant, `StatusCode`. `tests/Agw.Shared.Tests` contains guard tests for error-code format and `throw new` usage.
 
 ## Commit Conventions
 

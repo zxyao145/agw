@@ -19,14 +19,14 @@ Agw.Infrastructure/  # EF Core DbContext, repositories, migrations, seeding
 Agw.Integrations/    # OAuth integrations, app definitions/instances, integration tools
 Agw.Jobs/            # Scheduled jobs, execution logs, hosted scheduler
 Agw.Providers/       # Models, providers, model-provider links, auth configs
-Agw.Shared/          # Shared entities, contracts, repository abstractions, utilities
+Agw.Shared/          # Shared entities, contracts, exceptions, repository abstractions, utilities
 Agw.Skills/          # Skill archive validation, storage, and agent-skill relations
 Agw.Tasks/           # Projects, project tasks, task records, and task APIs
 Agw.Tools/           # Tool discovery, metadata, and AI tool factory/registry
 ```
 
 Notes:
-- `Agw.slnx` includes all backend projects above plus `tests/Agw.A2A.Tests`, `tests/Agw.Agents.Tests`, `tests/Agw.Tasks.Tests`, and `tests/Agw.Skills.Tests`.
+- `Agw.slnx` includes all backend projects above plus `tests/Agw.A2A.Tests`, `tests/Agw.Agents.Tests`, `tests/Agw.Files.Tests`, `tests/Agw.Shared.Tests`, `tests/Agw.Tasks.Tests`, and `tests/Agw.Skills.Tests`.
 - `tests/Agw.Jobs.Tests` exists in the repo but is not currently included in `Agw.slnx`.
 
 ### Frontend (`src/frontend/web/`)
@@ -72,6 +72,7 @@ src/types/                   # Shared frontend types
 - `src/backend/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and manages extracted skill content under `wwwroot/skills/`.
 - `src/backend/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations and exposes them as runtime AI tools.
 - `src/backend/Agw.Tasks/Application/ProjectTaskAppService.cs`: coordinates project task persistence, chat history, and task lifecycle operations.
+- `src/backend/Agw.Shared/Exceptions/ErrorCodes.cs`: central catalog for backend `AgwException` error codes and HTTP status mapping.
 
 ## Important Domain Concepts
 
@@ -186,6 +187,10 @@ Guidance:
 - Keep request/response DTOs in `Contracts/` folders inside the owning module when adding new API contracts.
 - Controllers should end with `Controller`.
 - Prefer async methods for I/O and constructor injection for dependencies.
+- For intentional backend errors, throw `Agw.Shared.Exceptions.AgwException` with an `ErrorCodes` entry. Do not add new `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, or protocol-specific exceptions in `src/backend`.
+- Add reusable errors to `src/backend/Agw.Shared/Exceptions/ErrorCodes.cs`. `ErrorCode.Code` is 7 digits: first 3 digits match the HTTP status code, and the last 4 digits increment within that status group, for example `400_0001` or `404_0003`. Reuse existing codes before adding new ones and do not renumber existing codes.
+- Use `new AgwException(ErrorCodes.SomeCode)` when the catalog message is sufficient. Use `new AgwException(ErrorCodes.SomeCode, $"...")` when the message needs runtime context such as an id, file path, provider name, or validation value.
+- Preserve boundary-specific behavior by translating `AgwException` at the boundary instead of throwing protocol exceptions internally. For example, A2A implementation code throws `AgwException`, while `AgwA2AJsonRpcProcessor` maps it to A2A JSON-RPC errors.
 - Frontend code should use TypeScript, React function components, and kebab-case filenames.
 - Do not edit generated artifacts unless the task is explicitly about generated output.
 
