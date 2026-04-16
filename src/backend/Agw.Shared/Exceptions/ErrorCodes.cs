@@ -72,6 +72,8 @@ public static class ErrorCodes
     public static readonly ErrorCode AgentExecutionFailed = new(500_0011, "Agent execution failed.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode ProjectTaskMarkSucceededFailed = new(500_0012, "Failed to mark project task as succeeded.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode EnvironmentVariableNotSet = new(500_0013, "Required environment variable is not set.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode JobWorkerDispatchFailed = new(500_0014, "Job worker dispatch failed.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode RedisLockLost = new(500_0015, "Redis lock was lost.", HttpStatusCode.InternalServerError);
 
     public static readonly ErrorCode UnsupportedTransportType = new(501_0001, "Transport type is not supported.", HttpStatusCode.NotImplemented);
     public static readonly ErrorCode UnsupportedAgentType = new(501_0002, "Agent type is not supported.", HttpStatusCode.NotImplemented);
@@ -82,4 +84,6 @@ public static class ErrorCodes
     public static readonly ErrorCode A2AUnsupportedOperation = new(501_0007, "A2A operation is not supported.", HttpStatusCode.NotImplemented);
 
     public static readonly ErrorCode GitHubBadResponseStatusCode = new(502_0001, "GitHub returned a bad response status code.", HttpStatusCode.BadGateway);
+
+    public static readonly ErrorCode JobWorkerUnavailable = new(503_0001, "No job worker is available.", HttpStatusCode.ServiceUnavailable);
 }

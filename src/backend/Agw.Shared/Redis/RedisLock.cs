@@ -1,3 +1,5 @@
+using Agw.Shared.Exceptions;
+
 using StackExchange.Redis;
 
 namespace Agw.Shared.Redis;
@@ -50,6 +52,11 @@ public sealed class RedisLock
     /// </summary>
     public async Task<IAsyncDisposable> AcquireAsync(string lockKey, CancellationToken cancellationToken)
     {
+        return await AcquireLeaseAsync(lockKey, cancellationToken);
+    }
+
+    public async Task<IRedisLockLease> AcquireLeaseAsync(string lockKey, CancellationToken cancellationToken)
+    {
         var lockValue = Guid.NewGuid().ToString("N");
 
         while (!cancellationToken.IsCancellationRequested)
@@ -63,10 +70,11 @@ public sealed class RedisLock
             await Task.Delay(_retryDelay, cancellationToken);
         }
 
-        throw new OperationCanceledException(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new AgwException(ErrorCodes.CannotCreateInstance, $"Unable to acquire Redis lock: {lockKey}");
     }
 
-    private sealed class RedisLockLease : IAsyncDisposable
+    private sealed class RedisLockLease : IRedisLockLease
     {
         private readonly IDatabase _database;
         private readonly string _lockKey;
@@ -75,6 +83,7 @@ public sealed class RedisLock
         private readonly TimeSpan _renewInterval;
         private readonly CancellationTokenSource _renewCancellation;
         private readonly Task _renewTask;
+        private readonly TaskCompletionSource _lost = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private bool _disposed;
 
@@ -89,11 +98,13 @@ public sealed class RedisLock
             _renewTask = Task.Run(RunRenewLoopAsync);
         }
 
+        public Task Lost => _lost.Task;
+
         private async Task RunRenewLoopAsync()
         {
-            while (!_renewCancellation.IsCancellationRequested)
+            try
             {
-                try
+                while (!_renewCancellation.IsCancellationRequested)
                 {
                     await Task.Delay(_renewInterval, _renewCancellation.Token);
                     var redisResult = await _database.ScriptEvaluateAsync(
@@ -103,13 +114,18 @@ public sealed class RedisLock
 
                     if ((int)redisResult == 0)
                     {
+                        _lost.TrySetException(new AgwException(ErrorCodes.RedisLockLost, $"Redis lock was lost: {_lockKey}"));
                         return;
                     }
                 }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
+            }
+            catch (OperationCanceledException) when (_renewCancellation.IsCancellationRequested)
+            {
+                // Lease disposal stops renewal.
+            }
+            catch (Exception ex)
+            {
+                _lost.TrySetException(new AgwException(ErrorCodes.RedisLockLost, $"Failed to renew Redis lock: {_lockKey}", ex));
             }
         }
 
@@ -122,6 +138,7 @@ public sealed class RedisLock
 
             _disposed = true;
             await _renewCancellation.CancelAsync();
+            _lost.TrySetCanceled(_renewCancellation.Token);
 
             try
             {
