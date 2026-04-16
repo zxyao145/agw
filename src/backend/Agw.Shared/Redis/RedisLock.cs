@@ -1,14 +1,21 @@
 using StackExchange.Redis;
 
-namespace Agw.Jobs.Application.Services;
+namespace Agw.Shared.Redis;
 
-public sealed class RedisProjectExecutionLock : IProjectExecutionLock
+/// <summary>
+/// Generic Redis distributed lock with automatic renewal.
+/// Usage: <c>await using var lease = await redisLock.AcquireAsync("my-key", cancellationToken);</c>
+/// </summary>
+public sealed class RedisLock
 {
-    private static readonly TimeSpan LockTtl = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(300);
-    private static readonly TimeSpan RenewInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan DefaultLockTtl = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan DefaultRetryDelay = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan DefaultRenewInterval = TimeSpan.FromMinutes(1);
 
     private readonly IDatabase _database;
+    private readonly TimeSpan _lockTtl;
+    private readonly TimeSpan _retryDelay;
+    private readonly TimeSpan _renewInterval;
 
     private const string UnlockScript = """
         if redis.call('get', KEYS[1]) == ARGV[1] then
@@ -26,45 +33,58 @@ public sealed class RedisProjectExecutionLock : IProjectExecutionLock
         end
         """;
 
-    public RedisProjectExecutionLock(IConnectionMultiplexer connectionMultiplexer)
+    public RedisLock(IConnectionMultiplexer connectionMultiplexer,
+        TimeSpan? lockTtl = null,
+        TimeSpan? retryDelay = null,
+        TimeSpan? renewInterval = null)
     {
         _database = connectionMultiplexer.GetDatabase();
+        _lockTtl = lockTtl ?? DefaultLockTtl;
+        _retryDelay = retryDelay ?? DefaultRetryDelay;
+        _renewInterval = renewInterval ?? DefaultRenewInterval;
     }
 
-    public async Task<IAsyncDisposable> AcquireAsync(Guid projectId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Acquire the distributed lock. Retries until acquired or cancelled.
+    /// The returned lease automatically renews the lock and releases it on dispose.
+    /// </summary>
+    public async Task<IAsyncDisposable> AcquireAsync(string lockKey, CancellationToken cancellationToken)
     {
-        var lockKey = $"agw:jobs:project-lock:{projectId:D}";
         var lockValue = Guid.NewGuid().ToString("N");
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            var acquired = await _database.StringSetAsync(lockKey, lockValue, LockTtl, When.NotExists);
+            var acquired = await _database.StringSetAsync(lockKey, lockValue, _lockTtl, When.NotExists);
             if (acquired)
             {
-                return new RedisProjectLockLease(_database, lockKey, lockValue);
+                return new RedisLockLease(_database, lockKey, lockValue, _lockTtl, _renewInterval);
             }
 
-            await Task.Delay(RetryDelay, cancellationToken);
+            await Task.Delay(_retryDelay, cancellationToken);
         }
 
         throw new OperationCanceledException(cancellationToken);
     }
 
-    private sealed class RedisProjectLockLease : IAsyncDisposable
+    private sealed class RedisLockLease : IAsyncDisposable
     {
         private readonly IDatabase _database;
         private readonly string _lockKey;
         private readonly string _lockValue;
+        private readonly TimeSpan _lockTtl;
+        private readonly TimeSpan _renewInterval;
         private readonly CancellationTokenSource _renewCancellation;
         private readonly Task _renewTask;
 
         private bool _disposed;
 
-        public RedisProjectLockLease(IDatabase database, string lockKey, string lockValue)
+        public RedisLockLease(IDatabase database, string lockKey, string lockValue, TimeSpan lockTtl, TimeSpan renewInterval)
         {
             _database = database;
             _lockKey = lockKey;
             _lockValue = lockValue;
+            _lockTtl = lockTtl;
+            _renewInterval = renewInterval;
             _renewCancellation = new CancellationTokenSource();
             _renewTask = Task.Run(RunRenewLoopAsync);
         }
@@ -75,11 +95,11 @@ public sealed class RedisProjectExecutionLock : IProjectExecutionLock
             {
                 try
                 {
-                    await Task.Delay(RenewInterval, _renewCancellation.Token);
+                    await Task.Delay(_renewInterval, _renewCancellation.Token);
                     var redisResult = await _database.ScriptEvaluateAsync(
                         RenewScript,
                         [new RedisKey(_lockKey)],
-                        [new RedisValue(_lockValue), (long)LockTtl.TotalMilliseconds]);
+                        [new RedisValue(_lockValue), (long)_lockTtl.TotalMilliseconds]);
 
                     if ((int)redisResult == 0)
                     {

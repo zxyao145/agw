@@ -13,5 +13,6 @@
 		<PackageReference Include="Microsoft.Agents.AI.OpenAI" />
 		<PackageReference Include="Microsoft.Agents.AI.Workflows" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" />
+		<PackageReference Include="StackExchange.Redis" />
 	</ItemGroup>
 </Project>

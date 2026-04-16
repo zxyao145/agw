@@ -1,4 +1,4 @@
-namespace Agw.Jobs.Application.Services;
+namespace Agw.Jobs.External;
 
 public interface IProjectExecutionLock
 {

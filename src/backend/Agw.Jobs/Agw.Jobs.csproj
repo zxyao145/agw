@@ -3,7 +3,6 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
         <PackageReference Include="Cronos" />
         <PackageReference Include="Microsoft.Agents.AI" />
-        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
         <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
         <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
         <ProjectReference Include="..\Agw.Tasks\Agw.Tasks.csproj" />

@@ -4,6 +4,7 @@ using Agw.Jobs.Application.Services;
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Domain.Events;
 using Agw.Jobs.Dtos;
+using Agw.Jobs.External;
 using Agw.Shared.Exceptions;
 
 using Microsoft.Extensions.DependencyInjection;

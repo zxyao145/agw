@@ -1,9 +1,11 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Domain.Entities;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Domain.Entities;
+using Agw.Jobs.External;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Services;
 
@@ -12,6 +14,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+
+using StackExchange.Redis;
 
 namespace Agw.Infrastructure;
 
@@ -42,6 +46,13 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddSingleton<IGitCommandService, GitCommandService>();
+
+        // Redis
+        var redisConnectionString = configuration.GetValue<string>("Redis:ConnectionString") ?? "localhost:6379,abortConnect=false";
+        var redisConfiguration = ConfigurationOptions.Parse(redisConnectionString);
+        redisConfiguration.AbortOnConnectFail = false;
+        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConfiguration));
+        services.AddSingleton<IProjectExecutionLock, RedisProjectExecutionLock>();
 
         return services;
     }
