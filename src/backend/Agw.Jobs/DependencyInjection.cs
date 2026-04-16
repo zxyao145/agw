@@ -1,12 +1,18 @@
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Executors.Abstractions;
+using Agw.Jobs.Executors.Cluster;
 using Agw.Jobs.Executors.Common;
 using Agw.Jobs.Executors.StandAlone;
+using Agw.Jobs.External;
+using Agw.Jobs.External.Cluster;
+using Agw.Jobs.External.StandAlone;
 using Agw.Jobs.HostedService;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+
+using StackExchange.Redis;
 
 namespace Agw.Jobs;
 
@@ -24,10 +30,29 @@ public static class DependencyInjection
         services.AddSingleton<IJobTimeCalculator, JobTimeCalculator>();
         services.AddSingleton<IJobScheduler, JobScheduler>();
         services.AddSingleton<IJobWorker, JobWorker>();
-        services.TryAddSingleton<IJobWorkerPool, LocalJobWorkerPool>();
-        services.TryAddSingleton<IJobWorkerNode, LocalJobWorkerNode>();
-        services.TryAddSingleton<IJobSchedulerCoordinator, PassThroughJobSchedulerCoordinator>();
         services.AddScoped<JobAppService>();
+
+
+        var workerPoolMode = configuration.GetValue<string>("Jobs:WorkerPool:Mode") ?? "SingleNode";
+        if (string.Equals(workerPoolMode, "Cluster", StringComparison.OrdinalIgnoreCase))
+        {
+            var redisConnectionString = configuration.GetValue<string>("Redis:ConnectionString") ?? "localhost:6379,abortConnect=false";
+            var redisConfiguration = ConfigurationOptions.Parse(redisConnectionString);
+            redisConfiguration.AbortOnConnectFail = false;
+            services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConfiguration));
+
+            services.AddSingleton<IProjectExecutionLock, RedisProjectExecutionLock>();
+            services.AddSingleton<IJobWorkerPool, RedisJobWorkerPool>();
+            services.AddSingleton<IJobWorkerNode, RedisJobWorkerNode>();
+            services.AddSingleton<IJobSchedulerCoordinator, RedisJobSchedulerCoordinator>();
+        }
+        else
+        {
+            services.TryAddSingleton<IProjectExecutionLock, LocalProjectExecutionLock>();
+            services.TryAddSingleton<IJobWorkerPool, LocalJobWorkerPool>();
+            services.TryAddSingleton<IJobWorkerNode, LocalJobWorkerNode>();
+            services.TryAddSingleton<IJobSchedulerCoordinator, PassThroughJobSchedulerCoordinator>();
+        }
         return services;
     }
 }

@@ -60,13 +60,13 @@ public class A2ARoutesBuilderExtensionsTests
             options.ValidateOnBuild = true;
         });
 
-        var agentService = new A2AAgentService(null!, new EmptyAgentRepository());
-
         builder.Services.AddLogging();
         builder.Services.AddRouting();
-        builder.Services.AddSingleton(new AgentHandlerFactory(agentService, new FakeAgentExecutionBridge()));
+        builder.Services.AddSingleton<IRepository<Agent>, EmptyAgentRepository>();
+        builder.Services.AddScoped<A2AAgentService>();
+        builder.Services.AddSingleton<IAgentExecutionBridge, FakeAgentExecutionBridge>();
+        builder.Services.AddSingleton<AgentHandlerFactory>();
         builder.Services.AddScoped<IAgwA2ARequestHandler, ThrowingRequestHandler>();
-        builder.Services.AddScoped(_ => agentService);
 
         return builder.Build();
     }

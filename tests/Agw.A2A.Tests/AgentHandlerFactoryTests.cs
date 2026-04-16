@@ -226,9 +226,15 @@ public class AgentHandlerFactoryTests
 
     private static AgentHandlerFactory CreateFactory(InMemoryRepository<Agent> repository)
     {
-        var service = CreateA2AAgentService(repository);
+        var serviceProvider = new ServiceCollection()
+            .AddSingleton<IRepository<Agent>>(repository)
+            .AddScoped<A2AAgentService>()
+            .AddSingleton<IAgentExecutionBridge, FakeAgentExecutionBridge>()
+            .BuildServiceProvider();
 
-        return new AgentHandlerFactory(service, new FakeAgentExecutionBridge());
+        return new AgentHandlerFactory(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            serviceProvider.GetRequiredService<IAgentExecutionBridge>());
     }
 
     private static CommonAgentHandler CreateHandler(string agentName, IAgentExecutionBridge executionBridge)
@@ -245,10 +251,7 @@ public class AgentHandlerFactoryTests
 
     private static A2AAgentService CreateA2AAgentService(InMemoryRepository<Agent> repository)
     {
-        return new A2AAgentService(
-            agentRuntimeService: null!,
-            agentRepository: repository
-            );
+        return new A2AAgentService(repository);
     }
 
     private static AgwA2ARequestHandler CreateRequestHandler(AgentHandlerFactory agentHandlerFactory)

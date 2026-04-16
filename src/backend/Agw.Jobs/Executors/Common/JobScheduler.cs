@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Domain.Enums;
@@ -31,17 +29,20 @@ public sealed class JobScheduler(
     private readonly JobSchedulerOptions _options = options.Value;
     private readonly ILogger<JobScheduler> _logger = logger;
 
-    private readonly PriorityQueue<InMemoryJob, DateTimeOffset> _queue = new();
-    private readonly ConcurrentDictionary<Guid, InMemoryJob> _taskMap = new();
-    private readonly ConcurrentDictionary<Guid, byte> _runningProjects = new();
-    private readonly Dictionary<Guid, Queue<InMemoryJob>> _projectBacklog = new();
-    private readonly ConcurrentDictionary<Guid, Task> _runningExecutions = new();
-    private readonly object _queueLock = new();
+    // SchedulerState is the only synchronization boundary for queue, version, lane, and backlog data.
+    private readonly SchedulerState _state = new();
+
+    // Released whenever the dispatch loop should re-check the queue before its current wait expires.
     private readonly SemaphoreSlim _wakeSignal = new(0, int.MaxValue);
+
+    // Released by near-term job creation events so prefetch can pick up new persisted jobs early.
     private readonly SemaphoreSlim _prefetchSignal = new(0, int.MaxValue);
 
     private long _workerSelectionCursor = -1;
 
+    /// <summary>
+    /// Starts the prefetch and dispatch loops until cancellation is requested.
+    /// </summary>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         _jobDomainEventDispatcher.DomainEventDispatched += HandleDomainEventAsync;
@@ -58,6 +59,9 @@ public sealed class JobScheduler(
         }
     }
 
+    /// <summary>
+    /// Periodically loads due persisted jobs into the in-memory scheduler state.
+    /// </summary>
     private async Task RunPrefetchLoopAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -99,6 +103,9 @@ public sealed class JobScheduler(
         }
     }
 
+    /// <summary>
+    /// Wakes prefetch early when a newly created one-shot job can run soon.
+    /// </summary>
     private Task HandleDomainEventAsync(IJobDomainEvent domainEvent, CancellationToken _)
     {
         if (domainEvent is not JobCreatedDomainEvent createdEvent)
@@ -127,35 +134,27 @@ public sealed class JobScheduler(
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Drives due-job dispatch by repeatedly taking the next state decision.
+    /// </summary>
     private async Task RunDispatchLoopAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                var hasNext = TryPeekLatest(out var nextJob);
-                if (!hasNext || nextJob == null)
+                var decision = _state.TakeNextDispatch(DateTimeOffset.UtcNow);
+                if (decision.ReadyJob is { } job)
                 {
-                    await _wakeSignal.WaitAsync(cancellationToken);
+                    if (_state.TryClaimProjectLane(job))
+                    {
+                        _ = RunProjectLaneAsync(job, cancellationToken);
+                    }
+
                     continue;
                 }
 
-                var now = DateTimeOffset.UtcNow;
-                if (nextJob.NextRunTime > now)
-                {
-                    var delay = nextJob.NextRunTime - now;
-                    var delayTask = Task.Delay(delay, cancellationToken);
-                    var signalTask = _wakeSignal.WaitAsync(cancellationToken);
-                    await Task.WhenAny(delayTask, signalTask);
-                    continue;
-                }
-
-                if (!TryDequeueLatest(out var dequeued) || dequeued == null)
-                {
-                    continue;
-                }
-
-                DispatchOrQueueByProject(dequeued, cancellationToken);
+                await WaitForDispatchWorkAsync(decision.NextRunTime, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -168,103 +167,63 @@ public sealed class JobScheduler(
         }
     }
 
-    private void DispatchOrQueueByProject(InMemoryJob job, CancellationToken cancellationToken)
+    /// <summary>
+    /// Waits until there is dispatch work, or until the next known job becomes due.
+    /// </summary>
+    private async Task WaitForDispatchWorkAsync(DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
     {
-        var shouldStartExecution = false;
-
-        lock (_queueLock)
+        if (!nextRunTime.HasValue)
         {
-            if (_runningProjects.TryAdd(job.ProjectId, 0))
-            {
-                shouldStartExecution = true;
-            }
-            else
-            {
-                if (!_projectBacklog.TryGetValue(job.ProjectId, out var backlogQueue))
-                {
-                    backlogQueue = new Queue<InMemoryJob>();
-                    _projectBacklog[job.ProjectId] = backlogQueue;
-                }
-
-                backlogQueue.Enqueue(job);
-            }
+            await _wakeSignal.WaitAsync(cancellationToken);
+            return;
         }
 
-        if (!shouldStartExecution)
+        var delay = nextRunTime.Value - DateTimeOffset.UtcNow;
+        if (delay <= TimeSpan.Zero)
         {
             return;
         }
 
-        StartProjectExecution(job, cancellationToken);
+        // Wait until the next due time, but allow fresh/updated jobs to wake the loop immediately.
+        await _wakeSignal.WaitAsync(delay, cancellationToken);
     }
 
-    private void StartProjectExecution(InMemoryJob job, CancellationToken cancellationToken)
+    /// <summary>
+    /// Dispatches jobs for one project sequentially until that project's backlog is drained.
+    /// </summary>
+    private async Task RunProjectLaneAsync(InMemoryJob firstJob, CancellationToken cancellationToken)
     {
-        var executionTask = ExecuteProjectQueueAsync(job, cancellationToken);
-        _runningExecutions[job.JobId] = executionTask;
-
-        _ = executionTask.ContinueWith(
-            task =>
-            {
-                _runningExecutions.TryRemove(job.JobId, out _);
-                if (task.IsFaulted)
-                {
-                    _logger.LogError(task.Exception, "Project queue for job {JobId} failed unexpectedly.", job.JobId);
-                }
-            },
-            TaskScheduler.Default);
-    }
-
-    private async Task ExecuteProjectQueueAsync(InMemoryJob job, CancellationToken cancellationToken)
-    {
-        var current = job;
-        while (!cancellationToken.IsCancellationRequested)
+        var current = firstJob;
+        try
         {
-            try
+            // Drain this project's backlog in the lane task so same-project dispatch never overlaps.
+            while (!cancellationToken.IsCancellationRequested)
             {
                 var dispatchResult = await DispatchToSelectedWorkerAsync(current, cancellationToken);
-                ApplyExecutionResult(current, dispatchResult.ExecutionResult);
-            }
-            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-            {
-                _logger.LogError(ex, "Job {JobId} dispatch failed.", current.JobId);
-                RequeueAfterDispatchFailure(current);
-                ReleaseProjectLane(current.ProjectId);
-                return;
-            }
+                CompleteDispatchedJob(current, dispatchResult.ExecutionResult);
 
-            InMemoryJob? next = null;
-            lock (_queueLock)
-            {
-                if (_projectBacklog.TryGetValue(current.ProjectId, out var backlogQueue))
+                if (!_state.TryTakeNextProjectJob(current.ProjectId, out var next) || next == null)
                 {
-                    while (backlogQueue.Count > 0)
-                    {
-                        var candidate = backlogQueue.Dequeue();
-                        if (_taskMap.TryGetValue(candidate.JobId, out var latest) && latest.Version == candidate.Version)
-                        {
-                            next = candidate;
-                            break;
-                        }
-                    }
-
-                    if (backlogQueue.Count == 0)
-                    {
-                        _projectBacklog.Remove(current.ProjectId);
-                    }
-                }
-
-                if (next == null)
-                {
-                    _runningProjects.TryRemove(current.ProjectId, out _);
                     return;
                 }
-            }
 
-            current = next;
+                current = next;
+            }
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Job {JobId} dispatch failed.", current.JobId);
+            RequeueAfterDispatchFailure(current);
+            _state.ReleaseProjectLane(current.ProjectId);
         }
     }
 
+
+    #region Dispatch Job To Worker
+
+    /// <summary>
+    /// Selects an available worker and dispatches the job to it.
+    /// </summary>
     private async Task<JobWorkerDispatchResult> DispatchToSelectedWorkerAsync(InMemoryJob job, CancellationToken cancellationToken)
     {
         var workers = await _workerPool.ListAvailableWorkersAsync(cancellationToken);
@@ -277,6 +236,9 @@ public sealed class JobScheduler(
         return await _workerPool.DispatchAsync(worker, job, cancellationToken);
     }
 
+    /// <summary>
+    /// Chooses a worker with a stable round-robin order.
+    /// </summary>
     private JobWorkerDescriptor SelectWorker(IReadOnlyList<JobWorkerDescriptor> workers)
     {
         var orderedWorkers = workers
@@ -292,89 +254,250 @@ public sealed class JobScheduler(
 
         return orderedWorkers[index];
     }
+    #endregion
 
-    private void ApplyExecutionResult(InMemoryJob current, JobWorkerExecutionResult result)
+    #region Finish Job Dispatch
+
+    /// <summary>
+    /// Applies the worker result and wakes dispatch if the job was rescheduled.
+    /// </summary>
+    private void CompleteDispatchedJob(InMemoryJob current, JobWorkerExecutionResult result)
     {
-        if (result.RemoveFromSchedule || !result.NextRunTime.HasValue)
+        if (_state.ApplyExecutionResult(current, result))
         {
-            _taskMap.TryRemove(current.JobId, out _);
-            return;
+            _wakeSignal.Release();
         }
-
-        var updatedJob = InMemoryJobMapper.ToJob(current);
-        updatedJob.NextRunTime = result.NextRunTime.Value;
-        updatedJob.RetryCount = result.RetryCount;
-        UpsertInMemoryTask(updatedJob);
     }
 
+    /// <summary>
+    /// Requeues a job after worker selection or dispatch failed before execution completed.
+    /// </summary>
     private void RequeueAfterDispatchFailure(InMemoryJob job)
     {
         var updatedJob = InMemoryJobMapper.ToJob(job);
         updatedJob.NextRunTime = DateTimeOffset.UtcNow.Add(_options.DispatchRetryDelay);
         UpsertInMemoryTask(updatedJob);
-    }
+    } 
+    #endregion
 
-    private void ReleaseProjectLane(Guid projectId)
-    {
-        lock (_queueLock)
-        {
-            _runningProjects.TryRemove(projectId, out _);
-        }
-    }
-
+    /// <summary>
+    /// Inserts or updates a job in memory and wakes the dispatch loop.
+    /// </summary>
     private void UpsertInMemoryTask(Job job)
     {
-        InMemoryJob upserted;
-
-        lock (_queueLock)
-        {
-            var version = _taskMap.TryGetValue(job.Id, out var existing)
-                ? existing.Version + 1
-                : 1;
-
-            upserted = InMemoryJobMapper.FromJob(job, version);
-            _taskMap[job.Id] = upserted;
-            _queue.Enqueue(upserted, upserted.NextRunTime);
-        }
-
+        _state.Upsert(job);
         _wakeSignal.Release();
     }
+}
 
-    private bool TryPeekLatest(out InMemoryJob? job)
+
+/// <summary>
+/// Owns all mutable in-memory scheduling state for <see cref="JobScheduler" />.
+/// </summary>
+/// <remarks>
+/// The dispatch loop and project lane tasks can run concurrently, so queue state,
+/// latest job versions, active project lanes, and per-project backlogs must be
+/// read and updated as one unit. This type is the single synchronization boundary
+/// for those structures and keeps stale-entry cleanup, version checks, and lane
+/// release rules in one place.
+/// </remarks>
+internal sealed class SchedulerState
+{
+    // Protects every field in this type. Callers should never coordinate these structures separately.
+    private readonly object _syncRoot = new();
+
+    // PriorityQueue does not support keyed updates, so updated jobs are appended and older versions are skipped.
+    private readonly PriorityQueue<InMemoryJob, DateTimeOffset> _queue = new();
+
+    // Latest accepted version per job id. Queue/backlog entries are valid only while their version matches this map.
+    private readonly Dictionary<Guid, InMemoryJob> _jobs = new();
+
+    // Project ids currently owned by a lane task.
+    private readonly HashSet<Guid> _runningProjects = [];
+
+    // Due jobs waiting behind the active lane for the same project.
+    private readonly Dictionary<Guid, Queue<InMemoryJob>> _projectBacklogs = new();
+
+    /// <summary>
+    /// Adds or replaces the latest in-memory version of a job.
+    /// </summary>
+    public void Upsert(Job job)
     {
-        lock (_queueLock)
+        lock (_syncRoot)
         {
+            UpsertCore(job);
+        }
+    }
+
+    /// <summary>
+    /// Returns the next ready job, next wake time, or empty-wait decision.
+    /// </summary>
+    public DispatchDecision TakeNextDispatch(DateTimeOffset now)
+    {
+        lock (_syncRoot)
+        {
+            // Drop stale queue entries lazily; this keeps updates cheap and local to the state boundary.
             while (_queue.TryPeek(out var candidate, out _))
             {
-                if (_taskMap.TryGetValue(candidate.JobId, out var current) && current.Version == candidate.Version)
+                if (!IsCurrent(candidate))
                 {
-                    job = candidate;
-                    return true;
+                    _queue.Dequeue();
+                    continue;
+                }
+
+                if (candidate.NextRunTime > now)
+                {
+                    return DispatchDecision.WaitUntil(candidate.NextRunTime);
                 }
 
                 _queue.Dequeue();
+                return DispatchDecision.Ready(candidate);
             }
-        }
 
-        job = null;
-        return false;
+            return DispatchDecision.WaitForWork();
+        }
     }
 
-    private bool TryDequeueLatest(out InMemoryJob? job)
+    /// <summary>
+    /// Claims the project lane for a job, or appends the job to that project's backlog.
+    /// </summary>
+    public bool TryClaimProjectLane(InMemoryJob job)
     {
-        lock (_queueLock)
+        lock (_syncRoot)
         {
-            while (_queue.TryDequeue(out var candidate, out _))
+            if (_runningProjects.Add(job.ProjectId))
             {
-                if (_taskMap.TryGetValue(candidate.JobId, out var current) && current.Version == candidate.Version)
+                return true;
+            }
+
+            if (!_projectBacklogs.TryGetValue(job.ProjectId, out var backlog))
+            {
+                backlog = new Queue<InMemoryJob>();
+                _projectBacklogs[job.ProjectId] = backlog;
+            }
+
+            backlog.Enqueue(job);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets the next current job from a project's backlog, releasing the lane when none remains.
+    /// </summary>
+    public bool TryTakeNextProjectJob(Guid projectId, out InMemoryJob? next)
+    {
+        lock (_syncRoot)
+        {
+            next = null;
+            if (_projectBacklogs.TryGetValue(projectId, out var backlog))
+            {
+                while (backlog.Count > 0)
                 {
-                    job = candidate;
-                    return true;
+                    var candidate = backlog.Dequeue();
+                    if (IsCurrent(candidate))
+                    {
+                        next = candidate;
+                        break;
+                    }
+                }
+
+                if (backlog.Count == 0)
+                {
+                    _projectBacklogs.Remove(projectId);
                 }
             }
-        }
 
-        job = null;
-        return false;
+            if (next != null)
+            {
+                return true;
+            }
+
+            _runningProjects.Remove(projectId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes a completed job from memory or reschedules it based on the worker result.
+    /// </summary>
+    public bool ApplyExecutionResult(InMemoryJob current, JobWorkerExecutionResult result)
+    {
+        lock (_syncRoot)
+        {
+            if (result.RemoveFromSchedule || !result.NextRunTime.HasValue)
+            {
+                _jobs.Remove(current.JobId);
+                return false;
+            }
+
+            var updatedJob = InMemoryJobMapper.ToJob(current);
+            updatedJob.NextRunTime = result.NextRunTime.Value;
+            updatedJob.RetryCount = result.RetryCount;
+            UpsertCore(updatedJob);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Releases a project lane after dispatch failed before normal backlog draining.
+    /// </summary>
+    public void ReleaseProjectLane(Guid projectId)
+    {
+        lock (_syncRoot)
+        {
+            _runningProjects.Remove(projectId);
+        }
+    }
+
+    /// <summary>
+    /// Stores a new job version and enqueues it by next run time.
+    /// </summary>
+    private void UpsertCore(Job job)
+    {
+        var version = _jobs.TryGetValue(job.Id, out var existing)
+            ? existing.Version + 1
+            : 1;
+
+        var upserted = InMemoryJobMapper.FromJob(job, version);
+        _jobs[job.Id] = upserted;
+        _queue.Enqueue(upserted, upserted.NextRunTime);
+    }
+
+    /// <summary>
+    /// Determines whether a queued or backlogged entry still matches the latest job version.
+    /// </summary>
+    private bool IsCurrent(InMemoryJob candidate)
+    {
+        // Stale entries can come from queue updates, retries, or completed jobs that were removed from the schedule.
+        return _jobs.TryGetValue(candidate.JobId, out var current)
+            && current.Version == candidate.Version;
+    }
+}
+
+// Represents the dispatch loop's next action without exposing SchedulerState internals.
+internal readonly record struct DispatchDecision(InMemoryJob? ReadyJob, DateTimeOffset? NextRunTime)
+{
+    /// <summary>
+    /// Creates a decision to dispatch a job immediately.
+    /// </summary>
+    public static DispatchDecision Ready(InMemoryJob job)
+    {
+        return new DispatchDecision(job, null);
+    }
+
+    /// <summary>
+    /// Creates a decision to wait until the supplied next run time.
+    /// </summary>
+    public static DispatchDecision WaitUntil(DateTimeOffset nextRunTime)
+    {
+        return new DispatchDecision(null, nextRunTime);
+    }
+
+    /// <summary>
+    /// Creates a decision to wait until the scheduler is woken by new work.
+    /// </summary>
+    public static DispatchDecision WaitForWork()
+    {
+        return new DispatchDecision(null, null);
     }
 }

@@ -1,5 +1,6 @@
 using A2A;
 
+using Agw.Agents.Application.AgentRun;
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
 using Agw.Shared.Exceptions;
@@ -37,7 +38,7 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
     {
         using var scope = serviceScopeFactory.CreateScope();
         var agentRepository = scope.ServiceProvider.GetRequiredService<IRepository<Agent>>();
-        var agentRuntimeService = scope.ServiceProvider.GetRequiredService<AgentRuntimeService>();
+        var agentRuntimeService = scope.ServiceProvider.GetRequiredService<IAgentRuntimeService>();
 
         var agent = await agentRepository
             .SingleOrDefaultAsync(a => a.Name == agentName, cancellationToken)
@@ -68,7 +69,7 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
     {
         using var scope = serviceScopeFactory.CreateScope();
         var agentRepository = scope.ServiceProvider.GetRequiredService<IRepository<Agent>>();
-        var agentRuntimeService = scope.ServiceProvider.GetRequiredService<AgentRuntimeService>();
+        var agentRuntimeService = scope.ServiceProvider.GetRequiredService<IAgentRuntimeService>();
 
         var agent = await agentRepository
             .SingleOrDefaultAsync(a => a.Name == agentName, cancellationToken)

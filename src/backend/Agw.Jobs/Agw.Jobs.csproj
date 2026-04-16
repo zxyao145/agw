@@ -7,4 +7,7 @@
         <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
         <ProjectReference Include="..\Agw.Tasks\Agw.Tasks.csproj" />
     </ItemGroup>
+    <ItemGroup>
+      <Folder Include="External\StandAlone\" />
+    </ItemGroup>
 </Project>

@@ -37,7 +37,7 @@ The current design is split into three layers:
 | `WorkerNode` | Implementation of `IJobWorkerNode`. It represents the current process joining the worker pool as a worker. It handles registration, heartbeat, queue consumption, and shutdown unregistering. |
 | `Worker` | Implementation of `IJobWorker`. It executes a single job, including acquiring the project lock, invoking the agent, updating job state, and writing execution logs. |
 | `Project lane` | A scheduler-owned serial execution lane keyed by `ProjectId`. Jobs in the same project are not dispatched concurrently by the scheduler. |
-| `Project execution lock` | A project-level distributed lock acquired before worker execution. It is currently implemented by `RedisProjectExecutionLock`. It is the final cross-scheduler and cross-worker concurrency guard for a project. |
+| `Project execution lock` | A project-level lock acquired before worker execution. Single-node mode uses `LocalProjectExecutionLock`; cluster mode uses `RedisProjectExecutionLock`. It is the final project concurrency guard. |
 | `DispatchResult` | Result returned by the worker pool to the scheduler. It contains the worker id, job id, and worker execution result. |
 | `ExecutionResult` | Result returned by the worker to the scheduler. It indicates whether the job should be removed from the in-memory schedule or rescheduled with a new `NextRunTime` and `RetryCount`. |
 
@@ -72,7 +72,7 @@ Core constraints:
 - The database is the persisted source of truth. The in-memory queue only provides precise scheduling and fast dispatch.
 - The scheduler only discovers and dispatches jobs. It does not execute business work directly.
 - The worker is the execution boundary and owns persisted state changes.
-- Jobs with the same `ProjectId` are dispatched serially by the scheduler, and worker execution is also protected by the Redis project lock.
+- Jobs with the same `ProjectId` are dispatched serially by the scheduler, and worker execution is also protected by the configured project lock.
 - In cluster mode, only the leader scheduler prefetches and dispatches jobs, but all nodes can consume work as workers.
 
 ## Lifecycle
@@ -105,6 +105,7 @@ Registrations:
 
 - `IJobScheduler` -> `JobScheduler`
 - `IJobWorker` -> `JobWorker`
+- `IProjectExecutionLock` -> `LocalProjectExecutionLock`
 - `IJobWorkerPool` -> `LocalJobWorkerPool`
 - `IJobWorkerNode` -> `LocalJobWorkerNode`
 - `IJobSchedulerCoordinator` -> `PassThroughJobSchedulerCoordinator`
@@ -132,6 +133,7 @@ After `Jobs:WorkerPool:Mode` is set to `Cluster`, `Agw.Infrastructure` overrides
 - `IJobWorkerPool` -> `RedisJobWorkerPool`
 - `IJobWorkerNode` -> `RedisJobWorkerNode`
 - `IJobSchedulerCoordinator` -> `RedisJobSchedulerCoordinator`
+- `IProjectExecutionLock` -> `RedisProjectExecutionLock`
 
 ```mermaid
 flowchart LR
@@ -268,7 +270,7 @@ flowchart TD
     Next -->|"no"| Release
 ```
 
-Note: project-lane serialization only controls scheduler selection and dispatch order. Before execution, the worker still acquires `IProjectExecutionLock`, which protects concurrency across nodes and exceptional paths.
+Note: project-lane serialization only controls scheduler selection and dispatch order. Before execution, the worker still acquires `IProjectExecutionLock`, which protects concurrency within the current deployment mode and across exceptional paths.
 
 ### Worker Selection
 
@@ -649,7 +651,7 @@ sequenceDiagram
 | Redis dispatch response fails | The pool throws `JobWorkerDispatchFailed`; the scheduler treats it as a dispatch failure and reschedules after a delay. |
 | Worker execution fails | The worker updates DB retry/failure state and writes an execution log. The scheduler reschedules or removes the in-memory item based on the execution result. |
 | Scheduler leader lock is lost | The coordinator cancels the current scheduler, throws `RedisLockLost`, and then competes for the leader lock again. |
-| Same-project concurrency | The scheduler-side project lane serializes dispatch, and the worker-side Redis project lock protects actual execution. |
+| Same-project concurrency | The scheduler-side project lane serializes dispatch, and the worker-side project lock protects actual execution. |
 
 ## Extension Guidance
 

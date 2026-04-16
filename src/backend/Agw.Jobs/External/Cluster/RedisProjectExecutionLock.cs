@@ -1,9 +1,8 @@
-using Agw.Jobs.External;
 using Agw.Shared.Redis;
 
 using StackExchange.Redis;
 
-namespace Agw.Infrastructure.Jobs;
+namespace Agw.Jobs.External.Cluster;
 
 public sealed class RedisProjectExecutionLock : IProjectExecutionLock
 {
@@ -18,6 +17,7 @@ public sealed class RedisProjectExecutionLock : IProjectExecutionLock
         _redisLock = new RedisLock(connectionMultiplexer, LockTtl, RetryDelay, RenewInterval);
     }
 
+    /// <inheritdoc />
     public Task<IAsyncDisposable> AcquireAsync(Guid projectId, CancellationToken cancellationToken)
     {
         var lockKey = $"agw:jobs:project-lock:{projectId:D}";

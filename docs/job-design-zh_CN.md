@@ -37,7 +37,7 @@ Jobs 模块的目标是把持久化的 `Job` 按时间触发执行，并支持�
 | `WorkerNode` | `IJobWorkerNode` 实现。代表当前进程作为 worker 加入 worker pool，负责注册、心跳、消费队列和退出注销。 |
 | `Worker` | `IJobWorker` 实现。执行单个 job 的业务逻辑，包括抢项目锁、调用 agent、更新 job 状态和写 execution log。 |
 | `Project lane` | scheduler 内部按 `ProjectId` 维护的串行执行通道。同一个 project 的 job 不会被 scheduler 并发派发。 |
-| `Project execution lock` | worker 执行前获取的项目级分布式锁，当前由 `RedisProjectExecutionLock` 实现。它是跨 scheduler/worker 的最后一道项目并发保护。 |
+| `Project execution lock` | worker 执行前获取的项目级锁。单节点模式使用 `LocalProjectExecutionLock`，集群模式使用 `RedisProjectExecutionLock`。它是最后一道项目并发保护。 |
 | `DispatchResult` | worker pool 返回给 scheduler 的派发结果，包含 worker id、job id 和 worker execution result。 |
 | `ExecutionResult` | worker 返回给 scheduler 的执行结果，表示是否从内存调度中移除，或用新的 `NextRunTime` / `RetryCount` 重新调度。 |
 
@@ -72,7 +72,7 @@ flowchart LR
 - DB 是持久化事实源，内存队列只负责精确调度和快速派发。
 - Scheduler 只负责发现和派发，不直接执行业务。
 - Worker 是执行边界，负责持久化状态变更。
-- 同一 `ProjectId` 的 job 在 scheduler 侧串行派发，在 worker 侧还会用 Redis 项目锁保护。
+- 同一 `ProjectId` 的 job 在 scheduler 侧串行派发，在 worker 侧还会用当前部署模式对应的项目锁保护。
 - 集群模式下只有 leader scheduler 预取和派发，但所有节点都可以作为 worker 消费任务。
 
 ## 生命周期
@@ -105,6 +105,7 @@ sequenceDiagram
 
 - `IJobScheduler` -> `JobScheduler`
 - `IJobWorker` -> `JobWorker`
+- `IProjectExecutionLock` -> `LocalProjectExecutionLock`
 - `IJobWorkerPool` -> `LocalJobWorkerPool`
 - `IJobWorkerNode` -> `LocalJobWorkerNode`
 - `IJobSchedulerCoordinator` -> `PassThroughJobSchedulerCoordinator`
@@ -132,6 +133,7 @@ flowchart LR
 - `IJobWorkerPool` -> `RedisJobWorkerPool`
 - `IJobWorkerNode` -> `RedisJobWorkerNode`
 - `IJobSchedulerCoordinator` -> `RedisJobSchedulerCoordinator`
+- `IProjectExecutionLock` -> `RedisProjectExecutionLock`
 
 ```mermaid
 flowchart LR
@@ -268,7 +270,7 @@ flowchart TD
     Next -->|"no"| Release
 ```
 
-注意：项目串行派发只约束 scheduler 选择和派发顺序。worker 执行前仍会获取 `IProjectExecutionLock`，这是跨节点和异常场景下的并发保护。
+注意：项目串行派发只约束 scheduler 选择和派发顺序。worker 执行前仍会获取 `IProjectExecutionLock`，用于在当前部署模式和异常场景下保护并发执行。
 
 ### Worker 选择
 
@@ -649,7 +651,7 @@ sequenceDiagram
 | Redis dispatch 响应失败 | pool 抛 `JobWorkerDispatchFailed`，scheduler 视为派发失败并延迟重排。 |
 | Worker 执行失败 | worker 更新 DB retry/failure 状态并写 execution log，scheduler 根据 execution result 重排或移除。 |
 | Scheduler leader lock 丢失 | coordinator 取消当前 scheduler，抛 `RedisLockLost`，然后重新竞争 leader lock。 |
-| 同项目并发 | scheduler 侧 project lane 串行派发，worker 侧 Redis project lock 再保护实际执行。 |
+| 同项目并发 | scheduler 侧 project lane 串行派发，worker 侧 project lock 再保护实际执行。 |
 
 ## 扩展建议
 

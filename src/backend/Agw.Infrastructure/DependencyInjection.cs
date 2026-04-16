@@ -1,6 +1,5 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Domain.Entities;
 using Agw.Jobs.Application.Services;
@@ -8,6 +7,7 @@ using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Executors.Abstractions;
 using Agw.Jobs.Executors.Cluster;
 using Agw.Jobs.External;
+using Agw.Jobs.External.Cluster;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Services;
 
@@ -49,20 +49,7 @@ public static class DependencyInjection
 
         services.AddSingleton<IGitCommandService, GitCommandService>();
 
-        // Redis
-        var redisConnectionString = configuration.GetValue<string>("Redis:ConnectionString") ?? "localhost:6379,abortConnect=false";
-        var redisConfiguration = ConfigurationOptions.Parse(redisConnectionString);
-        redisConfiguration.AbortOnConnectFail = false;
-        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConfiguration));
-        services.AddSingleton<IProjectExecutionLock, RedisProjectExecutionLock>();
 
-        var workerPoolMode = configuration.GetValue<string>("Jobs:WorkerPool:Mode") ?? "SingleNode";
-        if (string.Equals(workerPoolMode, "Cluster", StringComparison.OrdinalIgnoreCase))
-        {
-            services.AddSingleton<IJobWorkerPool, RedisJobWorkerPool>();
-            services.AddSingleton<IJobWorkerNode, RedisJobWorkerNode>();
-            services.AddSingleton<IJobSchedulerCoordinator, RedisJobSchedulerCoordinator>();
-        }
 
         return services;
     }

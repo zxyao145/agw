@@ -239,25 +239,12 @@ public class AgentHandlerFactory
     private readonly ConcurrentDictionary<string, Lazy<Task<IAgentHandler?>>> _handlers =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly IServiceScopeFactory? _serviceScopeFactory;
-    private readonly A2AAgentService? _a2aAgentService;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IAgentExecutionBridge _executionBridge;
 
-    [ActivatorUtilitiesConstructor]
     public AgentHandlerFactory(IServiceScopeFactory serviceScopeFactory, IAgentExecutionBridge executionBridge)
     {
         _serviceScopeFactory = serviceScopeFactory;
-        _executionBridge = executionBridge;
-    }
-
-    /// <summary>
-    /// display for test
-    /// </summary>
-    /// <param name="a2aAgentService"></param>
-    /// <param name="executionBridge"></param>
-    public AgentHandlerFactory(A2AAgentService a2aAgentService, IAgentExecutionBridge executionBridge)
-    {
-        _a2aAgentService = a2aAgentService;
         _executionBridge = executionBridge;
     }
 
@@ -290,20 +277,7 @@ public class AgentHandlerFactory
 
     private async Task<IAgentHandler?> CreateHandlerAsync(string agentName)
     {
-        CommonAgentHandler? handler = null;
-        if (_a2aAgentService is not null)
-        {
-            handler = new CommonAgentHandler(agentName, _executionBridge, _a2aAgentService);
-        }
-        else if (_serviceScopeFactory is not null)
-        {
-            handler = new CommonAgentHandler(agentName, _executionBridge, _serviceScopeFactory);
-        }
-        if (handler is null)
-        {
-            return null;
-        }
-
+        var handler = new CommonAgentHandler(agentName, _executionBridge, _serviceScopeFactory);
         var agentCard = await handler.GetAgentCardAsync().ConfigureAwait(false);
         return agentCard is null ? null : handler;
     }
