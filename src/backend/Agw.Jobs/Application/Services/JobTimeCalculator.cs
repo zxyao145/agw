@@ -1,5 +1,4 @@
-using Agw.Jobs.Domain.Entities;
-using Agw.Jobs.Domain.Enums;
+using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 
 using Cronos;

@@ -7,6 +7,8 @@ using Agw.Jobs.External;
 using Agw.Jobs.External.Cluster;
 using Agw.Jobs.External.StandAlone;
 using Agw.Jobs.HostedService;
+using Agw.Shared.Domain.Events;
+using Agw.Shared.EventBus.Abstractions;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,9 +28,10 @@ public static class DependencyInjection
 
         services.AddHostedService<JobHostedService>();
         services.AddScoped<IAgentExecutor, AgentExecutor>();
-        services.AddSingleton<IJobDomainEventDispatcher, JobDomainEventDispatcher>();
         services.AddSingleton<IJobTimeCalculator, JobTimeCalculator>();
         services.AddSingleton<IJobScheduler, JobScheduler>();
+        services.AddSingleton<IDomainEventHandler<JobCreatedDomainEvent>>(sp => (JobScheduler)sp.GetRequiredService<IJobScheduler>());
+        services.AddSingleton<IDomainEventHandler<JobUpdatedDomainEvent>>(sp => (JobScheduler)sp.GetRequiredService<IJobScheduler>());
         services.AddSingleton<IJobWorker, JobWorker>();
         services.AddScoped<JobAppService>();
 

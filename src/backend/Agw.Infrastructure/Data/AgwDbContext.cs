@@ -2,10 +2,12 @@ using System.Text.Json;
 
 using Agw.Agents.Domain.Entities;
 using Agw.Integrations.Domain.Entities;
-using Agw.Jobs.Domain.Entities;
 using Agw.Providers.Domain.Entities;
+using Agw.Shared.Data;
+using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.EventBus.Abstractions;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -14,22 +16,31 @@ namespace Agw.Infrastructure.Data;
 
 public class AgwDbContext : DbContext
 {
-    public AgwDbContext(DbContextOptions<AgwDbContext> options) : base(options)
+    private readonly IDomainEventBus? _domainEventBus;
+
+    public AgwDbContext(DbContextOptions<AgwDbContext> options, IDomainEventBus? domainEventBus = null) : base(options)
     {
+        _domainEventBus = domainEventBus;
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        var entitiesWithEvents = GetEntitiesWithDomainEvents();
         PruneDeletedAgentAppRelations();
         StampJobRowVersions();
-        return base.SaveChanges(acceptAllChangesOnSuccess);
+        var result = base.SaveChanges(acceptAllChangesOnSuccess);
+        PublishDomainEventsAsync(entitiesWithEvents, CancellationToken.None).GetAwaiter().GetResult();
+        return result;
     }
 
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        var entitiesWithEvents = GetEntitiesWithDomainEvents();
         PruneDeletedAgentAppRelations();
         StampJobRowVersions();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        await PublishDomainEventsAsync(entitiesWithEvents, cancellationToken);
+        return result;
     }
 
     public DbSet<Provider> Providers => Set<Provider>();
@@ -398,6 +409,41 @@ public class AgwDbContext : DbContext
         if (relationsToRemove.Count > 0)
         {
             AgentAppRelations.RemoveRange(relationsToRemove);
+        }
+    }
+
+    private IReadOnlyList<BaseEntity> GetEntitiesWithDomainEvents()
+    {
+        return ChangeTracker.Entries<BaseEntity>()
+            .Select(entry => entry.Entity)
+            .Where(entity => entity.DomainEvents.Count > 0)
+            .ToList();
+    }
+
+    private async Task PublishDomainEventsAsync(IReadOnlyList<BaseEntity> entities, CancellationToken cancellationToken)
+    {
+        if (entities.Count == 0)
+        {
+            return;
+        }
+
+        var domainEvents = entities
+            .SelectMany(entity => entity.DomainEvents)
+            .ToList();
+
+        foreach (var entity in entities)
+        {
+            entity.ClearDomainEvents();
+        }
+
+        if (_domainEventBus == null)
+        {
+            return;
+        }
+
+        foreach (var domainEvent in domainEvents)
+        {
+            await _domainEventBus.PublishAsync(domainEvent, cancellationToken);
         }
     }
 }

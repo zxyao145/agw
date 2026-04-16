@@ -41,7 +41,7 @@ public class JobSchedulerStructureTests
 
     private static string ExtractMethod(string source, string methodName)
     {
-        var methodStart = source.IndexOf(methodName, StringComparison.Ordinal);
+        var methodStart = source.IndexOf($"private async Task {methodName}", StringComparison.Ordinal);
         Assert.True(methodStart >= 0, $"Could not find method {methodName}.");
 
         var bodyStart = source.IndexOf('{', methodStart);

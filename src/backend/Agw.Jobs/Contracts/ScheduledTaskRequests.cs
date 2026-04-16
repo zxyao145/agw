@@ -1,5 +1,5 @@
-using Agw.Jobs.Domain.Enums;
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Data.Entities.Jobs;
 
 namespace Agw.Jobs.Contracts;
 

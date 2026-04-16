@@ -10,8 +10,13 @@ public class ProjectTaskDomainService
         string user,
         ProjectTaskStatus initialStatus = ProjectTaskStatus.Pending)
     {
+        if (task.ProjectId == Guid.Empty || string.IsNullOrWhiteSpace(task.ContextId))
+        {
+            return false;
+        }
 
         task.Id = task.Id == Guid.Empty ? Guid.NewGuid() : task.Id;
+        task.ContextId = task.ContextId.Trim();
         task.Title = string.IsNullOrWhiteSpace(task.Title) ? "Untitled" : task.Title.Trim();
         task.Status = initialStatus;
         task.CreateBy = user;

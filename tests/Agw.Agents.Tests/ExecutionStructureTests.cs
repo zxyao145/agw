@@ -9,21 +9,24 @@ public class ExecutionStructureTests
     {
         var executionTypeNames = new[]
         {
-            "AgentExecutionCoordinator",
-            "IAgentExecutionCoordinator",
+            "ActiveTurn",
+            "AgwUserInputUtil",
+            "CommandDispatcher",
             "ExecutionCommandContext",
-            "ExecutionCommandDispatcher",
             "ExecutionConnectionState",
-            "ExecutionInputTextExtractor",
-            "SettingCommandStrategy",
+            "ExecutionCommandResult",
+            "IExecutionCommandStrategy",
             "ExecCommandStrategy",
-            "InterruptCommandStrategy"
+            "InterruptCommandStrategy",
+            "SettingCommandStrategy"
         };
         var assembly = typeof(AgentExecutionsController).Assembly;
-        var executionTypes = executionTypeNames
-            .Select(name => assembly.GetTypes().Single(type => type.Name == name))
+        var executionTypes = assembly
+            .GetTypes()
+            .Where(type => executionTypeNames.Contains(type.Name))
             .ToArray();
 
-        Assert.All(executionTypes, type => Assert.Equal("Agw.Api.Execution", type.Namespace));
+        Assert.Equal(executionTypeNames.Length, executionTypes.Length);
+        Assert.All(executionTypes, type => Assert.StartsWith("Agw.Agents.Application.Execution", type.Namespace, StringComparison.Ordinal));
     }
 }

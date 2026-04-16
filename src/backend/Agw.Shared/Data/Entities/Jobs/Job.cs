@@ -1,10 +1,8 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Jobs.Domain.Enums;
 using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Data;
 
-namespace Agw.Jobs.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Jobs;
 
 [Table("job")]
 public class Job : BaseEntity, IAggregateRoot

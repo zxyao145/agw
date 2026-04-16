@@ -3,12 +3,9 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Domain.Entities;
 using Agw.Jobs.Application.Services;
-using Agw.Jobs.Domain.Entities;
-using Agw.Jobs.Executors.Abstractions;
-using Agw.Jobs.Executors.Cluster;
-using Agw.Jobs.External;
-using Agw.Jobs.External.Cluster;
+using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.EventBus.Abstractions;
 using Agw.Shared.Services;
 
 using Microsoft.EntityFrameworkCore;
@@ -16,8 +13,6 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-
-using StackExchange.Redis;
 
 namespace Agw.Infrastructure;
 
@@ -46,11 +41,9 @@ public static class DependencyInjection
         services.AddScoped<IRepository<Job>, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
         services.AddScoped<IJobStore, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-
         services.AddSingleton<IGitCommandService, GitCommandService>();
 
-
-
+        services.AddSingleton<IDomainEventBus, InMemoryDomainEventBus>();
         return services;
     }
 

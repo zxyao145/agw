@@ -41,6 +41,7 @@ public class ProjectTaskDomainServiceTests
         var task = new ProjectTask
         {
             Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            ProjectId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             Title = "  New task  ",
             ContextId = "context-1",
         };
@@ -90,7 +91,7 @@ public class ProjectTaskDomainServiceTests
             [
                 "TryMarkFailed",
                 "TryMarkSucceeded",
-                "TryPrepareForCreate",
+                "TryPrepareTaskForCreate",
                 "TryUpdateTitle"
             ],
             methodNames);

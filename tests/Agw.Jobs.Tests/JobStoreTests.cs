@@ -2,7 +2,7 @@ using System.Reflection;
 
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Jobs.Domain.Entities;
+using Agw.Shared.Data.Entities.Jobs;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;

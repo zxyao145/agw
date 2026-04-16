@@ -1,9 +1,9 @@
 using Agw.Jobs.Application.Services;
-using Agw.Jobs.Domain.Entities;
-using Agw.Jobs.Domain.Enums;
 using Agw.Jobs.Dtos;
 using Agw.Jobs.Executors.Abstractions;
 using Agw.Jobs.Executors.Common;
+using Agw.Shared.Data.Entities.Jobs;
+using Agw.Shared.Domain.Events;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -32,7 +32,6 @@ public class JobSchedulerTests
         var scheduler = new JobScheduler(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             workerPool,
-            new JobDomainEventDispatcher(),
             Options.Create(new JobSchedulerOptions
             {
                 PrefetchInterval = TimeSpan.FromMilliseconds(50),
@@ -51,6 +50,76 @@ public class JobSchedulerTests
         workerPool.ReleaseFirstDispatch.SetResult();
 
         await workerPool.SecondDispatchStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+        await schedulerCancellation.CancelAsync();
+
+        await schedulerTask.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenNearTermOneShotJobCreated_WakesPrefetchLoop()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var job = CreateJob(Guid.NewGuid());
+
+        var services = new ServiceCollection();
+        var jobStore = new EventTriggeredPrefetchJobStore(job);
+        services.AddSingleton<IJobStore>(jobStore);
+        await using var serviceProvider = services.BuildServiceProvider();
+
+        var scheduler = new JobScheduler(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            new BlockingWorkerPool(),
+            Options.Create(new JobSchedulerOptions
+            {
+                PrefetchInterval = TimeSpan.FromMinutes(10),
+                PrefetchWindow = TimeSpan.FromMinutes(10),
+                DispatchRetryDelay = TimeSpan.FromMilliseconds(50)
+            }),
+            NullLogger<JobScheduler>.Instance);
+
+        using var schedulerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var schedulerTask = scheduler.RunAsync(schedulerCancellation.Token);
+
+        await jobStore.FirstPrefetch.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+
+        await scheduler.HandleAsync(new JobCreatedDomainEvent(job), cancellationToken);
+
+        await jobStore.SecondPrefetch.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+        await schedulerCancellation.CancelAsync();
+
+        await schedulerTask.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenNearTermOneShotJobUpdated_WakesPrefetchLoop()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var job = CreateJob(Guid.NewGuid());
+
+        var services = new ServiceCollection();
+        var jobStore = new EventTriggeredPrefetchJobStore(job);
+        services.AddSingleton<IJobStore>(jobStore);
+        await using var serviceProvider = services.BuildServiceProvider();
+
+        var scheduler = new JobScheduler(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            new BlockingWorkerPool(),
+            Options.Create(new JobSchedulerOptions
+            {
+                PrefetchInterval = TimeSpan.FromMinutes(10),
+                PrefetchWindow = TimeSpan.FromMinutes(10),
+                DispatchRetryDelay = TimeSpan.FromMilliseconds(50)
+            }),
+            NullLogger<JobScheduler>.Instance);
+
+        using var schedulerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var schedulerTask = scheduler.RunAsync(schedulerCancellation.Token);
+
+        await jobStore.FirstPrefetch.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+
+        await scheduler.HandleAsync(new JobUpdatedDomainEvent(job), cancellationToken);
+
+        await jobStore.SecondPrefetch.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
         await schedulerCancellation.CancelAsync();
 
         await schedulerTask.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
@@ -91,6 +160,59 @@ public class JobSchedulerTests
 
             _prefetched = true;
             return Task.FromResult(_jobs);
+        }
+
+        public Task<bool> MarkRunningAsync(Guid jobId, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task MarkSucceededAsync(Guid jobId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task MarkRetryAsync(Guid jobId, DateTimeOffset nextRunTime, int retryCount, string errorMessage, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task MarkFailedAsync(Guid jobId, int retryCount, string errorMessage, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task AddExecutionLogAsync(Guid jobId, Guid taskId, DateTimeOffset startTime, DateTimeOffset endTime, bool success, int attempt, string? errorMessage, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    private sealed class EventTriggeredPrefetchJobStore : IJobStore
+    {
+        private readonly Job _job;
+        private int _prefetchCount;
+
+        public EventTriggeredPrefetchJobStore(Job job)
+        {
+            _job = job;
+        }
+
+        public TaskCompletionSource FirstPrefetch { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource SecondPrefetch { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<IReadOnlyList<Job>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken)
+        {
+            var prefetchCount = Interlocked.Increment(ref _prefetchCount);
+            if (prefetchCount == 1)
+            {
+                FirstPrefetch.SetResult();
+                return Task.FromResult<IReadOnlyList<Job>>([]);
+            }
+
+            SecondPrefetch.SetResult();
+            return Task.FromResult<IReadOnlyList<Job>>([_job]);
         }
 
         public Task<bool> MarkRunningAsync(Guid jobId, CancellationToken cancellationToken)

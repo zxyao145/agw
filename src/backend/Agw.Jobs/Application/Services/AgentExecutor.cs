@@ -1,9 +1,9 @@
 using Agw.Agents.Application.Agentflows;
 using Agw.Agents.Application.AgentRun;
 using Agw.Agents.Application.AgentRun.Dtos;
-using Agw.Jobs.Domain.Entities;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using Agw.Tasks.Application;

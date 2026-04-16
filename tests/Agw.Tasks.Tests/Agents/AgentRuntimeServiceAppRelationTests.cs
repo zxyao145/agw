@@ -146,7 +146,7 @@ public class AgentRuntimeServiceAppRelationTests
 
     private static async Task<string[]> InvokeCollectNamedToolNamesAsync(IAgentRuntimeService service, Guid agentId, string? rawAgentTools)
     {
-        var method = typeof(IAgentRuntimeService).GetMethod(
+        var method = service.GetType().GetMethod(
             "CollectNamedToolNamesAsync",
             BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 

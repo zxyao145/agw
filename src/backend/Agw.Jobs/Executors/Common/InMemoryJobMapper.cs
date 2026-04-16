@@ -1,5 +1,5 @@
-using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Dtos;
+using Agw.Shared.Data.Entities.Jobs;
 
 namespace Agw.Jobs.Executors.Common;
 

@@ -149,7 +149,8 @@ public class ProjectTaskAppService
             Id = Guid.NewGuid(),
             TaskId = taskId,
             ConversationSequence = 0,
-            ConversationPayload = JsonUtil.Serialize(inputMessage)
+            ConversationPayload = JsonUtil.Serialize(inputMessage),
+            CreateTime = DateTime.UtcNow
         };
 
         if (!_projectTaskDomainService.TryPrepareTaskForCreate(task, user, initialStatus))
@@ -159,6 +160,7 @@ public class ProjectTaskAppService
         }
 
         await _taskRepository.AddAsync(task);
+        await _recordRepository.AddAsync(initialRecord);
         await _unitOfWork.SaveChangesAsync();
 
         return ApplicationResult<ProjectTaskResponse>.Success(ToResponse(task, [initialRecord], null));

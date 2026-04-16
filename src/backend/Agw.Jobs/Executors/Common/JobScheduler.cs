@@ -1,9 +1,9 @@
 using Agw.Jobs.Application.Services;
-using Agw.Jobs.Domain.Entities;
-using Agw.Jobs.Domain.Enums;
-using Agw.Jobs.Domain.Events;
 using Agw.Jobs.Dtos;
 using Agw.Jobs.Executors.Abstractions;
+using Agw.Shared.Data.Entities.Jobs;
+using Agw.Shared.Domain.Events;
+using Agw.Shared.EventBus.Abstractions;
 using Agw.Shared.Exceptions;
 
 using Microsoft.Extensions.DependencyInjection;
@@ -19,13 +19,14 @@ namespace Agw.Jobs.Executors.Common;
 public sealed class JobScheduler(
     IServiceScopeFactory scopeFactory,
     IJobWorkerPool workerPool,
-    IJobDomainEventDispatcher jobDomainEventDispatcher,
     IOptions<JobSchedulerOptions> options,
-    ILogger<JobScheduler> logger) : IJobScheduler
+    ILogger<JobScheduler> logger) :
+    IJobScheduler,
+    IDomainEventHandler<JobCreatedDomainEvent>,
+    IDomainEventHandler<JobUpdatedDomainEvent>
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly IJobWorkerPool _workerPool = workerPool;
-    private readonly IJobDomainEventDispatcher _jobDomainEventDispatcher = jobDomainEventDispatcher;
     private readonly JobSchedulerOptions _options = options.Value;
     private readonly ILogger<JobScheduler> _logger = logger;
 
@@ -45,18 +46,9 @@ public sealed class JobScheduler(
     /// </summary>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        _jobDomainEventDispatcher.DomainEventDispatched += HandleDomainEventAsync;
-
-        try
-        {
-            var prefetchTask = RunPrefetchLoopAsync(cancellationToken);
-            var dispatchTask = RunDispatchLoopAsync(cancellationToken);
-            await Task.WhenAll(prefetchTask, dispatchTask);
-        }
-        finally
-        {
-            _jobDomainEventDispatcher.DomainEventDispatched -= HandleDomainEventAsync;
-        }
+        var prefetchTask = RunPrefetchLoopAsync(cancellationToken);
+        var dispatchTask = RunDispatchLoopAsync(cancellationToken);
+        await Task.WhenAll(prefetchTask, dispatchTask);
     }
 
     /// <summary>
@@ -106,32 +98,40 @@ public sealed class JobScheduler(
     /// <summary>
     /// Wakes prefetch early when a newly created one-shot job can run soon.
     /// </summary>
-    private Task HandleDomainEventAsync(IJobDomainEvent domainEvent, CancellationToken _)
+    public Task HandleAsync(JobCreatedDomainEvent domainEvent, CancellationToken _)
     {
-        if (domainEvent is not JobCreatedDomainEvent createdEvent)
-        {
-            return Task.CompletedTask;
-        }
+        HandleJobChanged(domainEvent.Job);
+        return Task.CompletedTask;
+    }
 
-        var job = createdEvent.Job;
+    /// <summary>
+    /// Wakes prefetch early when an updated one-shot job can run soon.
+    /// </summary>
+    public Task HandleAsync(JobUpdatedDomainEvent domainEvent, CancellationToken _)
+    {
+        HandleJobChanged(domainEvent.Job);
+        return Task.CompletedTask;
+    }
+
+    private void HandleJobChanged(Job job)
+    {
         var now = DateTimeOffset.UtcNow;
         if (job.TriggerType != TriggerType.Once)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         if (!job.IsEnabled || job.Status != JobStatus.Pending)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         if (job.NextRunTime >= now.Add(_options.PrefetchInterval))
         {
-            return Task.CompletedTask;
+            return;
         }
 
         _prefetchSignal.Release();
-        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -277,7 +277,7 @@ public sealed class JobScheduler(
         var updatedJob = InMemoryJobMapper.ToJob(job);
         updatedJob.NextRunTime = DateTimeOffset.UtcNow.Add(_options.DispatchRetryDelay);
         UpsertInMemoryTask(updatedJob);
-    } 
+    }
     #endregion
 
     /// <summary>

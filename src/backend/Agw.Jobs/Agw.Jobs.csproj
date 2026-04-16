@@ -8,6 +8,7 @@
         <ProjectReference Include="..\Agw.Tasks\Agw.Tasks.csproj" />
     </ItemGroup>
     <ItemGroup>
+      <Folder Include="Domain\" />
       <Folder Include="External\StandAlone\" />
     </ItemGroup>
 </Project>

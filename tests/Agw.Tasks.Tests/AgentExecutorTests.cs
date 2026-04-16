@@ -1,8 +1,8 @@
 using System.Reflection;
 
 using Agw.Jobs.Application.Services;
-using Agw.Jobs.Domain.Entities;
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Data.Entities.Jobs;
 
 namespace Agw.Tasks.Tests;
 
