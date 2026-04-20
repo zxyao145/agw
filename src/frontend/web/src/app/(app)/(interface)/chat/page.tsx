@@ -88,6 +88,9 @@ type AgentflowDto = {
   enable?: boolean;
 };
 
+const DEFAULT_PROJECT_VALUE = "default-built-in";
+const DEFAULT_AGENT_LABEL = "Hello";
+
 function getRestoredTargetValue(messages: AiMessage[]): string | null {
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
     const message = messages[messageIndex];
@@ -798,6 +801,13 @@ export default function ChatPage() {
         return queryProjectId;
       }
 
+      const defaultProject = projects.find(
+        (project) => project.id === DEFAULT_PROJECT_VALUE || project.name === DEFAULT_PROJECT_VALUE,
+      );
+      if (defaultProject) {
+        return defaultProject.id;
+      }
+
       return projects[0].id;
     });
   }, [projects, queryProjectId]);
@@ -809,18 +819,27 @@ export default function ChatPage() {
     }
 
     setSelectedTargetValue((current) => {
-      if (current) {
+      if (current && targetOptions.some((option) => getTargetValue(option) === current)) {
         return current;
       }
 
-      if (selectedProjectId) {
-        const storedTargetValue = chatSettingsStorage.get(selectedProjectId).targetValue;
-        if (
-          storedTargetValue &&
-          targetOptions.some((option) => getTargetValue(option) === storedTargetValue)
-        ) {
-          return storedTargetValue;
-        }
+      if (!selectedProjectId) {
+        return null;
+      }
+
+      const storedTargetValue = chatSettingsStorage.get(selectedProjectId).targetValue;
+      if (
+        storedTargetValue &&
+        targetOptions.some((option) => getTargetValue(option) === storedTargetValue)
+      ) {
+        return storedTargetValue;
+      }
+
+      const defaultAgent = targetOptions.find(
+        (option) => option.type === "agent" && option.label === DEFAULT_AGENT_LABEL,
+      );
+      if (defaultAgent) {
+        return getTargetValue(defaultAgent);
       }
 
       return getTargetValue(targetOptions[0]);
