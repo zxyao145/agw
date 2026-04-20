@@ -819,18 +819,20 @@ export default function ChatPage() {
     }
 
     setSelectedTargetValue((current) => {
-      if (current) {
+      if (current && targetOptions.some((option) => getTargetValue(option) === current)) {
         return current;
       }
 
-      if (selectedProjectId) {
-        const storedTargetValue = chatSettingsStorage.get(selectedProjectId).targetValue;
-        if (
-          storedTargetValue &&
-          targetOptions.some((option) => getTargetValue(option) === storedTargetValue)
-        ) {
-          return storedTargetValue;
-        }
+      if (!selectedProjectId) {
+        return null;
+      }
+
+      const storedTargetValue = chatSettingsStorage.get(selectedProjectId).targetValue;
+      if (
+        storedTargetValue &&
+        targetOptions.some((option) => getTargetValue(option) === storedTargetValue)
+      ) {
+        return storedTargetValue;
       }
 
       const defaultAgent = targetOptions.find(
