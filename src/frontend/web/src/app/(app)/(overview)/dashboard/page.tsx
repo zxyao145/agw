@@ -49,18 +49,46 @@ function getApiErrorMessage(error: unknown): string {
   return "Unknown error";
 }
 
-function SummaryCards({ loading, stats }: { loading: boolean; stats?: DashboardStatsResponse }) {
+function SummaryCards({
+  loading,
+  stats,
+  hasData,
+}: {
+  loading: boolean;
+  stats?: DashboardStatsResponse;
+  hasData: boolean;
+}) {
   const cards = [
-    { label: "Job 数量", value: stats?.jobCount ?? 0, color: "text-light" },
-    { label: "Project 数量", value: stats?.projectCount ?? 0, color: "text-sage" },
-    { label: "Project Task 数量", value: stats?.projectTaskCount ?? 0, color: "text-blue-400" },
+    {
+      label: "Job 数量",
+      value: hasData ? stats?.jobCount : "—",
+      color: "text-light",
+    },
+    {
+      label: "Project 数量",
+      value: hasData ? stats?.projectCount : "—",
+      color: "text-sage",
+    },
+    {
+      label: "Project Task 数量",
+      value: hasData ? stats?.projectTaskCount : "—",
+      color: "text-blue-400",
+    },
     {
       label: "Project Task Record 数量",
-      value: stats?.projectTaskRecordCount ?? 0,
+      value: hasData ? stats?.projectTaskRecordCount : "—",
       color: "text-violet-400",
     },
-    { label: "Agent 数量", value: stats?.agentCount ?? 0, color: "text-amber-300" },
-    { label: "Agentflow 数量", value: stats?.agentflowCount ?? 0, color: "text-rose" },
+    {
+      label: "Agent 数量",
+      value: hasData ? stats?.agentCount : "—",
+      color: "text-amber-300",
+    },
+    {
+      label: "Agentflow 数量",
+      value: hasData ? stats?.agentflowCount : "—",
+      color: "text-rose",
+    },
   ];
 
   return (
@@ -91,7 +119,11 @@ export default function Page() {
 
   return (
     <div className="mt-4 w-full space-y-4">
-      <SummaryCards loading={statsQuery.isLoading} stats={statsQuery.data} />
+      <SummaryCards
+        loading={statsQuery.isLoading}
+        stats={statsQuery.data}
+        hasData={statsQuery.data !== undefined}
+      />
 
       {statsQuery.isError ? (
         <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-300">
