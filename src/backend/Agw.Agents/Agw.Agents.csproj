@@ -5,6 +5,7 @@
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
         <PackageReference Include="ClaudeCodeSdk.MAF" />
+        <PackageReference Include="CodexSdk.MAF" />
         <PackageReference Include="Microsoft.Agents.AI" />
         <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
         <PackageReference Include="Microsoft.Agents.AI.Anthropic" />

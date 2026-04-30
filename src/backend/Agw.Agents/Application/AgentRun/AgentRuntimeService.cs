@@ -32,6 +32,7 @@ using ModelContextProtocol.Client;
 
 using OpenAI;
 using OpenAI.Chat;
+using OpenAI.CodexSdk.MAF;
 
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
@@ -111,12 +112,12 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
         }
 
         var extra = request.ExtraOverride ?? request.Agent.Extra;
-        if (request.Agent.Name != AgentNames.ClaudeCode)
+        aiAgent = request.Agent.Name switch
         {
-            return false;
-        }
-
-        aiAgent = CreateClaudeCodeAgent(extra, request.Workspace, request.TaskId, request.Resume);
+            AgentNames.ClaudeCode => CreateClaudeCodeAgent(extra, request.Workspace, request.TaskId, request.Resume),
+            AgentNames.Codex => CreateCodexAgent(extra, request.Workspace, request.TaskId, request.Resume),
+            _ => null
+        };
         return aiAgent != null;
     }
 
@@ -149,6 +150,25 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
 
         options = options with { ChatHistoryProvider = _chatHistoryProvider };
         return new ClaudeCodeAIAgent(options, _logger);
+    }
+
+    private AIAgent? CreateCodexAgent(string? extra, string? workspace, Guid? taskId, bool resume)
+    {
+        if (string.IsNullOrWhiteSpace(extra))
+        {
+            _logger.LogError("agent.Extra is null or whitespace");
+            return null;
+        }
+
+        var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(extra, workspace, taskId, resume);
+        if (options == null)
+        {
+            _logger.LogError("agent.Extra Deserialize to options error");
+            return null;
+        }
+
+        options = options with { ChatHistoryProvider = _chatHistoryProvider };
+        return new CodexAIAgent(options);
     }
 
 

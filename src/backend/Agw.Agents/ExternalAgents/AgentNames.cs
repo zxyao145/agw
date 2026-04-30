@@ -3,6 +3,8 @@ using Agw.Shared.Utils;
 
 using ClaudeCodeSdk.MAF;
 
+using OpenAI.CodexSdk.MAF;
+
 namespace Agw.Agents.ExternalAgents;
 
 public class AgentNames
@@ -33,6 +35,7 @@ public class AgentNames
                 Name = Codex,
                 Description = "External agent for OpenAI Codex integration",
                 Type = AgentType.External,
+                Extra = JsonUtil.Serialize(new CodexAIAgentOptions()),
             },
             //new Agent
             //{

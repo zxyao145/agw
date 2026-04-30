@@ -4,6 +4,9 @@ using System.Text.Json.Nodes;
 
 using Agw.Shared.Utils;
 
+using OpenAI.CodexSdk;
+using OpenAI.CodexSdk.MAF;
+
 namespace Agw.Agents.Application.AgentRun;
 
 public static class AgentRuntimeServiceUtil
@@ -30,6 +33,58 @@ public static class AgentRuntimeServiceUtil
 
         return $"{systemPrompt}{Environment.NewLine}{workspaceInstructions}";
     }
+
+
+    #region CodexAgentOptions
+
+    public static CodexAIAgentOptions? BuildCodexAIAgentOptions(string extra, string? workspace, Guid? taskId, bool resume)
+    {
+        var options = JsonUtil.Deserialize<CodexAIAgentOptions>(extra);
+        if (options == null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(workspace))
+        {
+            options = options with
+            {
+                ThreadOptions = CreateCodexThreadOptionsWithWorkspace(options.ThreadOptions, workspace)
+            };
+        }
+
+        if (taskId != null)
+        {
+            options = options with
+            {
+                ThreadId = taskId.Value,
+                IsResume = resume
+            };
+        }
+
+        return options;
+    }
+
+    private static ThreadOptions CreateCodexThreadOptionsWithWorkspace(ThreadOptions? options, string workspace)
+    {
+        options ??= new ThreadOptions();
+
+        return new ThreadOptions
+        {
+            Model = options.Model,
+            SandboxMode = options.SandboxMode,
+            WorkingDirectory = workspace,
+            SkipGitRepoCheck = options.SkipGitRepoCheck,
+            ModelReasoningEffort = options.ModelReasoningEffort,
+            NetworkAccessEnabled = options.NetworkAccessEnabled,
+            WebSearchMode = options.WebSearchMode,
+            WebSearchEnabled = options.WebSearchEnabled,
+            ApprovalPolicy = options.ApprovalPolicy,
+            AdditionalDirectories = options.AdditionalDirectories,
+        };
+    }
+
+    #endregion
 
 
     #region AgentRuntimeConfigurationMerger
