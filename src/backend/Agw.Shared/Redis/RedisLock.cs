@@ -63,7 +63,7 @@ public sealed class RedisLock
             await Task.Delay(_retryDelay, cancellationToken);
         }
 
-        throw new OperationCanceledException(cancellationToken);
+        return await Task.FromCanceled<IAsyncDisposable>(cancellationToken);
     }
 
     private sealed class RedisLockLease : IAsyncDisposable

@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text.Json;
 
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
@@ -10,7 +9,6 @@ namespace Agw.Tasks.Tests;
 public class ProjectTaskDomainServiceTests
 {
     private readonly ProjectTaskDomainService _service = new();
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
     public void ProjectTask_RemovesLegacyTargetAndDescriptionProperties()
@@ -21,7 +19,7 @@ public class ProjectTaskDomainServiceTests
     }
 
     [Fact]
-    public void TryPrepareForCreate_MissingRequiredFields_ReturnsFalse()
+    public void TryPrepareTaskForCreate_BlankTitle_UsesUntitledFallback()
     {
         var task = new ProjectTask
         {
@@ -30,12 +28,13 @@ public class ProjectTaskDomainServiceTests
 
         var result = _service.TryPrepareTaskForCreate(task, "tester");
 
-        Assert.False(result);
-        Assert.Equal(Guid.Empty, task.Id);
+        Assert.True(result);
+        Assert.NotEqual(Guid.Empty, task.Id);
+        Assert.Equal("Untitled", task.Title);
     }
 
     [Fact]
-    public void TryPrepareForCreate_ValidTask_InitializesTaskWithoutDescriptionOrAgent()
+    public void TryPrepareTaskForCreate_ValidTask_InitializesTaskWithoutDescriptionOrAgent()
     {
         var before = DateTime.UtcNow;
         var task = new ProjectTask
@@ -90,7 +89,7 @@ public class ProjectTaskDomainServiceTests
             [
                 "TryMarkFailed",
                 "TryMarkSucceeded",
-                "TryPrepareForCreate",
+                "TryPrepareTaskForCreate",
                 "TryUpdateTitle"
             ],
             methodNames);

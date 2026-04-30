@@ -36,7 +36,7 @@ public class ProjectTaskAppServiceTests
     }
 
     [Fact]
-    public async Task CreateRunningAsync_PersistsJobIdAndReturnsTitleOnlySummary()
+    public async Task CreateRunningAsync_DefersInitialRecordPersistence()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
@@ -100,12 +100,11 @@ public class ProjectTaskAppServiceTests
         Assert.Equal("job-executor", task.CreateBy);
         Assert.Equal("job-executor", task.UpdateBy);
 
-        var record = await dbContext.TaskRecords.SingleAsync(
-            x => x.TaskId == response.Id,
-            cancellationToken);
-        Assert.Equal(response.Id, record.TaskId);
-        Assert.Equal(0, record.ConversationSequence);
-        Assert.Equal("Run scheduled sync", record.GetText());
+        var records = await dbContext.TaskRecords
+            .Where(x => x.TaskId == response.Id)
+            .ToListAsync(cancellationToken);
+
+        Assert.Empty(records);
     }
 
     [Fact]

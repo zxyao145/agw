@@ -5,25 +5,27 @@ namespace Agw.Agents.Tests;
 public class ExecutionStructureTests
 {
     [Fact]
-    public void ExecutionTypes_ShouldLiveOutsideControllerNamespace()
+    public void ExecutionTypes_ShouldLiveInApplicationExecutionNamespaces()
     {
-        var executionTypeNames = new[]
+        var executionTypes = new Dictionary<string, string>
         {
-            "AgentExecutionCoordinator",
-            "IAgentExecutionCoordinator",
-            "ExecutionCommandContext",
-            "ExecutionCommandDispatcher",
-            "ExecutionConnectionState",
-            "ExecutionInputTextExtractor",
-            "SettingCommandStrategy",
-            "ExecCommandStrategy",
-            "InterruptCommandStrategy"
+            ["ActiveTurn"] = "Agw.Agents.Application.Execution",
+            ["AgwUserInputUtil"] = "Agw.Agents.Application.Execution",
+            ["CommandDispatcher"] = "Agw.Agents.Application.Execution",
+            ["ExecutionCommandContext"] = "Agw.Agents.Application.Execution",
+            ["ExecutionConnectionState"] = "Agw.Agents.Application.Execution",
+            ["ExecCommandStrategy"] = "Agw.Agents.Application.Execution.CommandStrategies",
+            ["IExecutionCommandStrategy"] = "Agw.Agents.Application.Execution.CommandStrategies",
+            ["InterruptCommandStrategy"] = "Agw.Agents.Application.Execution.CommandStrategies",
+            ["SettingCommandStrategy"] = "Agw.Agents.Application.Execution.CommandStrategies",
         };
         var assembly = typeof(AgentExecutionsController).Assembly;
-        var executionTypes = executionTypeNames
-            .Select(name => assembly.GetTypes().Single(type => type.Name == name))
-            .ToArray();
 
-        Assert.All(executionTypes, type => Assert.Equal("Agw.Api.Execution", type.Namespace));
+        foreach (var (typeName, expectedNamespace) in executionTypes)
+        {
+            var executionType = Assert.Single(assembly.GetTypes(), type => type.Name == typeName);
+
+            Assert.Equal(expectedNamespace, executionType.Namespace);
+        }
     }
 }

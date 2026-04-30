@@ -1,6 +1,3 @@
-using System.Reflection;
-
-using Agw.Agents.Application.AgentRun;
 using Agw.Agents.Application.Agents;
 using Agw.Agents.Domain.Entities;
 using Agw.Agents.Domain.Services;
@@ -13,7 +10,6 @@ using Agw.Shared.Data.Entities.Skills;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
@@ -111,9 +107,9 @@ public class AgentRuntimeServiceAppRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken);
-        var service = scope.CreateRuntimeService();
+        var service = scope.CreateAgentAppService();
 
-        var toolNames = await InvokeCollectNamedToolNamesAsync(service, scope.AgentId, """["git_status"]""");
+        var toolNames = await service.CollectNamedToolNamesAsync(scope.AgentId, """["git_status"]""");
 
         Assert.Equal(
             ["github_clone", "github_list_repository", "git_status"],
@@ -125,9 +121,9 @@ public class AgentRuntimeServiceAppRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken, includeDuplicateGithubApp: true);
-        var service = scope.CreateRuntimeService();
+        var service = scope.CreateAgentAppService();
 
-        var toolNames = await InvokeCollectNamedToolNamesAsync(service, scope.AgentId, """["github_clone"]""");
+        var toolNames = await service.CollectNamedToolNamesAsync(scope.AgentId, """["github_clone"]""");
 
         Assert.Equal(["github_clone", "github_list_repository"], toolNames);
     }
@@ -137,24 +133,11 @@ public class AgentRuntimeServiceAppRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await AgentRuntimeServiceTestScope.CreateAsync(cancellationToken, includeUnknownApp: true);
-        var service = scope.CreateRuntimeService();
+        var service = scope.CreateAgentAppService();
 
-        var toolNames = await InvokeCollectNamedToolNamesAsync(service, scope.AgentId, null);
+        var toolNames = await service.CollectNamedToolNamesAsync(scope.AgentId, null);
 
         Assert.Equal(["github_clone", "github_list_repository"], toolNames);
-    }
-
-    private static async Task<string[]> InvokeCollectNamedToolNamesAsync(IAgentRuntimeService service, Guid agentId, string? rawAgentTools)
-    {
-        var method = typeof(IAgentRuntimeService).GetMethod(
-            "CollectNamedToolNamesAsync",
-            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-
-        Assert.NotNull(method);
-
-        var result = method!.Invoke(service, [agentId, rawAgentTools]);
-        var task = Assert.IsAssignableFrom<Task<string[]>>(result);
-        return await task;
     }
 
     private sealed class AgentRuntimeServiceTestScope : IAsyncDisposable
@@ -310,19 +293,6 @@ public class AgentRuntimeServiceAppRelationTests
                 new EfRepository<AgentSkillRelation>(dbContext),
                 new UnitOfWork(dbContext),
                 new AgentDomainService());
-        }
-
-        public IAgentRuntimeService CreateRuntimeService()
-        {
-            return new AgentRuntimeService(
-                CreateAgentAppService(),
-                null!,
-                null!,
-                null!,
-                null!,
-                null!,
-                null!,
-                NullLogger<AgentRuntimeService>.Instance);
         }
 
         public async ValueTask DisposeAsync()
