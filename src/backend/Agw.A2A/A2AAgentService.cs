@@ -9,9 +9,7 @@ public class A2AAgentService
 {
     private readonly IRepository<Agent> _agentRepository;
 
-    public A2AAgentService(
-        AgentRuntimeService agentRuntimeService,
-        IRepository<Agent> agentRepository)
+    public A2AAgentService(IRepository<Agent> agentRepository)
     {
         _agentRepository = agentRepository;
     }

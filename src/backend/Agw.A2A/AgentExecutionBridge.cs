@@ -37,7 +37,7 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
     {
         using var scope = serviceScopeFactory.CreateScope();
         var agentRepository = scope.ServiceProvider.GetRequiredService<IRepository<Agent>>();
-        var agentRuntimeService = scope.ServiceProvider.GetRequiredService<AgentRuntimeService>();
+        var agentRuntimeService = scope.ServiceProvider.GetRequiredService<IAgentRuntimeService>();
 
         var agent = await agentRepository
             .SingleOrDefaultAsync(a => a.Name == agentName, cancellationToken)
@@ -68,7 +68,7 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
     {
         using var scope = serviceScopeFactory.CreateScope();
         var agentRepository = scope.ServiceProvider.GetRequiredService<IRepository<Agent>>();
-        var agentRuntimeService = scope.ServiceProvider.GetRequiredService<AgentRuntimeService>();
+        var agentRuntimeService = scope.ServiceProvider.GetRequiredService<IAgentRuntimeService>();
 
         var agent = await agentRepository
             .SingleOrDefaultAsync(a => a.Name == agentName, cancellationToken)

@@ -60,7 +60,7 @@ public class A2ARoutesBuilderExtensionsTests
             options.ValidateOnBuild = true;
         });
 
-        var agentService = new A2AAgentService(null!, new EmptyAgentRepository());
+        var agentService = new A2AAgentService(new EmptyAgentRepository());
 
         builder.Services.AddLogging();
         builder.Services.AddRouting();

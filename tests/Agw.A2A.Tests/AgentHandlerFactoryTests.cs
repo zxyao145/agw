@@ -245,10 +245,7 @@ public class AgentHandlerFactoryTests
 
     private static A2AAgentService CreateA2AAgentService(InMemoryRepository<Agent> repository)
     {
-        return new A2AAgentService(
-            agentRuntimeService: null!,
-            agentRepository: repository
-            );
+        return new A2AAgentService(repository);
     }
 
     private static AgwA2ARequestHandler CreateRequestHandler(AgentHandlerFactory agentHandlerFactory)
