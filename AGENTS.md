@@ -26,6 +26,7 @@ Agw.Tools/           # Tool discovery, metadata, and AI tool factory/registry
 ```
 
 Notes:
+
 - `Agw.slnx` includes all backend projects above plus `tests/Agw.A2A.Tests`, `tests/Agw.Agents.Tests`, `tests/Agw.Files.Tests`, `tests/Agw.Shared.Tests`, `tests/Agw.Tasks.Tests`, and `tests/Agw.Skills.Tests`.
 - `tests/Agw.Jobs.Tests` exists in the repo but is not currently included in `Agw.slnx`.
 
@@ -101,6 +102,7 @@ dotnet format
 ```
 
 Notes:
+
 - The development host runs on `http://localhost:5015` by default via `src/backend/Agw.Host/Properties/launchSettings.json`.
 - Do not add or apply EF Core migrations automatically. When needed, use:
 
@@ -131,6 +133,7 @@ pnpm gen:openapi
 ```
 
 Notes:
+
 - The Next.js dev server runs on `http://localhost:3000` by default.
 - Linting and formatting use `oxlint` and `oxfmt`, not ESLint/Prettier.
 - `src/frontend/web/next.config.ts` rewrites `/api/*` and `/openapi/*` to `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015`.
@@ -142,6 +145,23 @@ Notes:
 - Run `dotnet test Agw.slnx` for the normal repo-wide backend test pass.
 - If you touch `Agw.Jobs`, also run `dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj` because that project is not currently part of `Agw.slnx`.
 - Prefer test namespaces that mirror production namespaces and method names like `Method_Condition_ExpectedResult`.
+
+## Rules
+
+Read [`docs/rules.md`](docs/rules.md) to obtain mandatory constraint rules for all coding, and strictly adhere to each item
+
+## Commit Conventions
+
+Follow Conventional Commits:
+
+- `feat:` new features
+- `fix:` bug fixes
+- `refactor:` code restructuring
+- `chore:` maintenance tasks
+- `docs:` documentation
+- `test:` tests
+  
+   
 
 ## Configuration
 
@@ -162,6 +182,7 @@ Primary backend settings live in `src/backend/Agw.Host/appsettings.json`:
 ```
 
 Guidance:
+
 - Supported database providers are `sqlite` and `postgres`.
 - Keep secrets out of `appsettings*.json` and frontend env files; prefer environment-variable overrides.
 - Register new backend services in the relevant module `DependencyInjection.cs` and wire the module into `src/backend/Agw.Host/Program.cs`.
