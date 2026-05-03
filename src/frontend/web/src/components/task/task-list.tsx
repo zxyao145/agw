@@ -72,11 +72,7 @@ export function TaskHistoryList({
     const refreshUntilCurrentTaskAppears = async () => {
       attempts += 1;
       const latestTasks = await refreshTasks();
-      if (
-        cancelled ||
-        attempts >= 5 ||
-        !isTaskMissingFromHistory(latestTasks, currentTaskId)
-      ) {
+      if (cancelled || attempts >= 5 || !isTaskMissingFromHistory(latestTasks, currentTaskId)) {
         return;
       }
 

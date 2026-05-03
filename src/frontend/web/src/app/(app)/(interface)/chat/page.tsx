@@ -66,6 +66,14 @@ import {
   getTargetValue,
   getTargetValueFromMetadata,
 } from "./lib/target-options";
+import {
+  buildChatUrlSettings,
+  decodeChatUrlSettings,
+  encodeChatUrlSettings,
+  getChatSettingsHash,
+  getChatSettingsHashValue,
+  getTargetValueFromChatUrlSettings,
+} from "./lib/url-settings";
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
 import { getApiErrorMessage } from "@/api/utils";
 
@@ -117,6 +125,47 @@ function getRestoredTargetValue(messages: AiMessage[]): string | null {
 
 function nextTaskId(): string {
   return Uuid4.generate().toCanonical();
+}
+
+function getChatRouteHref({
+  projectId,
+  taskId,
+  settingsHash,
+}: {
+  projectId: string | null;
+  taskId: string | null;
+  settingsHash: string;
+}): string {
+  const nextParams = new URLSearchParams();
+  if (projectId) {
+    nextParams.set("projectId", projectId);
+  }
+  if (projectId && taskId) {
+    nextParams.set("taskId", taskId);
+  }
+
+  const nextQuery = nextParams.toString();
+  return `${nextQuery ? `/chat?${nextQuery}` : "/chat"}${settingsHash}`;
+}
+
+function getCurrentChatSettingsHashValue(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return getChatSettingsHashValue(window.location.hash);
+}
+
+function replaceCurrentChatSettingsHash(settingsParam: string | null): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  searchParams.delete("settings");
+  const nextSearch = searchParams.toString();
+  const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${getChatSettingsHash(settingsParam)}`;
+  window.history.replaceState(window.history.state, "", nextUrl);
 }
 
 type ChatSettingsDraft = {
@@ -342,12 +391,25 @@ export default function ChatPage() {
   const searchParams = useSearchParams();
   const queryProjectId = searchParams.get("projectId");
   const queryTaskId = searchParams.get("taskId");
+  const [hashSettingsValue, setHashSettingsValue] = React.useState<string | null>(
+    getCurrentChatSettingsHashValue,
+  );
+  const routeSettings = React.useMemo(
+    () => decodeChatUrlSettings(hashSettingsValue),
+    [hashSettingsValue],
+  );
+  const initialRouteTargetValue = React.useMemo(
+    () => getTargetValueFromChatUrlSettings(routeSettings),
+    [routeSettings],
+  );
 
   const [currentTab, setCurrentTab] = React.useState("chat");
   const [isMobile, setIsMobile] = React.useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(queryProjectId);
-  const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(null);
+  const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(
+    initialRouteTargetValue,
+  );
   const [showChatHistory, setShowChatHistory] = React.useState(true);
   const [showFileExplorer, setShowFileExplorer] = React.useState(true);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
@@ -362,9 +424,15 @@ export default function ChatPage() {
   const [recursiveMode] = React.useState(true);
   const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
-  const [workspaceOverride, setWorkspaceOverride] = React.useState("");
-  const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
-  const [extraSettingText, setExtraSettingText] = React.useState(EMPTY_EXTRA_SETTING_TEXT);
+  const [workspaceOverride, setWorkspaceOverride] = React.useState(
+    routeSettings?.chatSettings?.workspace ?? "",
+  );
+  const [envVars, setEnvVars] = React.useState<EnvVar[]>(
+    routeSettings?.chatSettings?.envVars ?? [],
+  );
+  const [extraSettingText, setExtraSettingText] = React.useState(
+    routeSettings?.chatSettings?.extraSettingText ?? EMPTY_EXTRA_SETTING_TEXT,
+  );
 
   const wsRef = React.useRef<WebSocket | null>(null);
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
@@ -419,6 +487,34 @@ export default function ChatPage() {
 
   const hasWorkspace = resolvedWorkspace.length > 0;
 
+  const activeRouteSettings = React.useMemo(
+    () =>
+      routeSettings && (!queryProjectId || queryProjectId === selectedProjectId)
+        ? routeSettings
+        : null,
+    [queryProjectId, routeSettings, selectedProjectId],
+  );
+
+  const routeTargetValue = React.useMemo(
+    () => getTargetValueFromChatUrlSettings(activeRouteSettings),
+    [activeRouteSettings],
+  );
+
+  const routeSettingsParam = React.useMemo(() => {
+    if (!selectedTarget) {
+      return null;
+    }
+
+    return encodeChatUrlSettings(
+      buildChatUrlSettings({
+        target: selectedTarget,
+        workspace: workspaceOverride,
+        envVars: normalizeEnvVars(envVars),
+        extraSettingText,
+      }),
+    );
+  }, [envVars, extraSettingText, selectedTarget, workspaceOverride]);
+
   const closeSocket = React.useCallback((reason: string) => {
     const ws = wsRef.current;
     if (!ws) {
@@ -432,19 +528,19 @@ export default function ChatPage() {
   }, []);
 
   const syncRoute = React.useCallback(
-    (projectId: string | null, taskIdValue: string | null) => {
-      const nextParams = new URLSearchParams();
-      if (projectId) {
-        nextParams.set("projectId", projectId);
-      }
-      if (projectId && taskIdValue) {
-        nextParams.set("taskId", taskIdValue);
-      }
-
-      const nextQuery = nextParams.toString();
-      router.replace(nextQuery ? `/chat?${nextQuery}` : "/chat", { scroll: false });
+    (projectId: string | null, taskIdValue: string | null, settingsParamValue?: string | null) => {
+      const nextSettingsParam =
+        settingsParamValue === undefined ? routeSettingsParam : settingsParamValue;
+      const settingsHash = getChatSettingsHash(nextSettingsParam);
+      const nextHref = getChatRouteHref({
+        projectId,
+        taskId: taskIdValue,
+        settingsHash,
+      });
+      router.replace(nextHref, { scroll: false });
+      setHashSettingsValue(nextSettingsParam);
     },
-    [router],
+    [router, routeSettingsParam],
   );
 
   const applyAiMessageActions = React.useCallback((actions: AiMessageAction[]) => {
@@ -574,6 +670,21 @@ export default function ChatPage() {
       };
     },
     [projects],
+  );
+
+  const getActiveSettingsDraft = React.useCallback(
+    (projectId: string | null): ChatSettingsDraft => {
+      if (projectId && projectId === selectedProjectId) {
+        return {
+          workspace: workspaceOverride,
+          envVars,
+          extraSettingText,
+        };
+      }
+
+      return getProjectSettingsDraft(projectId);
+    },
+    [envVars, extraSettingText, getProjectSettingsDraft, selectedProjectId, workspaceOverride],
   );
 
   const buildEnvironmentVariables = React.useCallback(() => {
@@ -747,7 +858,7 @@ export default function ChatPage() {
       if (restoredTargetValue) {
         setSelectedTargetValue(restoredTargetValue);
       }
-      syncRoute(projectId, details.taskId);
+      syncRoute(projectId, details.taskId, null);
     },
     [closeSocket, syncRoute],
   );
@@ -777,11 +888,20 @@ export default function ChatPage() {
       return;
     }
 
+    if (activeRouteSettings) {
+      setWorkspaceOverride(activeRouteSettings.chatSettings?.workspace ?? "");
+      setEnvVars(activeRouteSettings.chatSettings?.envVars ?? []);
+      setExtraSettingText(
+        activeRouteSettings.chatSettings?.extraSettingText ?? EMPTY_EXTRA_SETTING_TEXT,
+      );
+      return;
+    }
+
     const draft = getProjectSettingsDraft(selectedProjectId);
     setWorkspaceOverride(draft.workspace);
     setEnvVars(draft.envVars);
     setExtraSettingText(draft.extraSettingText);
-  }, [getProjectSettingsDraft, selectedProjectId]);
+  }, [activeRouteSettings, getProjectSettingsDraft, selectedProjectId]);
 
   React.useEffect(() => {
     if (selectedFile) {
@@ -830,6 +950,13 @@ export default function ChatPage() {
     }
 
     setSelectedTargetValue((current) => {
+      if (
+        routeTargetValue &&
+        targetOptions.some((option) => getTargetValue(option) === routeTargetValue)
+      ) {
+        return routeTargetValue;
+      }
+
       if (current && targetOptions.some((option) => getTargetValue(option) === current)) {
         return current;
       }
@@ -855,7 +982,29 @@ export default function ChatPage() {
 
       return getTargetValue(targetOptions[0]);
     });
-  }, [selectedProjectId, targetOptions]);
+  }, [routeTargetValue, selectedProjectId, targetOptions]);
+
+  React.useEffect(() => {
+    const handleHashChange = () => {
+      setHashSettingsValue(getCurrentChatSettingsHashValue());
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  React.useEffect(() => {
+    if (!selectedProjectId || !routeSettingsParam) {
+      return;
+    }
+
+    if (routeSettingsParam === hashSettingsValue) {
+      return;
+    }
+
+    replaceCurrentChatSettingsHash(routeSettingsParam);
+    setHashSettingsValue(routeSettingsParam);
+  }, [hashSettingsValue, routeSettingsParam, selectedProjectId]);
 
   React.useEffect(() => {
     const routeAction = getChatRouteSessionAction({
@@ -895,8 +1044,9 @@ export default function ChatPage() {
         setIsExecuting(false);
         setTaskId(details.taskId);
         setMessages(details.messages ?? []);
-        if (restoredTargetValue) {
-          setSelectedTargetValue(restoredTargetValue);
+        const nextTargetValue = routeTargetValue ?? restoredTargetValue;
+        if (nextTargetValue) {
+          setSelectedTargetValue(nextTargetValue);
         }
       } catch (error) {
         if (!cancelled) {
@@ -908,7 +1058,7 @@ export default function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [clearLocalSessionState, closeSocket, queryProjectId, queryTaskId]);
+  }, [clearLocalSessionState, closeSocket, queryProjectId, queryTaskId, routeTargetValue]);
 
   const handleProjectChange = React.useCallback(
     (nextProjectId: string) => {
@@ -923,7 +1073,7 @@ export default function ChatPage() {
       setSelectedTargetValue(null);
       setMessages([]);
       setTaskId(null);
-      syncRoute(nextProjectId, null);
+      syncRoute(nextProjectId, null, null);
     },
     [closeSocket, selectedProjectId, syncRoute],
   );
@@ -1156,14 +1306,14 @@ export default function ChatPage() {
         headerActions={
           <ChatSettingsDialog
             selectedProjectId={selectedProjectId}
-            getDraft={getProjectSettingsDraft}
+            getDraft={getActiveSettingsDraft}
             onSave={handleSaveChatSettings}
           />
         }
       />
     ),
     [
-      getProjectSettingsDraft,
+      getActiveSettingsDraft,
       handleAllTasksDeleted,
       handleNewTask,
       handleSaveChatSettings,
