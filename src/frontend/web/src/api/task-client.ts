@@ -111,6 +111,30 @@ export async function clearTaskRecords(taskId: string, projectId: string): Promi
   }
 }
 
+export async function updateTaskTitle(
+  taskId: string,
+  projectId: string,
+  title: string,
+): Promise<boolean> {
+  const normalizedTitle = title.trim();
+  if (!taskId || !projectId || !normalizedTitle) {
+    return false;
+  }
+
+  try {
+    await client.apiPut("/api/projects/{projectId}/tasks/{taskId}/title", {
+      params: { path: { projectId, taskId } },
+      body: { title: normalizedTitle },
+    });
+    return true;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 export async function deleteAllTasks(projectId: string): Promise<void> {
   const tasks = await getAllTasks(projectId);
   await Promise.all(tasks.map((task) => deleteTaskById(task.taskId, projectId)));

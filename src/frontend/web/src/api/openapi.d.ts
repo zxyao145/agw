@@ -1995,6 +1995,48 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/projects/{projectId}/tasks/{taskId}/title": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+          taskId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ProjectTaskTitleUpdateRequest"];
+          "text/json": components["schemas"]["ProjectTaskTitleUpdateRequest"];
+          "application/*+json": components["schemas"]["ProjectTaskTitleUpdateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/projects/{projectId}/tasks/{taskId}/clear-records": {
     parameters: {
       query?: never;
@@ -2374,6 +2416,9 @@ export interface components {
       workspace: null | string;
       enable: boolean;
       extraSetting: null | string;
+    };
+    ProjectTaskTitleUpdateRequest: {
+      title: string;
     };
     ProviderAuthConfigRequest: {
       authType: components["schemas"]["ProviderAuthType"];

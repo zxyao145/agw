@@ -1,17 +1,27 @@
 "use client";
 
 import * as React from "react";
-import { Trash2, Plus, Info, RotateCw } from "lucide-react";
+import { Trash2, Plus, Info, RotateCw, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { getApiErrorMessage } from "@/api/utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { deleteTaskById, deleteAllTasks, getAllTasks, type TaskSummary } from "@/api/task-client";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  deleteTaskById,
+  deleteAllTasks,
+  getAllTasks,
+  updateTaskTitle,
+  type TaskSummary,
+} from "@/api/task-client";
 import { cn } from "@/lib/utils";
 import { isTaskMissingFromHistory } from "./task-history-refresh";
 
@@ -37,6 +47,12 @@ export function TaskHistoryList({
   const [tasks, setTasks] = React.useState<TaskSummary[]>([]);
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [editingTask, setEditingTask] = React.useState<TaskSummary | null>(null);
+  const [editTitle, setEditTitle] = React.useState("");
+  const [editTitleError, setEditTitleError] = React.useState<string | null>(null);
+  const [isSavingTitle, setIsSavingTitle] = React.useState(false);
+  const editTitleInputId = React.useId();
+  const editTitleErrorId = `${editTitleInputId}-error`;
 
   const refreshTasks = React.useCallback(async (): Promise<TaskSummary[]> => {
     setIsRefreshing(true);
@@ -112,6 +128,59 @@ export function TaskHistoryList({
     } catch (error) {
       console.error("Delete error:", error);
       toast.error("Error deleting chat");
+    }
+  };
+
+  const handleEditTitle = (task: TaskSummary, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingTask(task);
+    setEditTitle(task.title);
+    setEditTitleError(null);
+  };
+
+  const handleEditTitleDialogOpenChange = (open: boolean) => {
+    if (open || isSavingTitle) {
+      return;
+    }
+
+    setEditingTask(null);
+    setEditTitle("");
+    setEditTitleError(null);
+  };
+
+  const handleSaveTitle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTask) {
+      return;
+    }
+
+    const title = editTitle.trim();
+    if (!title) {
+      setEditTitleError("Title is required.");
+      return;
+    }
+
+    setIsSavingTitle(true);
+    setEditTitleError(null);
+    try {
+      const success = await updateTaskTitle(editingTask.taskId, projectId, title);
+      if (!success) {
+        setEditTitleError("Task was not found.");
+        toast.error("Failed to update task title");
+        return;
+      }
+
+      toast.success("Task title updated");
+      setEditingTask(null);
+      setEditTitle("");
+      await refreshTasks();
+    } catch (error) {
+      console.error("Update task title error:", error);
+      const message = getApiErrorMessage(error);
+      setEditTitleError(message);
+      toast.error(`Update failed: ${message}`);
+    } finally {
+      setIsSavingTitle(false);
     }
   };
 
@@ -216,12 +285,22 @@ export function TaskHistoryList({
                       {formatDate(task.updateTime ?? task.createTime)}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0"
+                      onClick={(e) => handleEditTitle(task, e)}
+                      aria-label="Edit task title"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       className="h-6 w-6 p-0 text-destructive"
                       onClick={(e) => handleDelete(task, e)}
+                      aria-label="Delete task"
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -232,6 +311,53 @@ export function TaskHistoryList({
           })
         )}
       </div>
+
+      {/* Edit Title Modal */}
+      <Dialog open={editingTask !== null} onOpenChange={handleEditTitleDialogOpenChange}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>Rename Task</DialogTitle>
+            <DialogDescription>Update the title shown in chat history.</DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleSaveTitle}>
+            <div className="space-y-2">
+              <Label htmlFor={editTitleInputId}>Title</Label>
+              <Input
+                id={editTitleInputId}
+                value={editTitle}
+                onChange={(event) => {
+                  setEditTitle(event.target.value);
+                  if (editTitleError) {
+                    setEditTitleError(null);
+                  }
+                }}
+                disabled={isSavingTitle}
+                aria-invalid={Boolean(editTitleError)}
+                aria-describedby={editTitleError ? editTitleErrorId : undefined}
+                autoFocus
+              />
+              {editTitleError ? (
+                <p id={editTitleErrorId} className="text-xs text-destructive">
+                  {editTitleError}
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSavingTitle}
+                onClick={() => handleEditTitleDialogOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!editTitle.trim() || isSavingTitle}>
+                {isSavingTitle ? "Saving..." : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Info Modal */}
       <Dialog open={infoModalOpen} onOpenChange={setInfoModalOpen}>

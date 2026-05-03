@@ -8,6 +8,8 @@ public record ProjectTaskCreateRequest(
     string? Title = null,
     string? ContextId = null);
 
+public record ProjectTaskTitleUpdateRequest(string Title);
+
 public record ProjectTaskSummaryResponse(
     Guid Id,
     string ProjectId,

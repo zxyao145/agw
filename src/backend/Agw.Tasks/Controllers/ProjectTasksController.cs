@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Tasks;
 using Agw.Tasks.Application;
 
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +24,24 @@ public class ProjectTasksController : ControllerBase
     {
         var task = await _projectTaskAppService.GetResponseAsync(projectId, taskId);
         return task == null ? NotFound() : Ok(task);
+    }
+
+    [HttpPut("{taskId:guid}/title")]
+    public async Task<IActionResult> UpdateTitleAsync(
+        Guid projectId,
+        Guid taskId,
+        [FromBody] ProjectTaskTitleUpdateRequest request)
+    {
+        var user = User?.Identity?.Name ?? "system";
+        var result = await _projectTaskAppService.UpdateTitleAsync(projectId, taskId, request.Title, user);
+
+        return result.Type switch
+        {
+            ApplicationResultType.Success => Ok(),
+            ApplicationResultType.NotFound => NotFound(),
+            ApplicationResultType.Invalid => BadRequest(result.Error),
+            _ => BadRequest(result.Error)
+        };
     }
 
     [HttpDelete("{taskId:guid}")]
