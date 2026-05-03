@@ -25,6 +25,35 @@ Frontend:
 - Tailwind CSS 4
 - Shadcn 4 （Radix UI）
 
+## 使用
+
+在仓库根目录启动后端：
+
+```bash
+dotnet restore Agw.slnx
+dotnet run --project src/backend/Agw.Host
+```
+
+开发环境后端默认监听 `http://localhost:5015`。首次运行时，打开 `http://localhost:5015/setup`，选择数据库 Provider、连接字符串和可选 API Key。初始化流程会完成数据库种子数据写入，并生成本地的 `appsettings.setup.json` 文件。如果配置了 API Key，请求后端 `/api` 时需要携带 `X-API-Key` 请求头。
+
+在另一个终端启动前端：
+
+```bash
+cd src/frontend/web
+pnpm install
+pnpm dev
+```
+
+两个服务都启动后，打开 `http://localhost:3000`。Next.js 开发服务器会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:5015`。
+
+典型本地使用流程：
+
+1. 如果后端跳转到 `/setup`，先完成首次初始化。
+2. 在 `Providers`、`Models`、`Model Providers` 中配置供应商、模型和模型供应商关联。
+3. 在 `Agents` 中创建 Agent，并按需关联 MCP Tool Servers、Tools、Skills 或集成应用。
+4. 通过 `Chat` 或 `Projects` 运行 Agent Session，并查看持久化的 Task 历史。
+5. 使用 `Agentflows` 进行多 Agent 编排，使用 `Jobs` 执行定时或周期任务。
+
 ## 架构
 
 Agw 采用基于领域的模块化单体架构。`src/backend/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；而前端则位于 `src/frontend/web` 目录下。
@@ -124,9 +153,9 @@ flowchart BT
 
 本项目的详细文档位于： [`docs/`](docs/):
 
-- [Development Guide](docs/1. Development.md): 本地环境配置、构建/测试/代码检查/格式化命令，以及 Git 钩子配置。
-- [Architecture](docs/2. Architecture.md): 系统概述、后端/前端架构以及核心领域概念。
-- [Module Organization](docs/3. Module Organization.md): 模块内部采用的分层原则。
+- [Development Guide](docs/1.Development.md): 本地环境配置、构建/测试/代码检查/格式化命令，以及 Git 钩子配置。
+- [Architecture](docs/2.Architecture.md): 系统概述、后端/前端架构以及核心领域概念。
+- [Module Organization](docs/3.%20Module%20Organization.md): 模块内部采用的分层原则。
 
 ## 配置
 

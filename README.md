@@ -27,6 +27,35 @@ Frontend:
 - Tailwind CSS 4
 - Shadcn 4 （Radix UI）
 
+## Usage
+
+Start the backend from the repository root:
+
+```bash
+dotnet restore Agw.slnx
+dotnet run --project src/backend/Agw.Host
+```
+
+The development backend listens on `http://localhost:5015`. On the first run, open `http://localhost:5015/setup` to choose the database provider, connection string, and optional API key. The setup process seeds the database and writes the local `appsettings.setup.json` file. If an API key is configured, backend `/api` requests must include the `X-API-Key` header.
+
+Start the frontend in another terminal:
+
+```bash
+cd src/frontend/web
+pnpm install
+pnpm dev
+```
+
+Open `http://localhost:3000` after both services are running. The Next.js dev server proxies `/api/*` and `/openapi/*` to the backend, using `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015`.
+
+Typical local workflow:
+
+1. Complete the first-run setup page if the backend redirects to `/setup`.
+2. Configure providers, models, and model-provider links under `Providers`, `Models`, and `Model Providers`.
+3. Create agents under `Agents`, then attach MCP tool servers, tools, skills, or integration-backed apps as needed.
+4. Use `Chat` or `Projects` to run agent sessions and review persisted task history.
+5. Use `Agentflows` for multi-agent orchestration and `Jobs` for scheduled or recurring task execution.
+
 ## Architecture
 
 Agw uses a domain-based, modular monolithic architecture. `src/backend/Agw.Host` serves as the entry point for the ASP.NET Core application and is responsible for assembling the various modules; the frontend is located in the `src/frontend/web` directory.
@@ -128,8 +157,8 @@ Provides an interface for the A2A protocol to external systems.
 
 The detailed project docs live under [`docs/`](docs/):
 
-- [Development Guide](docs/1.%20Development.md): local setup, build/test/lint/format commands, and git hook configuration.
-- [Architecture](docs/2.%20Architecture.md): system overview, backend/frontend structure, and core domain concepts.
+- [Development Guide](docs/1.Development.md): local setup, build/test/lint/format commands, and git hook configuration.
+- [Architecture](docs/2.Architecture.md): system overview, backend/frontend structure, and core domain concepts.
 - [Module Organization](docs/3.%20Module%20Organization.md): layering principles used inside modules.
 
 ## Configuration
@@ -150,6 +179,6 @@ Primary backend settings are in [`src/backend/Agw.Host/appsettings.json`](src/ba
 }
 ```
 
-- Supported database providers are `sqlite` and `postgres`.
+- Supported database providers are `sqlite`, `postgres`, and `mysql`.
 - Keep secrets out of committed config files; prefer environment-variable overrides.
 - After backend contract changes, regenerate `src/frontend/web/src/api/openapi.d.ts` with `pnpm gen:openapi`.
