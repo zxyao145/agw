@@ -3,9 +3,9 @@ namespace Agw.Shared.Utils;
 
 public class PathUtil
 {
-    public static string ExpandTilde(string path)
+    public static string ExpandTilde(string? path)
     {
-        if (string.IsNullOrEmpty(path)) return path;
+        if (string.IsNullOrWhiteSpace(path)) return path ?? "";
 
         if (path == "~")
         {
