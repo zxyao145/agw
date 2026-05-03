@@ -1,5 +1,6 @@
 using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -38,14 +39,14 @@ public class ModelProvidersController : ControllerBase
             mp.UpdateTime,
             mp.UpdateBy
         }).ToList();
-        return Ok(result);
+        return AgwApiResult.Ok(result);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var entity = await _service.GetAsync(id);
-        return entity == null ? NotFound() : Ok(entity);
+        return entity == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(entity);
     }
 
     [HttpPost]
@@ -53,7 +54,7 @@ public class ModelProvidersController : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
         var created = await _service.CreateAsync(request, user);
-        return Ok(created);
+        return AgwApiResult.Ok(created);
     }
 
     [HttpPut("{id:guid}")]
@@ -62,13 +63,13 @@ public class ModelProvidersController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
         var updated = await _service.UpdateAsync(id, request, user);
 
-        return updated == null ? NotFound() : Ok(updated);
+        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _service.DeleteAsync(id);
-        return deleted ? NoContent() : NotFound();
+        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
     }
 }

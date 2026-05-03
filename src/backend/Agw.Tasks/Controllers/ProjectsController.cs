@@ -1,5 +1,6 @@
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,14 +21,14 @@ public class ProjectsController : ControllerBase
     public async Task<IActionResult> ListAsync()
     {
         var projects = await _projectAppService.ListAsync();
-        return Ok(projects);
+        return AgwApiResult.Ok(projects);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var project = await _projectAppService.GetAsync(id);
-        return project == null ? NotFound() : Ok(project);
+        return project == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(project);
     }
 
     [HttpPost]
@@ -46,10 +47,10 @@ public class ProjectsController : ControllerBase
         var created = await _projectAppService.CreateAsync(project, user);
         if (created == null)
         {
-            return BadRequest("Failed to create project.");
+            return AgwApiResult.BadRequest("Failed to create project.");
         }
 
-        return Ok(created);
+        return AgwApiResult.Ok(created);
     }
 
     [HttpPut("{id:guid}")]
@@ -66,13 +67,13 @@ public class ProjectsController : ControllerBase
             project.ExtraSetting = request.ExtraSetting;
         }, user);
 
-        return updated == null ? NotFound() : Ok(updated);
+        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _projectAppService.DeleteAsync(id);
-        return deleted ? NoContent() : NotFound();
+        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
     }
 }

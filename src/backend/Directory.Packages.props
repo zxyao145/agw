@@ -17,6 +17,7 @@
     <PackageVersion Include="A2A.AspNetCore" Version="1.0.0-preview2" />
   </ItemGroup>
   <ItemGroup>
+    <PackageVersion Include="Bens.Results" Version="10.0.5" />
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
     <PackageVersion Include="CliWrap" Version="3.10.1" />
     <PackageVersion Include="StackExchange.Redis" Version="2.12.14" />

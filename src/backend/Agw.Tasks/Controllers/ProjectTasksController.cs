@@ -1,4 +1,5 @@
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Results;
 using Agw.Tasks.Application;
 
 using Microsoft.AspNetCore.Mvc;
@@ -17,13 +18,13 @@ public class ProjectTasksController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> ListAsync(Guid projectId) => Ok(await _projectTaskAppService.ListResponsesAsync(projectId));
+    public async Task<IActionResult> ListAsync(Guid projectId) => AgwApiResult.Ok(await _projectTaskAppService.ListResponsesAsync(projectId));
 
     [HttpGet("{taskId:guid}")]
     public async Task<IActionResult> GetAsync(Guid projectId, Guid taskId)
     {
         var task = await _projectTaskAppService.GetResponseAsync(projectId, taskId);
-        return task == null ? NotFound() : Ok(task);
+        return task == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(task);
     }
 
     [HttpPut("{taskId:guid}/title")]
@@ -37,10 +38,10 @@ public class ProjectTasksController : ControllerBase
 
         return result.Type switch
         {
-            ApplicationResultType.Success => Ok(),
-            ApplicationResultType.NotFound => NotFound(),
-            ApplicationResultType.Invalid => BadRequest(result.Error),
-            _ => BadRequest(result.Error)
+            ApplicationResultType.Success => AgwApiResult.Ok(),
+            ApplicationResultType.NotFound => AgwApiResult.NotFound(),
+            ApplicationResultType.Invalid => AgwApiResult.BadRequest(result.Error ?? "Invalid request."),
+            _ => AgwApiResult.BadRequest(result.Error ?? "Invalid request.")
         };
     }
 
@@ -48,13 +49,13 @@ public class ProjectTasksController : ControllerBase
     public async Task<IActionResult> DeleteAsync(Guid projectId, Guid taskId)
     {
         var result = await _projectTaskAppService.DeleteTaskAsync(projectId, taskId);
-        return result.Type == ApplicationResultType.Success ? Ok() : NotFound();
+        return result.Type == ApplicationResultType.Success ? AgwApiResult.Ok() : AgwApiResult.NotFound();
     }
 
     [HttpDelete("{taskId:guid}/clear-records")]
     public async Task<IActionResult> ClearRecordsAsync(Guid projectId, Guid taskId)
     {
         var result = await _projectTaskAppService.ClearRecordsAsync(projectId, taskId);
-        return result.Type == ApplicationResultType.Success ? Ok() : NotFound();
+        return result.Type == ApplicationResultType.Success ? AgwApiResult.Ok() : AgwApiResult.NotFound();
     }
 }

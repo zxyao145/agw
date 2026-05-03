@@ -73,7 +73,7 @@ public class ProjectTasksControllerTests
             taskId,
             new ProjectTaskTitleUpdateRequest("  Renamed task  "));
 
-        Assert.IsType<OkResult>(result);
+        Assert.Equal("Bens.Results.ApiResult", result.GetType().FullName);
         var task = await dbContext.ProjectTasks.SingleAsync(x => x.Id == taskId, cancellationToken);
         Assert.Equal("Renamed task", task.Title);
         Assert.Equal("system", task.UpdateBy);
@@ -134,7 +134,7 @@ public class ProjectTasksControllerTests
             taskId,
             new ProjectTaskTitleUpdateRequest("   "));
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("Bens.Results.ApiResult", result.GetType().FullName);
         var task = await dbContext.ProjectTasks.SingleAsync(x => x.Id == taskId, TestContext.Current.CancellationToken);
         Assert.Equal("Original", task.Title);
     }

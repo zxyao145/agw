@@ -6,6 +6,20 @@ export function getApiErrorMessage(error: unknown): string {
       return error.body;
     }
     if (error.body && typeof error.body === "object") {
+      const resultBody = error.body as {
+        title?: unknown;
+        detail?: unknown;
+        errors?: unknown;
+      };
+
+      if (typeof resultBody.detail === "string" && resultBody.detail.trim().length) {
+        return resultBody.detail;
+      }
+
+      if (typeof resultBody.title === "string" && resultBody.title.trim().length) {
+        return resultBody.title;
+      }
+
       try {
         return JSON.stringify(error.body);
       } catch {

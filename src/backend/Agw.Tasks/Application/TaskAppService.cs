@@ -1,9 +1,9 @@
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Results;
 using Agw.Tasks.Domain.Services;
 
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Tasks.Application;
@@ -86,25 +86,25 @@ public class TaskAppService : ITaskAppService
         var resolvedProjectId = await _projectResolver.ResolveProjectIdAsync(request.ProjectId);
         if (!resolvedProjectId.HasValue)
         {
-            return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Project not found."));
+            return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Project not found."));
         }
 
         if (request.Resume)
         {
             if (!request.TaskId.HasValue || request.TaskId.Value == Guid.Empty)
             {
-                return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("TaskId is required when resume is true."));
+                return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("TaskId is required when resume is true."));
             }
 
             var existingTask = await GetTaskAsync(request.TaskId.Value);
             if (existingTask == null)
             {
-                return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Task not found."));
+                return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Task not found."));
             }
 
             if (existingTask.ProjectId != resolvedProjectId.Value)
             {
-                return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Task does not belong to the supplied projectId."));
+                return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Task does not belong to the supplied projectId."));
             }
 
             return new ExecutionTaskResolutionResult(existingTask, null);
@@ -133,7 +133,7 @@ public class TaskAppService : ITaskAppService
 
         if (task.ProjectId != resolvedProjectId.Value)
         {
-            return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Task does not belong to the supplied projectId."));
+            return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Task does not belong to the supplied projectId."));
         }
 
         return new ExecutionTaskResolutionResult(task, null);
@@ -155,7 +155,7 @@ public class TaskAppService : ITaskAppService
             cancellationToken);
         if (task == null)
         {
-            return new ExecutionTaskResolutionResult(null, new BadRequestObjectResult("Failed to create task."));
+            return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Failed to create task."));
         }
 
         return new ExecutionTaskResolutionResult(task, null);

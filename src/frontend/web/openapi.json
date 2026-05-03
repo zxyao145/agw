@@ -10,6 +10,157 @@
     }
   ],
   "paths": {
+    "/.well-known/agents.json": {
+      "get": {
+        "tags": [
+          "Agw.Host"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/a2a/{agentName}/.well-known/agent-card.json": {
+      "get": {
+        "tags": [
+          "Agw.Host"
+        ],
+        "parameters": [
+          {
+            "name": "agentName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/a2a/{agentName}": {
+      "post": {
+        "tags": [
+          "Agw.Host"
+        ],
+        "parameters": [
+          {
+            "name": "agentName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/dashboard/stats": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardStatsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardStatsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardStatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/executions/{agentId}/ws": {
+      "get": {
+        "tags": [
+          "AgentExecutions"
+        ],
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/executions/{id}/execute": {
+      "post": {
+        "tags": [
+          "AgentExecutions"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentExecutionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentExecutionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentExecutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/agentflows": {
       "get": {
         "tags": [
@@ -213,33 +364,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AgentResponse"
-                  }
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AgentResponse"
-                  }
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AgentResponse"
-                  }
-                }
-              }
-            }
+            "description": "OK"
           }
         }
       },
@@ -269,24 +394,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              }
-            }
+            "description": "OK"
           }
         }
       }
@@ -309,24 +417,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              }
-            }
+            "description": "OK"
           }
         }
       },
@@ -367,24 +458,7 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              }
-            }
+            "description": "OK"
           }
         }
       },
@@ -569,19 +643,33 @@
         }
       }
     },
-    "/api/executions/{agentId}/ws": {
+    "/api/files/list": {
       "get": {
         "tags": [
-          "AgentExecutions"
+          "Files"
         ],
         "parameters": [
           {
-            "name": "agentId",
-            "in": "path",
-            "required": true,
+            "name": "path",
+            "in": "query",
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
+            }
+          },
+          {
+            "name": "diff",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
             }
           }
         ],
@@ -592,42 +680,132 @@
         }
       }
     },
-    "/api/executions/{id}/execute": {
-      "post": {
+    "/api/files/read": {
+      "get": {
         "tags": [
-          "AgentExecutions"
+          "Files"
         ],
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "required": true,
+            "name": "path",
+            "in": "query",
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentExecutionRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentExecutionRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentExecutionRequest"
-              }
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/files/diff": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/files/delete": {
+      "delete": {
+        "tags": [
+          "Files"
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/files/reset": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/files/search": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -1425,176 +1603,6 @@
         }
       }
     },
-    "/api/files/list": {
-      "get": {
-        "tags": [
-          "Files"
-        ],
-        "parameters": [
-          {
-            "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "diff",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          },
-          {
-            "name": "recursive",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/files/read": {
-      "get": {
-        "tags": [
-          "Files"
-        ],
-        "parameters": [
-          {
-            "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/files/diff": {
-      "get": {
-        "tags": [
-          "Files"
-        ],
-        "parameters": [
-          {
-            "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/files/delete": {
-      "delete": {
-        "tags": [
-          "Files"
-        ],
-        "parameters": [
-          {
-            "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/files/reset": {
-      "post": {
-        "tags": [
-          "Files"
-        ],
-        "parameters": [
-          {
-            "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/files/search": {
-      "get": {
-        "tags": [
-          "Files"
-        ],
-        "parameters": [
-          {
-            "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "keyword",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ],
-              "format": "int32",
-              "default": 10
-            }
-          },
-          {
-            "name": "recursive",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": true
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/projects": {
       "get": {
         "tags": [
@@ -1896,6 +1904,7 @@
         "tags": [
           "Tools"
         ],
+        "summary": "Gets all available tools.",
         "responses": {
           "200": {
             "description": "OK"
@@ -1908,6 +1917,7 @@
         "tags": [
           "Tools"
         ],
+        "summary": "Gets tools grouped by category.",
         "responses": {
           "200": {
             "description": "OK"
@@ -1920,6 +1930,7 @@
         "tags": [
           "Tools"
         ],
+        "summary": "Gets a specific tool by name.",
         "parameters": [
           {
             "name": "name",
@@ -1940,23 +1951,6 @@
   },
   "components": {
     "schemas": {
-      "AgentAppRelationResponse": {
-        "required": [
-          "agentId",
-          "appInstanceId"
-        ],
-        "type": "object",
-        "properties": {
-          "agentId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "appInstanceId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
       "AgentCreateRequest": {
         "required": [
           "displayName",
@@ -2147,7 +2141,8 @@
         "type": "integer"
       },
       "AgentflowOrchestrationPattern": {
-        "type": "integer"
+        "type": "integer",
+        "description": "Agentflow orchestration patterns."
       },
       "AgentflowUpdateRequest": {
         "required": [
@@ -2196,147 +2191,9 @@
           }
         }
       },
-      "AgentMcpToolServerRelationResponse": {
-        "required": [
-          "agentId",
-          "mcpToolServerId"
-        ],
-        "type": "object",
-        "properties": {
-          "agentId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "mcpToolServerId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
-      "AgentResponse": {
-        "required": [
-          "id",
-          "displayName",
-          "name",
-          "description",
-          "systemPrompt",
-          "modelProviderId",
-          "tools",
-          "type",
-          "extra",
-          "agentMcpToolServers",
-          "agentSkillRelations",
-          "agentAppRelations",
-          "createTime",
-          "createBy",
-          "updateTime",
-          "updateBy"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "systemPrompt": {
-            "type": "string"
-          },
-          "modelProviderId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "tools": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "type": {
-            "$ref": "#/components/schemas/AgentType"
-          },
-          "extra": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "agentMcpToolServers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentMcpToolServerRelationResponse"
-            }
-          },
-          "agentSkillRelations": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentSkillRelationResponse"
-            }
-          },
-          "agentAppRelations": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentAppRelationResponse"
-            }
-          },
-          "createTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "updateBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
       "AgentRuntimeType": {
-        "type": "integer"
-      },
-      "AgentSkillRelationResponse": {
-        "required": [
-          "agentId",
-          "skillId"
-        ],
-        "type": "object",
-        "properties": {
-          "agentId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "skillId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
-      "AgentType": {
-        "type": "integer"
+        "type": "integer",
+        "description": "Agent Runtime Type"
       },
       "AgentUpdateRequest": {
         "required": [
@@ -2421,6 +2278,67 @@
           },
           "usePkce": {
             "type": "boolean"
+          }
+        }
+      },
+      "DashboardStatsResponse": {
+        "required": [
+          "jobCount",
+          "projectCount",
+          "projectTaskCount",
+          "projectTaskRecordCount",
+          "agentCount",
+          "agentflowCount"
+        ],
+        "type": "object",
+        "properties": {
+          "jobCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "projectCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "projectTaskCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "projectTaskRecordCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "agentCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "agentflowCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -2930,6 +2848,17 @@
           }
         }
       },
+      "ProjectTaskTitleUpdateRequest": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "ProjectUpdateRequest": {
         "required": [
           "name",
@@ -2963,17 +2892,6 @@
               "null",
               "string"
             ]
-          }
-        }
-      },
-      "ProjectTaskTitleUpdateRequest": {
-        "required": [
-          "title"
-        ],
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string"
           }
         }
       },
@@ -3097,6 +3015,15 @@
   },
   "tags": [
     {
+      "name": "Agw.Host"
+    },
+    {
+      "name": "Dashboard"
+    },
+    {
+      "name": "AgentExecutions"
+    },
+    {
       "name": "Agentflows"
     },
     {
@@ -3106,7 +3033,7 @@
       "name": "McpToolServers"
     },
     {
-      "name": "AgentExecutions"
+      "name": "Files"
     },
     {
       "name": "Integrations"
@@ -3128,9 +3055,6 @@
     },
     {
       "name": "Skills"
-    },
-    {
-      "name": "Files"
     },
     {
       "name": "Projects"

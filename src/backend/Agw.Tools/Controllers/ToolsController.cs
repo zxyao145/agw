@@ -1,4 +1,5 @@
 using Agw.Domain.Services;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -22,7 +23,7 @@ public class ToolsController : ControllerBase
     public IActionResult GetAllTools()
     {
         var tools = _toolRegistry.GetAllTools();
-        return Ok(tools);
+        return AgwApiResult.Ok(tools);
     }
 
     /// <summary>
@@ -32,7 +33,7 @@ public class ToolsController : ControllerBase
     public IActionResult GetToolsByCategory()
     {
         var toolsByCategory = _toolRegistry.GetToolsByCategory();
-        return Ok(toolsByCategory);
+        return AgwApiResult.Ok(toolsByCategory);
     }
 
     /// <summary>
@@ -42,6 +43,6 @@ public class ToolsController : ControllerBase
     public IActionResult GetTool(string name)
     {
         var tool = _toolRegistry.GetTool(name);
-        return tool == null ? NotFound() : Ok(tool);
+        return tool == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(tool);
     }
 }

@@ -2,6 +2,7 @@ using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,7 +20,7 @@ public partial class AgentExecutionsController : ControllerBase
         {
             AgentRuntimeType.Agent => await ExecuteAgentAsync(id, request, cancellationToken),
             AgentRuntimeType.Agentflow => await ExecuteAgentflowAsync(id, request, cancellationToken),
-            _ => BadRequest("Invalid AgentType.")
+            _ => AgwApiResult.BadRequest("Invalid AgentType.")
         };
     }
 
@@ -48,10 +49,10 @@ public partial class AgentExecutionsController : ControllerBase
         var result = await _agentRuntimeService.ExecuteByIdAsync(req, cancellationToken);
         if (result == null)
         {
-            return NotFound();
+            return AgwApiResult.NotFound();
         }
 
-        return Ok(AgentExecutionResponse.FromAgentResult(result));
+        return AgwApiResult.Ok(AgentExecutionResponse.FromAgentResult(result));
     }
 
     private async Task<IActionResult> ExecuteAgentflowAsync(
@@ -83,9 +84,9 @@ public partial class AgentExecutionsController : ControllerBase
              "");
         if (result == null)
         {
-            return NotFound();
+            return AgwApiResult.NotFound();
         }
 
-        return Ok(AgentExecutionResponse.FromAgentflowResult(result));
+        return AgwApiResult.Ok(AgentExecutionResponse.FromAgentflowResult(result));
     }
 }

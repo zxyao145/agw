@@ -15,12 +15,18 @@ using Agw.Providers;
 using Agw.Setup.Controllers;
 using Agw.Setup.Middleware;
 using Agw.Setup.Services;
+using Agw.Shared.Exceptions;
+using Agw.Shared.Results;
 using Agw.Shared.Utils;
 using Agw.Skills;
 using Agw.Skills.Controllers;
 using Agw.Tasks;
 using Agw.Tasks.Controllers;
 using Agw.Tools;
+
+using Bens.Results;
+
+using Microsoft.AspNetCore.Mvc;
 
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
@@ -113,8 +119,16 @@ try
         .AddApplicationPart(typeof(OAuthController).Assembly)
         .AddApplicationPart(typeof(ToolsController).Assembly)
         ;
+    builder.Services.Configure<ApiBehaviorOptions>(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+            ApiResult.BadRequest(
+                context.ModelState,
+                code: ErrorCodes.InvalidParam.Code);
+    });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
+    builder.Services.AddApiResult();
     builder.Services.AddHttpClient();
     builder.Services.AddSingleton<IocUtil>();
 
@@ -174,6 +188,7 @@ try
     app.UseStaticFiles();
     app.UseMiddleware<InitializationGuardMiddleware>();
     app.UseMiddleware<ApiKeyGuardMiddleware>();
+    app.UseMiddleware<AgwApiExceptionMiddleware>();
     app.UseMiddleware<FileEndpointExceptionMappingMiddleware>();
 
     var a2AServerOptions = app.Services

@@ -23,6 +23,7 @@ function getApiErrorMessage(error: unknown): string {
       const candidateBody = error.body as {
         message?: unknown;
         error?: unknown;
+        title?: unknown;
         detail?: unknown;
       };
 
@@ -36,6 +37,10 @@ function getApiErrorMessage(error: unknown): string {
 
       if (typeof candidateBody.detail === "string" && candidateBody.detail.trim().length > 0) {
         return candidateBody.detail;
+      }
+
+      if (typeof candidateBody.title === "string" && candidateBody.title.trim().length > 0) {
+        return candidateBody.title;
       }
     }
 

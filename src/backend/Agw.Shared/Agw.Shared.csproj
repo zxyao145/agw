@@ -8,6 +8,7 @@
 
 	<ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <PackageReference Include="Bens.Results" />
         <PackageReference Include="CliWrap" />
 		<PackageReference Include="Microsoft.Agents.AI" />
 		<PackageReference Include="Microsoft.Agents.AI.OpenAI" />

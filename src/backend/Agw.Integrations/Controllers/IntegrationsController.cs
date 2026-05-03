@@ -4,6 +4,7 @@ using System.Text.Json;
 using Agw.Integrations.Contracts.Manager;
 using Agw.Integrations.Domain.Entities;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -39,7 +40,7 @@ public class IntegrationsController : ControllerBase
         var appDefinitions = await _appDefinitionRepository.ListAsync(
             orderBy: query => query.OrderBy(app => app.DisplayName).ThenBy(app => app.Name));
 
-        return Ok(appDefinitions.Select(Map));
+        return AgwApiResult.Ok(appDefinitions.Select(Map));
     }
 
     [HttpGet("app-instances")]
@@ -61,7 +62,7 @@ public class IntegrationsController : ControllerBase
             return Map(instance, definition, now);
         });
 
-        return Ok(response);
+        return AgwApiResult.Ok(response);
     }
 
     [HttpPost("app-instances")]
@@ -71,13 +72,13 @@ public class IntegrationsController : ControllerBase
             || string.IsNullOrWhiteSpace(request.ClientId)
             || string.IsNullOrWhiteSpace(request.ClientSecret))
         {
-            return BadRequest("Invalid app instance request.");
+            return AgwApiResult.BadRequest("Invalid app instance request.");
         }
 
         var definition = await _appDefinitionRepository.GetByIdAsync(request.AppName);
         if (definition == null)
         {
-            return BadRequest("Invalid app instance request.");
+            return AgwApiResult.BadRequest("Invalid app instance request.");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -95,7 +96,7 @@ public class IntegrationsController : ControllerBase
         await _appInstanceRepository.AddAsync(entity);
         await _unitOfWork.SaveChangesAsync();
 
-        return Ok(Map(entity, definition, now));
+        return AgwApiResult.Ok(Map(entity, definition, now));
     }
 
     [HttpPost("app-instances/{id:guid}/authorize-start")]
@@ -104,13 +105,13 @@ public class IntegrationsController : ControllerBase
         var appInstance = await _appInstanceRepository.GetByIdAsync(id);
         if (appInstance == null)
         {
-            return NotFound();
+            return AgwApiResult.NotFound();
         }
 
         var appDefinition = await _appDefinitionRepository.GetByIdAsync(appInstance.AppName);
         if (appDefinition == null)
         {
-            return BadRequest("App definition not found.");
+            return AgwApiResult.BadRequest("App definition not found.");
         }
 
         var state = Guid.NewGuid().ToString("N");
@@ -126,7 +127,7 @@ public class IntegrationsController : ControllerBase
         AppendCallbackStateCookie(state, appInstance.Id, appDefinition.Name, verifier);
 
         var authorizeUrl = BuildAuthorizeUrl(appDefinition, appInstance, state, codeChallenge);
-        return Ok(new AuthorizeStartResponse(authorizeUrl));
+        return AgwApiResult.Ok(new AuthorizeStartResponse(authorizeUrl));
     }
 
     [HttpDelete("app-instances/{id:guid}")]
@@ -138,13 +139,13 @@ public class IntegrationsController : ControllerBase
 
         if (appInstance == null)
         {
-            return NotFound();
+            return AgwApiResult.NotFound();
         }
 
         _appInstanceRepository.Remove(appInstance);
         await _unitOfWork.SaveChangesAsync();
 
-        return NoContent();
+        return AgwApiResult.Ok();
     }
 
     private static AppDefinitionListItemResponse Map(AppDefinition definition)

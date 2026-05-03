@@ -49,8 +49,7 @@ public class OauthControllerTests
 
         var result = await controller.AuthorizeStartAsync(appInstanceId, cancellationToken);
 
-        var ok = Assert.IsType<OkObjectResult>(result);
-        var payload = Assert.IsType<AuthorizeStartResponse>(ok.Value);
+        var payload = Assert.IsType<AuthorizeStartResponse>(ReadApiResultData(result));
         Assert.Contains("client_id=client-id", payload.AuthorizeUrl);
         Assert.Contains(
             "redirect_uri=https%3A%2F%2Ffrontend.example.com%2Fapi%2Fintegrations%2Foauth%2Fcallback",
@@ -70,7 +69,7 @@ public class OauthControllerTests
 
         var result = await controller.AuthorizeStartAsync(Guid.NewGuid(), cancellationToken);
 
-        Assert.IsType<NotFoundResult>(result);
+        AssertApiResult(result);
     }
 
     [Fact]
@@ -136,6 +135,22 @@ public class OauthControllerTests
     private static string BuildCallbackStateCookieName(string state)
     {
         return $"agw_oauth2_{WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(state))}";
+    }
+
+    private static object ReadApiResultData(IActionResult result)
+    {
+        AssertApiResult(result);
+        var property = result.GetType().GetProperty("Data");
+        Assert.NotNull(property);
+
+        var data = property!.GetValue(result);
+        Assert.NotNull(data);
+        return data;
+    }
+
+    private static void AssertApiResult(IActionResult result)
+    {
+        Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
     }
 
     private static string BuildCallbackCookieValue(

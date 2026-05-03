@@ -1,5 +1,6 @@
 using Agw.Agents.Application.Agentflows;
 using Agw.Agents.Contracts.Manager;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,21 +21,21 @@ public class AgentflowsController : ControllerBase
     public async Task<IActionResult> ListAsync()
     {
         var agentflows = await _agentflowRuntimeService.ListAsync();
-        return Ok(agentflows);
+        return AgwApiResult.Ok(agentflows);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var agentflow = await _agentflowRuntimeService.GetAsync(id);
-        return agentflow == null ? NotFound() : Ok(agentflow);
+        return agentflow == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(agentflow);
     }
 
     [HttpGet("mermaid/{id:guid}")]
     public async Task<IActionResult> GetMermaidAsync(Guid id)
     {
         var text = await _agentflowRuntimeService.GetMermaidAsync(id);
-        return text == null ? NotFound() : Ok(text);
+        return text == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(text);
     }
 
     [HttpGet("{id:guid}/nodes")]
@@ -43,11 +44,11 @@ public class AgentflowsController : ControllerBase
         var agentflow = await _agentflowRuntimeService.GetAsync(id);
         if (agentflow == null)
         {
-            return NotFound();
+            return AgwApiResult.NotFound();
         }
 
         var nodes = await _agentflowRuntimeService.ListNodesAsync(id);
-        return Ok(nodes);
+        return AgwApiResult.Ok(nodes);
     }
 
     [HttpGet("{id:guid}/edges")]
@@ -56,11 +57,11 @@ public class AgentflowsController : ControllerBase
         var agentflow = await _agentflowRuntimeService.GetAsync(id);
         if (agentflow == null)
         {
-            return NotFound();
+            return AgwApiResult.NotFound();
         }
 
         var edges = await _agentflowRuntimeService.ListEdgesAsync(id);
-        return Ok(edges);
+        return AgwApiResult.Ok(edges);
     }
 
     [HttpPost]
@@ -96,8 +97,8 @@ public class AgentflowsController : ControllerBase
 
         var created = await _agentflowRuntimeService.CreateAsync(agentflow, nodes, edges, user);
         return created == null
-            ? BadRequest("Failed to create agentflow (validation failed or referenced resources not found).")
-            : Ok(created);
+            ? AgwApiResult.BadRequest("Failed to create agentflow (validation failed or referenced resources not found).")
+            : AgwApiResult.Ok(created);
     }
 
     [HttpPut("{id:guid}")]
@@ -136,13 +137,13 @@ public class AgentflowsController : ControllerBase
             edges,
             user);
 
-        return updated == null ? NotFound() : Ok(updated);
+        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _agentflowRuntimeService.DeleteAsync(id);
-        return deleted ? NoContent() : NotFound();
+        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
     }
 }

@@ -59,10 +59,20 @@ type OperationResponses<P extends keyof paths, M extends keyof paths[P]> =
 
 type Response200<R> = R extends { 200: infer T } ? T : R extends { "200": infer T } ? T : unknown;
 
+type ApiResultEnvelope<T = unknown> = {
+  code: number;
+  title: string;
+  statusCode?: number;
+  detail?: string | null;
+  data?: T;
+};
+
+type UnwrapApiResult<T> = T extends ApiResultEnvelope<infer D> ? D : T;
+
 export type ApiResponse<P extends keyof paths, M extends keyof paths[P]> =
   Response200<OperationResponses<P, M>> extends { content: infer C }
     ? C extends { "application/json": infer T }
-      ? T
+      ? UnwrapApiResult<T>
       : unknown
     : unknown;
 
@@ -127,6 +137,25 @@ async function readResponseBody(response: Response): Promise<unknown> {
   } catch {
     return undefined;
   }
+}
+
+function isApiResultEnvelope(body: unknown): body is ApiResultEnvelope {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    "code" in body &&
+    typeof body.code === "number" &&
+    "title" in body &&
+    typeof body.title === "string"
+  );
+}
+
+function unwrapApiResultEnvelope(body: unknown): unknown {
+  if (!isApiResultEnvelope(body)) {
+    return body;
+  }
+
+  return "data" in body ? body.data : undefined;
 }
 
 export function apiRequest<P extends PathsWith<"get">>(
@@ -198,7 +227,7 @@ export async function apiRequest(
   }
 
   // Some endpoints return 200 with no response body.
-  return await readResponseBody(response);
+  return unwrapApiResultEnvelope(await readResponseBody(response));
 }
 
 export function apiGet<P extends PathsWith<"get">>(

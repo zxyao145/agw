@@ -51,6 +51,7 @@ public static class ErrorCodes
     public static readonly ErrorCode A2ATaskNotFound = new(404_0004, "A2A task was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode A2AExtendedAgentCardNotConfigured = new(404_0005, "Extended agent card is not configured.", HttpStatusCode.NotFound);
     public static readonly ErrorCode AgentNotFound = new(404_0006, "Agent was not found.", HttpStatusCode.NotFound);
+    public static readonly ErrorCode ResourceNotFound = new(404_0007, "Resource was not found.", HttpStatusCode.NotFound);
 
     public static readonly ErrorCode SkillAlreadyExists = new(409_0001, "Skill already exists.", HttpStatusCode.Conflict);
     public static readonly ErrorCode A2ATaskIdAlreadyUsed = new(409_0002, "Task id is already used by a non-A2A task.", HttpStatusCode.Conflict);

@@ -1,5 +1,6 @@
 using Agw.Agents.Application.Agents;
 using Agw.Agents.Contracts.Manager;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -25,14 +26,14 @@ public class McpToolServersController : ControllerBase
     public async Task<IActionResult> ListAsync()
     {
         var servers = await _mcpToolServerAppService.ListMcpToolServersAsync();
-        return Ok(servers);
+        return AgwApiResult.Ok(servers);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var server = await _mcpToolServerAppService.GetMcpToolServerAsync(id);
-        return server == null ? NotFound() : Ok(server);
+        return server == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(server);
     }
 
     [HttpPost]
@@ -54,7 +55,7 @@ public class McpToolServersController : ControllerBase
         };
 
         var created = await _mcpToolServerAppService.CreateMcpToolServerAsync(server, request.AgentIds, user);
-        return Ok(created);
+        return AgwApiResult.Ok(created);
     }
 
     [HttpPut("{id:guid}")]
@@ -78,14 +79,14 @@ public class McpToolServersController : ControllerBase
             },
             user);
 
-        return updated == null ? NotFound() : Ok(updated);
+        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _mcpToolServerAppService.DeleteMcpToolServerAsync(id);
-        return deleted ? NoContent() : NotFound();
+        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
     }
 
     [HttpPost("connect")]
@@ -101,12 +102,12 @@ public class McpToolServersController : ControllerBase
                 .Select(x => new McpToolItem(x.Name))
                 .ToList();
 
-            return Ok(new McpToolServerConnectResponse("success", toolItems));
+            return AgwApiResult.Ok(new McpToolServerConnectResponse("success", toolItems));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to connect MCP tool server {McpToolServerId}", request.McpToolServerId);
-            return Ok(new McpToolServerConnectResponse("failed", []));
+            return AgwApiResult.Ok(new McpToolServerConnectResponse("failed", []));
         }
     }
 }

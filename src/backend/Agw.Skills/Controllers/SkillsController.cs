@@ -1,5 +1,6 @@
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Results;
 using Agw.Skills.Application;
 using Agw.Skills.Contracts.Manager;
 
@@ -22,14 +23,14 @@ public class SkillsController : ControllerBase
     public async Task<IActionResult> ListAsync()
     {
         var skills = await _skillAppService.ListAsync();
-        return Ok(skills.Select(Map));
+        return AgwApiResult.Ok(skills.Select(Map));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var skill = await _skillAppService.GetAsync(id);
-        return skill == null ? NotFound() : Ok(Map(skill));
+        return skill == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(Map(skill));
     }
 
     [HttpPost]
@@ -47,11 +48,11 @@ public class SkillsController : ControllerBase
             };
 
             var created = await _skillAppService.CreateAsync(skill, request.Archive, user);
-            return Ok(Map(created));
+            return AgwApiResult.Ok(Map(created));
         }
         catch (AgwException ex)
         {
-            return BadRequest(ex.Message);
+            return AgwApiResult.Fail(ex);
         }
     }
 
@@ -64,11 +65,11 @@ public class SkillsController : ControllerBase
         {
             var user = User?.Identity?.Name ?? "system";
             var updated = await _skillAppService.UpdateAsync(id, request.Name, request.Description, request.Archive, user);
-            return updated == null ? NotFound() : Ok(Map(updated));
+            return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(Map(updated));
         }
         catch (AgwException ex)
         {
-            return BadRequest(ex.Message);
+            return AgwApiResult.Fail(ex);
         }
     }
 
@@ -76,7 +77,7 @@ public class SkillsController : ControllerBase
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _skillAppService.DeleteAsync(id);
-        return deleted ? NoContent() : NotFound();
+        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
     }
 
     private static SkillResponse Map(SkillDetails detail)

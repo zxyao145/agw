@@ -1,5 +1,6 @@
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Contracts;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,21 +14,21 @@ public class JobsController(JobAppService jobAppService) : ControllerBase
     public async Task<IActionResult> ListAsync(CancellationToken cancellationToken)
     {
         var tasks = await jobAppService.ListAsync(cancellationToken);
-        return Ok(tasks);
+        return AgwApiResult.Ok(tasks);
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var task = await jobAppService.GetAsync(id);
-        return task == null ? NotFound() : Ok(task);
+        return task == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(task);
     }
 
     [HttpGet("{id:guid}/logs")]
     public async Task<IActionResult> ListLogsAsync(Guid id, CancellationToken cancellationToken)
     {
         var logs = await jobAppService.ListLogsAsync(id, cancellationToken);
-        return Ok(logs);
+        return AgwApiResult.Ok(logs);
     }
 
     [HttpPost]
@@ -35,7 +36,7 @@ public class JobsController(JobAppService jobAppService) : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
         var task = await jobAppService.CreateAsync(request, user);
-        return Ok(task);
+        return AgwApiResult.Ok(task);
     }
 
     [HttpPut("{id:guid}")]
@@ -43,13 +44,13 @@ public class JobsController(JobAppService jobAppService) : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
         var task = await jobAppService.UpdateAsync(id, request, user);
-        return task == null ? NotFound() : Ok(task);
+        return task == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(task);
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await jobAppService.DeleteAsync(id);
-        return deleted ? NoContent() : NotFound();
+        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
     }
 }

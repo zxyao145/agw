@@ -25,9 +25,7 @@ public class IntegrationsControllerTests
 
         var result = await InvokeActionAsync(controller, "CreateAppInstanceAsync", request);
 
-        var ok = Assert.IsType<OkObjectResult>(result);
-        Assert.NotNull(ok.Value);
-        var created = ok.Value!;
+        var created = ReadApiResultData(result);
 
         Assert.Equal("github", ReadProperty<string>(created, "AppName"));
         Assert.Equal("client-id", ReadProperty<string>(created, "ClientId"));
@@ -45,7 +43,7 @@ public class IntegrationsControllerTests
 
         var result = await InvokeActionAsync(controller, "CreateAppInstanceAsync", request);
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        AssertApiResult(result);
     }
 
     [Fact]
@@ -57,8 +55,7 @@ public class IntegrationsControllerTests
 
         var result = await InvokeActionAsync(controller, "ListAppDefinitionsAsync");
 
-        var ok = Assert.IsType<OkObjectResult>(result);
-        var items = Assert.IsAssignableFrom<IEnumerable>(ok.Value).Cast<object>().ToList();
+        var items = Assert.IsAssignableFrom<IEnumerable>(ReadApiResultData(result)).Cast<object>().ToList();
 
         Assert.Equal(IntegrationConstants.AppList.Count, items.Count);
 
@@ -124,8 +121,7 @@ public class IntegrationsControllerTests
         var controller = scope.CreateController();
         var result = await InvokeActionAsync(controller, "ListAppInstancesAsync");
 
-        var ok = Assert.IsType<OkObjectResult>(result);
-        var items = Assert.IsAssignableFrom<IEnumerable>(ok.Value).Cast<object>().ToList();
+        var items = Assert.IsAssignableFrom<IEnumerable>(ReadApiResultData(result)).Cast<object>().ToList();
         Assert.Equal(2, items.Count);
 
         var expired = items.Single(item => ReadProperty<Guid>(item, "Id") == expiredInstanceId);
@@ -177,7 +173,7 @@ public class IntegrationsControllerTests
         var controller = scope.CreateController();
         var result = await InvokeActionAsync(controller, "DeleteAppInstanceAsync", appInstanceId);
 
-        Assert.IsType<NoContentResult>(result);
+        AssertApiResult(result);
 
         await using var assertContext = scope.CreateDbContext();
         Assert.Null(await assertContext.AppInstances.FindAsync([appInstanceId], cancellationToken));
@@ -196,7 +192,7 @@ public class IntegrationsControllerTests
 
         var result = await InvokeActionAsync(controller, "DeleteAppInstanceAsync", Guid.NewGuid());
 
-        Assert.IsType<NotFoundResult>(result);
+        AssertApiResult(result);
     }
 
     private static async Task<IActionResult> InvokeActionAsync(object controller, string methodName, params object[] arguments)
@@ -220,6 +216,22 @@ public class IntegrationsControllerTests
 
         var value = property!.GetValue(item);
         return Assert.IsType<T>(value);
+    }
+
+    private static object ReadApiResultData(IActionResult result)
+    {
+        AssertApiResult(result);
+        var property = result.GetType().GetProperty("Data");
+        Assert.NotNull(property);
+
+        var data = property!.GetValue(result);
+        Assert.NotNull(data);
+        return data;
+    }
+
+    private static void AssertApiResult(IActionResult result)
+    {
+        Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
     }
 
     private sealed class IntegrationControllerTestScope : IAsyncDisposable

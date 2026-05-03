@@ -1,5 +1,6 @@
 using Agw.Agents.Application.Agents;
 using Agw.Agents.Contracts.Manager;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,21 +18,21 @@ public class AgentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<AgentResponse>>> ListAsync()
+    public async Task<IActionResult> ListAsync()
     {
         var agents = await _agentAppService.ListAgentsAsync();
-        return Ok(agents.Select(AgentResponse.FromDomain).ToArray());
+        return AgwApiResult.Ok(agents.Select(AgentResponse.FromDomain).ToArray());
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<AgentResponse>> GetAsync(Guid id)
+    public async Task<IActionResult> GetAsync(Guid id)
     {
         var agent = await _agentAppService.GetAgentAsync(id);
-        return agent == null ? NotFound() : Ok(AgentResponse.FromDomain(agent));
+        return agent == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(AgentResponse.FromDomain(agent));
     }
 
     [HttpPost]
-    public async Task<ActionResult<AgentResponse>> CreateAsync([FromBody] AgentCreateRequest request)
+    public async Task<IActionResult> CreateAsync([FromBody] AgentCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
         var agent = new Agent
@@ -50,11 +51,13 @@ public class AgentsController : ControllerBase
             request.SkillIds,
             request.AppInstanceIds,
             user);
-        return created == null ? BadRequest("Failed to create agent.") : Ok(AgentResponse.FromDomain(created));
+        return created == null
+            ? AgwApiResult.BadRequest("Failed to create agent.")
+            : AgwApiResult.Ok(AgentResponse.FromDomain(created));
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<AgentResponse>> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
+    public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
         var updated = await _agentAppService.UpdateAgentAsync(
@@ -72,13 +75,13 @@ public class AgentsController : ControllerBase
             request.AppInstanceIds,
             user);
 
-        return updated == null ? NotFound() : Ok(AgentResponse.FromDomain(updated));
+        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(AgentResponse.FromDomain(updated));
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _agentAppService.DeleteAgentAsync(id);
-        return deleted ? NoContent() : NotFound();
+        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
     }
 }

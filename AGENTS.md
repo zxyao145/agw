@@ -169,6 +169,7 @@ Guidance:
 ## Frontend Integration Notes
 
 - Prefer the typed helpers in `src/frontend/web/src/api/client.ts` for REST calls.
+- `src/frontend/web/src/api/client.ts` unwraps Bens.Results response envelopes before data reaches pages; update that central helper when the backend result wrapper contract changes.
 - Use `src/frontend/web/src/api/task-client.ts` for project-task history/session helpers.
 - Use `src/frontend/web/src/api/execution-ws.ts` for task execution websocket flows.
 - Use `src/frontend/web/src/api/files.ts` for backend file-management endpoints used by the UI.
@@ -191,6 +192,7 @@ Guidance:
 - Add reusable errors to `src/backend/Agw.Shared/Exceptions/ErrorCodes.cs`. `ErrorCode.Code` is 7 digits: first 3 digits match the HTTP status code, and the last 4 digits increment within that status group, for example `400_0001` or `404_0003`. Reuse existing codes before adding new ones and do not renumber existing codes.
 - Use `new AgwException(ErrorCodes.SomeCode)` when the catalog message is sufficient. Use `new AgwException(ErrorCodes.SomeCode, $"...")` when the message needs runtime context such as an id, file path, provider name, or validation value.
 - Preserve boundary-specific behavior by translating `AgwException` at the boundary instead of throwing protocol exceptions internally. For example, A2A implementation code throws `AgwException`, while `AgwA2AJsonRpcProcessor` maps it to A2A JSON-RPC errors.
+- Non-WebSocket JSON API endpoints in `Agw.Tools`, `Agw.Tasks`, `Agw.Skills`, `Agw.Providers`, `Agw.Jobs`, `Agw.Integrations`, and `Agw.Agents` must return Bens.Results envelopes through `Agw.Shared.Results.AgwApiResult` or the configured Bens.Results boundary mapping. Do not return raw `Ok(...)`, `BadRequest(...)`, `NotFound(...)`, or `NoContent()` from those controllers. Protocol endpoints such as WebSocket handlers and OAuth redirect callbacks keep their protocol-specific responses.
 - Frontend code should use TypeScript, React function components, and kebab-case filenames.
 - Do not edit generated artifacts unless the task is explicitly about generated output.
 

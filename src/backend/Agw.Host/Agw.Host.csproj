@@ -7,7 +7,8 @@
 	  <None Remove="code-work\**" />
 	</ItemGroup>
 
-	<ItemGroup>
+	 <ItemGroup>
+	   <PackageReference Include="Bens.Results" />
 	   <PackageReference Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" />
 	   <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
 	   <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
