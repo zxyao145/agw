@@ -60,6 +60,7 @@ import {
   normalizeExtraSettingTextForStorage,
   tryParseJsonObjectText,
 } from "./lib/chat-settings";
+import { getChatRouteSessionAction, getTaskHydrationKey } from "./lib/session-routing";
 import {
   buildChatTargetOptions,
   getTargetValue,
@@ -682,7 +683,7 @@ export default function ChatPage() {
       projectId: selectedProjectId,
       taskId: nextTaskIdValue,
     }),
-    [buildSettingContent, selectedProjectId],
+    [buildSettingContent, resolvedWorkspace, selectedProjectId],
   );
 
   const buildExecRequest = React.useCallback(
@@ -700,27 +701,37 @@ export default function ChatPage() {
     }
 
     const nextId = nextTaskId();
+    hydratedTaskKeyRef.current = getTaskHydrationKey(selectedProjectId, nextId);
     setTaskId(nextId);
     syncRoute(selectedProjectId, nextId);
     return nextId;
   }, [selectedProjectId, syncRoute, taskId]);
 
-  const clearActiveSessionState = React.useCallback(() => {
+  const clearLocalSessionState = React.useCallback(() => {
     closeSocket("Session cleared");
     hydratedTaskKeyRef.current = null;
     setIsExecuting(false);
-    if (selectedProjectId && taskId) {
-      clearTaskRecords(taskId, selectedProjectId);
-    }
     setMessages([]);
     setTaskId(null);
     userInputRef.current?.setInput("");
-  }, [closeSocket, taskId, selectedProjectId]);
+  }, [closeSocket]);
+
+  const clearActiveSessionState = React.useCallback(() => {
+    if (selectedProjectId && taskId) {
+      void clearTaskRecords(taskId, selectedProjectId);
+    }
+    clearLocalSessionState();
+  }, [clearLocalSessionState, taskId, selectedProjectId]);
 
   const resetSession = React.useCallback(() => {
     clearActiveSessionState();
     syncRoute(selectedProjectId, null);
   }, [clearActiveSessionState, selectedProjectId, syncRoute]);
+
+  const startNewTask = React.useCallback(() => {
+    clearLocalSessionState();
+    syncRoute(selectedProjectId, null);
+  }, [clearLocalSessionState, selectedProjectId, syncRoute]);
 
   const loadTaskHistory = React.useCallback(
     async (projectId: string, nextTaskIdValue: string) => {
@@ -847,19 +858,24 @@ export default function ChatPage() {
   }, [selectedProjectId, targetOptions]);
 
   React.useEffect(() => {
-    if (!queryProjectId) {
-      clearActiveSessionState();
+    const routeAction = getChatRouteSessionAction({
+      queryProjectId,
+      queryTaskId,
+      hydratedTaskKey: hydratedTaskKeyRef.current,
+    });
+
+    if (routeAction.type === "clearLocal") {
+      clearLocalSessionState();
       return;
     }
 
-    if (!queryTaskId) {
-      clearActiveSessionState();
-      setSelectedProjectId(queryProjectId);
+    if (routeAction.type === "selectProject") {
+      clearLocalSessionState();
+      setSelectedProjectId(routeAction.projectId);
       return;
     }
 
-    const hydrateKey = `${queryProjectId}:${queryTaskId}`;
-    if (hydratedTaskKeyRef.current === hydrateKey) {
+    if (routeAction.type === "ignore") {
       return;
     }
 
@@ -867,15 +883,15 @@ export default function ChatPage() {
 
     void (async () => {
       try {
-        const details = await getTaskDetails(queryProjectId, queryTaskId);
+        const details = await getTaskDetails(routeAction.projectId, routeAction.taskId);
         const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
         if (cancelled) {
           return;
         }
 
         closeSocket("History loaded");
-        hydratedTaskKeyRef.current = hydrateKey;
-        setSelectedProjectId(queryProjectId);
+        hydratedTaskKeyRef.current = routeAction.hydrateKey;
+        setSelectedProjectId(routeAction.projectId);
         setIsExecuting(false);
         setTaskId(details.taskId);
         setMessages(details.messages ?? []);
@@ -892,7 +908,7 @@ export default function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [clearActiveSessionState, closeSocket, queryProjectId, queryTaskId]);
+  }, [clearLocalSessionState, closeSocket, queryProjectId, queryTaskId]);
 
   const handleProjectChange = React.useCallback(
     (nextProjectId: string) => {
@@ -1038,9 +1054,9 @@ export default function ChatPage() {
   );
 
   const handleNewTask = React.useCallback(() => {
-    resetSession();
+    startNewTask();
     setIsDrawerOpen(false);
-  }, [resetSession]);
+  }, [startNewTask]);
 
   const handleAllTasksDeleted = React.useCallback(() => {
     resetSession();

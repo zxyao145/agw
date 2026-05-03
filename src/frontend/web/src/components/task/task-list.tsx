@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { deleteTaskById, deleteAllTasks, getAllTasks, type TaskSummary } from "@/api/task-client";
 import { cn } from "@/lib/utils";
+import { isTaskMissingFromHistory } from "./task-history-refresh";
 
 interface TaskHistoryListProps {
   projectId: string;
@@ -37,17 +38,19 @@ export function TaskHistoryList({
   const [infoModalOpen, setInfoModalOpen] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
-  const refreshTasks = React.useCallback(async () => {
+  const refreshTasks = React.useCallback(async (): Promise<TaskSummary[]> => {
     setIsRefreshing(true);
     try {
       if (!projectId) {
         setTasks([]);
-        return;
+        return [];
       }
       const latestTasks = await getAllTasks(projectId);
       setTasks(latestTasks);
+      return latestTasks;
     } catch (error) {
       console.error("Failed to load chat history:", error);
+      return [];
     } finally {
       setIsRefreshing(false);
     }
@@ -56,6 +59,41 @@ export function TaskHistoryList({
   React.useEffect(() => {
     void refreshTasks();
   }, [refreshTasks]);
+
+  React.useEffect(() => {
+    if (!projectId || !currentTaskId) {
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+
+    const refreshUntilCurrentTaskAppears = async () => {
+      attempts += 1;
+      const latestTasks = await refreshTasks();
+      if (
+        cancelled ||
+        attempts >= 5 ||
+        !isTaskMissingFromHistory(latestTasks, currentTaskId)
+      ) {
+        return;
+      }
+
+      timeoutId = setTimeout(() => {
+        void refreshUntilCurrentTaskAppears();
+      }, 500);
+    };
+
+    void refreshUntilCurrentTaskAppears();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [currentTaskId, projectId, refreshTasks]);
 
   const handleDelete = async (task: TaskSummary, e: React.MouseEvent) => {
     e.stopPropagation();
