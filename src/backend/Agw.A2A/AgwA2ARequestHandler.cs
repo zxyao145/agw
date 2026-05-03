@@ -33,10 +33,10 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     private readonly ConcurrentDictionary<string, Task> _backgroundTasks = new();
 
     /// <summary>Initializes a new instance of the <see cref="A2AServer"/> class.</summary>
-    /// <param name="handler">The agent handler that provides execution logic.</param>
     /// <param name="taskStore">The task store used for persistence.</param>
     /// <param name="notifier">The event notifier for live event streaming and per-task locking.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="serviceScopeFactory"></param>
     /// <param name="options">Optional configuration options.</param>
     public AgwA2ARequestHandler(
         ITaskStore taskStore,

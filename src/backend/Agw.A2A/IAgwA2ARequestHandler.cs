@@ -8,12 +8,14 @@ namespace Agw.A2A;
 public interface IAgwA2ARequestHandler
 {
     /// <summary>Handles a send message request.</summary>
+    /// <param name="agentName"></param>
     /// <param name="request">The send message request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The send message response.</returns>
     Task<SendMessageResponse> SendMessageAsync(string agentName, SendMessageRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>Handles a streaming send message request.</summary>
+    /// <param name="agentName"></param>
     /// <param name="request">The send message request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>An asynchronous enumerable of streaming responses.</returns>
@@ -26,12 +28,14 @@ public interface IAgwA2ARequestHandler
     Task<AgentTask> GetTaskAsync(GetTaskRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>Lists tasks with pagination.</summary>
+    /// <param name="agentName"></param>
     /// <param name="request">The list tasks request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The list tasks response.</returns>
     Task<ListTasksResponse> ListTasksAsync(string agentName, ListTasksRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>Cancels a task.</summary>
+    /// <param name="agentName"></param>
     /// <param name="request">The cancel task request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The canceled agent task.</returns>
