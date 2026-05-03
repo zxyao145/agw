@@ -3,7 +3,15 @@
 import * as React from "react";
 import { Uuid4 } from "id128";
 import Link from "next/link";
-import { FileText, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from "lucide-react";
+import {
+  FileText,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Settings,
+  Share2,
+  Trash2,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -61,6 +69,7 @@ import {
   tryParseJsonObjectText,
 } from "./lib/chat-settings";
 import { getChatRouteSessionAction, getTaskHydrationKey } from "./lib/session-routing";
+import { copyCurrentUrlToClipboard } from "./lib/share-url";
 import {
   buildChatTargetOptions,
   getTargetValue,
@@ -1248,6 +1257,18 @@ export default function ChatPage() {
     setShowFileExplorer((prev) => !prev);
   }, [currentTab, hasWorkspace, isMobile, openDrawer]);
 
+  const handleShareCurrentUrl = React.useCallback(async () => {
+    try {
+      await copyCurrentUrlToClipboard(
+        window.location.href,
+        navigator.clipboard.writeText.bind(navigator.clipboard),
+      );
+      toast.success("Current URL copied");
+    } catch {
+      toast.error("Failed to copy current URL");
+    }
+  }, []);
+
   const handleTabChange = React.useCallback((value: string) => {
     setCurrentTab(value);
     setIsDrawerOpen(false);
@@ -1428,6 +1449,16 @@ export default function ChatPage() {
             ) : (
               <PanelLeftOpen className="h-4 w-4" />
             )}
+          </Button>
+          <Button
+            variant="ghost"
+            className="cursor-pointer"
+            size="sm"
+            onClick={handleShareCurrentUrl}
+            title="Share current URL"
+            aria-label="Share current URL"
+          >
+            <Share2 className="h-4 w-4" />
           </Button>
         </div>
 
