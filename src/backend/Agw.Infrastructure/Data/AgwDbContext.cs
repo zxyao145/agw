@@ -53,6 +53,7 @@ public class AgwDbContext : DbContext
 
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
+    public DbSet<ProjectTaskSessionBinding> ProjectTaskSessionBindings => Set<ProjectTaskSessionBinding>();
     public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobLog> JobLogs => Set<JobLog>();
@@ -283,6 +284,21 @@ public class AgwDbContext : DbContext
             entity.HasOne(e => e.Project)
                 .WithMany(project => project.Tasks)
                 .HasForeignKey(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProjectTaskSessionBinding>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ExternalAgentName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ProviderSessionId).IsRequired().HasMaxLength(200);
+
+            entity.HasIndex(e => new { e.TaskId, e.AgentId, e.ExternalAgentName }).IsUnique();
+            entity.HasIndex(e => new { e.ExternalAgentName, e.ProviderSessionId });
+
+            entity.HasOne(e => e.Task)
+                .WithMany()
+                .HasForeignKey(e => e.TaskId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

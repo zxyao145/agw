@@ -42,9 +42,10 @@ public static class AgentRuntimeServiceUtil
     public static CodexAIAgentOptions? BuildCodexAIAgentOptions(
         string extra,
         string? workspace,
-        Guid? taskId,
+        Guid? threadId,
         bool resume,
-        IReadOnlyDictionary<string, string>? environmentVariables = null)
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
+        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null)
     {
         var options = JsonUtil.Deserialize<CodexAIAgentOptions>(extra);
         if (options == null)
@@ -60,12 +61,20 @@ public static class AgentRuntimeServiceUtil
             };
         }
 
-        if (taskId != null)
+        if (threadId != null)
         {
             options = options with
             {
-                ThreadId = taskId.Value,
+                ThreadId = threadId.Value,
                 IsResume = resume
+            };
+        }
+
+        if (onThreadStartedAsync != null)
+        {
+            options = options with
+            {
+                OnThreadStartedAsync = onThreadStartedAsync
             };
         }
 

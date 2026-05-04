@@ -89,7 +89,7 @@ public class AgentRuntimeServiceCompositionTests
             {"threadOptions":{"model":"gpt-5-codex","skipGitRepoCheck":true}}
             """,
             "D:\\source\\workspace",
-            taskId: null,
+            threadId: null,
             resume: false);
 
         Assert.NotNull(options);
@@ -101,19 +101,37 @@ public class AgentRuntimeServiceCompositionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void BuildCodexAIAgentOptions_WhenTaskProvided_UsesTaskIdAsThreadId(bool resume)
+    public void BuildCodexAIAgentOptions_WhenProviderSessionProvided_UsesThreadId(bool resume)
     {
-        var taskId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var threadId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
         var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
             "{}",
             workspace: null,
-            taskId,
+            threadId,
             resume);
 
         Assert.NotNull(options);
-        Assert.Equal(taskId, options.ThreadId);
+        Assert.Equal(threadId, options.ThreadId);
         Assert.Equal(resume, options.IsResume);
+    }
+
+    [Fact]
+    public void BuildCodexAIAgentOptions_WhenThreadStartedCallbackProvided_PreservesCallback()
+    {
+        ValueTask OnThreadStartedAsync(string threadId, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+        Func<string, CancellationToken, ValueTask> callback = OnThreadStartedAsync;
+
+        var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
+            "{}",
+            workspace: null,
+            threadId: null,
+            resume: false,
+            environmentVariables: null,
+            onThreadStartedAsync: callback);
+
+        Assert.NotNull(options);
+        Assert.Same(callback, options.OnThreadStartedAsync);
     }
 
     [Fact]
@@ -127,7 +145,7 @@ public class AgentRuntimeServiceCompositionTests
             var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
                 JsonUtil.Serialize(new CodexAIAgentOptions()),
                 workspace: null,
-                taskId: null,
+                threadId: null,
                 resume: false,
                 new Dictionary<string, string>
                 {
@@ -155,20 +173,57 @@ public class AgentRuntimeServiceCompositionTests
             cache: null!,
             chatHistoryProvider: null!,
             providerSessionState: null!,
+            projectTaskSessionBindingService: null!,
             webHostEnvironment: null!,
             logger: NullLogger<AgentRuntimeService>.Instance);
         var method = typeof(AgentRuntimeService).GetMethod(
             "CreateCodexAgent",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        var taskId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+            [
+                typeof(string),
+                typeof(string),
+                typeof(Guid?),
+                typeof(bool),
+                typeof(IReadOnlyDictionary<string, string>),
+                typeof(Func<string, CancellationToken, ValueTask>)
+            ]);
+        var providerThreadId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var extra = JsonUtil.Serialize(new CodexAIAgentOptions());
 
         Assert.NotNull(method);
-        var agent = Assert.IsAssignableFrom<AIAgent>(method.Invoke(service, [extra, null, taskId, true, null]));
+        var agent = Assert.IsAssignableFrom<AIAgent>(
+            method.Invoke(service, [extra, null, providerThreadId, true, null, null]));
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
         var codexSession = Assert.IsType<CodexAgentSession>(session);
 
-        Assert.Equal(taskId.Normalize(), codexSession.ThreadId);
+        Assert.Equal(providerThreadId.Normalize(), codexSession.ThreadId);
+    }
+
+    [Fact]
+    public void CreateCodexAgent_WhenThreadStartedCallbackProvided_PassesCallbackToOptions()
+    {
+        var service = CreateRuntimeServiceForReflection();
+        var method = typeof(AgentRuntimeService).GetMethod(
+            "CreateCodexAgent",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+            [
+                typeof(string),
+                typeof(string),
+                typeof(Guid?),
+                typeof(bool),
+                typeof(IReadOnlyDictionary<string, string>),
+                typeof(Func<string, CancellationToken, ValueTask>)
+            ]);
+        var extra = JsonUtil.Serialize(new CodexAIAgentOptions());
+        ValueTask OnThreadStartedAsync(string threadId, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+        Func<string, CancellationToken, ValueTask> callback = OnThreadStartedAsync;
+
+        Assert.NotNull(method);
+        var agent = Assert.IsAssignableFrom<AIAgent>(
+            method.Invoke(service, [extra, null, null, false, null, callback]));
+        var options = GetPrivateField<CodexAIAgentOptions>(agent, "_options");
+
+        Assert.Same(callback, options.OnThreadStartedAsync);
     }
 
     [Fact]
@@ -212,7 +267,8 @@ public class AgentRuntimeServiceCompositionTests
                 typeof(string),
                 typeof(Guid?),
                 typeof(bool),
-                typeof(IReadOnlyDictionary<string, string>)
+                typeof(IReadOnlyDictionary<string, string>),
+                typeof(Func<string, CancellationToken, ValueTask>)
             ]);
         var extra = JsonUtil.Serialize(new CodexAIAgentOptions
         {
@@ -232,7 +288,7 @@ public class AgentRuntimeServiceCompositionTests
 
         Assert.NotNull(method);
         var agent = Assert.IsAssignableFrom<AIAgent>(
-            method.Invoke(service, [extra, null, null, false, environmentVariables]));
+            method.Invoke(service, [extra, null, null, false, environmentVariables, null]));
         var options = GetPrivateField<CodexAIAgentOptions>(agent, "_options");
 
         Assert.NotNull(options.CodexOptions.Env);
@@ -249,6 +305,7 @@ public class AgentRuntimeServiceCompositionTests
             cache: null!,
             chatHistoryProvider: null!,
             providerSessionState: null!,
+            projectTaskSessionBindingService: null!,
             webHostEnvironment: null!,
             logger: NullLogger<AgentRuntimeService>.Instance);
     }

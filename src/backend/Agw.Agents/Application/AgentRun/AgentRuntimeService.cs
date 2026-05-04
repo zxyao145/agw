@@ -47,6 +47,7 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
     private readonly HybridCache _cache;
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
+    private readonly IProjectTaskSessionBindingService _projectTaskSessionBindingService;
     private readonly IWebHostEnvironment _webHostEnvironment;
 
     public AgentRuntimeService(
@@ -56,6 +57,7 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
         HybridCache cache,
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
+        IProjectTaskSessionBindingService projectTaskSessionBindingService,
         IWebHostEnvironment webHostEnvironment,
         ILogger<AgentRuntimeService> logger)
     {
@@ -65,6 +67,7 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
         _cache = cache;
         _chatHistoryProvider = chatHistoryProvider;
         _providerSessionState = providerSessionState;
+        _projectTaskSessionBindingService = projectTaskSessionBindingService;
         _webHostEnvironment = webHostEnvironment;
         _logger = logger;
     }
@@ -123,9 +126,10 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
             AgentNames.Codex => CreateCodexAgent(
                 extra,
                 request.Workspace,
-                request.TaskId,
+                request.ProviderSessionId,
                 request.Resume,
-                request.EnvironmentVariables),
+                request.EnvironmentVariables,
+                request.OnExternalSessionStartedAsync),
             _ => null
         };
         return aiAgent != null;
@@ -171,9 +175,10 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
     private AIAgent? CreateCodexAgent(
         string? extra,
         string? workspace,
-        Guid? taskId,
+        Guid? threadId,
         bool resume,
-        IReadOnlyDictionary<string, string>? environmentVariables)
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync)
     {
         if (string.IsNullOrWhiteSpace(extra))
         {
@@ -184,9 +189,10 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
         var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
             extra,
             workspace,
-            taskId,
+            threadId,
             resume,
-            environmentVariables);
+            environmentVariables,
+            onThreadStartedAsync);
         if (options == null)
         {
             _logger.LogError("agent.Extra Deserialize to options error");
@@ -457,6 +463,10 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
         var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
         var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, settings.SettingContent);
         string taskIdString = task.Id.Normalize();
+        var providerSessionId = await GetCodexProviderSessionIdAsync(agent, task.Id, cancellationToken);
+        var resume = IsCodexExternalAgent(agent)
+            ? providerSessionId.HasValue
+            : settings.Resume;
 
         var resolvedContextId = string.IsNullOrWhiteSpace(task.ContextId)
             ? TaskUtil.GenContextId()
@@ -468,8 +478,10 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
             Workspace = settings.Workspace,
             EnvironmentVariables = settings.EnvironmentVariables,
             TaskId = task.Id,
+            ProviderSessionId = providerSessionId,
             ProjectId = projectId,
-            Resume = settings.Resume,
+            Resume = resume,
+            OnExternalSessionStartedAsync = CreateExternalSessionStartedCallback(agent, task),
         }, cancellationToken);
         if (aiAgent == null)
         {
@@ -490,6 +502,67 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
             _logger,
             taskTitle: agent.Name);
     }
+
+    private async Task<Guid?> GetCodexProviderSessionIdAsync(
+        Agent agent,
+        Guid taskId,
+        CancellationToken cancellationToken)
+    {
+        if (!IsCodexExternalAgent(agent))
+        {
+            return null;
+        }
+
+        var binding = await _projectTaskSessionBindingService.GetAsync(
+            taskId,
+            agent.Id,
+            agent.Name,
+            cancellationToken);
+        if (binding == null)
+        {
+            return null;
+        }
+
+        return Guid.TryParse(binding.ProviderSessionId, out var providerSessionId)
+            ? providerSessionId
+            : null;
+    }
+
+    private Func<string, CancellationToken, ValueTask>? CreateExternalSessionStartedCallback(
+        Agent agent,
+        ProjectTask task)
+    {
+        if (!IsCodexExternalAgent(agent))
+        {
+            return null;
+        }
+
+        return async (providerSessionId, _) =>
+        {
+            try
+            {
+                await _projectTaskSessionBindingService.UpsertAsync(
+                    task.Id,
+                    agent.Id,
+                    agent.Name,
+                    providerSessionId,
+                    "system",
+                    CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to save provider session binding for task {TaskId}, agent {AgentId}.",
+                    task.Id,
+                    agent.Id);
+            }
+        };
+    }
+
+    private static bool IsCodexExternalAgent(Agent agent) =>
+        agent.Type == AgentType.External
+        && string.Equals(agent.Name, AgentNames.Codex, StringComparison.OrdinalIgnoreCase);
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(AgentExecSession session, AgwUserInput input, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
