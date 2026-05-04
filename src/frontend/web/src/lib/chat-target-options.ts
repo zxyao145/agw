@@ -75,16 +75,15 @@ export function buildChatTargetOptions({
     type: "agent" as const,
   }));
 
-  const agentflowOptions =
-    restrictedAgentName
-      ? []
-      : agentflows
-          .filter((agentflow) => agentflow.enable ?? true)
-          .map((agentflow) => ({
-            id: agentflow.id,
-            label: agentflow.name,
-            type: "agentflow" as const,
-          }));
+  const agentflowOptions = restrictedAgentName
+    ? []
+    : agentflows
+        .filter((agentflow) => agentflow.enable ?? true)
+        .map((agentflow) => ({
+          id: agentflow.id,
+          label: agentflow.name,
+          type: "agentflow" as const,
+        }));
 
   return [...agentOptions, ...agentflowOptions].sort((left, right) =>
     left.label.localeCompare(right.label),

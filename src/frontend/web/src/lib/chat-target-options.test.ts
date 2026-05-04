@@ -63,7 +63,6 @@ test("buildChatTargetOptions includes enabled agentflows and sorts normal projec
   );
 });
 
-
 test("buildChatTargetOptions restricts codex project to codex agent only", () => {
   assert.deepEqual(
     buildChatTargetOptions({

@@ -13,12 +13,11 @@ import {
   Server,
   Boxes,
   Box,
-  // Gauge,
-  // Waypoints,
-  // Link2,
   Cable,
   MessagesSquare,
   Clock,
+  Gauge,
+  // Waypoints,
   // Hammer,
 } from "lucide-react";
 
@@ -35,24 +34,23 @@ import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
 const navItems: SidebarMenuGroupProps[] = [
-  // {
-  //   groupLable: "Overview",
-  //   menus: [
-  //     {
-  //       url: "/dashboard",
-  //       title: "Dashboard",
-  //       isActive: true,
-  //       icon: <Gauge />,
-  //     },
-  //     {
-  //       url: "/traces",
-  //       title: "Traces",
-  //       isActive: true,
-  //       icon: <Waypoints />,
-  //     },
-  //   ],
-  // },
-
+  {
+    groupLable: "Overview",
+    menus: [
+      {
+        url: "/dashboard",
+        title: "Dashboard (beta)",
+        isActive: true,
+        icon: <Gauge />,
+      },
+      // {
+      //   url: "/traces",
+      //   title: "Traces",
+      //   isActive: true,
+      //   icon: <Waypoints />,
+      // },
+    ],
+  },
   {
     groupLable: "Projects",
     menus: [
@@ -136,7 +134,7 @@ const navItems: SidebarMenuGroupProps[] = [
     menus: [
       {
         url: "/integrations",
-        title: "Integrations",
+        title: "Integrations (beta)",
         isActive: true,
         icon: <Cable />,
       },
