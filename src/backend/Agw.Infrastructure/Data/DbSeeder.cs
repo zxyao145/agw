@@ -50,7 +50,15 @@ public class DbSeeder
             Description = "Built-in project for A2A task execution.",
             Type = ProjectType.DefaultBuiltIn,
             Enable = true
-        }
+        },
+        new Project
+        {
+            Id = ProjectDefaults.CodexId,
+            Name = ProjectDefaults.CodexName,
+            Description = "Built-in project for Codex task execution.",
+            Type = ProjectType.DefaultBuiltIn,
+            Enable = true
+        },
     ];
 
     private readonly AgwDbContext _context;

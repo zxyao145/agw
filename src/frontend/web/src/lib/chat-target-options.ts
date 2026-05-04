@@ -1,7 +1,9 @@
 import type { ChatTargetOption, ChatTargetType } from "../types/chat-target";
 
-export const SPECIAL_PROJECT_ID = "11111111-1111-1111-1111-000000000002";
-const RESTRICTED_AGENT_NAME = "ClaudeCode";
+const RESTRICTED_PROJECT_AGENT_MAP: Readonly<Record<string, string>> = {
+  "11111111-1111-1111-1111-000000000002": "ClaudeCode",
+  "11111111-1111-1111-1111-000000000004": "Codex",
+};
 
 type ChatAgentTargetSource = {
   id: string;
@@ -60,10 +62,12 @@ export function buildChatTargetOptions({
   agents,
   agentflows,
 }: BuildChatTargetOptionsInput): ChatTargetOption[] {
-  const filteredAgents =
-    projectId === SPECIAL_PROJECT_ID
-      ? agents.filter((agent) => agent.name === RESTRICTED_AGENT_NAME)
-      : agents;
+  const restrictedAgentName =
+    typeof projectId === "string" ? RESTRICTED_PROJECT_AGENT_MAP[projectId] : undefined;
+
+  const filteredAgents = restrictedAgentName
+    ? agents.filter((agent) => agent.name === restrictedAgentName)
+    : agents;
 
   const agentOptions = filteredAgents.map((agent) => ({
     id: agent.id,
@@ -72,7 +76,7 @@ export function buildChatTargetOptions({
   }));
 
   const agentflowOptions =
-    projectId === SPECIAL_PROJECT_ID
+    restrictedAgentName
       ? []
       : agentflows
           .filter((agentflow) => agentflow.enable ?? true)
