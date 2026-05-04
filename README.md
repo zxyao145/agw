@@ -56,6 +56,44 @@ Typical local workflow:
 4. Use `Chat` or `Projects` to run agent sessions and review persisted task history.
 5. Use `Agentflows` for multi-agent orchestration and `Jobs` for scheduled or recurring task execution.
 
+## Screenshots
+
+Below are screenshots of the main Agw UI pages:
+
+### Providers
+![Providers](medias/provider.png)
+
+### Agents
+![Agents](medias/agents.png)
+
+![Agents Detail](medias/agents2.png)
+
+### Tools & MCP
+![MCP](medias/mcp.png)
+
+### Skills
+![Skills](medias/skill.png)
+
+### Integrations
+![Integrations](medias/integrations.png)
+
+### Chat Conversation
+![Chat](medias/chat-conversation.png)
+
+### Chat Workspace Files
+![All Files](medias/chat-workspace-files.png)
+
+![Git Changed Files](medias/chat-workspace-files-diff.png)
+
+### Projects
+![Projects](medias/project.png)
+
+### Jobs
+![Jobs](medias/job.png)
+
+### Agentflows
+![Agentflows](medias/agent-workflow.png)
+
 ## Architecture
 
 Agw uses a domain-based, modular monolithic architecture. `src/backend/Agw.Host` serves as the entry point for the ASP.NET Core application and is responsible for assembling the various modules; the frontend is located in the `src/frontend/web` directory.

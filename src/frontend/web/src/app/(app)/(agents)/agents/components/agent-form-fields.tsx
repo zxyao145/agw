@@ -272,7 +272,7 @@ export function AgentFormFields({
       </div>
 
       <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}extra`}>Extra (JSON)</Label>
+        <Label htmlFor={`${idPrefix}extra`}>Extra Settings (JSON)</Label>
         <Textarea
           id={`${idPrefix}extra`}
           value={extra}

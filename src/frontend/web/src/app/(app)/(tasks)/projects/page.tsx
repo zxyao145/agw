@@ -257,7 +257,7 @@ export default function ProjectsPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label>Settings (JSON)</Label>
+                  <Label>Extra Settings (JSON)</Label>
                   <div className="overflow-hidden rounded-md border">
                     <Editor
                       height="200px"

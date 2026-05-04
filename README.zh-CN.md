@@ -54,6 +54,44 @@ pnpm dev
 4. 通过 `Chat` 或 `Projects` 运行 Agent Session，并查看持久化的 Task 历史。
 5. 使用 `Agentflows` 进行多 Agent 编排，使用 `Jobs` 执行定时或周期任务。
 
+## 界面截图
+
+以下是 Agw 主要界面的截图：
+
+### Providers（供应商）
+![Providers](medias/provider.png)
+
+### Agents（代理）
+![Agents](medias/agents.png)
+
+![Agents 详情](medias/agents2.png)
+
+### Tools & MCP（工具与 MCP）
+![MCP](medias/mcp.png)
+
+### Skills（技能）
+![Skills](medias/skill.png)
+
+### Integrations（集成）
+![Integrations](medias/integrations.png)
+
+### Chat（对话）
+![Chat](medias/chat-conversation.png)
+
+### Chat Workspace Files（对话工作区文件）
+![All Files](medias/chat-workspace-files.png)
+
+![Git Changed Files](medias/chat-workspace-files-diff.png)
+
+### Projects（项目）
+![Projects](medias/project.png)
+
+### Jobs（任务）
+![Jobs](medias/job.png)
+
+### Agentflows（代理编排）
+![Agentflows](medias/agent-workflow.png)
+
 ## 架构
 
 Agw 采用基于领域的模块化单体架构。`src/backend/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；而前端则位于 `src/frontend/web` 目录下。
