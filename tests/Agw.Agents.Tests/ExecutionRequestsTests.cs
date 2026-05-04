@@ -33,6 +33,52 @@ public class ExecutionRequestsTests
     }
 
     [Fact]
+    public void Deserialize_SettingCommand_WithEnvironmentVariables_ReturnsEnvironmentVariables()
+    {
+        var projectId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        const string json = """
+                            {
+                              "type": "SettingCommand",
+                              "settingContent": "{}",
+                              "environmentVariables": {
+                                "AGW_TOKEN": "secret",
+                                "EMPTY_VALUE": ""
+                              },
+                              "projectId": "__PROJECT_ID__",
+                              "taskId": "__TASK_ID__"
+                            }
+                            """;
+        var payload = json
+            .Replace("__PROJECT_ID__", projectId.ToString())
+            .Replace("__TASK_ID__", taskId.ToString());
+
+        var request = JsonUtil.Deserialize<AgentRunCommand>(payload);
+
+        var settingRequest = Assert.IsType<SettingCommand>(request);
+        Assert.Equal("secret", settingRequest.EnvironmentVariables["AGW_TOKEN"]);
+        Assert.Equal("", settingRequest.EnvironmentVariables["EMPTY_VALUE"]);
+    }
+
+    [Fact]
+    public void Equals_WhenEnvironmentVariablesDiffer_ReturnsFalse()
+    {
+        var projectId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+
+        var left = CreateSettingCommand(projectId, taskId, new Dictionary<string, string>
+        {
+            ["AGW_TOKEN"] = "one"
+        });
+        var right = CreateSettingCommand(projectId, taskId, new Dictionary<string, string>
+        {
+            ["AGW_TOKEN"] = "two"
+        });
+
+        Assert.NotEqual(left, right);
+    }
+
+    [Fact]
     public void Deserialize_ExecCommand_ReturnsExecutionCommand()
     {
         const string json = """
@@ -73,5 +119,17 @@ public class ExecutionRequestsTests
 
         var interruptRequest = Assert.IsType<InterruptCommand>(request);
         Assert.Null(interruptRequest.Reason);
+    }
+
+    private static SettingCommand CreateSettingCommand(
+        Guid projectId,
+        Guid taskId,
+        IReadOnlyDictionary<string, string> environmentVariables)
+    {
+        return new SettingCommand(
+            projectId,
+            taskId,
+            settingContent: "{}",
+            environmentVariables: new Dictionary<string, string>(environmentVariables));
     }
 }

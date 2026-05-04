@@ -7,7 +7,7 @@ import {
   getChatSettingsHashValue,
   encodeChatUrlSettings,
   getTargetValueFromChatUrlSettings,
-} from "./url-settings.ts";
+} from "./url-settings";
 
 test("chat URL settings round trip as base64 url-safe JSON", () => {
   const settings = {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isTaskMissingFromHistory } from "./task-history-refresh.ts";
+import { isTaskMissingFromHistory } from "./task-history-refresh";
 
 test("isTaskMissingFromHistory detects the current task is absent from loaded history", () => {
   assert.equal(

@@ -2,13 +2,30 @@ import type { AiMessage } from "@/types";
 
 export type ExecutionWsUserInput = Pick<AiMessage, "messageId" | "author" | "contents">;
 
-export type ExecutionWsRequest = {
-  agentType: number;
-  input: ExecutionWsUserInput;
+export type ExecutionWsEnvironmentVariables = Record<string, string>;
+
+export type ExecutionWsSettingCommandRequest = {
   projectId: string;
   settingContent?: string;
   taskId?: string | null;
   resume?: boolean;
+  workspace?: string | null;
+  environmentVariables?: ExecutionWsEnvironmentVariables | null;
+};
+
+export type ExecutionWsSettingCommandPayload = {
+  type: "SettingCommand";
+  settingContent: string;
+  projectId: string;
+  taskId: string | null;
+  resume: boolean;
+  workspace?: string | null;
+  environmentVariables?: ExecutionWsEnvironmentVariables | null;
+};
+
+export type ExecutionWsRequest = ExecutionWsSettingCommandRequest & {
+  agentType: number;
+  input: ExecutionWsUserInput;
 };
 
 type ExecutionWsResultStatus = "completed" | "interrupted" | "cancelled" | "failed";
@@ -55,6 +72,28 @@ function tryParseExecutionWsResult(payload: string): ExecutionWsResult | null {
   }
 }
 
+export function buildSettingCommandPayload(
+  request: ExecutionWsSettingCommandRequest,
+): ExecutionWsSettingCommandPayload {
+  const payload: ExecutionWsSettingCommandPayload = {
+    type: "SettingCommand",
+    settingContent: request.settingContent ?? "{}",
+    projectId: request.projectId,
+    taskId: request.taskId ?? null,
+    resume: request.resume ?? false,
+  };
+
+  if (request.workspace !== undefined) {
+    payload.workspace = request.workspace;
+  }
+
+  if (request.environmentVariables !== undefined) {
+    payload.environmentVariables = request.environmentVariables;
+  }
+
+  return payload;
+}
+
 function openExecutionWebSocket(
   wsUrl: string,
   request: ExecutionWsRequest,
@@ -71,15 +110,7 @@ function openExecutionWebSocket(
     };
 
     ws.onopen = () => {
-      ws.send(
-        JSON.stringify({
-          type: "SettingCommand",
-          settingContent: request.settingContent ?? "{}",
-          projectId: request.projectId,
-          taskId: request.taskId ?? null,
-          resume: request.resume ?? false,
-        }),
-      );
+      ws.send(JSON.stringify(buildSettingCommandPayload(request)));
       ws.send(
         JSON.stringify({
           type: "ExecCommand",

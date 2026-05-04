@@ -12,6 +12,8 @@ using ClaudeCodeSdk.Types;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
+using OpenAI.CodexSdk.MAF;
+
 namespace Agw.Infrastructure.Data;
 
 /// <summary>
@@ -57,7 +59,12 @@ public class DbSeeder
             Name = ProjectDefaults.CodexName,
             Description = "Built-in project for Codex task execution.",
             Type = ProjectType.DefaultBuiltIn,
-            Enable = true
+            Enable = true,
+            ExtraSetting = JsonUtil.Serialize(
+                new CodexAIAgentOptions()
+                    {
+                    }
+                ),
         },
     ];
 
@@ -121,13 +128,16 @@ public class DbSeeder
     private static Project CreateBuiltInProject(Project definition)
     {
         var now = DateTime.UtcNow;
+        var workspace = string.IsNullOrWhiteSpace(definition.Workspace)
+            ? "~/.agw/" + definition.Name
+            : definition.Workspace;
         return new Project
         {
             Id = definition.Id,
             Name = definition.Name,
             Type = definition.Type,
             Description = definition.Description,
-            Workspace = definition.Workspace,
+            Workspace = workspace,
             Enable = true,
             ExtraSetting = definition.ExtraSetting,
             CreateBy = "system",

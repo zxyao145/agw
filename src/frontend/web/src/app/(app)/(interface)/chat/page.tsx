@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
 import { apiGet } from "@/api/client";
+import { buildSettingCommandPayload } from "@/api/execution-ws";
 import { clearTaskRecords, getTaskDetails } from "@/api/task-client";
 import { Explorer, FileContent } from "@/components/file-explorer";
 import type { LineComment } from "@/components/file-explorer";
@@ -720,13 +721,8 @@ export default function ChatPage() {
       settingContent.workspace = resolvedWorkspace;
     }
 
-    const environmentVariables = buildEnvironmentVariables();
-    if (Object.keys(environmentVariables).length > 0) {
-      settingContent.environmentVariables = environmentVariables;
-    }
-
     return JSON.stringify(settingContent);
-  }, [buildEnvironmentVariables, extraSettingText, resolvedWorkspace]);
+  }, [extraSettingText, resolvedWorkspace]);
 
   const loadFileContent = React.useCallback(
     async (filePath: string) => {
@@ -796,14 +792,15 @@ export default function ChatPage() {
   );
 
   const buildSettingCommand = React.useCallback(
-    (nextTaskIdValue: string) => ({
-      type: "SettingCommand",
-      workspace: resolvedWorkspace ?? "",
-      settingContent: buildSettingContent(),
-      projectId: selectedProjectId,
-      taskId: nextTaskIdValue,
-    }),
-    [buildSettingContent, resolvedWorkspace, selectedProjectId],
+    (nextTaskIdValue: string) =>
+      buildSettingCommandPayload({
+        workspace: resolvedWorkspace ?? "",
+        settingContent: buildSettingContent(),
+        environmentVariables: buildEnvironmentVariables(),
+        projectId: selectedProjectId ?? "",
+        taskId: nextTaskIdValue,
+      }),
+    [buildEnvironmentVariables, buildSettingContent, resolvedWorkspace, selectedProjectId],
   );
 
   const buildExecRequest = React.useCallback(

@@ -6,7 +6,7 @@ import {
   getTargetValue,
   getTargetValueFromMetadata,
   parseTargetValue,
-} from "./chat-target-options.ts";
+} from "./chat-target-options";
 
 test("getTargetValue encodes agent and agentflow targets", () => {
   assert.equal(getTargetValue({ id: "agent-1", type: "agent" }), "agent:agent-1");

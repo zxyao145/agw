@@ -45,6 +45,10 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
       continue;
     }
 
+    if (currentMsg.role === "system") {
+      continue;
+    }
+
     if (!currentMsg.contents || currentMsg.contents.length === 0) {
       continue;
     }

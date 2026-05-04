@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SPECIAL_PROJECT_ID, buildChatTargetOptions } from "./target-options.ts";
+import { buildChatTargetOptions } from "./target-options";
 
 test("restricted project only exposes the ClaudeCode agent", () => {
   const result = buildChatTargetOptions({
-    projectId: SPECIAL_PROJECT_ID,
+    projectId: "11111111-1111-1111-1111-000000000002",
     agents: [
       { id: "agent-1", name: "GeneralAgent", displayName: "General Agent" },
       { id: "agent-2", name: "ClaudeCode", displayName: "Claude Code" },

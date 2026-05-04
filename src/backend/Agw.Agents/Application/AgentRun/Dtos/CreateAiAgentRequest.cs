@@ -12,5 +12,7 @@ public sealed class CreateAiAgentRequest
 
     public string? Workspace { get; init; }
 
+    public IReadOnlyDictionary<string, string>? EnvironmentVariables { get; init; }
+
     public bool Resume { get; init; }
 }

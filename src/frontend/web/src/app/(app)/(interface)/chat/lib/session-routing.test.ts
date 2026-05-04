@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getChatRouteSessionAction, getTaskHydrationKey } from "./session-routing.ts";
+import { getChatRouteSessionAction, getTaskHydrationKey } from "./session-routing";
 
 test("route action ignores the task route created by the active local session", () => {
   const projectId = "11111111-1111-1111-1111-111111111111";

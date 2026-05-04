@@ -5,11 +5,12 @@
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
         <PackageReference Include="ClaudeCodeSdk.MAF" />
-        <PackageReference Include="CodexSdk.MAF" />
+        <!--<PackageReference Include="CodexSdk.MAF" />-->
         <PackageReference Include="Microsoft.Agents.AI" />
         <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
         <PackageReference Include="Microsoft.Agents.AI.Anthropic" />
         <PackageReference Include="ModelContextProtocol" />
+        <ProjectReference Include="..\..\..\..\..\codex-sdk-csharp\src\CodexSdk.MAF\CodexSdk.MAF.csproj" />
         <ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
         <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
         <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />

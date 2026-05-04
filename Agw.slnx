@@ -13,6 +13,8 @@
     <Project Path="src/backend/Agw.A2A/Agw.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
   </Folder>
   <Folder Name="/3.Core/">
+    <Project Path="../../codex-sdk-csharp/src/CodexSdk.MAF/CodexSdk.MAF.csproj" />
+    <Project Path="../../codex-sdk-csharp/src/CodexSdk/CodexSdk.csproj" />
     <Project Path="src/backend/Agw.Agents/Agw.Agents.csproj" />
     <Project Path="src/backend/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <Project Path="src/backend/Agw.Integrations/Agw.Integrations.csproj" />

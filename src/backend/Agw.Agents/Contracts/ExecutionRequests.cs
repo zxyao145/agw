@@ -14,18 +14,22 @@ public abstract class AgentRunCommand;
 
 public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
 {
+    private Dictionary<string, string> _environmentVariables = new();
+
     [JsonConstructor]
     [SetsRequiredMembers]
     public SettingCommand(
         Guid projectId,
         Guid taskId,
         string? workspace = "~/.agw/temp",
-        string settingContent = "{}")
+        string settingContent = "{}",
+        Dictionary<string, string>? environmentVariables = null)
     {
         ProjectId = projectId;
         TaskId = taskId;
         Workspace = workspace;
         SettingContent = settingContent;
+        EnvironmentVariables = environmentVariables ?? new Dictionary<string, string>();
     }
 
     public Guid ProjectId { get; set; }
@@ -35,6 +39,12 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public string? Workspace { get; set; }
 
     public string SettingContent { get; set; }
+
+    public Dictionary<string, string> EnvironmentVariables
+    {
+        get => _environmentVariables;
+        set => _environmentVariables = value ?? new Dictionary<string, string>();
+    }
 
     [JsonIgnore]
     public bool Resume { get; set; }
@@ -53,7 +63,9 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
 
         return left.SettingContent == right.SettingContent
             && left.ProjectId == right.ProjectId
-            && left.TaskId == right.TaskId;
+            && left.TaskId == right.TaskId
+            && left.Workspace == right.Workspace
+            && EnvironmentVariablesEqual(left.EnvironmentVariables, right.EnvironmentVariables);
     }
 
     public static bool operator !=(SettingCommand? left, SettingCommand? right) => !(left == right);
@@ -63,7 +75,54 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public override bool Equals(object? obj) => obj is SettingCommand other && Equals(other);
 
     public override int GetHashCode() =>
-        HashCode.Combine(SettingContent, ProjectId, TaskId);
+        HashCode.Combine(
+            SettingContent,
+            ProjectId,
+            TaskId,
+            Workspace,
+            GetEnvironmentVariablesHashCode(EnvironmentVariables));
+
+    private static bool EnvironmentVariablesEqual(
+        IReadOnlyDictionary<string, string>? left,
+        IReadOnlyDictionary<string, string>? right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left == null || right == null || left.Count != right.Count)
+        {
+            return false;
+        }
+
+        foreach (var (key, value) in left)
+        {
+            if (!right.TryGetValue(key, out var rightValue) || rightValue != value)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int GetEnvironmentVariablesHashCode(IReadOnlyDictionary<string, string>? environmentVariables)
+    {
+        if (environmentVariables == null || environmentVariables.Count == 0)
+        {
+            return 0;
+        }
+
+        var hash = new HashCode();
+        foreach (var (key, value) in environmentVariables.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            hash.Add(key, StringComparer.Ordinal);
+            hash.Add(value, StringComparer.Ordinal);
+        }
+
+        return hash.ToHashCode();
+    }
 }
 
 public class ExecCommand : AgentRunCommand

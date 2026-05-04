@@ -114,14 +114,29 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
         var extra = request.ExtraOverride ?? request.Agent.Extra;
         aiAgent = request.Agent.Name switch
         {
-            AgentNames.ClaudeCode => CreateClaudeCodeAgent(extra, request.Workspace, request.TaskId, request.Resume),
-            AgentNames.Codex => CreateCodexAgent(extra, request.Workspace, request.TaskId, request.Resume),
+            AgentNames.ClaudeCode => CreateClaudeCodeAgent(
+                extra,
+                request.Workspace,
+                request.TaskId,
+                request.Resume,
+                request.EnvironmentVariables),
+            AgentNames.Codex => CreateCodexAgent(
+                extra,
+                request.Workspace,
+                request.TaskId,
+                request.Resume,
+                request.EnvironmentVariables),
             _ => null
         };
         return aiAgent != null;
     }
 
-    private AIAgent? CreateClaudeCodeAgent(string? extra, string? workspace, Guid? taskId, bool resume)
+    private AIAgent? CreateClaudeCodeAgent(
+        string? extra,
+        string? workspace,
+        Guid? taskId,
+        bool resume,
+        IReadOnlyDictionary<string, string>? environmentVariables)
     {
         if (string.IsNullOrWhiteSpace(extra))
         {
@@ -148,11 +163,17 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
                 : options with { Resume = null, SessionId = taskId };
         }
 
+        options = AgentRuntimeServiceUtil.ApplyEnvironmentVariables(options, environmentVariables);
         options = options with { ChatHistoryProvider = _chatHistoryProvider };
         return new ClaudeCodeAIAgent(options, _logger);
     }
 
-    private AIAgent? CreateCodexAgent(string? extra, string? workspace, Guid? taskId, bool resume)
+    private AIAgent? CreateCodexAgent(
+        string? extra,
+        string? workspace,
+        Guid? taskId,
+        bool resume,
+        IReadOnlyDictionary<string, string>? environmentVariables)
     {
         if (string.IsNullOrWhiteSpace(extra))
         {
@@ -160,7 +181,12 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
             return null;
         }
 
-        var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(extra, workspace, taskId, resume);
+        var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
+            extra,
+            workspace,
+            taskId,
+            resume,
+            environmentVariables);
         if (options == null)
         {
             _logger.LogError("agent.Extra Deserialize to options error");
@@ -168,7 +194,7 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
         }
 
         options = options with { ChatHistoryProvider = _chatHistoryProvider };
-        return new CodexAIAgent(options);
+        return new CodexAIAgent(options, _logger);
     }
 
 
@@ -440,6 +466,7 @@ public class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeService
             Agent = agent,
             ExtraOverride = mergedExtra,
             Workspace = settings.Workspace,
+            EnvironmentVariables = settings.EnvironmentVariables,
             TaskId = task.Id,
             ProjectId = projectId,
             Resume = settings.Resume,

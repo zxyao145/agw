@@ -6,7 +6,7 @@ import {
   CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME,
   EMPTY_EXTRA_SETTING_TEXT,
   normalizeExtraSettingTextForStorage,
-} from "./chat-settings.ts";
+} from "./chat-settings";
 
 test("chat settings dialog content uses a capped flex layout", () => {
   assert.equal(

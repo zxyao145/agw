@@ -4,6 +4,8 @@ using System.Text.Json.Nodes;
 
 using Agw.Shared.Utils;
 
+using ClaudeCodeSdk.MAF;
+
 using OpenAI.CodexSdk;
 using OpenAI.CodexSdk.MAF;
 
@@ -37,7 +39,12 @@ public static class AgentRuntimeServiceUtil
 
     #region CodexAgentOptions
 
-    public static CodexAIAgentOptions? BuildCodexAIAgentOptions(string extra, string? workspace, Guid? taskId, bool resume)
+    public static CodexAIAgentOptions? BuildCodexAIAgentOptions(
+        string extra,
+        string? workspace,
+        Guid? taskId,
+        bool resume,
+        IReadOnlyDictionary<string, string>? environmentVariables = null)
     {
         var options = JsonUtil.Deserialize<CodexAIAgentOptions>(extra);
         if (options == null)
@@ -62,7 +69,45 @@ public static class AgentRuntimeServiceUtil
             };
         }
 
+        if (environmentVariables is { Count: > 0 })
+        {
+            options = options with
+            {
+                CodexOptions = CreateCodexOptionsWithEnvironmentVariables(
+                    options.CodexOptions,
+                    environmentVariables)
+            };
+        }
+
         return options;
+    }
+
+    public static ClaudeCodeAIAgentOptions ApplyEnvironmentVariables(
+        ClaudeCodeAIAgentOptions options,
+        IReadOnlyDictionary<string, string>? environmentVariables)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (environmentVariables is not { Count: > 0 })
+        {
+            return options;
+        }
+
+        var merged = new Dictionary<string, string?>(StringComparer.Ordinal);
+        if (options.EnvironmentVariables != null)
+        {
+            foreach (var (key, value) in options.EnvironmentVariables)
+            {
+                merged[key] = value;
+            }
+        }
+
+        foreach (var (key, value) in environmentVariables)
+        {
+            merged[key] = value;
+        }
+
+        return options with { EnvironmentVariables = merged };
     }
 
     private static ThreadOptions CreateCodexThreadOptionsWithWorkspace(ThreadOptions? options, string workspace)
@@ -81,6 +126,46 @@ public static class AgentRuntimeServiceUtil
             WebSearchEnabled = options.WebSearchEnabled,
             ApprovalPolicy = options.ApprovalPolicy,
             AdditionalDirectories = options.AdditionalDirectories,
+        };
+    }
+
+    private static CodexOptions CreateCodexOptionsWithEnvironmentVariables(
+        CodexOptions? options,
+        IReadOnlyDictionary<string, string> environmentVariables)
+    {
+        options ??= new CodexOptions();
+
+        var merged = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (options.Env != null)
+        {
+            foreach (var (key, value) in options.Env)
+            {
+                merged[key] = value;
+            }
+        }
+        else
+        {
+            foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+            {
+                if (entry.Key is string key && entry.Value is string value)
+                {
+                    merged[key] = value;
+                }
+            }
+        }
+
+        foreach (var (key, value) in environmentVariables)
+        {
+            merged[key] = value;
+        }
+
+        return new CodexOptions
+        {
+            CodexPathOverride = options.CodexPathOverride,
+            BaseUrl = options.BaseUrl,
+            ApiKey = options.ApiKey,
+            Config = options.Config,
+            Env = merged
         };
     }
 
