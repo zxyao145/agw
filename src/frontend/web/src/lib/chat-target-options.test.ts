@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  SPECIAL_PROJECT_ID,
   buildChatTargetOptions,
   getTargetValue,
   getTargetValueFromMetadata,
@@ -30,7 +29,7 @@ test("getTargetValueFromMetadata rebuilds target values from persisted metadata"
 test("buildChatTargetOptions preserves restricted-project filtering and sorting", () => {
   assert.deepEqual(
     buildChatTargetOptions({
-      projectId: SPECIAL_PROJECT_ID,
+      projectId: "11111111-1111-1111-1111-000000000002",
       agents: [
         { id: "agent-1", name: "GeneralAgent", displayName: "General Agent" },
         { id: "agent-2", name: "ClaudeCode", displayName: "Claude Code" },
@@ -61,5 +60,20 @@ test("buildChatTargetOptions includes enabled agentflows and sorts normal projec
       { id: "agent-1", label: "General Agent", type: "agent" },
       { id: "flow-2", label: "Zeta Flow", type: "agentflow" },
     ],
+  );
+});
+
+
+test("buildChatTargetOptions restricts codex project to codex agent only", () => {
+  assert.deepEqual(
+    buildChatTargetOptions({
+      projectId: "11111111-1111-1111-1111-000000000004",
+      agents: [
+        { id: "agent-1", name: "GeneralAgent", displayName: "General Agent" },
+        { id: "agent-2", name: "Codex", displayName: "OpenAI Codex" },
+      ],
+      agentflows: [{ id: "flow-1", name: "Team Flow", enable: true }],
+    }),
+    [{ id: "agent-2", label: "OpenAI Codex", type: "agent" }],
   );
 });
