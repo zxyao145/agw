@@ -211,13 +211,11 @@ export function Conversation({
               </div>
             );
           } else {
-            const isUser =
-              item.message.role === "user" &&
-              item.message.author === "user" &&
-              !item.message.additionalProperties;
-            console.debug("isUser", isUser, item.message);
+            const isUserBlock =
+              item.message.role === "user" && !item.message.additionalProperties;
+            console.debug("isUser", isUserBlock, "message", item.message);
             return (
-              <div className={cn("mx-4", isUser ? "max-w-full" : "max-w-[80%]")} key={index}>
+              <div className={cn("mx-4", isUserBlock ? "max-w-full" : "max-w-[80%]")} key={index} data-msg-id={item.message.messageId}>
                 <AiMessageComponent message={item.message} />
               </div>
             );

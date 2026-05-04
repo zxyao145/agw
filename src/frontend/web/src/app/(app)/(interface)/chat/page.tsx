@@ -1469,7 +1469,7 @@ export default function ChatPage() {
 
             <ColResizeSplit.Right>
               <div className="relative flex flex-col min-h-105 flex-1 overflow-hidden">
-                <div className="border-b px-4 py-3">
+                {/* <div className="border-b px-4 py-3">
                   <div className="text-xs text-muted-foreground">
                     {selectedProjectId
                       ? `Project: ${projects.find((project) => project.id === selectedProjectId)?.name ?? selectedProjectId}`
@@ -1477,9 +1477,9 @@ export default function ChatPage() {
                     {selectedTarget ? ` · Target: ${selectedTarget.type}` : ""}
                     {taskId ? ` · Task: ${taskId}` : ""}
                   </div>
-                </div>
+                </div> */}
 
-                <div className="relative flex h-[calc(100%-57px)] min-h-0 flex-1 flex-col">
+                <div className="relative flex h-[calc(100%-57px)] min-h-0 flex-1 flex-col border-t">
                   <Conversation
                     taskId={taskId}
                     messages={messages}

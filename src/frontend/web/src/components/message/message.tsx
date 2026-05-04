@@ -250,8 +250,11 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
   console.debug(
     "AiMessageComponent isUser",
     isUser,
+    "isToolResult",
     isToolResult,
+    "IsSideRight",
     IsSideRight,
+    "message",
     JSON.stringify(message),
   );
   return (
