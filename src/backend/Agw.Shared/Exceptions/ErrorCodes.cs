@@ -42,6 +42,20 @@ public static class ErrorCodes
     public static readonly ErrorCode JobAgentTargetRequired = new(400_0036, "Job agent target is required.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode McpStdioCommandRequired = new(400_0037, "MCP stdio transport requires a command.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode McpHttpUrlRequired = new(400_0038, "MCP HTTP/SSE transport requires a URL.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode NoChangesToMake = new(400_0039, "No changes to make.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode FileAlreadyExists = new(400_0040, "File already exists.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode MultipleMatches = new(400_0041, "Multiple matches found.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode CommandRequired = new(400_0042, "Command is required.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode CommandExecutionFailed = new(400_0043, "Command execution failed.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode CommandTimeout = new(400_0044, "Command timed out.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode PatternRequired = new(400_0045, "Pattern is required.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode OffsetOutOfRange = new(400_0046, "Offset is out of range.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode InvalidPattern = new(400_0047, "Invalid pattern.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode UrlRequired = new(400_0048, "URL is required.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode InvalidUrl = new(400_0049, "Invalid URL.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode FetchFailed = new(400_0050, "Failed to fetch content.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode QueryRequired = new(400_0051, "Query is required.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode InvalidParameters = new(400_0052, "Invalid parameters.", HttpStatusCode.BadRequest);
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
 

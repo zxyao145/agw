@@ -49,3 +49,28 @@ Dependencies must always point **inward**. Domain never depends on anything else
 ## 3. Anemic domain model
 
 Domain objects (entities, value objects) contain **only data** — no business behavior. All business behavior lives in **Application-layer services** (AppService / DomainService).
+
+---
+
+## 4. Do not instantiate HttpClient directly
+
+All HTTP client usage must go through `IHttpClientFactory`. Never instantiate `HttpClient` with `new HttpClient()`.
+
+### Applicable modules
+
+- All backend modules under `src/backend/`
+
+### What to do
+
+- Resolve `IHttpClientFactory` via `IocUtil.GetSingletonRequiredService<IHttpClientFactory>()`.
+- Create short-lived `HttpClient` instances with `httpClientFactory.CreateClient()`.
+
+### What NOT to do
+
+- Do not call `new HttpClient()` directly.
+- Do not hold `HttpClient` as a singleton field without using the factory.
+
+### Rationale
+
+Direct `new HttpClient()` causes socket exhaustion and DNS staleness. `IHttpClientFactory` manages connection pooling, DNS refresh, and handler lifecycle automatically.
+

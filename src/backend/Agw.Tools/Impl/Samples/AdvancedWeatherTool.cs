@@ -2,7 +2,7 @@ using Agw.Shared.Contracts.Tools.Abstractions;
 
 using Microsoft.Extensions.AI;
 
-namespace Agw.Tools.Impl.Weather;
+namespace Agw.Tools.Impl.Samples;
 
 /// <summary>
 /// Example of a class-based weather tool using the new <see cref="IAgwTool"/> pattern.
@@ -11,7 +11,7 @@ public class AdvancedWeatherTool : IAgwTool
 {
     public string Name => "get_advanced_weather";
 
-    public string Category => "Test";
+    public string Category => "Sample";
 
     [Description("Get advanced weather information including humidity, wind, UV index, and optional alerts.")]
     public string Execute(

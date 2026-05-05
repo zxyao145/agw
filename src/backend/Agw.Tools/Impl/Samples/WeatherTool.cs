@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Agw.Tools.Impl.Weather;
+namespace Agw.Tools.Impl.Samples;
 
 /// <summary>
 /// Weather-related tools exposed as attributed static methods.
@@ -8,7 +8,7 @@ namespace Agw.Tools.Impl.Weather;
 [AiToolContainer(DefaultCategory = "Test")]
 public static class WeatherTools
 {
-    [AiTool("get_weather", Category = "Test")]
+    [AiTool("get_weather", Category = "Sample")]
     [Description("Get the current weather for a given location.")]
     public static string GetWeather(
         [Description("The location to get the weather for (city name or coordinates).")] string location)
@@ -16,7 +16,7 @@ public static class WeatherTools
         return $"The weather in {location} is cloudy with a high of 15°C.";
     }
 
-    [AiTool("get_forecast", Category = "Test")]
+    [AiTool("get_forecast", Category = "Sample")]
     [Description("Get the weather forecast for the next few days at a given location.")]
     public static string GetForecast(
         [Description("The location to get the forecast for.")] string location,
@@ -38,7 +38,7 @@ public static class WeatherTools
         return $"Weather forecast for {location}:{Environment.NewLine}{string.Join(Environment.NewLine, forecasts)}";
     }
 
-    [AiTool("convert_temperature", Category = "Test")]
+    [AiTool("convert_temperature", Category = "Sample")]
     [Description("Convert temperature between Celsius and Fahrenheit.")]
     public static string ConvertTemperature(
         [Description("The temperature value to convert.")] double temperature,

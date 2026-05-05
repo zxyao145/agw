@@ -35,6 +35,8 @@ internal class DiffTool : IAgwTool
 {
     public string Name => "diff";
 
+    public string Category => "File";
+
     [Description(
     """
     Generate the difference between the two texts before and after.

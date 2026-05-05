@@ -40,6 +40,8 @@ internal class LsTool : IAgwTool
 {
     public string Name => "ls";
 
+    public string Category => "File";
+
     [Description(
         """
         Returns the names of files (including their paths) that match the specified search
