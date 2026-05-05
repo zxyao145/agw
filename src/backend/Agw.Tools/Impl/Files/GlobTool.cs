@@ -103,7 +103,6 @@ internal class GlobTool : IAgwTool
     public AITool ToAITool()
     {
         Func<GlobToolParams, GlobToolResult> func = Execute;
-        var aiTool = AIFunctionFactory.Create(func, Name);
-        return aiTool;
+        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 }

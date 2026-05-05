@@ -77,7 +77,6 @@ internal class DiffTool : IAgwTool
     public AITool ToAITool()
     {
         Func<DiffToolParams, DiffToolResult> func = Execute;
-        var aiTool = AIFunctionFactory.Create(func, Name);
-        return aiTool;
+        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 }

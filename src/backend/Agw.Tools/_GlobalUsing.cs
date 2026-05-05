@@ -4,3 +4,5 @@ global using System.Diagnostics.CodeAnalysis;
 global using Agw.Shared.Contracts.Tools.Attributes;
 global using Agw.Shared.Services;
 global using Agw.Shared.Utils;
+global using Agw.Domain.Tools;
+

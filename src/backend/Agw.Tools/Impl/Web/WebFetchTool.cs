@@ -5,6 +5,7 @@ using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace Agw.Tools.Impl.Web;
 
@@ -76,6 +77,8 @@ internal class WebFetchTool : IAgwTool
         }
         catch (HttpRequestException ex)
         {
+            var logger = IocUtil.CreateLogger<WebFetchTool>();
+            logger.LogError(ex, "HTTP request failed for URL: {Url}", toolParams.Url);
             throw new AgwException(ErrorCodes.FetchFailed, $"Failed to fetch URL: {ex.Message}");
         }
 
@@ -123,8 +126,7 @@ internal class WebFetchTool : IAgwTool
     public AITool ToAITool()
     {
         Func<WebFetchToolParams, WebFetchToolResult> func = Execute;
-        var aiTool = AIFunctionFactory.Create(func, Name);
-        return aiTool;
+        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 
     private static string ApplyPromptToContent(string prompt, string content)

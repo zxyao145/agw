@@ -72,7 +72,6 @@ internal class LsTool : IAgwTool
     public AITool ToAITool()
     {
         Func<LsToolParams, LsToolResult> func = Execute;
-        var aiTool = AIFunctionFactory.Create(func, Name);
-        return aiTool;
+        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 }

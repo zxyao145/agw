@@ -84,8 +84,7 @@ internal class FileWriteTool : IAgwTool
     public AITool ToAITool()
     {
         Func<FileWriteToolParams, FileWriteToolResult> func = Execute;
-        var aiTool = AIFunctionFactory.Create(func, Name);
-        return aiTool;
+        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 
     private static List<PatchHunk> GeneratePatch(string oldContent, string newContent)

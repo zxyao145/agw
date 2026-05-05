@@ -143,8 +143,7 @@ internal class FileEditTool : IAgwTool
     public AITool ToAITool()
     {
         Func<FileEditToolParams, FileEditToolResult> func = Execute;
-        var aiTool = AIFunctionFactory.Create(func, Name);
-        return aiTool;
+        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 
     private static List<PatchHunk> GeneratePatch(string oldContent, string newContent, string filePath)

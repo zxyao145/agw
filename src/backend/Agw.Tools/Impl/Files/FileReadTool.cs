@@ -111,7 +111,6 @@ internal class FileReadTool : IAgwTool
     public AITool ToAITool()
     {
         Func<FileReadToolParams, FileReadToolResult> func = Execute;
-        var aiTool = AIFunctionFactory.Create(func, Name);
-        return aiTool;
+        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 }

@@ -196,8 +196,7 @@ internal class GrepTool : IAgwTool
     public AITool ToAITool()
     {
         Func<GrepToolParams, GrepToolResult> func = Execute;
-        var aiTool = AIFunctionFactory.Create(func, Name);
-        return aiTool;
+        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 
     private static List<string> GetFilesToSearch(string searchPath, List<string>? extensions, string? globPattern)
