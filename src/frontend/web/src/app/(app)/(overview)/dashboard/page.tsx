@@ -65,11 +65,6 @@ function SummaryCards({
 }) {
   const cards = [
     {
-      label: "Job 数量",
-      value: hasData ? stats?.jobCount : "—",
-      color: "text-light",
-    },
-    {
       label: "Project 数量",
       value: hasData ? stats?.projectCount : "—",
       color: "text-sage",
@@ -83,6 +78,11 @@ function SummaryCards({
       label: "Project Task Record 数量",
       value: hasData ? stats?.projectTaskRecordCount : "—",
       color: "text-violet-400",
+    },
+    {
+      label: "Job 数量",
+      value: hasData ? stats?.jobCount : "—",
+      color: "text-light",
     },
     {
       label: "Agent 数量",

@@ -22,7 +22,11 @@ import {
   SidebarTrigger,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export type MenuLink = { title: string; url: string; icon?: React.ReactNode };
 
@@ -55,18 +59,27 @@ export function AppSidebar({ menus }: AppSidebarProps) {
         <SidebarHeader className="border-b border-slate-200">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton className="flex-row-reverse justify-between">
-                <SidebarTrigger className="-ml-1" />
-                <span>Agw</span>
-                {/* <span>Squidward</span> */}
-              </SidebarMenuButton>
+              <div className="flex items-center justify-between group-data-[collapsible=icon]:justify-center">
+                <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+                  {/* <p className="text-xs uppercase tracking-[0.28em] text-slate-400">
+                    Agw
+                  </p>
+                  <p className="truncate text-sm font-semibold text-black">
+                    Agw-Web
+                  </p> */}
+                  <span>Agw</span>
+                </div>
+                <SidebarTrigger className="-ml-1 group-data-[collapsible=icon]:mx-auto" />
+              </div>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
           {menus.map((grpItem, index) => (
             <SidebarGroup key={index}>
-              {grpItem.groupLable && <SidebarGroupLabel>{grpItem.groupLable}</SidebarGroupLabel>}
+              {grpItem.groupLable && (
+                <SidebarGroupLabel>{grpItem.groupLable}</SidebarGroupLabel>
+              )}
               <SidebarMenu>
                 {grpItem.menus.map((item) => (
                   <Collapsible
