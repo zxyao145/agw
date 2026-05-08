@@ -30,7 +30,7 @@ final class ReactViewController: UIViewController {
         reactNativeFactory = factory
 
         view = factory.rootViewFactory.view(
-            withModuleName: "FeReactNative",
+            withModuleName: "AgwReactNative",
             initialProperties: page.props
         )
     }

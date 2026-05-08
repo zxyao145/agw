@@ -1,4 +1,4 @@
-package com.fe
+package com.agw
 
 import android.app.Application
 import com.facebook.react.PackageList

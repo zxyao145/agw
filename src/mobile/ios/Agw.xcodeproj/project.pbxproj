@@ -7,25 +7,25 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		670F1400D66311A74E143CD6 /* libPods-Fe.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FD7B1670C3B78815CA9ADBD1 /* libPods-Fe.a */; };
+		670F1400D66311A74E143CD6 /* libPods-Agw.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FD7B1670C3B78815CA9ADBD1 /* libPods-Agw.a */; };
 		D52149F447B5045CE247C045 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B0F9C19C9248799E0F8F9AC2 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		7B7EE263A72A347B6D36351C /* Pods-Fe.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Fe.debug.xcconfig"; path = "Target Support Files/Pods-Fe/Pods-Fe.debug.xcconfig"; sourceTree = "<group>"; };
-		9C6515BE6C2D67177B3557E2 /* Pods-Fe.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Fe.release.xcconfig"; path = "Target Support Files/Pods-Fe/Pods-Fe.release.xcconfig"; sourceTree = "<group>"; };
+		7B7EE263A72A347B6D36351C /* Pods-Agw.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Agw.debug.xcconfig"; path = "Target Support Files/Pods-Agw/Pods-Agw.debug.xcconfig"; sourceTree = "<group>"; };
+		9C6515BE6C2D67177B3557E2 /* Pods-Agw.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Agw.release.xcconfig"; path = "Target Support Files/Pods-Agw/Pods-Agw.release.xcconfig"; sourceTree = "<group>"; };
 		B0F9C19C9248799E0F8F9AC2 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		B5A331A62F97D367007C60C0 /* Fe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Fe.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		D7A833632F9822B900B2AA10 /* FeInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = FeInfo.plist; sourceTree = "<group>"; };
-		FD7B1670C3B78815CA9ADBD1 /* libPods-Fe.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Fe.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B5A331A62F97D367007C60C0 /* Agw.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Agw.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D7A833632F9822B900B2AA10 /* AgwInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = AgwInfo.plist; sourceTree = "<group>"; };
+		FD7B1670C3B78815CA9ADBD1 /* libPods-Agw.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Agw.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		B5A331A82F97D367007C60C0 /* Fe */ = {
+		B5A331A82F97D367007C60C0 /* Agw */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 			);
-			path = Fe;
+			path = Agw;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -35,7 +35,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				670F1400D66311A74E143CD6 /* libPods-Fe.a in Frameworks */,
+				670F1400D66311A74E143CD6 /* libPods-Agw.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -45,7 +45,7 @@
 		49810B3A35C9E7BF233ABB33 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				FD7B1670C3B78815CA9ADBD1 /* libPods-Fe.a */,
+				FD7B1670C3B78815CA9ADBD1 /* libPods-Agw.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -53,9 +53,9 @@
 		B5A3319D2F97D367007C60C0 = {
 			isa = PBXGroup;
 			children = (
-				B5A331A82F97D367007C60C0 /* Fe */,
+				B5A331A82F97D367007C60C0 /* Agw */,
 				B5A331A72F97D367007C60C0 /* Products */,
-				D7A833632F9822B900B2AA10 /* FeInfo.plist */,
+				D7A833632F9822B900B2AA10 /* AgwInfo.plist */,
 				DD311BDB7E0E64E823EFEFCF /* Pods */,
 				49810B3A35C9E7BF233ABB33 /* Frameworks */,
 			);
@@ -65,7 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				B0F9C19C9248799E0F8F9AC2 /* PrivacyInfo.xcprivacy */,
-				B5A331A62F97D367007C60C0 /* Fe.app */,
+				B5A331A62F97D367007C60C0 /* Agw.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,8 +73,8 @@
 		DD311BDB7E0E64E823EFEFCF /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				7B7EE263A72A347B6D36351C /* Pods-Fe.debug.xcconfig */,
-				9C6515BE6C2D67177B3557E2 /* Pods-Fe.release.xcconfig */,
+				7B7EE263A72A347B6D36351C /* Pods-Agw.debug.xcconfig */,
+				9C6515BE6C2D67177B3557E2 /* Pods-Agw.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -82,9 +82,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		B5A331A52F97D367007C60C0 /* Fe */ = {
+		B5A331A52F97D367007C60C0 /* Agw */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B5A331B12F97D368007C60C0 /* Build configuration list for PBXNativeTarget "Fe" */;
+			buildConfigurationList = B5A331B12F97D368007C60C0 /* Build configuration list for PBXNativeTarget "Agw" */;
 			buildPhases = (
 				9A103D3F474EF6D856EF2C95 /* [CP] Check Pods Manifest.lock */,
 				B5A331A22F97D367007C60C0 /* Sources */,
@@ -99,11 +99,11 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				B5A331A82F97D367007C60C0 /* Fe */,
+				B5A331A82F97D367007C60C0 /* Agw */,
 			);
-			name = Fe;
-			productName = Fe;
-			productReference = B5A331A62F97D367007C60C0 /* Fe.app */;
+			name = Agw;
+			productName = Agw;
+			productReference = B5A331A62F97D367007C60C0 /* Agw.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -121,7 +121,7 @@
 					};
 				};
 			};
-			buildConfigurationList = B5A331A12F97D367007C60C0 /* Build configuration list for PBXProject "Fe" */;
+			buildConfigurationList = B5A331A12F97D367007C60C0 /* Build configuration list for PBXProject "Agw" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -135,7 +135,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				B5A331A52F97D367007C60C0 /* Fe */,
+				B5A331A52F97D367007C60C0 /* Agw */,
 			);
 		};
 /* End PBXProject section */
@@ -158,15 +158,15 @@
 			files = (
 			);
 			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Fe/Pods-Fe-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+				"${PODS_ROOT}/Target Support Files/Pods-Agw/Pods-Agw-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Fe/Pods-Fe-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+				"${PODS_ROOT}/Target Support Files/Pods-Agw/Pods-Agw-frameworks-${CONFIGURATION}-output-files.xcfilelist",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Fe/Pods-Fe-frameworks.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Agw/Pods-Agw-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		4FCD5B47C3A37247AB1D1B17 /* Bundle React Native code and images */ = {
@@ -202,7 +202,7 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-Fe-checkManifestLockResult.txt",
+				"$(DERIVED_FILE_DIR)/Pods-Agw-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -215,15 +215,15 @@
 			files = (
 			);
 			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Fe/Pods-Fe-resources-${CONFIGURATION}-input-files.xcfilelist",
+				"${PODS_ROOT}/Target Support Files/Pods-Agw/Pods-Agw-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Fe/Pods-Fe-resources-${CONFIGURATION}-output-files.xcfilelist",
+				"${PODS_ROOT}/Target Support Files/Pods-Agw/Pods-Agw-resources-${CONFIGURATION}-output-files.xcfilelist",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Fe/Pods-Fe-resources.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Agw/Pods-Agw-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -382,17 +382,17 @@
 		};
 		B5A331B22F97D368007C60C0 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 7B7EE263A72A347B6D36351C /* Pods-Fe.debug.xcconfig */;
+			baseConfigurationReference = 7B7EE263A72A347B6D36351C /* Pods-Agw.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = FeInfo.plist;
+				INFOPLIST_FILE = AgwInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -403,7 +403,7 @@
 					"$(inherited)",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.42.fe;
+				PRODUCT_BUNDLE_IDENTIFIER = com.42.agw;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -417,17 +417,17 @@
 		};
 		B5A331B32F97D368007C60C0 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 9C6515BE6C2D67177B3557E2 /* Pods-Fe.release.xcconfig */;
+			baseConfigurationReference = 9C6515BE6C2D67177B3557E2 /* Pods-Agw.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = FeInfo.plist;
+				INFOPLIST_FILE = AgwInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -438,7 +438,7 @@
 					"$(inherited)",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.42.fe;
+				PRODUCT_BUNDLE_IDENTIFIER = com.42.agw;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -453,7 +453,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		B5A331A12F97D367007C60C0 /* Build configuration list for PBXProject "Fe" */ = {
+		B5A331A12F97D367007C60C0 /* Build configuration list for PBXProject "Agw" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B5A331AF2F97D368007C60C0 /* Debug */,
@@ -462,7 +462,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		B5A331B12F97D368007C60C0 /* Build configuration list for PBXNativeTarget "Fe" */ = {
+		B5A331B12F97D368007C60C0 /* Build configuration list for PBXNativeTarget "Agw" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B5A331B22F97D368007C60C0 /* Debug */,

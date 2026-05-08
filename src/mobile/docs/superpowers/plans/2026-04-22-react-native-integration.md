@@ -4,9 +4,9 @@
 
 **Goal:** Embed React Native 0.85 into the existing SwiftUI iOS app so multiple Swift buttons can open different React Native pages.
 
-**Architecture:** Keep SwiftUI as the native shell. Swift passes a `routeName`, `title`, and page-specific props into one registered React Native module named `FeReactNative`; the RN root dispatches that route to separate screen components.
+**Architecture:** Keep SwiftUI as the native shell. Swift passes a `routeName`, `title`, and page-specific props into one registered React Native module named `AgwReactNative`; the RN root dispatches that route to separate screen components.
 
-**Tech Stack:** SwiftUI, UIKit, React Native 0.85.2, React 19.2.3, TypeScript, Jest, CocoaPods 1.16.2, Xcode workspace generated from `Fe.xcodeproj`.
+**Tech Stack:** SwiftUI, UIKit, React Native 0.85.2, React 19.2.3, TypeScript, Jest, CocoaPods 1.16.2, Xcode workspace generated from `Agw.xcodeproj`.
 
 ---
 
@@ -18,14 +18,14 @@
 - Create `.gitignore`: ignore generated JS, CocoaPods, Xcode, and local bundle artifacts.
 - Create `src/rn/routes.ts`: page route registry and route resolution.
 - Create `src/rn/App.tsx`: RN root component that renders the requested route.
-- Create `index.js`: RN entrypoint that registers `FeReactNative`.
+- Create `index.js`: RN entrypoint that registers `AgwReactNative`.
 - Create `__tests__/routes.test.ts` and `__tests__/App.test.tsx`: route and root rendering tests.
 - Create `Gemfile`, `Podfile`, `react-native.config.js`: CocoaPods and RN CLI iOS configuration for a root-level Xcode project.
-- Create `Fe/ReactNativePage.swift`: Swift page configuration model.
-- Create `Fe/ReactNativeView.swift`: SwiftUI wrapper for the RN UIKit controller.
-- Create `Fe/ReactViewController.swift`: UIKit controller that owns `RCTReactNativeFactory`.
-- Modify `Fe/ContentView.swift`: native multi-button launcher UI.
-- Modify `Fe.xcodeproj/project.pbxproj`: set RN-required build settings and add the release JS bundle phase.
+- Create `Agw/ReactNativePage.swift`: Swift page configuration model.
+- Create `Agw/ReactNativeView.swift`: SwiftUI wrapper for the RN UIKit controller.
+- Create `Agw/ReactViewController.swift`: UIKit controller that owns `RCTReactNativeFactory`.
+- Modify `Agw/ContentView.swift`: native multi-button launcher UI.
+- Modify `Agw.xcodeproj/project.pbxproj`: set RN-required build settings and add the release JS bundle phase.
 
 ---
 
@@ -49,7 +49,7 @@ Create `package.json`:
 
 ```json
 {
-  "name": "fe-react-native-bridge",
+  "name": "agw-react-native-bridge",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -90,8 +90,8 @@ Create `app.json`:
 
 ```json
 {
-  "name": "FeReactNative",
-  "displayName": "Fe"
+  "name": "AgwReactNative",
+  "displayName": "Agw"
 }
 ```
 
@@ -357,7 +357,7 @@ function RouteScreen(props: ReactNativeInitialProps): React.JSX.Element {
   if (!route) {
     return (
       <View style={[styles.container, {paddingTop: safeAreaInsets.top + 24}]}>
-        <Text style={styles.eyebrow}>Fe React Native</Text>
+        <Text style={styles.eyebrow}>Agw React Native</Text>
         <Text style={styles.title}>Unknown route: {props.routeName ?? 'none'}</Text>
         <Text style={styles.body}>Swift opened a route that is not registered in JavaScript.</Text>
       </View>
@@ -370,7 +370,7 @@ function RouteScreen(props: ReactNativeInitialProps): React.JSX.Element {
         styles.container,
         {paddingTop: safeAreaInsets.top + 24, borderTopColor: route.accentColor},
       ]}>
-      <Text style={styles.eyebrow}>Fe React Native</Text>
+      <Text style={styles.eyebrow}>Agw React Native</Text>
       <Text style={styles.title}>{props.title ?? route.title}</Text>
       <Text style={styles.body}>{route.description}</Text>
       <View style={[styles.badge, {backgroundColor: route.accentColor}]}>
@@ -476,7 +476,7 @@ git commit -m "feat: add react native root screens"
 - Create: `react-native.config.js`
 - Create after install: `Gemfile.lock`
 - Create after install: `Podfile.lock`
-- Generate locally: `Fe.xcworkspace`
+- Generate locally: `Agw.xcworkspace`
 
 - [ ] **Step 1: Add CocoaPods and RN CLI configuration**
 
@@ -511,7 +511,7 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
-target 'Fe' do
+target 'Agw' do
   config = use_native_modules!
 
   use_react_native!(
@@ -537,7 +537,7 @@ module.exports = {
     ios: {
       sourceDir: '.',
       xcodeProject: {
-        name: 'Fe.xcodeproj',
+        name: 'Agw.xcodeproj',
       },
     },
   },
@@ -562,24 +562,24 @@ Run:
 bundle exec pod install
 ```
 
-Expected: `Podfile.lock` and `Fe.xcworkspace` are created. Output includes `Pod installation complete`.
+Expected: `Podfile.lock` and `Agw.xcworkspace` are created. Output includes `Pod installation complete`.
 
 - [ ] **Step 4: Verify the workspace exists**
 
 Run:
 
 ```bash
-xcodebuild -list -workspace Fe.xcworkspace
+xcodebuild -list -workspace Agw.xcworkspace
 ```
 
-Expected: output lists scheme `Fe`.
+Expected: output lists scheme `Agw`.
 
 - [ ] **Step 5: Commit dependency configuration**
 
 Run:
 
 ```bash
-git add Gemfile Gemfile.lock Podfile Podfile.lock react-native.config.js Fe.xcworkspace
+git add Gemfile Gemfile.lock Podfile Podfile.lock react-native.config.js Agw.xcworkspace
 git commit -m "build: add react native ios dependencies"
 ```
 
@@ -588,14 +588,14 @@ git commit -m "build: add react native ios dependencies"
 ### Task 4: Native SwiftUI Multi-Page Launcher And RN Host
 
 **Files:**
-- Create: `Fe/ReactNativePage.swift`
-- Create: `Fe/ReactNativeView.swift`
-- Create: `Fe/ReactViewController.swift`
-- Modify: `Fe/ContentView.swift`
+- Create: `Agw/ReactNativePage.swift`
+- Create: `Agw/ReactNativeView.swift`
+- Create: `Agw/ReactViewController.swift`
+- Modify: `Agw/ContentView.swift`
 
 - [ ] **Step 1: Add native RN host files and launcher UI**
 
-Create `Fe/ReactNativePage.swift`:
+Create `Agw/ReactNativePage.swift`:
 
 ```swift
 import Foundation
@@ -631,7 +631,7 @@ struct ReactNativePage: Identifiable {
 }
 ```
 
-Create `Fe/ReactNativeView.swift`:
+Create `Agw/ReactNativeView.swift`:
 
 ```swift
 import SwiftUI
@@ -648,7 +648,7 @@ struct ReactNativeView: UIViewControllerRepresentable {
 }
 ```
 
-Create `Fe/ReactViewController.swift`:
+Create `Agw/ReactViewController.swift`:
 
 ```swift
 import UIKit
@@ -683,7 +683,7 @@ final class ReactViewController: UIViewController {
         reactNativeFactory = factory
 
         view = factory.rootViewFactory.view(
-            withModuleName: "FeReactNative",
+            withModuleName: "AgwReactNative",
             initialProperties: page.props
         )
     }
@@ -704,7 +704,7 @@ final class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
 }
 ```
 
-Replace `Fe/ContentView.swift` with:
+Replace `Agw/ContentView.swift` with:
 
 ```swift
 import SwiftUI
@@ -730,7 +730,7 @@ struct ContentView: View {
                     .padding(.vertical, 6)
                 }
             }
-            .navigationTitle("Fe")
+            .navigationTitle("Agw")
             .sheet(item: $selectedPage) { page in
                 NavigationStack {
                     ReactNativeView(page: page)
@@ -758,7 +758,7 @@ struct ContentView: View {
 Run:
 
 ```bash
-xcodebuild -workspace Fe.xcworkspace -scheme Fe -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' build
+xcodebuild -workspace Agw.xcworkspace -scheme Agw -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' build
 ```
 
 Expected: FAIL if user script sandboxing or missing RN build settings still block the Pods/RN scripts. If the build fails earlier with a Swift error, fix the Swift error before continuing.
@@ -768,7 +768,7 @@ Expected: FAIL if user script sandboxing or missing RN build settings still bloc
 Run only after Swift syntax errors are resolved:
 
 ```bash
-git add Fe/ReactNativePage.swift Fe/ReactNativeView.swift Fe/ReactViewController.swift Fe/ContentView.swift
+git add Agw/ReactNativePage.swift Agw/ReactNativeView.swift Agw/ReactViewController.swift Agw/ContentView.swift
 git commit -m "feat: add swift react native launcher"
 ```
 
@@ -777,7 +777,7 @@ git commit -m "feat: add swift react native launcher"
 ### Task 5: Xcode Build Settings And Release Bundle Phase
 
 **Files:**
-- Modify: `Fe.xcodeproj/project.pbxproj`
+- Modify: `Agw.xcodeproj/project.pbxproj`
 
 - [ ] **Step 1: Update the Xcode project with xcodeproj**
 
@@ -785,9 +785,9 @@ Run:
 
 ```bash
 bundle exec ruby -rxcodeproj <<'RUBY'
-project = Xcodeproj::Project.open('Fe.xcodeproj')
-target = project.targets.find { |candidate| candidate.name == 'Fe' }
-raise 'Target Fe not found' unless target
+project = Xcodeproj::Project.open('Agw.xcodeproj')
+target = project.targets.find { |candidate| candidate.name == 'Agw' }
+raise 'Target Agw not found' unless target
 
 target.build_configurations.each do |configuration|
   configuration.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
@@ -813,7 +813,7 @@ project.save
 RUBY
 ```
 
-Expected: command exits with code 0 and `Fe.xcodeproj/project.pbxproj` changes.
+Expected: command exits with code 0 and `Agw.xcodeproj/project.pbxproj` changes.
 
 - [ ] **Step 2: Refresh Pods after project changes**
 
@@ -830,7 +830,7 @@ Expected: command exits with code 0 and keeps `Podfile.lock` consistent.
 Run:
 
 ```bash
-xcodebuild -workspace Fe.xcworkspace -scheme Fe -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' build
+xcodebuild -workspace Agw.xcworkspace -scheme Agw -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' build
 ```
 
 Expected: build exits with code 0.
@@ -840,7 +840,7 @@ Expected: build exits with code 0.
 Run:
 
 ```bash
-git add Fe.xcodeproj/project.pbxproj Fe.xcworkspace Podfile.lock
+git add Agw.xcodeproj/project.pbxproj Agw.xcworkspace Podfile.lock
 git commit -m "build: configure xcode for react native"
 ```
 
@@ -867,7 +867,7 @@ Expected: Jest and TypeScript both exit with code 0.
 Run:
 
 ```bash
-xcodebuild -workspace Fe.xcworkspace -scheme Fe -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' build
+xcodebuild -workspace Agw.xcworkspace -scheme Agw -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4.1' build
 ```
 
 Expected: build exits with code 0.
@@ -884,7 +884,7 @@ Expected: Metro starts and prints that it is waiting on port 8081.
 
 - [ ] **Step 4: Run the app from Xcode**
 
-Open `Fe.xcworkspace`, choose the `Fe` scheme, and run on an iOS simulator. Tap each native row:
+Open `Agw.xcworkspace`, choose the `Agw` scheme, and run on an iOS simulator. Tap each native row:
 
 ```text
 Home

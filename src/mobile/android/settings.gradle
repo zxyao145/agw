@@ -11,6 +11,6 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
     files("../shared/yarn.lock", "../shared/package-lock.json", "../shared/package.json", "../shared/react-native.config.js")
   )
 }
-rootProject.name = 'FeAndroid'
+rootProject.name = 'AgwAndroid'
 include ':app'
 includeBuild('../shared/node_modules/@react-native/gradle-plugin')

@@ -16,7 +16,7 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
-target 'Fe' do
+target 'Agw' do
   config = use_native_modules!(react_native_config_command)
 
   use_react_native!(

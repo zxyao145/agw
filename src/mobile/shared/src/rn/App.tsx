@@ -95,7 +95,7 @@ function RouteScreen(props: ReactNativeInitialProps): React.JSX.Element {
   if (!route) {
     return (
       <View style={[styles.container, {paddingTop: safeAreaInsets.top + 24}]}>
-        <Text style={styles.eyebrow}>Fe React Native</Text>
+        <Text style={styles.eyebrow}>Agw React Native</Text>
         <Text style={styles.title}>Unknown route: {props.routeName ?? 'none'}</Text>
         <Text style={styles.body}>Swift opened a route that is not registered in JavaScript.</Text>
       </View>
@@ -108,7 +108,7 @@ function RouteScreen(props: ReactNativeInitialProps): React.JSX.Element {
         styles.container,
         {paddingTop: safeAreaInsets.top + 24, borderTopColor: route.accentColor},
       ]}>
-      <Text style={styles.eyebrow}>Fe React Native</Text>
+      <Text style={styles.eyebrow}>Agw React Native</Text>
       <Text style={styles.title}>{props.title ?? route.title}</Text>
       <Text style={styles.body}>{route.description}</Text>
       <View style={[styles.badge, {backgroundColor: route.accentColor}]}>

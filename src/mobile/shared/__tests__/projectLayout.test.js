@@ -1,36 +1,42 @@
 const fs = require('fs');
 const path = require('path');
 
-function findRepoRoot(startPath) {
+function findMobileRoot(startPath) {
   let current = startPath;
 
   while (current !== path.dirname(current)) {
-    if (fs.existsSync(path.join(current, '.git'))) {
+    if (
+      fs.existsSync(path.join(current, 'android')) &&
+      fs.existsSync(path.join(current, 'ios')) &&
+      fs.existsSync(path.join(current, 'shared', 'package.json'))
+    ) {
       return current;
     }
 
     current = path.dirname(current);
   }
 
-  throw new Error(`Could not find repository root from ${startPath}`);
+  throw new Error(`Could not find mobile repository root from ${startPath}`);
 }
 
-const repoRoot = findRepoRoot(__dirname);
+const repoRoot = findMobileRoot(__dirname);
 
 describe('project layout', () => {
   it('keeps Swift/iOS code under ios and React Native code under shared', () => {
-    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Fe.xcodeproj'))).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Fe', 'ReactViewController.swift'))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Agw.xcodeproj'))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Agw', 'ReactViewController.swift'))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, 'shared', 'index.js'))).toBe(true);
     expect(fs.existsSync(path.join(repoRoot, 'shared', 'src', 'rn', 'App.tsx'))).toBe(true);
 
-    expect(fs.existsSync(path.join(repoRoot, 'Fe'))).toBe(false);
+    expect(fs.existsSync(path.join(repoRoot, 'Agw'))).toBe(false);
+    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Fe.xcodeproj'))).toBe(false);
+    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Fe'))).toBe(false);
     expect(fs.existsSync(path.join(repoRoot, 'src', 'rn'))).toBe(false);
   });
 
   it('uses native tabs for the top-level React Native pages', () => {
     const contentView = fs.readFileSync(
-      path.join(repoRoot, 'ios', 'Fe', 'ContentView.swift'),
+      path.join(repoRoot, 'ios', 'Agw', 'ContentView.swift'),
       'utf8',
     );
 
@@ -42,7 +48,7 @@ describe('project layout', () => {
 
   it('keeps Android native code under android and points it at shared React Native', () => {
     const androidMainActivity = fs.readFileSync(
-      path.join(repoRoot, 'android', 'app', 'src', 'main', 'java', 'com', 'fe', 'MainActivity.kt'),
+      path.join(repoRoot, 'android', 'app', 'src', 'main', 'java', 'com', 'agw', 'MainActivity.kt'),
       'utf8',
     );
     const androidBuild = fs.readFileSync(
@@ -58,7 +64,7 @@ describe('project layout', () => {
       'utf8',
     );
 
-    expect(androidMainActivity).toContain('getMainComponentName(): String = "FeReactNative"');
+    expect(androidMainActivity).toContain('getMainComponentName(): String = "AgwReactNative"');
     expect(androidBuild).toContain('root = file("../../shared")');
     expect(androidBuild).toContain('entryFile = file("../../shared/index.js")');
     expect(androidSettings).toContain('includeBuild("../shared/node_modules/@react-native/gradle-plugin")');

@@ -1,12 +1,12 @@
-# Fe 
+# Agw
 
 本仓库包含 iOS SwiftUI 和 Android 原生壳应用，二者都内嵌 `shared/` 下的 React Native 应用。
 
-- iOS 工程：`ios/Fe.xcworkspace`
+- iOS 工程：`ios/Agw.xcworkspace`
 - Android 工程：`android/`
-- SwiftUI 入口：`ios/Fe/ContentView.swift`
-- React Native 宿主：`ios/Fe/ReactViewController.swift`
-- Android React Native 入口：`android/app/src/main/java/com/fe/MainActivity.kt`
+- SwiftUI 入口：`ios/Agw/ContentView.swift`
+- React Native 宿主：`ios/Agw/ReactViewController.swift`
+- Android React Native 入口：`android/app/src/main/java/com/agw/MainActivity.kt`
 - React Native 应用：`shared/src/rn/App.tsx`
 - React Native 路由：`shared/src/rn/routes.ts`
 
@@ -43,7 +43,7 @@ bundle exec pod install
 之后用 Xcode 打开 workspace：
 
 ```sh
-open Fe.xcworkspace
+open Agw.xcworkspace
 ```
 
 ## 本地开发启动
@@ -62,7 +62,7 @@ cd shared
 npm run ios
 ```
 
-或在 Xcode 中打开 `ios/Fe.xcworkspace`，选择 `Fe` scheme，运行到 iOS Simulator。
+或在 Xcode 中打开 `ios/Agw.xcworkspace`，选择 `Agw` scheme，运行到 iOS Simulator。
 
 运行 Android App：
 
@@ -79,7 +79,7 @@ npm run android
 ```powershell
 cd android
 .\gradlew.bat :app:installDebug
-adb shell am start -n com.fe/.MainActivity
+adb shell am start -n com.agw/.MainActivity
 ```
 
 macOS/Linux 下使用：
@@ -87,7 +87,7 @@ macOS/Linux 下使用：
 ```sh
 cd android
 ./gradlew :app:installDebug
-adb shell am start -n com.fe/.MainActivity
+adb shell am start -n com.agw/.MainActivity
 ```
 
 Debug 模式下，Swift 侧会从 Metro 加载 JS：
@@ -102,16 +102,16 @@ Release 模式下会加载 App 内置的 `main.jsbundle`。Xcode 里的 `Bundle 
 
 常用文件：
 
-- `ios/Fe/FeApp.swift`：SwiftUI App 入口。
-- `ios/Fe/ContentView.swift`：顶层 UI，目前使用 `TabView` 显示 Home、Settings、Details。
-- `ios/Fe/ReactNativePage.swift`：定义 Swift 侧可打开的 RN 页面、标题、tab 图标和初始参数。
-- `ios/Fe/ReactNativeView.swift`：把 UIKit 的 RN 宿主控制器包装成 SwiftUI view。
-- `ios/Fe/ReactViewController.swift`：创建 `RCTReactNativeFactory`，并把 Swift 侧 props 传给 RN。
+- `ios/Agw/AgwApp.swift`：SwiftUI App 入口。
+- `ios/Agw/ContentView.swift`：顶层 UI，目前使用 `TabView` 显示 Home、Settings、Details。
+- `ios/Agw/ReactNativePage.swift`：定义 Swift 侧可打开的 RN 页面、标题、tab 图标和初始参数。
+- `ios/Agw/ReactNativeView.swift`：把 UIKit 的 RN 宿主控制器包装成 SwiftUI view。
+- `ios/Agw/ReactViewController.swift`：创建 `RCTReactNativeFactory`，并把 Swift 侧 props 传给 RN。
 
 新增一个顶级 RN 页面通常需要：
 
 1. 在 `shared/src/rn/routes.ts` 中新增 route。
-2. 在 `ios/Fe/ReactNativePage.swift` 的 `samples` 中新增对应 `ReactNativePage`。
+2. 在 `ios/Agw/ReactNativePage.swift` 的 `samples` 中新增对应 `ReactNativePage`。
 3. 如果需要新参数，把 Swift 的 `initialProps` 和 TypeScript 的 props 类型一起更新。
 
 如果改动了 Swift、Pods、Xcode 配置或原生依赖，需要重新 build iOS App。
@@ -122,8 +122,8 @@ Release 模式下会加载 App 内置的 `main.jsbundle`。Xcode 里的 `Bundle 
 
 - `android/settings.gradle`：让 Gradle 从 `shared/node_modules` 加载 React Native Gradle plugin，并在 `shared/` 下执行 RN autolinking。
 - `android/app/build.gradle`：Android app 配置，`react` block 显式指向 `../../shared`、`../../shared/index.js` 和 `shared/node_modules`。
-- `android/app/src/main/java/com/fe/MainApplication.kt`：Android Application，加载 React Native runtime。
-- `android/app/src/main/java/com/fe/MainActivity.kt`：Android Activity，加载 `FeReactNative` 模块，并向 RN 传入默认 `routeName=home`、`title=Home`、`source=Android`。
+- `android/app/src/main/java/com/agw/MainApplication.kt`：Android Application，加载 React Native runtime。
+- `android/app/src/main/java/com/agw/MainActivity.kt`：Android Activity，加载 `AgwReactNative` 模块，并向 RN 传入默认 `routeName=home`、`title=Home`、`source=Android`。
 
 Android 的顶层页面导航由 `shared/src/rn/App.tsx` 渲染。`source=Android` 时会显示底部 Home、Settings、Details tab；iOS 仍由 SwiftUI `TabView` 提供原生 tab。
 
@@ -133,7 +133,7 @@ Android 的顶层页面导航由 `shared/src/rn/App.tsx` 渲染。`source=Androi
 cd android
 .\gradlew.bat :app:assembleDebug
 .\gradlew.bat :app:installDebug
-adb shell am start -n com.fe/.MainActivity
+adb shell am start -n com.agw/.MainActivity
 ```
 
 如果当前有多个设备，给 `adb` 指定设备：
@@ -141,7 +141,7 @@ adb shell am start -n com.fe/.MainActivity
 ```powershell
 adb devices
 adb -s emulator-5554 reverse tcp:8081 tcp:8081
-adb -s emulator-5554 shell am start -n com.fe/.MainActivity
+adb -s emulator-5554 shell am start -n com.agw/.MainActivity
 ```
 
 Android 原生代码可以用 Android Studio 打开 `android/` 开发。改动 Kotlin、Gradle、Manifest 或原生依赖后，需要重新 build Android App。
@@ -150,7 +150,7 @@ Android 原生代码可以用 Android Studio 打开 `android/` 开发。改动 K
 
 常用文件：
 
-- `shared/index.js`：注册 RN 模块，模块名来自 `shared/app.json` 的 `FeReactNative`。
+- `shared/index.js`：注册 RN 模块，模块名来自 `shared/app.json` 的 `AgwReactNative`。
 - `shared/src/rn/App.tsx`：RN 页面入口，根据 native 传入的 props 渲染页面。`source=Android` 时渲染底部 tab；`source=SwiftUI` 时渲染单个 route。
 - `shared/src/rn/routes.ts`：RN route 定义和 Android tab 顺序。
 - `shared/metro.config.js`：Metro 配置。
@@ -232,38 +232,38 @@ npm run adb
 ```powershell
 cd android
 .\gradlew.bat :app:installDebug
-adb shell am start -n com.fe/.MainActivity
+adb shell am start -n com.agw/.MainActivity
 ```
 
 查看前台 Activity：
 
 ```sh
-adb shell dumpsys activity activities | grep com.fe
+adb shell dumpsys activity activities | grep com.agw
 ```
 
 Windows PowerShell 可用：
 
 ```powershell
-adb shell dumpsys activity activities | Select-String com.fe
+adb shell dumpsys activity activities | Select-String com.agw
 ```
 
 查看 Android 和 React Native 日志：
 
 ```sh
-adb logcat | grep -E "com.fe|ReactNativeJS|AndroidRuntime|FATAL EXCEPTION"
+adb logcat | grep -E "com.agw|ReactNativeJS|AndroidRuntime|FATAL EXCEPTION"
 ```
 
 Windows PowerShell 可用：
 
 ```powershell
-adb logcat | Select-String -SimpleMatch "com.fe","ReactNativeJS","AndroidRuntime","FATAL EXCEPTION"
+adb logcat | Select-String -SimpleMatch "com.agw","ReactNativeJS","AndroidRuntime","FATAL EXCEPTION"
 ```
 
 重新启动 App：
 
 ```sh
-adb shell am force-stop com.fe
-adb shell am start -n com.fe/.MainActivity
+adb shell am force-stop com.agw
+adb shell am start -n com.agw/.MainActivity
 ```
 
 ### 常见问题
@@ -287,7 +287,7 @@ bundle exec pod install
 Xcode 打开了 `.xcodeproj` 而不是 workspace：
 
 ```sh
-open ios/Fe.xcworkspace
+open ios/Agw.xcworkspace
 ```
 
 Android 设备连不上 Metro：
@@ -314,8 +314,8 @@ adb shell input keyevent 82
 在开发菜单中选择 Reload；或直接重启 App：
 
 ```sh
-adb shell am force-stop com.fe
-adb shell am start -n com.fe/.MainActivity
+adb shell am force-stop com.agw
+adb shell am start -n com.agw/.MainActivity
 ```
 
 ## 验证
@@ -337,7 +337,7 @@ npm run typecheck
 iOS 编译检查：
 
 ```sh
-xcodebuild -workspace ios/Fe.xcworkspace -scheme Fe -destination 'generic/platform=iOS Simulator' build
+xcodebuild -workspace ios/Agw.xcworkspace -scheme Agw -destination 'generic/platform=iOS Simulator' build
 ```
 
 Android 编译检查：
