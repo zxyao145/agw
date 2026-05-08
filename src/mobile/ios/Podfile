@@ -1,0 +1,35 @@
+react_native_app_path = File.expand_path('../shared', __dir__)
+react_native_config_command = [
+  'node',
+  '-e',
+  'const appPath = process.argv[1]; process.chdir(appPath); process.argv = ["", "", "config"]; require(require.resolve("@react-native-community/cli", {paths: [appPath]})).run();',
+  react_native_app_path,
+]
+
+# Resolve react_native_pods.rb from the shared React Native app.
+require Pod::Executable.execute_command('node', ['-p',
+  'require.resolve(
+    "react-native/scripts/react_native_pods.rb",
+    {paths: [process.argv[1]]},
+  )', react_native_app_path]).strip
+
+platform :ios, min_ios_version_supported
+prepare_react_native_project!
+
+target 'Fe' do
+  config = use_native_modules!(react_native_config_command)
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    :app_path => react_native_app_path,
+    :config_file_dir => react_native_app_path
+  )
+
+  post_install do |installer|
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false
+    )
+  end
+end
