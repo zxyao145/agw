@@ -11,6 +11,19 @@
     "test": "jest",
     "typecheck": "tsc --noEmit"
   },
+  "codegenConfig": {
+    "name": "NativeAgwConfigFileSpec",
+    "type": "modules",
+    "jsSrcsDir": "src/rn/specs",
+    "android": {
+      "javaPackageName": "com.agw"
+    },
+    "ios": {
+      "modulesProvider": {
+        "NativeAgwConfigFile": "RCTNativeAgwConfigFile"
+      }
+    }
+  },
   "dependencies": {
     "react": "19.2.3",
     "react-native": "0.85.2",

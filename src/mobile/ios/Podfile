@@ -1,4 +1,6 @@
 react_native_app_path = File.expand_path('../shared', __dir__)
+ios_app_path = File.expand_path('.', __dir__)
+ENV['NODE_PATH'] = File.join(react_native_app_path, 'node_modules')
 react_native_config_command = [
   'node',
   '-e',
@@ -21,7 +23,7 @@ target 'Agw' do
 
   use_react_native!(
     :path => config[:reactNativePath],
-    :app_path => react_native_app_path,
+    :app_path => ios_app_path,
     :config_file_dir => react_native_app_path
   )
 

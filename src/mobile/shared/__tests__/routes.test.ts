@@ -2,11 +2,22 @@ import { resolveRoute } from "../src/rn/routes";
 
 describe("resolveRoute", () => {
   it("maps native route aliases to the single Agw page", () => {
+    expect(resolveRoute("home")).toEqual({
+      routeName: "agw",
+      title: "Agw",
+      description: "Chat, files, and recent history in one React Native page.",
+      accentColor: "#0058bc",
+      initialTab: "chat",
+    });
+  });
+
+  it("can open settings as the initial page state", () => {
     expect(resolveRoute("settings")).toEqual({
       routeName: "agw",
       title: "Agw",
       description: "Chat, files, and recent history in one React Native page.",
       accentColor: "#0058bc",
+      initialSettingsOpen: true,
       initialTab: "chat",
     });
   });

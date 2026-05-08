@@ -19,6 +19,7 @@ export type RouteDefinition = {
   title: string;
   description: string;
   accentColor: string;
+  initialSettingsOpen?: boolean;
   initialTab: AgwTabName;
 };
 
@@ -43,6 +44,10 @@ export function resolveRoute(routeName?: string): RouteDefinition | undefined {
     routeName === "settings" ||
     routeName === "details"
   ) {
+    if (routeName === "settings") {
+      return { ...routes.agw, initialSettingsOpen: true };
+    }
+
     return routes.agw;
   }
 

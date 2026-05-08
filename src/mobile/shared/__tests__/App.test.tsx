@@ -1,5 +1,7 @@
 import React from "react";
 import renderer, { act } from "react-test-renderer";
+import { encodeConfigBase64Url } from "../src/rn/config/agw-config";
+import { readLocalConfig, writeLocalConfig } from "../src/rn/config/config-store";
 import App from "../src/rn/App";
 
 jest.mock("react-native-safe-area-context", () => {
@@ -12,11 +14,37 @@ jest.mock("react-native-safe-area-context", () => {
   };
 });
 
+jest.mock("../src/rn/config/config-store", () => ({
+  readLocalConfig: jest.fn(),
+  writeLocalConfig: jest.fn(),
+}));
+
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+const testConfig = {
+  version: 1 as const,
+  serverDomain: "http://localhost:5015",
+  apiKey: "test-api-key",
+};
+const readLocalConfigMock = readLocalConfig as jest.MockedFunction<
+  typeof readLocalConfig
+>;
+const writeLocalConfigMock = writeLocalConfig as jest.MockedFunction<
+  typeof writeLocalConfig
+>;
+
 describe("App", () => {
+  beforeEach(() => {
+    readLocalConfigMock.mockResolvedValue(testConfig);
+    writeLocalConfigMock.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   it("renders the Agw chat page from native props", async () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
@@ -93,6 +121,82 @@ describe("App", () => {
     });
 
     expect(collectText(tree?.toJSON())).not.toContain("UI Refresh Strategy");
+  });
+
+  it("imports a Base64URL config when no local config exists", async () => {
+    readLocalConfigMock.mockResolvedValueOnce(null);
+    let tree: renderer.ReactTestRenderer | undefined;
+
+    await act(async () => {
+      tree = renderer.create(<App routeName="home" title="Home" />);
+    });
+
+    expect(collectText(tree?.toJSON())).toContain("Server Configuration");
+
+    const input = tree!.root.findByProps({
+      testID: "agw-config-import-input",
+    });
+    const importButton = tree!.root.findByProps({
+      testID: "agw-config-import-save",
+    });
+    const encodedConfig = encodeConfigBase64Url({
+      version: 1,
+      serverDomain: "https://api.example.com/",
+      apiKey: "imported-key",
+    });
+
+    await act(async () => {
+      input.props.onChangeText(encodedConfig);
+    });
+
+    await act(async () => {
+      importButton.props.onPress();
+    });
+
+    expect(writeLocalConfigMock).toHaveBeenCalledWith({
+      version: 1,
+      serverDomain: "https://api.example.com",
+      apiKey: "imported-key",
+    });
+    expect(collectText(tree?.toJSON())).toContain("Chat");
+  });
+
+  it("opens settings from the drawer and saves config changes", async () => {
+    let tree: renderer.ReactTestRenderer | undefined;
+
+    await act(async () => {
+      tree = renderer.create(<App routeName="home" title="Home" />);
+    });
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-open-drawer" }).props.onPress();
+    });
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-open-settings" }).props.onPress();
+    });
+
+    expect(collectText(tree?.toJSON())).toContain("Local Configuration");
+
+    await act(async () => {
+      tree!.root
+        .findByProps({ testID: "agw-settings-domain-input" })
+        .props.onChangeText("https://mobile.example.com/");
+      tree!.root
+        .findByProps({ testID: "agw-settings-api-key-input" })
+        .props.onChangeText("updated-key");
+    });
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-settings-save" }).props.onPress();
+    });
+
+    expect(writeLocalConfigMock).toHaveBeenLastCalledWith({
+      version: 1,
+      serverDomain: "https://mobile.example.com",
+      apiKey: "updated-key",
+    });
+    expect(collectText(tree?.toJSON())).not.toContain("Local Configuration");
   });
 });
 

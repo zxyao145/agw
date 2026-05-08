@@ -6,10 +6,12 @@ import { colors } from "./tokens";
 
 export function HistoryDrawer({
   onClose,
+  onOpenSettings,
   safeBottom,
   safeTop,
 }: {
   onClose: () => void;
+  onOpenSettings: () => void;
   safeBottom: number;
   safeTop: number;
 }): React.JSX.Element {
@@ -64,10 +66,18 @@ export function HistoryDrawer({
             { paddingBottom: Math.max(8, safeBottom) },
           ]}
         >
-          <View style={styles.settingsRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onOpenSettings}
+            style={({ pressed }) => [
+              styles.settingsRow,
+              pressed && styles.historyItemPressed,
+            ]}
+            testID="agw-open-settings"
+          >
             <Icon color={colors.muted} name="settings" size={22} />
             <Text style={styles.settingsText}>Settings</Text>
-          </View>
+          </Pressable>
         </View>
       </View>
     </View>

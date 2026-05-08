@@ -42,7 +42,12 @@ function RouteScreen(props: ReactNativeInitialProps): React.JSX.Element {
     );
   }
 
-  return <AgwMobilePage initialTab={route.initialTab} />;
+  return (
+    <AgwMobilePage
+      initialSettingsOpen={route.initialSettingsOpen}
+      initialTab={route.initialTab}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
