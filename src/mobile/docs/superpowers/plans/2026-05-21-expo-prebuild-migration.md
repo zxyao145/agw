@@ -57,6 +57,7 @@ Use this dependency and script shape:
   "dependencies": {
     "expo": "~55.0.26",
     "expo-secure-store": "~55.0.14",
+    "expo-system-ui": "~55.0.18",
     "react": "19.2.0",
     "react-native": "0.83.6",
     "react-native-safe-area-context": "~5.6.2"
