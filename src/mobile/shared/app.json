@@ -1,4 +1,29 @@
 {
-  "name": "AgwReactNative",
-  "displayName": "Agw"
+  "expo": {
+    "name": "Agw",
+    "slug": "agw",
+    "version": "0.0.1",
+    "scheme": "agw",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.agw",
+      "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.agw"
+    },
+    "plugins": [
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "Allow Agw to access Face ID for protected local configuration."
+        }
+      ]
+    ]
+  }
 }

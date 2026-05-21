@@ -17,6 +17,7 @@
 - Modify `shared/index.js`: replace direct `AppRegistry` registration with Expo `registerRootComponent`.
 - Modify `shared/babel.config.js`: use `babel-preset-expo`.
 - Modify `shared/metro.config.js`: use `expo/metro-config`.
+- Modify `shared/jest.config.js`: use `jest-expo`.
 - Modify `shared/tsconfig.json`: extend `expo/tsconfig.base`.
 - Delete `shared/react-native.config.js`: no React Native CLI sibling-project mapping remains.
 - Modify `shared/src/rn/config/config-store.ts`: replace `NativeAgwConfigFile` with `expo-secure-store`.
@@ -35,6 +36,7 @@
 - Modify: `shared/index.js`
 - Modify: `shared/babel.config.js`
 - Modify: `shared/metro.config.js`
+- Modify: `shared/jest.config.js`
 - Modify: `shared/tsconfig.json`
 - Delete: `shared/react-native.config.js`
 
@@ -137,7 +139,15 @@ const { getDefaultConfig } = require('expo/metro-config');
 module.exports = getDefaultConfig(__dirname);
 ```
 
-- [ ] **Step 6: Replace `shared/tsconfig.json`**
+- [ ] **Step 6: Replace `shared/jest.config.js`**
+
+```js
+module.exports = {
+  preset: 'jest-expo',
+};
+```
+
+- [ ] **Step 7: Replace `shared/tsconfig.json`**
 
 ```json
 {
@@ -150,14 +160,14 @@ module.exports = getDefaultConfig(__dirname);
 }
 ```
 
-- [ ] **Step 7: Delete `shared/react-native.config.js`**
+- [ ] **Step 8: Delete `shared/react-native.config.js`**
 
 Remove the file because Expo prebuild no longer needs React Native CLI source-directory overrides.
 
-- [ ] **Step 8: Commit the tooling boundary**
+- [ ] **Step 9: Commit the tooling boundary**
 
 ```bash
-git add shared/package.json shared/app.json shared/index.js shared/babel.config.js shared/metro.config.js shared/tsconfig.json shared/react-native.config.js
+git add shared/package.json shared/app.json shared/index.js shared/babel.config.js shared/metro.config.js shared/jest.config.js shared/tsconfig.json shared/react-native.config.js
 git commit -m "chore(mobile): switch shared app to expo tooling"
 ```
 
