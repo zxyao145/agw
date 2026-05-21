@@ -54,7 +54,6 @@ export function ConfigSetupSheet({
       testID="agw-config-setup-sheet"
     >
       <View style={styles.configSheet}>
-        <Text style={styles.configEyebrow}>FIRST RUN</Text>
         <Text style={styles.configTitle}>Server Configuration</Text>
         <Text style={styles.configDescription}>
           Paste the Base64URL configuration payload to continue.
@@ -82,6 +81,19 @@ export function ConfigSetupSheet({
             { paddingBottom: Math.max(0, safeBottom - 4) },
           ]}
         >
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setEncodedConfig("")}
+            style={({ pressed }) => [
+              styles.configSecondaryButton,
+              pressed && styles.pressed,
+            ]}
+            testID="agw-config-import-save"
+          >
+            <Text style={styles.configSecondaryButtonText}>
+              Clear
+            </Text>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             onPress={handleImport}
