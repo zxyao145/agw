@@ -66,6 +66,7 @@ Use this dependency and script shape:
     "@types/jest": "^29.5.13",
     "@types/react": "~19.2.2",
     "@types/react-test-renderer": "^19.1.0",
+    "babel-preset-expo": "~55.0.22",
     "jest": "^29.6.3",
     "jest-expo": "~55.0.18",
     "react-test-renderer": "19.2.0",
@@ -231,18 +232,13 @@ describe("config-store", () => {
       apiKey: "stored-key",
     });
 
-    expect(setItemAsyncMock).toHaveBeenCalledWith(
-      "agw.localConfig",
-      JSON.stringify(
-        {
-          version: 1,
-          serverDomain: "https://api.example.com",
-          apiKey: "stored-key",
-        },
-        null,
-        2
-      )
-    );
+    expect(setItemAsyncMock).toHaveBeenCalledTimes(1);
+    expect(setItemAsyncMock.mock.calls[0][0]).toBe("agw.localConfig");
+    expect(JSON.parse(setItemAsyncMock.mock.calls[0][1])).toEqual({
+      version: 1,
+      serverDomain: "https://api.example.com",
+      apiKey: "stored-key",
+    });
   });
 
   it("deletes the Expo SecureStore config key", async () => {
