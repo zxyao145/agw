@@ -71,6 +71,9 @@ replay_pid*
 # React Native Stack Base
 
 .expo
+shared/.expo/
+shared/android/
+shared/ios/
 __generated__
 
 ### ReactNative.macOS Stack ###

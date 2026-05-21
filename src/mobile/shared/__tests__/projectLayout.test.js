@@ -6,8 +6,7 @@ function findMobileRoot(startPath) {
 
   while (current !== path.dirname(current)) {
     if (
-      fs.existsSync(path.join(current, 'android')) &&
-      fs.existsSync(path.join(current, 'ios')) &&
+      fs.existsSync(path.join(current, 'AGENTS.md')) &&
       fs.existsSync(path.join(current, 'shared', 'package.json'))
     ) {
       return current;
@@ -20,66 +19,42 @@ function findMobileRoot(startPath) {
 }
 
 const repoRoot = findMobileRoot(__dirname);
+const sharedRoot = path.join(repoRoot, 'shared');
 
 describe('project layout', () => {
-  it('keeps Swift/iOS code under ios and React Native code under shared', () => {
-    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Agw.xcodeproj'))).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Agw', 'ReactViewController.swift'))).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, 'shared', 'index.js'))).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, 'shared', 'src', 'rn', 'App.tsx'))).toBe(true);
+  it('uses shared as the Expo app root', () => {
+    const appConfig = JSON.parse(
+      fs.readFileSync(path.join(sharedRoot, 'app.json'), 'utf8'),
+    );
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(sharedRoot, 'package.json'), 'utf8'),
+    );
 
-    expect(fs.existsSync(path.join(repoRoot, 'Agw'))).toBe(false);
-    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Fe.xcodeproj'))).toBe(false);
-    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Fe'))).toBe(false);
-    expect(fs.existsSync(path.join(repoRoot, 'src', 'rn'))).toBe(false);
+    expect(appConfig.expo.name).toBe('Agw');
+    expect(appConfig.expo.slug).toBe('agw');
+    expect(appConfig.expo.ios.bundleIdentifier).toBe('com.agw');
+    expect(appConfig.expo.android.package).toBe('com.agw');
+    expect(packageJson.scripts.start).toBe('expo start');
+    expect(packageJson.scripts.android).toBe('expo run:android');
+    expect(packageJson.scripts.ios).toBe('expo run:ios');
+    expect(packageJson.dependencies.expo).toMatch(/^~55\./);
+    expect(packageJson.dependencies['expo-secure-store']).toMatch(/^~55\./);
   });
 
-  it('uses native tabs for the top-level React Native pages', () => {
-    const contentView = fs.readFileSync(
-      path.join(repoRoot, 'ios', 'Agw', 'ContentView.swift'),
-      'utf8',
-    );
+  it('registers the app through Expo instead of React Native CLI metadata', () => {
+    const index = fs.readFileSync(path.join(sharedRoot, 'index.js'), 'utf8');
 
-    expect(contentView).toContain('TabView');
-    expect(contentView).toContain('.tabItem');
-    expect(contentView).not.toContain('.sheet');
-    expect(contentView).not.toContain('selectedPage');
+    expect(index).toContain("import { registerRootComponent } from 'expo'");
+    expect(index).toContain('registerRootComponent(App)');
+    expect(fs.existsSync(path.join(sharedRoot, 'react-native.config.js'))).toBe(false);
   });
 
-  it('keeps Android native code under android and points it at shared React Native', () => {
-    const androidMainActivity = fs.readFileSync(
-      path.join(repoRoot, 'android', 'app', 'src', 'main', 'java', 'com', 'agw', 'MainActivity.kt'),
-      'utf8',
-    );
-    const androidBuild = fs.readFileSync(
-      path.join(repoRoot, 'android', 'app', 'build.gradle'),
-      'utf8',
-    );
-    const androidSettings = fs.readFileSync(
-      path.join(repoRoot, 'android', 'settings.gradle'),
-      'utf8',
-    );
-    const reactNativeConfig = fs.readFileSync(
-      path.join(repoRoot, 'shared', 'react-native.config.js'),
-      'utf8',
-    );
-
-    expect(androidMainActivity).toContain('getMainComponentName(): String = "AgwReactNative"');
-    expect(androidBuild).toContain('root = file("../../shared")');
-    expect(androidBuild).toContain('entryFile = file("../../shared/index.js")');
-    expect(androidSettings).toContain('includeBuild("../shared/node_modules/@react-native/gradle-plugin")');
-    expect(reactNativeConfig).toContain("android: {");
-    expect(reactNativeConfig).toContain("sourceDir: '../android'");
-  });
-
-  it('uses a Windows-compatible React Native autolinking command', () => {
-    const androidSettings = fs.readFileSync(
-      path.join(repoRoot, 'android', 'settings.gradle'),
-      'utf8',
-    );
-
-    expect(androidSettings).toContain('reactNativeCliConfigCommand');
-    expect(androidSettings).toContain('["cmd", "/c", "npx", "@react-native-community/cli", "config"]');
-    expect(androidSettings).toContain('reactNativeCliConfigCommand,');
+  it('removes the old top-level native host projects from the source tree', () => {
+    expect(fs.existsSync(path.join(repoRoot, 'ios', 'Agw', 'ReactViewController.swift'))).toBe(false);
+    expect(
+      fs.existsSync(
+        path.join(repoRoot, 'android', 'app', 'src', 'main', 'java', 'com', 'agw', 'MainActivity.kt'),
+      ),
+    ).toBe(false);
   });
 });
