@@ -23,6 +23,7 @@ public class McpToolServersController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesApiResult(typeof(McpServer[]))]
     public async Task<IActionResult> ListAsync()
     {
         var servers = await _mcpToolServerAppService.ListMcpToolServersAsync();
@@ -30,6 +31,7 @@ public class McpToolServersController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesApiResult(typeof(McpServer))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var server = await _mcpToolServerAppService.GetMcpToolServerAsync(id);
@@ -37,6 +39,7 @@ public class McpToolServersController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesApiResult(typeof(McpServer))]
     public async Task<IActionResult> CreateAsync([FromBody] McpToolServerCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -59,6 +62,7 @@ public class McpToolServersController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesApiResult(typeof(McpServer))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] McpToolServerUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -83,6 +87,7 @@ public class McpToolServersController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesApiResult]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _mcpToolServerAppService.DeleteMcpToolServerAsync(id);
@@ -90,6 +95,7 @@ public class McpToolServersController : ControllerBase
     }
 
     [HttpPost("connect")]
+    [ProducesApiResult(typeof(McpToolServerConnectResponse))]
     public async Task<IActionResult> ConnectAsync(
         [FromBody] McpToolServerConnectRequest request,
         CancellationToken cancellationToken)

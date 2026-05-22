@@ -18,9 +18,11 @@ public class ProjectTasksController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesApiResult(typeof(ProjectTaskSummaryResponse[]))]
     public async Task<IActionResult> ListAsync(Guid projectId) => AgwApiResult.Ok(await _projectTaskAppService.ListResponsesAsync(projectId));
 
     [HttpGet("{taskId:guid}")]
+    [ProducesApiResult(typeof(ProjectTaskResponse))]
     public async Task<IActionResult> GetAsync(Guid projectId, Guid taskId)
     {
         var task = await _projectTaskAppService.GetResponseAsync(projectId, taskId);
@@ -28,6 +30,7 @@ public class ProjectTasksController : ControllerBase
     }
 
     [HttpPut("{taskId:guid}/title")]
+    [ProducesApiResult]
     public async Task<IActionResult> UpdateTitleAsync(
         Guid projectId,
         Guid taskId,
@@ -46,6 +49,7 @@ public class ProjectTasksController : ControllerBase
     }
 
     [HttpDelete("{taskId:guid}")]
+    [ProducesApiResult]
     public async Task<IActionResult> DeleteAsync(Guid projectId, Guid taskId)
     {
         var result = await _projectTaskAppService.DeleteTaskAsync(projectId, taskId);
@@ -53,6 +57,7 @@ public class ProjectTasksController : ControllerBase
     }
 
     [HttpDelete("{taskId:guid}/clear-records")]
+    [ProducesApiResult]
     public async Task<IActionResult> ClearRecordsAsync(Guid projectId, Guid taskId)
     {
         var result = await _projectTaskAppService.ClearRecordsAsync(projectId, taskId);

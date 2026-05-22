@@ -2,6 +2,7 @@ using Agw.Files.Application.Files;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Services;
 
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -46,6 +47,9 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("list")]
+    [ProducesResponseType(typeof(FileListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ListAsync([FromQuery] string? path, [FromQuery] bool diff = false, [FromQuery] bool recursive = false)
     {
         if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
@@ -213,6 +217,9 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("read")]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ReadAsync([FromQuery] string? path)
     {
         if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
@@ -230,6 +237,9 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("diff")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DiffAsync([FromQuery] string? path)
     {
         if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
@@ -268,6 +278,9 @@ public class FilesController : ControllerBase
     }
 
     [HttpDelete("delete")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteAsync([FromQuery] string? path)
     {
         if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
@@ -293,6 +306,10 @@ public class FilesController : ControllerBase
     }
 
     [HttpPost("reset")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> ResetAsync([FromQuery] string? path)
     {
         if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
@@ -450,6 +467,9 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("search")]
+    [ProducesResponseType(typeof(FileSearchResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public Task<IActionResult> SearchAsync(
         [FromQuery] string? path,
         [FromQuery] string? keyword,

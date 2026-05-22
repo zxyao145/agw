@@ -20,6 +20,7 @@ public class SkillsController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesApiResult(typeof(SkillResponse[]))]
     public async Task<IActionResult> ListAsync()
     {
         var skills = await _skillAppService.ListAsync();
@@ -27,6 +28,7 @@ public class SkillsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesApiResult(typeof(SkillResponse))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var skill = await _skillAppService.GetAsync(id);
@@ -36,6 +38,7 @@ public class SkillsController : ControllerBase
     [HttpPost]
     [Consumes("multipart/form-data")]
     [RequestFormLimits(MultipartBodyLengthLimit = 104857600)]
+    [ProducesApiResult(typeof(SkillResponse))]
     public async Task<IActionResult> CreateAsync([FromForm] SkillCreateRequest request)
     {
         try
@@ -59,6 +62,7 @@ public class SkillsController : ControllerBase
     [HttpPut("{id:guid}")]
     [Consumes("multipart/form-data")]
     [RequestFormLimits(MultipartBodyLengthLimit = 104857600)]
+    [ProducesApiResult(typeof(SkillResponse))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromForm] SkillUpdateRequest request)
     {
         try
@@ -74,6 +78,7 @@ public class SkillsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesApiResult]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _skillAppService.DeleteAsync(id);

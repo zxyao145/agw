@@ -45,6 +45,7 @@ public class OAuthController : ControllerBase
     }
 
     [HttpGet("callback")]
+    [ProducesResponseType(StatusCodes.Status302Found)]
     public async Task<IActionResult> OAuthCallback(CancellationToken cancellationToken)
     {
         var queryParameters = BuildRedirectQueryParameters();

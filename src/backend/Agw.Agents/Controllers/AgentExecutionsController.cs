@@ -41,6 +41,8 @@ public partial class AgentExecutionsController : ControllerBase
     }
 
     [HttpGet("{agentId:guid}/ws")]
+    [ProducesResponseType(StatusCodes.Status101SwitchingProtocols)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task ExecuteWsAsync(Guid agentId, CancellationToken cancellationToken)
     {
         if (!HttpContext.WebSockets.IsWebSocketRequest)

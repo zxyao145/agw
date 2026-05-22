@@ -18,6 +18,7 @@ public class AgentflowsController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesApiResult(typeof(Agentflow[]))]
     public async Task<IActionResult> ListAsync()
     {
         var agentflows = await _agentflowRuntimeService.ListAsync();
@@ -25,6 +26,7 @@ public class AgentflowsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesApiResult(typeof(Agentflow))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var agentflow = await _agentflowRuntimeService.GetAsync(id);
@@ -32,6 +34,7 @@ public class AgentflowsController : ControllerBase
     }
 
     [HttpGet("mermaid/{id:guid}")]
+    [ProducesApiResult(typeof(string))]
     public async Task<IActionResult> GetMermaidAsync(Guid id)
     {
         var text = await _agentflowRuntimeService.GetMermaidAsync(id);
@@ -39,6 +42,7 @@ public class AgentflowsController : ControllerBase
     }
 
     [HttpGet("{id:guid}/nodes")]
+    [ProducesApiResult(typeof(AgentflowNode[]))]
     public async Task<IActionResult> ListNodesAsync(Guid id)
     {
         var agentflow = await _agentflowRuntimeService.GetAsync(id);
@@ -52,6 +56,7 @@ public class AgentflowsController : ControllerBase
     }
 
     [HttpGet("{id:guid}/edges")]
+    [ProducesApiResult(typeof(AgentflowEdge[]))]
     public async Task<IActionResult> ListEdgesAsync(Guid id)
     {
         var agentflow = await _agentflowRuntimeService.GetAsync(id);
@@ -65,6 +70,7 @@ public class AgentflowsController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesApiResult(typeof(Agentflow))]
     public async Task<IActionResult> CreateAsync([FromBody] AgentflowCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -102,6 +108,7 @@ public class AgentflowsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesApiResult(typeof(Agentflow))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentflowUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -141,6 +148,7 @@ public class AgentflowsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesApiResult]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _agentflowRuntimeService.DeleteAsync(id);

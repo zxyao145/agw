@@ -11,6 +11,7 @@ namespace Agw.Api.Controllers;
 public partial class AgentExecutionsController : ControllerBase
 {
     [HttpPost("{id:guid}/execute")]
+    [ProducesApiResult(typeof(AgentExecutionResponse))]
     public async Task<IActionResult> ExecuteAsync(
         Guid id,
         [FromBody] AgentExecutionRequest request,

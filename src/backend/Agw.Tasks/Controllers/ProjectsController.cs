@@ -18,6 +18,7 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesApiResult(typeof(Project[]))]
     public async Task<IActionResult> ListAsync()
     {
         var projects = await _projectAppService.ListAsync();
@@ -25,6 +26,7 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesApiResult(typeof(Project))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var project = await _projectAppService.GetAsync(id);
@@ -32,6 +34,7 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesApiResult(typeof(Project))]
     public async Task<IActionResult> CreateAsync([FromBody] ProjectCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -54,6 +57,7 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesApiResult(typeof(Project))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ProjectUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -71,6 +75,7 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesApiResult]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _projectAppService.DeleteAsync(id);

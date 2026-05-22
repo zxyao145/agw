@@ -1,6 +1,7 @@
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
 
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Setup.Controllers;
@@ -18,6 +19,8 @@ public class SetupController : Controller
     }
 
     [HttpGet("")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult Index()
     {
         if (_stateStore.GetSnapshot().IsInitialized)
@@ -34,6 +37,10 @@ public class SetupController : Controller
 
     [HttpPost("")]
     [ValidateAntiForgeryToken]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status302Found)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Index(SetupRequest request, CancellationToken cancellationToken)
     {
         if (_stateStore.GetSnapshot().IsInitialized)

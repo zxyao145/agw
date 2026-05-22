@@ -1,5 +1,6 @@
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Contracts;
+using Agw.Jobs.Domain.Entities;
 using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +12,7 @@ namespace Agw.Jobs.Controllers;
 public class JobsController(JobAppService jobAppService) : ControllerBase
 {
     [HttpGet]
+    [ProducesApiResult(typeof(Job[]))]
     public async Task<IActionResult> ListAsync(CancellationToken cancellationToken)
     {
         var tasks = await jobAppService.ListAsync(cancellationToken);
@@ -18,6 +20,7 @@ public class JobsController(JobAppService jobAppService) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesApiResult(typeof(Job))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var task = await jobAppService.GetAsync(id);
@@ -25,6 +28,7 @@ public class JobsController(JobAppService jobAppService) : ControllerBase
     }
 
     [HttpGet("{id:guid}/logs")]
+    [ProducesApiResult(typeof(JobLog[]))]
     public async Task<IActionResult> ListLogsAsync(Guid id, CancellationToken cancellationToken)
     {
         var logs = await jobAppService.ListLogsAsync(id, cancellationToken);
@@ -32,6 +36,7 @@ public class JobsController(JobAppService jobAppService) : ControllerBase
     }
 
     [HttpPost]
+    [ProducesApiResult(typeof(Job))]
     public async Task<IActionResult> CreateAsync([FromBody] JobCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -40,6 +45,7 @@ public class JobsController(JobAppService jobAppService) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesApiResult(typeof(Job))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] JobUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -48,6 +54,7 @@ public class JobsController(JobAppService jobAppService) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesApiResult]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await jobAppService.DeleteAsync(id);

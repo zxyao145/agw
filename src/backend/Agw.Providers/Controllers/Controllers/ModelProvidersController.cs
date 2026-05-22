@@ -1,5 +1,6 @@
 using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
+using Agw.Providers.Domain.Entities;
 using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
@@ -18,6 +19,7 @@ public class ModelProvidersController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesApiResult(typeof(object[]))]
     public async Task<IActionResult> ListAsync([FromQuery] Guid? modelId = null, [FromQuery] Guid? providerId = null)
     {
         var entities = await _service.ListAsync(modelId, providerId);
@@ -43,6 +45,7 @@ public class ModelProvidersController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesApiResult(typeof(ModelProviderRelation))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var entity = await _service.GetAsync(id);
@@ -50,6 +53,7 @@ public class ModelProvidersController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesApiResult(typeof(ModelProviderRelation))]
     public async Task<IActionResult> CreateAsync([FromBody] ModelProviderCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -58,6 +62,7 @@ public class ModelProvidersController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesApiResult(typeof(ModelProviderRelation))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ModelProviderUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -67,6 +72,7 @@ public class ModelProvidersController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesApiResult]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _service.DeleteAsync(id);

@@ -1,4 +1,5 @@
 using Agw.Domain.Services;
+using Agw.Shared.Models;
 using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
@@ -20,6 +21,7 @@ public class ToolsController : ControllerBase
     /// Gets all available tools.
     /// </summary>
     [HttpGet]
+    [ProducesApiResult(typeof(ToolInfo[]))]
     public IActionResult GetAllTools()
     {
         var tools = _toolRegistry.GetAllTools();
@@ -30,6 +32,7 @@ public class ToolsController : ControllerBase
     /// Gets tools grouped by category.
     /// </summary>
     [HttpGet("by-category")]
+    [ProducesApiResult(typeof(Dictionary<string, List<ToolInfo>>))]
     public IActionResult GetToolsByCategory()
     {
         var toolsByCategory = _toolRegistry.GetToolsByCategory();
@@ -40,6 +43,7 @@ public class ToolsController : ControllerBase
     /// Gets a specific tool by name.
     /// </summary>
     [HttpGet("{name}")]
+    [ProducesApiResult(typeof(ToolInfo))]
     public IActionResult GetTool(string name)
     {
         var tool = _toolRegistry.GetTool(name);

@@ -18,6 +18,7 @@ public class AgentsController : ControllerBase
     }
 
     [HttpGet]
+    [ProducesApiResult(typeof(AgentResponse[]))]
     public async Task<IActionResult> ListAsync()
     {
         var agents = await _agentAppService.ListAgentsAsync();
@@ -25,6 +26,7 @@ public class AgentsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var agent = await _agentAppService.GetAgentAsync(id);
@@ -32,6 +34,7 @@ public class AgentsController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> CreateAsync([FromBody] AgentCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -57,6 +60,7 @@ public class AgentsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -79,6 +83,7 @@ public class AgentsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesApiResult]
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _agentAppService.DeleteAgentAsync(id);

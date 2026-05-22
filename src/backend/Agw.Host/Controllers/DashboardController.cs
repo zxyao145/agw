@@ -2,6 +2,7 @@ using Agw.Agents.Domain.Entities;
 using Agw.Jobs.Domain.Entities;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -36,7 +37,8 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("stats")]
-    public async Task<ActionResult<DashboardStatsResponse>> GetStats()
+    [ProducesApiResult(typeof(DashboardStatsResponse))]
+    public async Task<IActionResult> GetStats()
     {
         var stats = new DashboardStatsResponse(
             await _jobRepository.Queryable.CountAsync(),
@@ -46,7 +48,7 @@ public class DashboardController : ControllerBase
             await _agentRepository.Queryable.CountAsync(),
             await _agentflowRepository.Queryable.CountAsync());
 
-        return Ok(stats);
+        return AgwApiResult.Ok(stats);
     }
 }
 

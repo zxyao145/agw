@@ -35,6 +35,7 @@ public class IntegrationsController : ControllerBase
     }
 
     [HttpGet("app-definitions")]
+    [ProducesApiResult(typeof(AppDefinitionListItemResponse[]))]
     public async Task<IActionResult> ListAppDefinitionsAsync()
     {
         var appDefinitions = await _appDefinitionRepository.ListAsync(
@@ -44,6 +45,7 @@ public class IntegrationsController : ControllerBase
     }
 
     [HttpGet("app-instances")]
+    [ProducesApiResult(typeof(AppInstanceListItemResponse[]))]
     public async Task<IActionResult> ListAppInstancesAsync()
     {
         var appDefinitions = await _appDefinitionRepository.ListAsync();
@@ -66,6 +68,7 @@ public class IntegrationsController : ControllerBase
     }
 
     [HttpPost("app-instances")]
+    [ProducesApiResult(typeof(AppInstanceListItemResponse))]
     public async Task<IActionResult> CreateAppInstanceAsync([FromBody] AppInstanceCreateRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.AppName)
@@ -100,6 +103,7 @@ public class IntegrationsController : ControllerBase
     }
 
     [HttpPost("app-instances/{id:guid}/authorize-start")]
+    [ProducesApiResult(typeof(AuthorizeStartResponse))]
     public async Task<IActionResult> AuthorizeStartAsync(Guid id, CancellationToken cancellationToken)
     {
         var appInstance = await _appInstanceRepository.GetByIdAsync(id);
@@ -131,6 +135,7 @@ public class IntegrationsController : ControllerBase
     }
 
     [HttpDelete("app-instances/{id:guid}")]
+    [ProducesApiResult]
     public async Task<IActionResult> DeleteAppInstanceAsync(Guid id)
     {
         var appInstance = await _appInstanceRepository.Queryable
