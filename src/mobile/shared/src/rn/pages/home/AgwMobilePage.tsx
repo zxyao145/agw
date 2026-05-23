@@ -1,6 +1,18 @@
 import React from "react";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { createAgwApiClient, AgwApiError } from "../../api/agw-api-client";
+import type {
+  AgwAgent,
+  AgwAgentflow,
+  AgwExecutionResponse,
+  AgwFileItem,
+  AgwFileListResponse,
+  AgwMessage,
+  AgwProject,
+  AgwTaskDetails,
+  AgwTaskSummary,
+} from "../../api/agw-api-types";
 import type { AgwLocalConfig } from "../../config/agw-config";
 import { readLocalConfig, writeLocalConfig } from "../../config/config-store";
 import { ChatPanel } from "./components/chat-panel";
@@ -9,6 +21,7 @@ import { ConfigSettingsSheet } from "./components/config-settings-sheet";
 import { ConfigSetupSheet } from "./components/config-setup-sheet";
 import { FilesPanel } from "./components/files-panel";
 import { HistoryDrawer } from "./components/history-drawer";
+import { buildAgwTargetOptions, getTargetValue } from "./lib/target-options";
 import { styles } from "./components/styles";
 import { TopBar } from "./components/top-bar";
 import type { AgwTabName } from "./components/types";
@@ -36,6 +49,62 @@ function AgwMobilePage({
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] =
     React.useState(initialSettingsOpen);
+  const [projects, setProjects] = React.useState<AgwProject[]>([]);
+  const [agents, setAgents] = React.useState<AgwAgent[]>([]);
+  const [agentflows, setAgentflows] = React.useState<AgwAgentflow[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = React.useState<
+    string | null
+  >(null);
+  const [selectedTargetValue, setSelectedTargetValue] = React.useState<
+    string | null
+  >(null);
+  const [tasks, setTasks] = React.useState<AgwTaskSummary[]>([]);
+  const [currentTaskId, setCurrentTaskId] = React.useState<string | null>(null);
+  const [messages, setMessages] = React.useState<AgwMessage[]>([]);
+  const [files, setFiles] = React.useState<AgwFileItem[]>([]);
+  const [isDependenciesLoading, setIsDependenciesLoading] =
+    React.useState(false);
+  const [dependenciesError, setDependenciesError] = React.useState<
+    string | null
+  >(null);
+  const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
+  const [historyError, setHistoryError] = React.useState<string | null>(null);
+  const [isChatLoading, setIsChatLoading] = React.useState(false);
+  const [chatError, setChatError] = React.useState<string | null>(null);
+  const [isFilesLoading, setIsFilesLoading] = React.useState(false);
+  const [filesError, setFilesError] = React.useState<string | null>(null);
+  const [composerText, setComposerText] = React.useState("");
+  const [isExecuting, setIsExecuting] = React.useState(false);
+  const [executionError, setExecutionError] = React.useState<string | null>(
+    null
+  );
+
+  const apiClient = React.useMemo(
+    () => (config ? createAgwApiClient(config) : null),
+    [config]
+  );
+
+  const selectedProject = React.useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) ?? null,
+    [projects, selectedProjectId]
+  );
+
+  const targets = React.useMemo(
+    () =>
+      buildAgwTargetOptions({
+        projectId: selectedProjectId,
+        agents,
+        agentflows,
+      }),
+    [agentflows, agents, selectedProjectId]
+  );
+
+  const selectedTarget = React.useMemo(
+    () =>
+      targets.find((target) => getTargetValue(target) === selectedTargetValue) ??
+      null,
+    [selectedTargetValue, targets]
+  );
 
   React.useEffect(() => {
     let isMounted = true;
@@ -78,9 +147,314 @@ function AgwMobilePage({
     setConfigLoadError(null);
   }
 
+  React.useEffect(() => {
+    if (!apiClient) {
+      setProjects([]);
+      setAgents([]);
+      setAgentflows([]);
+      setTasks([]);
+      setCurrentTaskId(null);
+      setMessages([]);
+      setFiles([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadDependencies() {
+      setIsDependenciesLoading(true);
+      setDependenciesError(null);
+
+      try {
+        const [nextProjects, nextAgents, nextAgentflows] = await Promise.all([
+          apiClient!.getJson<AgwProject[]>("/api/projects"),
+          apiClient!.getJson<AgwAgent[]>("/api/agents"),
+          apiClient!.getJson<AgwAgentflow[]>("/api/agentflows"),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setProjects(nextProjects.filter((project) => project.enable));
+        setAgents(nextAgents);
+        setAgentflows(nextAgentflows.filter((agentflow) => agentflow.enable !== false));
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setProjects([]);
+        setAgents([]);
+        setAgentflows([]);
+        setTasks([]);
+        setCurrentTaskId(null);
+        setMessages([]);
+        setFiles([]);
+        setDependenciesError(`Failed to load mobile data: ${getErrorMessage(error)}`);
+      } finally {
+        if (isMounted) {
+          setIsDependenciesLoading(false);
+        }
+      }
+    }
+
+    loadDependencies();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiClient]);
+
+  React.useEffect(() => {
+    setSelectedProjectId((currentProjectId) => {
+      if (
+        currentProjectId &&
+        projects.some((project) => project.id === currentProjectId)
+      ) {
+        return currentProjectId;
+      }
+
+      return projects[0]?.id ?? null;
+    });
+  }, [projects]);
+
+  React.useEffect(() => {
+    setSelectedTargetValue((currentTargetValue) => {
+      if (
+        currentTargetValue &&
+        targets.some((target) => getTargetValue(target) === currentTargetValue)
+      ) {
+        return currentTargetValue;
+      }
+
+      return targets[0] ? getTargetValue(targets[0]) : null;
+    });
+  }, [targets]);
+
+  React.useEffect(() => {
+    if (!apiClient || !selectedProjectId) {
+      setTasks([]);
+      setCurrentTaskId(null);
+      setHistoryError(null);
+      setIsHistoryLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadHistory() {
+      setIsHistoryLoading(true);
+      setHistoryError(null);
+
+      try {
+        const nextTasks = await apiClient!.getJson<AgwTaskSummary[]>(
+          `/api/projects/${encodeURIComponent(selectedProjectId!)}/tasks`
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        setTasks(nextTasks);
+        setCurrentTaskId((currentTaskIdValue) => {
+          if (
+            currentTaskIdValue &&
+            nextTasks.some((task) => task.id === currentTaskIdValue)
+          ) {
+            return currentTaskIdValue;
+          }
+
+          return nextTasks[0]?.id ?? null;
+        });
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setTasks([]);
+        setCurrentTaskId(null);
+        setHistoryError(`Failed to load history: ${getErrorMessage(error)}`);
+      } finally {
+        if (isMounted) {
+          setIsHistoryLoading(false);
+        }
+      }
+    }
+
+    loadHistory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiClient, selectedProjectId]);
+
+  React.useEffect(() => {
+    if (!apiClient || !selectedProjectId || !currentTaskId) {
+      setMessages([]);
+      setChatError(null);
+      setIsChatLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadTaskMessages() {
+      setIsChatLoading(true);
+      setChatError(null);
+
+      try {
+        const taskDetails = await apiClient!.getJson<AgwTaskDetails>(
+          `/api/projects/${encodeURIComponent(
+            selectedProjectId!
+          )}/tasks/${encodeURIComponent(currentTaskId!)}`
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        setMessages(taskDetails.messages ?? []);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setMessages([]);
+        setChatError(`Failed to load chat: ${getErrorMessage(error)}`);
+      } finally {
+        if (isMounted) {
+          setIsChatLoading(false);
+        }
+      }
+    }
+
+    loadTaskMessages();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiClient, currentTaskId, selectedProjectId]);
+
+  React.useEffect(() => {
+    const workspace = selectedProject?.workspace?.trim();
+
+    if (!apiClient || !workspace) {
+      setFiles([]);
+      setFilesError(null);
+      setIsFilesLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadFiles() {
+      setIsFilesLoading(true);
+      setFilesError(null);
+
+      try {
+        const fileList = await apiClient!.getJson<AgwFileListResponse>(
+          "/api/files/list",
+          { query: { path: workspace } }
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        setFiles(fileList.items);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setFiles([]);
+        setFilesError(`Failed to load files: ${getErrorMessage(error)}`);
+      } finally {
+        if (isMounted) {
+          setIsFilesLoading(false);
+        }
+      }
+    }
+
+    loadFiles();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiClient, selectedProject]);
+
   function openSettings() {
     setIsDrawerOpen(false);
     setIsSettingsOpen(true);
+  }
+
+  function selectTask(taskId: string) {
+    setCurrentTaskId(taskId);
+    setExecutionError(null);
+    setIsDrawerOpen(false);
+  }
+
+  function selectProject(projectId: string) {
+    setSelectedProjectId(projectId);
+    setCurrentTaskId(null);
+    setMessages([]);
+    setFiles([]);
+    setExecutionError(null);
+  }
+
+  function selectTarget(targetValue: string) {
+    setSelectedTargetValue(targetValue);
+    setExecutionError(null);
+  }
+
+  async function sendMessage() {
+    const input = composerText.trim();
+    if (
+      !apiClient ||
+      !selectedProjectId ||
+      !selectedTarget ||
+      !input ||
+      isExecuting
+    ) {
+      return;
+    }
+
+    const executionTaskId = currentTaskId ?? createUuid();
+    const userMessage = createUserMessage(input);
+
+    setComposerText("");
+    setExecutionError(null);
+    setMessages((currentMessages) => [...currentMessages, userMessage]);
+    setIsExecuting(true);
+
+    try {
+      const result = await apiClient.postJson<AgwExecutionResponse>(
+        `/api/executions/${encodeURIComponent(selectedTarget.id)}/execute`,
+        {
+          agentType: selectedTarget.agentType,
+          input,
+          projectId: selectedProjectId,
+          taskId: executionTaskId,
+        }
+      );
+
+      setCurrentTaskId(result.taskId ?? executionTaskId);
+      if (result.messages.length > 0) {
+        setMessages((currentMessages) =>
+          mergeMessages(currentMessages, result.messages)
+        );
+      }
+
+      const latestTasks = await apiClient.getJson<AgwTaskSummary[]>(
+        `/api/projects/${encodeURIComponent(selectedProjectId)}/tasks`
+      );
+      setTasks(latestTasks);
+    } catch (error) {
+      setExecutionError(`Failed to send message: ${getErrorMessage(error)}`);
+    } finally {
+      setIsExecuting(false);
+    }
   }
 
   return (
@@ -99,17 +473,52 @@ function AgwMobilePage({
               safeTop={safeAreaInsets.top}
             />
             <View style={styles.mainPanel}>
-              {activeTab === "chat" ? <ChatPanel /> : <FilesPanel />}
+              {activeTab === "chat" ? (
+                <ChatPanel
+                  error={dependenciesError ?? chatError ?? executionError}
+                  isLoading={isDependenciesLoading || isChatLoading}
+                  messages={messages}
+                />
+              ) : (
+                <FilesPanel
+                  error={dependenciesError ?? filesError}
+                  files={files}
+                  isLoading={isDependenciesLoading || isFilesLoading}
+                  workspace={selectedProject?.workspace}
+                />
+              )}
             </View>
-            <Composer safeBottom={safeAreaInsets.bottom} />
+            <Composer
+              disabled={
+                Boolean(dependenciesError) ||
+                !selectedProjectId ||
+                !selectedTarget
+              }
+              isSending={isExecuting}
+              message={composerText}
+              onMessageChange={setComposerText}
+              onSend={sendMessage}
+              safeBottom={safeAreaInsets.bottom}
+            />
           </>
         )}
         {isDrawerOpen ? (
           <HistoryDrawer
+            currentTaskId={currentTaskId}
+            historyError={historyError}
+            isLoadingHistory={isHistoryLoading}
             onClose={() => setIsDrawerOpen(false)}
             onOpenSettings={openSettings}
+            onProjectSelect={selectProject}
+            onTaskSelect={selectTask}
+            onTargetSelect={selectTarget}
+            projects={projects}
             safeBottom={safeAreaInsets.bottom}
             safeTop={safeAreaInsets.top}
+            selectedProjectId={selectedProjectId}
+            selectedTargetValue={selectedTargetValue}
+            targets={targets}
+            tasks={tasks}
           />
         ) : null}
         {configLoadState === "missing" ? (
@@ -135,3 +544,67 @@ function AgwMobilePage({
 }
 
 export default AgwMobilePage;
+
+function createUserMessage(content: string): AgwMessage {
+  return {
+    author: "$agw",
+    contents: [
+      {
+        content,
+        type: "TextContent",
+      },
+    ],
+    messageId: createUuid(),
+    role: "user",
+  };
+}
+
+function mergeMessages(
+  currentMessages: AgwMessage[],
+  incomingMessages: AgwMessage[]
+): AgwMessage[] {
+  const merged = [...currentMessages];
+  const indexesById = new Map(
+    merged.map((message, index) => [message.messageId, index])
+  );
+
+  incomingMessages.forEach((message) => {
+    const existingIndex = indexesById.get(message.messageId);
+
+    if (existingIndex === undefined) {
+      indexesById.set(message.messageId, merged.length);
+      merged.push(message);
+      return;
+    }
+
+    merged[existingIndex] = message;
+  });
+
+  return merged;
+}
+
+function createUuid(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = token === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof AgwApiError) {
+    if (isRecord(error.body) && typeof error.body.message === "string") {
+      return error.body.message;
+    }
+
+    if (isRecord(error.body) && typeof error.body.detail === "string") {
+      return error.body.detail;
+    }
+  }
+
+  return error instanceof Error ? error.message : "Unknown error.";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

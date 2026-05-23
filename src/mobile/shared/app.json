@@ -14,7 +14,8 @@
       }
     },
     "android": {
-      "package": "com.agw"
+      "package": "com.agw",
+      "usesCleartextTraffic": true
     },
     "plugins": [
       [

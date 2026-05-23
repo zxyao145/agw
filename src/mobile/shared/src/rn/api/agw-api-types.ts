@@ -1,0 +1,81 @@
+export type AgwProject = {
+  id: string;
+  name: string;
+  description?: string | null;
+  workspace?: string | null;
+  enable: boolean;
+  extraSetting?: string | null;
+};
+
+export type AgwAgent = {
+  id: string;
+  displayName: string;
+  name: string;
+};
+
+export type AgwAgentflow = {
+  id: string;
+  name: string;
+  enable?: boolean;
+};
+
+export type AgwTargetType = "agent" | "agentflow";
+
+export type AgwTarget = {
+  id: string;
+  label: string;
+  type: AgwTargetType;
+  agentType: 0 | 1;
+};
+
+export type AgwTaskSummary = {
+  id: string;
+  projectId: string;
+  contextId: string;
+  jobId?: string | null;
+  status: number;
+  title: string;
+  errorMessage?: string | null;
+  createTime: string;
+  updateTime?: string | null;
+  startedTime?: string | null;
+  finishedTime?: string | null;
+};
+
+export type AgwMessageContent = {
+  type: string;
+  content?: string | null;
+  additionalProperties?: Record<string, unknown> | null;
+};
+
+export type AgwMessage = {
+  messageId: string;
+  author?: string | null;
+  role: string;
+  contents: AgwMessageContent[];
+  additionalProperties?: Record<string, unknown> | null;
+};
+
+export type AgwTaskDetails = AgwTaskSummary & {
+  input: string;
+  messageCount: number;
+  messages?: AgwMessage[] | null;
+};
+
+export type AgwFileItem = {
+  name: string;
+  path: string;
+  type: "file" | "directory" | string;
+  size?: number | null;
+  modifiedTime?: string | null;
+  gitStatus?: string | null;
+};
+
+export type AgwFileListResponse = {
+  items: AgwFileItem[];
+};
+
+export type AgwExecutionResponse = {
+  taskId?: string | null;
+  messages: AgwMessage[];
+};

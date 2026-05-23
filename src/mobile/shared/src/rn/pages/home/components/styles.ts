@@ -74,6 +74,28 @@ export const styles = StyleSheet.create({
   panelScroll: {
     flex: 1,
   },
+  emptyPanel: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+  emptyPanelText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  errorText: {
+    color: colors.red,
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0,
+    lineHeight: 20,
+    textAlign: "center",
+  },
   chatContent: {
     gap: 12,
     paddingBottom: 32,
@@ -303,6 +325,9 @@ export const styles = StyleSheet.create({
     shadowRadius: 6,
     width: 48,
   },
+  sendButtonDisabled: {
+    opacity: 0.45,
+  },
   drawerLayer: {
     backgroundColor: colors.background,
     bottom: 0,
@@ -365,6 +390,9 @@ export const styles = StyleSheet.create({
     paddingLeft: 9,
     paddingRight: 7,
   },
+  selectBoxActive: {
+    borderColor: colors.primary,
+  },
   selectValue: {
     color: colors.ink,
     flex: 1,
@@ -373,6 +401,35 @@ export const styles = StyleSheet.create({
     letterSpacing: 0.5,
     lineHeight: 14,
     minWidth: 0,
+  },
+  drawerOptions: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  selectorOption: {
+    borderRadius: 8,
+    minHeight: 38,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  selectorOptionText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0,
+    lineHeight: 18,
+  },
+  selectorOptionMeta: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    lineHeight: 13,
   },
   historySection: {
     flex: 1,
@@ -391,6 +448,9 @@ export const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 4,
     paddingVertical: 12,
+  },
+  historyItemActive: {
+    backgroundColor: colors.surface,
   },
   historyItemPressed: {
     backgroundColor: colors.surface,
