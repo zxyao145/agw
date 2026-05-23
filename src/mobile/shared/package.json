@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --dev-client",
+    "start:expo-go": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "prebuild": "expo prebuild",
@@ -12,6 +13,7 @@
   },
   "dependencies": {
     "expo": "~55.0.26",
+    "expo-dev-client": "~55.0.35",
     "expo-secure-store": "~55.0.14",
     "expo-system-ui": "~55.0.18",
     "react": "19.2.0",

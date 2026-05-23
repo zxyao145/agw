@@ -28,6 +28,15 @@ cd shared
 npm start
 ```
 
+默认启动命令使用 development client，避免 Expo Go/launcher 多 Host 兼容问题影响 React Native DevTools 的 Network inspection。
+
+如需显式使用 Expo Go：
+
+```sh
+cd shared
+npm run start:expo-go
+```
+
 运行 Android development build：
 
 ```sh

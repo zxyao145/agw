@@ -34,11 +34,29 @@ describe('project layout', () => {
     expect(appConfig.expo.slug).toBe('agw');
     expect(appConfig.expo.ios.bundleIdentifier).toBe('com.agw');
     expect(appConfig.expo.android.package).toBe('com.agw');
-    expect(packageJson.scripts.start).toBe('expo start');
+    expect(packageJson.scripts.start).toBe('expo start --dev-client');
+    expect(packageJson.scripts['start:expo-go']).toBe('expo start');
     expect(packageJson.scripts.android).toBe('expo run:android');
     expect(packageJson.scripts.ios).toBe('expo run:ios');
     expect(packageJson.dependencies.expo).toMatch(/^~55\./);
     expect(packageJson.dependencies['expo-secure-store']).toMatch(/^~55\./);
+  });
+
+  it('uses an Expo development client for React Native DevTools network inspection', () => {
+    const appConfig = JSON.parse(
+      fs.readFileSync(path.join(sharedRoot, 'app.json'), 'utf8'),
+    );
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(sharedRoot, 'package.json'), 'utf8'),
+    );
+
+    expect(packageJson.dependencies['expo-dev-client']).toMatch(/^~55\./);
+    expect(appConfig.expo.plugins).toContainEqual([
+      'expo-dev-client',
+      {
+        launchMode: 'most-recent',
+      },
+    ]);
   });
 
   it('registers the app through Expo instead of React Native CLI metadata', () => {
