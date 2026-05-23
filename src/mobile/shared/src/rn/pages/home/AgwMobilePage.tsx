@@ -17,10 +17,13 @@ import type { AgwLocalConfig } from "../../config/agw-config";
 import { readLocalConfig, writeLocalConfig } from "../../config/config-store";
 import { ChatPanel } from "./components/chat-panel";
 import { Composer } from "./components/composer";
-import { ConfigSettingsSheet } from "./components/config-settings-sheet";
 import { ConfigSetupSheet } from "./components/config-setup-sheet";
 import { FilesPanel } from "./components/files-panel";
 import { HistoryDrawer } from "./components/history-drawer";
+import {
+  DEFAULT_AGENT_LABEL,
+  DEFAULT_PROJECT_VALUE,
+} from "./lib/default-selections";
 import { buildAgwTargetOptions, getTargetValue } from "./lib/target-options";
 import { styles } from "./components/styles";
 import { TopBar } from "./components/top-bar";
@@ -46,7 +49,7 @@ function AgwMobilePage({
   const [configLoadError, setConfigLoadError] = React.useState<string | null>(
     null
   );
-  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = React.useState(initialSettingsOpen);
   const [isSettingsOpen, setIsSettingsOpen] =
     React.useState(initialSettingsOpen);
   const [projects, setProjects] = React.useState<AgwProject[]>([]);
@@ -215,7 +218,13 @@ function AgwMobilePage({
         return currentProjectId;
       }
 
-      return projects[0]?.id ?? null;
+      const defaultProject = projects.find(
+        (project) =>
+          project.id === DEFAULT_PROJECT_VALUE ||
+          project.name === DEFAULT_PROJECT_VALUE
+      );
+
+      return defaultProject?.id ?? projects[0]?.id ?? null;
     });
   }, [projects]);
 
@@ -228,7 +237,16 @@ function AgwMobilePage({
         return currentTargetValue;
       }
 
-      return targets[0] ? getTargetValue(targets[0]) : null;
+      const defaultTarget = targets.find(
+        (target) =>
+          target.type === "agent" && target.label === DEFAULT_AGENT_LABEL
+      );
+
+      return defaultTarget
+        ? getTargetValue(defaultTarget)
+        : targets[0]
+          ? getTargetValue(targets[0])
+          : null;
     });
   }, [targets]);
 
@@ -385,8 +403,17 @@ function AgwMobilePage({
   }, [apiClient, selectedProject]);
 
   function openSettings() {
-    setIsDrawerOpen(false);
+    setIsDrawerOpen(true);
     setIsSettingsOpen(true);
+  }
+
+  function closeSettings() {
+    setIsSettingsOpen(false);
+  }
+
+  function closeDrawer() {
+    setIsDrawerOpen(false);
+    setIsSettingsOpen(false);
   }
 
   function selectTask(taskId: string) {
@@ -502,14 +529,17 @@ function AgwMobilePage({
             />
           </>
         )}
-        {isDrawerOpen ? (
+        {configLoadState !== "loading" && isDrawerOpen ? (
           <HistoryDrawer
             currentTaskId={currentTaskId}
             historyError={historyError}
+            isSettingsOpen={isSettingsOpen}
             isLoadingHistory={isHistoryLoading}
-            onClose={() => setIsDrawerOpen(false)}
+            onClose={closeDrawer}
+            onCloseSettings={closeSettings}
             onOpenSettings={openSettings}
             onProjectSelect={selectProject}
+            onSaveSettings={saveConfig}
             onTaskSelect={selectTask}
             onTargetSelect={selectTarget}
             projects={projects}
@@ -517,6 +547,7 @@ function AgwMobilePage({
             safeTop={safeAreaInsets.top}
             selectedProjectId={selectedProjectId}
             selectedTargetValue={selectedTargetValue}
+            settingsConfig={config}
             targets={targets}
             tasks={tasks}
           />
@@ -524,15 +555,6 @@ function AgwMobilePage({
         {configLoadState === "missing" ? (
           <ConfigSetupSheet
             initialError={configLoadError}
-            onSave={saveConfig}
-            safeBottom={safeAreaInsets.bottom}
-            safeTop={safeAreaInsets.top}
-          />
-        ) : null}
-        {config && isSettingsOpen ? (
-          <ConfigSettingsSheet
-            config={config}
-            onClose={() => setIsSettingsOpen(false)}
             onSave={saveConfig}
             safeBottom={safeAreaInsets.bottom}
             safeTop={safeAreaInsets.top}

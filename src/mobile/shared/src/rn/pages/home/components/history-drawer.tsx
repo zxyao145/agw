@@ -1,10 +1,17 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
+import { Bolt } from "lucide-react-native";
 import type {
   AgwProject,
   AgwTarget,
   AgwTaskSummary,
 } from "../../../api/agw-api-types";
+import type { AgwLocalConfig } from "../../../config/agw-config";
+import { ConfigSettingsPage } from "./config-settings-sheet";
+import {
+  DEFAULT_AGENT_LABEL,
+  DEFAULT_PROJECT_VALUE,
+} from "../lib/default-selections";
 import { Icon, IconButton } from "./icons";
 import { styles } from "./styles";
 import { colors } from "./tokens";
@@ -12,10 +19,13 @@ import { colors } from "./tokens";
 export function HistoryDrawer({
   currentTaskId,
   historyError,
+  isSettingsOpen,
   isLoadingHistory,
   onClose,
+  onCloseSettings,
   onOpenSettings,
   onProjectSelect,
+  onSaveSettings,
   onTaskSelect,
   onTargetSelect,
   projects,
@@ -23,15 +33,19 @@ export function HistoryDrawer({
   safeTop,
   selectedProjectId,
   selectedTargetValue,
+  settingsConfig,
   targets,
   tasks,
 }: {
   currentTaskId?: string | null;
   historyError?: string | null;
   isLoadingHistory?: boolean;
+  isSettingsOpen?: boolean;
   onClose: () => void;
+  onCloseSettings?: () => void;
   onOpenSettings: () => void;
   onProjectSelect: (projectId: string) => void;
+  onSaveSettings?: (config: AgwLocalConfig) => Promise<void>;
   onTaskSelect: (taskId: string) => void;
   onTargetSelect: (targetValue: string) => void;
   projects: AgwProject[];
@@ -39,6 +53,7 @@ export function HistoryDrawer({
   safeTop: number;
   selectedProjectId?: string | null;
   selectedTargetValue?: string | null;
+  settingsConfig?: AgwLocalConfig | null;
   targets: AgwTarget[];
   tasks: AgwTaskSummary[];
 }): React.JSX.Element {
@@ -50,6 +65,14 @@ export function HistoryDrawer({
   const selectedTarget =
     targets.find((target) => getTargetValue(target) === selectedTargetValue) ??
     null;
+  const settingsPage =
+    isSettingsOpen && settingsConfig && onCloseSettings && onSaveSettings
+      ? {
+          config: settingsConfig,
+          onClose: onCloseSettings,
+          onSave: onSaveSettings,
+        }
+      : null;
 
   function toggleSelector(selector: "project" | "target") {
     setExpandedSelector((current) => (current === selector ? null : selector));
@@ -64,7 +87,21 @@ export function HistoryDrawer({
             { height: 64 + safeTop, paddingTop: safeTop },
           ]}
         >
-          <Text style={styles.drawerBrand}>Agw</Text>
+          {settingsPage ? (
+            <View style={styles.drawerTitleRow}>
+              <IconButton
+                color={colors.primary}
+                icon="chevronLeft"
+                label="Back to chat history"
+                onPress={settingsPage.onClose}
+                size={40}
+                testID="agw-settings-back"
+              />
+              <Text style={styles.drawerTitle}>Settings</Text>
+            </View>
+          ) : (
+            <Text style={styles.drawerBrand}>Agw</Text>
+          )}
           <IconButton
             color={colors.primary}
             icon="close"
@@ -75,102 +112,113 @@ export function HistoryDrawer({
           />
         </View>
 
-        <View style={styles.drawerSelectors}>
-          <DrawerSelect
-            expanded={expandedSelector === "project"}
-            label="PROJECT"
-            onPress={() => toggleSelector("project")}
-            testID="agw-project-selector"
-            value={selectedProject?.name ?? "No project"}
+        {settingsPage ? (
+          <ConfigSettingsPage
+            config={settingsPage.config}
+            onClose={settingsPage.onClose}
+            onSave={settingsPage.onSave}
+            safeBottom={safeBottom}
           />
-          <DrawerSelect
-            expanded={expandedSelector === "target"}
-            label="AGENT"
-            onPress={() => toggleSelector("target")}
-            testID="agw-agent-selector"
-            value={selectedTarget?.label ?? "No agent"}
-          />
-        </View>
-
-        {expandedSelector === "project" ? (
-          <View style={styles.drawerOptions}>
-            {projects.map((project) => (
-              <SelectorOption
-                active={project.id === selectedProjectId}
-                key={project.id}
-                label={project.name}
-                onPress={() => {
-                  onProjectSelect(project.id);
-                  setExpandedSelector(null);
-                }}
-                testID={`agw-project-option-${project.id}`}
+        ) : (
+          <>
+            <View style={styles.drawerSelectors}>
+              <DrawerSelect
+                expanded={expandedSelector === "project"}
+                label="PROJECT"
+                onPress={() => toggleSelector("project")}
+                testID="agw-project-selector"
+                value={selectedProject?.name ?? DEFAULT_PROJECT_VALUE}
               />
-            ))}
-          </View>
-        ) : null}
-
-        {expandedSelector === "target" ? (
-          <View style={styles.drawerOptions}>
-            {targets.map((target) => {
-              const targetValue = getTargetValue(target);
-
-              return (
-                <SelectorOption
-                  active={targetValue === selectedTargetValue}
-                  key={targetValue}
-                  label={target.label}
-                  meta={target.type === "agent" ? "Agent" : "Agentflow"}
-                  onPress={() => {
-                    onTargetSelect(targetValue);
-                    setExpandedSelector(null);
-                  }}
-                  testID={`agw-agent-option-${targetValue}`}
-                />
-              );
-            })}
-          </View>
-        ) : null}
-
-        <View style={styles.historySection}>
-          <Text style={styles.sectionLabel}>RECENT HISTORY</Text>
-          {isLoadingHistory ? (
-            <Text style={styles.emptyPanelText}>Loading history</Text>
-          ) : historyError ? (
-            <Text style={styles.errorText}>{historyError}</Text>
-          ) : tasks.length === 0 ? (
-            <Text style={styles.emptyPanelText}>No chat history yet</Text>
-          ) : (
-            tasks.map((task) => (
-              <HistoryItem
-                active={task.id === currentTaskId}
-                key={task.id}
-                onPress={() => onTaskSelect(task.id)}
-                preview={formatTaskPreview(task)}
-                title={task.title}
+              <DrawerSelect
+                expanded={expandedSelector === "target"}
+                label="AGENT"
+                onPress={() => toggleSelector("target")}
+                testID="agw-agent-selector"
+                value={selectedTarget?.label ?? DEFAULT_AGENT_LABEL}
               />
-            ))
-          )}
-        </View>
+            </View>
 
-        <View
-          style={[
-            styles.drawerFooter,
-            { paddingBottom: Math.max(8, safeBottom) },
-          ]}
-        >
-          <Pressable
-            accessibilityRole="button"
-            onPress={onOpenSettings}
-            style={({ pressed }) => [
-              styles.settingsRow,
-              pressed && styles.historyItemPressed,
-            ]}
-            testID="agw-open-settings"
-          >
-            <Icon color={colors.muted} name="settings" size={22} />
-            <Text style={styles.settingsText}>Settings</Text>
-          </Pressable>
-        </View>
+            {expandedSelector === "project" ? (
+              <View style={styles.drawerOptions}>
+                {projects.map((project) => (
+                  <SelectorOption
+                    active={project.id === selectedProjectId}
+                    key={project.id}
+                    label={project.name}
+                    onPress={() => {
+                      onProjectSelect(project.id);
+                      setExpandedSelector(null);
+                    }}
+                    testID={`agw-project-option-${project.id}`}
+                  />
+                ))}
+              </View>
+            ) : null}
+
+            {expandedSelector === "target" ? (
+              <View style={styles.drawerOptions}>
+                {targets.map((target) => {
+                  const targetValue = getTargetValue(target);
+
+                  return (
+                    <SelectorOption
+                      active={targetValue === selectedTargetValue}
+                      key={targetValue}
+                      label={target.label}
+                      meta={target.type === "agent" ? "Agent" : "Agentflow"}
+                      onPress={() => {
+                        onTargetSelect(targetValue);
+                        setExpandedSelector(null);
+                      }}
+                      testID={`agw-agent-option-${targetValue}`}
+                    />
+                  );
+                })}
+              </View>
+            ) : null}
+
+            <View style={styles.historySection}>
+              <Text style={styles.sectionLabel}>RECENT HISTORY</Text>
+              {isLoadingHistory ? (
+                <Text style={styles.emptyPanelText}>Loading history</Text>
+              ) : historyError ? (
+                <Text style={styles.errorText}>{historyError}</Text>
+              ) : tasks.length === 0 ? (
+                <Text style={styles.emptyPanelText}>No chat history yet</Text>
+              ) : (
+                tasks.map((task) => (
+                  <HistoryItem
+                    active={task.id === currentTaskId}
+                    key={task.id}
+                    onPress={() => onTaskSelect(task.id)}
+                    preview={formatTaskPreview(task)}
+                    title={task.title}
+                  />
+                ))
+              )}
+            </View>
+
+            <View
+              style={[
+                styles.drawerFooter,
+                { paddingBottom: Math.max(8, safeBottom) },
+              ]}
+            >
+              <Pressable
+                accessibilityRole="button"
+                onPress={onOpenSettings}
+                style={({ pressed }) => [
+                  styles.settingsRow,
+                  pressed && styles.historyItemPressed,
+                ]}
+                testID="agw-open-settings"
+              >
+                <Bolt color={colors.muted} size={22} />
+                <Text style={styles.settingsText}>Settings</Text>
+              </Pressable>
+            </View>
+          </>
+        )}
       </View>
     </View>
   );

@@ -223,7 +223,7 @@ export const styles = StyleSheet.create({
     color: colors.muted,
   },
   markdownParagraph: {
-    marginBottom: 12,
+    marginBottom: 8,
     marginTop: 0,
   },
   markdownStrong: {
@@ -473,6 +473,19 @@ export const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: 28,
   },
+  drawerTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    minWidth: 0,
+  },
+  drawerTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: 0,
+    lineHeight: 24,
+  },
   drawerSelectors: {
     flexDirection: "row",
     gap: 8,
@@ -603,6 +616,13 @@ export const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: 24,
   },
+  settingsPage: {
+    backgroundColor: colors.white,
+    flex: 1,
+    gap: 16,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+  },
   configOverlay: {
     alignItems: "center",
     backgroundColor: "rgba(250, 249, 254, 0.98)",
@@ -675,6 +695,9 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     justifyContent: "flex-end",
+  },
+  settingsActionRow: {
+    marginTop: "auto",
   },
   configPrimaryButton: {
     alignItems: "center",

@@ -9,6 +9,7 @@ export type IconName =
   | "more"
   | "close"
   | "chevronDown"
+  | "chevronLeft"
   | "chevronRight"
   | "folder"
   | "info"
@@ -151,7 +152,11 @@ export function Icon({
     );
   }
 
-  if (name === "chevronDown" || name === "chevronRight") {
+  if (
+    name === "chevronDown" ||
+    name === "chevronLeft" ||
+    name === "chevronRight"
+  ) {
     return (
       <View style={[styles.iconCenter, { height: size, width: size }]}>
         <View
@@ -162,7 +167,14 @@ export function Icon({
             borderRightWidth: lineThickness,
             height: size * 0.42,
             transform: [
-              { rotate: name === "chevronDown" ? "45deg" : "-45deg" },
+              {
+                rotate:
+                  name === "chevronDown"
+                    ? "45deg"
+                    : name === "chevronLeft"
+                      ? "135deg"
+                      : "-45deg",
+              },
             ],
             width: size * 0.42,
           }}

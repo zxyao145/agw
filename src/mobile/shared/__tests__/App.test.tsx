@@ -3,6 +3,7 @@ import renderer, { act } from "react-test-renderer";
 import { encodeConfigBase64Url } from "../src/rn/config/agw-config";
 import { readLocalConfig, writeLocalConfig } from "../src/rn/config/config-store";
 import App from "../src/rn/App";
+import { styles } from "../src/rn/pages/home/components/styles";
 
 jest.mock("react-native-safe-area-context", () => {
   const React = require("react");
@@ -193,6 +194,46 @@ describe("App", () => {
     expect(collectText(tree?.toJSON())).toContain("Project Two API Chat");
   });
 
+  it("selects the built-in project and Hello agent by default when available", async () => {
+    fetchMock.mockImplementation(
+      createAgwFetchMock({ includeDefaultSelections: true })
+    );
+    let tree: renderer.ReactTestRenderer | undefined;
+
+    await act(async () => {
+      tree = renderer.create(<App routeName="home" title="Home" />);
+    });
+    await settleAsync();
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-open-drawer" }).props.onPress();
+    });
+
+    expect(collectText(tree?.toJSON())).toContain("Default Built In Chat");
+    expect(collectText(tree?.toJSON())).toContain("Default Built In");
+    expect(collectText(tree?.toJSON())).toContain("Hello");
+
+    await act(async () => {
+      tree!.root
+        .findByProps({ testID: "agw-message-input" })
+        .props.onChangeText("Use the defaults");
+    });
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-send-message" }).props.onPress();
+    });
+    await settleAsync();
+
+    const executionCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes("/api/executions/agent-hello/execute")
+    );
+
+    expect(executionCall).toBeDefined();
+    expect(JSON.parse(String(executionCall?.[1].body))).toMatchObject({
+      projectId: "default-built-in",
+    });
+  });
+
   it("imports a Base64URL config when no local config exists", async () => {
     readLocalConfigMock.mockResolvedValueOnce(null);
     let tree: renderer.ReactTestRenderer | undefined;
@@ -249,6 +290,12 @@ describe("App", () => {
     });
 
     expect(collectText(tree?.toJSON())).toContain("Local Configuration");
+    expect(
+      tree!.root.findAllByProps({ testID: "agw-settings-page" }).length
+    ).toBeGreaterThan(0);
+    expect(tree!.root.findAllByProps({ testID: "agw-settings-sheet" })).toHaveLength(0);
+    expect(collectText(tree?.toJSON())).not.toContain("Mobile API Chat");
+    expect(getSettingsActionBottomPadding(tree!)).toBeGreaterThanOrEqual(24);
 
     await act(async () => {
       tree!.root
@@ -269,6 +316,37 @@ describe("App", () => {
       apiKey: "updated-key",
     });
     expect(collectText(tree?.toJSON())).not.toContain("Local Configuration");
+    expect(collectText(tree?.toJSON())).toContain("Mobile API Chat");
+  });
+
+  it("returns to the history drawer from the settings secondary page", async () => {
+    let tree: renderer.ReactTestRenderer | undefined;
+
+    await act(async () => {
+      tree = renderer.create(<App routeName="home" title="Home" />);
+    });
+    await settleAsync();
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-open-drawer" }).props.onPress();
+    });
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-open-settings" }).props.onPress();
+    });
+
+    expect(collectText(tree?.toJSON())).toContain("Local Configuration");
+    expect(collectText(tree?.toJSON())).not.toContain("Mobile API Chat");
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-settings-back" }).props.onPress();
+    });
+
+    const output = collectText(tree?.toJSON());
+
+    expect(output).not.toContain("Local Configuration");
+    expect(output).toContain("Mobile API Chat");
+    expect(output).toContain("Settings");
   });
 
   it("sends composer input through the execution API", async () => {
@@ -342,13 +420,37 @@ function collectText(
     .join("");
 }
 
-function createAgwFetchMock() {
+function getSettingsActionBottomPadding(
+  tree: renderer.ReactTestRenderer
+): number {
+  const actionRows = tree.root.findAll(
+    (node) =>
+      Array.isArray(node.props.style) &&
+      node.props.style.includes(styles.configActionRow) &&
+      node.props.style.includes(styles.settingsActionRow)
+  );
+  const styleEntries = actionRows[0]?.props.style ?? [];
+  const inlineStyle = styleEntries.find(
+    (entry: unknown): entry is { paddingBottom: number } =>
+      typeof entry === "object" &&
+      entry !== null &&
+      "paddingBottom" in entry
+  );
+
+  return inlineStyle?.paddingBottom ?? 0;
+}
+
+function createAgwFetchMock({
+  includeDefaultSelections = false,
+}: {
+  includeDefaultSelections?: boolean;
+} = {}) {
   return async (input: RequestInfo | URL) => {
     const url = String(input);
     const pathname = new URL(url).pathname;
 
     if (pathname === "/api/projects") {
-      return jsonResponse([
+      const projectResponses = [
         {
           id: "project-1",
           name: "Mobile Workspace",
@@ -363,11 +465,23 @@ function createAgwFetchMock() {
           enable: true,
           extraSetting: "{}",
         },
-      ]);
+      ];
+
+      if (includeDefaultSelections) {
+        projectResponses.splice(1, 0, {
+          id: "default-built-in",
+          name: "Default Built In",
+          workspace: "D:\\work\\default-built-in",
+          enable: true,
+          extraSetting: "{}",
+        });
+      }
+
+      return jsonResponse(projectResponses);
     }
 
     if (pathname === "/api/agents") {
-      return jsonResponse([
+      const agentResponses = [
         {
           id: "agent-1",
           displayName: "Mobile Agent",
@@ -378,7 +492,17 @@ function createAgwFetchMock() {
           displayName: "Backend Agent Two",
           name: "backend-agent-two",
         },
-      ]);
+      ];
+
+      if (includeDefaultSelections) {
+        agentResponses.splice(1, 0, {
+          id: "agent-hello",
+          displayName: "Hello",
+          name: "hello",
+        });
+      }
+
+      return jsonResponse(agentResponses);
     }
 
     if (pathname === "/api/agentflows") {
@@ -415,6 +539,20 @@ function createAgwFetchMock() {
           title: "Project Two API Chat",
           createTime: "2026-05-22T11:00:00Z",
           updateTime: "2026-05-22T11:05:00Z",
+        },
+      ]);
+    }
+
+    if (pathname === "/api/projects/default-built-in/tasks") {
+      return jsonResponse([
+        {
+          id: "task-default",
+          projectId: "default-built-in",
+          contextId: "context-default",
+          status: 2,
+          title: "Default Built In Chat",
+          createTime: "2026-05-22T12:00:00Z",
+          updateTime: "2026-05-22T12:05:00Z",
         },
       ]);
     }
@@ -484,6 +622,33 @@ function createAgwFetchMock() {
       });
     }
 
+    if (pathname === "/api/projects/default-built-in/tasks/task-default") {
+      return jsonResponse({
+        id: "task-default",
+        projectId: "default-built-in",
+        contextId: "context-default",
+        status: 2,
+        title: "Default Built In Chat",
+        input: "Use defaults.",
+        createTime: "2026-05-22T12:00:00Z",
+        updateTime: "2026-05-22T12:05:00Z",
+        messageCount: 1,
+        messages: [
+          {
+            messageId: "message-default",
+            author: "Hello",
+            role: "assistant",
+            contents: [
+              {
+                type: "TextContent",
+                content: "Default built-in response from task history.",
+              },
+            ],
+          },
+        ],
+      });
+    }
+
     if (pathname === "/api/files/list") {
       return jsonResponse({
         items: [
@@ -527,6 +692,36 @@ function createAgwFetchMock() {
               {
                 type: "TextContent",
                 content: "Execution response from API.",
+              },
+            ],
+          },
+        ],
+      });
+    }
+
+    if (pathname === "/api/executions/agent-hello/execute") {
+      return jsonResponse({
+        taskId: "task-default",
+        messages: [
+          {
+            messageId: "message-user-default",
+            author: "$agw",
+            role: "user",
+            contents: [
+              {
+                type: "TextContent",
+                content: "Use the defaults",
+              },
+            ],
+          },
+          {
+            messageId: "message-assistant-default",
+            author: "Hello",
+            role: "assistant",
+            contents: [
+              {
+                type: "TextContent",
+                content: "Default execution response from API.",
               },
             ],
           },
