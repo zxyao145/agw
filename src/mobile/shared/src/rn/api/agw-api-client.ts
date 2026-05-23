@@ -173,14 +173,15 @@ function normalizeBaseUrlForPlatform(
   baseUrl: string,
   platform: typeof Platform.OS
 ): string {
-  if (platform !== "android") {
-    return baseUrl;
-  }
+  return baseUrl;
+  // if (platform !== "android") {
+  //   return baseUrl;
+  // }
 
-  return baseUrl.replace(
-    /^(https?:\/\/)(localhost|127\.0\.0\.1)(?=[:/]|$)/i,
-    (_match, protocol: string) => `${protocol}192.168.10.24`
-  );
+  // return baseUrl.replace(
+  //   /^(https?:\/\/)(localhost|127\.0\.0\.1)(?=[:/]|$)/i,
+  //   (_match, protocol: string) => `${protocol}192.168.10.24`
+  // );
 }
 
 async function readResponseBody(response: Response): Promise<unknown> {
