@@ -73,6 +73,7 @@ export const styles = StyleSheet.create({
   },
   panelScroll: {
     flex: 1,
+    paddingHorizontal: 16
   },
   emptyPanel: {
     alignItems: "center",
@@ -117,8 +118,7 @@ export const styles = StyleSheet.create({
   },
   selfMessageRow: {
     alignItems: "flex-end",
-    paddingLeft: 92,
-    width: "100%",
+    paddingLeft: 80,
   },
   selfBubble: {
     backgroundColor: colors.primary,
@@ -137,7 +137,7 @@ export const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "400",
     letterSpacing: 0,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   bubbleShadow: {
     elevation: 1,
@@ -148,8 +148,7 @@ export const styles = StyleSheet.create({
   },
   receiverGroup: {
     alignItems: "flex-start",
-    marginLeft: 48,
-    maxWidth: 276,
+    marginLeft: 0,
   },
   receiverGroupCompact: {
     alignItems: "flex-start",
@@ -185,7 +184,121 @@ export const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "400",
     letterSpacing: 0,
-    lineHeight: 20,
+    lineHeight: 22,
+  },
+  messageTitle: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    lineHeight: 14,
+    marginBottom: 6,
+  },
+  selfMessageTitle: {
+    color: colors.white,
+    opacity: 0.78,
+    textAlign: "right",
+  },
+  messageContentContainer: {
+    gap: 8,
+  },
+  messageContent: {
+    minWidth: 0,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  markdownBody: {
+    fontSize: 15,
+    fontWeight: "400",
+    letterSpacing: 0,
+    lineHeight: 22,
+  },
+  receiverMarkdownBody: {
+    color: colors.ink,
+  },
+  selfMarkdownBody: {
+    color: colors.white,
+  },
+  reasoningMarkdownBody: {
+    color: colors.muted,
+  },
+  markdownParagraph: {
+    marginBottom: 12,
+    marginTop: 0,
+  },
+  markdownStrong: {
+    fontWeight: "700",
+  },
+  markdownList: {
+    marginBottom: 8,
+    marginTop: 2,
+  },
+  markdownListItem: {
+    marginBottom: 4,
+  },
+  markdownCodeInline: {
+    backgroundColor: "#fdf6e3",
+    borderColor: colors.border,
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: colors.ink,
+    fontSize: 13,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  selfMarkdownCodeInline: {
+    backgroundColor: "#fdf6e3",
+    borderColor: colors.border,
+    color: colors.ink,
+  },
+  markdownCodeBlock: {
+    backgroundColor: "#fdf6e4",
+    borderColor: colors.border,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: colors.ink,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 0,
+    marginTop: 2,
+    padding: 10,
+  },
+  selfMarkdownCodeBlock: {
+    backgroundColor: "#fdf6e4",
+    borderColor: colors.border,
+    color: colors.ink,
+  },
+  toolGroup: {
+    alignSelf: "stretch",
+    borderColor: colors.border,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    marginHorizontal: 24,
+    padding: 10,
+  },
+  toolGroupHeader: {
+    borderBottomColor: colors.borderSoft,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 2,
+    paddingBottom: 8,
+  },
+  toolGroupEyebrow: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    lineHeight: 14,
+  },
+  toolGroupTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0,
+    lineHeight: 18,
+  },
+  toolGroupMessages: {
+    gap: 10,
   },
   typingIndicator: {
     alignItems: "center",

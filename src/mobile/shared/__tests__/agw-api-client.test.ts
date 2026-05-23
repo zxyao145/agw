@@ -71,7 +71,7 @@ describe("createAgwApiClient", () => {
     );
   });
 
-  it("maps localhost server domains to the configured Android host address", async () => {
+  it("keeps configured localhost server domains unchanged on Android", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
         code: 2000000,
@@ -91,7 +91,7 @@ describe("createAgwApiClient", () => {
     await client.getJson("/api/projects");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://192.168.10.24:5015/api/projects",
+      "http://localhost:5015/api/projects",
       {
         headers: { "X-API-Key": "mobile-key" },
         method: "GET",
