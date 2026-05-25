@@ -72,6 +72,8 @@ export function createAgwApiClient(
   };
 }
 
+export type AgwApiClient = ReturnType<typeof createAgwApiClient>;
+
 async function requestJson<T>(
   config: AgwLocalConfig,
   platform: typeof Platform.OS,

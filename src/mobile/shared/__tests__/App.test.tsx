@@ -107,7 +107,7 @@ describe("App", () => {
     expect(output).toContain("mobile-api.md");
     expect(output).not.toContain("Brand_Assets_Hero.png");
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:5015/api/files/list?path=D%3A%5Cwork%5Cmobile",
+      "http://localhost:5015/api/files/list?diff=true&path=D%3A%5Cwork%5Cmobile&recursive=true",
       expect.objectContaining({
         headers: { "X-API-Key": "test-api-key" },
         method: "GET",

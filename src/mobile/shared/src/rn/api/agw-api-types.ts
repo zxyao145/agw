@@ -69,10 +69,23 @@ export type AgwFileItem = {
   size?: number | null;
   modifiedTime?: string | null;
   gitStatus?: string | null;
+  children?: AgwFileItem[];
 };
 
 export type AgwFileListResponse = {
   items: AgwFileItem[];
+};
+
+export type AgwFileActionResponse = {
+  message: string;
+  success: boolean;
+};
+
+export type AgwGitDiffResponse = {
+  diff: string;
+  unchanged: boolean;
+  message?: string | null;
+  originalContent?: string | null;
 };
 
 export type AgwExecutionResponse = {

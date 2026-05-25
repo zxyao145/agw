@@ -6,8 +6,6 @@ import type {
   AgwAgent,
   AgwAgentflow,
   AgwExecutionResponse,
-  AgwFileItem,
-  AgwFileListResponse,
   AgwMessage,
   AgwProject,
   AgwTaskDetails,
@@ -64,7 +62,6 @@ function AgwMobilePage({
   const [tasks, setTasks] = React.useState<AgwTaskSummary[]>([]);
   const [currentTaskId, setCurrentTaskId] = React.useState<string | null>(null);
   const [messages, setMessages] = React.useState<AgwMessage[]>([]);
-  const [files, setFiles] = React.useState<AgwFileItem[]>([]);
   const [isDependenciesLoading, setIsDependenciesLoading] =
     React.useState(false);
   const [dependenciesError, setDependenciesError] = React.useState<
@@ -74,8 +71,6 @@ function AgwMobilePage({
   const [historyError, setHistoryError] = React.useState<string | null>(null);
   const [isChatLoading, setIsChatLoading] = React.useState(false);
   const [chatError, setChatError] = React.useState<string | null>(null);
-  const [isFilesLoading, setIsFilesLoading] = React.useState(false);
-  const [filesError, setFilesError] = React.useState<string | null>(null);
   const [composerText, setComposerText] = React.useState("");
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [executionError, setExecutionError] = React.useState<string | null>(
@@ -158,7 +153,6 @@ function AgwMobilePage({
       setTasks([]);
       setCurrentTaskId(null);
       setMessages([]);
-      setFiles([]);
       return;
     }
 
@@ -193,7 +187,6 @@ function AgwMobilePage({
         setTasks([]);
         setCurrentTaskId(null);
         setMessages([]);
-        setFiles([]);
         setDependenciesError(`Failed to load mobile data: ${getErrorMessage(error)}`);
       } finally {
         if (isMounted) {
@@ -354,54 +347,6 @@ function AgwMobilePage({
     };
   }, [apiClient, currentTaskId, selectedProjectId]);
 
-  React.useEffect(() => {
-    const workspace = selectedProject?.workspace?.trim();
-
-    if (!apiClient || !workspace) {
-      setFiles([]);
-      setFilesError(null);
-      setIsFilesLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-
-    async function loadFiles() {
-      setIsFilesLoading(true);
-      setFilesError(null);
-
-      try {
-        const fileList = await apiClient!.getJson<AgwFileListResponse>(
-          "/api/files/list",
-          { query: { path: workspace } }
-        );
-
-        if (!isMounted) {
-          return;
-        }
-
-        setFiles(fileList.items);
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        setFiles([]);
-        setFilesError(`Failed to load files: ${getErrorMessage(error)}`);
-      } finally {
-        if (isMounted) {
-          setIsFilesLoading(false);
-        }
-      }
-    }
-
-    loadFiles();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [apiClient, selectedProject]);
-
   function openSettings() {
     setIsDrawerOpen(true);
     setIsSettingsOpen(true);
@@ -426,7 +371,6 @@ function AgwMobilePage({
     setSelectedProjectId(projectId);
     setCurrentTaskId(null);
     setMessages([]);
-    setFiles([]);
     setExecutionError(null);
   }
 
@@ -508,9 +452,9 @@ function AgwMobilePage({
                 />
               ) : (
                 <FilesPanel
-                  error={dependenciesError ?? filesError}
-                  files={files}
-                  isLoading={isDependenciesLoading || isFilesLoading}
+                  apiClient={apiClient}
+                  dependenciesError={dependenciesError}
+                  isDependenciesLoading={isDependenciesLoading}
                   workspace={selectedProject?.workspace}
                 />
               )}
