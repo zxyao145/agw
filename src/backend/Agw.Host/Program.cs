@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 using Agw.A2A;
 using Agw.A2A.Extensions;
 using Agw.Agents;
@@ -27,6 +29,7 @@ using Agw.Tools;
 using Bens.Results;
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.OpenApi;
 
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
@@ -127,7 +130,41 @@ try
                 code: ErrorCodes.InvalidParam.Code);
     });
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddOpenApi();
+    builder.Services.AddOpenApi(options =>
+    {
+        options.AddSchemaTransformer((schema, context, cancellationToken) =>
+        {
+            if (context.JsonTypeInfo.Type == typeof(int) ||
+                context.JsonTypeInfo.Type == typeof(int?))
+            {
+                schema.Type = JsonSchemaType.Integer;
+                schema.Format = "int32";
+                schema.Pattern = null;
+            }
+
+            var type = context.JsonTypeInfo.Type;
+            if (type.IsClass)
+            {
+                foreach (var property in context.JsonTypeInfo.Properties)
+                {
+                    var propertyType = property.PropertyType;
+
+                    // 非 nullable value type，例如 int、long、bool、DateTime
+                    if ((propertyType.IsValueType || propertyType == typeof(string)) &&
+                        Nullable.GetUnderlyingType(propertyType) is null)
+                    {
+                        var jsonName = property.Name;
+
+                        schema.Required ??= new HashSet<string>();
+                        schema.Required.Add(jsonName);
+                    }
+                }
+            }
+
+
+            return Task.CompletedTask;
+        });
+    });
     builder.Services.AddApiResult();
     builder.Services.AddHttpClient();
     builder.Services.AddSingleton<IocUtil>();
