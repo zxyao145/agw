@@ -1,11 +1,10 @@
 import React from "react";
-import { Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createAgwApiClient, AgwApiError } from "../../api/agw-api-client";
 import type {
   AgwAgent,
   AgwAgentflow,
-  AgwExecutionResponse,
   AgwMessage,
   AgwProject,
   AgwTaskDetails,
@@ -18,6 +17,12 @@ import { Composer } from "./components/composer";
 import { ConfigSetupSheet } from "./components/config-setup-sheet";
 import { FilesPanel } from "./components/files-panel";
 import { HistoryDrawer } from "./components/history-drawer";
+import {
+  executeWithWebSocket,
+  mergeStreamingMessages,
+  parseExecutionWsMessage,
+  toExecutionWsUserInput,
+} from "./lib/execution-ws";
 import {
   DEFAULT_AGENT_LABEL,
   DEFAULT_PROJECT_VALUE,
@@ -76,6 +81,19 @@ function AgwMobilePage({
   const [executionError, setExecutionError] = React.useState<string | null>(
     null
   );
+  const chatScrollRef = React.useRef<ScrollView | null>(null);
+  const isTurnFinishedMessage = React.useCallback((message: AgwMessage): boolean => {
+    if (message.role?.toLowerCase() !== "system") {
+      return false;
+    }
+
+    return (
+      message.author === "$agw-server" &&
+      message.contents.some(
+        (content) => content.additionalProperties?.type === "turn-finished"
+      )
+    );
+  }, []);
 
   const apiClient = React.useMemo(
     () => (config ? createAgwApiClient(config) : null),
@@ -383,6 +401,7 @@ function AgwMobilePage({
     const input = composerText.trim();
     if (
       !apiClient ||
+      !config ||
       !selectedProjectId ||
       !selectedTarget ||
       !input ||
@@ -396,26 +415,39 @@ function AgwMobilePage({
 
     setComposerText("");
     setExecutionError(null);
+    setCurrentTaskId(executionTaskId);
     setMessages((currentMessages) => [...currentMessages, userMessage]);
     setIsExecuting(true);
 
     try {
-      const result = await apiClient.postJson<AgwExecutionResponse>(
-        `/api/executions/${encodeURIComponent(selectedTarget.id)}/execute`,
+      await executeWithWebSocket(
+        config.serverDomain,
+        selectedTarget.id,
         {
-          agentType: selectedTarget.agentType,
-          input,
           projectId: selectedProjectId,
           taskId: executionTaskId,
+          workspace: selectedProject?.workspace,
+          settingContent: selectedProject?.extraSetting,
+          agentType: selectedTarget.agentType,
+          input: toExecutionWsUserInput(userMessage),
+        },
+        (data) => {
+          const incomingMessage = parseExecutionWsMessage(data);
+          if (!incomingMessage || incomingMessage.role === "user") {
+            return;
+          }
+
+          setMessages((currentMessages) =>
+            mergeStreamingMessages(currentMessages, [incomingMessage])
+          );
+
+          if (isTurnFinishedMessage(incomingMessage)) {
+            setIsExecuting(false);
+          }
         }
       );
 
-      setCurrentTaskId(result.taskId ?? executionTaskId);
-      if (result.messages.length > 0) {
-        setMessages((currentMessages) =>
-          mergeMessages(currentMessages, result.messages)
-        );
-      }
+      setCurrentTaskId(executionTaskId);
 
       const latestTasks = await apiClient.getJson<AgwTaskSummary[]>(
         `/api/projects/${encodeURIComponent(selectedProjectId)}/tasks`
@@ -428,9 +460,40 @@ function AgwMobilePage({
     }
   }
 
+  async function clearCurrentTaskRecords() {
+    if (!apiClient || !selectedProjectId || !currentTaskId || isExecuting) {
+      return;
+    }
+
+    setExecutionError(null);
+
+    try {
+      await apiClient.deleteJson(
+        `/api/projects/${encodeURIComponent(
+          selectedProjectId
+        )}/tasks/${encodeURIComponent(currentTaskId)}/clear-records`
+      );
+      setMessages([]);
+    } catch (error) {
+      if (error instanceof AgwApiError && error.status === 404) {
+        return;
+      }
+
+      setExecutionError(`Failed to clear chat: ${getErrorMessage(error)}`);
+    }
+  }
+
+  function scrollChatToTop() {
+    chatScrollRef.current?.scrollTo({ animated: true, y: 0 });
+  }
+
   return (
     <View style={styles.root}>
-      <View style={styles.phoneFrame}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={safeAreaInsets.top}
+        style={styles.phoneFrame}
+      >
         {configLoadState === "loading" ? (
           <View style={styles.loadingPanel}>
             <Text style={styles.loadingText}>Loading Configuration</Text>
@@ -449,6 +512,7 @@ function AgwMobilePage({
                   error={dependenciesError ?? chatError ?? executionError}
                   isLoading={isDependenciesLoading || isChatLoading}
                   messages={messages}
+                  scrollViewRef={chatScrollRef}
                 />
               ) : (
                 <FilesPanel
@@ -467,7 +531,9 @@ function AgwMobilePage({
               }
               isSending={isExecuting}
               message={composerText}
+              onClear={clearCurrentTaskRecords}
               onMessageChange={setComposerText}
+              onScrollToTop={scrollChatToTop}
               onSend={sendMessage}
               safeBottom={safeAreaInsets.bottom}
             />
@@ -504,7 +570,7 @@ function AgwMobilePage({
             safeTop={safeAreaInsets.top}
           />
         ) : null}
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -523,30 +589,6 @@ function createUserMessage(content: string): AgwMessage {
     messageId: createUuid(),
     role: "user",
   };
-}
-
-function mergeMessages(
-  currentMessages: AgwMessage[],
-  incomingMessages: AgwMessage[]
-): AgwMessage[] {
-  const merged = [...currentMessages];
-  const indexesById = new Map(
-    merged.map((message, index) => [message.messageId, index])
-  );
-
-  incomingMessages.forEach((message) => {
-    const existingIndex = indexesById.get(message.messageId);
-
-    if (existingIndex === undefined) {
-      indexesById.set(message.messageId, merged.length);
-      merged.push(message);
-      return;
-    }
-
-    merged[existingIndex] = message;
-  });
-
-  return merged;
 }
 
 function createUuid(): string {

@@ -36,10 +36,12 @@ export function ChatPanel({
   error,
   isLoading,
   messages,
+  scrollViewRef,
 }: {
   error?: string | null;
   isLoading?: boolean;
   messages: AgwMessage[];
+  scrollViewRef?: React.RefObject<ScrollView | null>;
 }): React.JSX.Element {
   if (isLoading) {
     return (
@@ -69,6 +71,7 @@ export function ChatPanel({
     <ScrollView
       alwaysBounceVertical={false}
       contentContainerStyle={styles.chatContent}
+      ref={scrollViewRef}
       style={styles.panelScroll}
     >
       {processMessages(messages).map((item, index) =>

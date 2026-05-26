@@ -3,7 +3,57 @@ import renderer, { act } from "react-test-renderer";
 import { encodeConfigBase64Url } from "../src/rn/config/agw-config";
 import { readLocalConfig, writeLocalConfig } from "../src/rn/config/config-store";
 import App from "../src/rn/App";
+import { Composer } from "../src/rn/pages/home/components/composer";
 import { styles } from "../src/rn/pages/home/components/styles";
+
+class MockWebSocket {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+  static instances: MockWebSocket[] = [];
+
+  public static reset(): void {
+    this.instances = [];
+  }
+
+  public url: string;
+  public readyState = MockWebSocket.CONNECTING;
+  public sentData: string[] = [];
+  public onclose: ((event: { code: number; reason: string }) => void) | null = null;
+  public onerror: ((event: unknown) => void) | null = null;
+  public onmessage: ((event: { data: string }) => void) | null = null;
+  public onopen: ((event: { target: MockWebSocket }) => void) | null = null;
+
+  public constructor(url: string) {
+    this.url = url;
+    MockWebSocket.instances.push(this);
+    setTimeout(() => {
+      this.readyState = MockWebSocket.OPEN;
+      this.onopen?.({ target: this });
+    }, 0);
+  }
+
+  public send(data: string): void {
+    this.sentData.push(data);
+  }
+
+  public emitMessage(data: string): void {
+    if (this.onmessage) {
+      this.onmessage({ data });
+    }
+  }
+
+  public close(code = 1000, reason = ""): void {
+    this.readyState = MockWebSocket.CLOSING;
+    this.onclose?.({ code, reason });
+    this.readyState = MockWebSocket.CLOSED;
+  }
+}
+
+function getLatestWebSocket(): MockWebSocket | undefined {
+  return MockWebSocket.instances[MockWebSocket.instances.length - 1];
+}
 
 jest.mock("react-native-safe-area-context", () => {
   const React = require("react");
@@ -43,6 +93,8 @@ describe("App", () => {
     writeLocalConfigMock.mockResolvedValue(undefined);
     fetchMock.mockImplementation(createAgwFetchMock());
     globalThis.fetch = fetchMock as unknown as typeof fetch;
+    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+    MockWebSocket.reset();
   });
 
   afterEach(() => {
@@ -194,7 +246,7 @@ describe("App", () => {
     expect(collectText(tree?.toJSON())).toContain("Project Two API Chat");
   });
 
-  it("selects the built-in project and Hello agent by default when available", async () => {
+  it("starts a websocket execution stream for default selections", async () => {
     fetchMock.mockImplementation(
       createAgwFetchMock({ includeDefaultSelections: true })
     );
@@ -224,14 +276,57 @@ describe("App", () => {
     });
     await settleAsync();
 
-    const executionCall = fetchMock.mock.calls.find(([url]) =>
-      String(url).includes("/api/executions/agent-hello/execute")
-    );
+    const ws = getLatestWebSocket();
 
-    expect(executionCall).toBeDefined();
-    expect(JSON.parse(String(executionCall?.[1].body))).toMatchObject({
+    expect(ws).toBeDefined();
+
+    const sentPayloads = ws!.sentData.map((payload) => JSON.parse(payload));
+    expect(sentPayloads[0]).toMatchObject({
+      type: "SettingCommand",
       projectId: "default-built-in",
+      taskId: "task-default",
     });
+    expect(sentPayloads[1]).toMatchObject({
+      type: "ExecCommand",
+      agentType: 0,
+    });
+
+    await act(async () => {
+      ws!.emitMessage(
+        JSON.stringify({
+          messageId: "hello-assistant",
+          author: "Hello",
+          role: "assistant",
+          contents: [
+            {
+              type: "TextContent",
+              content: "Hello from stream.",
+            },
+          ],
+        })
+      );
+    });
+    await act(async () => {
+      ws!.emitMessage(
+        JSON.stringify({
+          messageId: "hello-system",
+          author: "$agw-server",
+          role: "system",
+          contents: [
+            {
+              type: "TextContent",
+              content: "Execution done.",
+              additionalProperties: {
+                type: "turn-finished",
+              },
+            },
+          ],
+        })
+      );
+    });
+
+    await settleAsync();
+    expect(collectText(tree?.toJSON())).toContain("Hello from stream.");
   });
 
   it("imports a Base64URL config when no local config exists", async () => {
@@ -349,7 +444,7 @@ describe("App", () => {
     expect(output).toContain("Settings");
   });
 
-  it("sends composer input through the execution API", async () => {
+  it("sends composer input through websocket stream", async () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
@@ -367,27 +462,159 @@ describe("App", () => {
       tree!.root.findByProps({ testID: "agw-send-message" }).props.onPress();
     });
     await settleAsync();
+    const ws = getLatestWebSocket();
 
-    const executionCall = fetchMock.mock.calls.find(([url]) =>
-      String(url).includes("/api/executions/agent-2/execute")
-    );
+    expect(ws).toBeDefined();
+    expect(ws!.sentData[0]).toBeDefined();
+    expect(ws!.sentData[1]).toBeDefined();
 
-    expect(executionCall).toBeDefined();
-    expect(executionCall?.[1]).toMatchObject({
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": "test-api-key",
-      },
-      method: "POST",
-    });
-    expect(JSON.parse(String(executionCall?.[1].body))).toEqual({
-      agentType: 0,
-      input: "Run the mobile task",
+    const settingCommand = JSON.parse(ws!.sentData[0]);
+    const execCommand = JSON.parse(ws!.sentData[1]);
+
+    expect(settingCommand).toMatchObject({
+      type: "SettingCommand",
       projectId: "project-1",
       taskId: "task-1",
+      settingContent: "{}",
     });
+    expect(execCommand).toMatchObject({
+      type: "ExecCommand",
+      agentType: 0,
+      input: {
+        messageId: expect.any(String),
+        author: "$agw",
+        contents: [{ type: "TextContent", content: "Run the mobile task" }],
+      },
+    });
+
+    await act(async () => {
+      ws!.emitMessage(
+        JSON.stringify({
+          messageId: "assistant-stream",
+          author: "Mobile Agent",
+          role: "assistant",
+          contents: [
+            {
+              type: "TextContent",
+              content: "Execution response from stream.",
+            },
+          ],
+        })
+      );
+    });
+    await act(async () => {
+      ws!.emitMessage(
+        JSON.stringify({
+          messageId: "system-end",
+          author: "$agw-server",
+          role: "system",
+          contents: [
+            {
+              type: "TextContent",
+              content: "",
+              additionalProperties: {
+                type: "turn-finished",
+              },
+            },
+          ],
+        })
+      );
+    });
+
+    await settleAsync();
+
     expect(collectText(tree?.toJSON())).toContain(
-      "Execution response from API."
+      "Execution response from stream."
+    );
+  });
+
+  it("matches the web composer top-right actions", async () => {
+    const onClear = jest.fn();
+    const onMessageChange = jest.fn();
+    const onScrollToTop = jest.fn();
+    let tree: renderer.ReactTestRenderer | undefined;
+
+    await act(async () => {
+      tree = renderer.create(
+        <Composer
+          message=""
+          onClear={onClear}
+          onMessageChange={onMessageChange}
+          onScrollToTop={onScrollToTop}
+          onSend={jest.fn()}
+          safeBottom={0}
+        />
+      );
+    });
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-quick-text-open" }).props.onPress();
+    });
+    await act(async () => {
+      tree!.root
+        .findByProps({ testID: "agw-quick-text-option-analyze" })
+        .props.onPress();
+    });
+
+    expect(onMessageChange).toHaveBeenCalledWith(
+      "Please analyze the code in this file and provide insights about "
+    );
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-clear-session" }).props.onPress();
+    });
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-scroll-to-top" }).props.onPress();
+    });
+
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(onScrollToTop).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      tree!.update(
+        <Composer
+          isSending
+          message=""
+          onClear={onClear}
+          onMessageChange={onMessageChange}
+          onScrollToTop={onScrollToTop}
+          onSend={jest.fn()}
+          safeBottom={0}
+        />
+      );
+    });
+
+    expect(
+      tree!.root.findByProps({ testID: "agw-clear-session" }).props.disabled
+    ).toBe(true);
+  });
+
+  it("clears current task records from the composer toolbar", async () => {
+    let tree: renderer.ReactTestRenderer | undefined;
+
+    await act(async () => {
+      tree = renderer.create(<App routeName="home" title="Home" />);
+    });
+    await settleAsync();
+
+    expect(collectText(tree?.toJSON())).toContain(
+      "Backend response from task history."
+    );
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-clear-session" }).props.onPress();
+    });
+    await settleAsync();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:5015/api/projects/project-1/tasks/task-1/clear-records",
+      expect.objectContaining({
+        headers: { "X-API-Key": "test-api-key" },
+        method: "DELETE",
+      })
+    );
+    expect(collectText(tree?.toJSON())).not.toContain(
+      "Backend response from task history."
     );
   });
 });
@@ -622,6 +849,10 @@ function createAgwFetchMock({
       });
     }
 
+    if (pathname === "/api/projects/project-1/tasks/task-1/clear-records") {
+      return jsonResponse(undefined);
+    }
+
     if (pathname === "/api/projects/default-built-in/tasks/task-default") {
       return jsonResponse({
         id: "task-default",
@@ -664,66 +895,6 @@ function createAgwFetchMock({
             type: "file",
             size: 1024,
             modifiedTime: "2026-05-22T09:00:00Z",
-          },
-        ],
-      });
-    }
-
-    if (pathname === "/api/executions/agent-2/execute") {
-      return jsonResponse({
-        taskId: "task-1",
-        messages: [
-          {
-            messageId: "message-user-2",
-            author: "$agw",
-            role: "user",
-            contents: [
-              {
-                type: "TextContent",
-                content: "Run the mobile task",
-              },
-            ],
-          },
-          {
-            messageId: "message-assistant-2",
-            author: "Mobile Agent",
-            role: "assistant",
-            contents: [
-              {
-                type: "TextContent",
-                content: "Execution response from API.",
-              },
-            ],
-          },
-        ],
-      });
-    }
-
-    if (pathname === "/api/executions/agent-hello/execute") {
-      return jsonResponse({
-        taskId: "task-default",
-        messages: [
-          {
-            messageId: "message-user-default",
-            author: "$agw",
-            role: "user",
-            contents: [
-              {
-                type: "TextContent",
-                content: "Use the defaults",
-              },
-            ],
-          },
-          {
-            messageId: "message-assistant-default",
-            author: "Hello",
-            role: "assistant",
-            contents: [
-              {
-                type: "TextContent",
-                content: "Default execution response from API.",
-              },
-            ],
           },
         ],
       });
