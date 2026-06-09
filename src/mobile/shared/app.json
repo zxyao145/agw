@@ -15,7 +15,8 @@
     },
     "android": {
       "package": "com.agw",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "softwareKeyboardLayoutMode": "resize"
     },
     "plugins": [
       [

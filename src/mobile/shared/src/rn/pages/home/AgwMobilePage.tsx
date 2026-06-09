@@ -1,5 +1,11 @@
 import React from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createAgwApiClient, AgwApiError } from "../../api/agw-api-client";
 import type {
@@ -50,7 +56,7 @@ function AgwMobilePage({
     "loading" | "ready" | "missing"
   >("loading");
   const [configLoadError, setConfigLoadError] = React.useState<string | null>(
-    null
+    null,
   );
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(initialSettingsOpen);
   const [isSettingsOpen, setIsSettingsOpen] =
@@ -79,30 +85,33 @@ function AgwMobilePage({
   const [composerText, setComposerText] = React.useState("");
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [executionError, setExecutionError] = React.useState<string | null>(
-    null
+    null,
   );
   const chatScrollRef = React.useRef<ScrollView | null>(null);
-  const isTurnFinishedMessage = React.useCallback((message: AgwMessage): boolean => {
-    if (message.role?.toLowerCase() !== "system") {
-      return false;
-    }
+  const isTurnFinishedMessage = React.useCallback(
+    (message: AgwMessage): boolean => {
+      if (message.role?.toLowerCase() !== "system") {
+        return false;
+      }
 
-    return (
-      message.author === "$agw-server" &&
-      message.contents.some(
-        (content) => content.additionalProperties?.type === "turn-finished"
-      )
-    );
-  }, []);
+      return (
+        message.author === "$agw-server" &&
+        message.contents.some(
+          (content) => content.additionalProperties?.type === "turn-finished",
+        )
+      );
+    },
+    [],
+  );
 
   const apiClient = React.useMemo(
     () => (config ? createAgwApiClient(config) : null),
-    [config]
+    [config],
   );
 
   const selectedProject = React.useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
-    [projects, selectedProjectId]
+    [projects, selectedProjectId],
   );
 
   const targets = React.useMemo(
@@ -112,14 +121,15 @@ function AgwMobilePage({
         agents,
         agentflows,
       }),
-    [agentflows, agents, selectedProjectId]
+    [agentflows, agents, selectedProjectId],
   );
 
   const selectedTarget = React.useMemo(
     () =>
-      targets.find((target) => getTargetValue(target) === selectedTargetValue) ??
-      null,
-    [selectedTargetValue, targets]
+      targets.find(
+        (target) => getTargetValue(target) === selectedTargetValue,
+      ) ?? null,
+    [selectedTargetValue, targets],
   );
 
   React.useEffect(() => {
@@ -144,7 +154,7 @@ function AgwMobilePage({
         setConfig(null);
         setConfigLoadState("missing");
         setConfigLoadError(
-          error instanceof Error ? error.message : "Configuration is invalid."
+          error instanceof Error ? error.message : "Configuration is invalid.",
         );
       }
     }
@@ -193,7 +203,9 @@ function AgwMobilePage({
 
         setProjects(nextProjects.filter((project) => project.enable));
         setAgents(nextAgents);
-        setAgentflows(nextAgentflows.filter((agentflow) => agentflow.enable !== false));
+        setAgentflows(
+          nextAgentflows.filter((agentflow) => agentflow.enable !== false),
+        );
       } catch (error) {
         if (!isMounted) {
           return;
@@ -205,7 +217,9 @@ function AgwMobilePage({
         setTasks([]);
         setCurrentTaskId(null);
         setMessages([]);
-        setDependenciesError(`Failed to load mobile data: ${getErrorMessage(error)}`);
+        setDependenciesError(
+          `Failed to load mobile data: ${getErrorMessage(error)}`,
+        );
       } finally {
         if (isMounted) {
           setIsDependenciesLoading(false);
@@ -232,7 +246,7 @@ function AgwMobilePage({
       const defaultProject = projects.find(
         (project) =>
           project.id === DEFAULT_PROJECT_VALUE ||
-          project.name === DEFAULT_PROJECT_VALUE
+          project.name === DEFAULT_PROJECT_VALUE,
       );
 
       return defaultProject?.id ?? projects[0]?.id ?? null;
@@ -250,7 +264,7 @@ function AgwMobilePage({
 
       const defaultTarget = targets.find(
         (target) =>
-          target.type === "agent" && target.label === DEFAULT_AGENT_LABEL
+          target.type === "agent" && target.label === DEFAULT_AGENT_LABEL,
       );
 
       return defaultTarget
@@ -278,7 +292,7 @@ function AgwMobilePage({
 
       try {
         const nextTasks = await apiClient!.getJson<AgwTaskSummary[]>(
-          `/api/projects/${encodeURIComponent(selectedProjectId!)}/tasks`
+          `/api/projects/${encodeURIComponent(selectedProjectId!)}/tasks`,
         );
 
         if (!isMounted) {
@@ -335,8 +349,8 @@ function AgwMobilePage({
       try {
         const taskDetails = await apiClient!.getJson<AgwTaskDetails>(
           `/api/projects/${encodeURIComponent(
-            selectedProjectId!
-          )}/tasks/${encodeURIComponent(currentTaskId!)}`
+            selectedProjectId!,
+          )}/tasks/${encodeURIComponent(currentTaskId!)}`,
         );
 
         if (!isMounted) {
@@ -438,19 +452,19 @@ function AgwMobilePage({
           }
 
           setMessages((currentMessages) =>
-            mergeStreamingMessages(currentMessages, [incomingMessage])
+            mergeStreamingMessages(currentMessages, [incomingMessage]),
           );
 
           if (isTurnFinishedMessage(incomingMessage)) {
             setIsExecuting(false);
           }
-        }
+        },
       );
 
       setCurrentTaskId(executionTaskId);
 
       const latestTasks = await apiClient.getJson<AgwTaskSummary[]>(
-        `/api/projects/${encodeURIComponent(selectedProjectId)}/tasks`
+        `/api/projects/${encodeURIComponent(selectedProjectId)}/tasks`,
       );
       setTasks(latestTasks);
     } catch (error) {
@@ -470,8 +484,8 @@ function AgwMobilePage({
     try {
       await apiClient.deleteJson(
         `/api/projects/${encodeURIComponent(
-          selectedProjectId
-        )}/tasks/${encodeURIComponent(currentTaskId)}/clear-records`
+          selectedProjectId,
+        )}/tasks/${encodeURIComponent(currentTaskId)}/clear-records`,
       );
       setMessages([]);
     } catch (error) {
@@ -488,12 +502,11 @@ function AgwMobilePage({
   }
 
   return (
-    <View style={styles.root}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={safeAreaInsets.top}
-        style={styles.phoneFrame}
-      >
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={styles.phoneFrame}
+    >
+      <View style={{ flex: 1, padding: 16 }}>
         {configLoadState === "loading" ? (
           <View style={styles.loadingPanel}>
             <Text style={styles.loadingText}>Loading Configuration</Text>
@@ -523,20 +536,22 @@ function AgwMobilePage({
                 />
               )}
             </View>
-            <Composer
-              disabled={
-                Boolean(dependenciesError) ||
-                !selectedProjectId ||
-                !selectedTarget
-              }
-              isSending={isExecuting}
-              message={composerText}
-              onClear={clearCurrentTaskRecords}
-              onMessageChange={setComposerText}
-              onScrollToTop={scrollChatToTop}
-              onSend={sendMessage}
-              safeBottom={safeAreaInsets.bottom}
-            />
+            <View style={{ paddingBottom: safeAreaInsets.bottom }}>
+              <Composer
+                disabled={
+                  Boolean(dependenciesError) ||
+                  !selectedProjectId ||
+                  !selectedTarget
+                }
+                isSending={isExecuting}
+                message={composerText}
+                onClear={clearCurrentTaskRecords}
+                onMessageChange={setComposerText}
+                onScrollToTop={scrollChatToTop}
+                onSend={sendMessage}
+                safeBottom={safeAreaInsets.bottom}
+              />
+            </View>
           </>
         )}
         {configLoadState !== "loading" && isDrawerOpen ? (
@@ -570,8 +585,8 @@ function AgwMobilePage({
             safeTop={safeAreaInsets.top}
           />
         ) : null}
-      </KeyboardAvoidingView>
-    </View>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 

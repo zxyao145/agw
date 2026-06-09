@@ -112,7 +112,9 @@ export function Composer({
     <View
       style={[
         styles.composer,
-        { paddingBottom: Math.max(32, safeBottom + 20) },
+        {
+          paddingBottom: 0,
+        },
       ]}
     >
       <View style={styles.toolbarRow}>

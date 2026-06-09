@@ -10,8 +10,6 @@ export const styles = StyleSheet.create({
   phoneFrame: {
     backgroundColor: colors.background,
     flex: 1,
-    maxWidth: 430,
-    width: "100%",
   },
   topBar: {
     alignItems: "center",
@@ -841,8 +839,8 @@ export const styles = StyleSheet.create({
     borderTopColor: colors.border,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,
-    paddingHorizontal: 20,
-    paddingTop: 17,
+    paddingHorizontal: 8,
+    paddingTop: 16,
   },
   toolbarRow: {
     alignItems: "center",
