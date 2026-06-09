@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<IExecutionCommandStrategy, ExecCommandStrategy>();
         services.AddScoped<IExecutionCommandStrategy, InterruptCommandStrategy>();
         services.AddScoped<CommandDispatcher>();
+        services.AddSingleton<LoggingMiddleware>();
 
         return services;
     }

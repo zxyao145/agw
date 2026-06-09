@@ -251,16 +251,29 @@ public class AgentflowRuntimeService : RuntimeServiceBase
                     break;
 
                 case AgentResponseUpdateEvent updateEvt when updateEvt.Data is AgentResponseUpdate update:
-                    _logger.LogInformation("AgentResponseUpdateEvent {ExecutorId}, {Data}", updateEvt.ExecutorId, updateEvt.Data);
+                    _logger.LogInformation("AgentResponseUpdateEvent {ExecutorId}, {Data}", updateEvt.ExecutorId,
+                        updateEvt.Data);
                     var chatMsg = update.ToAiMessage();
                     if (chatMsg != null)
                     {
                         yield return chatMsg;
                     }
+
                     break;
 
-                case WorkflowOutputEvent output:
-                    _logger.LogInformation("Workflow output: {Data}", output.Data);
+                case WorkflowOutputEvent outputEvt:
+                    _logger.LogInformation("Workflow output: {Data}", outputEvt.Data);
+                    // List<ChatMessage> result = outputEvt.As<List<ChatMessage>>()!;
+                    //
+                    // foreach (ChatMessage chatMessage in result)
+                    // {
+                    //     var agwMsg = chatMessage.ToAiMessage();
+                    //     if (agwMsg != null)
+                    //     {
+                    //         yield return agwMsg;
+                    //     }
+                    // }
+                    //
                     break;
 
                 case WorkflowErrorEvent error:
@@ -288,7 +301,8 @@ public class AgentflowRuntimeService : RuntimeServiceBase
             }
         };
 
-        return await ExecuteAsync(agentflowId, taskId, messages, cancellationToken, projectId, contextId).ConfigureAwait(false);
+        return await ExecuteAsync(agentflowId, taskId, messages, cancellationToken, projectId, contextId)
+            .ConfigureAwait(false);
     }
 
     public async Task<AgentflowExecutionResult?> ExecuteAsync(
@@ -299,7 +313,8 @@ public class AgentflowRuntimeService : RuntimeServiceBase
         Guid? projectId = null,
         string? contextId = null)
     {
-        return await ExecuteAsync(agentflowId, ProjectDefaults.GetDefaultProjectIdentifier(projectId), taskId, messages, cancellationToken).ConfigureAwait(false);
+        return await ExecuteAsync(agentflowId, ProjectDefaults.GetDefaultProjectIdentifier(projectId), taskId, messages,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<Workflow?> CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken = default)
@@ -358,7 +373,8 @@ public class AgentflowRuntimeService : RuntimeServiceBase
         foreach (var message in result)
         {
             var contentObj = new AgwTextContent { Content = message.Text };
-            var chatMsg = new AgwMessage(message.MessageId ?? string.Empty, message.AuthorName, message.Role, [contentObj]);
+            var chatMsg = new AgwMessage(message.MessageId ?? string.Empty, message.AuthorName, message.Role,
+                [contentObj]);
             outputs.Add(chatMsg);
         }
 
@@ -384,7 +400,8 @@ public class AgentflowRuntimeService : RuntimeServiceBase
             AIAgent? aiAgent;
             if (node.Type == AgentflowNodeType.AgentNode)
             {
-                aiAgent = await _agentRuntimeService.CreateAiAgentAsync(node.RelateId, cancellationToken: cancellationToken);
+                aiAgent = await _agentRuntimeService.CreateAiAgentAsync(node.RelateId,
+                    cancellationToken: cancellationToken);
             }
             else
             {
@@ -401,21 +418,70 @@ public class AgentflowRuntimeService : RuntimeServiceBase
             nodeIdToAgent[node.NodeId] = aiAgent;
         }
 
-        return agentflow.Pattern switch
+        Workflow? workflow = null;
+        switch (agentflow.Pattern)
         {
-            AgentflowOrchestrationPattern.Concurrent => MsAgentWorkflowBuilder.BuildConcurrent(aiAgents),
-            AgentflowOrchestrationPattern.Sequential => MsAgentWorkflowBuilder.BuildSequential(aiAgents),
-            AgentflowOrchestrationPattern.GroupChat => MsAgentWorkflowBuilder.CreateGroupChatBuilderWith(
-                    agents => new RoundRobinGroupChatManager(agents)
-                    {
-                        MaximumIterationCount = GetConfigInt(config, "maximumIterationCount", 5)
-                    })
-                .AddParticipants(aiAgents.ToArray())
-                .Build(),
-            AgentflowOrchestrationPattern.Handoff => DxAgentWorkflowBuilder.BuildHandoff(aiAgents, agentflowEdges, nodeIdToAgent),
-            AgentflowOrchestrationPattern.Magentic => throw new AgwException(ErrorCodes.MagenticNotSupported, "Magentic not supported now"),
-            _ => null
-        };
+            case AgentflowOrchestrationPattern.Concurrent:
+            {
+                var options = new AIAgentHostOptions
+                {
+                    ForwardIncomingMessages = false,
+                    ReassignOtherAgentsAsUsers = false
+                };
+                var executorBindings = aiAgents
+                        .Select(x => x.BindAsExecutor(options))
+                        .ToList()
+                    ;
+
+                if (executorBindings.Count == 0)
+                {
+                    throw new ArgumentException("Executors cannot be empty.", nameof(executorBindings));
+                }
+
+                var builder = new WorkflowBuilder(executorBindings[0]);
+                for (var i = 0; i < executorBindings.Count - 1; i++)
+                {
+                    builder.AddEdge(executorBindings[i], executorBindings[i + 1]);
+                }
+
+                workflow = builder.Build();
+
+                // workflow = MsAgentWorkflowBuilder.BuildConcurrent(aiAgents);
+                break;
+            }
+            case AgentflowOrchestrationPattern.Sequential:
+            {
+                workflow = MsAgentWorkflowBuilder.BuildSequential(aiAgents);
+                break;
+            }
+            case AgentflowOrchestrationPattern.GroupChat:
+            {
+                workflow = MsAgentWorkflowBuilder.CreateGroupChatBuilderWith(agents =>
+                        new RoundRobinGroupChatManager(agents)
+                        {
+                            MaximumIterationCount = GetConfigInt(config, "maximumIterationCount", 5)
+                        })
+                    .AddParticipants(aiAgents.ToArray())
+                    .Build();
+                break;
+            }
+            case AgentflowOrchestrationPattern.Handoff:
+            {
+                workflow = DxAgentWorkflowBuilder.BuildHandoff(aiAgents, agentflowEdges,
+                    nodeIdToAgent);
+                break;
+            }
+            case AgentflowOrchestrationPattern.Magentic:
+                throw new AgwException(ErrorCodes.MagenticNotSupported,
+                    "Magentic not supported now");
+            default:
+                workflow = null;
+                break;
+        }
+
+        ;
+
+        return workflow;
     }
 
     private async Task<IReadOnlyCollection<Guid>> ListExistingAgentIdsAsync(IReadOnlyList<AgentflowNode> nodes)

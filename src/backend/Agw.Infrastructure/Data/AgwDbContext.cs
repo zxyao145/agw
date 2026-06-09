@@ -277,7 +277,7 @@ public class AgwDbContext : DbContext
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue("Untitled");
             entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
 
-            entity.HasIndex(e => e.ContextId).IsUnique();
+            entity.HasIndex(e => e.ContextId);
             entity.HasIndex(e => e.ProjectId);
             entity.HasIndex(e => new { e.ProjectId, e.Status, e.UpdateTime });
 

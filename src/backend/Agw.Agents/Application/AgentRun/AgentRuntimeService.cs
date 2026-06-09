@@ -33,6 +33,7 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
     private readonly IProjectTaskSessionBindingService _projectTaskSessionBindingService;
     private readonly IWebHostEnvironment _webHostEnvironment;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
+    private readonly LoggingMiddleware _loggingMiddleware;
 
     public AgentRuntimeService(
         AgentAppService agentAppService,
@@ -44,7 +45,7 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
         IProjectTaskSessionBindingService projectTaskSessionBindingService,
         IWebHostEnvironment webHostEnvironment,
         IAgwFileSystemResolver fileSystemResolver,
-        ILogger<AgentRuntimeService> logger)
+        ILogger<AgentRuntimeService> logger, LoggingMiddleware loggingMiddleware)
     {
         _agentAppService = agentAppService;
         _projectAppService = projectAppService;
@@ -56,6 +57,7 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
         _webHostEnvironment = webHostEnvironment;
         _fileSystemResolver = fileSystemResolver;
         _logger = logger;
+        _loggingMiddleware = loggingMiddleware;
     }
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(AgentExecSession session, AgwUserInput input, [EnumeratorCancellation] CancellationToken cancellationToken = default)

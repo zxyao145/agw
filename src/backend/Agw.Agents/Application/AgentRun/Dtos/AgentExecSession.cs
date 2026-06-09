@@ -6,8 +6,6 @@ using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Models;
 
-using ClaudeCodeSdk.MAF;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;

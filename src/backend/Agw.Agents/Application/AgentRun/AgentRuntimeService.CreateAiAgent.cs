@@ -201,7 +201,7 @@ public partial class AgentRuntimeService
         var skillsProvider = await CreateSkillsProviderAsync(agentDefinition.Id).ConfigureAwait(false);
 
         string workspace = project.GetMustWorkspace();
-        return provider.ProviderType switch
+        AIAgent aiAgent = provider.ProviderType switch
         {
             ProviderType.OpenAI => CreateOpenAiAgent(agentDefinition, model, provider, authConfig, tools,
                 skillsProvider, workspace),
@@ -210,6 +210,14 @@ public partial class AgentRuntimeService
             _ => throw new AgwException(ErrorCodes.UnsupportedProviderType,
                 $"Provider type '{provider.ProviderType}' is not supported")
         };
+
+
+        aiAgent = aiAgent.AsBuilder()
+            .Use(runFunc: _loggingMiddleware.LogRunMiddleware,
+                runStreamingFunc: _loggingMiddleware.LogStreamingMiddleware
+                )
+            .Build();
+        return aiAgent;
     }
 
     private AIAgent CreateOpenAiAgent(

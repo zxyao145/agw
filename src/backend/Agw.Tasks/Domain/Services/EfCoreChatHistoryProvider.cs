@@ -137,7 +137,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         var now = DateTime.UtcNow;
         var projectTask = await dbContext.Set<ProjectTask>()
-            .SingleOrDefaultAsync(x => x.Id == ParseSessionTaskId(state.TaskId), cancellationToken)
+            .SingleOrDefaultAsync(x => x.Id == ParseSessionTaskId(state.ContextId), cancellationToken)
             .ConfigureAwait(false);
 
         if (projectTask == null)

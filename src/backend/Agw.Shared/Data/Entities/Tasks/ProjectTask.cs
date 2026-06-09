@@ -7,7 +7,7 @@ namespace Agw.Shared.Data.Entities.Tasks;
 [Table("project_task")]
 public class ProjectTask : BaseEntity
 {
-    // as session id
+    // task 是 context 中某个具体的任务
     public Guid Id { get; set; }
 
     public Guid ProjectId { get; set; }
