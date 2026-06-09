@@ -17,6 +17,7 @@ import {
   MessagesSquare,
   Clock,
   Gauge,
+  Settings,
   // Waypoints,
   // Hammer,
 } from "lucide-react";
@@ -137,6 +138,18 @@ const navItems: SidebarMenuGroupProps[] = [
         title: "Integrations (beta)",
         isActive: true,
         icon: <Cable />,
+      },
+    ],
+  },
+
+  {
+    groupLable: "System",
+    menus: [
+      {
+        url: "/settings",
+        title: "Settings",
+        isActive: true,
+        icon: <Settings />,
       },
     ],
   },

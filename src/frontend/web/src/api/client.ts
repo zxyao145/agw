@@ -2,6 +2,47 @@ import type { paths } from "./openapi";
 
 export type ApiMethod = "get" | "post" | "put" | "delete";
 
+const API_KEY_HEADER = "X-API-Key";
+const API_KEY_STORAGE_KEY = "agw.apiKey";
+
+let cachedApiKey: string | null = readApiKeyFromStorage();
+
+function readApiKeyFromStorage(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(API_KEY_STORAGE_KEY);
+    return value && value.length > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getApiKey(): string | null {
+  return cachedApiKey;
+}
+
+export function setApiKey(value: string | null): void {
+  const next = value && value.length > 0 ? value : null;
+  cachedApiKey = next;
+  if (typeof window === "undefined") return;
+  try {
+    if (next === null) {
+      window.localStorage.removeItem(API_KEY_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(API_KEY_STORAGE_KEY, next);
+    }
+  } catch {
+    // Ignore storage failures (private mode, quota, etc.) — cache still works for the session.
+  }
+}
+
+function hasHeader(headers: HeadersInit, name: string): boolean {
+  const lower = name.toLowerCase();
+  if (headers instanceof Headers) return headers.has(name);
+  if (Array.isArray(headers)) return headers.some(([k]) => k.toLowerCase() === lower);
+  return Object.keys(headers).some((k) => k.toLowerCase() === lower);
+}
+
 export type PathsWith<M extends ApiMethod> = {
   [P in keyof paths]-?: M extends keyof paths[P] ? P : never;
 }[keyof paths];
@@ -197,6 +238,11 @@ export async function apiRequest(
   const url = appendQuery(urlWithPath, opts.params?.query);
 
   const headers: HeadersInit = { ...opts.headers };
+
+  if (cachedApiKey && !hasHeader(headers, API_KEY_HEADER)) {
+    (headers as Record<string, string>)[API_KEY_HEADER] = cachedApiKey;
+  }
+
   const init: RequestInit = {
     method: method.toUpperCase(),
     headers,
