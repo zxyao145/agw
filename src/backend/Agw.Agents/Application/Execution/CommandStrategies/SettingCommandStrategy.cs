@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
 using Agw.Shared.Contracts.Tasks;
@@ -24,8 +22,6 @@ internal sealed class SettingCommandStrategy : IExecutionCommandStrategy
         var normalizedSettings = new SettingCommand(
             settings.ProjectId,
             settings.TaskId,
-            settings.Workspace,
-            settings.SettingContent,
             new Dictionary<string, string>(settings.EnvironmentVariables));
         if (await _taskAppService.HasTaskAsync(normalizedSettings.TaskId, cancellationToken: cancellationToken))
         {
@@ -42,12 +38,6 @@ internal sealed class SettingCommandStrategy : IExecutionCommandStrategy
         ExecutionCommandContext context)
     {
         var settingCommand = (SettingCommand)command;
-        if (!IsJsonObject(settingCommand.SettingContent))
-        {
-            await context.SendErrorAsync("SettingContent must be a JSON object string.");
-            return default;
-        }
-
         var normalizedSettings = await NormalizeSettingsAsync(
             settingCommand,
             context.CancellationToken);
@@ -73,23 +63,5 @@ internal sealed class SettingCommandStrategy : IExecutionCommandStrategy
         agentSession.CancelActiveRequest();
         await agentSession.DisposeAsync();
         return null;
-    }
-
-    private static bool IsJsonObject(string settingContent)
-    {
-        if (string.IsNullOrWhiteSpace(settingContent))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(settingContent);
-            return document.RootElement.ValueKind == JsonValueKind.Object;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
     }
 }

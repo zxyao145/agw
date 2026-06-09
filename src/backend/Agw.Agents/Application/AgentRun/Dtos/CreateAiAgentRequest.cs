@@ -8,13 +8,12 @@ public sealed class CreateAiAgentRequest
 
     public Guid? TaskId { get; init; }
 
+    /// <summary>
+    /// external agent session id
+    /// </summary>
     public Guid? ProviderSessionId { get; init; }
 
     public required Agent Agent { get; init; }
-
-    public string? ExtraOverride { get; init; }
-
-    public string? Workspace { get; init; }
 
     public IReadOnlyDictionary<string, string>? EnvironmentVariables { get; init; }
 

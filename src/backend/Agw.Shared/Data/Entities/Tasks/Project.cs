@@ -17,4 +17,13 @@ public class Project : BaseEntity, IAggregateRoot
     public string? ExtraSetting { get; set; }
 
     public ICollection<ProjectTask> Tasks { get; set; } = new List<ProjectTask>();
+
+    public string GetMustWorkspace()
+    {
+        if (string.IsNullOrEmpty(Workspace))
+        {
+            return "~/.agw/temp";
+        }
+        return Workspace;
+    }
 }

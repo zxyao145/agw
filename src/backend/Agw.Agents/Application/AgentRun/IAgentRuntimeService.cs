@@ -9,7 +9,7 @@ namespace Agw.Agents.Application.AgentRun;
 
 public interface IAgentRuntimeService
 {
-    Task<AIAgent?> CreateAiAgentAsync(Guid agentId, string? extraOverride = null, CancellationToken cancellationToken = default);
+    Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default);
 
     Task<AgentExecSession?> CreateSessionAsync(
         Guid agentId,

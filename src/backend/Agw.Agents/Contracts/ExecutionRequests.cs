@@ -21,24 +21,16 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public SettingCommand(
         Guid projectId,
         Guid taskId,
-        string? workspace = "~/.agw/temp",
-        string settingContent = "{}",
         Dictionary<string, string>? environmentVariables = null)
     {
         ProjectId = projectId;
         TaskId = taskId;
-        Workspace = workspace;
-        SettingContent = settingContent;
         EnvironmentVariables = environmentVariables ?? new Dictionary<string, string>();
     }
 
     public Guid ProjectId { get; set; }
 
     public Guid TaskId { get; set; }
-
-    public string? Workspace { get; set; }
-
-    public string SettingContent { get; set; }
 
     public Dictionary<string, string> EnvironmentVariables
     {
@@ -61,10 +53,8 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
             return false;
         }
 
-        return left.SettingContent == right.SettingContent
-            && left.ProjectId == right.ProjectId
+        return left.ProjectId == right.ProjectId
             && left.TaskId == right.TaskId
-            && left.Workspace == right.Workspace
             && EnvironmentVariablesEqual(left.EnvironmentVariables, right.EnvironmentVariables);
     }
 
@@ -76,10 +66,8 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
 
     public override int GetHashCode() =>
         HashCode.Combine(
-            SettingContent,
             ProjectId,
             TaskId,
-            Workspace,
             GetEnvironmentVariablesHashCode(EnvironmentVariables));
 
     private static bool EnvironmentVariablesEqual(

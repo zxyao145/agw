@@ -14,9 +14,7 @@ test("chat URL settings round trip as base64 url-safe JSON", () => {
     agentType: 0,
     agentId: "agent-1",
     chatSettings: {
-      workspace: "D:\\source\\示例",
       envVars: [{ key: "OPENAI_API_KEY", value: "sk test value" }],
-      extraSettingText: '{\n  "language": "中文"\n}',
     },
   };
 
@@ -36,6 +34,16 @@ test("chat URL settings reject malformed values", () => {
         agentType: 0,
         agentId: "agent-1",
         workspace: "D:\\source\\repo",
+      }),
+    ),
+    null,
+  );
+  assert.equal(
+    decodeChatUrlSettings(
+      encodeChatUrlSettings({
+        agentType: 0,
+        agentId: "agent-1",
+        extraSettingText: '{"foo":"bar"}',
       }),
     ),
     null,

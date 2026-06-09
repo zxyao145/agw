@@ -1,9 +1,11 @@
 using Agw.Agents.Application.AgentRun;
 using Agw.Agents.ExternalAgents;
+using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 
 using ClaudeCodeSdk.MAF;
+using ClaudeCodeSdk.Types;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -119,7 +121,9 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void BuildCodexAIAgentOptions_WhenThreadStartedCallbackProvided_PreservesCallback()
     {
-        ValueTask OnThreadStartedAsync(string threadId, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+        ValueTask OnThreadStartedAsync(string threadId, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
+
         Func<string, CancellationToken, ValueTask> callback = OnThreadStartedAsync;
 
         var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
@@ -166,34 +170,23 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public async Task CreateCodexAgent_WhenResumeRequested_CreatesSessionForTaskThread()
     {
-        var service = new AgentRuntimeService(
-            agentAppService: null!,
-            projectAppService: null!,
-            toolRegistry: null!,
-            cache: null!,
-            chatHistoryProvider: null!,
-            providerSessionState: null!,
-            projectTaskSessionBindingService: null!,
-            webHostEnvironment: null!,
-            fileSystemResolver: null!,
-            logger: NullLogger<AgentRuntimeService>.Instance);
+        var service = CreateRuntimeServiceForReflection();
         var method = typeof(AgentRuntimeService).GetMethod(
             "CreateCodexAgent",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
             [
-                typeof(string),
-                typeof(string),
+                typeof(Project),
                 typeof(Guid?),
                 typeof(bool),
                 typeof(IReadOnlyDictionary<string, string>),
                 typeof(Func<string, CancellationToken, ValueTask>)
             ]);
         var providerThreadId = Guid.Parse("33333333-3333-3333-3333-333333333333");
-        var extra = JsonUtil.Serialize(new CodexAIAgentOptions());
+        var project = new Project { ExtraSetting = JsonUtil.Serialize(new CodexAIAgentOptions()) };
 
         Assert.NotNull(method);
         var agent = Assert.IsAssignableFrom<AIAgent>(
-            method.Invoke(service, [extra, null, providerThreadId, true, null, null]));
+            method.Invoke(service, [project, providerThreadId, true, null, null]));
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
         var codexSession = Assert.IsType<CodexAgentSession>(session);
 
@@ -208,20 +201,22 @@ public class AgentRuntimeServiceCompositionTests
             "CreateCodexAgent",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
             [
-                typeof(string),
-                typeof(string),
+                typeof(Project),
                 typeof(Guid?),
                 typeof(bool),
                 typeof(IReadOnlyDictionary<string, string>),
                 typeof(Func<string, CancellationToken, ValueTask>)
             ]);
-        var extra = JsonUtil.Serialize(new CodexAIAgentOptions());
-        ValueTask OnThreadStartedAsync(string threadId, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+        var project = new Project { ExtraSetting = JsonUtil.Serialize(new CodexAIAgentOptions()) };
+
+        ValueTask OnThreadStartedAsync(string threadId, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
+
         Func<string, CancellationToken, ValueTask> callback = OnThreadStartedAsync;
 
         Assert.NotNull(method);
         var agent = Assert.IsAssignableFrom<AIAgent>(
-            method.Invoke(service, [extra, null, null, false, null, callback]));
+            method.Invoke(service, [project, null, false, null, callback]));
         var options = GetPrivateField<CodexAIAgentOptions>(agent, "_options");
 
         Assert.Same(callback, options.OnThreadStartedAsync);
@@ -235,13 +230,16 @@ public class AgentRuntimeServiceCompositionTests
             "CreateClaudeCodeAgent",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
             [
-                typeof(string),
-                typeof(string),
+                typeof(Project),
                 typeof(Guid?),
                 typeof(bool),
                 typeof(IReadOnlyDictionary<string, string>)
             ]);
-        var extra = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions());
+        var project = new Project
+        {
+            ExtraSetting = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions()
+                { PermissionMode = PermissionMode.bypassPermissions, })
+        };
         var environmentVariables = new Dictionary<string, string>
         {
             ["AGW_TOKEN"] = "secret"
@@ -249,7 +247,7 @@ public class AgentRuntimeServiceCompositionTests
 
         Assert.NotNull(method);
         var agent = Assert.IsAssignableFrom<AIAgent>(
-            method.Invoke(service, [extra, null, null, false, environmentVariables]));
+            method.Invoke(service, [project, null, false, environmentVariables]));
         var options = GetPrivateField<ClaudeCodeAIAgentOptions>(agent, "_options");
 
         Assert.NotNull(options.EnvironmentVariables);
@@ -264,24 +262,26 @@ public class AgentRuntimeServiceCompositionTests
             "CreateCodexAgent",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
             [
-                typeof(string),
-                typeof(string),
+                typeof(Project),
                 typeof(Guid?),
                 typeof(bool),
                 typeof(IReadOnlyDictionary<string, string>),
                 typeof(Func<string, CancellationToken, ValueTask>)
             ]);
-        var extra = JsonUtil.Serialize(new CodexAIAgentOptions
+        var project = new Project
         {
-            CodexOptions = new CodexOptions
+            ExtraSetting = JsonUtil.Serialize(new CodexAIAgentOptions
             {
-                Env = new Dictionary<string, string>
+                CodexOptions = new CodexOptions
                 {
-                    ["EXISTING"] = "kept",
-                    ["AGW_TOKEN"] = "old"
+                    Env = new Dictionary<string, string>
+                    {
+                        ["EXISTING"] = "kept",
+                        ["AGW_TOKEN"] = "old"
+                    }
                 }
-            }
-        });
+            })
+        };
         var environmentVariables = new Dictionary<string, string>
         {
             ["AGW_TOKEN"] = "secret"
@@ -289,7 +289,7 @@ public class AgentRuntimeServiceCompositionTests
 
         Assert.NotNull(method);
         var agent = Assert.IsAssignableFrom<AIAgent>(
-            method.Invoke(service, [extra, null, null, false, environmentVariables, null]));
+            method.Invoke(service, [project, null, false, environmentVariables, null]));
         var options = GetPrivateField<CodexAIAgentOptions>(agent, "_options");
 
         Assert.NotNull(options.CodexOptions.Env);

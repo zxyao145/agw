@@ -36,7 +36,6 @@ public class ExecutionConnectionStateEnvironmentVariablesTests
         return new SettingCommand(
             projectId,
             taskId,
-            settingContent: "{}",
             environmentVariables: new Dictionary<string, string>(environmentVariables));
     }
 }

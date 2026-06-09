@@ -27,7 +27,6 @@ public class ExecutionRequestsTests
         var request = JsonUtil.Deserialize<AgentRunCommand>(payload);
 
         var settingRequest = Assert.IsType<SettingCommand>(request);
-        Assert.Equal("{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}", settingRequest.SettingContent);
         Assert.Equal(projectId, settingRequest.ProjectId);
         Assert.Equal(taskId, settingRequest.TaskId);
     }
@@ -129,7 +128,6 @@ public class ExecutionRequestsTests
         return new SettingCommand(
             projectId,
             taskId,
-            settingContent: "{}",
             environmentVariables: new Dictionary<string, string>(environmentVariables));
     }
 }

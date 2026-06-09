@@ -18,6 +18,7 @@ using Anthropic;
 using Anthropic.Core;
 
 using ClaudeCodeSdk.MAF;
+using ClaudeCodeSdk.Types;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -35,7 +36,6 @@ public partial class AgentRuntimeService
 {
     public async Task<AIAgent?> CreateAiAgentAsync(
         Guid agentId,
-        string? extraOverride = null,
         CancellationToken cancellationToken = default)
     {
         var agent = await _agentAppService.GetAgentAsync(agentId);
@@ -47,7 +47,6 @@ public partial class AgentRuntimeService
         return await CreateAiAgentAsync(new CreateAiAgentRequest
         {
             Agent = agent,
-            ExtraOverride = extraOverride,
         }, cancellationToken);
     }
 
@@ -67,7 +66,7 @@ public partial class AgentRuntimeService
         }
 
 
-        return await CreateDefinitionAgentAsync(request.Agent, request.Workspace, project, cancellationToken)
+        return await CreateDefinitionAgentAsync(request.Agent, project, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -82,7 +81,6 @@ public partial class AgentRuntimeService
             return false;
         }
 
-        var extra = request.ExtraOverride ?? request.Agent.Extra;
         aiAgent = request.Agent.Name switch
         {
             AgentNames.ClaudeCode => CreateClaudeCodeAgent(
@@ -108,23 +106,25 @@ public partial class AgentRuntimeService
         IReadOnlyDictionary<string, string>? environmentVariables)
     {
         string? extra = project.ExtraSetting;
-        if (string.IsNullOrWhiteSpace(extra))
+        if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
         {
-            extra = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions());
+            extra = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions()
+                { PermissionMode = PermissionMode.bypassPermissions, });
         }
+
         var options = JsonUtil.Deserialize<ClaudeCodeAIAgentOptions>(extra);
         if (options == null)
         {
             _logger.LogError("agent.Extra Deserialize to options error");
             return null;
         }
-        
+
         options = options with
         {
             WorkingDirectory = project.Workspace,
             ChatHistoryProvider = _chatHistoryProvider
         };
-        
+
         if (taskId != null)
         {
             options = resume
@@ -144,7 +144,7 @@ public partial class AgentRuntimeService
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync)
     {
         string? extra = project.ExtraSetting;
-        if (string.IsNullOrWhiteSpace(extra))
+        if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
         {
             extra = JsonUtil.Serialize(new CodexAIAgentOptions());
         }
@@ -171,7 +171,7 @@ public partial class AgentRuntimeService
 
     #region DefinitionAgent
 
-    private async Task<AIAgent?> CreateDefinitionAgentAsync(Agent agentDefinition, string? workspace, Project project,
+    private async Task<AIAgent?> CreateDefinitionAgentAsync(Agent agentDefinition, Project project,
         CancellationToken cancellationToken)
     {
         if (!agentDefinition.ModelProviderId.HasValue)
@@ -200,6 +200,7 @@ public partial class AgentRuntimeService
             await CreateAgentTools(agentDefinition, project.Id, cancellationToken).ConfigureAwait(false);
         var skillsProvider = await CreateSkillsProviderAsync(agentDefinition.Id).ConfigureAwait(false);
 
+        string workspace = project.GetMustWorkspace();
         return provider.ProviderType switch
         {
             ProviderType.OpenAI => CreateOpenAiAgent(agentDefinition, model, provider, authConfig, tools,
@@ -414,6 +415,30 @@ public partial class AgentRuntimeService
         }
 
         return Path.Combine(_webHostEnvironment.ContentRootPath, "wwwroot");
+    }
+
+    private static bool IsEmptyJsonObject(string value)
+    {
+        var hasOpen = false;
+        foreach (var c in value)
+        {
+            if (char.IsWhiteSpace(c))
+            {
+                continue;
+            }
+
+            if (!hasOpen)
+            {
+                if (c != '{') return false;
+                hasOpen = true;
+                continue;
+            }
+
+            if (c != '}') return false;
+            return true;
+        }
+
+        return false;
     }
 
     #endregion

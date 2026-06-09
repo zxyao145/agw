@@ -3,7 +3,6 @@ using System.Text.Json;
 
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Application.Agents;
-using Agw.Agents.ExternalAgents;
 using Agw.Domain.Services;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Storage;
@@ -129,12 +128,9 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
 
 
         projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
-        var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
-        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, null);
         var aiAgent = await CreateAiAgentAsync(new CreateAiAgentRequest
         {
             Agent = agent,
-            ExtraOverride = mergedExtra,
             ProjectId = projectId
         }, cancellationToken);
         if (aiAgent == null)
@@ -212,17 +208,6 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
         await _cache.SetAsync(taskId, serialized, cancellationToken: cancellationToken);
     }
 
-    private string? MergeExtraSettings(string? agentExtra, string? projectExtraSetting, string? requestExtraSetting) =>
-        AgentRuntimeServiceUtil.MergeExtraSettings(
-            agentExtra,
-            projectExtraSetting,
-            requestExtraSetting,
-            settingName => _logger.LogWarning("{SettingName} is not a valid JSON object. Skipping it.", settingName));
-
-    private Task<string?> GetProjectExtraSettingAsync(Guid? projectId)
-    {
-        return _projectAppService.GetProjectExtraSettingAsync(projectId);
-    }
 
 
     private async Task<AgentSession> CreateOrRestoreSessionAsync(AIAgent aiAgent, Guid? taskId)

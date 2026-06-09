@@ -7,9 +7,7 @@ export type ChatUrlSettings = {
 };
 
 export type ChatUrlChatSettings = {
-  workspace?: string;
   envVars?: EnvVar[];
-  extraSettingText?: string;
 };
 
 type ChatUrlSettingsSourceTarget = {
@@ -19,9 +17,7 @@ type ChatUrlSettingsSourceTarget = {
 
 type BuildChatUrlSettingsInput = {
   target: ChatUrlSettingsSourceTarget | null;
-  workspace: string;
   envVars: EnvVar[];
-  extraSettingText: string;
 };
 
 function encodeBase64Url(value: string): string {
@@ -87,40 +83,25 @@ function parseChatSettings(value: unknown): ChatUrlChatSettings | null | undefin
     return null;
   }
 
-  const { workspace, envVars, extraSettingText } = value;
-  if (workspace !== undefined && typeof workspace !== "string") {
-    return null;
-  }
+  const { envVars } = value;
 
   const parsedEnvVars = parseEnvVars(envVars);
   if (parsedEnvVars === null) {
     return null;
   }
 
-  if (extraSettingText !== undefined && typeof extraSettingText !== "string") {
-    return null;
-  }
-
-  return {
-    ...(workspace === undefined ? {} : { workspace }),
-    ...(envVars === undefined ? {} : { envVars: parsedEnvVars }),
-    ...(extraSettingText === undefined ? {} : { extraSettingText }),
-  };
+  return envVars === undefined ? {} : { envVars: parsedEnvVars };
 }
 
 export function buildChatUrlSettings({
   target,
-  workspace,
   envVars,
-  extraSettingText,
 }: BuildChatUrlSettingsInput): ChatUrlSettings {
   return {
     agentType: target ? (target.type === "agent" ? 0 : 1) : null,
     agentId: target?.id ?? null,
     chatSettings: {
-      workspace,
       envVars,
-      extraSettingText,
     },
   };
 }

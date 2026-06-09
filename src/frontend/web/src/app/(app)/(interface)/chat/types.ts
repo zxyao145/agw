@@ -10,9 +10,7 @@ export interface EnvVar {
 
 export interface ChatProjectSettingsStorageValues {
   targetValue?: string | null;
-  workspace?: string;
   envVars?: EnvVar[];
-  extraSettingText?: string;
 }
 
 export interface InitMessageContent {

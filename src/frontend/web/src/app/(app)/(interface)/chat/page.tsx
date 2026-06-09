@@ -50,7 +50,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import {
   createUserTextMessage,
   mergeStreamingMessagesById,
@@ -64,10 +63,6 @@ import { handleAiMessage, type AiMessageAction } from "./lib/ai-message-handlers
 import {
   CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME,
   CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME,
-  EMPTY_EXTRA_SETTING_TEXT,
-  formatJsonObjectText,
-  normalizeExtraSettingTextForStorage,
-  tryParseJsonObjectText,
 } from "./lib/chat-settings";
 import { getChatRouteSessionAction, getTaskHydrationKey } from "./lib/session-routing";
 import { copyCurrentUrlToClipboard } from "./lib/share-url";
@@ -91,7 +86,6 @@ type ProjectDto = {
   id: string;
   name: string;
   workspace?: string | null;
-  extraSetting?: string | null;
   enable: boolean;
 };
 
@@ -179,9 +173,7 @@ function replaceCurrentChatSettingsHash(settingsParam: string | null): void {
 }
 
 type ChatSettingsDraft = {
-  workspace: string;
   envVars: EnvVar[];
-  extraSettingText: string;
 };
 
 function normalizeEnvVars(envVars: EnvVar[]): EnvVar[] {
@@ -201,10 +193,7 @@ type ChatSettingsDialogProps = {
 
 function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSettingsDialogProps) {
   const [open, setOpen] = React.useState(false);
-  const [draftWorkspace, setDraftWorkspace] = React.useState("");
   const [draftEnvVars, setDraftEnvVars] = React.useState<EnvVar[]>([]);
-  const [draftExtraSettingText, setDraftExtraSettingText] =
-    React.useState(EMPTY_EXTRA_SETTING_TEXT);
 
   React.useEffect(() => {
     if (!open) {
@@ -212,9 +201,7 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
     }
 
     const draft = getDraft(selectedProjectId);
-    setDraftWorkspace(draft.workspace);
     setDraftEnvVars(draft.envVars);
-    setDraftExtraSettingText(draft.extraSettingText);
   }, [getDraft, open, selectedProjectId]);
 
   const handleAddEnvVar = () => {
@@ -234,19 +221,8 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
   };
 
   const handleSave = () => {
-    const normalizedExtraSetting = tryParseJsonObjectText(draftExtraSettingText);
-    if (normalizedExtraSetting === null) {
-      toast.error("Extra Setting JSON must be a valid JSON object.");
-      return;
-    }
-
     const didSave = onSave({
-      workspace: draftWorkspace,
       envVars: normalizeEnvVars(draftEnvVars),
-      extraSettingText:
-        Object.keys(normalizedExtraSetting).length === 0
-          ? EMPTY_EXTRA_SETTING_TEXT
-          : JSON.stringify(normalizedExtraSetting, null, 2),
     });
 
     if (didSave) {
@@ -277,16 +253,6 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
 
         <div className={CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME}>
           <div className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label htmlFor="chat-settings-workspace">Workspace</Label>
-              <Input
-                id="chat-settings-workspace"
-                value={draftWorkspace}
-                onChange={(event) => setDraftWorkspace(event.target.value)}
-                placeholder="Leave blank to fall back to the project workspace"
-              />
-            </div>
-
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
                 <Label>Environment Variables</Label>
@@ -339,22 +305,6 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="chat-settings-extra-setting">Extra Setting JSON</Label>
-              <Textarea
-                id="chat-settings-extra-setting"
-                value={draftExtraSettingText}
-                onChange={(event) => setDraftExtraSettingText(event.target.value)}
-                placeholder={EMPTY_EXTRA_SETTING_TEXT}
-                className="min-h-40 font-mono text-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave blank to fall back to the project extra setting. Saved per project in local
-                storage and merged into <code>SettingCommand.settingContent</code> at execution
-                time.
-              </p>
             </div>
           </div>
         </div>
@@ -436,14 +386,8 @@ export default function ChatPage() {
   const [recursiveMode] = React.useState(true);
   const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
-  const [workspaceOverride, setWorkspaceOverride] = React.useState(
-    routeSettings?.chatSettings?.workspace ?? "",
-  );
   const [envVars, setEnvVars] = React.useState<EnvVar[]>(
     routeSettings?.chatSettings?.envVars ?? [],
-  );
-  const [extraSettingText, setExtraSettingText] = React.useState(
-    routeSettings?.chatSettings?.extraSettingText ?? EMPTY_EXTRA_SETTING_TEXT,
   );
 
   const wsRef = React.useRef<WebSocket | null>(null);
@@ -493,8 +437,8 @@ export default function ChatPage() {
   );
 
   const resolvedWorkspace = React.useMemo(
-    () => workspaceOverride.trim() || selectedProject?.workspace?.trim() || "",
-    [selectedProject, workspaceOverride],
+    () => selectedProject?.workspace?.trim() || "",
+    [selectedProject],
   );
 
   const hasWorkspace = resolvedWorkspace.length > 0;
@@ -520,12 +464,10 @@ export default function ChatPage() {
     return encodeChatUrlSettings(
       buildChatUrlSettings({
         target: selectedTarget,
-        workspace: workspaceOverride,
         envVars: normalizeEnvVars(envVars),
-        extraSettingText,
       }),
     );
-  }, [envVars, extraSettingText, selectedTarget, workspaceOverride]);
+  }, [envVars, selectedTarget]);
 
   const closeSocket = React.useCallback((reason: string) => {
     const ws = wsRef.current;
@@ -671,34 +613,26 @@ export default function ChatPage() {
 
   const getProjectSettingsDraft = React.useCallback(
     (projectId: string | null): ChatSettingsDraft => {
-      const project = projectId ? (projects.find((item) => item.id === projectId) ?? null) : null;
       const storedSettings = projectId ? chatSettingsStorage.get(projectId) : {};
-      const effectiveWorkspace =
-        storedSettings.workspace?.trim() || project?.workspace?.trim() || "";
 
       return {
-        workspace: effectiveWorkspace,
         envVars: storedSettings.envVars ?? [],
-        extraSettingText:
-          storedSettings.extraSettingText ?? formatJsonObjectText(project?.extraSetting),
       };
     },
-    [projects],
+    [],
   );
 
   const getActiveSettingsDraft = React.useCallback(
     (projectId: string | null): ChatSettingsDraft => {
       if (projectId && projectId === selectedProjectId) {
         return {
-          workspace: workspaceOverride,
           envVars,
-          extraSettingText,
         };
       }
 
       return getProjectSettingsDraft(projectId);
     },
-    [envVars, extraSettingText, getProjectSettingsDraft, selectedProjectId, workspaceOverride],
+    [envVars, getProjectSettingsDraft, selectedProjectId],
   );
 
   const buildEnvironmentVariables = React.useCallback(() => {
@@ -712,21 +646,6 @@ export default function ChatPage() {
 
     return environmentVariables;
   }, [envVars]);
-
-  const buildSettingContent = React.useCallback(() => {
-    const settingContent: Record<string, unknown> = {};
-
-    const parsedExtraSetting = tryParseJsonObjectText(extraSettingText);
-    if (parsedExtraSetting) {
-      Object.assign(settingContent, parsedExtraSetting);
-    }
-
-    if (resolvedWorkspace) {
-      settingContent.workspace = resolvedWorkspace;
-    }
-
-    return JSON.stringify(settingContent);
-  }, [extraSettingText, resolvedWorkspace]);
 
   const loadFileContent = React.useCallback(
     async (filePath: string) => {
@@ -798,13 +717,11 @@ export default function ChatPage() {
   const buildSettingCommand = React.useCallback(
     (nextTaskIdValue: string) =>
       buildSettingCommandPayload({
-        workspace: resolvedWorkspace ?? "",
-        settingContent: buildSettingContent(),
         environmentVariables: buildEnvironmentVariables(),
         projectId: selectedProjectId ?? "",
         taskId: nextTaskIdValue,
       }),
-    [buildEnvironmentVariables, buildSettingContent, resolvedWorkspace, selectedProjectId],
+    [buildEnvironmentVariables, selectedProjectId],
   );
 
   const buildExecRequest = React.useCallback(
@@ -892,25 +809,17 @@ export default function ChatPage() {
 
   React.useEffect(() => {
     if (!selectedProjectId) {
-      setWorkspaceOverride("");
       setEnvVars([]);
-      setExtraSettingText(EMPTY_EXTRA_SETTING_TEXT);
       return;
     }
 
     if (activeRouteSettings) {
-      setWorkspaceOverride(activeRouteSettings.chatSettings?.workspace ?? "");
       setEnvVars(activeRouteSettings.chatSettings?.envVars ?? []);
-      setExtraSettingText(
-        activeRouteSettings.chatSettings?.extraSettingText ?? EMPTY_EXTRA_SETTING_TEXT,
-      );
       return;
     }
 
     const draft = getProjectSettingsDraft(selectedProjectId);
-    setWorkspaceOverride(draft.workspace);
     setEnvVars(draft.envVars);
-    setExtraSettingText(draft.extraSettingText);
   }, [activeRouteSettings, getProjectSettingsDraft, selectedProjectId]);
 
   React.useEffect(() => {
@@ -1282,36 +1191,18 @@ export default function ChatPage() {
         return false;
       }
 
-      const normalizedExtraSetting = tryParseJsonObjectText(draft.extraSettingText);
-      if (normalizedExtraSetting === null) {
-        toast.error("Extra Setting JSON must be a valid JSON object.");
-        return false;
-      }
-
-      const projectWorkspace = selectedProject?.workspace?.trim() || "";
-      const normalizedWorkspace = draft.workspace.trim();
       const normalizedSettings: ChatProjectSettingsStorageValues = {
-        workspace:
-          !normalizedWorkspace || normalizedWorkspace === projectWorkspace
-            ? undefined
-            : normalizedWorkspace,
         envVars: normalizeEnvVars(draft.envVars),
-        extraSettingText: normalizeExtraSettingTextForStorage(
-          draft.extraSettingText,
-          selectedProject?.extraSetting,
-        ),
       };
 
       chatSettingsStorage.set(selectedProjectId, normalizedSettings);
       const nextDraft = getProjectSettingsDraft(selectedProjectId);
-      setWorkspaceOverride(nextDraft.workspace);
       setEnvVars(nextDraft.envVars);
-      setExtraSettingText(nextDraft.extraSettingText);
 
       toast.success("Chat settings saved");
       return true;
     },
-    [getProjectSettingsDraft, selectedProject, selectedProjectId],
+    [getProjectSettingsDraft, selectedProjectId],
   );
 
   const renderTaskHistory = React.useCallback(

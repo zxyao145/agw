@@ -7,20 +7,16 @@ export type ExecutionWsEnvironmentVariables = Record<string, string>;
 
 export type ExecutionWsSettingCommandRequest = {
   projectId: string;
-  settingContent?: string;
   taskId?: string | null;
   resume?: boolean;
-  workspace?: string | null;
   environmentVariables?: ExecutionWsEnvironmentVariables | null;
 };
 
 export type ExecutionWsSettingCommandPayload = {
   type: "SettingCommand";
-  settingContent: string;
   projectId: string;
   taskId: string | null;
   resume: boolean;
-  workspace?: string | null;
   environmentVariables?: ExecutionWsEnvironmentVariables | null;
 };
 
@@ -80,15 +76,10 @@ export function buildSettingCommandPayload(
 ): ExecutionWsSettingCommandPayload {
   const payload: ExecutionWsSettingCommandPayload = {
     type: "SettingCommand",
-    settingContent: request.settingContent ?? "{}",
     projectId: request.projectId,
     taskId: request.taskId ?? null,
     resume: request.resume ?? false,
   };
-
-  if (request.workspace !== undefined) {
-    payload.workspace = request.workspace;
-  }
 
   if (request.environmentVariables !== undefined) {
     payload.environmentVariables = request.environmentVariables;

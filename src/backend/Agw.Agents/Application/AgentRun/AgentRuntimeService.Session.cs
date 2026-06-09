@@ -27,8 +27,6 @@ public partial class AgentRuntimeService
         }
 
         Guid projectId = task.ProjectId;
-        var projectExtraSetting = await GetProjectExtraSettingAsync(projectId);
-        var mergedExtra = MergeExtraSettings(agent.Extra, projectExtraSetting, settings.SettingContent);
         string taskIdString = task.Id.Normalize();
         var providerSessionId = await GetCodexProviderSessionIdAsync(agent, task.Id, cancellationToken);
         var resume = IsCodexExternalAgent(agent)
@@ -38,12 +36,6 @@ public partial class AgentRuntimeService
         var resolvedContextId = string.IsNullOrWhiteSpace(task.ContextId)
             ? TaskUtil.GenContextId()
             : task.ContextId;
-
-        var workspace = settings.Workspace;
-        if (!string.IsNullOrWhiteSpace(workspace))
-        {
-            workspace = PathUtil.ExpandTilde(workspace);
-        }
 
         var fs = await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
         var rootStat = await fs.StatAsync("", cancellationToken);
@@ -55,8 +47,6 @@ public partial class AgentRuntimeService
         var aiAgent = await CreateAiAgentAsync(new CreateAiAgentRequest
         {
             Agent = agent,
-            ExtraOverride = mergedExtra,
-            Workspace = workspace,
             EnvironmentVariables = settings.EnvironmentVariables,
             TaskId = task.Id,
             ProviderSessionId = providerSessionId,

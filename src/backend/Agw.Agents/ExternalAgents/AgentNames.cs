@@ -3,6 +3,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Utils;
 
 using ClaudeCodeSdk.MAF;
+using ClaudeCodeSdk.Types;
 
 using OpenAI.CodexSdk.MAF;
 
@@ -27,7 +28,7 @@ public class AgentNames
                 Name = ClaudeCode,
                 Description = "External agent for Claude Code integration with AI-powered coding assistance",
                 Type = AgentType.External,
-                Extra = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions()),
+                Extra = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions(){ PermissionMode = PermissionMode.bypassPermissions, }),
             },
             new Agent
             {

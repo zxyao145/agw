@@ -131,8 +131,6 @@ public sealed class ExecutionConnectionState
         return new SettingCommand(
             settings.ProjectId,
             settings.TaskId,
-            settings.Workspace,
-            settings.SettingContent,
             new Dictionary<string, string>(settings.EnvironmentVariables))
         {
             Resume = settings.Resume
