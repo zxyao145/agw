@@ -31,6 +31,11 @@ public class ApiKeyGuardMiddleware
         }
 
         var requestApiKey = context.Request.Headers[ApiKeyHeader].ToString();
+        if (string.IsNullOrEmpty(requestApiKey) && context.WebSockets.IsWebSocketRequest)
+        {
+            requestApiKey = context.Request.Query[ApiKeyHeader].ToString();
+        }
+
         if (string.Equals(requestApiKey, snapshot.ApiKey, StringComparison.Ordinal))
         {
             await _next(context);

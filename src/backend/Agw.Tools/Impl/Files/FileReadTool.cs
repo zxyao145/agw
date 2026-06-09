@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 
@@ -9,7 +10,7 @@ public class FileReadToolParams
 {
     [Description(
         """
-        The absolute path to the file to read.
+        The path to the file to read, relative to the project workspace root.
         """
     )]
     public string FilePath { get; set; } = "";
@@ -27,13 +28,6 @@ public class FileReadToolParams
         """
     )]
     public int? Limit { get; set; }
-
-    [Description(
-        """
-        Page range for PDF files (e.g., "1-5", "3", "10-20"). Only applicable to PDF files.
-        """
-    )]
-    public string? Pages { get; set; }
 }
 
 public class FileReadToolResult
@@ -45,19 +39,23 @@ public class FileReadToolResult
     public int TotalLines { get; set; }
 }
 
-internal class FileReadTool : IAgwTool
+internal class FileReadTool : IProjectScopedAgwTool
 {
+    private readonly IAgwFileSystemResolver _resolver;
+
+    public FileReadTool(IAgwFileSystemResolver resolver) => _resolver = resolver;
+
     public string Name => "read_file";
 
     public string Category => "File";
 
     [Description(
         """
-        Reads a file from the local filesystem. You can access any file directly by using this tool.
-        Supports reading specific line ranges via offset and limit parameters.
+        Reads a file from the project workspace. Supports reading specific line ranges via offset and limit parameters.
         """
     )]
-    public FileReadToolResult Execute(FileReadToolParams toolParams)
+    public async Task<FileReadToolResult> ExecuteAsync(
+        FileReadToolParams toolParams, Guid projectId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(toolParams);
 
@@ -66,14 +64,13 @@ internal class FileReadTool : IAgwTool
             throw new AgwException(ErrorCodes.FilePathRequired);
         }
 
-        var fullPath = Path.GetFullPath(toolParams.FilePath);
-
-        if (!File.Exists(fullPath))
+        var fs = await _resolver.ResolveAsync(projectId, ct);
+        if (!await fs.ExistsFileAsync(toolParams.FilePath, ct))
         {
-            throw new AgwException(ErrorCodes.FileNotFound, $"File '{fullPath}' does not exist.");
+            throw new AgwException(ErrorCodes.FileNotFound, $"File '{toolParams.FilePath}' does not exist.");
         }
 
-        var allLines = File.ReadAllLines(fullPath);
+        var allLines = await fs.ReadAllLinesAsync(toolParams.FilePath, ct);
         var totalLines = allLines.Length;
 
         var startLine = toolParams.Offset ?? 1;
@@ -108,9 +105,12 @@ internal class FileReadTool : IAgwTool
         };
     }
 
-    public AITool ToAITool()
+    public AITool ToAITool() => ToAITool(Guid.Empty);
+
+    public AITool ToAITool(Guid projectId)
     {
-        Func<FileReadToolParams, FileReadToolResult> func = Execute;
+        Func<FileReadToolParams, CancellationToken, Task<FileReadToolResult>> func =
+            (p, ct) => ExecuteAsync(p, projectId, ct);
         return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 }

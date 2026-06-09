@@ -181,6 +181,29 @@ public class ToolRegistryService
     }
 
     /// <summary>
+    /// Creates an <see cref="AITool"/> for a tool by its name, binding it to a specific project.
+    /// </summary>
+    public AITool? CreateAIFunction(string name, Guid projectId)
+    {
+        if (_toolInstances.TryGetValue(name, out var tool))
+        {
+            if (tool is IProjectScopedAgwTool projectScoped)
+            {
+                return projectScoped.ToAITool(projectId);
+            }
+
+            return tool.ToAITool();
+        }
+
+        if (_methods.TryGetValue(name, out var method))
+        {
+            return _toolFactory.CreateFromMethod(method);
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Creates <see cref="AITool"/> instances for a list of tool names.
     /// </summary>
     public IList<AITool> CreateAIFunctions(IEnumerable<string> names)
@@ -191,6 +214,26 @@ public class ToolRegistryService
         foreach (var name in names)
         {
             var tool = CreateAIFunction(name);
+            if (tool != null)
+            {
+                tools.Add(tool);
+            }
+        }
+
+        return tools;
+    }
+
+    /// <summary>
+    /// Creates <see cref="AITool"/> instances for a list of tool names, binding project-scoped tools to a specific project.
+    /// </summary>
+    public IList<AITool> CreateAIFunctions(IEnumerable<string> names, Guid projectId)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+
+        var tools = new List<AITool>();
+        foreach (var name in names)
+        {
+            var tool = CreateAIFunction(name, projectId);
             if (tool != null)
             {
                 tools.Add(tool);

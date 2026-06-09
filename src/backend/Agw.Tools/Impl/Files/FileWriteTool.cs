@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 
@@ -9,7 +10,7 @@ public class FileWriteToolParams
 {
     [Description(
         """
-        The absolute path to the file to write (must be absolute, not relative).
+        The path to the file to write, relative to the project workspace root.
         """
     )]
     public string FilePath { get; set; } = "";
@@ -31,19 +32,24 @@ public class FileWriteToolResult
     public string? OriginalFile { get; set; }
 }
 
-internal class FileWriteTool : IAgwTool
+internal class FileWriteTool : IProjectScopedAgwTool
 {
+    private readonly IAgwFileSystemResolver _resolver;
+
+    public FileWriteTool(IAgwFileSystemResolver resolver) => _resolver = resolver;
+
     public string Name => "write_file";
 
     public string Category => "File";
 
     [Description(
         """
-        Write a file to the local filesystem. Creates the file if it does not exist,
+        Write a file to the project workspace. Creates the file if it does not exist,
         or overwrites it if it does.
         """
     )]
-    public FileWriteToolResult Execute(FileWriteToolParams toolParams)
+    public async Task<FileWriteToolResult> ExecuteAsync(
+        FileWriteToolParams toolParams, Guid projectId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(toolParams);
 
@@ -52,18 +58,11 @@ internal class FileWriteTool : IAgwTool
             throw new AgwException(ErrorCodes.FilePathRequired);
         }
 
-        var fullPath = Path.GetFullPath(toolParams.FilePath);
-        var directory = Path.GetDirectoryName(fullPath);
+        var fs = await _resolver.ResolveAsync(projectId, ct);
+        bool isUpdate = await fs.ExistsFileAsync(toolParams.FilePath, ct);
+        string? originalContent = isUpdate ? await fs.ReadAllTextAsync(toolParams.FilePath, ct) : null;
 
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        bool isUpdate = File.Exists(fullPath);
-        string? originalContent = isUpdate ? File.ReadAllText(fullPath) : null;
-
-        File.WriteAllText(fullPath, toolParams.Content);
+        await fs.WriteAllTextAsync(toolParams.FilePath, toolParams.Content, ct);
 
         var result = new FileWriteToolResult
         {
@@ -81,9 +80,12 @@ internal class FileWriteTool : IAgwTool
         return result;
     }
 
-    public AITool ToAITool()
+    public AITool ToAITool() => ToAITool(Guid.Empty);
+
+    public AITool ToAITool(Guid projectId)
     {
-        Func<FileWriteToolParams, FileWriteToolResult> func = Execute;
+        Func<FileWriteToolParams, CancellationToken, Task<FileWriteToolResult>> func =
+            (p, ct) => ExecuteAsync(p, projectId, ct);
         return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 

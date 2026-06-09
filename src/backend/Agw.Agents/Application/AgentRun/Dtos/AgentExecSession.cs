@@ -6,6 +6,8 @@ using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Models;
 
+using ClaudeCodeSdk.MAF;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -122,7 +124,7 @@ public sealed class AgentExecSession : IAsyncDisposable
             MessageId = string.IsNullOrWhiteSpace(messageId) ? Guid.NewGuid().ToString() : messageId,
             AuthorName = string.IsNullOrWhiteSpace(author) ? Constants.DefaultAuthor : author
         };
-
+        
         await foreach (var update in Agent.RunStreamingAsync(message, Session, cancellationToken: cancellationToken))
         {
             var aiMessage = update.ToAiMessage();

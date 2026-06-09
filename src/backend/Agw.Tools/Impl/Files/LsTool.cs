@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 
@@ -9,7 +10,7 @@ public class LsToolParams
 {
     [Description(
         """
-        The relative or absolute path to the directory to search. This string is not case-sensitive.
+        The directory to list, relative to the project workspace root.
         """
     )]
     public string Directory { get; set; } = "";
@@ -24,7 +25,7 @@ public class LsToolParams
     public string SearchPattern { get; set; } = "*";
 
     [Description(
-       """
+        """
         Used to indicate whether to search for files in subfolders
         """
     )]
@@ -36,8 +37,12 @@ public class LsToolResult
     public List<string> Files { get; set; } = new();
 }
 
-internal class LsTool : IAgwTool
+internal class LsTool : IProjectScopedAgwTool
 {
+    private readonly IAgwFileSystemResolver _resolver;
+
+    public LsTool(IAgwFileSystemResolver resolver) => _resolver = resolver;
+
     public string Name => "ls";
 
     public string Category => "File";
@@ -48,7 +53,8 @@ internal class LsTool : IAgwTool
         pattern in the specified directory, using a value to determine whether to search subdirectories.
         """
     )]
-    public LsToolResult Execute(LsToolParams toolParams)
+    public async Task<LsToolResult> ExecuteAsync(
+        LsToolParams toolParams, Guid projectId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(toolParams);
 
@@ -56,22 +62,29 @@ internal class LsTool : IAgwTool
         {
             throw new AgwException(ErrorCodes.DirectoryRequired);
         }
-        if (!Directory.Exists(toolParams.Directory))
+
+        var fs = await _resolver.ResolveAsync(projectId, ct);
+        var files = new List<string>();
+
+        await foreach (var entry in fs.EnumerateAsync(
+            toolParams.Directory, toolParams.SearchPattern, toolParams.Recursion, ct))
         {
-            throw new AgwException(ErrorCodes.DirectoryNotFound, $"Directory '{toolParams.Directory}' does not exist.");
+            ct.ThrowIfCancellationRequested();
+            files.Add(entry.Path);
         }
 
-        var files = Directory.GetFiles(toolParams.Directory, toolParams.SearchPattern, toolParams.Recursion ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
-        var res = new LsToolResult
+        return new LsToolResult
         {
-            Files = new List<string>(files)
+            Files = files
         };
-        return res;
     }
 
-    public AITool ToAITool()
+    public AITool ToAITool() => ToAITool(Guid.Empty);
+
+    public AITool ToAITool(Guid projectId)
     {
-        Func<LsToolParams, LsToolResult> func = Execute;
+        Func<LsToolParams, CancellationToken, Task<LsToolResult>> func =
+            (p, ct) => ExecuteAsync(p, projectId, ct);
         return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 }

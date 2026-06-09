@@ -1,4 +1,9 @@
 using Agw.Files.Application.Files;
+using Agw.Files.Application.Storage.Local;
+using Agw.Files.Application.Storage.Resolver;
+using Agw.Files.Application.Storage.Sftp;
+
+using Agw.Shared.Contracts.Storage;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,6 +16,10 @@ public static class DependencyInjection
     {
         services.AddSingleton<IPathSecurityService, PathSecurityService>();
         services.AddSingleton<IFilePathRequestValidator, FilePathRequestValidator>();
+
+        services.AddSingleton<LocalFileSystemFactory>();
+        services.AddSingleton<SftpFileSystemFactory>();
+        services.AddSingleton<IAgwFileSystemResolver, ProjectScopedFileSystemResolver>();
 
         return services;
     }

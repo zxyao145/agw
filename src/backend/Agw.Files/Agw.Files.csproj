@@ -5,7 +5,11 @@
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="SSH.NET" />
+    </ItemGroup>
+
+    <ItemGroup>
       <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
     </ItemGroup>
-    
+
 </Project>

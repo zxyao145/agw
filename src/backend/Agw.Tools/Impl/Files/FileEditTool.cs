@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 
@@ -9,7 +10,7 @@ public class FileEditToolParams
 {
     [Description(
         """
-        The absolute path to the file to modify.
+        The path to the file to modify, relative to the project workspace root.
         """
     )]
     public string FilePath { get; set; } = "";
@@ -56,8 +57,12 @@ public class FileEditToolResult
     public bool ReplaceAll { get; set; }
 }
 
-internal class FileEditTool : IAgwTool
+internal class FileEditTool : IProjectScopedAgwTool
 {
+    private readonly IAgwFileSystemResolver _resolver;
+
+    public FileEditTool(IAgwFileSystemResolver resolver) => _resolver = resolver;
+
     public string Name => "file_edit";
 
     public string Category => "File";
@@ -68,7 +73,8 @@ internal class FileEditTool : IAgwTool
         If replace_all is true, all occurrences are replaced.
         """
     )]
-    public FileEditToolResult Execute(FileEditToolParams toolParams)
+    public async Task<FileEditToolResult> ExecuteAsync(
+        FileEditToolParams toolParams, Guid projectId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(toolParams);
 
@@ -77,14 +83,15 @@ internal class FileEditTool : IAgwTool
             throw new AgwException(ErrorCodes.FilePathRequired);
         }
 
-        var fullPath = Path.GetFullPath(toolParams.FilePath);
+        var fs = await _resolver.ResolveAsync(projectId, ct);
 
-        if (!File.Exists(fullPath) && !string.IsNullOrEmpty(toolParams.OldString))
+        var fileExists = await fs.ExistsFileAsync(toolParams.FilePath, ct);
+        if (!fileExists && !string.IsNullOrEmpty(toolParams.OldString))
         {
-            throw new AgwException(ErrorCodes.FileNotFound, $"File '{fullPath}' does not exist.");
+            throw new AgwException(ErrorCodes.FileNotFound, $"File '{toolParams.FilePath}' does not exist.");
         }
 
-        var originalContent = File.Exists(fullPath) ? File.ReadAllText(fullPath) : "";
+        var originalContent = fileExists ? await fs.ReadAllTextAsync(toolParams.FilePath, ct) : "";
 
         if (toolParams.OldString == toolParams.NewString)
         {
@@ -114,18 +121,12 @@ internal class FileEditTool : IAgwTool
             updatedContent = originalContent.Replace(oldString, newString, StringComparison.Ordinal);
         }
 
-        var directory = Path.GetDirectoryName(fullPath);
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        File.WriteAllText(fullPath, updatedContent);
+        await fs.WriteAllTextAsync(toolParams.FilePath, updatedContent, ct);
 
         var patch = new List<PatchHunk>();
         if (!string.IsNullOrEmpty(originalContent))
         {
-            patch = GeneratePatch(originalContent, updatedContent, fullPath);
+            patch = GeneratePatch(originalContent, updatedContent);
         }
 
         return new FileEditToolResult
@@ -140,13 +141,16 @@ internal class FileEditTool : IAgwTool
         };
     }
 
-    public AITool ToAITool()
+    public AITool ToAITool() => ToAITool(Guid.Empty);
+
+    public AITool ToAITool(Guid projectId)
     {
-        Func<FileEditToolParams, FileEditToolResult> func = Execute;
+        Func<FileEditToolParams, CancellationToken, Task<FileEditToolResult>> func =
+            (p, ct) => ExecuteAsync(p, projectId, ct);
         return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 
-    private static List<PatchHunk> GeneratePatch(string oldContent, string newContent, string filePath)
+    private static List<PatchHunk> GeneratePatch(string oldContent, string newContent, string? filePath = null)
     {
         var patch = new List<PatchHunk>();
         var oldLines = oldContent.Split('\n');

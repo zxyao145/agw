@@ -17,7 +17,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
-import { apiGet } from "@/api/client";
+import { apiGet, getApiKey } from "@/api/client";
 import { buildSettingCommandPayload } from "@/api/execution-ws";
 import { clearTaskRecords, getTaskDetails } from "@/api/task-client";
 import { Explorer, FileContent } from "@/components/file-explorer";
@@ -615,8 +615,10 @@ export default function ChatPage() {
   const setupWebSocket = React.useCallback(
     (executionId: string) => {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const apiKey = getApiKey();
+      const apiKeyParam = apiKey ? `?X-API-Key=${encodeURIComponent(apiKey)}` : "";
       const ws = new WebSocket(
-        `${protocol}//${window.location.host}/api/executions/${executionId}/ws`,
+        `${protocol}//${window.location.host}/api/executions/${executionId}/ws${apiKeyParam}`,
       );
       wsRef.current = ws;
 

@@ -175,6 +175,7 @@ public class AgentRuntimeServiceCompositionTests
             providerSessionState: null!,
             projectTaskSessionBindingService: null!,
             webHostEnvironment: null!,
+            fileSystemResolver: null!,
             logger: NullLogger<AgentRuntimeService>.Instance);
         var method = typeof(AgentRuntimeService).GetMethod(
             "CreateCodexAgent",
@@ -307,6 +308,7 @@ public class AgentRuntimeServiceCompositionTests
             providerSessionState: null!,
             projectTaskSessionBindingService: null!,
             webHostEnvironment: null!,
+            fileSystemResolver: null!,
             logger: NullLogger<AgentRuntimeService>.Instance);
     }
 

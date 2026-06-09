@@ -58,6 +58,9 @@ public static class ErrorCodes
     public static readonly ErrorCode InvalidParameters = new(400_0052, "Invalid parameters.", HttpStatusCode.BadRequest);
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
+    public static readonly ErrorCode SftpAuthenticationFailed = new(401_0002, "SFTP authentication failed.", HttpStatusCode.Unauthorized);
+
+    public static readonly ErrorCode PathOutsideRoot = new(403_0001, "Path is outside the allowed root directory.", HttpStatusCode.Forbidden);
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode DirectoryNotFound = new(404_0002, "Directory was not found.", HttpStatusCode.NotFound);
@@ -87,6 +90,8 @@ public static class ErrorCodes
     public static readonly ErrorCode AgentExecutionFailed = new(500_0011, "Agent execution failed.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode ProjectTaskMarkSucceededFailed = new(500_0012, "Failed to mark project task as succeeded.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode EnvironmentVariableNotSet = new(500_0013, "Required environment variable is not set.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode FileStorageConfigInvalid = new(500_0014, "File storage configuration is invalid.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode SftpConnectionFailed = new(500_0015, "SFTP connection failed.", HttpStatusCode.InternalServerError);
 
     public static readonly ErrorCode UnsupportedTransportType = new(501_0001, "Transport type is not supported.", HttpStatusCode.NotImplemented);
     public static readonly ErrorCode UnsupportedAgentType = new(501_0002, "Agent type is not supported.", HttpStatusCode.NotImplemented);
@@ -95,6 +100,7 @@ public static class ErrorCodes
     public static readonly ErrorCode MagenticNotSupported = new(501_0005, "Magentic is not supported.", HttpStatusCode.NotImplemented);
     public static readonly ErrorCode A2APushNotificationNotSupported = new(501_0006, "Push notifications are not supported.", HttpStatusCode.NotImplemented);
     public static readonly ErrorCode A2AUnsupportedOperation = new(501_0007, "A2A operation is not supported.", HttpStatusCode.NotImplemented);
+    public static readonly ErrorCode FileStorageBackendNotSupported = new(501_0008, "File storage backend is not supported.", HttpStatusCode.NotImplemented);
 
     public static readonly ErrorCode GitHubBadResponseStatusCode = new(502_0001, "GitHub returned a bad response status code.", HttpStatusCode.BadGateway);
 }

@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 
@@ -16,9 +17,7 @@ public class GlobToolParams
 
     [Description(
         """
-        The directory to search in. If not specified, the current working directory will be used.
-        IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior.
-        Must be a valid directory path if provided.
+        The directory to search in, relative to the project workspace root. If not specified, the workspace root will be used.
         """
     )]
     public string? Path { get; set; }
@@ -32,8 +31,12 @@ public class GlobToolResult
     public bool Truncated { get; set; }
 }
 
-internal class GlobTool : IAgwTool
+internal class GlobTool : IProjectScopedAgwTool
 {
+    private readonly IAgwFileSystemResolver _resolver;
+
+    public GlobTool(IAgwFileSystemResolver resolver) => _resolver = resolver;
+
     public string Name => "glob";
 
     public string Category => "File";
@@ -45,7 +48,8 @@ internal class GlobTool : IAgwTool
         Returns matching file paths sorted by modification time.
         """
     )]
-    public GlobToolResult Execute(GlobToolParams toolParams)
+    public async Task<GlobToolResult> ExecuteAsync(
+        GlobToolParams toolParams, Guid projectId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(toolParams);
 
@@ -54,39 +58,31 @@ internal class GlobTool : IAgwTool
             throw new AgwException(ErrorCodes.PatternRequired, "Pattern is required.");
         }
 
-        var searchPath = string.IsNullOrWhiteSpace(toolParams.Path)
-            ? Directory.GetCurrentDirectory()
-            : Path.GetFullPath(toolParams.Path);
-
-        if (!Directory.Exists(searchPath))
-        {
-            throw new AgwException(ErrorCodes.DirectoryNotFound, $"Directory '{searchPath}' does not exist.");
-        }
+        var fs = await _resolver.ResolveAsync(projectId, ct);
+        var searchPath = string.IsNullOrWhiteSpace(toolParams.Path) ? "." : toolParams.Path;
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var pattern = toolParams.Pattern;
 
-        // Handle **/ prefix for recursive search
         bool recursive = pattern.Contains("**");
         var cleanPattern = pattern.Replace("**/", "").Replace("**", "*");
 
-        string[] files;
-        if (recursive)
+        var files = new List<FileEntry>();
+        await foreach (var entry in fs.EnumerateAsync(searchPath, cleanPattern, recursive, ct))
         {
-            files = Directory.GetFiles(searchPath, cleanPattern, SearchOption.AllDirectories);
-        }
-        else
-        {
-            files = Directory.GetFiles(searchPath, cleanPattern, SearchOption.TopDirectoryOnly);
+            ct.ThrowIfCancellationRequested();
+            if (!entry.IsDirectory)
+            {
+                files.Add(entry);
+            }
         }
 
         const int maxResults = 100;
-        bool truncated = files.Length > maxResults;
-        var limitedFiles = files.Take(maxResults).ToList();
-
-        // Convert to relative paths
-        var relativeFiles = limitedFiles
-            .Select(f => Path.GetRelativePath(searchPath, f))
+        bool truncated = files.Count > maxResults;
+        var limitedFiles = files
+            .OrderByDescending(f => f.LastModifiedUtc)
+            .Take(maxResults)
+            .Select(f => f.Path)
             .ToList();
 
         stopwatch.Stop();
@@ -94,15 +90,18 @@ internal class GlobTool : IAgwTool
         return new GlobToolResult
         {
             DurationMs = stopwatch.ElapsedMilliseconds,
-            NumFiles = relativeFiles.Count,
-            Filenames = relativeFiles,
+            NumFiles = limitedFiles.Count,
+            Filenames = limitedFiles,
             Truncated = truncated
         };
     }
 
-    public AITool ToAITool()
+    public AITool ToAITool() => ToAITool(Guid.Empty);
+
+    public AITool ToAITool(Guid projectId)
     {
-        Func<GlobToolParams, GlobToolResult> func = Execute;
+        Func<GlobToolParams, CancellationToken, Task<GlobToolResult>> func =
+            (p, ct) => ExecuteAsync(p, projectId, ct);
         return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 }

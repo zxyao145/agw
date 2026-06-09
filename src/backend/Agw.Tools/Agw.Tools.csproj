@@ -5,6 +5,7 @@
     </ItemGroup>
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />
         <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
     </ItemGroup>
 </Project>

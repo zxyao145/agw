@@ -12,7 +12,15 @@ internal static class AgwAIFunctionFactory
         string name)
     {
         var innerFunction = AIFunctionFactory.Create(function, name);
-        return new FlattenedParameterObjectAIFunction(innerFunction, "toolParams");
+        return new FlattenedParameterObjectAIFunction(innerFunction);
+    }
+
+    public static AITool CreateParameterObjectFunction<TParams, TResult>(
+        Func<TParams, CancellationToken, Task<TResult>> function,
+        string name)
+    {
+        var innerFunction = AIFunctionFactory.Create(function, name);
+        return new FlattenedParameterObjectAIFunction(innerFunction);
     }
 
     private sealed class FlattenedParameterObjectAIFunction : DelegatingAIFunction
@@ -20,11 +28,11 @@ internal static class AgwAIFunctionFactory
         private readonly string _parameterName;
         private readonly JsonElement _jsonSchema;
 
-        public FlattenedParameterObjectAIFunction(AIFunction innerFunction, string parameterName)
+        public FlattenedParameterObjectAIFunction(AIFunction innerFunction)
             : base(innerFunction)
         {
-            _parameterName = parameterName;
-            _jsonSchema = FlattenSchema(innerFunction.JsonSchema, parameterName);
+            _parameterName = DetectParameterName(innerFunction.JsonSchema);
+            _jsonSchema = FlattenSchema(innerFunction.JsonSchema, _parameterName);
         }
 
         public override JsonElement JsonSchema => _jsonSchema;
@@ -48,6 +56,24 @@ internal static class AgwAIFunctionFactory
             };
 
             return base.InvokeCoreAsync(wrappedArguments, cancellationToken);
+        }
+
+        private static string DetectParameterName(JsonElement schema)
+        {
+            // Find the first property in "properties" that looks like an object parameter
+            // (skip "cancellationToken" which may appear for async signatures)
+            if (schema.TryGetProperty("properties", out var properties))
+            {
+                foreach (var prop in properties.EnumerateObject())
+                {
+                    if (string.Equals(prop.Name, "cancellationToken", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    return prop.Name;
+                }
+            }
+
+            return "toolParams";
         }
 
         private static JsonElement FlattenSchema(JsonElement schema, string parameterName)

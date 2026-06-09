@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 
+using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 
@@ -18,7 +19,7 @@ public class GrepToolParams
 
     [Description(
         """
-        File or directory to search in. Defaults to current working directory.
+        File or directory to search in, relative to the project workspace root. Defaults to workspace root.
         """
     )]
     public string? Path { get; set; }
@@ -114,8 +115,12 @@ public class GrepToolResult
     public int? AppliedOffset { get; set; }
 }
 
-internal class GrepTool : IAgwTool
+internal class GrepTool : IProjectScopedAgwTool
 {
+    private readonly IAgwFileSystemResolver _resolver;
+
+    public GrepTool(IAgwFileSystemResolver resolver) => _resolver = resolver;
+
     public string Name => "grep";
 
     public string Category => "File";
@@ -128,7 +133,8 @@ internal class GrepTool : IAgwTool
         Usage: search file contents with regex.
         """
     )]
-    public GrepToolResult Execute(GrepToolParams toolParams)
+    public async Task<GrepToolResult> ExecuteAsync(
+        GrepToolParams toolParams, Guid projectId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(toolParams);
 
@@ -137,40 +143,17 @@ internal class GrepTool : IAgwTool
             throw new AgwException(ErrorCodes.PatternRequired, "Pattern is required.");
         }
 
-        var searchPath = string.IsNullOrWhiteSpace(toolParams.Path)
-            ? Directory.GetCurrentDirectory()
-            : Path.GetFullPath(toolParams.Path);
+        var fs = await _resolver.ResolveAsync(projectId, ct);
+        var searchPath = string.IsNullOrWhiteSpace(toolParams.Path) ? "." : toolParams.Path;
 
-        if (!Directory.Exists(searchPath) && !File.Exists(searchPath))
-        {
-            throw new AgwException(ErrorCodes.DirectoryNotFound, $"Path '{searchPath}' does not exist.");
-        }
-
-        var regexOptions = RegexOptions.Compiled;
-        if (toolParams.CaseInsensitive)
-        {
-            regexOptions |= RegexOptions.IgnoreCase;
-        }
-        if (toolParams.Multiline)
-        {
-            regexOptions |= RegexOptions.Singleline;
-        }
-
-        Regex regex;
-        try
-        {
-            regex = new Regex(toolParams.Pattern, regexOptions);
-        }
-        catch (ArgumentException ex)
-        {
-            throw new AgwException(ErrorCodes.InvalidPattern, $"Invalid regex pattern: {ex.Message}");
-        }
-
-        // Determine file filter
-        var extensions = GetExtensionsFromType(toolParams.Type);
-        var globPattern = toolParams.Glob;
-
-        var filesToSearch = GetFilesToSearch(searchPath, extensions, globPattern);
+        var searchOptions = new SearchOptions(
+            Pattern: toolParams.Pattern,
+            IsRegex: true,
+            CaseInsensitive: toolParams.CaseInsensitive,
+            Multiline: toolParams.Multiline,
+            IncludeExtensions: GetExtensionsFromType(toolParams.Type),
+            FilenameGlob: toolParams.Glob,
+            MaxHits: null);
 
         var outputMode = toolParams.OutputMode.ToLowerInvariant() switch
         {
@@ -181,118 +164,46 @@ internal class GrepTool : IAgwTool
 
         if (outputMode == "content")
         {
-            return SearchContentMode(filesToSearch, regex, toolParams);
+            return await SearchContentMode(fs, searchPath, searchOptions, toolParams, ct);
         }
         else if (outputMode == "count")
         {
-            return SearchCountMode(filesToSearch, regex, toolParams);
+            return await SearchCountMode(fs, searchPath, searchOptions, toolParams, ct);
         }
         else
         {
-            return SearchFilesMode(filesToSearch, regex, toolParams);
+            return await SearchFilesMode(fs, searchPath, searchOptions, toolParams, ct);
         }
     }
 
-    public AITool ToAITool()
+    public AITool ToAITool() => ToAITool(Guid.Empty);
+
+    public AITool ToAITool(Guid projectId)
     {
-        Func<GrepToolParams, GrepToolResult> func = Execute;
+        Func<GrepToolParams, CancellationToken, Task<GrepToolResult>> func =
+            (p, ct) => ExecuteAsync(p, projectId, ct);
         return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 
-    private static List<string> GetFilesToSearch(string searchPath, List<string>? extensions, string? globPattern)
+    private async Task<GrepToolResult> SearchFilesMode(
+        IAgwFileSystem fs, string searchPath, SearchOptions options, GrepToolParams toolParams, CancellationToken ct)
     {
-        var files = new List<string>();
+        var matchingFiles = new List<(string Path, DateTimeOffset Mtime)>();
+        var regex = BuildRegex(toolParams.Pattern, toolParams.CaseInsensitive, toolParams.Multiline);
 
-        if (File.Exists(searchPath))
+        await foreach (var entry in fs.EnumerateAsync(searchPath, "*", true, ct))
         {
-            files.Add(searchPath);
-            return files;
-        }
+            ct.ThrowIfCancellationRequested();
 
-        var searchOption = SearchOption.AllDirectories;
-        var allFiles = Directory.GetFiles(searchPath, "*", searchOption);
+            if (entry.IsDirectory) continue;
+            if (!MatchesFilters(entry.Path, toolParams.Type, toolParams.Glob)) continue;
 
-        foreach (var file in allFiles)
-        {
-            // Skip VCS directories
-            if (file.Contains("\\.git\\") || file.Contains("/.git/"))
-                continue;
-
-            // Filter by extension
-            if (extensions != null && extensions.Count > 0)
-            {
-                var ext = Path.GetExtension(file).TrimStart('.').ToLowerInvariant();
-                if (!extensions.Contains(ext))
-                    continue;
-            }
-
-            // Filter by glob
-            if (!string.IsNullOrEmpty(globPattern))
-            {
-                var filename = Path.GetFileName(file);
-                if (!MatchesGlob(filename, globPattern))
-                    continue;
-            }
-
-            files.Add(file);
-        }
-
-        return files;
-    }
-
-    private static List<string>? GetExtensionsFromType(string? type)
-    {
-        if (string.IsNullOrEmpty(type))
-            return null;
-
-        return type.ToLowerInvariant() switch
-        {
-            "js" => new List<string> { "js", "jsx", "mjs", "cjs" },
-            "ts" => new List<string> { "ts", "tsx", "mts", "cts" },
-            "py" => new List<string> { "py", "pyw", "pyi" },
-            "rust" => new List<string> { "rs" },
-            "go" => new List<string> { "go" },
-            "java" => new List<string> { "java" },
-            "cs" => new List<string> { "cs" },
-            "cpp" => new List<string> { "cpp", "cc", "cxx", "h", "hpp" },
-            "c" => new List<string> { "c", "h" },
-            "rb" => new List<string> { "rb" },
-            "php" => new List<string> { "php" },
-            _ => new List<string> { type }
-        };
-    }
-
-    private static bool MatchesGlob(string filename, string pattern)
-    {
-        // Simple glob matching
-        var regexPattern = "^" + pattern
-            .Replace(".", "\\.")
-            .Replace("*", ".*")
-            .Replace("?", ".")
-            + "$";
-
-        try
-        {
-            return Regex.IsMatch(filename, regexPattern, RegexOptions.IgnoreCase);
-        }
-        catch
-        {
-            return true;
-        }
-    }
-
-    private static GrepToolResult SearchFilesMode(List<string> files, Regex regex, GrepToolParams toolParams)
-    {
-        var matchingFiles = new List<string>();
-
-        foreach (var file in files)
-        {
             try
             {
-                var content = File.ReadAllText(file);
+                var content = await fs.ReadAllTextAsync(entry.Path, ct);
                 if (regex.IsMatch(content))
                 {
-                    matchingFiles.Add(file);
+                    matchingFiles.Add((entry.Path, entry.LastModifiedUtc));
                 }
             }
             catch
@@ -301,46 +212,45 @@ internal class GrepTool : IAgwTool
             }
         }
 
-        // Sort by modification time
         matchingFiles = matchingFiles
-            .Select(f => new { File = f, Mtime = File.GetLastWriteTimeUtc(f) })
             .OrderByDescending(x => x.Mtime)
-            .ThenBy(x => x.File)
-            .Select(x => x.File)
+            .ThenBy(x => x.Path)
             .ToList();
 
-        var (limitedItems, appliedLimit) = ApplyHeadLimit(matchingFiles, toolParams.HeadLimit, toolParams.Offset);
-
-        // Convert to relative paths
-        var cwd = Directory.GetCurrentDirectory();
-        var relativeFiles = limitedItems
-            .Select(f => f.StartsWith(cwd) ? f[cwd.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : f)
-            .ToList();
+        var (limitedItems, appliedLimit) = ApplyHeadLimit(
+            matchingFiles.Select(x => x.Path).ToList(), toolParams.HeadLimit, toolParams.Offset);
 
         return new GrepToolResult
         {
             Mode = "files_with_matches",
-            NumFiles = relativeFiles.Count,
-            Filenames = relativeFiles,
+            NumFiles = limitedItems.Count,
+            Filenames = limitedItems,
             AppliedLimit = appliedLimit,
             AppliedOffset = toolParams.Offset > 0 ? toolParams.Offset : null
         };
     }
 
-    private static GrepToolResult SearchContentMode(List<string> files, Regex regex, GrepToolParams toolParams)
+    private async Task<GrepToolResult> SearchContentMode(
+        IAgwFileSystem fs, string searchPath, SearchOptions options, GrepToolParams toolParams, CancellationToken ct)
     {
         var contextLines = toolParams.Context ?? toolParams.ContextBefore ?? toolParams.ContextAfter ?? 0;
         var beforeLines = toolParams.ContextBefore ?? contextLines;
         var afterLines = toolParams.ContextAfter ?? contextLines;
+        var regex = BuildRegex(toolParams.Pattern, toolParams.CaseInsensitive, toolParams.Multiline);
 
         var allLines = new List<string>();
 
-        foreach (var file in files)
+        await foreach (var entry in fs.EnumerateAsync(searchPath, "*", true, ct))
         {
+            ct.ThrowIfCancellationRequested();
+
+            if (entry.IsDirectory) continue;
+            if (!MatchesFilters(entry.Path, toolParams.Type, toolParams.Glob)) continue;
+
             try
             {
-                var lines = File.ReadAllLines(file);
-                var fileName = Path.GetFileName(file);
+                var lines = await fs.ReadAllLinesAsync(entry.Path, ct);
+                var fileName = System.IO.Path.GetFileName(entry.Path);
 
                 for (int i = 0; i < lines.Length; i++)
                 {
@@ -380,22 +290,28 @@ internal class GrepTool : IAgwTool
         };
     }
 
-    private static GrepToolResult SearchCountMode(List<string> files, Regex regex, GrepToolParams toolParams)
+    private async Task<GrepToolResult> SearchCountMode(
+        IAgwFileSystem fs, string searchPath, SearchOptions options, GrepToolParams toolParams, CancellationToken ct)
     {
         var countLines = new List<string>();
         int totalMatches = 0;
         int fileCount = 0;
+        var regex = BuildRegex(toolParams.Pattern, toolParams.CaseInsensitive, toolParams.Multiline);
 
-        foreach (var file in files)
+        await foreach (var entry in fs.EnumerateAsync(searchPath, "*", true, ct))
         {
+            ct.ThrowIfCancellationRequested();
+
+            if (entry.IsDirectory) continue;
+            if (!MatchesFilters(entry.Path, toolParams.Type, toolParams.Glob)) continue;
+
             try
             {
-                var content = File.ReadAllText(file);
+                var content = await fs.ReadAllTextAsync(entry.Path, ct);
                 var matches = regex.Matches(content).Count;
                 if (matches > 0)
                 {
-                    var relativePath = Path.GetRelativePath(Directory.GetCurrentDirectory(), file);
-                    countLines.Add($"{relativePath}:{matches}");
+                    countLines.Add($"{entry.Path}:{matches}");
                     totalMatches += matches;
                     fileCount++;
                 }
@@ -417,6 +333,83 @@ internal class GrepTool : IAgwTool
             AppliedLimit = appliedLimit,
             AppliedOffset = toolParams.Offset > 0 ? toolParams.Offset : null
         };
+    }
+
+    private static Regex BuildRegex(string pattern, bool caseInsensitive, bool multiline)
+    {
+        var options = RegexOptions.Compiled;
+        if (caseInsensitive) options |= RegexOptions.IgnoreCase;
+        if (multiline) options |= RegexOptions.Singleline;
+
+        try
+        {
+            return new Regex(pattern, options);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new AgwException(ErrorCodes.InvalidPattern, $"Invalid regex pattern: {ex.Message}");
+        }
+    }
+
+    private static bool MatchesFilters(string path, string? type, string? globPattern)
+    {
+        if (!string.IsNullOrEmpty(type))
+        {
+            var extensions = GetExtensionsFromType(type);
+            if (extensions is { Count: > 0 })
+            {
+                var ext = System.IO.Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+                if (!extensions.Contains(ext)) return false;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(globPattern))
+        {
+            var filename = System.IO.Path.GetFileName(path);
+            if (!MatchesSimpleGlob(filename, globPattern)) return false;
+        }
+
+        return true;
+    }
+
+    private static List<string>? GetExtensionsFromType(string? type)
+    {
+        if (string.IsNullOrEmpty(type))
+            return null;
+
+        return type.ToLowerInvariant() switch
+        {
+            "js" => ["js", "jsx", "mjs", "cjs"],
+            "ts" => ["ts", "tsx", "mts", "cts"],
+            "py" => ["py", "pyw", "pyi"],
+            "rust" => ["rs"],
+            "go" => ["go"],
+            "java" => ["java"],
+            "cs" => ["cs"],
+            "cpp" => ["cpp", "cc", "cxx", "h", "hpp"],
+            "c" => ["c", "h"],
+            "rb" => ["rb"],
+            "php" => ["php"],
+            _ => [type]
+        };
+    }
+
+    private static bool MatchesSimpleGlob(string filename, string pattern)
+    {
+        var regexPattern = "^" + pattern
+            .Replace(".", "\\.")
+            .Replace("*", ".*")
+            .Replace("?", ".")
+            + "$";
+
+        try
+        {
+            return Regex.IsMatch(filename, regexPattern, RegexOptions.IgnoreCase);
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static (List<T> Items, int? AppliedLimit) ApplyHeadLimit<T>(List<T> items, int? headLimit, int offset)
