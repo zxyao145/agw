@@ -1,5 +1,5 @@
-using Agw.Agents.Domain.Entities;
 using Agw.Jobs.Domain.Entities;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Results;

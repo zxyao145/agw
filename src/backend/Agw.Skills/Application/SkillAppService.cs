@@ -1,8 +1,8 @@
 using System.IO.Compression;
 using System.Text;
 
-using Agw.Agents.Domain.Entities;
 using Agw.Domain.Services.Skills;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;

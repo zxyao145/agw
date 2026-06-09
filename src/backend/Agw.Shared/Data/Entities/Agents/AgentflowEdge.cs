@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Shared.Data;
-
-namespace Agw.Agents.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Agents;
 
 [Table("agentflow_edge")]
 public class AgentflowEdge : BaseEntity

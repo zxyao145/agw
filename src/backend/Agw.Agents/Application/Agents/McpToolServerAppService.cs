@@ -1,3 +1,4 @@
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
 
 using ModelContextProtocol.Client;

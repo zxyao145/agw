@@ -7,7 +7,7 @@ using Agw.A2A.Extensions;
 using Agw.Agents.Application.AgentRun;
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
-using Agw.Agents.Domain.Entities;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Models;

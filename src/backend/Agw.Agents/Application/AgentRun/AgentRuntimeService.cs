@@ -8,6 +8,7 @@ using Agw.Domain.Services;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Models;

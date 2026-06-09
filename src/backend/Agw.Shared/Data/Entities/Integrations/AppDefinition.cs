@@ -1,6 +1,6 @@
 using Agw.Shared.Contracts.Integrations;
 
-namespace Agw.Integrations.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Integrations;
 
 
 /// <summary>

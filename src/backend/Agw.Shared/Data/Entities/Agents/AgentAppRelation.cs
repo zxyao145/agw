@@ -1,9 +1,8 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Integrations.Domain.Entities;
-using Agw.Shared.Data;
+using Agw.Shared.Data.Entities.Integrations;
 
-namespace Agw.Agents.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Agents;
 
 [Table("agent_app_relation")]
 public class AgentAppRelation : IAggregateRoot

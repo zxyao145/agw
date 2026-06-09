@@ -1,6 +1,6 @@
 using Agw.Providers.Contracts.Manager;
-using Agw.Providers.Domain.Entities;
 using Agw.Providers.Domain.Services;
+using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Repositories;
 
 using Microsoft.EntityFrameworkCore;

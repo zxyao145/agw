@@ -1,3 +1,5 @@
+using Agw.Shared.Data.Entities.Agents;
+
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 

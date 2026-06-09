@@ -1,4 +1,4 @@
-using Agw.Providers.Domain.Entities;
+using Agw.Shared.Data.Entities.Providers;
 
 namespace Agw.Providers.Contracts.Manager;
 

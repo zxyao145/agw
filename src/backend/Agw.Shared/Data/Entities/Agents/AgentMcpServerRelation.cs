@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Shared.Data;
-
-namespace Agw.Agents.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Agents;
 
 [Table("agent_mcp_server_relation")]
 public class AgentMcpServerRelation : IAggregateRoot

@@ -1,9 +1,8 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
 using Agw.Shared.Contracts.Providers;
-using Agw.Shared.Data;
 
-namespace Agw.Providers.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Providers;
 
 [Table("model")]
 public class LlmModel : BaseEntity, IAggregateRoot

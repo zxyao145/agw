@@ -1,5 +1,7 @@
 using A2A;
 
+using Agw.Shared.Data.Entities.Agents;
+
 namespace Agw.A2A;
 
 /// <summary>

@@ -4,7 +4,7 @@ using System.Reflection;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Contracts.Manager;
-using Agw.Integrations.Domain.Entities;
+using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 
 using Microsoft.AspNetCore.Mvc;

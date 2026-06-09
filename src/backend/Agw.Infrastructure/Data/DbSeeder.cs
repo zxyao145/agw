@@ -1,8 +1,8 @@
-using Agw.Agents.Domain.Entities;
 using Agw.Agents.ExternalAgents;
-using Agw.Providers.Domain.Entities;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Utils;
 

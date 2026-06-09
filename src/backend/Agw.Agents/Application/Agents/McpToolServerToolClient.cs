@@ -1,3 +1,4 @@
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 
 using ModelContextProtocol.Client;

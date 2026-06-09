@@ -2,6 +2,7 @@ using A2A;
 
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Models;
 

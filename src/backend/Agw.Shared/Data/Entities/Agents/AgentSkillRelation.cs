@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Agw.Agents.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Agents;
 
 [Table("agent_skill_relation")]
 public class AgentSkillRelation

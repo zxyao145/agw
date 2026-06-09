@@ -1,3 +1,5 @@
+using Agw.Shared.Data.Entities.Agents;
+
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Application.AgentRun.Dtos;

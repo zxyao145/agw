@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Shared.Data;
-
-namespace Agw.Integrations.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Integrations;
 
 [Table("app_instance")]
 public class AppInstance : BaseEntity, IAggregateRoot

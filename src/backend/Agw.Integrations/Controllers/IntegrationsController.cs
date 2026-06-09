@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 
 using Agw.Integrations.Contracts.Manager;
-using Agw.Integrations.Domain.Entities;
+using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Results;
 

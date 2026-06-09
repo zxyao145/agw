@@ -1,7 +1,8 @@
 using System.Text.Json;
 
-using Agw.Integrations.Domain.Entities;
-using Agw.Providers.Domain.Entities;
+using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Integrations;
+using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 

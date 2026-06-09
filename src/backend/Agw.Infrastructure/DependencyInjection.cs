@@ -2,10 +2,10 @@ using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Repositories;
-using Agw.Integrations.Domain.Entities;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.External;
+using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Services;
 

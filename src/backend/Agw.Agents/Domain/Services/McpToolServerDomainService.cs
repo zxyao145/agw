@@ -1,3 +1,5 @@
+using Agw.Shared.Data.Entities.Agents;
+
 namespace Agw.Agents.Domain.Services;
 
 public class McpToolServerDomainService

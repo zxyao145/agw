@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Agw.Integrations.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Integrations;
 
 /// <summary>
 /// Persists provider-issued OAuth tokens for a specific authenticated subject.

@@ -1,3 +1,5 @@
+using Agw.Shared.Data.Entities.Agents;
+
 namespace Agw.Agents.Tests;
 
 public class McpToolServerDomainServiceTests

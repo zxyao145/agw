@@ -1,5 +1,5 @@
-using Agw.Integrations.Domain.Entities;
 using Agw.Shared.Contracts.Integrations;
+using Agw.Shared.Data.Entities.Integrations;
 
 namespace Agw.Integrations;
 

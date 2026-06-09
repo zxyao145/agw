@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
 
 using Agw.Integrations;
-using Agw.Integrations.Domain.Entities;
+using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 
 namespace Agw.Infrastructure.Repositories;

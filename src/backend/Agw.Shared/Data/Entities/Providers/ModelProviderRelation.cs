@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Shared.Data;
-
-namespace Agw.Providers.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Providers;
 
 [Table("model_provider_relation")]
 public class ModelProviderRelation : BaseEntity, IAggregateRoot

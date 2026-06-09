@@ -4,7 +4,7 @@ using System.Text;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Contracts.Manager;
-using Agw.Integrations.Domain.Entities;
+using Agw.Shared.Data.Entities.Integrations;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;

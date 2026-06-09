@@ -1,7 +1,7 @@
-using Agw.Agents.Domain.Entities;
 using Agw.Infrastructure.Data;
-using Agw.Integrations.Domain.Entities;
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Integrations;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;

@@ -2,8 +2,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
-using Agw.Integrations.Domain.Entities;
 using Agw.Integrations.Tools.GitHub.Dtos;
+using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Services;

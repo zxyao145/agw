@@ -1,6 +1,6 @@
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations;
-using Agw.Integrations.Domain.Entities;
+using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 
 using Microsoft.Extensions.Configuration;

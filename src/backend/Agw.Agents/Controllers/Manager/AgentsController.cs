@@ -1,5 +1,6 @@
 using Agw.Agents.Application.Agents;
 using Agw.Agents.Contracts.Manager;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;
