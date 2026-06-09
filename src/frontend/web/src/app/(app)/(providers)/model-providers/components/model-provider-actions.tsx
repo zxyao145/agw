@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { apiDelete } from "@/api/client";
+import { apiDelete, apiRequest } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { listKeysByPair } from "./utils";
@@ -21,16 +21,18 @@ export function ModelProviderActions({ modelProviderId }: ModelProviderActionsPr
   const deleteModelProviderMutation = useMutation({
     mutationFn: async () => {
       const keys = await listKeysByPair({ modelProviderId });
-      await Promise.all(
-        keys.map(async (k) => {
-          const response = await fetch(`/api/model-provider-keys/${encodeURIComponent(k.id)}`, {
-            method: "DELETE",
-          });
+      const deleteKey = apiRequest as unknown as (
+        path: string,
+        method: "delete",
+        options: { params: { path: { id: string } } },
+      ) => Promise<unknown>;
 
-          if (!response.ok) {
-            throw new Error(`Failed to delete API key ${k.id}`);
-          }
-        }),
+      await Promise.all(
+        keys.map((k) =>
+          deleteKey("/api/model-provider-keys/{id}", "delete", {
+            params: { path: { id: k.id } },
+          }),
+        ),
       );
       await apiDelete("/api/model-providers/{id}", {
         params: { path: { id: modelProviderId } },

@@ -53,10 +53,10 @@ type OperationParams<P extends keyof paths, M extends keyof paths[P]> =
   Operation<P, M> extends { parameters: infer T } ? T : never;
 
 type PathParams<P extends keyof paths, M extends keyof paths[P]> =
-  OperationParams<P, M> extends { path: infer T } ? T : never;
+  OperationParams<P, M> extends { path?: infer T } ? T : never;
 
 type QueryParams<P extends keyof paths, M extends keyof paths[P]> =
-  OperationParams<P, M> extends { query: infer T } ? T : never;
+  OperationParams<P, M> extends { query?: infer T } ? T : never;
 
 type RequestContent<P extends keyof paths, M extends keyof paths[P]> =
   Operation<P, M> extends { requestBody: { content: infer C } } ? C : never;

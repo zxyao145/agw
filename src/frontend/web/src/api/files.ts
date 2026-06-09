@@ -3,6 +3,8 @@
  * Uses the backend API for file browsing and reading
  */
 
+import { ApiError, apiDelete, apiGet, apiPost } from "./client";
+
 export interface FileItem {
   name: string;
   path: string;
@@ -29,6 +31,26 @@ export class FileApiError extends Error {
   }
 }
 
+function toFileApiError(err: unknown, fallbackMessage: string): FileApiError {
+  if (err instanceof FileApiError) {
+    return err;
+  }
+
+  if (err instanceof ApiError) {
+    const body = err.body;
+    const message =
+      typeof body === "object" &&
+      body !== null &&
+      "error" in body &&
+      typeof body.error === "string"
+        ? body.error
+        : fallbackMessage;
+    return new FileApiError(message, err.status, err.statusText);
+  }
+
+  return new FileApiError(`Network error: ${(err as Error).message}`);
+}
+
 /**
  * List files and directories at the specified path
  * @param path - Directory path to list
@@ -41,31 +63,11 @@ export async function listFiles(
   recursive: boolean = false,
 ): Promise<ListFilesResponse> {
   try {
-    const params = new URLSearchParams({ path });
-    if (diff) {
-      params.append("diff", "true");
-    }
-    if (recursive) {
-      params.append("recursive", "true");
-    }
-
-    const response = await fetch(`/api/files/list?${params.toString()}`);
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new FileApiError(
-        errorData.error || `Failed to load directory: ${response.statusText}`,
-        response.status,
-        response.statusText,
-      );
-    }
-
-    return await response.json();
+    return (await apiGet("/api/files/list", {
+      params: { query: { path, diff: diff || undefined, recursive: recursive || undefined } },
+    })) as ListFilesResponse;
   } catch (err) {
-    if (err instanceof FileApiError) {
-      throw err;
-    }
-    throw new FileApiError(`Network error: ${(err as Error).message}`);
+    throw toFileApiError(err, "Failed to load directory");
   }
 }
 
@@ -74,22 +76,9 @@ export async function listFiles(
  */
 export async function readFile(path: string): Promise<string> {
   try {
-    const response = await fetch(`/api/files/read?path=${encodeURIComponent(path)}`);
-
-    if (!response.ok) {
-      throw new FileApiError(
-        `Failed to read file: ${response.statusText}`,
-        response.status,
-        response.statusText,
-      );
-    }
-
-    return await response.text();
+    return (await apiGet("/api/files/read", { params: { query: { path } } })) as string;
   } catch (err) {
-    if (err instanceof FileApiError) {
-      throw err;
-    }
-    throw new FileApiError(`Network error: ${(err as Error).message}`);
+    throw toFileApiError(err, "Failed to read file");
   }
 }
 
@@ -105,23 +94,9 @@ export interface GitDiffResponse {
  */
 export async function getFileDiff(path: string): Promise<GitDiffResponse> {
   try {
-    const response = await fetch(`/api/files/diff?path=${encodeURIComponent(path)}`);
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new FileApiError(
-        errorData.error || `Failed to get diff: ${response.statusText}`,
-        response.status,
-        response.statusText,
-      );
-    }
-
-    return await response.json();
+    return (await apiGet("/api/files/diff", { params: { query: { path } } })) as GitDiffResponse;
   } catch (err) {
-    if (err instanceof FileApiError) {
-      throw err;
-    }
-    throw new FileApiError(`Network error: ${(err as Error).message}`);
+    throw toFileApiError(err, "Failed to get diff");
   }
 }
 
@@ -130,25 +105,11 @@ export async function getFileDiff(path: string): Promise<GitDiffResponse> {
  */
 export async function deleteFile(path: string): Promise<{ success: boolean; message: string }> {
   try {
-    const response = await fetch(`/api/files/delete?path=${encodeURIComponent(path)}`, {
-      method: "DELETE",
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new FileApiError(
-        errorData.error || `Failed to delete: ${response.statusText}`,
-        response.status,
-        response.statusText,
-      );
-    }
-
-    return await response.json();
+    return (await apiDelete("/api/files/delete", {
+      params: { query: { path } },
+    })) as { success: boolean; message: string };
   } catch (err) {
-    if (err instanceof FileApiError) {
-      throw err;
-    }
-    throw new FileApiError(`Network error: ${(err as Error).message}`);
+    throw toFileApiError(err, "Failed to delete");
   }
 }
 
@@ -157,25 +118,11 @@ export async function deleteFile(path: string): Promise<{ success: boolean; mess
  */
 export async function resetFile(path: string): Promise<{ success: boolean; message: string }> {
   try {
-    const response = await fetch(`/api/files/reset?path=${encodeURIComponent(path)}`, {
-      method: "POST",
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new FileApiError(
-        errorData.error || `Failed to reset: ${response.statusText}`,
-        response.status,
-        response.statusText,
-      );
-    }
-
-    return await response.json();
+    return (await apiPost("/api/files/reset", {
+      params: { query: { path } },
+    })) as { success: boolean; message: string };
   } catch (err) {
-    if (err instanceof FileApiError) {
-      throw err;
-    }
-    throw new FileApiError(`Network error: ${(err as Error).message}`);
+    throw toFileApiError(err, "Failed to reset");
   }
 }
 
@@ -201,30 +148,10 @@ export async function searchFiles(
   recursive: boolean = true,
 ): Promise<SearchFilesResponse> {
   try {
-    const params = new URLSearchParams({
-      path,
-      keyword,
-    });
-    if (recursive) {
-      params.append("recursive", "true");
-    }
-
-    const response = await fetch(`/api/files/search?${params.toString()}`);
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new FileApiError(
-        errorData.error || `Failed to search files: ${response.statusText}`,
-        response.status,
-        response.statusText,
-      );
-    }
-
-    return await response.json();
+    return (await apiGet("/api/files/search", {
+      params: { query: { path, keyword, recursive: recursive || undefined } },
+    })) as SearchFilesResponse;
   } catch (err) {
-    if (err instanceof FileApiError) {
-      throw err;
-    }
-    throw new FileApiError(`Network error: ${(err as Error).message}`);
+    throw toFileApiError(err, "Failed to search files");
   }
 }
