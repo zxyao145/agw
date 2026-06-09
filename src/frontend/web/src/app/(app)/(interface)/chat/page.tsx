@@ -401,9 +401,11 @@ export default function ChatPage() {
   const searchParams = useSearchParams();
   const queryProjectId = searchParams.get("projectId");
   const queryTaskId = searchParams.get("taskId");
-  const [hashSettingsValue, setHashSettingsValue] = React.useState<string | null>(
-    getCurrentChatSettingsHashValue,
-  );
+  const [hashSettingsValue, setHashSettingsValue] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setHashSettingsValue(getCurrentChatSettingsHashValue());
+  }, []);
   const routeSettings = React.useMemo(
     () => decodeChatUrlSettings(hashSettingsValue),
     [hashSettingsValue],
