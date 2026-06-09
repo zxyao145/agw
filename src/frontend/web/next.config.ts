@@ -6,20 +6,25 @@ const backendBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   "http://localhost:5015";
 
+const outputMode = process.env.NEXT_OUTPUT_MODE;
+const isStaticExport = outputMode === "export";
+
 const nextConfig: NextConfig = {
+  output: outputMode === "export" || outputMode === "standalone" ? outputMode : undefined,
   turbopack: {
     rules: codeInspectorPlugin({
       bundler: 'turbopack',
     }),
   },
-  async rewrites() {
-    return [
-      // Proxy backend APIs to avoid CORS in local dev.
-      { source: "/api/:path*", destination: `${backendBaseUrl}/api/:path*` },
-      // OpenAPI endpoint (Development): /openapi
-      { source: "/openapi/:path*", destination: `${backendBaseUrl}/openapi/:path*` },
-    ];
-  },
 };
+
+if (!isStaticExport) {
+  nextConfig.rewrites = async () => [
+    // Proxy backend APIs to avoid CORS in local dev and local app mode.
+    { source: "/api/:path*", destination: `${backendBaseUrl}/api/:path*` },
+    // OpenAPI endpoint (Development): /openapi
+    { source: "/openapi/:path*", destination: `${backendBaseUrl}/openapi/:path*` },
+  ];
+}
 
 export default nextConfig;

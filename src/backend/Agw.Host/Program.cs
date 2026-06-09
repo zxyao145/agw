@@ -222,6 +222,7 @@ try
 
     // Enable WebSocket support
     app.UseWebSockets();
+    app.UseDefaultFiles();
     app.UseStaticFiles();
     app.UseMiddleware<InitializationGuardMiddleware>();
     app.UseMiddleware<ApiKeyGuardMiddleware>();
@@ -233,6 +234,7 @@ try
         .Value;
     app.MapAgwA2A(a2AServerOptions.Prefix);
     app.MapControllers();
+    app.MapFallbackToFile("index.html");
 
     Log.Information("Agw Host configured successfully");
     app.Run();

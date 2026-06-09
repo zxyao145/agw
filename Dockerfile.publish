@@ -1,0 +1,16 @@
+FROM node:24-bookworm-slim AS node
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+WORKDIR /app
+
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY backend ./backend
+COPY frontend ./frontend
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+
+ENV ASPNETCORE_ENVIRONMENT=Development \
+    BACKEND_PORT=5015 \
+    WEB_PORT=8080 \
+    HOSTNAME=0.0.0.0
+EXPOSE 8080
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
