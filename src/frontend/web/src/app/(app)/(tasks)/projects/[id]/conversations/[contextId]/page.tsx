@@ -4,11 +4,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
-import { apiGet } from "@/api/client";
+import { getProjectContextDetails, type ContextDetails } from "@/api/task-client";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ProjectTaskDto } from "./types";
 import { getApiErrorMessage } from "@/api/utils";
 
 function formatDate(value?: string | null): string {
@@ -48,7 +47,6 @@ function statusClassName(status: number): string {
     case 1:
       return "bg-blue-500/10 text-blue-700 dark:text-blue-300";
     case 0:
-      return "bg-muted text-muted-foreground";
     case 4:
       return "bg-muted text-muted-foreground";
     case 3:
@@ -58,22 +56,31 @@ function statusClassName(status: number): string {
   }
 }
 
-export default function TaskDetailsPage() {
-  const params = useParams<{ id: string; taskId: string }>();
-  const projectId = params.id;
-  const taskId = params.taskId;
-
-  const taskQuery = useQuery({
-    queryKey: ["projects", projectId, "tasks", taskId],
-    queryFn: async () => {
-      return (await apiGet("/api/projects/{projectId}/tasks/{taskId}", {
-        params: { path: { projectId, taskId } },
-      } as never)) as unknown as ProjectTaskDto;
-    },
+function getChatHref(projectId: string, conversation: ContextDetails): string {
+  const searchParams = new URLSearchParams({
+    projectId,
+    contextId: conversation.contextId,
   });
 
-  const task = taskQuery.data;
-  const messages = task?.messages ?? [];
+  if (conversation.latestTaskId) {
+    searchParams.set("taskId", conversation.latestTaskId);
+  }
+
+  return `/chat?${searchParams.toString()}`;
+}
+
+export default function ConversationDetailsPage() {
+  const params = useParams<{ id: string; contextId: string }>();
+  const projectId = params.id;
+  const contextId = decodeURIComponent(params.contextId);
+
+  const conversationQuery = useQuery({
+    queryKey: ["projects", projectId, "contexts", contextId],
+    queryFn: async () => getProjectContextDetails(projectId, contextId),
+  });
+
+  const conversation = conversationQuery.data;
+  const messages = conversation?.messages ?? [];
 
   return (
     <div className="space-y-6 w-full min-w-0 max-w-full">
@@ -81,110 +88,120 @@ export default function TaskDetailsPage() {
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-xl font-semibold">
-              {taskQuery.isLoading ? "Loading task..." : (task?.title ?? "Task")}
+              {conversationQuery.isLoading ? "Loading conversation..." : (conversation?.title ?? "Conversation")}
             </h1>
-            {task ? (
-              <span className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(task.status)}`}>
-                {statusLabel(task.status)}
+            {conversation?.latestStatus !== null && conversation?.latestStatus !== undefined ? (
+              <span
+                className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(conversation.latestStatus)}`}
+              >
+                {statusLabel(conversation.latestStatus)}
               </span>
             ) : null}
           </div>
-          <div className="text-sm text-muted-foreground">
-            {task?.jobId ? `Source job: ${task.jobId}` : "Source: chat"}
-          </div>
-          {task ? (
+          <div className="text-sm text-muted-foreground">Conversation history across related tasks.</div>
+          {conversation ? (
             <div className="text-xs text-muted-foreground">
-              <span className="font-mono">{task.id}</span>
+              <span className="font-mono">{conversation.contextId}</span>
             </div>
           ) : null}
         </div>
 
         <ButtonGroup>
-          <Button asChild size="sm">
-            <Link href={`/chat?projectId=${projectId}&taskId=${taskId}`}>Continue In Chat</Link>
-          </Button>
+          {conversation ? (
+            <Button asChild size="sm">
+              <Link href={getChatHref(projectId, conversation)}>Continue In Chat</Link>
+            </Button>
+          ) : null}
           <Button asChild variant="outline" size="sm">
             <Link href={`/projects/${projectId}`}>Back</Link>
           </Button>
         </ButtonGroup>
       </div>
 
-      {taskQuery.isLoading ? (
-        <div className="text-sm text-muted-foreground">Loading task details...</div>
-      ) : taskQuery.isError ? (
+      {conversationQuery.isLoading ? (
+        <div className="text-sm text-muted-foreground">Loading conversation details...</div>
+      ) : conversationQuery.isError ? (
         <div className="text-sm text-destructive">
-          Failed to load task: {getApiErrorMessage(taskQuery.error)}
+          Failed to load conversation: {getApiErrorMessage(conversationQuery.error)}
         </div>
-      ) : task ? (
+      ) : conversation ? (
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Task Overview</CardTitle>
-              <CardDescription>Execution metadata captured for this task session.</CardDescription>
+              <CardTitle>Conversation Overview</CardTitle>
+              <CardDescription>Aggregate metadata for all tasks in this conversation.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
               <div className="space-y-1">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Context ID</div>
+                <div className="break-all font-mono text-xs">{conversation.contextId}</div>
+              </div>
+              <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Context ID
+                  Latest Task ID
                 </div>
-                <div className="break-all font-mono text-xs">{task.contextId}</div>
+                <div className="break-all font-mono text-xs">{conversation.latestTaskId ?? "-"}</div>
               </div>
               <div className="space-y-1">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Job ID</div>
-                <div className="break-all font-mono text-xs">{task.jobId ?? "-"}</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Source</div>
-                <div>{task.jobId ? "Job run" : "Chat session"}</div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Task Count</div>
+                <div>{conversation.taskCount}</div>
               </div>
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">
                   Message Count
                 </div>
-                <div>{task.messageCount}</div>
+                <div>{conversation.messageCount}</div>
               </div>
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">Created</div>
-                <div>{formatDate(task.createTime)}</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Started</div>
-                <div>{formatDate(task.startedTime)}</div>
+                <div>{formatDate(conversation.createTime)}</div>
               </div>
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">Updated</div>
-                <div>{formatDate(task.updateTime)}</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Finished
-                </div>
-                <div>{formatDate(task.finishedTime)}</div>
+                <div>{formatDate(conversation.updateTime)}</div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Input</CardTitle>
-              <CardDescription>The initial user input stored for this task.</CardDescription>
+              <CardTitle>Tasks</CardTitle>
+              <CardDescription>Concrete task executions attached to this conversation.</CardDescription>
             </CardHeader>
             <CardContent>
-              <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/40 p-3 text-sm">
-                {task.input || "-"}
-              </pre>
+              {conversation.tasks.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No tasks recorded.</div>
+              ) : (
+                <div className="space-y-3">
+                  {conversation.tasks.map((task) => (
+                    <div key={task.taskId} className="rounded-lg border p-4">
+                      <div className="space-y-2">
+                        <div className="font-medium">{task.title}</div>
+                        <div className="grid gap-1 text-xs text-muted-foreground">
+                          <div>
+                            Task ID: <span className="font-mono">{task.taskId}</span>
+                          </div>
+                          <div>
+                            Created: {formatDate(task.createTime)} · Updated: {formatDate(task.updateTime)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {task.errorMessage ? (
+          {conversation.errorMessage ? (
             <Card className="border-destructive/50">
               <CardHeader>
                 <CardTitle className="text-destructive">Error</CardTitle>
-                <CardDescription>Terminal error recorded for this task.</CardDescription>
+                <CardDescription>Latest terminal error recorded for this conversation.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {task.errorMessage}
+                  {conversation.errorMessage}
                 </div>
               </CardContent>
             </Card>
@@ -193,7 +210,7 @@ export default function TaskDetailsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Message History</CardTitle>
-              <CardDescription>Conversation records attached to this task session.</CardDescription>
+              <CardDescription>Messages across all tasks in this conversation.</CardDescription>
             </CardHeader>
             <CardContent>
               {messages.length === 0 ? (

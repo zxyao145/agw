@@ -56,9 +56,21 @@ export type AgwMessage = {
   additionalProperties?: Record<string, unknown> | null;
 };
 
-export type AgwTaskDetails = AgwTaskSummary & {
-  input: string;
+export type AgwContextSummary = {
+  projectId: string;
+  contextId: string;
+  title: string;
+  latestTaskId?: string | null;
+  latestStatus?: number | null;
+  taskCount: number;
   messageCount: number;
+  createTime: string;
+  updateTime?: string | null;
+  errorMessage?: string | null;
+};
+
+export type AgwContextDetails = AgwContextSummary & {
+  tasks: AgwTaskSummary[];
   messages?: AgwMessage[] | null;
 };
 

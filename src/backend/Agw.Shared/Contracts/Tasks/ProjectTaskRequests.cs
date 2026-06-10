@@ -38,3 +38,23 @@ public record ProjectTaskResponse(
     DateTime? FinishedTime,
     int MessageCount,
     IReadOnlyList<AgwMessage>? Messages);
+
+public record ProjectContextSummaryResponse(
+    string ProjectId,
+    string ContextId,
+    string Title,
+    Guid? LatestTaskId,
+    ProjectTaskStatus? LatestStatus,
+    int TaskCount,
+    int MessageCount,
+    DateTime CreateTime,
+    DateTime? UpdateTime,
+    string? ErrorMessage);
+
+public record ProjectContextResponse(
+    string ProjectId,
+    string ContextId,
+    Guid? LatestTaskId,
+    IReadOnlyList<ProjectTaskSummaryResponse> Tasks,
+    int MessageCount,
+    IReadOnlyList<AgwMessage>? Messages);

@@ -18,7 +18,7 @@ import { UserInput, UserInputRef } from "./user-input";
 import { ArrowUp, Eraser, Square } from "lucide-react";
 import { Separator } from "../ui/separator";
 import { useQuery } from "@tanstack/react-query";
-import { clearTaskRecords, getTaskDetails } from "@/api/task-client";
+import { clearProjectContextRecords, getProjectContextDetailsByTaskId } from "@/api/task-client";
 import { QuickTextDialog } from "../task/quick-text-dialog";
 
 export interface ChatProps {
@@ -78,9 +78,9 @@ export function Chat({
   }, []);
 
   const sessionQuery = useQuery({
-    queryKey: ["projects", projectId, "tasks", taskId, "task-record"],
+    queryKey: ["projects", projectId, "contexts", "by-task", taskId],
     queryFn: async () => {
-      return await getTaskDetails(taskId!, projectId);
+      return await getProjectContextDetailsByTaskId(projectId, taskId!);
     },
     enabled: Boolean(taskId),
     refetchInterval: false,
@@ -173,7 +173,8 @@ export function Chat({
       return;
     }
 
-    const success = await clearTaskRecords(taskId, projectId);
+    const session = await getProjectContextDetailsByTaskId(projectId, taskId);
+    const success = await clearProjectContextRecords(projectId, session.contextId);
     if (success) {
       setMessages([]);
     }

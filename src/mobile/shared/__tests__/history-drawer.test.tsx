@@ -30,14 +30,14 @@ describe("HistoryDrawer", () => {
           onOpenSettings={jest.fn()}
           onProjectSelect={jest.fn()}
           onTargetSelect={jest.fn()}
-          onTaskSelect={jest.fn()}
+          contexts={[]}
+          onContextSelect={jest.fn()}
           projects={[]}
           safeBottom={0}
           safeTop={0}
           selectedProjectId={null}
           selectedTargetValue={null}
           targets={[]}
-          tasks={[]}
         />
       );
     });
@@ -60,14 +60,14 @@ describe("HistoryDrawer", () => {
           onOpenSettings={jest.fn()}
           onProjectSelect={jest.fn()}
           onTargetSelect={jest.fn()}
-          onTaskSelect={jest.fn()}
+          contexts={[]}
+          onContextSelect={jest.fn()}
           projects={[]}
           safeBottom={0}
           safeTop={0}
           selectedProjectId={null}
           selectedTargetValue={null}
           targets={[]}
-          tasks={[]}
         />
       );
     });

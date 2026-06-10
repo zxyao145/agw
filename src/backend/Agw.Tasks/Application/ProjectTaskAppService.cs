@@ -5,7 +5,6 @@ using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Extensions;
-using Agw.Shared.Models;
 using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
 
@@ -60,7 +59,7 @@ public class ProjectTaskAppService
 
         return tasks
             .OrderByDescending(task => task.UpdateTime ?? task.CreateTime)
-            .Select(ToSummaryResponse)
+            .Select(ProjectTaskResponseMapper.ToSummaryResponse)
             .ToList();
     }
 
@@ -79,8 +78,8 @@ public class ProjectTaskAppService
         }
 
         var records = await GetOrderedRecordsByTaskIdAsync(task.Id);
-        var messages = records.SelectMany(ToAiMessages).ToList();
-        return ToResponse(task, records, messages);
+        var messages = records.SelectMany(ProjectTaskResponseMapper.ToAiMessages).ToList();
+        return ProjectTaskResponseMapper.ToResponse(task, records, messages);
     }
 
     public async Task<ApplicationResult<ProjectTaskResponse>> CreateAsync(
@@ -161,7 +160,7 @@ public class ProjectTaskAppService
         await _taskRepository.AddAsync(task);
         await _unitOfWork.SaveChangesAsync();
 
-        return ApplicationResult<ProjectTaskResponse>.Success(ToResponse(task, [initialRecord], null));
+        return ApplicationResult<ProjectTaskResponse>.Success(ProjectTaskResponseMapper.ToResponse(task, [initialRecord], null));
     }
 
     public async Task<ApplicationResult> UpdateTitleAsync(
@@ -276,67 +275,4 @@ public class ProjectTaskAppService
         return _taskRecordDomainService.Order(records);
     }
 
-    private static ProjectTaskSummaryResponse ToSummaryResponse(ProjectTask task) =>
-        new(
-            task.Id,
-            task.ProjectId.Normalize(),
-            task.ContextId,
-            task.JobId,
-            task.Status,
-            task.Title,
-            task.ErrorMessage,
-            task.CreateTime,
-            task.UpdateTime,
-            task.FinishedTime,
-            GetStartedTime(task));
-
-    private static ProjectTaskResponse ToResponse(
-        ProjectTask task,
-        IReadOnlyList<TaskRecord> records,
-        IReadOnlyList<AgwMessage>? messages)
-    {
-        return new ProjectTaskResponse(
-            task.Id,
-            task.ProjectId.Normalize(),
-            task.ContextId,
-            task.JobId,
-            task.Status,
-            task.Title,
-            GetInputText(records.LastOrDefault(record => record.ToChatMessage()?.Role == ChatRole.User)),
-            task.ErrorMessage ?? records.LastOrDefault()?.Error,
-            task.CreateTime,
-            task.UpdateTime,
-            GetStartedTime(task),
-            task.FinishedTime,
-            CountMessages(records),
-            messages);
-    }
-
-    private static IEnumerable<AgwMessage> ToAiMessages(TaskRecord record)
-    {
-        var message = record.ToChatMessage()?.ToAiMessage();
-        if (message != null)
-        {
-            yield return message;
-        }
-    }
-
-    private static int CountMessages(IEnumerable<TaskRecord> records) =>
-        records.Sum(CountMessages);
-
-    private static int CountMessages(TaskRecord record) =>
-        record.ToChatMessage() == null ? 0 : 1;
-
-    private static DateTime? GetStartedTime(ProjectTask task) =>
-        task.Status == ProjectTaskStatus.Pending ? null : task.CreateTime;
-
-    private static string GetInputText(TaskRecord? record)
-    {
-        if (record?.ToChatMessage()?.Role != ChatRole.User)
-        {
-            return string.Empty;
-        }
-
-        return record.GetText();
-    }
 }

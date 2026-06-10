@@ -6,12 +6,27 @@ import * as client from "./client";
 export interface TaskSummary {
   taskId: string;
   projectId: string;
+  contextId: string;
   title: string;
   createTime: string;
   updateTime?: string | null;
 }
 
-export interface TaskRecordDetails extends TaskSummary {
+export interface ContextSummary {
+  projectId: string;
+  contextId: string;
+  title: string;
+  latestTaskId?: string | null;
+  latestStatus?: number | null;
+  taskCount: number;
+  messageCount: number;
+  createTime: string;
+  updateTime?: string | null;
+  errorMessage?: string | null;
+}
+
+export interface ContextDetails extends ContextSummary {
+  tasks: TaskSummary[];
   messages: AiMessage[];
 }
 
@@ -29,9 +44,21 @@ export type ProjectTaskSummaryResponse = {
   finishedTime?: string | null;
 };
 
-export type ProjectTaskHistoryResponse = ProjectTaskSummaryResponse & {
-  input: string;
+export type ProjectContextSummaryResponse = {
+  projectId: string;
+  contextId: string;
+  title: string;
+  latestTaskId?: string | null;
+  latestStatus?: number | null;
+  taskCount: number;
   messageCount: number;
+  createTime: string;
+  updateTime?: string | null;
+  errorMessage?: string | null;
+};
+
+export type ProjectContextResponse = ProjectContextSummaryResponse & {
+  tasks: ProjectTaskSummaryResponse[];
   messages?: AiMessage[] | null;
 };
 
@@ -39,17 +66,33 @@ function toChatSessionSummary(task: ProjectTaskSummaryResponse): TaskSummary {
   return {
     taskId: task.id,
     projectId: task.projectId,
+    contextId: task.contextId,
     title: task.title,
     createTime: task.createTime,
     updateTime: task.updateTime ?? null,
   };
 }
 
-function toChatSessionDetails(task: ProjectTaskHistoryResponse): TaskRecordDetails {
-  const summary = toChatSessionSummary(task);
+function toContextSummary(context: ProjectContextSummaryResponse): ContextSummary {
   return {
-    ...summary,
-    messages: task.messages ?? [],
+    projectId: context.projectId,
+    contextId: context.contextId,
+    title: context.title,
+    latestTaskId: context.latestTaskId ?? null,
+    latestStatus: context.latestStatus ?? null,
+    taskCount: context.taskCount,
+    messageCount: context.messageCount,
+    createTime: context.createTime,
+    updateTime: context.updateTime ?? null,
+    errorMessage: context.errorMessage ?? null,
+  };
+}
+
+function toContextDetails(context: ProjectContextResponse): ContextDetails {
+  return {
+    ...toContextSummary(context),
+    tasks: context.tasks.map(toChatSessionSummary),
+    messages: context.messages ?? [],
   };
 }
 
@@ -57,73 +100,49 @@ function isNotFoundError(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
 }
 
-export async function getAllTasks(projectId: string): Promise<TaskSummary[]> {
-  const result = (await client.apiGet("/api/projects/{projectId}/tasks", {
-    params: { path: { projectId } },
-  })) as ProjectTaskSummaryResponse[];
-
-  return result.map(toChatSessionSummary);
-}
-
-export async function getTaskDetails(
+export async function getProjectContextDetailsByTaskId(
   projectId: string,
   taskId: string,
-): Promise<TaskRecordDetails> {
-  const response = (await client.apiGet("/api/projects/{projectId}/tasks/{taskId}", {
+): Promise<ContextDetails> {
+  const response = (await client.apiGet("/api/projects/{projectId}/contexts/by-task/{taskId}", {
     params: { path: { projectId, taskId } },
-  })) as ProjectTaskHistoryResponse;
-  return toChatSessionDetails(response);
+  })) as ProjectContextResponse;
+
+  return toContextDetails(response);
 }
 
-export async function deleteTaskById(taskId: string, projectId: string): Promise<boolean> {
-  if (!taskId || !projectId) {
-    return false;
-  }
+export async function getProjectContexts(projectId: string): Promise<ContextSummary[]> {
+  const result = (await client.apiGet("/api/projects/{projectId}/contexts", {
+    params: { path: { projectId } },
+  })) as ProjectContextSummaryResponse[];
 
-  try {
-    await client.apiDelete("/api/projects/{projectId}/tasks/{taskId}", {
-      params: { path: { projectId, taskId } },
-    });
-    return true;
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return false;
-    }
-    throw error;
-  }
+  return result.map(toContextSummary);
 }
 
-export async function clearTaskRecords(taskId: string, projectId: string): Promise<boolean> {
-  if (!taskId || !projectId) {
-    return false;
-  }
-
-  try {
-    await client.apiDelete("/api/projects/{projectId}/tasks/{taskId}/clear-records", {
-      params: { path: { projectId, taskId } },
-    });
-    return true;
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return false;
-    }
-    throw error;
-  }
-}
-
-export async function updateTaskTitle(
-  taskId: string,
+export async function getProjectContextDetails(
   projectId: string,
+  contextId: string,
+): Promise<ContextDetails> {
+  const response = (await client.apiGet("/api/projects/{projectId}/contexts/{contextId}", {
+    params: { path: { projectId, contextId } },
+  })) as ProjectContextResponse;
+
+  return toContextDetails(response);
+}
+
+export async function updateProjectContextTitle(
+  projectId: string,
+  contextId: string,
   title: string,
 ): Promise<boolean> {
   const normalizedTitle = title.trim();
-  if (!taskId || !projectId || !normalizedTitle) {
+  if (!projectId || !contextId || !normalizedTitle) {
     return false;
   }
 
   try {
-    await client.apiPut("/api/projects/{projectId}/tasks/{taskId}/title", {
-      params: { path: { projectId, taskId } },
+    await client.apiPut("/api/projects/{projectId}/contexts/{contextId}/title", {
+      params: { path: { projectId, contextId } },
       body: { title: normalizedTitle },
     });
     return true;
@@ -135,7 +154,59 @@ export async function updateTaskTitle(
   }
 }
 
-export async function deleteAllTasks(projectId: string): Promise<void> {
-  const tasks = await getAllTasks(projectId);
-  await Promise.all(tasks.map((task) => deleteTaskById(task.taskId, projectId)));
+export async function deleteProjectContext(projectId: string, contextId: string): Promise<boolean> {
+  if (!projectId || !contextId) {
+    return false;
+  }
+
+  try {
+    await client.apiDelete("/api/projects/{projectId}/contexts/{contextId}", {
+      params: { path: { projectId, contextId } },
+    });
+    return true;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+export async function clearProjectContextRecords(
+  projectId: string,
+  contextId: string,
+): Promise<boolean> {
+  if (!projectId || !contextId) {
+    return false;
+  }
+
+  try {
+    await client.apiDelete("/api/projects/{projectId}/contexts/{contextId}/clear-records", {
+      params: { path: { projectId, contextId } },
+    });
+    return true;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+export async function deleteAllProjectContexts(projectId: string): Promise<boolean> {
+  if (!projectId) {
+    return false;
+  }
+
+  try {
+    await client.apiDelete("/api/projects/{projectId}/contexts", {
+      params: { path: { projectId } },
+    });
+    return true;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return false;
+    }
+    throw error;
+  }
 }

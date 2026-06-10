@@ -19,12 +19,17 @@ import { toast } from "sonner";
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
 import { apiGet, getApiKey } from "@/api/client";
 import { buildSettingCommandPayload } from "@/api/execution-ws";
-import { clearTaskRecords, getTaskDetails } from "@/api/task-client";
+import {
+  clearProjectContextRecords,
+  getProjectContextDetails,
+  getProjectContextDetailsByTaskId,
+  type ContextSummary,
+} from "@/api/task-client";
 import { Explorer, FileContent } from "@/components/file-explorer";
 import type { LineComment } from "@/components/file-explorer";
 import { Conversation } from "@/components/message/conversation";
 import { type UserInputRef } from "@/components/message/user-input";
-import { TaskHistoryList } from "@/components/task/task-list";
+import { ConversationList } from "@/components/task/conversation-list";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -64,7 +69,11 @@ import {
   CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME,
   CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME,
 } from "./lib/chat-settings";
-import { getChatRouteSessionAction, getTaskHydrationKey } from "./lib/session-routing";
+import {
+  getChatRouteSessionAction,
+  getContextHydrationKey,
+  getTaskHydrationKey,
+} from "./lib/session-routing";
 import { copyCurrentUrlToClipboard } from "./lib/share-url";
 import {
   buildChatTargetOptions,
@@ -134,15 +143,20 @@ function nextTaskId(): string {
 function getChatRouteHref({
   projectId,
   taskId,
+  contextId,
   settingsHash,
 }: {
   projectId: string | null;
   taskId: string | null;
+  contextId: string | null;
   settingsHash: string;
 }): string {
   const nextParams = new URLSearchParams();
   if (projectId) {
     nextParams.set("projectId", projectId);
+  }
+  if (projectId && contextId) {
+    nextParams.set("contextId", contextId);
   }
   if (projectId && taskId) {
     nextParams.set("taskId", taskId);
@@ -351,6 +365,7 @@ export default function ChatPage() {
   const searchParams = useSearchParams();
   const queryProjectId = searchParams.get("projectId");
   const queryTaskId = searchParams.get("taskId");
+  const queryContextId = searchParams.get("contextId");
   const [hashSettingsValue, setHashSettingsValue] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -376,6 +391,7 @@ export default function ChatPage() {
   const [showFileExplorer, setShowFileExplorer] = React.useState(true);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [taskId, setTaskId] = React.useState<string | null>(queryTaskId);
+  const [contextId, setContextId] = React.useState<string | null>(queryContextId);
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
@@ -482,13 +498,19 @@ export default function ChatPage() {
   }, []);
 
   const syncRoute = React.useCallback(
-    (projectId: string | null, taskIdValue: string | null, settingsParamValue?: string | null) => {
+    (
+      projectId: string | null,
+      taskIdValue: string | null,
+      contextIdValue: string | null = null,
+      settingsParamValue?: string | null,
+    ) => {
       const nextSettingsParam =
         settingsParamValue === undefined ? routeSettingsParam : settingsParamValue;
       const settingsHash = getChatSettingsHash(nextSettingsParam);
       const nextHref = getChatRouteHref({
         projectId,
         taskId: taskIdValue,
+        contextId: contextIdValue,
         settingsHash,
       });
       router.replace(nextHref, { scroll: false });
@@ -741,9 +763,9 @@ export default function ChatPage() {
     const nextId = nextTaskId();
     hydratedTaskKeyRef.current = getTaskHydrationKey(selectedProjectId, nextId);
     setTaskId(nextId);
-    syncRoute(selectedProjectId, nextId);
+    syncRoute(selectedProjectId, nextId, contextId);
     return nextId;
-  }, [selectedProjectId, syncRoute, taskId]);
+  }, [contextId, selectedProjectId, syncRoute, taskId]);
 
   const clearLocalSessionState = React.useCallback(() => {
     closeSocket("Session cleared");
@@ -751,41 +773,44 @@ export default function ChatPage() {
     setIsExecuting(false);
     setMessages([]);
     setTaskId(null);
+    setContextId(null);
     userInputRef.current?.setInput("");
   }, [closeSocket]);
 
   const clearActiveSessionState = React.useCallback(() => {
-    if (selectedProjectId && taskId) {
-      void clearTaskRecords(taskId, selectedProjectId);
+    if (selectedProjectId && contextId) {
+      void clearProjectContextRecords(selectedProjectId, contextId);
     }
     clearLocalSessionState();
-  }, [clearLocalSessionState, taskId, selectedProjectId]);
+  }, [clearLocalSessionState, contextId, selectedProjectId]);
 
   const resetSession = React.useCallback(() => {
     clearActiveSessionState();
-    syncRoute(selectedProjectId, null);
+    syncRoute(selectedProjectId, null, null);
   }, [clearActiveSessionState, selectedProjectId, syncRoute]);
 
   const startNewTask = React.useCallback(() => {
     clearLocalSessionState();
-    syncRoute(selectedProjectId, null);
+    syncRoute(selectedProjectId, null, null);
   }, [clearLocalSessionState, selectedProjectId, syncRoute]);
 
-  const loadTaskHistory = React.useCallback(
-    async (projectId: string, nextTaskIdValue: string) => {
-      const details = await getTaskDetails(projectId, nextTaskIdValue);
+
+  const loadContextHistory = React.useCallback(
+    async (projectId: string, nextContextIdValue: string) => {
+      const details = await getProjectContextDetails(projectId, nextContextIdValue);
       const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
 
       closeSocket("Session switched");
-      hydratedTaskKeyRef.current = `${projectId}:${details.taskId}`;
+      hydratedTaskKeyRef.current = getContextHydrationKey(projectId, details.contextId);
       setSelectedProjectId(projectId);
       setIsExecuting(false);
-      setTaskId(details.taskId);
+      setTaskId(details.latestTaskId ?? null);
+      setContextId(details.contextId);
       setMessages(details.messages ?? []);
       if (restoredTargetValue) {
         setSelectedTargetValue(restoredTargetValue);
       }
-      syncRoute(projectId, details.taskId, null);
+      syncRoute(projectId, details.latestTaskId ?? null, details.contextId, null);
     },
     [closeSocket, syncRoute],
   );
@@ -929,6 +954,7 @@ export default function ChatPage() {
     const routeAction = getChatRouteSessionAction({
       queryProjectId,
       queryTaskId,
+      queryContextId,
       hydratedTaskKey: hydratedTaskKeyRef.current,
     });
 
@@ -951,7 +977,28 @@ export default function ChatPage() {
 
     void (async () => {
       try {
-        const details = await getTaskDetails(routeAction.projectId, routeAction.taskId);
+        if (routeAction.type === "hydrateContext") {
+          const details = await getProjectContextDetails(routeAction.projectId, routeAction.contextId);
+          const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
+          if (cancelled) {
+            return;
+          }
+
+          closeSocket("History loaded");
+          hydratedTaskKeyRef.current = routeAction.hydrateKey;
+          setSelectedProjectId(routeAction.projectId);
+          setIsExecuting(false);
+          setTaskId(details.latestTaskId ?? null);
+          setContextId(details.contextId);
+          setMessages(details.messages ?? []);
+          const nextTargetValue = routeTargetValue ?? restoredTargetValue;
+          if (nextTargetValue) {
+            setSelectedTargetValue(nextTargetValue);
+          }
+          return;
+        }
+
+        const details = await getProjectContextDetailsByTaskId(routeAction.projectId, routeAction.taskId);
         const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
         if (cancelled) {
           return;
@@ -961,7 +1008,8 @@ export default function ChatPage() {
         hydratedTaskKeyRef.current = routeAction.hydrateKey;
         setSelectedProjectId(routeAction.projectId);
         setIsExecuting(false);
-        setTaskId(details.taskId);
+        setTaskId(details.latestTaskId ?? routeAction.taskId);
+        setContextId(details.contextId);
         setMessages(details.messages ?? []);
         const nextTargetValue = routeTargetValue ?? restoredTargetValue;
         if (nextTargetValue) {
@@ -969,7 +1017,7 @@ export default function ChatPage() {
         }
       } catch (error) {
         if (!cancelled) {
-          toast.error(`Failed to load task history: ${getApiErrorMessage(error)}`);
+          toast.error(`Failed to load chat history: ${getApiErrorMessage(error)}`);
         }
       }
     })();
@@ -977,7 +1025,7 @@ export default function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [clearLocalSessionState, closeSocket, queryProjectId, queryTaskId, routeTargetValue]);
+  }, [clearLocalSessionState, closeSocket, queryContextId, queryProjectId, queryTaskId, routeTargetValue]);
 
   const handleProjectChange = React.useCallback(
     (nextProjectId: string) => {
@@ -992,7 +1040,8 @@ export default function ChatPage() {
       setSelectedTargetValue(null);
       setMessages([]);
       setTaskId(null);
-      syncRoute(nextProjectId, null, null);
+      setContextId(null);
+      syncRoute(nextProjectId, null, null, null);
     },
     [closeSocket, selectedProjectId, syncRoute],
   );
@@ -1095,32 +1144,23 @@ export default function ChatPage() {
     setIsExecuting(false);
   }, [closeSocket]);
 
-  const handleTaskSelect = React.useCallback(
-    async (nextTaskIdValue: string) => {
+  const handleContextSelect = React.useCallback(
+    async (context: ContextSummary) => {
       if (!selectedProjectId) {
         toast.error("Please select a project");
         return;
       }
 
       try {
-        await loadTaskHistory(selectedProjectId, nextTaskIdValue);
+        await loadContextHistory(selectedProjectId, context.contextId);
         setIsDrawerOpen(false);
       } catch (error) {
-        toast.error(`Failed to load session: ${getApiErrorMessage(error)}`);
+        toast.error(`Failed to load context: ${getApiErrorMessage(error)}`);
       }
     },
-    [loadTaskHistory, selectedProjectId],
+    [loadContextHistory, selectedProjectId],
   );
 
-  const handleTaskDeleted = React.useCallback(
-    (deletedTaskId: string) => {
-      if (deletedTaskId === taskId) {
-        resetSession();
-        setIsDrawerOpen(false);
-      }
-    },
-    [resetSession, taskId],
-  );
 
   const handleNewTask = React.useCallback(() => {
     startNewTask();
@@ -1205,16 +1245,15 @@ export default function ChatPage() {
     [getProjectSettingsDraft, selectedProjectId],
   );
 
-  const renderTaskHistory = React.useCallback(
+  const renderConversationList = React.useCallback(
     () => (
-      <TaskHistoryList
+      <ConversationList
         projectId={selectedProjectId ?? ""}
-        currentTaskId={taskId}
-        onTaskSelect={(nextTaskIdValue) => {
-          void handleTaskSelect(nextTaskIdValue);
+        currentContextId={contextId}
+        onContextSelect={(nextContext) => {
+          void handleContextSelect(nextContext);
         }}
         onNewTask={handleNewTask}
-        onTaskDeleted={handleTaskDeleted}
         onAllTasksDeleted={handleAllTasksDeleted}
         headerActions={
           <ChatSettingsDialog
@@ -1227,13 +1266,12 @@ export default function ChatPage() {
     ),
     [
       getActiveSettingsDraft,
+      contextId,
       handleAllTasksDeleted,
+      handleContextSelect,
       handleNewTask,
       handleSaveChatSettings,
-      handleTaskDeleted,
-      handleTaskSelect,
       selectedProjectId,
-      taskId,
     ],
   );
 
@@ -1358,7 +1396,7 @@ export default function ChatPage() {
           <ColResizeSplit>
             {!isMobile && isChatTab && showChatHistory ? (
               <ColResizeSplit.Left minWidth={260} maxWidth={520}>
-                {renderTaskHistory()}
+                {renderConversationList()}
               </ColResizeSplit.Left>
             ) : null}
 
@@ -1464,7 +1502,7 @@ export default function ChatPage() {
                 renderWorkspaceRequiredState()
               )
             ) : (
-              renderTaskHistory()
+              renderConversationList()
             )}
           </div>
         </DrawerContent>

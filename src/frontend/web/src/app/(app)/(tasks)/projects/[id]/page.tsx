@@ -6,7 +6,8 @@ import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import type { ProjectTaskSummaryResponse } from "@/api/task-client";
+import type { ContextSummary } from "@/api/task-client";
+import { getProjectContexts } from "@/api/task-client";
 import { ApiError, apiGet, apiPost } from "@/api/client";
 import { buildChatTargetOptions } from "@/lib/chat-target-options";
 import { Button } from "@/components/ui/button";
@@ -164,13 +165,9 @@ export default function ProjectDetailsPage() {
     queryFn: async () => (await apiGet("/api/agentflows")) as unknown as AgentflowDto[],
   });
 
-  const tasksQuery = useQuery({
-    queryKey: ["projects", projectId, "tasks"],
-    queryFn: async () => {
-      return (await apiGet("/api/projects/{projectId}/tasks", {
-        params: { path: { projectId } },
-      } as never)) as unknown as ProjectTaskSummaryResponse[];
-    },
+  const conversationsQuery = useQuery({
+    queryKey: ["projects", projectId, "contexts"],
+    queryFn: async () => getProjectContexts(projectId),
   });
 
   const project = projectQuery.data;
@@ -194,14 +191,14 @@ export default function ProjectDetailsPage() {
       toast.success("Task created.");
       setCreateTaskOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["jobs"] });
-      await queryClient.invalidateQueries({ queryKey: ["projects", projectId, "tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["projects", projectId, "contexts"] });
     },
     onError: (error) => {
       toast.error(`Create task failed: ${getApiErrorMessage(error)}`);
     },
   });
 
-  const tasks = [...(tasksQuery.data ?? [])].sort((left, right) => {
+  const conversations = [...(conversationsQuery.data ?? [])].sort((left, right) => {
     const leftTime = Date.parse(left.updateTime ?? left.createTime ?? "") || 0;
     const rightTime = Date.parse(right.updateTime ?? right.createTime ?? "") || 0;
     return rightTime - leftTime;
@@ -228,7 +225,7 @@ export default function ProjectDetailsPage() {
             ) : null}
           </div>
           <div className="text-sm text-muted-foreground">
-            {project?.description?.trim() || "Read-only task history for this project."}
+            {project?.description?.trim() || "Read-only conversation history for this project."}
           </div>
           {project ? (
             <div className="text-xs text-muted-foreground">
@@ -258,62 +255,61 @@ export default function ProjectDetailsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Tasks</CardTitle>
-          <CardDescription>Read-only history for chat sessions and job runs.</CardDescription>
+          <CardTitle>Conversations</CardTitle>
+          <CardDescription>Read-only conversation history for chat sessions and job runs.</CardDescription>
         </CardHeader>
         <CardContent>
-          {tasksQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">Loading tasks...</div>
-          ) : tasksQuery.isError ? (
+          {conversationsQuery.isLoading ? (
+            <div className="text-sm text-muted-foreground">Loading conversations...</div>
+          ) : conversationsQuery.isError ? (
             <div className="text-sm text-destructive">
-              Failed to load tasks: {getApiErrorMessage(tasksQuery.error)}
+              Failed to load conversations: {getApiErrorMessage(conversationsQuery.error)}
             </div>
-          ) : tasks.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No task history found.</div>
+          ) : conversations.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No conversation history found.</div>
           ) : (
             <div className="space-y-3">
-              {tasks.map((task) => (
-                <div key={task.id} className="rounded-lg border p-4">
+              {conversations.map((conversation: ContextSummary) => (
+                <div key={conversation.contextId} className="rounded-lg border p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="font-medium">{task.title}</div>
-                        <span
-                          className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(task.status)}`}
-                        >
-                          {statusLabel(task.status)}
-                        </span>
+                        <div className="font-medium">{conversation.title}</div>
+                        {conversation.latestStatus !== null && conversation.latestStatus !== undefined ? (
+                          <span
+                            className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(conversation.latestStatus)}`}
+                          >
+                            {statusLabel(conversation.latestStatus)}
+                          </span>
+                        ) : null}
                       </div>
 
                       <div className="grid gap-1 text-xs text-muted-foreground">
                         <div>
-                          Source:{" "}
-                          <span className="font-mono">
-                            {task.jobId ? `job:${task.jobId}` : "chat"}
-                          </span>
+                          Context ID: <span className="font-mono">{conversation.contextId}</span>
                         </div>
                         <div>
-                          Task ID: <span className="font-mono">{task.id}</span>
+                          Latest Task ID:{" "}
+                          <span className="font-mono">{conversation.latestTaskId ?? "-"}</span>
                         </div>
                         <div>
-                          Context ID: <span className="font-mono">{task.contextId}</span>
+                          Tasks: {conversation.taskCount} · Messages: {conversation.messageCount}
                         </div>
                         <div>
-                          Job ID: <span className="font-mono">{task.jobId ?? "-"}</span>
-                        </div>
-                        <div>
-                          Created: {formatDate(task.createTime)} · Started:{" "}
-                          {formatDate(task.startedTime)} · Finished: {formatDate(task.finishedTime)}
+                          Created: {formatDate(conversation.createTime)} · Updated:{" "}
+                          {formatDate(conversation.updateTime)}
                         </div>
                       </div>
 
-                      {task.errorMessage ? (
-                        <div className="text-xs text-destructive">Error: {task.errorMessage}</div>
+                      {conversation.errorMessage ? (
+                        <div className="text-xs text-destructive">Error: {conversation.errorMessage}</div>
                       ) : null}
                     </div>
 
                     <Button asChild variant="outline" size="sm">
-                      <Link href={`/projects/${projectId}/tasks/${task.id}`}>View History</Link>
+                      <Link href={`/projects/${projectId}/conversations/${conversation.contextId}`}>
+                        View History
+                      </Link>
                     </Button>
                   </div>
                 </div>

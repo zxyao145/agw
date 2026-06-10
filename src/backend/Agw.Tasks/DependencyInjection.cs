@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectAppService, ProjectAppService>();
         services.AddScoped<IProjectTaskSessionBindingService, ProjectTaskSessionBindingService>();
         services.AddScoped<ProjectTaskAppService>();
+        services.AddScoped<ProjectContextAppService>();
         services.AddScoped<ProjectResolver>();
         services.AddScoped<TaskRecordDomainService>();
 

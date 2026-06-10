@@ -6,7 +6,7 @@ export interface AgentCreateRequest {
   description: string;
   systemPrompt: string;
   modelProviderId: string | null;
-  tools?: string | null;
+  tools: string | null;
   mcpToolServerIds?: string[] | null;
   skillIds?: string[] | null;
   appInstanceIds?: string[] | null;
@@ -17,7 +17,7 @@ export interface AgentUpdateRequest {
   description: string;
   systemPrompt: string;
   modelProviderId: string | null;
-  tools?: string | null;
+  tools: string | null;
   mcpToolServerIds?: string[] | null;
   skillIds?: string[] | null;
   appInstanceIds?: string[] | null;

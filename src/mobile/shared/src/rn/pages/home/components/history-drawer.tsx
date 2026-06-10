@@ -2,9 +2,9 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { Bolt } from "lucide-react-native";
 import type {
+  AgwContextSummary,
   AgwProject,
   AgwTarget,
-  AgwTaskSummary,
 } from "../../../api/agw-api-types";
 import type { AgwLocalConfig } from "../../../config/agw-config";
 import { ConfigSettingsPage } from "./config-settings-sheet";
@@ -17,7 +17,8 @@ import { styles } from "./styles";
 import { colors } from "./tokens";
 
 export function HistoryDrawer({
-  currentTaskId,
+  contexts,
+  currentContextId,
   historyError,
   isSettingsOpen,
   isLoadingHistory,
@@ -26,7 +27,7 @@ export function HistoryDrawer({
   onOpenSettings,
   onProjectSelect,
   onSaveSettings,
-  onTaskSelect,
+  onContextSelect,
   onTargetSelect,
   projects,
   safeBottom,
@@ -35,9 +36,9 @@ export function HistoryDrawer({
   selectedTargetValue,
   settingsConfig,
   targets,
-  tasks,
 }: {
-  currentTaskId?: string | null;
+  contexts: AgwContextSummary[];
+  currentContextId?: string | null;
   historyError?: string | null;
   isLoadingHistory?: boolean;
   isSettingsOpen?: boolean;
@@ -46,7 +47,7 @@ export function HistoryDrawer({
   onOpenSettings: () => void;
   onProjectSelect: (projectId: string) => void;
   onSaveSettings?: (config: AgwLocalConfig) => Promise<void>;
-  onTaskSelect: (taskId: string) => void;
+  onContextSelect: (contextId: string) => void;
   onTargetSelect: (targetValue: string) => void;
   projects: AgwProject[];
   safeBottom: number;
@@ -55,7 +56,6 @@ export function HistoryDrawer({
   selectedTargetValue?: string | null;
   settingsConfig?: AgwLocalConfig | null;
   targets: AgwTarget[];
-  tasks: AgwTaskSummary[];
 }): React.JSX.Element {
   const [expandedSelector, setExpandedSelector] = React.useState<
     "project" | "target" | null
@@ -183,16 +183,16 @@ export function HistoryDrawer({
                 <Text style={styles.emptyPanelText}>Loading history</Text>
               ) : historyError ? (
                 <Text style={styles.errorText}>{historyError}</Text>
-              ) : tasks.length === 0 ? (
+              ) : contexts.length === 0 ? (
                 <Text style={styles.emptyPanelText}>No chat history yet</Text>
               ) : (
-                tasks.map((task) => (
+                contexts.map((context) => (
                   <HistoryItem
-                    active={task.id === currentTaskId}
-                    key={task.id}
-                    onPress={() => onTaskSelect(task.id)}
-                    preview={formatTaskPreview(task)}
-                    title={task.title}
+                    active={context.contextId === currentContextId}
+                    key={context.contextId}
+                    onPress={() => onContextSelect(context.contextId)}
+                    preview={formatContextPreview(context)}
+                    title={context.title}
                   />
                 ))
               )}
@@ -326,8 +326,8 @@ function HistoryItem({
   );
 }
 
-function formatTaskPreview(task: AgwTaskSummary): string {
-  const timestamp = task.updateTime ?? task.createTime;
+function formatContextPreview(context: AgwContextSummary): string {
+  const timestamp = context.updateTime ?? context.createTime;
   const date = new Date(timestamp);
 
   if (Number.isNaN(date.getTime())) {

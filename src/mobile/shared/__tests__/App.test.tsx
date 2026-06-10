@@ -237,7 +237,7 @@ describe("App", () => {
     await settleAsync();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:5015/api/projects/project-2/tasks",
+      "http://localhost:5015/api/projects/project-2/contexts",
       expect.objectContaining({
         headers: { "X-API-Key": "test-api-key" },
         method: "GET",
@@ -589,7 +589,7 @@ describe("App", () => {
     ).toBe(true);
   });
 
-  it("clears current task records from the composer toolbar", async () => {
+  it("clears current context records from the composer toolbar", async () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
@@ -607,7 +607,7 @@ describe("App", () => {
     await settleAsync();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:5015/api/projects/project-1/tasks/task-1/clear-records",
+      "http://localhost:5015/api/projects/project-1/contexts/context-1/clear-records",
       expect.objectContaining({
         headers: { "X-API-Key": "test-api-key" },
         method: "DELETE",
@@ -742,59 +742,66 @@ function createAgwFetchMock({
       ]);
     }
 
-    if (pathname === "/api/projects/project-1/tasks") {
+    if (pathname === "/api/projects/project-1/contexts") {
       return jsonResponse([
         {
-          id: "task-1",
           projectId: "project-1",
           contextId: "context-1",
-          status: 2,
           title: "Mobile API Chat",
+          latestTaskId: "task-1",
+          latestStatus: 2,
+          taskCount: 1,
+          messageCount: 2,
           createTime: "2026-05-22T10:00:00Z",
           updateTime: "2026-05-22T10:05:00Z",
         },
       ]);
     }
 
-    if (pathname === "/api/projects/project-2/tasks") {
+    if (pathname === "/api/projects/project-2/contexts") {
       return jsonResponse([
         {
-          id: "task-2",
           projectId: "project-2",
           contextId: "context-2",
-          status: 2,
           title: "Project Two API Chat",
+          latestTaskId: "task-2",
+          latestStatus: 2,
+          taskCount: 1,
+          messageCount: 1,
           createTime: "2026-05-22T11:00:00Z",
           updateTime: "2026-05-22T11:05:00Z",
         },
       ]);
     }
 
-    if (pathname === "/api/projects/default-built-in/tasks") {
+    if (pathname === "/api/projects/default-built-in/contexts") {
       return jsonResponse([
         {
-          id: "task-default",
           projectId: "default-built-in",
           contextId: "context-default",
-          status: 2,
           title: "Default Built In Chat",
+          latestTaskId: "task-default",
+          latestStatus: 2,
+          taskCount: 1,
+          messageCount: 1,
           createTime: "2026-05-22T12:00:00Z",
           updateTime: "2026-05-22T12:05:00Z",
         },
       ]);
     }
 
-    if (pathname === "/api/projects/project-2/tasks/task-2") {
+    if (pathname === "/api/projects/project-2/contexts/context-2") {
       return jsonResponse({
-        id: "task-2",
         projectId: "project-2",
         contextId: "context-2",
-        status: 2,
         title: "Project Two API Chat",
-        input: "Load project two.",
+        latestTaskId: "task-2",
+        latestStatus: 2,
+        taskCount: 1,
         createTime: "2026-05-22T11:00:00Z",
         updateTime: "2026-05-22T11:05:00Z",
         messageCount: 1,
+        tasks: [],
         messages: [
           {
             messageId: "message-project-2",
@@ -811,17 +818,18 @@ function createAgwFetchMock({
       });
     }
 
-    if (pathname === "/api/projects/project-1/tasks/task-1") {
+    if (pathname === "/api/projects/project-1/contexts/context-1") {
       return jsonResponse({
-        id: "task-1",
         projectId: "project-1",
         contextId: "context-1",
-        status: 2,
         title: "Mobile API Chat",
-        input: "Please summarize the API changes.",
+        latestTaskId: "task-1",
+        latestStatus: 2,
+        taskCount: 1,
         createTime: "2026-05-22T10:00:00Z",
         updateTime: "2026-05-22T10:05:00Z",
         messageCount: 2,
+        tasks: [],
         messages: [
           {
             messageId: "message-user-1",
@@ -849,21 +857,22 @@ function createAgwFetchMock({
       });
     }
 
-    if (pathname === "/api/projects/project-1/tasks/task-1/clear-records") {
+    if (pathname === "/api/projects/project-1/contexts/context-1/clear-records") {
       return jsonResponse(undefined);
     }
 
-    if (pathname === "/api/projects/default-built-in/tasks/task-default") {
+    if (pathname === "/api/projects/default-built-in/contexts/context-default") {
       return jsonResponse({
-        id: "task-default",
         projectId: "default-built-in",
         contextId: "context-default",
-        status: 2,
         title: "Default Built In Chat",
-        input: "Use defaults.",
+        latestTaskId: "task-default",
+        latestStatus: 2,
+        taskCount: 1,
         createTime: "2026-05-22T12:00:00Z",
         updateTime: "2026-05-22T12:05:00Z",
         messageCount: 1,
+        tasks: [],
         messages: [
           {
             messageId: "message-default",

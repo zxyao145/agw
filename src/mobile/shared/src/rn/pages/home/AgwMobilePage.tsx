@@ -11,10 +11,10 @@ import { createAgwApiClient, AgwApiError } from "../../api/agw-api-client";
 import type {
   AgwAgent,
   AgwAgentflow,
+  AgwContextDetails,
+  AgwContextSummary,
   AgwMessage,
   AgwProject,
-  AgwTaskDetails,
-  AgwTaskSummary,
 } from "../../api/agw-api-types";
 import type { AgwLocalConfig } from "../../config/agw-config";
 import { readLocalConfig, writeLocalConfig } from "../../config/config-store";
@@ -70,7 +70,8 @@ function AgwMobilePage({
   const [selectedTargetValue, setSelectedTargetValue] = React.useState<
     string | null
   >(null);
-  const [tasks, setTasks] = React.useState<AgwTaskSummary[]>([]);
+  const [contexts, setContexts] = React.useState<AgwContextSummary[]>([]);
+  const [currentContextId, setCurrentContextId] = React.useState<string | null>(null);
   const [currentTaskId, setCurrentTaskId] = React.useState<string | null>(null);
   const [messages, setMessages] = React.useState<AgwMessage[]>([]);
   const [isDependenciesLoading, setIsDependenciesLoading] =
@@ -178,7 +179,8 @@ function AgwMobilePage({
       setProjects([]);
       setAgents([]);
       setAgentflows([]);
-      setTasks([]);
+      setContexts([]);
+      setCurrentContextId(null);
       setCurrentTaskId(null);
       setMessages([]);
       return;
@@ -214,7 +216,8 @@ function AgwMobilePage({
         setProjects([]);
         setAgents([]);
         setAgentflows([]);
-        setTasks([]);
+        setContexts([]);
+        setCurrentContextId(null);
         setCurrentTaskId(null);
         setMessages([]);
         setDependenciesError(
@@ -277,7 +280,8 @@ function AgwMobilePage({
 
   React.useEffect(() => {
     if (!apiClient || !selectedProjectId) {
-      setTasks([]);
+      setContexts([]);
+      setCurrentContextId(null);
       setCurrentTaskId(null);
       setHistoryError(null);
       setIsHistoryLoading(false);
@@ -291,31 +295,42 @@ function AgwMobilePage({
       setHistoryError(null);
 
       try {
-        const nextTasks = await apiClient!.getJson<AgwTaskSummary[]>(
-          `/api/projects/${encodeURIComponent(selectedProjectId!)}/tasks`,
+        const nextContexts = await apiClient!.getJson<AgwContextSummary[]>(
+          `/api/projects/${encodeURIComponent(selectedProjectId!)}/contexts`,
         );
 
         if (!isMounted) {
           return;
         }
 
-        setTasks(nextTasks);
+        setContexts(nextContexts);
+        setCurrentContextId((currentContextIdValue) => {
+          if (
+            currentContextIdValue &&
+            nextContexts.some((context) => context.contextId === currentContextIdValue)
+          ) {
+            return currentContextIdValue;
+          }
+
+          return nextContexts[0]?.contextId ?? null;
+        });
         setCurrentTaskId((currentTaskIdValue) => {
           if (
             currentTaskIdValue &&
-            nextTasks.some((task) => task.id === currentTaskIdValue)
+            nextContexts.some((context) => context.latestTaskId === currentTaskIdValue)
           ) {
             return currentTaskIdValue;
           }
 
-          return nextTasks[0]?.id ?? null;
+          return nextContexts[0]?.latestTaskId ?? null;
         });
       } catch (error) {
         if (!isMounted) {
           return;
         }
 
-        setTasks([]);
+        setContexts([]);
+        setCurrentContextId(null);
         setCurrentTaskId(null);
         setHistoryError(`Failed to load history: ${getErrorMessage(error)}`);
       } finally {
@@ -333,7 +348,7 @@ function AgwMobilePage({
   }, [apiClient, selectedProjectId]);
 
   React.useEffect(() => {
-    if (!apiClient || !selectedProjectId || !currentTaskId) {
+    if (!apiClient || !selectedProjectId || !currentContextId) {
       setMessages([]);
       setChatError(null);
       setIsChatLoading(false);
@@ -342,22 +357,23 @@ function AgwMobilePage({
 
     let isMounted = true;
 
-    async function loadTaskMessages() {
+    async function loadContextMessages() {
       setIsChatLoading(true);
       setChatError(null);
 
       try {
-        const taskDetails = await apiClient!.getJson<AgwTaskDetails>(
+        const contextDetails = await apiClient!.getJson<AgwContextDetails>(
           `/api/projects/${encodeURIComponent(
             selectedProjectId!,
-          )}/tasks/${encodeURIComponent(currentTaskId!)}`,
+          )}/contexts/${encodeURIComponent(currentContextId!)}`,
         );
 
         if (!isMounted) {
           return;
         }
 
-        setMessages(taskDetails.messages ?? []);
+        setCurrentTaskId(contextDetails.latestTaskId ?? null);
+        setMessages(contextDetails.messages ?? []);
       } catch (error) {
         if (!isMounted) {
           return;
@@ -372,12 +388,12 @@ function AgwMobilePage({
       }
     }
 
-    loadTaskMessages();
+    loadContextMessages();
 
     return () => {
       isMounted = false;
     };
-  }, [apiClient, currentTaskId, selectedProjectId]);
+  }, [apiClient, currentContextId, selectedProjectId]);
 
   function openSettings() {
     setIsDrawerOpen(true);
@@ -393,14 +409,17 @@ function AgwMobilePage({
     setIsSettingsOpen(false);
   }
 
-  function selectTask(taskId: string) {
-    setCurrentTaskId(taskId);
+  function selectContext(contextId: string) {
+    const context = contexts.find((item) => item.contextId === contextId);
+    setCurrentContextId(contextId);
+    setCurrentTaskId(context?.latestTaskId ?? null);
     setExecutionError(null);
     setIsDrawerOpen(false);
   }
 
   function selectProject(projectId: string) {
     setSelectedProjectId(projectId);
+    setCurrentContextId(null);
     setCurrentTaskId(null);
     setMessages([]);
     setExecutionError(null);
@@ -463,10 +482,15 @@ function AgwMobilePage({
 
       setCurrentTaskId(executionTaskId);
 
-      const latestTasks = await apiClient.getJson<AgwTaskSummary[]>(
-        `/api/projects/${encodeURIComponent(selectedProjectId)}/tasks`,
+      const latestContexts = await apiClient.getJson<AgwContextSummary[]>(
+        `/api/projects/${encodeURIComponent(selectedProjectId)}/contexts`,
       );
-      setTasks(latestTasks);
+      setContexts(latestContexts);
+      setCurrentContextId(
+        latestContexts.find((context) => context.latestTaskId === executionTaskId)?.contextId ??
+          latestContexts[0]?.contextId ??
+          currentContextId,
+      );
     } catch (error) {
       setExecutionError(`Failed to send message: ${getErrorMessage(error)}`);
     } finally {
@@ -474,8 +498,8 @@ function AgwMobilePage({
     }
   }
 
-  async function clearCurrentTaskRecords() {
-    if (!apiClient || !selectedProjectId || !currentTaskId || isExecuting) {
+  async function clearCurrentContextRecords() {
+    if (!apiClient || !selectedProjectId || !currentContextId || isExecuting) {
       return;
     }
 
@@ -485,7 +509,7 @@ function AgwMobilePage({
       await apiClient.deleteJson(
         `/api/projects/${encodeURIComponent(
           selectedProjectId,
-        )}/tasks/${encodeURIComponent(currentTaskId)}/clear-records`,
+        )}/contexts/${encodeURIComponent(currentContextId)}/clear-records`,
       );
       setMessages([]);
     } catch (error) {
@@ -545,7 +569,7 @@ function AgwMobilePage({
                 }
                 isSending={isExecuting}
                 message={composerText}
-                onClear={clearCurrentTaskRecords}
+                onClear={clearCurrentContextRecords}
                 onMessageChange={setComposerText}
                 onScrollToTop={scrollChatToTop}
                 onSend={sendMessage}
@@ -556,7 +580,8 @@ function AgwMobilePage({
         )}
         {configLoadState !== "loading" && isDrawerOpen ? (
           <HistoryDrawer
-            currentTaskId={currentTaskId}
+            contexts={contexts}
+            currentContextId={currentContextId}
             historyError={historyError}
             isSettingsOpen={isSettingsOpen}
             isLoadingHistory={isHistoryLoading}
@@ -565,7 +590,7 @@ function AgwMobilePage({
             onOpenSettings={openSettings}
             onProjectSelect={selectProject}
             onSaveSettings={saveConfig}
-            onTaskSelect={selectTask}
+            onContextSelect={selectContext}
             onTargetSelect={selectTarget}
             projects={projects}
             safeBottom={safeAreaInsets.bottom}
@@ -574,7 +599,6 @@ function AgwMobilePage({
             selectedTargetValue={selectedTargetValue}
             settingsConfig={config}
             targets={targets}
-            tasks={tasks}
           />
         ) : null}
         {configLoadState === "missing" ? (

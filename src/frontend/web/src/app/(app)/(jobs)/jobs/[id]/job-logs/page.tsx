@@ -152,15 +152,15 @@ export default function JobLogsPage() {
                   <TableCell className="text-right">
                     {canOpenTask ? (
                       <Button type="button" variant="outline" size="sm" asChild>
-                        <Link href={`/projects/${job.projectId}/tasks/${log.taskId}`}>
+                        <Link href={`/chat?projectId=${job.projectId}&taskId=${log.taskId}`}>
                           <MessageSquareText className="mr-2 h-4 w-4" />
-                          Go to Task
+                          Go to Chat
                         </Link>
                       </Button>
                     ) : (
                       <Button type="button" variant="outline" size="sm" disabled>
                         <MessageSquareText className="mr-2 h-4 w-4" />
-                        Go to Task
+                        Go to Chat
                       </Button>
                     )}
                   </TableCell>

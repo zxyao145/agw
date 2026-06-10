@@ -15,7 +15,7 @@ public class ProjectTask : BaseEntity
     public Project? Project { get; set; }
 
     /// <summary>
-    /// ContextId 全局唯一
+    /// ContextId identifies a conversation/session and may be shared by multiple tasks.
     /// </summary>
     public string ContextId { get; set; } = string.Empty;
 
