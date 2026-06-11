@@ -53,8 +53,3 @@ export type ProviderDto = {
   updateTime?: string | null;
 };
 
-export type SearchableSelectOption = {
-  value: string;
-  title: string;
-  subtitle?: string;
-};

@@ -6,11 +6,18 @@ import { ChevronDownIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { SearchableSelectOption } from "./types";
+
+export type SearchableSelectOption = {
+  value: string;
+  title: string;
+  subtitle?: string;
+  group?: string;
+};
 
 type SearchableSelectProps = {
   id: string;
-  label: string;
+  label?: string;
+  ariaLabel?: string;
   value: string;
   onValueChange: (value: string) => void;
   options: SearchableSelectOption[];
@@ -19,11 +26,13 @@ type SearchableSelectProps = {
   disabled?: boolean;
   isLoading?: boolean;
   errorMessage?: string | null;
+  clearable?: boolean;
 };
 
 export function SearchableSelect({
   id,
   label,
+  ariaLabel,
   value,
   onValueChange,
   options,
@@ -32,6 +41,7 @@ export function SearchableSelect({
   disabled,
   isLoading,
   errorMessage,
+  clearable = true,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -71,10 +81,26 @@ export function SearchableSelect({
     const q = search.trim().toLowerCase();
     if (!q.length) return options;
     return options.filter((opt) => {
-      const haystack = `${opt.title} ${opt.subtitle ?? ""} ${opt.value}`.toLowerCase();
+      const haystack = `${opt.title} ${opt.subtitle ?? ""} ${opt.group ?? ""} ${opt.value}`.toLowerCase();
       return haystack.includes(q);
     });
   }, [options, search]);
+  const groupedOptions = React.useMemo(() => {
+    const groups: { label: string | null; options: SearchableSelectOption[] }[] = [];
+
+    for (const option of filteredOptions) {
+      const groupLabel = option.group ?? null;
+      let group = groups.find((item) => item.label === groupLabel);
+      if (!group) {
+        group = { label: groupLabel, options: [] };
+        groups.push(group);
+      }
+
+      group.options.push(option);
+    }
+
+    return groups;
+  }, [filteredOptions]);
 
   const triggerText = selected ? selected.title : placeholder;
 
@@ -83,7 +109,7 @@ export function SearchableSelect({
 
   return (
     <div ref={rootRef} className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
+      {label ? <Label htmlFor={id}>{label}</Label> : null}
 
       <div className="relative">
         <Button
@@ -94,6 +120,7 @@ export function SearchableSelect({
           disabled={disabled}
           aria-haspopup="listbox"
           aria-expanded={open}
+          aria-label={ariaLabel ?? label}
           onClick={() => setOpen((x) => !x)}
         >
           <span className={selected ? "truncate" : "truncate text-muted-foreground"}>
@@ -106,7 +133,7 @@ export function SearchableSelect({
           <div
             className="bg-popover text-popover-foreground absolute left-0 top-full z-50 mt-1 w-full rounded-md border p-2 shadow-md"
             role="listbox"
-            aria-label={label}
+            aria-label={ariaLabel ?? label}
           >
             <div className="pb-2">
               <Input
@@ -130,7 +157,7 @@ export function SearchableSelect({
               <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading...</div>
             ) : (
               <div className="max-h-64 overflow-auto">
-                {value.trim().length > 0 && (
+                {clearable && value.trim().length > 0 && (
                   <button
                     type="button"
                     className={`${itemClassName} text-muted-foreground`}
@@ -147,26 +174,35 @@ export function SearchableSelect({
                 {filteredOptions.length === 0 ? (
                   <div className="px-2 py-1.5 text-sm text-muted-foreground">No results.</div>
                 ) : (
-                  filteredOptions.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      className={itemClassName}
-                      onClick={() => {
-                        onValueChange(opt.value);
-                        setOpen(false);
-                        setSearch("");
-                      }}
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm">{opt.title}</div>
-                        {opt.subtitle ? (
-                          <div className="truncate font-mono text-xs text-muted-foreground">
-                            {opt.subtitle}
+                  groupedOptions.map((group) => (
+                    <React.Fragment key={group.label ?? "ungrouped"}>
+                      {group.label ? (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          {group.label}
+                        </div>
+                      ) : null}
+                      {group.options.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={itemClassName}
+                          onClick={() => {
+                            onValueChange(opt.value);
+                            setOpen(false);
+                            setSearch("");
+                          }}
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm">{opt.title}</div>
+                            {opt.subtitle ? (
+                              <div className="truncate font-mono text-xs text-muted-foreground">
+                                {opt.subtitle}
+                              </div>
+                            ) : null}
                           </div>
-                        ) : null}
-                      </div>
-                    </button>
+                        </button>
+                      ))}
+                    </React.Fragment>
                   ))
                 )}
               </div>

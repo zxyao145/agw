@@ -18,14 +18,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type {
-  ModelProviderCreateRequest,
-  ModelDto,
-  ProviderDto,
-  SearchableSelectOption,
-} from "./types";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/SearchableSelect/searchable-select";
+import type { ModelProviderCreateRequest, ModelDto, ProviderDto } from "./types";
 import { parseFloatOrNull, parseIntOrNull } from "./utils";
-import { SearchableSelect } from "./searchable-select";
 import { getApiErrorMessage } from "@/api/utils";
 
 type CreateModelProviderDialogProps = {
