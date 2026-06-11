@@ -1280,6 +1280,51 @@ export default function ChatPage() {
     [selectedProject?.name],
   );
 
+  const [projectSearchValue, setProjectSearchValue] = React.useState("");
+  const [targetSearchValue, setTargetSearchValue] = React.useState("");
+  const [isProjectSelectOpen, setIsProjectSelectOpen] = React.useState(false);
+  const [isTargetSelectOpen, setIsTargetSelectOpen] = React.useState(false);
+  const projectSearchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const targetSearchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const filteredProjects = React.useMemo(() => {
+    const search = projectSearchValue.trim().toLowerCase();
+    if (!search) {
+      return projects;
+    }
+
+    return projects.filter((project) =>
+      `${project.name} ${project.workspace ?? ""}`.toLowerCase().includes(search),
+    );
+  }, [projectSearchValue, projects]);
+  const filteredTargetOptions = React.useMemo(() => {
+    const search = targetSearchValue.trim().toLowerCase();
+    if (!search) {
+      return targetOptions;
+    }
+
+    return targetOptions.filter((option) =>
+      `${option.label} ${option.type} ${getTargetValue(option)}`.toLowerCase().includes(search),
+    );
+  }, [targetOptions, targetSearchValue]);
+  const filteredAgentTargetOptions = React.useMemo(
+    () => filteredTargetOptions.filter((option) => option.type === "agent"),
+    [filteredTargetOptions],
+  );
+  const filteredAgentflowTargetOptions = React.useMemo(
+    () => filteredTargetOptions.filter((option) => option.type === "agentflow"),
+    [filteredTargetOptions],
+  );
+  React.useEffect(() => {
+    if (isProjectSelectOpen && document.activeElement !== projectSearchInputRef.current) {
+      projectSearchInputRef.current?.focus();
+    }
+  }, [filteredProjects, isProjectSelectOpen, projectSearchValue, projects]);
+  React.useEffect(() => {
+    if (isTargetSelectOpen && document.activeElement !== targetSearchInputRef.current) {
+      targetSearchInputRef.current?.focus();
+    }
+  }, [filteredTargetOptions, isTargetSelectOpen, targetOptions, targetSearchValue]);
+
   const isChatTab = currentTab === "chat";
   const isFilesTab = currentTab === "files";
   const activeSidebarVisible = isChatTab ? showChatHistory : hasWorkspace && showFileExplorer;
@@ -1318,43 +1363,117 @@ export default function ChatPage() {
       >
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={selectedProjectId ?? undefined} onValueChange={handleProjectChange}>
+            <Select
+              value={selectedProjectId ?? undefined}
+              onValueChange={(value) => {
+                handleProjectChange(value);
+                setProjectSearchValue("");
+              }}
+              onOpenChange={(open) => {
+                setIsProjectSelectOpen(open);
+                if (!open) {
+                  setProjectSearchValue("");
+                }
+              }}
+            >
               <SelectTrigger className="w-[220px]" aria-label="Select project">
                 <SelectValue placeholder="Select project" />
               </SelectTrigger>
-              <SelectContent position="popper" side="bottom" align="start" sideOffset={4}>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
+              <SelectContent
+                className="w-[220px]"
+                position="popper"
+                side="bottom"
+                align="start"
+                sideOffset={4}
+              >
+                <div className="sticky top-0 z-10 bg-popover p-1">
+                  <Input
+                    ref={projectSearchInputRef}
+                    autoFocus
+                    className="h-8"
+                    value={projectSearchValue}
+                    onChange={(event) => setProjectSearchValue(event.target.value)}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    placeholder="Search projects..."
+                  />
+                </div>
+                {filteredProjects.length > 0 ? (
+                  filteredProjects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                    No projects found.
+                  </div>
+                )}
               </SelectContent>
             </Select>
 
-            <Select value={selectedTargetValue ?? undefined} onValueChange={handleTargetChange}>
+            <Select
+              value={selectedTargetValue ?? undefined}
+              onValueChange={(value) => {
+                handleTargetChange(value);
+                setTargetSearchValue("");
+              }}
+              onOpenChange={(open) => {
+                setIsTargetSelectOpen(open);
+                if (!open) {
+                  setTargetSearchValue("");
+                }
+              }}
+            >
               <SelectTrigger className="w-[260px]" aria-label="Select target">
                 <SelectValue placeholder="Select agent or agentflow" />
               </SelectTrigger>
-              <SelectContent position="popper" side="bottom" align="start" sideOffset={4}>
+              <SelectContent
+                className="w-[260px]"
+                position="popper"
+                side="bottom"
+                align="start"
+                sideOffset={4}
+              >
+                <div className="sticky top-0 z-10 bg-popover p-1">
+                  <Input
+                    ref={targetSearchInputRef}
+                    autoFocus
+                    className="h-8"
+                    value={targetSearchValue}
+                    onChange={(event) => setTargetSearchValue(event.target.value)}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    placeholder="Search agents or agentflows..."
+                  />
+                </div>
                 <SelectGroup>
                   <SelectLabel>Agent</SelectLabel>
-                  {targetOptions
-                    .filter((option) => option.type === "agent")
-                    .map((option) => (
+                  {filteredAgentTargetOptions.length > 0 ? (
+                    filteredAgentTargetOptions.map((option) => (
                       <SelectItem key={getTargetValue(option)} value={getTargetValue(option)}>
                         {option.label}
                       </SelectItem>
-                    ))}
+                    ))
+                  ) : (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      No agents found.
+                    </div>
+                  )}
                 </SelectGroup>
                 <SelectGroup>
                   <SelectLabel>Agentflow</SelectLabel>
-                  {targetOptions
-                    .filter((option) => option.type === "agentflow")
-                    .map((option) => (
+                  {filteredAgentflowTargetOptions.length > 0 ? (
+                    filteredAgentflowTargetOptions.map((option) => (
                       <SelectItem key={getTargetValue(option)} value={getTargetValue(option)}>
                         {option.label}
                       </SelectItem>
-                    ))}
+                    ))
+                  ) : (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      No agentflows found.
+                    </div>
+                  )}
                 </SelectGroup>
               </SelectContent>
             </Select>

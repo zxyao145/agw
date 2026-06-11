@@ -423,6 +423,11 @@ public class AgentflowRuntimeService : RuntimeServiceBase
         {
             case AgentflowOrchestrationPattern.Concurrent:
             {
+                workflow = MsAgentWorkflowBuilder.BuildConcurrent(aiAgents);
+                break;
+            }
+            case AgentflowOrchestrationPattern.Sequential:
+            {
                 var options = new AIAgentHostOptions
                 {
                     ForwardIncomingMessages = false,
@@ -448,11 +453,7 @@ public class AgentflowRuntimeService : RuntimeServiceBase
 
                 // workflow = MsAgentWorkflowBuilder.BuildConcurrent(aiAgents);
                 break;
-            }
-            case AgentflowOrchestrationPattern.Sequential:
-            {
-                workflow = MsAgentWorkflowBuilder.BuildSequential(aiAgents);
-                break;
+                
             }
             case AgentflowOrchestrationPattern.GroupChat:
             {
