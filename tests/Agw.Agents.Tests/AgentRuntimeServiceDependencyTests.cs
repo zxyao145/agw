@@ -31,6 +31,16 @@ public class AgentRuntimeServiceDependencyTests
     }
 
     [Fact]
+    public void Constructor_UsesAgentSessionStateStoreForSessionPersistence()
+    {
+        var constructor = Assert.Single(typeof(AgentRuntimeService).GetConstructors());
+
+        Assert.Contains(
+            constructor.GetParameters(),
+            parameter => parameter.ParameterType == typeof(AgentSessionStateStore));
+    }
+
+    [Fact]
     public void Interface_UsesRequestObjectForChatMessageExecution()
     {
         var requestOverload = typeof(IAgentRuntimeService).GetMethod(

@@ -303,13 +303,14 @@ public class AgentRuntimeServiceCompositionTests
             agentAppService: null!,
             projectAppService: null!,
             toolRegistry: null!,
-            cache: null!,
             chatHistoryProvider: null!,
             providerSessionState: null!,
             projectTaskSessionBindingService: null!,
             webHostEnvironment: null!,
             fileSystemResolver: null!,
-            logger: NullLogger<AgentRuntimeService>.Instance);
+            sessionStateStore: null!,
+            logger: NullLogger<AgentRuntimeService>.Instance,
+            loggingMiddleware: new LoggingMiddleware(NullLogger<LoggingMiddleware>.Instance));
     }
 
     private static T GetPrivateField<T>(object instance, string fieldName)

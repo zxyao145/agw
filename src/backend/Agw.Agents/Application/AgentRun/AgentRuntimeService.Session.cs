@@ -1,6 +1,5 @@
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
-using Agw.Agents.ExternalAgents;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
@@ -59,7 +58,7 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        var agentSession = await GetOrCreateThreadAsync(agent, aiAgent, taskIdString, cancellationToken);
+        var agentSession = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, taskIdString, cancellationToken);
         _providerSessionState.InitializeSessionState(agentSession, resolvedContextId, taskIdString,
             ProjectDefaults.GetDefaultProjectIdentifier(projectId));
         return new AgentExecSession(
@@ -131,9 +130,4 @@ public partial class AgentRuntimeService
             }
         };
     }
-    
-    
-    private static bool IsCodexExternalAgent(Agent agent) =>
-        agent.Type == AgentType.External
-        && string.Equals(agent.Name, AgentNames.Codex, StringComparison.OrdinalIgnoreCase);
 }
