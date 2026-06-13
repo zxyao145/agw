@@ -3,8 +3,8 @@ using System.Text.Json;
 
 using A2A;
 
+using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Models;
 
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;

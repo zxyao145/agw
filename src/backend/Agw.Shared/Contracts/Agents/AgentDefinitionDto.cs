@@ -1,4 +1,4 @@
-namespace Agw.Shared.Models;
+namespace Agw.Shared.Contracts.Agents;
 
 /// <summary>
 /// DTO representing all values required to construct an agent with Microsoft Agent Framework (e.g., an AIAgent instance).

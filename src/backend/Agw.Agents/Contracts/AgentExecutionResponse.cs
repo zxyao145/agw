@@ -1,6 +1,6 @@
 using Agw.Agents.Application.Agentflows;
 using Agw.Agents.Application.AgentRun.Dtos;
-using Agw.Shared.Models;
+using Agw.Shared.AgwMsgVm;
 
 namespace Agw.Agents.Contracts;
 

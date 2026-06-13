@@ -1,6 +1,6 @@
 using Agw.Agents.Application.Agentflows;
+using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Models;
 
 namespace Agw.Agents.Contracts.Manager;
 

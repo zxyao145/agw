@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 
 using Agw.Agents.Application.AgentRun.Dtos;
-using Agw.Shared.Models;
+using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Utils;
 
 using Microsoft.AspNetCore.Mvc;

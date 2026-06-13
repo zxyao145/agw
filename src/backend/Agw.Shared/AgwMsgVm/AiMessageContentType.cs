@@ -1,4 +1,4 @@
-namespace Agw.Shared.Models;
+namespace Agw.Shared.AgwMsgVm;
 
 /// <summary>
 /// Content type names matching Microsoft.Extensions.AI content types.

@@ -1,4 +1,4 @@
-namespace Agw.Shared.Models;
+namespace Agw.Shared.Contracts.Tools;
 
 /// <summary>
 /// Represents information about a tool that can be used by an agent.

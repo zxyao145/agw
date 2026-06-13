@@ -1,6 +1,6 @@
 using Agw.Agents.Contracts;
+using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Models;
 using Agw.Shared.Utils;
 
 namespace Agw.Agents.Tests;

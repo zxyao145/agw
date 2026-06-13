@@ -1,5 +1,5 @@
 using Agw.Domain.Services;
-using Agw.Shared.Models;
+using Agw.Shared.Contracts.Tools;
 using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Mvc;

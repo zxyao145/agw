@@ -1,4 +1,4 @@
-namespace Agw.Shared.Models;
+namespace Agw.Shared.AgwMsgVm;
 
 public class AgwUserInput
 {

@@ -2,13 +2,13 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 using Agw.Agents.Application.AgentRun;
+using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
-using Agw.Shared.Models;
 
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;

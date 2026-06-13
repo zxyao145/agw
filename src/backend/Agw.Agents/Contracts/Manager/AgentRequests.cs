@@ -1,7 +1,7 @@
 using Agw.Agents.Application.AgentRun.Dtos;
+using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Models;
 
 namespace Agw.Agents.Contracts.Manager;
 

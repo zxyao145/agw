@@ -1,7 +1,7 @@
+using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
-using Agw.Shared.Models;
 using Agw.Tasks.Domain.Services;
 
 using Microsoft.Extensions.AI;

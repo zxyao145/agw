@@ -5,9 +5,9 @@ using A2A;
 
 using Agw.A2A.Extensions;
 using Agw.Agents.Application.AgentRun.Dtos;
+using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
-using Agw.Shared.Models;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;

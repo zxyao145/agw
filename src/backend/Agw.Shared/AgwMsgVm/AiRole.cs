@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 
 using Microsoft.Extensions.AI;
 
-namespace Agw.Shared.Models;
+namespace Agw.Shared.AgwMsgVm;
 
 /// <summary>
 /// copy from ChatRole

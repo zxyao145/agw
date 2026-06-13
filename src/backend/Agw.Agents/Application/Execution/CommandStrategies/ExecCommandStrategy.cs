@@ -4,11 +4,11 @@ using Agw.Agents.Application.Agentflows;
 using Agw.Agents.Application.AgentRun;
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
+using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
-using Agw.Shared.Models;
 using Agw.Shared.Utils;
 
 using Microsoft.Extensions.Logging;

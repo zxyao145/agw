@@ -13,7 +13,7 @@ using Agw.Shared.Utils;
 
 using Microsoft.Extensions.AI;
 
-namespace Agw.Shared.Models;
+namespace Agw.Shared.AgwMsgVm;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(AgwTextContent), "TextContent")]
