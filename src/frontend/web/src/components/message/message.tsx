@@ -9,6 +9,9 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 
 type MessageNode = { type: string; content: string };
 
+const isResultMessage = (message: AiMessage): boolean =>
+  message.additionalProperties?.type === "result";
+
 const stripCommandTags = (str: string) =>
   str.replace("<local-command-stdout>", "").replace("</local-command-stdout>", "");
 
@@ -211,13 +214,7 @@ const groupContentsByType = (message: AiMessage): MessageNode[] => {
 };
 
 export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
-  // claude
-  const isResult = message.role === "system" && message.additionalProperties?.type === "result";
-
-  if (isResult) {
-    return null;
-    // return <div className="flex justify-center">{contentNodes.map((n, i) => <React.Fragment key={i}>{renderNode(n, message)}</React.Fragment>)}</div>;
-  }
+  const isResult = isResultMessage(message);
 
   // group contents by type
   // To solve the problem of multiple returns of the same type in streaming mode
@@ -243,6 +240,8 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
     title = "Tool use";
   } else if (isUser) {
     title = "You";
+  } else if (isResult) {
+    title = "Result";
   } else {
     title = `${message.role} (${message.author ?? "-"})`;
   }
@@ -254,6 +253,8 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
     isToolResult,
     "IsSideRight",
     IsSideRight,
+    "isResult",
+    isResult,
     "message",
     JSON.stringify(message),
   );

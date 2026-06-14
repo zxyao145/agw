@@ -10,7 +10,7 @@ public sealed class AgentExecuteByNameRequest
     {
         var chatMsg = new ChatMessage(ChatRole.User, input)
         {
-            AuthorName = Constants.DefaultAuthor
+            AuthorName = Constants.DefaultInputAuthor
         };
 
         AgentName = agentName;
@@ -47,7 +47,7 @@ public sealed class AgentExecuteByIdRequest
     {
         var chatMsg = new ChatMessage(ChatRole.User, input)
         {
-            AuthorName = Constants.DefaultAuthor
+            AuthorName = Constants.DefaultInputAuthor
         };
 
         AgentId = agentId;

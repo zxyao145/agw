@@ -124,7 +124,7 @@ public class CommonAgentHandler : IAgentHandler
             MessageId = string.IsNullOrWhiteSpace(context.Message.MessageId)
                 ? Guid.NewGuid().ToString("N")
                 : context.Message.MessageId,
-            Author = Constants.DefaultAuthor,
+            Author = Constants.DefaultInputAuthor,
             Contents = contents
         };
     }
@@ -218,11 +218,8 @@ public class CommonAgentHandler : IAgentHandler
     }
 
     private static bool IsTurnFinished(AgwMessage message) =>
-        message.Contents
-            .OfType<AgwTextContent>()
-            .Any(content =>
-                content.AdditionalProperties?.TryGetValue("type", out var value) == true
-                && string.Equals(value?.ToString(), "turn-finished", StringComparison.OrdinalIgnoreCase));
+        message.AdditionalProperties?.TryGetValue("type", out object? value) == true
+        && string.Equals(value?.ToString(), "turn-finished", StringComparison.OrdinalIgnoreCase);
 
     private static Message CreateStatusMessage(RequestContext context, string text) => new()
     {

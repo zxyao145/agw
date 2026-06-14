@@ -87,7 +87,7 @@ public sealed class ExecutionCommandContext
         var payload = new AgwMessage
             (
                 Guid.NewGuid().ToString("D"),
-                "$agw-server",
+                Constants.DefaultAgentAuthor,
                 AiRole.System,
                 new List<AgwContent> { content }
             );
@@ -99,7 +99,7 @@ public sealed class ExecutionCommandContext
     {
         var payload = new AgwMessage(
             Guid.NewGuid().ToString("D"),
-            "$agw-server",
+            Constants.DefaultAgentAuthor,
             AiRole.System,
             new List<AgwContent> { new AgwTextContent { Content = message } });
         return SendJsonAsync(JsonUtil.Serialize(payload), cancellationToken ?? CancellationToken);

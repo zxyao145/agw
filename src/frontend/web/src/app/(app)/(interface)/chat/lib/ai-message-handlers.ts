@@ -1,5 +1,15 @@
 import type { AiMessage } from "@/types";
-import { MessageContentType } from "@/types";
+
+const ErrorContent = "ErrorContent";
+const TextContent = "TextContent";
+const ResultType = "result";
+
+export function isResultMessage(message: AiMessage): boolean {
+  return (
+    message.additionalProperties?.type === ResultType ||
+    message.contents.some((content) => content.additionalProperties?.type === ResultType)
+  );
+}
 
 export type AiMessageAction =
   | { type: "append"; message: AiMessage }
@@ -11,7 +21,7 @@ export function handleSystemMessage(message: AiMessage): AiMessageAction[] {
     return [];
   }
 
-  if (message.author === "Agw" && firstContent.type === MessageContentType.ErrorContent) {
+  if (message.author === "Agw" && firstContent.type === ErrorContent) {
     return [
       { type: "setIsExecuting", value: false },
       { type: "append", message },
@@ -20,14 +30,17 @@ export function handleSystemMessage(message: AiMessage): AiMessageAction[] {
 
   if (
     message.additionalProperties?.subtype === "hint" &&
-    firstContent.type === MessageContentType.TextContent &&
+    firstContent.type === TextContent &&
     firstContent.content.toLowerCase().includes("interrupted")
   ) {
     return [{ type: "setIsExecuting", value: false }];
   }
 
-  if (message.additionalProperties?.type === "result") {
-    return [{ type: "setIsExecuting", value: false }];
+  if (isResultMessage(message)) {
+    return [
+      { type: "setIsExecuting", value: false },
+      { type: "append", message },
+    ];
   }
 
   return [{ type: "append", message }];

@@ -4,8 +4,9 @@ import test from "node:test";
 import {
   getChatRouteSessionAction,
   getContextHydrationKey,
+  getRouteHydrationKey,
   getTaskHydrationKey,
-} from "./session-routing";
+} from "./session-routing.ts";
 
 test("route action ignores the task route created by the active local session", () => {
   const projectId = "11111111-1111-1111-1111-111111111111";
@@ -83,4 +84,29 @@ test("route action clears only local chat state when no project is in the route"
   });
 
   assert.deepEqual(action, { type: "clearLocal" });
+});
+
+test("route hydration key is available only for hydrate actions", () => {
+  assert.equal(
+    getRouteHydrationKey({
+      type: "hydrate",
+      hydrateKey: "project-1:task:task-1",
+      projectId: "project-1",
+      taskId: "task-1",
+    }),
+    "project-1:task:task-1",
+  );
+
+  assert.equal(
+    getRouteHydrationKey({
+      type: "hydrateContext",
+      hydrateKey: "project-1:context:context-1",
+      projectId: "project-1",
+      contextId: "context-1",
+      taskId: null,
+    }),
+    "project-1:context:context-1",
+  );
+
+  assert.equal(getRouteHydrationKey({ type: "ignore" }), null);
 });

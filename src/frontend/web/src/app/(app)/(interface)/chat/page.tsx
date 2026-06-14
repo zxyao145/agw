@@ -67,6 +67,7 @@ import {
 import {
   getChatRouteSessionAction,
   getContextHydrationKey,
+  getRouteHydrationKey,
   getTaskHydrationKey,
 } from "./lib/session-routing";
 import { copyCurrentUrlToClipboard } from "./lib/share-url";
@@ -544,9 +545,7 @@ export default function ChatPage() {
       return false;
     }
 
-    return message.contents.some(
-      (content) => content.additionalProperties?.type === "turn-finished",
-    );
+    return message.additionalProperties?.type === "turn-finished"
   }, []);
 
   const waitForWebSocketOpen = React.useCallback((ws: WebSocket): Promise<void> => {
@@ -968,6 +967,11 @@ export default function ChatPage() {
       return;
     }
 
+    const hydrationKey = getRouteHydrationKey(routeAction);
+    if (hydrationKey) {
+      hydratedTaskKeyRef.current = hydrationKey;
+    }
+
     let cancelled = false;
 
     void (async () => {
@@ -1012,6 +1016,9 @@ export default function ChatPage() {
         }
       } catch (error) {
         if (!cancelled) {
+          if (hydrationKey && hydratedTaskKeyRef.current === hydrationKey) {
+            hydratedTaskKeyRef.current = null;
+          }
           toast.error(`Failed to load chat history: ${getApiErrorMessage(error)}`);
         }
       }

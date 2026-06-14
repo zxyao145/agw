@@ -140,7 +140,7 @@ public class ProjectTaskAppService
         var inputMessage = new ChatMessage(ChatRole.User, request.Input.Trim())
         {
             MessageId = Guid.NewGuid().ToString(),
-            AuthorName = Constants.DefaultAuthor
+            AuthorName = Constants.DefaultInputAuthor
         };
 
         var initialRecord = new TaskRecord

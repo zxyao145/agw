@@ -296,19 +296,18 @@ public class AgentHandlerFactoryTests
     private static AgwMessage CreateTurnFinishedMessage() =>
         new(
             Guid.NewGuid().ToString("N"),
-            "$agw-server",
+            "$agw",
             AiRole.System,
             [
                 new AgwTextContent
                 {
                     Content = string.Empty,
-                    AdditionalProperties = new AdditionalPropertiesDictionary
-                    {
-                        ["type"] = "turn-finished",
-                        ["status"] = string.Empty
-                    }
                 }
-            ]);
+            ],
+            new AdditionalPropertiesDictionary
+            {
+                ["type"] = "turn-finished",
+            });
 
     private static async Task<List<StreamResponse>> DrainAsync(AgentEventQueue queue, CancellationToken cancellationToken)
     {

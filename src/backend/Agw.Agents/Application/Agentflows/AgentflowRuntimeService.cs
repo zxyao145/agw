@@ -297,7 +297,7 @@ public class AgentflowRuntimeService : RuntimeServiceBase
         {
             new(ChatRole.User, input)
             {
-                AuthorName = Constants.DefaultAuthor
+                AuthorName = Constants.DefaultInputAuthor
             }
         };
 

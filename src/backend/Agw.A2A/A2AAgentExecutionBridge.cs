@@ -28,7 +28,7 @@ public interface IAgentExecutionBridge
         CancellationToken cancellationToken);
 }
 
-public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactory) : IAgentExecutionBridge
+public sealed class A2AAgentExecutionBridge(IServiceScopeFactory serviceScopeFactory) : IAgentExecutionBridge
 {
     public async Task<AgentExecutionResult?> ExecuteAsync(
         string agentName,
@@ -86,7 +86,7 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
             ProjectId = ProjectDefaults.A2AId,
             ContextId = context.ContextId,
             Title = agent.Name,
-            CreateBy = Constants.DefaultAuthor,
+            CreateBy = Constants.DefaultInputAuthor,
             CreateTime = DateTime.UtcNow
         };
         var settings = new SettingCommand(ProjectDefaults.A2AId, taskId)
@@ -125,7 +125,7 @@ public sealed class AgentExecutionBridge(IServiceScopeFactory serviceScopeFactor
         var message = new ChatMessage(ChatRole.User, ConvertToAIContents(input.Contents))
         {
             MessageId = input.MessageId,
-            AuthorName = string.IsNullOrWhiteSpace(input.Author) ? Constants.DefaultAuthor : input.Author
+            AuthorName = string.IsNullOrWhiteSpace(input.Author) ? Constants.DefaultInputAuthor : input.Author
         };
 
         return message;

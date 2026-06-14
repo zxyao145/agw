@@ -11,7 +11,7 @@ namespace Agw.Agents.Application.AgentRun;
 
 public sealed class AgentSessionStateStore
 {
-    private readonly HybridCache _cache;
+    private readonly HybridCache  _cache;
     private readonly ILogger<AgentSessionStateStore> _logger;
 
     public AgentSessionStateStore(HybridCache cache, ILogger<AgentSessionStateStore> logger)

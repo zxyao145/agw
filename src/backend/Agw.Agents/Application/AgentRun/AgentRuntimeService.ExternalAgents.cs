@@ -73,7 +73,7 @@ public partial class AgentRuntimeService
 
         options = options with
         {
-            WorkingDirectory = project.Workspace,
+            WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
             ChatHistoryProvider = _chatHistoryProvider
         };
 
@@ -103,7 +103,7 @@ public partial class AgentRuntimeService
 
         var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
             extra,
-            project.Workspace,
+            PathUtil.ExpandTilde(project.Workspace),
             threadId,
             resume,
             environmentVariables,

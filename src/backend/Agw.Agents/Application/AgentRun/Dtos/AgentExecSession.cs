@@ -6,6 +6,8 @@ using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 
+using ClaudeCodeSdk.MAF;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -61,29 +63,6 @@ public sealed class AgentExecSession : IAsyncDisposable
     }
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-        string input,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(input);
-
-        var content = new AgwTextContent
-        {
-            Content = input,
-        };
-
-        await foreach (var message in ExecuteStreamingAsync(
-                           new AgwUserInput
-                           {
-                               Author = Constants.DefaultAuthor,
-                               Contents = [content]
-                           },
-                           cancellationToken))
-        {
-            yield return message;
-        }
-    }
-
-    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgwUserInput input,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -102,16 +81,6 @@ public sealed class AgentExecSession : IAsyncDisposable
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         List<AgwContent> contents,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        await foreach (var message in ExecuteStreamingAsync(contents, null, null, cancellationToken))
-        {
-            yield return message;
-        }
-    }
-
-    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-        List<AgwContent> contents,
         string? messageId,
         string? author,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -120,7 +89,7 @@ public sealed class AgentExecSession : IAsyncDisposable
         var message = new ChatMessage(ChatRole.User, aiContents)
         {
             MessageId = string.IsNullOrWhiteSpace(messageId) ? Guid.NewGuid().ToString() : messageId,
-            AuthorName = string.IsNullOrWhiteSpace(author) ? Constants.DefaultAuthor : author
+            AuthorName = string.IsNullOrWhiteSpace(author) ? Constants.DefaultInputAuthor : author
         };
         
         await foreach (var update in Agent.RunStreamingAsync(message, Session, cancellationToken: cancellationToken))
@@ -134,9 +103,7 @@ public sealed class AgentExecSession : IAsyncDisposable
 
         _logger.LogDebug("Saved thread state for task: {TaskId}", _taskId);
     }
-
-    public void UpdateThread(AgentSession newThread) => Session = newThread;
-
+    
     public void CancelActiveRequest()
     {
         if (_cancellationTokenSource.IsCancellationRequested)

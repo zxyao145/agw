@@ -9,7 +9,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddA2A(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddSingleton<IAgentExecutionBridge, AgentExecutionBridge>();
+        services.AddSingleton<IAgentExecutionBridge, A2AAgentExecutionBridge>();
         services.AddSingleton(sp => new AgentHandlerFactory(
             sp.GetRequiredService<IServiceScopeFactory>(),
             sp.GetRequiredService<IAgentExecutionBridge>()));

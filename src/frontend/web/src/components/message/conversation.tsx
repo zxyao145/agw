@@ -108,6 +108,8 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
           msg?.contents?.length === 1 &&
           msg.contents[0].type === MessageContentType.FunctionResultContent;
 
+          console.log("Checking for matching FunctionResult", isFunctionResult);
+
         if (isFunctionResult) {
           const resultCallId = msg.contents[0].additionalProperties?.callId as string;
           if (resultCallId === callId) {

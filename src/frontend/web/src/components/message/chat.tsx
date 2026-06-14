@@ -72,9 +72,7 @@ export function Chat({
       return false;
     }
 
-    return message.contents.some(
-      (content) => content.additionalProperties?.type === "turn-finished",
-    );
+    return message.additionalProperties?.type === "turn-finished";
   }, []);
 
   const sessionQuery = useQuery({

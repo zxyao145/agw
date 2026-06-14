@@ -7,23 +7,64 @@ namespace Agw.Agents.Application.AgentRun;
 
 public class RuntimeServiceBase
 {
-    protected static AgwMessage CreateTurnFinishedMessage(CancellationToken cancellationToken)
+    protected static AgwMessage CreateResultMessage(
+        string content = "",
+        CancellationToken cancellationToken = default
+    )
     {
-        var content = new AgwTextContent
+        var contents = new List<AgwContent>
         {
-            Content = "",
-            AdditionalProperties = new AdditionalPropertiesDictionary
+            new AgwTextContent
             {
-                { "type", "turn-finished" },
-                { "status", "" }
+                Content = content,
             }
+        };
+
+        return CreateResultMessage(contents, cancellationToken);
+    }
+
+
+    // ReSharper disable once MemberCanBePrivate.Global
+    protected static AgwMessage CreateResultMessage(
+        List<AgwContent> contents,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var additionalProperties = new AdditionalPropertiesDictionary
+        {
+            { "type", "result" },
         };
 
         var payload = new AgwMessage(
             Guid.NewGuid().Normalize(),
-            "$agw-server",
+            Constants.DefaultAgentAuthor,
             AiRole.System,
-            new List<AgwContent> { content });
+            contents,
+            additionalProperties
+        );
+
+        return payload;
+    }
+
+
+    protected static AgwMessage CreateTurnFinishedMessage(CancellationToken cancellationToken)
+    {
+        var additionalProperties = new AdditionalPropertiesDictionary
+        {
+            { "type", "turn-finished" },
+        };
+
+        var content = new AgwTextContent
+        {
+            Content = "",
+        };
+
+        var payload = new AgwMessage(
+            Guid.NewGuid().Normalize(),
+            Constants.DefaultAgentAuthor,
+            AiRole.System,
+            [content],
+            additionalProperties);
         return payload;
     }
 }

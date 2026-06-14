@@ -424,7 +424,7 @@ public class ProjectContextAppServiceTests
         ConversationPayload = JsonUtil.Serialize(new ChatMessage(ChatRole.User, text)
         {
             MessageId = Guid.NewGuid().ToString(),
-            AuthorName = Constants.DefaultAuthor
+            AuthorName = Constants.DefaultInputAuthor
         }),
         CreateTime = DateTime.UtcNow
     };

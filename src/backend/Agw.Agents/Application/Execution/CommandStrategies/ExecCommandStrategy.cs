@@ -6,6 +6,7 @@ using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
@@ -37,18 +38,21 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
 
     private readonly IAgentRuntimeService _agentRuntimeService;
     private readonly AgentflowRuntimeService _agentflowRuntimeService;
+    private readonly IAgwFileSystemResolver _fileSystemResolver;
+
 
 
     private const string BusyMessage = "The previous session is currently in progress, please wait and execute again.";
 
 
     public ExecCommandStrategy(ILogger<ExecCommandStrategy> logger,
-        ITaskAppService taskAppService, IAgentRuntimeService agentRuntimeService, AgentflowRuntimeService agentflowRuntimeService)
+        ITaskAppService taskAppService, IAgentRuntimeService agentRuntimeService, AgentflowRuntimeService agentflowRuntimeService, IAgwFileSystemResolver fileSystemResolver)
     {
         _logger = logger;
         _taskAppService = taskAppService;
         _agentRuntimeService = agentRuntimeService;
         _agentflowRuntimeService = agentflowRuntimeService;
+        _fileSystemResolver = fileSystemResolver;
     }
 
 
@@ -174,7 +178,14 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
     {
         // Each runtime type streams through the same socket but has slightly different session/cancellation rules.
         var executionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-
+        var projectId = request.Settings.ProjectId;
+        var fs = await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
+        var rootStat = await fs.StatAsync("", cancellationToken);
+        if (rootStat == null)
+        {
+            await fs.CreateDirectoryAsync("", cancellationToken);
+        }
+        
         switch (request.Command.AgentType)
         {
             case AgentRuntimeType.Agent:

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 
+using Agw.Shared;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
@@ -79,6 +80,13 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         _state.SaveState(session, state);
     }
 
+    /// <summary>
+    /// 获取历史消息
+    /// </summary>
+    /// <param name="context"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    /// <exception cref="ArgumentNullException"></exception>
     protected override async ValueTask<IEnumerable<ChatMessage>> ProvideChatHistoryAsync(
         InvokingContext context,
         CancellationToken cancellationToken)
@@ -117,6 +125,12 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         return messages;
     }
 
+    /// <summary>
+    /// 存储新消息
+    /// </summary>
+    /// <param name="context"></param>
+    /// <param name="cancellationToken"></param>
+    /// <exception cref="ArgumentNullException"></exception>
     protected override async ValueTask StoreChatHistoryAsync(
         InvokedContext context,
         CancellationToken cancellationToken)
@@ -175,7 +189,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .MaxAsync(cancellationToken)
             .ConfigureAwait(false) ?? -1;
 
-        foreach (var message in newMessages)
+        foreach (ChatMessage message in newMessages)
         {
             // user input
             nextSequence++;

@@ -7,6 +7,8 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 
+using ClaudeCodeSdk.MAF;
+
 using Microsoft.Agents.AI;
 
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -27,7 +29,7 @@ public partial class AgentRuntimeService
         {
             await foreach (var message in session.ExecuteStreamingAsync(input, cancellationToken).ConfigureAwait(false))
             {
-                yield return message;
+                yield return AgentUtil.PostAgwMessage(session, message);
             }
 
             yield return CreateTurnFinishedMessage(cancellationToken);

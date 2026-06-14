@@ -33,6 +33,14 @@ export function getContextHydrationKey(
   return `${projectId}:context:${contextId}`;
 }
 
+export function getRouteHydrationKey(action: ChatRouteSessionAction): string | null {
+  if (action.type === "hydrate" || action.type === "hydrateContext") {
+    return action.hydrateKey;
+  }
+
+  return null;
+}
+
 export function getChatRouteSessionAction({
   queryProjectId,
   queryTaskId,

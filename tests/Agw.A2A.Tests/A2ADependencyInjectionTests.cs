@@ -45,7 +45,7 @@ public class A2ADependencyInjectionTests
         [
             new Agent { Id = agentId, Name = "alpha", SystemPrompt = "Alpha prompt" }
         ]));
-        services.AddSingleton<IAgentExecutionBridge, AgentExecutionBridge>();
+        services.AddSingleton<IAgentExecutionBridge, A2AAgentExecutionBridge>();
 
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions
         {

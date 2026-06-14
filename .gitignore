@@ -375,3 +375,4 @@ agw - 副本.db
 appsettings.setup.json
 .idea/
 .worktrees/
+.claude/settings.local.json
