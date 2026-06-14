@@ -7,7 +7,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { AiMessageComponent } from "./message";
+import { AiMessageComponent, isResultMessage } from "./message";
 import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
 import {
   Empty,
@@ -17,6 +17,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
+import { MessageTrigger } from "../MessageTrigger";
 
 export interface ChatSessionProps {
   taskId?: string | null;
@@ -41,6 +42,16 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
     const currentMsg = msgs[i];
     // console.debug("Processing message", i, JSON.stringify(currentMsg));
     // Skip messages without an author (could be system metadata or similar)
+    const isResult = isResultMessage(currentMsg);
+
+    if (isResult) {
+      items.push({
+        type: "result",
+        message: currentMsg,
+      });
+      processedIndices.add(i);
+    }
+
     if (!currentMsg.author) {
       continue;
     }
@@ -107,8 +118,6 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
         const isFunctionResult =
           msg?.contents?.length === 1 &&
           msg.contents[0].type === MessageContentType.FunctionResultContent;
-
-          console.log("Checking for matching FunctionResult", isFunctionResult);
 
         if (isFunctionResult) {
           const resultCallId = msg.contents[0].additionalProperties?.callId as string;
@@ -193,14 +202,14 @@ export function Conversation({
             return (
               <div className="mx-4 max-w-[80%]" key={index}>
                 <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="item-1" className="border rounded-lg px-2 last:border-b">
-                    <AccordionTrigger>
-                      <div className="flex items-center gap-2">
+                  <AccordionItem value="item-1">
+                    <MessageTrigger className="py-0">
+                      <div className="flex flex-2 items-center gap-2">
                         <Badge variant="secondary" className="text-xs">
                           {item.toolName}
                         </Badge>
                       </div>
-                    </AccordionTrigger>
+                    </MessageTrigger>
                     <AccordionContent>
                       <div className="space-y-4">
                         {item.messages.map((msg, msgIndex) => (
@@ -213,11 +222,15 @@ export function Conversation({
               </div>
             );
           } else {
-            const isUserBlock = item.message.role === "user" && !item.message.additionalProperties;
-            console.debug("isUser", isUserBlock, "message", item.message);
+            const isResult = isResultMessage(item.message);
+            
+            console.debug("isResult", isResult, "message", item.message);
             return (
               <div
-                className={cn("mx-4", isUserBlock ? "max-w-full" : "max-w-[80%]")}
+                className={cn(
+                  "mx-4 max-w-full",
+                  isResult ? "border-t pt-2" : "",
+                )}
                 key={index}
                 data-msg-id={item.message.messageId}
               >

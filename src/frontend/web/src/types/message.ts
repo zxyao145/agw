@@ -2,7 +2,7 @@ export type AdditionalProperties = Record<string, unknown>;
 
 export interface AiMessageContent {
   type: string;
-  content: string;
+  content?: unknown;
   additionalProperties?: AdditionalProperties;
 }
 
@@ -18,7 +18,8 @@ export interface AiMessage {
 
 export type ProcessedMessageItem =
   | { type: "accordion"; messages: AiMessage[]; toolName: string }
-  | { type: "normal"; message: AiMessage };
+  | { type: "normal"; message: AiMessage }
+  | { type: "result"; message: AiMessage };
 
 export const MessageContentType = {
   DataContent: "DataContent",

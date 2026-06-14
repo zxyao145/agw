@@ -6,10 +6,11 @@ import remarkGfm from "remark-gfm";
 import { Button } from "../ui/button";
 import { layoutWithLines, prepareWithSegments } from "@chenglou/pretext";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type MessageNode = { type: string; content: string };
 
-const isResultMessage = (message: AiMessage): boolean =>
+export const isResultMessage = (message: AiMessage): boolean =>
   message.additionalProperties?.type === "result";
 
 const stripCommandTags = (str: string) =>
@@ -27,18 +28,6 @@ const getNodePrefix = (type: string): string =>
           : type === MessageContentType.FunctionCallContent
             ? ""
             : "";
-
-const isTextNode = (type: string) =>
-  (
-    [
-      MessageContentType.TextContent,
-      MessageContentType.FunctionCallContent,
-      MessageContentType.FunctionResultContent,
-
-      MessageContentType.DataContent,
-      MessageContentType.ErrorContent,
-    ] as string[]
-  ).includes(type);
 
 const MdCard = ({ mdText: content }: { mdText: string }) => (
   <ReactMarkdown
@@ -108,7 +97,18 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
   );
 };
 
-const renderContent = (node: MessageNode, _: AiMessage): React.ReactNode => {
+const isTextNode = (type: string) =>
+  (
+    [
+      MessageContentType.TextContent,
+      MessageContentType.FunctionCallContent,
+      MessageContentType.FunctionResultContent,
+
+      MessageContentType.DataContent,
+      MessageContentType.ErrorContent,
+    ] as string[]
+  ).includes(type);
+const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
   if (isTextNode(node.type)) {
     return (
       <div className="msg-content">
@@ -225,6 +225,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
 
   // const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
   const isUser = message.role === "user";
+  const isUserBlock = message.role === "user" && !message.additionalProperties;
 
   // TODO: There are pits here that need to be optimized
   const isToolUse = message.contents.some((c) => c.type === MessageContentType.FunctionCallContent);
@@ -234,17 +235,18 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
 
   const IsSideRight = isUser && !isToolResult;
   let title = "";
-  if (isToolResult) {
+  if (isResult) {
+    title = "Result";
+  } else if (isToolResult) {
     title = "Tool result";
   } else if (isToolUse) {
     title = "Tool use";
-  } else if (isUser) {
-    title = "You";
-  } else if (isResult) {
-    title = "Result";
-  } else {
-    title = `${message.role} (${message.author ?? "-"})`;
-  }
+  } 
+  // else if (isUser) {
+  //   title = "You";
+  // } else {
+  //   title = `${message.role} (${message.author ?? "-"})`;
+  // }
 
   console.debug(
     "AiMessageComponent isUser",
@@ -259,12 +261,26 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
     JSON.stringify(message),
   );
   return (
-    <div className={`flex ${IsSideRight ? "justify-end" : "justify-start"}`}>
+    <div
+      className={cn(
+        "flex",
+        IsSideRight ? "justify-end" : "justify-start",
+        isUserBlock ? "max-w-full mb-8" : "max-w-[80%]",
+      )}
+    >
       <div
-        className={`min-w-0 max-w-full rounded-lg px-4 py-3 ${IsSideRight ? "bg-primary text-primary-foreground ml-12" : "bg-secondary mr-12"}`}
+        className={`min-w-0 max-w-full ${
+          IsSideRight
+            ? " rounded-lg px-2 py-1 bg-primary text-primary-foreground ml-12"
+            : // debug
+              // : "bg-secondary mr-12"}`}
+              "mr-12"
+        }`}
       >
-        <div className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}>
-          <span className="text-xs font-semibold opacity-70">{title}</span>
+        <div
+          className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}
+        >
+          <span className="text-xs font-semibold opacity-40">{title}</span>
         </div>
 
         <div className="msg-content-container">
