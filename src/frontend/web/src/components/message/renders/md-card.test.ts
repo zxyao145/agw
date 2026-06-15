@@ -41,6 +41,22 @@ test("markdown list item first paragraphs stay on the marker line", () => {
   assert.doesNotMatch(body, /block/);
 });
 
+test("markdown code receives a muted background", () => {
+  const body = getRuleBody(".msg-content-md-code");
+
+  assert.match(body, /bg-muted\/50/);
+  assert.match(body, /rounded/);
+});
+
+test("markdown code blocks keep one visible background layer", () => {
+  const preBody = getRuleBody("pre.msg-content-md-code");
+  const nestedCodeBody = getRuleBody("pre.msg-content-md-code > code.msg-content-md-code");
+
+  assert.match(preBody, /p-3/);
+  assert.match(nestedCodeBody, /bg-transparent/);
+  assert.match(nestedCodeBody, /p-0/);
+});
+
 test("markdown lists collapse parser whitespace between list items and paragraphs", () => {
   const orderedBody = getRuleBody(".msg-content-md-ol");
   const unorderedBody = getRuleBody(".msg-content-md-ul");
