@@ -2,12 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  areChatSettingsParamsEquivalent,
   decodeChatUrlSettings,
   getChatSettingsHash,
   getChatSettingsHashValue,
   encodeChatUrlSettings,
   getTargetValueFromChatUrlSettings,
 } from "./url-settings";
+
+function encodeBase64UrlForTest(value: string): string {
+  return Buffer.from(value, "utf8")
+    .toString("base64")
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
+}
 
 test("chat URL settings round trip as base64 url-safe JSON", () => {
   const settings = {
@@ -68,4 +77,31 @@ test("chat URL settings use the settings hash fragment", () => {
   assert.equal(getChatSettingsHashValue("#settings=abc-123_DEF"), "abc-123_DEF");
   assert.equal(getChatSettingsHashValue(""), null);
   assert.equal(getChatSettingsHashValue("#other=abc-123_DEF"), null);
+});
+
+test("chat URL settings compare decoded settings instead of encoded string identity", () => {
+  const left = encodeChatUrlSettings({
+    agentType: 1,
+    agentId: "flow-1",
+    chatSettings: {
+      envVars: [],
+    },
+  });
+  const right = encodeBase64UrlForTest(
+    JSON.stringify(
+      {
+        chatSettings: {
+          envVars: [],
+        },
+        agentId: "flow-1",
+        agentType: 1,
+      },
+      null,
+      2,
+    ),
+  );
+
+  assert.notEqual(left, right);
+  assert.equal(areChatSettingsParamsEquivalent(left, right), true);
+  assert.equal(areChatSettingsParamsEquivalent(left, null), false);
 });

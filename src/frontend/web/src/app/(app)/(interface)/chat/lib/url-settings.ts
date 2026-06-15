@@ -171,6 +171,24 @@ export function decodeChatUrlSettings(value: string | null): ChatUrlSettings | n
   }
 }
 
+export function areChatSettingsParamsEquivalent(
+  left: string | null,
+  right: string | null,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  const leftSettings = decodeChatUrlSettings(left);
+  const rightSettings = decodeChatUrlSettings(right);
+
+  if (!leftSettings || !rightSettings) {
+    return false;
+  }
+
+  return JSON.stringify(leftSettings) === JSON.stringify(rightSettings);
+}
+
 export function getTargetValueFromChatUrlSettings(settings: ChatUrlSettings | null): string | null {
   if (!settings || !settings.agentId) {
     return null;

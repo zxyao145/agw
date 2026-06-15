@@ -77,6 +77,7 @@ import {
   getTargetValueFromMetadata,
 } from "./lib/target-options";
 import {
+  areChatSettingsParamsEquivalent,
   buildChatUrlSettings,
   decodeChatUrlSettings,
   encodeChatUrlSettings,
@@ -193,6 +194,17 @@ function normalizeEnvVars(envVars: EnvVar[]): EnvVar[] {
       value: envVar.value,
     }))
     .filter((envVar) => envVar.key.length > 0 || envVar.value.trim().length > 0);
+}
+
+function areEnvVarsEqual(left: EnvVar[], right: EnvVar[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((envVar, index) => {
+    const rightEnvVar = right[index];
+    return envVar.key === rightEnvVar.key && envVar.value === rightEnvVar.value;
+  });
 }
 
 type ChatSettingsDialogProps = {
@@ -509,8 +521,17 @@ export default function ChatPage() {
         contextId: contextIdValue,
         settingsHash,
       });
-      router.replace(nextHref, { scroll: false });
-      setHashSettingsValue(nextSettingsParam);
+
+      if (
+        typeof window === "undefined" ||
+        `${window.location.pathname}${window.location.search}${window.location.hash}` !== nextHref
+      ) {
+        router.replace(nextHref, { scroll: false });
+      }
+
+      setHashSettingsValue((current) =>
+        areChatSettingsParamsEquivalent(current, nextSettingsParam) ? current : nextSettingsParam,
+      );
     },
     [router, routeSettingsParam],
   );
@@ -828,17 +849,18 @@ export default function ChatPage() {
 
   React.useEffect(() => {
     if (!selectedProjectId) {
-      setEnvVars([]);
+      setEnvVars((current) => (current.length === 0 ? current : []));
       return;
     }
 
     if (activeRouteSettings) {
-      setEnvVars(activeRouteSettings.chatSettings?.envVars ?? []);
+      const nextEnvVars = activeRouteSettings.chatSettings?.envVars ?? [];
+      setEnvVars((current) => (areEnvVarsEqual(current, nextEnvVars) ? current : nextEnvVars));
       return;
     }
 
     const draft = getProjectSettingsDraft(selectedProjectId);
-    setEnvVars(draft.envVars);
+    setEnvVars((current) => (areEnvVarsEqual(current, draft.envVars) ? current : draft.envVars));
   }, [activeRouteSettings, getProjectSettingsDraft, selectedProjectId]);
 
   React.useEffect(() => {
@@ -936,12 +958,14 @@ export default function ChatPage() {
       return;
     }
 
-    if (routeSettingsParam === hashSettingsValue) {
+    if (areChatSettingsParamsEquivalent(routeSettingsParam, hashSettingsValue)) {
       return;
     }
 
     replaceCurrentChatSettingsHash(routeSettingsParam);
-    setHashSettingsValue(routeSettingsParam);
+    setHashSettingsValue((current) =>
+      areChatSettingsParamsEquivalent(current, routeSettingsParam) ? current : routeSettingsParam,
+    );
   }, [hashSettingsValue, routeSettingsParam, selectedProjectId]);
 
   React.useEffect(() => {

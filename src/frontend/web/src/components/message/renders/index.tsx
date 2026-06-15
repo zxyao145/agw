@@ -16,7 +16,7 @@ const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
         MessageContentType.ErrorContent,
       ] as string[]
     ).includes(node.type);
-    
+
   if (isTextNode) {
     return <TextContent node={node} />;
   }

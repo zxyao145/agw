@@ -323,7 +323,7 @@
 }
 
 .msg-content {
-  @apply text-sm whitespace-pre-wrap wrap-break-word flex flex-col gap-1;
+  @apply text-sm whitespace-pre-wrap wrap-break-word flex flex-col gap-4;
 }
 
 .msg-content-md-code {
@@ -331,9 +331,17 @@
 }
 
 .msg-content-md-ol {
-  @apply list-disc list-inside leading-[0.8];
+  @apply list-decimal list-outside pl-5 leading-normal whitespace-normal;
 }
 
 .msg-content-md-ul {
-  @apply list-decimal list-inside leading-[0.8];
+  @apply list-disc list-outside pl-5 leading-normal whitespace-normal;
+}
+
+.msg-content-md-li {
+  @apply my-1 whitespace-normal;
+}
+
+.msg-content-md-li > .msg-content-md-p:first-child {
+  @apply inline;
 }
