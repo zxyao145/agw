@@ -1357,15 +1357,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[calc(100vh-58px)] w-full min-w-0 flex-col gap-4 px-2 md:px-0 md:pr-2">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Chat</h1>
-          <p className="text-sm text-muted-foreground">
-            Select a project and target, then continue an existing task or start a new session.
-          </p>
-        </div>
-      </div>
-
       {projectsQuery.isError || agentsQuery.isError || agentflowsQuery.isError ? (
         <div className="text-sm text-destructive">
           Failed to load chat dependencies:{" "}
