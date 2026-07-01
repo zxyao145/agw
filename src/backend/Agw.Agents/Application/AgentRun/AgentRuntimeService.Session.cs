@@ -3,7 +3,6 @@ using Agw.Agents.Contracts;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 
@@ -15,7 +14,7 @@ public partial class AgentRuntimeService
 {
     public async Task<AgentExecSession?> CreateSessionAsync(
         Guid agentId,
-        ProjectTask task,
+        TaskProjection task,
         SettingCommand settings,
         CancellationToken cancellationToken = default)
     {
@@ -26,8 +25,8 @@ public partial class AgentRuntimeService
         }
 
         Guid projectId = task.ProjectId;
-        string taskIdString = task.Id.Normalize();
-        var providerSessionId = await GetCodexProviderSessionIdAsync(agent, task.Id, cancellationToken);
+        string taskIdString = task.TaskId.Normalize();
+        var providerSessionId = await GetCodexProviderSessionIdAsync(agent, task.TaskId, cancellationToken);
         var resume = IsCodexExternalAgent(agent)
             ? providerSessionId.HasValue
             : settings.Resume;
@@ -47,7 +46,7 @@ public partial class AgentRuntimeService
         {
             Agent = agent,
             EnvironmentVariables = settings.EnvironmentVariables,
-            TaskId = task.Id,
+            TaskId = task.TaskId,
             ProviderSessionId = providerSessionId,
             ProjectId = projectId,
             Resume = resume,
@@ -84,7 +83,7 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        var binding = await _projectTaskSessionBindingService.GetAsync(
+        var binding = await _taskSessionBindingService.GetAsync(
             taskId,
             agent.Id,
             agent.Name,
@@ -101,7 +100,7 @@ public partial class AgentRuntimeService
 
     private Func<string, CancellationToken, ValueTask>? CreateExternalSessionStartedCallback(
         Agent agent,
-        ProjectTask task)
+        TaskProjection task)
     {
         if (!IsCodexExternalAgent(agent))
         {
@@ -112,8 +111,8 @@ public partial class AgentRuntimeService
         {
             try
             {
-                await _projectTaskSessionBindingService.UpsertAsync(
-                    task.Id,
+                await _taskSessionBindingService.UpsertAsync(
+                    task.TaskId,
                     agent.Id,
                     agent.Name,
                     providerSessionId,
@@ -125,7 +124,7 @@ public partial class AgentRuntimeService
                 _logger.LogError(
                     ex,
                     "Failed to save provider session binding for task {TaskId}, agent {AgentId}.",
-                    task.Id,
+                    task.TaskId,
                     agent.Id);
             }
         };

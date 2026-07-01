@@ -55,9 +55,12 @@ public class TaskStoreTests
         Assert.Equal("artifact-1", loadedArtifact.Parts![0].Text);
         Assert.Equal("trace-1", loaded.Metadata!["traceId"].GetString());
 
-        var persistedTask = await dbContext.ProjectTasks.SingleAsync(x => x.Id == Guid.Parse(taskId), cancellationToken);
-        Assert.Equal(A2AProjectId, persistedTask.ProjectId);
-        Assert.Equal(ProjectTaskStatus.Running, persistedTask.Status);
+        var persistedContext = await dbContext.ProjectContexts.SingleAsync(cancellationToken);
+        Assert.Equal(A2AProjectId, persistedContext.ProjectId);
+        Assert.Equal("ctx-roundtrip", persistedContext.ContextId);
+        var persistedRecord = await dbContext.TaskRecords.SingleAsync(x => x.TaskId == Guid.Parse(taskId), cancellationToken);
+        Assert.Equal(persistedContext.Id, persistedRecord.ProjectContextId);
+        Assert.Equal(TaskExecutionStatus.Running, persistedRecord.Status);
     }
 
     [Fact]
@@ -202,7 +205,7 @@ public class TaskStoreTests
 
     private static TaskStore CreateStore(AgwDbContext dbContext) =>
         new(
-            new EfRepository<ProjectTask>(dbContext),
+            new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
             new UnitOfWork(dbContext));
 

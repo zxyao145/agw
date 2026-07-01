@@ -52,8 +52,8 @@ public class AgwDbContext : DbContext
     public DbSet<AgentflowEdge> AgentflowEdges => Set<AgentflowEdge>();
 
     public DbSet<Project> Projects => Set<Project>();
-    public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
-    public DbSet<ProjectTaskSessionBinding> ProjectTaskSessionBindings => Set<ProjectTaskSessionBinding>();
+    public DbSet<ProjectContext> ProjectContexts => Set<ProjectContext>();
+    public DbSet<TaskSessionBinding> TaskSessionBindings => Set<TaskSessionBinding>();
     public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobLog> JobLogs => Set<JobLog>();
@@ -268,26 +268,25 @@ public class AgwDbContext : DbContext
             entity.Property(e => e.ExtraSetting).HasMaxLength(16000);
         });
 
-        modelBuilder.Entity<ProjectTask>(entity =>
+        modelBuilder.Entity<ProjectContext>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.JobId);
-            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue("Untitled");
-            entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
 
-            entity.HasIndex(e => e.ContextId);
+            entity.HasIndex(e => new { e.ProjectId, e.ContextId }).IsUnique();
             entity.HasIndex(e => e.ProjectId);
-            entity.HasIndex(e => new { e.ProjectId, e.Status, e.UpdateTime });
+            entity.HasIndex(e => e.JobId);
+            entity.HasIndex(e => e.UpdateTime);
 
             entity.HasOne(e => e.Project)
-                .WithMany(project => project.Tasks)
+                .WithMany(project => project.Contexts)
                 .HasForeignKey(e => e.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<ProjectTaskSessionBinding>(entity =>
+        modelBuilder.Entity<TaskSessionBinding>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ExternalAgentName).IsRequired().HasMaxLength(200);
@@ -296,21 +295,26 @@ public class AgwDbContext : DbContext
             entity.HasIndex(e => new { e.TaskId, e.AgentId, e.ExternalAgentName }).IsUnique();
             entity.HasIndex(e => new { e.ExternalAgentName, e.ProviderSessionId });
 
-            entity.HasOne(e => e.Task)
-                .WithMany()
-                .HasForeignKey(e => e.TaskId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TaskRecord>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.TaskId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.TaskId).IsRequired();
+            entity.Property(e => e.JobId);
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.TaskErrorMessage).HasMaxLength(2000);
             entity.Property(e => e.AgentName).HasMaxLength(200);
             entity.Property(e => e.ConversationPayload).HasColumnType("text");
             entity.Property(e => e.Error).HasColumnType("text");
+            entity.HasIndex(e => e.ProjectContextId);
             entity.HasIndex(e => new { e.TaskId, e.CreateTime });
             entity.HasIndex(e => new { e.TaskId, e.ConversationSequence }).IsUnique(false);
+
+            entity.HasOne(e => e.ProjectContext)
+                .WithMany(context => context.Records)
+                .HasForeignKey(e => e.ProjectContextId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.Property(e => e.Metadata)
                 .HasColumnType("jsonb")

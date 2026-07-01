@@ -32,7 +32,7 @@ public class TaskRecordMetadataFactoryTests
     [Fact]
     public void Create_UsesTrimmedInputPrefix()
     {
-        var title = ProjectTaskTitleFactory.Create("  this is a chat title  ");
+        var title = TaskTitleFactory.Create("  this is a chat title  ");
 
         Assert.Equal("this is a chat title", title);
     }

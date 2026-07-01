@@ -86,9 +86,9 @@ public static class ErrorCodes
     public static readonly ErrorCode UnableToCreateAgentSession = new(500_0007, "Unable to create agent session.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode A2ANoSubscriberSet = new(500_0008, "A2A subscriber set was not found.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode A2AInvalidAgentResponse = new(500_0009, "Invalid agent response.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode ProjectTaskCreationFailed = new(500_0010, "Failed to create project task.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode TaskCreationFailed = new(500_0010, "Failed to create task.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode AgentExecutionFailed = new(500_0011, "Agent execution failed.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode ProjectTaskMarkSucceededFailed = new(500_0012, "Failed to mark project task as succeeded.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode TaskMarkSucceededFailed = new(500_0012, "Failed to mark task as succeeded.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode EnvironmentVariableNotSet = new(500_0013, "Required environment variable is not set.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode FileStorageConfigInvalid = new(500_0014, "File storage configuration is invalid.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode SftpConnectionFailed = new(500_0015, "SFTP connection failed.", HttpStatusCode.InternalServerError);

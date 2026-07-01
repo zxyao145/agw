@@ -16,6 +16,8 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
+using AgwTaskProjection = Agw.Shared.Contracts.Tasks.TaskProjection;
+
 namespace Agw.A2A.Tests;
 
 public class A2ADependencyInjectionTests
@@ -87,7 +89,7 @@ public class A2ADependencyInjectionTests
         services.AddLogging();
         services.AddScoped<IAgentRuntimeService, FakeAgentRuntimeService>();
         services.AddScoped<IRepository<Agent>, RepositoryStub<Agent>>();
-        services.AddScoped<IRepository<ProjectTask>, RepositoryStub<ProjectTask>>();
+        services.AddScoped<IRepository<ProjectContext>, RepositoryStub<ProjectContext>>();
         services.AddScoped<IRepository<TaskRecord>, RepositoryStub<TaskRecord>>();
         services.AddScoped<IUnitOfWork, UnitOfWorkStub>();
         services.AddA2A(new ConfigurationManager());
@@ -105,7 +107,7 @@ public class A2ADependencyInjectionTests
 
         public Task<AgentExecSession?> CreateSessionAsync(
             Guid agentId,
-            ProjectTask task,
+            AgwTaskProjection task,
             SettingCommand settings,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<AgentExecSession?>(null);

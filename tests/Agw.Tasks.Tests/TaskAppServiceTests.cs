@@ -28,6 +28,7 @@ public class TaskAppServiceTests
             parameter => Assert.Equal("taskId", parameter.Name),
             parameter => Assert.Equal("input", parameter.Name),
             parameter => Assert.Equal("user", parameter.Name),
+            parameter => Assert.Equal("contextId", parameter.Name),
             parameter => Assert.Equal("cancellationToken", parameter.Name));
     }
 
@@ -77,23 +78,26 @@ public class TaskAppServiceTests
         Assert.NotNull(task);
         Assert.Null(task!.JobId);
         Assert.Equal("hello world", task.Title);
+        Assert.NotNull(await dbContext.ProjectContexts.SingleOrDefaultAsync(cancellationToken));
+        Assert.NotNull(await dbContext.TaskRecords.SingleOrDefaultAsync(
+            record => record.TaskId == task.TaskId,
+            cancellationToken));
     }
 
     private static TaskAppService CreateService(AgwDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
-        var projectTaskAppService = new ProjectTaskAppService(
-            new EfRepository<ProjectTask>(dbContext),
+        var taskExecutionAppService = new TaskExecutionAppService(
+            new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
             new UnitOfWork(dbContext),
-            new Domain.Services.ProjectTaskDomainService(),
             new Domain.Services.TaskRecordDomainService(),
             new ProjectResolver(projectRepository));
 
         return new TaskAppService(
-            new EfRepository<ProjectTask>(dbContext),
+            new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
             new ProjectResolver(projectRepository),
-            projectTaskAppService);
+            taskExecutionAppService);
     }
 }

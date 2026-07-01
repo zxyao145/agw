@@ -16,7 +16,7 @@ public class Project : BaseEntity, IAggregateRoot
 
     public string? ExtraSetting { get; set; }
 
-    public ICollection<ProjectTask> Tasks { get; set; } = new List<ProjectTask>();
+    public ICollection<ProjectContext> Contexts { get; set; } = new List<ProjectContext>();
 
     public string GetMustWorkspace()
     {

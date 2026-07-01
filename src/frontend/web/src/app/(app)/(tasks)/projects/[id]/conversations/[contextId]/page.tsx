@@ -62,11 +62,19 @@ function getChatHref(projectId: string, conversation: ContextDetails): string {
     contextId: conversation.contextId,
   });
 
-  if (conversation.latestTaskId) {
-    searchParams.set("taskId", conversation.latestTaskId);
+  return `/chat?${searchParams.toString()}`;
+}
+
+function formatMessageContent(content: unknown): string {
+  if (typeof content === "string") {
+    return content || "-";
   }
 
-  return `/chat?${searchParams.toString()}`;
+  if (content == null) {
+    return "-";
+  }
+
+  return JSON.stringify(content);
 }
 
 export default function ConversationDetailsPage() {
@@ -237,7 +245,7 @@ export default function ConversationDetailsPage() {
                                 {content.type}
                               </div>
                               <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/40 p-3 text-sm">
-                                {content.content || "-"}
+                                {formatMessageContent(content.content)}
                               </pre>
                             </div>
                           ))

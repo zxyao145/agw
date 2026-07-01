@@ -31,6 +31,7 @@ export function handleSystemMessage(message: AiMessage): AiMessageAction[] {
   if (
     message.additionalProperties?.subtype === "hint" &&
     firstContent.type === TextContent &&
+    typeof firstContent.content === "string" &&
     firstContent.content.toLowerCase().includes("interrupted")
   ) {
     return [{ type: "setIsExecuting", value: false }];

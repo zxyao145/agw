@@ -15,6 +15,7 @@ export interface TaskSummary {
 export interface ContextSummary {
   projectId: string;
   contextId: string;
+  jobId?: string | null;
   title: string;
   latestTaskId?: string | null;
   latestStatus?: number | null;
@@ -30,8 +31,8 @@ export interface ContextDetails extends ContextSummary {
   messages: AiMessage[];
 }
 
-export type ProjectTaskSummaryResponse = {
-  id: string;
+export type TaskSummaryResponse = {
+  taskId: string;
   projectId: string;
   contextId: string;
   jobId?: string | null;
@@ -47,6 +48,7 @@ export type ProjectTaskSummaryResponse = {
 export type ProjectContextSummaryResponse = {
   projectId: string;
   contextId: string;
+  jobId?: string | null;
   title: string;
   latestTaskId?: string | null;
   latestStatus?: number | null;
@@ -58,13 +60,13 @@ export type ProjectContextSummaryResponse = {
 };
 
 export type ProjectContextResponse = ProjectContextSummaryResponse & {
-  tasks: ProjectTaskSummaryResponse[];
+  tasks: TaskSummaryResponse[];
   messages?: AiMessage[] | null;
 };
 
-function toChatSessionSummary(task: ProjectTaskSummaryResponse): TaskSummary {
+function toChatSessionSummary(task: TaskSummaryResponse): TaskSummary {
   return {
-    taskId: task.id,
+    taskId: task.taskId,
     projectId: task.projectId,
     contextId: task.contextId,
     title: task.title,
@@ -77,6 +79,7 @@ function toContextSummary(context: ProjectContextSummaryResponse): ContextSummar
   return {
     projectId: context.projectId,
     contextId: context.contextId,
+    jobId: context.jobId ?? null,
     title: context.title,
     latestTaskId: context.latestTaskId ?? null,
     latestStatus: context.latestStatus ?? null,
@@ -86,6 +89,10 @@ function toContextSummary(context: ProjectContextSummaryResponse): ContextSummar
     updateTime: context.updateTime ?? null,
     errorMessage: context.errorMessage ?? null,
   };
+}
+
+function hasConversationMessages(context: ContextSummary): boolean {
+  return context.messageCount > 0;
 }
 
 function toContextDetails(context: ProjectContextResponse): ContextDetails {
@@ -116,7 +123,7 @@ export async function getProjectContexts(projectId: string): Promise<ContextSumm
     params: { path: { projectId } },
   })) as ProjectContextSummaryResponse[];
 
-  return result.map(toContextSummary);
+  return result.map(toContextSummary).filter(hasConversationMessages);
 }
 
 export async function getProjectContextDetails(

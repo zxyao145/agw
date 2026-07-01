@@ -129,7 +129,21 @@ test("getProjectContexts gets context list for a project", async (t) => {
       data: [
         {
           projectId: "project-1",
+          contextId: "ctx-empty",
+          jobId: null,
+          title: "New Chat",
+          latestTaskId: "task-empty",
+          latestStatus: 1,
+          taskCount: 1,
+          messageCount: 0,
+          createTime: "2026-01-01T00:00:00Z",
+          updateTime: "2026-01-02T00:00:00Z",
+          errorMessage: null,
+        },
+        {
+          projectId: "project-1",
           contextId: "ctx-1",
+          jobId: "job-1",
           title: "Tokyo trip",
           latestTaskId: "task-2",
           latestStatus: 2,
@@ -149,7 +163,9 @@ test("getProjectContexts gets context list for a project", async (t) => {
 
   const result = await getProjectContexts("project-1");
 
+  assert.equal(result.length, 1);
   assert.equal(result[0].contextId, "ctx-1");
+  assert.equal(result[0].jobId, "job-1");
   assert.deepEqual(requests, [
     {
       url: "/api/projects/project-1/contexts",
@@ -172,6 +188,7 @@ test("getProjectContextDetailsByTaskId gets the containing context for a task", 
       data: {
         projectId: "project-1",
         contextId: "ctx-1",
+        jobId: "job-1",
         title: "Tokyo trip",
         latestTaskId: "task-2",
         latestStatus: 2,
@@ -193,6 +210,7 @@ test("getProjectContextDetailsByTaskId gets the containing context for a task", 
   const result = await getProjectContextDetailsByTaskId("project-1", "task-1");
 
   assert.equal(result.contextId, "ctx-1");
+  assert.equal(result.jobId, "job-1");
   assert.deepEqual(requests, [
     {
       url: "/api/projects/project-1/contexts/by-task/task-1",
@@ -215,6 +233,7 @@ test("getProjectContextDetails encodes context id path parameter", async (t) => 
       data: {
         projectId: "project-1",
         contextId: "ctx/a b",
+        jobId: "job-1",
         title: "Tokyo trip",
         latestTaskId: "task-2",
         latestStatus: 2,
@@ -236,6 +255,7 @@ test("getProjectContextDetails encodes context id path parameter", async (t) => 
   const result = await getProjectContextDetails("project-1", "ctx/a b");
 
   assert.equal(result.contextId, "ctx/a b");
+  assert.equal(result.jobId, "job-1");
   assert.deepEqual(requests, [
     {
       url: "/api/projects/project-1/contexts/ctx%2Fa%20b",

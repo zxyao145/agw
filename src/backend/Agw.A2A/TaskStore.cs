@@ -4,6 +4,9 @@ using System.Text.Json;
 using A2A;
 
 using Agw.Shared.Exceptions;
+using Agw.Tasks.Application;
+
+using AgwTaskProjection = Agw.Shared.Contracts.Tasks.TaskProjection;
 
 namespace Agw.A2A;
 
@@ -14,16 +17,16 @@ public class TaskStore : ITaskStore
     private const string SnapshotMetadataKey = "agentTask";
     private const string SystemUser = "a2a";
 
-    private readonly IRepository<ProjectTask> _taskRepository;
+    private readonly IRepository<ProjectContext> _contextRepository;
     private readonly IRepository<TaskRecord> _recordRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public TaskStore(
-        IRepository<ProjectTask> taskRepository,
+        IRepository<ProjectContext> contextRepository,
         IRepository<TaskRecord> recordRepository,
         IUnitOfWork unitOfWork)
     {
-        _taskRepository = taskRepository;
+        _contextRepository = contextRepository;
         _recordRepository = recordRepository;
         _unitOfWork = unitOfWork;
     }
@@ -31,7 +34,7 @@ public class TaskStore : ITaskStore
     public async Task DeleteTaskAsync(string taskId, CancellationToken cancellationToken = default)
     {
         var taskGuid = ParseRequiredTaskId(taskId);
-        var task = await _taskRepository.GetByIdAsync(taskGuid);
+        var task = await GetProjectedTaskAsync(taskGuid);
         if (task == null || task.ProjectId != ProjectDefaults.A2AId)
         {
             return;
@@ -43,7 +46,6 @@ public class TaskStore : ITaskStore
             _recordRepository.Remove(record);
         }
 
-        _taskRepository.Remove(task);
         await _unitOfWork.SaveChangesAsync();
     }
 
@@ -54,7 +56,7 @@ public class TaskStore : ITaskStore
             return null;
         }
 
-        var task = await _taskRepository.GetByIdAsync(taskGuid);
+        var task = await GetProjectedTaskAsync(taskGuid);
         if (task == null || task.ProjectId != ProjectDefaults.A2AId)
         {
             return null;
@@ -63,20 +65,24 @@ public class TaskStore : ITaskStore
         var records = await _recordRepository.ListAsync(record => record.TaskId == taskGuid);
         var snapshot = TryReadSnapshot(records);
         var agentTask = snapshot ?? BuildFallbackTask(task);
-        return ProjectTaskResult(agentTask, null, includeArtifacts: true);
+        return BuildTaskResult(agentTask, null, includeArtifacts: true);
     }
 
     public async Task<ListTasksResponse> ListTasksAsync(ListTasksRequest request, CancellationToken cancellationToken = default)
     {
-        var tasks = await _taskRepository.ListAsync(task => task.ProjectId == ProjectDefaults.A2AId);
-        var filteredTasks = string.IsNullOrWhiteSpace(request.ContextId)
-            ? tasks
-            : tasks.Where(task => task.ContextId == request.ContextId.Trim()).ToList();
+        var contexts = await _contextRepository.ListAsync(context => context.ProjectId == ProjectDefaults.A2AId);
+        var filteredContexts = string.IsNullOrWhiteSpace(request.ContextId)
+            ? contexts
+            : contexts.Where(context => context.ContextId == request.ContextId.Trim()).ToList();
+        var contextIds = filteredContexts.Select(context => context.Id).ToHashSet();
+        var allRecords = await _recordRepository.ListAsync(record => contextIds.Contains(record.ProjectContextId));
+        var contextById = filteredContexts.ToDictionary(context => context.Id);
 
         var persistedTasks = new List<AgentTask>();
-        foreach (var task in filteredTasks)
+        foreach (var recordGroup in allRecords.GroupBy(record => record.TaskId))
         {
-            var records = await _recordRepository.ListAsync(record => record.TaskId == task.Id);
+            var records = recordGroup.ToList();
+            var task = TaskResponseMapper.ToTask(contextById[records[0].ProjectContextId], records);
             var agentTask = TryReadSnapshot(records) ?? BuildFallbackTask(task);
             if (!MatchesStatus(agentTask, request.Status))
             {
@@ -106,7 +112,7 @@ public class TaskStore : ITaskStore
         var page = orderedTasks
             .Skip(offset)
             .Take(pageSize)
-            .Select(task => ProjectTaskResult(task, request.HistoryLength, request.IncludeArtifacts ?? true))
+            .Select(task => BuildTaskResult(task, request.HistoryLength, request.IncludeArtifacts ?? true))
             .ToList();
 
         var nextOffset = offset + page.Count;
@@ -131,48 +137,45 @@ public class TaskStore : ITaskStore
 
         var now = DateTime.UtcNow;
         var statusTimestampUtc = task.Status?.Timestamp?.UtcDateTime ?? now;
-        var existingTask = await _taskRepository.GetByIdAsync(taskGuid);
+        var records = await _recordRepository.ListAsync(record => record.TaskId == taskGuid);
+        var existingContext = records.Count == 0 ? null : await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
+        var existingTask = existingContext == null || records.Count == 0
+            ? null
+            : TaskResponseMapper.ToTask(existingContext, records);
         if (existingTask != null && existingTask.ProjectId != ProjectDefaults.A2AId)
         {
             throw new AgwException(ErrorCodes.A2ATaskIdAlreadyUsed);
         }
 
-        var coarseStatus = ToProjectTaskStatus(task.Status?.State ?? TaskState.Unspecified);
+        var coarseStatus = ToTaskExecutionStatus(task.Status?.State ?? TaskState.Unspecified);
         var firstUserText = ExtractFirstUserText(task);
         var statusMessageText = ExtractMessageText(task.Status?.Message);
 
         if (existingTask == null)
         {
-            existingTask = new ProjectTask
+            existingContext = new ProjectContext
             {
-                Id = taskGuid,
+                Id = Guid.NewGuid(),
                 ProjectId = ProjectDefaults.A2AId,
                 ContextId = string.IsNullOrWhiteSpace(task.ContextId) ? taskGuid.Normalize() : task.ContextId.Trim(),
                 Title = BuildTitle(firstUserText),
-                Status = coarseStatus,
-                ErrorMessage = statusMessageText,
                 CreateBy = SystemUser,
                 CreateTime = statusTimestampUtc,
                 UpdateBy = SystemUser,
-                UpdateTime = statusTimestampUtc,
-                FinishedTime = IsTerminal(coarseStatus) ? statusTimestampUtc : null
+                UpdateTime = statusTimestampUtc
             };
 
-            await _taskRepository.AddAsync(existingTask);
+            await _contextRepository.AddAsync(existingContext);
         }
         else
         {
-            existingTask.ContextId = string.IsNullOrWhiteSpace(task.ContextId) ? existingTask.ContextId : task.ContextId.Trim();
-            existingTask.Title = BuildTitle(firstUserText, existingTask.Title);
-            existingTask.Status = coarseStatus;
-            existingTask.ErrorMessage = statusMessageText;
-            existingTask.UpdateBy = SystemUser;
-            existingTask.UpdateTime = statusTimestampUtc;
-            existingTask.FinishedTime = IsTerminal(coarseStatus) ? statusTimestampUtc : null;
-            _taskRepository.Update(existingTask);
+            existingContext!.ContextId = string.IsNullOrWhiteSpace(task.ContextId) ? existingContext.ContextId : task.ContextId.Trim();
+            existingContext.Title = BuildTitle(firstUserText, existingContext.Title);
+            existingContext.UpdateBy = SystemUser;
+            existingContext.UpdateTime = statusTimestampUtc;
+            _contextRepository.Update(existingContext);
         }
 
-        var records = await _recordRepository.ListAsync(record => record.TaskId == taskGuid);
         foreach (var record in records)
         {
             _recordRepository.Remove(record);
@@ -181,7 +184,12 @@ public class TaskStore : ITaskStore
         await _recordRepository.AddAsync(new TaskRecord
         {
             Id = Guid.NewGuid(),
+            ProjectContextId = existingContext!.Id,
             TaskId = taskGuid,
+            JobId = null,
+            Status = coarseStatus,
+            FinishedTime = IsTerminal(coarseStatus) ? statusTimestampUtc : null,
+            TaskErrorMessage = statusMessageText,
             ConversationSequence = 0,
             AgentName = task.Status?.Message?.Role == Role.Agent ? SystemUser : null,
             Metadata = CreateSnapshotMetadata(task),
@@ -191,6 +199,18 @@ public class TaskStore : ITaskStore
         });
 
         await _unitOfWork.SaveChangesAsync();
+    }
+
+    private async Task<AgwTaskProjection?> GetProjectedTaskAsync(Guid taskId)
+    {
+        var records = await _recordRepository.ListAsync(record => record.TaskId == taskId);
+        if (records.Count == 0)
+        {
+            return null;
+        }
+
+        var context = await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
+        return context == null ? null : TaskResponseMapper.ToTask(context, records);
     }
 
     private static Dictionary<string, JsonElement> CreateSnapshotMetadata(AgentTask task) =>
@@ -226,13 +246,13 @@ public class TaskStore : ITaskStore
         return null;
     }
 
-    private static AgentTask BuildFallbackTask(ProjectTask task)
+    private static AgentTask BuildFallbackTask(AgwTaskProjection task)
     {
         var statusMessageText = string.IsNullOrWhiteSpace(task.ErrorMessage) ? null : task.ErrorMessage.Trim();
 
         return new AgentTask
         {
-            Id = task.Id.Normalize(),
+            Id = task.TaskId.Normalize(),
             ContextId = task.ContextId,
             Status = new global::A2A.TaskStatus
             {
@@ -245,7 +265,7 @@ public class TaskStore : ITaskStore
                         Role = Role.Agent,
                         MessageId = Guid.NewGuid().ToString("N"),
                         ContextId = task.ContextId,
-                        TaskId = task.Id.Normalize(),
+                        TaskId = task.TaskId.Normalize(),
                         Parts = [Part.FromText(statusMessageText)]
                     }
             },
@@ -255,7 +275,7 @@ public class TaskStore : ITaskStore
         };
     }
 
-    private static AgentTask ProjectTaskResult(AgentTask task, int? historyLength, bool includeArtifacts)
+    private static AgentTask BuildTaskResult(AgentTask task, int? historyLength, bool includeArtifacts)
     {
         var projected = DeepClone(task);
 
@@ -337,26 +357,26 @@ public class TaskStore : ITaskStore
         return normalized[..Math.Min(normalized.Length, 80)];
     }
 
-    private static ProjectTaskStatus ToProjectTaskStatus(TaskState taskState) =>
+    private static TaskExecutionStatus ToTaskExecutionStatus(TaskState taskState) =>
         taskState switch
         {
-            TaskState.Working or TaskState.InputRequired => ProjectTaskStatus.Running,
-            TaskState.Completed => ProjectTaskStatus.Succeeded,
-            TaskState.Failed or TaskState.Rejected or TaskState.AuthRequired => ProjectTaskStatus.Failed,
-            TaskState.Canceled => ProjectTaskStatus.Canceled,
-            _ => ProjectTaskStatus.Pending
+            TaskState.Working or TaskState.InputRequired => TaskExecutionStatus.Running,
+            TaskState.Completed => TaskExecutionStatus.Succeeded,
+            TaskState.Failed or TaskState.Rejected or TaskState.AuthRequired => TaskExecutionStatus.Failed,
+            TaskState.Canceled => TaskExecutionStatus.Canceled,
+            _ => TaskExecutionStatus.Pending
         };
 
-    private static TaskState ToA2ATaskState(ProjectTaskStatus taskStatus) =>
+    private static TaskState ToA2ATaskState(TaskExecutionStatus taskStatus) =>
         taskStatus switch
         {
-            ProjectTaskStatus.Running => TaskState.Working,
-            ProjectTaskStatus.Succeeded => TaskState.Completed,
-            ProjectTaskStatus.Failed => TaskState.Failed,
-            ProjectTaskStatus.Canceled => TaskState.Canceled,
+            TaskExecutionStatus.Running => TaskState.Working,
+            TaskExecutionStatus.Succeeded => TaskState.Completed,
+            TaskExecutionStatus.Failed => TaskState.Failed,
+            TaskExecutionStatus.Canceled => TaskState.Canceled,
             _ => TaskState.Submitted
         };
 
-    private static bool IsTerminal(ProjectTaskStatus status) =>
-        status is ProjectTaskStatus.Succeeded or ProjectTaskStatus.Failed or ProjectTaskStatus.Canceled;
+    private static bool IsTerminal(TaskExecutionStatus status) =>
+        status is TaskExecutionStatus.Succeeded or TaskExecutionStatus.Failed or TaskExecutionStatus.Canceled;
 }

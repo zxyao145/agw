@@ -14,7 +14,7 @@ namespace Agw.Jobs.Application.Services;
 public class AgentExecutor(
     IAgentRuntimeService agentRuntimeService,
     AgentflowRuntimeService agentflowRuntimeService,
-    ProjectTaskAppService projectTaskAppService) : IAgentExecutor
+    TaskExecutionAppService taskExecutionAppService) : IAgentExecutor
 {
     private const string JobExecutorUser = "job-executor";
 
@@ -36,9 +36,9 @@ public class AgentExecutor(
 
         var contextId = TaskUtil.GenContextId();
 
-        var createResult = await projectTaskAppService.CreateRunningAsync(
+        var createResult = await taskExecutionAppService.CreateRunningAsync(
             job.ProjectId,
-            new ProjectTaskCreateRequest(
+            new TaskCreateRequest(
                 JobId: job.Id,
                 Input: prompt,
                 Title: title,
@@ -48,11 +48,11 @@ public class AgentExecutor(
         if (createResult.Type != ApplicationResultType.Success || createResult.Value == null)
         {
             throw new AgwException(
-                ErrorCodes.ProjectTaskCreationFailed,
-                createResult.Error ?? "Failed to create project task for job execution.");
+                ErrorCodes.TaskCreationFailed,
+                createResult.Error ?? "Failed to create task for job execution.");
         }
 
-        var projectTaskId = createResult.Value.Id;
+        var taskId = createResult.Value.TaskId;
 
         try
         {
@@ -60,12 +60,12 @@ public class AgentExecutor(
             {
                 AgentRuntimeType.Agent => await agentRuntimeService.ExecuteByIdAsync
                 (
-                    new AgentExecuteByIdRequest(prompt, job.AgentId.Value, projectTaskId, job.ProjectId, contextId),
+                    new AgentExecuteByIdRequest(prompt, job.AgentId.Value, taskId, job.ProjectId, contextId),
                     cancellationToken
                 ),
                 AgentRuntimeType.Agentflow => await agentflowRuntimeService.ExecuteAsync(
                     job.AgentId.Value,
-                    projectTaskId,
+                    taskId,
                     prompt,
                     cancellationToken,
                     job.ProjectId,
@@ -81,21 +81,21 @@ public class AgentExecutor(
                     $"{targetText} execution failed (target disabled/missing or runtime unavailable).");
             }
 
-            var succeededTask = await projectTaskAppService.MarkSucceededAsync(
-                projectTaskId,
+            var succeededTask = await taskExecutionAppService.MarkSucceededAsync(
+                taskId,
                 JobExecutorUser);
             if (succeededTask == null)
             {
                 throw new AgwException(
-                    ErrorCodes.ProjectTaskMarkSucceededFailed,
-                    $"Failed to mark project task {projectTaskId} as succeeded.");
+                    ErrorCodes.TaskMarkSucceededFailed,
+                    $"Failed to mark task {taskId} as succeeded.");
             }
-            return projectTaskId;
+            return taskId;
         }
         catch (Exception ex)
         {
-            _ = await projectTaskAppService.MarkFailedAsync(
-                projectTaskId,
+            _ = await taskExecutionAppService.MarkFailedAsync(
+                taskId,
                 ex.Message,
                 JobExecutorUser);
             throw;
@@ -113,7 +113,7 @@ public class AgentExecutor(
         {
             var title = !string.IsNullOrWhiteSpace(trimmedName)
                 ? trimmedName
-                : ProjectTaskTitleFactory.Create(trimmedPrompt, "Scheduled Job");
+                : TaskTitleFactory.Create(trimmedPrompt, "Scheduled Job");
 
             return (trimmedPrompt, title);
         }

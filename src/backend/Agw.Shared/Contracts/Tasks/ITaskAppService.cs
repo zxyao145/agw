@@ -1,16 +1,15 @@
-using Agw.Shared.Data.Entities.Tasks;
-
 namespace Agw.Shared.Contracts.Tasks;
 
 public interface ITaskAppService
 {
-    Task<ProjectTask?> GetTaskAsync(Guid value);
+    Task<TaskProjection?> GetTaskAsync(Guid value);
 
-    Task<ProjectTask?> CreateTaskForExecutionAsync(
+    Task<TaskProjection?> CreateTaskForExecutionAsync(
         Guid projectId,
         Guid? taskId,
         string input,
         string user,
+        string? contextId = null,
         CancellationToken cancellationToken = default);
 
     Task<bool> HasTaskAsync(Guid taskId, Guid? projectId = null, CancellationToken cancellationToken = default);

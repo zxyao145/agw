@@ -18,7 +18,7 @@ namespace Agw.Tasks.Tests;
 public class ProjectContextAppServiceTests
 {
     [Fact]
-    public async Task ListResponsesAsync_GroupsTasksByContextId()
+    public async Task ListResponsesAsync_GroupsTasksFromRecordsByContext()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -28,19 +28,17 @@ public class ProjectContextAppServiceTests
         await EnsureCreatedAsync(options, cancellationToken);
 
         var projectId = Guid.NewGuid();
+        var contextId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
         var firstTaskId = Guid.NewGuid();
         var secondTaskId = Guid.NewGuid();
-        var otherContextTaskId = Guid.NewGuid();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectTasks.AddRange(
-                CreateTask(firstTaskId, projectId, "context-1", "Plan trip", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(secondTaskId, projectId, "context-1", "Find hotels", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(otherContextTaskId, projectId, "context-2", "Other", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc)));
+            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip", jobId));
             seedContext.TaskRecords.AddRange(
-                CreateRecord(firstTaskId, 0, "Tokyo trip"),
-                CreateRecord(secondTaskId, 0, "Hotels"));
+                CreateRecord(contextId, firstTaskId, 0, "Tokyo trip", TaskExecutionStatus.Succeeded),
+                CreateRecord(contextId, secondTaskId, 0, "Hotels", TaskExecutionStatus.Running));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -49,17 +47,19 @@ public class ProjectContextAppServiceTests
 
         var contexts = await service.ListResponsesAsync(projectId);
 
-        Assert.Equal(2, contexts.Count);
-        var context = Assert.Single(contexts, item => item.ContextId == "context-1");
+        var context = Assert.Single(contexts);
         Assert.Equal(projectId.Normalize(), context.ProjectId);
+        Assert.Equal("context-1", context.ContextId);
+        Assert.Equal(jobId, context.JobId);
+        Assert.Equal("Trip", context.Title);
         Assert.Equal(2, context.TaskCount);
         Assert.Equal(2, context.MessageCount);
         Assert.Equal(secondTaskId, context.LatestTaskId);
-        Assert.Equal("Find hotels", context.Title);
+        Assert.Equal(TaskExecutionStatus.Running, context.LatestStatus);
     }
 
     [Fact]
-    public async Task GetResponseAsync_ReturnsMessagesForOnlyRequestedProjectContext()
+    public async Task ListResponsesAsync_SkipsContextsWithoutMessages()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -69,26 +69,80 @@ public class ProjectContextAppServiceTests
         await EnsureCreatedAsync(options, cancellationToken);
 
         var projectId = Guid.NewGuid();
-        var otherProjectId = Guid.NewGuid();
-        var firstTaskId = Guid.NewGuid();
-        var secondTaskId = Guid.NewGuid();
-        var otherContextTaskId = Guid.NewGuid();
-        var otherProjectTaskId = Guid.NewGuid();
+        var transientContextId = Guid.NewGuid();
+        var emptyTitledContextId = Guid.NewGuid();
+        var persistedContextId = Guid.NewGuid();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.AddRange(
-                CreateProject(projectId, "Project"),
-                CreateProject(otherProjectId, "Other Project"));
-            seedContext.ProjectTasks.AddRange(
-                CreateTask(firstTaskId, projectId, "context-1", "Plan trip", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(secondTaskId, projectId, "context-1", "Find hotels", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(otherContextTaskId, projectId, "context-2", "Other context", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(otherProjectTaskId, otherProjectId, "context-1", "Other project", new DateTime(2026, 1, 4, 0, 0, 0, DateTimeKind.Utc)));
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectContexts.AddRange(
+                CreateContext(transientContextId, projectId, "pending-context", "New Chat"),
+                CreateContext(emptyTitledContextId, projectId, "empty-titled-context", "Queued run"),
+                CreateContext(persistedContextId, projectId, "persisted-context", "Persisted"));
             seedContext.TaskRecords.AddRange(
-                CreateRecord(secondTaskId, 0, "Hotels"),
-                CreateRecord(firstTaskId, 0, "Tokyo trip"),
-                CreateRecord(otherContextTaskId, 0, "Wrong context"),
-                CreateRecord(otherProjectTaskId, 0, "Wrong project"));
+                new TaskRecord
+                {
+                    Id = Guid.NewGuid(),
+                    ProjectContextId = transientContextId,
+                    TaskId = Guid.NewGuid(),
+                    Status = TaskExecutionStatus.Running,
+                    CreateTime = DateTime.UtcNow,
+                    UpdateTime = DateTime.UtcNow
+                },
+                new TaskRecord
+                {
+                    Id = Guid.NewGuid(),
+                    ProjectContextId = emptyTitledContextId,
+                    TaskId = Guid.NewGuid(),
+                    Status = TaskExecutionStatus.Running,
+                    CreateTime = DateTime.UtcNow,
+                    UpdateTime = DateTime.UtcNow
+                },
+                CreateRecord(
+                    persistedContextId,
+                    Guid.NewGuid(),
+                    0,
+                    "hello",
+                    TaskExecutionStatus.Running));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var contexts = await service.ListResponsesAsync(projectId);
+
+        var context = Assert.Single(contexts);
+        Assert.Equal("persisted-context", context.ContextId);
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_ReturnsMessagesForRequestedContextOnly()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        var contextId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+        var otherContextId = Guid.NewGuid();
+        var firstTaskId = Guid.NewGuid();
+        var secondTaskId = Guid.NewGuid();
+        var otherTaskId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectContexts.AddRange(
+                CreateContext(contextId, projectId, "context-1", "Trip", jobId),
+                CreateContext(otherContextId, projectId, "context-2", "Other"));
+            seedContext.TaskRecords.AddRange(
+                CreateRecord(contextId, firstTaskId, 0, "Tokyo trip", TaskExecutionStatus.Succeeded),
+                CreateRecord(contextId, secondTaskId, 0, "Hotels", TaskExecutionStatus.Succeeded),
+                CreateRecord(otherContextId, otherTaskId, 0, "Wrong context", TaskExecutionStatus.Succeeded));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -98,16 +152,13 @@ public class ProjectContextAppServiceTests
         var context = await service.GetResponseAsync(projectId, "context-1");
 
         Assert.NotNull(context);
-        Assert.Equal(projectId.Normalize(), context.ProjectId);
-        Assert.Equal("context-1", context.ContextId);
-        Assert.Equal(secondTaskId, context.LatestTaskId);
-        Assert.Equal([firstTaskId, secondTaskId], context.Tasks.Select(task => task.Id));
-        Assert.Equal(2, context.MessageCount);
+        Assert.Equal(jobId, context.JobId);
+        Assert.Equal([firstTaskId, secondTaskId], context.Tasks.Select(task => task.TaskId));
         Assert.Equal(["Tokyo trip", "Hotels"], context.Messages!.Select(GetMessageText));
     }
 
     [Fact]
-    public async Task GetResponseByTaskIdAsync_ReturnsContainingProjectContext()
+    public async Task DeleteAsync_RemovesContextAndRecords()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -117,264 +168,32 @@ public class ProjectContextAppServiceTests
         await EnsureCreatedAsync(options, cancellationToken);
 
         var projectId = Guid.NewGuid();
-        var firstTaskId = Guid.NewGuid();
-        var secondTaskId = Guid.NewGuid();
+        var contextId = Guid.NewGuid();
+        var otherContextId = Guid.NewGuid();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectTasks.AddRange(
-                CreateTask(firstTaskId, projectId, "context-1", "Plan trip", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(secondTaskId, projectId, "context-1", "Find hotels", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc)));
+            seedContext.ProjectContexts.AddRange(
+                CreateContext(contextId, projectId, "context-1", "Trip"),
+                CreateContext(otherContextId, projectId, "context-2", "Other"));
             seedContext.TaskRecords.AddRange(
-                CreateRecord(firstTaskId, 0, "Tokyo trip"),
-                CreateRecord(secondTaskId, 0, "Hotels"));
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using var dbContext = new AgwDbContext(options);
-        var service = CreateService(dbContext);
-
-        var context = await service.GetResponseByTaskIdAsync(projectId, firstTaskId);
-
-        Assert.NotNull(context);
-        Assert.Equal("context-1", context.ContextId);
-        Assert.Equal(secondTaskId, context.LatestTaskId);
-        Assert.Equal(["Tokyo trip", "Hotels"], context.Messages!.Select(GetMessageText));
-    }
-
-    [Fact]
-    public async Task ClearRecordsAsync_RemovesOnlyRequestedProjectContextRecords()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
-        var projectId = Guid.NewGuid();
-        var firstTaskId = Guid.NewGuid();
-        var secondTaskId = Guid.NewGuid();
-        var otherContextTaskId = Guid.NewGuid();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectTasks.AddRange(
-                CreateTask(firstTaskId, projectId, "context-1", "Plan trip", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(secondTaskId, projectId, "context-1", "Find hotels", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(otherContextTaskId, projectId, "context-2", "Other context", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc)));
-            seedContext.TaskRecords.AddRange(
-                CreateRecord(firstTaskId, 0, "Tokyo trip"),
-                CreateRecord(secondTaskId, 0, "Hotels"),
-                CreateRecord(otherContextTaskId, 0, "Other"));
+                CreateRecord(contextId, Guid.NewGuid(), 0, "Delete me", TaskExecutionStatus.Succeeded),
+                CreateRecord(otherContextId, Guid.NewGuid(), 0, "Keep me", TaskExecutionStatus.Succeeded));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
         await using (var dbContext = new AgwDbContext(options))
         {
             var service = CreateService(dbContext);
-
-            var result = await service.ClearRecordsAsync(projectId, "context-1");
-
-            Assert.Equal(ApplicationResultType.Success, result.Type);
-        }
-
-        await using var assertContext = new AgwDbContext(options);
-        var remainingRecord = Assert.Single(assertContext.TaskRecords);
-        Assert.Equal(otherContextTaskId, remainingRecord.TaskId);
-        Assert.Equal(3, assertContext.ProjectTasks.Count());
-    }
-
-    [Fact]
-    public async Task UpdateTitleAsync_UpdatesOnlyRequestedProjectContextTasks()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
-        var projectId = Guid.NewGuid();
-        var otherProjectId = Guid.NewGuid();
-        var firstTaskId = Guid.NewGuid();
-        var secondTaskId = Guid.NewGuid();
-        var otherContextTaskId = Guid.NewGuid();
-        var otherProjectTaskId = Guid.NewGuid();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Projects.AddRange(
-                CreateProject(projectId, "Project"),
-                CreateProject(otherProjectId, "Other Project"));
-            seedContext.ProjectTasks.AddRange(
-                CreateTask(firstTaskId, projectId, "context-1", "Plan trip", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(secondTaskId, projectId, "context-1", "Find hotels", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(otherContextTaskId, projectId, "context-2", "Other context", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(otherProjectTaskId, otherProjectId, "context-1", "Other project", new DateTime(2026, 1, 4, 0, 0, 0, DateTimeKind.Utc)));
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using (var dbContext = new AgwDbContext(options))
-        {
-            var service = CreateService(dbContext);
-
-            var result = await service.UpdateTitleAsync(projectId, "context-1", "  Tokyo planning  ", "renamer");
-
-            Assert.Equal(ApplicationResultType.Success, result.Type);
-        }
-
-        await using var assertContext = new AgwDbContext(options);
-        Assert.Equal(
-            ["Tokyo planning"],
-            assertContext.ProjectTasks
-                .Where(task => task.ProjectId == projectId && task.ContextId == "context-1")
-                .Select(task => task.Title)
-                .Distinct()
-                .ToList());
-        Assert.Equal("Other context", assertContext.ProjectTasks.Single(task => task.Id == otherContextTaskId).Title);
-        Assert.Equal("Other project", assertContext.ProjectTasks.Single(task => task.Id == otherProjectTaskId).Title);
-    }
-
-    [Fact]
-    public async Task UpdateTitleAsync_WhenTitleBlank_ReturnsInvalid()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
-        await using var dbContext = new AgwDbContext(options);
-        var service = CreateService(dbContext);
-
-        var result = await service.UpdateTitleAsync(Guid.NewGuid(), "context-1", "   ", "renamer");
-
-        Assert.Equal(ApplicationResultType.Invalid, result.Type);
-    }
-
-    [Fact]
-    public async Task DeleteAsync_RemovesOnlyRequestedProjectContextTasksAndRecords()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
-        var projectId = Guid.NewGuid();
-        var otherProjectId = Guid.NewGuid();
-        var firstTaskId = Guid.NewGuid();
-        var secondTaskId = Guid.NewGuid();
-        var otherContextTaskId = Guid.NewGuid();
-        var otherProjectTaskId = Guid.NewGuid();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Projects.AddRange(
-                CreateProject(projectId, "Project"),
-                CreateProject(otherProjectId, "Other Project"));
-            seedContext.ProjectTasks.AddRange(
-                CreateTask(firstTaskId, projectId, "context-1", "Plan trip", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(secondTaskId, projectId, "context-1", "Find hotels", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(otherContextTaskId, projectId, "context-2", "Other context", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(otherProjectTaskId, otherProjectId, "context-1", "Other project", new DateTime(2026, 1, 4, 0, 0, 0, DateTimeKind.Utc)));
-            seedContext.TaskRecords.AddRange(
-                CreateRecord(firstTaskId, 0, "Tokyo trip"),
-                CreateRecord(secondTaskId, 0, "Hotels"),
-                CreateRecord(otherContextTaskId, 0, "Wrong context"),
-                CreateRecord(otherProjectTaskId, 0, "Wrong project"));
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using (var dbContext = new AgwDbContext(options))
-        {
-            var service = CreateService(dbContext);
-
             var deleted = await service.DeleteAsync(projectId, "context-1");
-
             Assert.True(deleted);
         }
 
         await using var assertContext = new AgwDbContext(options);
-        Assert.Equal(
-            [otherContextTaskId, otherProjectTaskId],
-            assertContext.ProjectTasks.Select(task => task.Id).ToHashSet());
-        Assert.Equal(
-            [otherContextTaskId, otherProjectTaskId],
-            assertContext.TaskRecords.Select(record => record.TaskId).ToHashSet());
-    }
-
-    [Fact]
-    public async Task DeleteAllAsync_RemovesOnlyRequestedProjectTasksAndRecords()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
-        var projectId = Guid.NewGuid();
-        var otherProjectId = Guid.NewGuid();
-        var firstTaskId = Guid.NewGuid();
-        var secondTaskId = Guid.NewGuid();
-        var otherProjectTaskId = Guid.NewGuid();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Projects.AddRange(
-                CreateProject(projectId, "Project"),
-                CreateProject(otherProjectId, "Other Project"));
-            seedContext.ProjectTasks.AddRange(
-                CreateTask(firstTaskId, projectId, "context-1", "Plan trip", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(secondTaskId, projectId, "context-2", "Find hotels", new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc)),
-                CreateTask(otherProjectTaskId, otherProjectId, "context-1", "Other project", new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc)));
-            seedContext.TaskRecords.AddRange(
-                CreateRecord(firstTaskId, 0, "Tokyo trip"),
-                CreateRecord(secondTaskId, 0, "Hotels"),
-                CreateRecord(otherProjectTaskId, 0, "Wrong project"));
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using (var dbContext = new AgwDbContext(options))
-        {
-            var service = CreateService(dbContext);
-
-            var result = await service.DeleteAllAsync(projectId);
-
-            Assert.Equal(ApplicationResultType.Success, result.Type);
-        }
-
-        await using var assertContext = new AgwDbContext(options);
-        var task = Assert.Single(assertContext.ProjectTasks);
-        Assert.Equal(otherProjectTaskId, task.Id);
-        var record = Assert.Single(assertContext.TaskRecords);
-        Assert.Equal(otherProjectTaskId, record.TaskId);
-    }
-
-    [Fact]
-    public async Task GetResponseAsync_WhenContextMissing_ReturnsNull()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
-        var projectId = Guid.NewGuid();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using var dbContext = new AgwDbContext(options);
-        var service = CreateService(dbContext);
-
-        var context = await service.GetResponseAsync(projectId, "missing-context");
-
-        Assert.Null(context);
+        var remainingContext = Assert.Single(assertContext.ProjectContexts);
+        Assert.Equal("context-2", remainingContext.ContextId);
+        var remainingRecord = Assert.Single(assertContext.TaskRecords);
+        Assert.Equal(otherContextId, remainingRecord.ProjectContextId);
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
@@ -399,46 +218,57 @@ public class ProjectContextAppServiceTests
         CreateTime = DateTime.UtcNow
     };
 
-    private static ProjectTask CreateTask(Guid taskId, Guid projectId, string contextId, string title, DateTime createTime) => new()
+    private static ProjectContext CreateContext(
+        Guid id,
+        Guid projectId,
+        string contextId,
+        string title,
+        Guid? jobId = null) => new()
     {
-        Id = taskId,
+        Id = id,
         ProjectId = projectId,
         ContextId = contextId,
+        JobId = jobId,
         Title = title,
-        Status = ProjectTaskStatus.Succeeded,
         CreateBy = "tester",
-        CreateTime = createTime,
+        CreateTime = DateTime.UtcNow,
         UpdateBy = "tester",
-        UpdateTime = createTime,
-        FinishedTime = createTime
+        UpdateTime = DateTime.UtcNow
     };
 
-    private static string? GetMessageText(AgwMessage message) =>
-        (message.Contents[0] as AgwTextContent)?.Content;
-
-    private static TaskRecord CreateRecord(Guid taskId, long sequence, string text) => new()
+    private static TaskRecord CreateRecord(
+        Guid contextId,
+        Guid taskId,
+        long sequence,
+        string text,
+        TaskExecutionStatus status) => new()
     {
         Id = Guid.NewGuid(),
+        ProjectContextId = contextId,
         TaskId = taskId,
+        Status = status,
         ConversationSequence = sequence,
         ConversationPayload = JsonUtil.Serialize(new ChatMessage(ChatRole.User, text)
         {
             MessageId = Guid.NewGuid().ToString(),
             AuthorName = Constants.DefaultInputAuthor
         }),
-        CreateTime = DateTime.UtcNow
+        CreateTime = DateTime.UtcNow,
+        UpdateTime = DateTime.UtcNow
     };
+
+    private static string? GetMessageText(AgwMessage message) =>
+        (message.Contents[0] as AgwTextContent)?.Content;
 
     private static ProjectContextAppService CreateService(AgwDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
 
         return new ProjectContextAppService(
-            new EfRepository<ProjectTask>(dbContext),
+            new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
             new UnitOfWork(dbContext),
             new ProjectResolver(projectRepository),
-            new ProjectTaskDomainService(),
             new TaskRecordDomainService());
     }
 }

@@ -4,7 +4,7 @@ namespace Agw.Agents.Application.Execution;
 
 internal static class AgwUserInputUtil
 {
-    public static string ExtractAgentflowInputText(AgwUserInput input)
+    public static string ExtractInputText(AgwUserInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
 
@@ -13,6 +13,11 @@ internal static class AgwUserInputUtil
             input.Contents
                 .Select(ExtractContentText)
                 .Where(static value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    public static string ExtractAgentflowInputText(AgwUserInput input)
+    {
+        return ExtractInputText(input);
     }
 
     private static string? ExtractContentText(AgwContent content)

@@ -1,8 +1,10 @@
 namespace Agw.Tasks.Domain.Services;
 
-public static class ProjectTaskTitleFactory
+public static class TaskTitleFactory
 {
-    public static string Create(string? text, string fallback = "New Chat")
+    public const string DefaultTitle = "New Chat";
+
+    public static string Create(string? text, string fallback = DefaultTitle)
     {
         var trimmed = text?.Trim();
         if (string.IsNullOrWhiteSpace(trimmed))

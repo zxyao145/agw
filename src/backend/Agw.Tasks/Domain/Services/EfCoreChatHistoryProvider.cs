@@ -2,7 +2,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 
-using Agw.Shared;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
@@ -150,38 +149,44 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
         var now = DateTime.UtcNow;
-        var projectTask = await dbContext.Set<ProjectTask>()
-            .SingleOrDefaultAsync(x => x.Id == ParseSessionTaskId(state.ContextId), cancellationToken)
+        var firstUserText = ExtractFirstText(newMessages.FirstOrDefault(message => message.Role == ChatRole.User));
+        var projectContext = await dbContext.Set<ProjectContext>()
+            .SingleOrDefaultAsync(
+                x => x.ProjectId == state.ProjectId && x.ContextId == state.ContextId,
+                cancellationToken)
             .ConfigureAwait(false);
 
-        if (projectTask == null)
+        if (projectContext == null)
         {
-            var firstUserText = ExtractFirstText(newMessages.FirstOrDefault(message => message.Role == ChatRole.User));
-            var taskId = ParseSessionTaskId(state.TaskId) ?? Guid.NewGuid();
-            projectTask = new ProjectTask
+            projectContext = new ProjectContext
             {
-                Id = taskId,
+                Id = Guid.NewGuid(),
                 ProjectId = state.ProjectId,
                 ContextId = state.ContextId,
-                JobId = null,
-                Title = ProjectTaskTitleFactory.Create(firstUserText),
-                Status = ProjectTaskStatus.Succeeded,
-                FinishedTime = now,
+                Title = TaskTitleFactory.Create(firstUserText),
                 CreateBy = DefaultUser,
                 CreateTime = now,
                 UpdateBy = DefaultUser,
                 UpdateTime = now
             };
-            dbContext.Set<ProjectTask>().Add(projectTask);
-            state = state with { TaskId = projectTask.Id.Normalize() };
+            dbContext.Set<ProjectContext>().Add(projectContext);
         }
         else
         {
-            projectTask.UpdateBy = DefaultUser;
-            projectTask.UpdateTime = now;
+            var titleFromUser = TaskTitleFactory.Create(firstUserText);
+            if (
+                string.Equals(projectContext.Title, TaskTitleFactory.DefaultTitle, StringComparison.Ordinal)
+                && !string.Equals(titleFromUser, TaskTitleFactory.DefaultTitle, StringComparison.Ordinal))
+            {
+                projectContext.Title = titleFromUser;
+            }
+
+            projectContext.UpdateBy = DefaultUser;
+            projectContext.UpdateTime = now;
         }
 
-        Guid taskGuid = Guid.Parse(state.TaskId);
+        var taskGuid = ParseSessionTaskId(state.TaskId) ?? Guid.NewGuid();
+        state = state with { TaskId = taskGuid.Normalize() };
 
         var nextSequence = await dbContext.Set<TaskRecord>()
             .Where(x => x.TaskId == taskGuid)
@@ -197,7 +202,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             dbContext.Set<TaskRecord>().Add(new TaskRecord
             {
                 Id = Guid.NewGuid(),
+                ProjectContextId = projectContext.Id,
                 TaskId = taskGuid,
+                Status = TaskExecutionStatus.Succeeded,
                 AgentName = message.AuthorName,
                 ConversationSequence = nextSequence,
                 ConversationPayload = JsonSerializer.Serialize(message, _jsonSerializerOptions),

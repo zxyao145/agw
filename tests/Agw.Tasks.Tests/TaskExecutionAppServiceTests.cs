@@ -1,0 +1,180 @@
+using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Repositories;
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Extensions;
+using Agw.Tasks.Application;
+using Agw.Tasks.Domain.Services;
+
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+
+namespace Agw.Tasks.Tests;
+
+public class TaskExecutionAppServiceTests
+{
+    [Fact]
+    public void TaskCreateRequest_RemovesLegacyTargetBindingConstructor()
+    {
+        Assert.DoesNotContain(
+            typeof(TaskCreateRequest).GetConstructors(),
+            constructor =>
+            {
+                var parameters = constructor.GetParameters();
+                return parameters.Length == 7
+                    && parameters[0].Name == "AgentType"
+                    && parameters[1].Name == "AgentflowId"
+                    && parameters[2].Name == "AgentId"
+                    && parameters[3].Name == "Description";
+            });
+    }
+
+    [Fact]
+    public async Task CreateRunningAsync_CreatesContextAndTaskRecord()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Jobs Project"));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        var jobId = Guid.NewGuid();
+
+        var result = await service.CreateRunningAsync(
+            projectId,
+            new TaskCreateRequest(
+                JobId: jobId,
+                Input: "Run scheduled sync",
+                Title: "Nightly sync",
+                ContextId: "context-1"),
+            "job-executor");
+
+        Assert.Equal(ApplicationResultType.Success, result.Type);
+        var response = Assert.IsType<TaskResponse>(result.Value);
+        Assert.Equal(jobId, response.JobId);
+        Assert.Equal(TaskExecutionStatus.Running, response.Status);
+        Assert.Equal(projectId.Normalize(), response.ProjectId);
+        Assert.Equal("context-1", response.ContextId);
+        Assert.Equal("Nightly sync", response.Title);
+        Assert.NotEqual(Guid.Empty, response.TaskId);
+
+        var context = await dbContext.ProjectContexts.SingleAsync(cancellationToken);
+        Assert.Equal("context-1", context.ContextId);
+        Assert.Equal("Nightly sync", context.Title);
+        Assert.Equal(jobId, context.JobId);
+
+        var record = await dbContext.TaskRecords.SingleAsync(cancellationToken);
+        Assert.Equal(context.Id, record.ProjectContextId);
+        Assert.Equal(response.TaskId, record.TaskId);
+        Assert.Equal(jobId, record.JobId);
+        Assert.Equal(TaskExecutionStatus.Running, record.Status);
+        Assert.Null(record.ConversationPayload);
+    }
+
+    [Fact]
+    public async Task ClearRecordsAsync_WhenTaskBelongsToProject_RemovesOnlyTaskRecords()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        var contextId = Guid.NewGuid();
+        var otherContextId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        var otherTaskId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectContexts.AddRange(
+                CreateContext(contextId, projectId, "context-1", "Task"),
+                CreateContext(otherContextId, projectId, "context-2", "Other Task"));
+            seedContext.TaskRecords.AddRange(
+                CreateRecord(contextId, taskId),
+                CreateRecord(contextId, taskId),
+                CreateRecord(otherContextId, otherTaskId));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var result = await service.ClearRecordsAsync(projectId, taskId);
+
+        Assert.Equal(ApplicationResultType.Success, result.Type);
+        Assert.Empty(await dbContext.TaskRecords
+            .Where(record => record.TaskId == taskId)
+            .ToListAsync(cancellationToken));
+        var remainingRecord = await dbContext.TaskRecords.SingleAsync(cancellationToken);
+        Assert.Equal(otherTaskId, remainingRecord.TaskId);
+    }
+
+    private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
+        new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+
+    private static async Task EnsureCreatedAsync(DbContextOptions<AgwDbContext> options, CancellationToken cancellationToken)
+    {
+        await using var setupContext = new AgwDbContext(options);
+        await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+    }
+
+    private static Project CreateProject(Guid projectId, string name) => new()
+    {
+        Id = projectId,
+        Name = name,
+        Type = ProjectType.UserDefined,
+        Enable = true,
+        CreateBy = "tester",
+        CreateTime = DateTime.UtcNow
+    };
+
+    private static ProjectContext CreateContext(Guid id, Guid projectId, string contextId, string title) => new()
+    {
+        Id = id,
+        ProjectId = projectId,
+        ContextId = contextId,
+        Title = title,
+        CreateBy = "tester",
+        CreateTime = DateTime.UtcNow,
+        UpdateBy = "tester",
+        UpdateTime = DateTime.UtcNow
+    };
+
+    private static TaskRecord CreateRecord(Guid contextId, Guid taskId) => new()
+    {
+        Id = Guid.NewGuid(),
+        ProjectContextId = contextId,
+        TaskId = taskId,
+        Status = TaskExecutionStatus.Running,
+        CreateTime = DateTime.UtcNow,
+        UpdateTime = DateTime.UtcNow
+    };
+
+    private static TaskExecutionAppService CreateService(AgwDbContext dbContext)
+    {
+        var projectRepository = new EfRepository<Project>(dbContext);
+
+        return new TaskExecutionAppService(
+            new EfRepository<ProjectContext>(dbContext),
+            new EfRepository<TaskRecord>(dbContext),
+            new UnitOfWork(dbContext),
+            new TaskRecordDomainService(),
+            new ProjectResolver(projectRepository));
+    }
+}

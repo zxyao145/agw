@@ -15,7 +15,7 @@ public class DashboardController : ControllerBase
 {
     private readonly IRepository<Job> _jobRepository;
     private readonly IRepository<Project> _projectRepository;
-    private readonly IRepository<ProjectTask> _projectTaskRepository;
+    private readonly IRepository<ProjectContext> _projectContextRepository;
     private readonly IRepository<TaskRecord> _taskRecordRepository;
     private readonly IRepository<Agent> _agentRepository;
     private readonly IRepository<Agentflow> _agentflowRepository;
@@ -23,14 +23,14 @@ public class DashboardController : ControllerBase
     public DashboardController(
         IRepository<Job> jobRepository,
         IRepository<Project> projectRepository,
-        IRepository<ProjectTask> projectTaskRepository,
+        IRepository<ProjectContext> projectContextRepository,
         IRepository<TaskRecord> taskRecordRepository,
         IRepository<Agent> agentRepository,
         IRepository<Agentflow> agentflowRepository)
     {
         _jobRepository = jobRepository;
         _projectRepository = projectRepository;
-        _projectTaskRepository = projectTaskRepository;
+        _projectContextRepository = projectContextRepository;
         _taskRecordRepository = taskRecordRepository;
         _agentRepository = agentRepository;
         _agentflowRepository = agentflowRepository;
@@ -43,7 +43,7 @@ public class DashboardController : ControllerBase
         var stats = new DashboardStatsResponse(
             await _jobRepository.Queryable.CountAsync(),
             await _projectRepository.Queryable.CountAsync(),
-            await _projectTaskRepository.Queryable.CountAsync(),
+            await _projectContextRepository.Queryable.CountAsync(),
             await _taskRecordRepository.Queryable.CountAsync(),
             await _agentRepository.Queryable.CountAsync(),
             await _agentflowRepository.Queryable.CountAsync());
@@ -55,7 +55,7 @@ public class DashboardController : ControllerBase
 public record DashboardStatsResponse(
     int JobCount,
     int ProjectCount,
-    int ProjectTaskCount,
-    int ProjectTaskRecordCount,
+    int ProjectContextCount,
+    int TaskRecordCount,
     int AgentCount,
     int AgentflowCount);

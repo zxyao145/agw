@@ -18,6 +18,18 @@ test("buildSettingCommandPayload includes environment variables", async () => {
   });
 });
 
+test("buildSettingCommandPayload includes context id", async () => {
+  const { buildSettingCommandPayload } = await import("./execution-ws" + ".ts");
+
+  const payload = buildSettingCommandPayload({
+    projectId: "project-1",
+    taskId: "task-1",
+    contextId: "context-1",
+  });
+
+  assert.equal(payload.contextId, "context-1");
+});
+
 test("buildSettingCommandPayload omits optional environment variables when absent", async () => {
   const { buildSettingCommandPayload } = await import("./execution-ws" + ".ts");
 

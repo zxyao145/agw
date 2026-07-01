@@ -8,6 +8,7 @@ export type ExecutionWsEnvironmentVariables = Record<string, string>;
 export type ExecutionWsSettingCommandRequest = {
   projectId: string;
   taskId?: string | null;
+  contextId?: string | null;
   resume?: boolean;
   environmentVariables?: ExecutionWsEnvironmentVariables | null;
 };
@@ -16,6 +17,7 @@ export type ExecutionWsSettingCommandPayload = {
   type: "SettingCommand";
   projectId: string;
   taskId: string | null;
+  contextId: string | null;
   resume: boolean;
   environmentVariables?: ExecutionWsEnvironmentVariables | null;
 };
@@ -78,6 +80,7 @@ export function buildSettingCommandPayload(
     type: "SettingCommand",
     projectId: request.projectId,
     taskId: request.taskId ?? null,
+    contextId: request.contextId ?? null,
     resume: request.resume ?? false,
   };
 

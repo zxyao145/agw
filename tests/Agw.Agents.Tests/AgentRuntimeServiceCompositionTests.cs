@@ -305,7 +305,7 @@ public class AgentRuntimeServiceCompositionTests
             toolRegistry: null!,
             chatHistoryProvider: null!,
             providerSessionState: null!,
-            projectTaskSessionBindingService: null!,
+            taskSessionBindingService: null!,
             webHostEnvironment: null!,
             fileSystemResolver: null!,
             sessionStateStore: null!,

@@ -7,8 +7,8 @@ import { ApiError, apiGet } from "@/api/client";
 type DashboardStatsResponse = {
   jobCount: number;
   projectCount: number;
-  projectTaskCount: number;
-  projectTaskRecordCount: number;
+  projectContextCount: number;
+  taskRecordCount: number;
   agentCount: number;
   agentflowCount: number;
 };
@@ -70,13 +70,13 @@ function SummaryCards({
       color: "text-sage",
     },
     {
-      label: "Project Task 数量",
-      value: hasData ? stats?.projectTaskCount : "—",
+      label: "Project Context 数量",
+      value: hasData ? stats?.projectContextCount : "—",
       color: "text-blue-400",
     },
     {
-      label: "Project Task Record 数量",
-      value: hasData ? stats?.projectTaskRecordCount : "—",
+      label: "Task Record 数量",
+      value: hasData ? stats?.taskRecordCount : "—",
       color: "text-violet-400",
     },
     {

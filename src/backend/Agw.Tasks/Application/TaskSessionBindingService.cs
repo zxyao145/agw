@@ -7,20 +7,20 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Tasks.Application;
 
-public class ProjectTaskSessionBindingService : IProjectTaskSessionBindingService
+public class TaskSessionBindingService : ITaskSessionBindingService
 {
-    private readonly IRepository<ProjectTaskSessionBinding> _bindingRepository;
+    private readonly IRepository<TaskSessionBinding> _bindingRepository;
     private readonly IUnitOfWork _unitOfWork;
 
-    public ProjectTaskSessionBindingService(
-        IRepository<ProjectTaskSessionBinding> bindingRepository,
+    public TaskSessionBindingService(
+        IRepository<TaskSessionBinding> bindingRepository,
         IUnitOfWork unitOfWork)
     {
         _bindingRepository = bindingRepository;
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<ProjectTaskSessionBinding?> GetAsync(
+    public async Task<TaskSessionBinding?> GetAsync(
         Guid taskId,
         Guid agentId,
         string externalAgentName,
@@ -41,7 +41,7 @@ public class ProjectTaskSessionBindingService : IProjectTaskSessionBindingServic
                 cancellationToken);
     }
 
-    public async Task<ProjectTaskSessionBinding> UpsertAsync(
+    public async Task<TaskSessionBinding> UpsertAsync(
         Guid taskId,
         Guid agentId,
         string externalAgentName,
@@ -63,7 +63,7 @@ public class ProjectTaskSessionBindingService : IProjectTaskSessionBindingServic
 
         if (binding == null)
         {
-            binding = new ProjectTaskSessionBinding
+            binding = new TaskSessionBinding
             {
                 Id = Guid.NewGuid(),
                 TaskId = taskId,

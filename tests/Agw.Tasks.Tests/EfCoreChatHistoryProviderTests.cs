@@ -19,6 +19,74 @@ namespace Agw.Tasks.Tests;
 public class EfCoreChatHistoryProviderTests
 {
     [Fact]
+    public async Task StoreChatHistoryAsync_WhenExistingContextUsesFallbackTitle_UpdatesTitleFromFirstUserMessage()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(new Project
+            {
+                Id = projectId,
+                Name = "Chat Project",
+                Type = ProjectType.UserDefined,
+                Enable = true,
+                CreateBy = "tester",
+                CreateTime = DateTime.UtcNow
+            });
+            seedContext.ProjectContexts.Add(new ProjectContext
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = projectId,
+                ContextId = "context-1",
+                Title = "New Chat",
+                CreateBy = "tester",
+                CreateTime = DateTime.UtcNow
+            });
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance);
+
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", Guid.NewGuid().ToString("D"), projectId);
+        var message = new ChatMessage(ChatRole.User, "Draft the launch plan")
+        {
+            MessageId = Guid.NewGuid().ToString(),
+            AuthorName = "tester"
+        };
+
+        await InvokeStoreChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokedContext(new FakeAgent(), session, [message], []),
+            cancellationToken);
+
+        await using var verifyContext = new AgwDbContext(options);
+        var projectContext = await verifyContext.ProjectContexts.SingleAsync(cancellationToken);
+        Assert.Equal("Draft the launch plan", projectContext.Title);
+    }
+
+    [Fact]
     public async Task StoreChatHistoryAsync_PersistsTargetMetadataFromRequestMessage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

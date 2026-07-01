@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Empty } from "@/components/ui/empty";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getApiErrorMessage } from "@/api/utils";
-import { isNonEmptyGuid } from "@/lib/guid";
 
 type JobDto = {
   id: string;
@@ -131,8 +130,6 @@ export default function JobLogsPage() {
           </TableHeader>
           <TableBody>
             {logsQuery.data?.map((log) => {
-              const canOpenTask = job && isNonEmptyGuid(log.taskId);
-
               return (
                 <TableRow key={log.id}>
                   <TableCell>
@@ -150,9 +147,9 @@ export default function JobLogsPage() {
                     <div className="line-clamp-2 wrap-break-word">{log.errorMessage ?? "-"}</div>
                   </TableCell>
                   <TableCell className="text-right">
-                    {canOpenTask ? (
+                    {job ? (
                       <Button type="button" variant="outline" size="sm" asChild>
-                        <Link href={`/chat?projectId=${job.projectId}&taskId=${log.taskId}`}>
+                        <Link href={`/chat?projectId=${job.projectId}`}>
                           <MessageSquareText className="mr-2 h-4 w-4" />
                           Go to Chat
                         </Link>

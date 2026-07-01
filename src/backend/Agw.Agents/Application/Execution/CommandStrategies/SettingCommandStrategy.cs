@@ -22,7 +22,8 @@ internal sealed class SettingCommandStrategy : IExecutionCommandStrategy
         var normalizedSettings = new SettingCommand(
             settings.ProjectId,
             settings.TaskId,
-            new Dictionary<string, string>(settings.EnvironmentVariables));
+            new Dictionary<string, string>(settings.EnvironmentVariables),
+            settings.ContextId);
         if (await _taskAppService.HasTaskAsync(normalizedSettings.TaskId, cancellationToken: cancellationToken))
         {
             normalizedSettings.Resume = true;

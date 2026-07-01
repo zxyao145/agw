@@ -1,0 +1,74 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const CHAT_PAGE_URL = new URL("./page.tsx", import.meta.url);
+const CONVERSATION_DETAILS_PAGE_URL = new URL(
+  "../../(tasks)/projects/[id]/conversations/[contextId]/page.tsx",
+  import.meta.url,
+);
+const JOB_LOGS_PAGE_URL = new URL("../../(jobs)/jobs/[id]/job-logs/page.tsx", import.meta.url);
+const CONVERSATION_LIST_URL = new URL(
+  "../../../../components/task/conversation-list.tsx",
+  import.meta.url,
+);
+const TASK_CLIENT_URL = new URL("../../../../api/task-client.ts", import.meta.url);
+
+test("chat page refreshes the conversation list after an execution completes", async () => {
+  const [pageSource, conversationListSource] = await Promise.all([
+    readFile(CHAT_PAGE_URL, "utf8"),
+    readFile(CONVERSATION_LIST_URL, "utf8"),
+  ]);
+
+  assert.match(conversationListSource, /refreshSignal\?: number;/);
+  assert.match(conversationListSource, /\[refreshSignal, refreshContexts\]/);
+  assert.match(
+    pageSource,
+    /const \[conversationListRefreshSignal, setConversationListRefreshSignal\] = React\.useState\(0\)/,
+  );
+  assert.match(pageSource, /setConversationListRefreshSignal\(\(signal\) => signal \+ 1\)/);
+  assert.match(pageSource, /refreshSignal=\{conversationListRefreshSignal\}/);
+});
+
+test("conversation list ignores stale refresh responses", async () => {
+  const conversationListSource = await readFile(CONVERSATION_LIST_URL, "utf8");
+
+  assert.match(conversationListSource, /refreshRequestIdRef/);
+  assert.match(conversationListSource, /requestId !== refreshRequestIdRef\.current/);
+});
+
+test("chat context list filters empty conversation placeholders", async () => {
+  const taskClientSource = await readFile(TASK_CLIENT_URL, "utf8");
+
+  assert.match(taskClientSource, /function hasConversationMessages/);
+  assert.match(taskClientSource, /context\.messageCount > 0/);
+  assert.match(taskClientSource, /\.filter\(hasConversationMessages\)/);
+});
+
+test("chat page resolves the active context from the current task id", async () => {
+  const [pageSource, conversationListSource] = await Promise.all([
+    readFile(CHAT_PAGE_URL, "utf8"),
+    readFile(CONVERSATION_LIST_URL, "utf8"),
+  ]);
+
+  assert.match(conversationListSource, /currentTaskId\?: string \| null;/);
+  assert.match(conversationListSource, /context\.latestTaskId/);
+  assert.match(conversationListSource, /onActiveContextResolved/);
+  assert.match(pageSource, /currentTaskId=\{taskId\}/);
+  assert.match(pageSource, /setContextId\(context\.contextId\)/);
+  assert.match(pageSource, /syncRoute\(selectedProjectId, context\.contextId\)/);
+});
+
+test("chat routes do not read or generate taskId query parameters", async () => {
+  const [pageSource, conversationDetailsSource, jobLogsSource] = await Promise.all([
+    readFile(CHAT_PAGE_URL, "utf8"),
+    readFile(CONVERSATION_DETAILS_PAGE_URL, "utf8"),
+    readFile(JOB_LOGS_PAGE_URL, "utf8"),
+  ]);
+
+  assert.doesNotMatch(pageSource, /searchParams\.get\("taskId"\)/);
+  assert.doesNotMatch(pageSource, /nextParams\.set\("taskId"/);
+  assert.match(pageSource, /searchParams\.delete\("taskId"\)/);
+  assert.doesNotMatch(conversationDetailsSource, /searchParams\.set\("taskId"/);
+  assert.doesNotMatch(jobLogsSource, /\/chat\?[^`"]*taskId/);
+});

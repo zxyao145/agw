@@ -488,7 +488,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
             var currentTask = await _taskStore.GetTaskAsync(context.TaskId, cancellationToken)
                 .ConfigureAwait(false);
 
-            var updatedTask = TaskProjection.Apply(currentTask, response);
+            var updatedTask = global::A2A.TaskProjection.Apply(currentTask, response);
 
             // Message-only responses with no existing task have nothing to persist.
             if (updatedTask is null)

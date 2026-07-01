@@ -10,45 +10,47 @@ namespace Agw.Tasks.Application;
 
 public class TaskAppService : ITaskAppService
 {
-    private readonly IRepository<ProjectTask> _taskRepository;
+    private readonly IRepository<ProjectContext> _contextRepository;
     private readonly IRepository<TaskRecord> _recordRepository;
     private readonly ProjectResolver _projectResolver;
-    private readonly ProjectTaskAppService _projectTaskAppService;
+    private readonly TaskExecutionAppService _taskExecutionAppService;
 
     public TaskAppService(
-        IRepository<ProjectTask> taskRepository,
+        IRepository<ProjectContext> contextRepository,
         IRepository<TaskRecord> recordRepository,
         ProjectResolver projectResolver,
-        ProjectTaskAppService projectTaskAppService)
+        TaskExecutionAppService taskExecutionAppService)
     {
-        _taskRepository = taskRepository;
+        _contextRepository = contextRepository;
         _recordRepository = recordRepository;
         _projectResolver = projectResolver;
-        _projectTaskAppService = projectTaskAppService;
+        _taskExecutionAppService = taskExecutionAppService;
     }
 
-    public Task<ProjectTask?> GetTaskAsync(Guid id) => _taskRepository.GetByIdAsync(id);
+    public Task<TaskProjection?> GetTaskAsync(Guid id) => _taskExecutionAppService.GetTaskAsync(id);
 
-    public async Task<ProjectTask?> CreateTaskForExecutionAsync(
+    public async Task<TaskProjection?> CreateTaskForExecutionAsync(
         Guid projectId,
         Guid? taskId,
         string input,
         string user,
+        string? contextId = null,
         CancellationToken cancellationToken = default)
     {
         var normalizedInput = input.Trim();
-        var request = new ProjectTaskCreateRequest(
+        var request = new TaskCreateRequest(
             JobId: null,
             Input: normalizedInput,
-            Title: ProjectTaskTitleFactory.Create(normalizedInput));
+            Title: TaskTitleFactory.Create(normalizedInput),
+            ContextId: contextId);
 
-        var result = await _projectTaskAppService.CreateForExecutionAsync(projectId, taskId, request, user);
+        var result = await _taskExecutionAppService.CreateForExecutionAsync(projectId, taskId, request, user);
         if (result.Value == null)
         {
             return null;
         }
 
-        return await _taskRepository.GetByIdAsync(result.Value.Id);
+        return await _taskExecutionAppService.GetTaskAsync(result.Value.TaskId);
     }
 
     public async Task<bool> HasTaskAsync(
@@ -63,15 +65,15 @@ public class TaskAppService : ITaskAppService
             {
                 return false;
             }
-            var existInProject = await _taskRepository.Queryable
+            var existInProject = await _recordRepository.Queryable
                 .AnyAsync(
-                r => r.Id == taskId && r.ProjectId == project.Id,
+                r => r.TaskId == taskId && r.ProjectContext != null && r.ProjectContext.ProjectId == project.Id,
                 cancellationToken
                 );
             return existInProject;
         }
 
-        var exist = await _taskRepository.Queryable.AnyAsync(r => r.Id == taskId, cancellationToken);
+        var exist = await _recordRepository.Queryable.AnyAsync(r => r.TaskId == taskId, cancellationToken);
         return exist;
     }
 
@@ -115,6 +117,7 @@ public class TaskAppService : ITaskAppService
             return await CreateTaskAsync(
                 resolvedProjectId.Value,
                 null,
+                request.ContextId,
                 request.Input,
                 request.User,
                 cancellationToken);
@@ -126,6 +129,7 @@ public class TaskAppService : ITaskAppService
             return await CreateTaskAsync(
                 resolvedProjectId.Value,
                 request.TaskId,
+                request.ContextId,
                 request.Input,
                 request.User,
                 cancellationToken);
@@ -143,6 +147,7 @@ public class TaskAppService : ITaskAppService
     private async Task<ExecutionTaskResolutionResult> CreateTaskAsync(
         Guid projectId,
         Guid? taskId,
+        string? contextId,
         string input,
         string user,
         CancellationToken cancellationToken)
@@ -152,6 +157,7 @@ public class TaskAppService : ITaskAppService
             taskId,
             input,
             user,
+            contextId,
             cancellationToken);
         if (task == null)
         {

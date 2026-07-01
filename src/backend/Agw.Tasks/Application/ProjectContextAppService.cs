@@ -10,26 +10,23 @@ namespace Agw.Tasks.Application;
 
 public class ProjectContextAppService
 {
-    private readonly IRepository<ProjectTask> _taskRepository;
+    private readonly IRepository<ProjectContext> _contextRepository;
     private readonly IRepository<TaskRecord> _recordRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectResolver _projectResolver;
-    private readonly ProjectTaskDomainService _projectTaskDomainService;
     private readonly TaskRecordDomainService _taskRecordDomainService;
 
     public ProjectContextAppService(
-        IRepository<ProjectTask> taskRepository,
+        IRepository<ProjectContext> contextRepository,
         IRepository<TaskRecord> recordRepository,
         IUnitOfWork unitOfWork,
         ProjectResolver projectResolver,
-        ProjectTaskDomainService projectTaskDomainService,
         TaskRecordDomainService taskRecordDomainService)
     {
-        _taskRepository = taskRepository;
+        _contextRepository = contextRepository;
         _recordRepository = recordRepository;
         _unitOfWork = unitOfWork;
         _projectResolver = projectResolver;
-        _projectTaskDomainService = projectTaskDomainService;
         _taskRecordDomainService = taskRecordDomainService;
     }
 
@@ -41,21 +38,21 @@ public class ProjectContextAppService
             return [];
         }
 
-        var tasks = await _taskRepository.ListAsync(task => task.ProjectId == project.Id);
-        if (tasks.Count == 0)
+        var contexts = await _contextRepository.ListAsync(context => context.ProjectId == project.Id);
+        if (contexts.Count == 0)
         {
             return [];
         }
 
-        var taskIds = tasks.Select(task => task.Id).ToHashSet();
-        var records = await _recordRepository.ListAsync(record => taskIds.Contains(record.TaskId));
-        var messageCounts = records
-            .GroupBy(record => record.TaskId)
-            .ToDictionary(group => group.Key, group => ProjectTaskResponseMapper.CountMessages(group));
+        var contextIds = contexts.Select(context => context.Id).ToHashSet();
+        var records = await _recordRepository.ListAsync(record => contextIds.Contains(record.ProjectContextId));
+        var recordsByContextId = records
+            .GroupBy(record => record.ProjectContextId)
+            .ToDictionary(group => group.Key, group => group.ToList());
 
-        return tasks
-            .GroupBy(task => task.ContextId, StringComparer.Ordinal)
-            .Select(group => ToSummaryResponse(project.Id, group.ToList(), messageCounts))
+        return contexts
+            .Select(context => ToSummaryResponse(context, recordsByContextId.GetValueOrDefault(context.Id) ?? []))
+            .Where(HasConversationMessages)
             .OrderByDescending(context => context.UpdateTime ?? context.CreateTime)
             .ToList();
     }
@@ -74,10 +71,10 @@ public class ProjectContextAppService
         }
 
         var normalizedContextId = contextId.Trim();
-        var tasks = await _taskRepository.ListAsync(task =>
-            task.ProjectId == project.Id && task.ContextId == normalizedContextId);
+        var context = await _contextRepository.SingleOrDefaultAsync(item =>
+            item.ProjectId == project.Id && item.ContextId == normalizedContextId);
 
-        return await ToResponseAsync(project.Id, normalizedContextId, tasks);
+        return context == null ? null : await ToResponseAsync(context);
     }
 
     public async Task<ProjectContextResponse?> GetResponseByTaskIdAsync(Guid projectId, Guid taskId)
@@ -88,42 +85,26 @@ public class ProjectContextAppService
             return null;
         }
 
-        var task = await _taskRepository.GetByIdAsync(taskId);
-        if (task == null || task.ProjectId != project.Id)
+        var records = await _recordRepository.ListAsync(record => record.TaskId == taskId);
+        if (records.Count == 0)
         {
             return null;
         }
 
-        var tasks = await _taskRepository.ListAsync(item =>
-            item.ProjectId == project.Id && item.ContextId == task.ContextId);
-
-        return await ToResponseAsync(project.Id, task.ContextId, tasks);
+        var context = await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
+        return context == null || context.ProjectId != project.Id ? null : await ToResponseAsync(context);
     }
 
     public async Task<ApplicationResult> ClearRecordsAsync(Guid projectId, string contextId)
     {
-        if (string.IsNullOrWhiteSpace(contextId))
+        var context = await GetProjectContextAsync(projectId, contextId);
+        if (context == null)
         {
             return ApplicationResult.NotFound();
         }
 
-        var project = await _projectResolver.ResolveRequiredAsync(projectId);
-        if (project == null)
-        {
-            return ApplicationResult.NotFound();
-        }
-
-        var normalizedContextId = contextId.Trim();
-        var tasks = await _taskRepository.ListAsync(task =>
-            task.ProjectId == project.Id && task.ContextId == normalizedContextId);
-        if (tasks.Count == 0)
-        {
-            return ApplicationResult.NotFound();
-        }
-
-        var taskIds = tasks.Select(task => task.Id).ToHashSet();
         await _recordRepository.Queryable
-            .Where(record => taskIds.Contains(record.TaskId))
+            .Where(record => record.ProjectContextId == context.Id)
             .ExecuteDeleteAsync();
 
         await _unitOfWork.SaveChangesAsync();
@@ -132,36 +113,21 @@ public class ProjectContextAppService
 
     public async Task<ApplicationResult> UpdateTitleAsync(Guid projectId, string contextId, string title, string user)
     {
-        if (string.IsNullOrWhiteSpace(contextId))
-        {
-            return ApplicationResult.NotFound();
-        }
-
         if (string.IsNullOrWhiteSpace(title))
         {
             return ApplicationResult.Invalid("title is required.");
         }
 
-        var project = await _projectResolver.ResolveRequiredAsync(projectId);
-        if (project == null)
+        var context = await GetProjectContextAsync(projectId, contextId);
+        if (context == null)
         {
             return ApplicationResult.NotFound();
         }
 
-        var normalizedContextId = contextId.Trim();
-        var tasks = await _taskRepository.ListAsync(task =>
-            task.ProjectId == project.Id && task.ContextId == normalizedContextId);
-        if (tasks.Count == 0)
-        {
-            return ApplicationResult.NotFound();
-        }
-
-        foreach (var task in tasks)
-        {
-            _projectTaskDomainService.TryUpdateTitle(task, title, user);
-            _taskRepository.Update(task);
-        }
-
+        context.Title = title.Trim();
+        context.UpdateBy = user;
+        context.UpdateTime = DateTime.UtcNow;
+        _contextRepository.Update(context);
         await _unitOfWork.SaveChangesAsync();
         return ApplicationResult.Success();
     }
@@ -174,122 +140,112 @@ public class ProjectContextAppService
             return ApplicationResult.NotFound();
         }
 
-        var tasks = await _taskRepository.ListAsync(task => task.ProjectId == project.Id);
-        if (tasks.Count == 0)
-        {
-            return ApplicationResult.Success();
-        }
+        await _contextRepository.Queryable
+            .Where(context => context.ProjectId == project.Id)
+            .ExecuteDeleteAsync();
 
-        await DeleteTasksAsync(tasks);
+        await _unitOfWork.SaveChangesAsync();
         return ApplicationResult.Success();
     }
 
     public async Task<bool> DeleteAsync(Guid projectId, string contextId)
     {
-        if (string.IsNullOrWhiteSpace(contextId))
+        var context = await GetProjectContextAsync(projectId, contextId);
+        if (context == null)
         {
             return false;
         }
 
-        var project = await _projectResolver.ResolveRequiredAsync(projectId);
-        if (project == null)
-        {
-            return false;
-        }
+        await _recordRepository.Queryable
+            .Where(record => record.ProjectContextId == context.Id)
+            .ExecuteDeleteAsync();
 
-        var normalizedContextId = contextId.Trim();
-        var tasks = await _taskRepository.ListAsync(task =>
-            task.ProjectId == project.Id && task.ContextId == normalizedContextId);
-        if (tasks.Count == 0)
-        {
-            return false;
-        }
-
-        await DeleteTasksAsync(tasks);
+        _contextRepository.Remove(context);
+        await _unitOfWork.SaveChangesAsync();
         return true;
     }
 
-    private async Task DeleteTasksAsync(IReadOnlyList<ProjectTask> tasks)
+    private async Task<ProjectContextResponse> ToResponseAsync(ProjectContext context)
     {
-        var taskIds = tasks.Select(task => task.Id).ToHashSet();
-        await _recordRepository.Queryable
-            .Where(record => taskIds.Contains(record.TaskId))
-            .ExecuteDeleteAsync();
-
-        foreach (var task in tasks)
-        {
-            _taskRepository.Remove(task);
-        }
-
-        await _unitOfWork.SaveChangesAsync();
-    }
-
-    private async Task<ProjectContextResponse?> ToResponseAsync(
-        Guid projectId,
-        string contextId,
-        IReadOnlyList<ProjectTask> tasks)
-    {
-        if (tasks.Count == 0)
-        {
-            return null;
-        }
-
-        var orderedTasks = OrderTasks(tasks).ToList();
-        var taskIds = orderedTasks.Select(task => task.Id).ToHashSet();
-        var records = await _recordRepository.ListAsync(record => taskIds.Contains(record.TaskId));
+        var records = await _recordRepository.ListAsync(record => record.ProjectContextId == context.Id);
+        var orderedTasks = records
+            .GroupBy(record => record.TaskId)
+            .Select(group => TaskResponseMapper.ToTask(context, group.ToList()))
+            .OrderBy(task => task.CreateTime)
+            .ThenBy(task => task.UpdateTime ?? task.CreateTime)
+            .ThenBy(task => task.TaskId)
+            .ToList();
         var recordsByTaskId = records
             .GroupBy(record => record.TaskId)
             .ToDictionary(
                 group => group.Key,
                 group => _taskRecordDomainService.Order(group));
-
         var messages = orderedTasks
-            .SelectMany(task => recordsByTaskId.GetValueOrDefault(task.Id) ?? [])
-            .SelectMany(ProjectTaskResponseMapper.ToAiMessages)
+            .SelectMany(task => recordsByTaskId.GetValueOrDefault(task.TaskId) ?? [])
+            .SelectMany(TaskResponseMapper.ToAiMessages)
             .ToList();
         var latestTask = GetLatestTask(orderedTasks);
 
         return new ProjectContextResponse(
-            projectId.Normalize(),
-            contextId,
-            latestTask?.Id,
-            orderedTasks.Select(ProjectTaskResponseMapper.ToSummaryResponse).ToList(),
+            context.ProjectId.Normalize(),
+            context.ContextId,
+            context.JobId,
+            latestTask?.TaskId,
+            orderedTasks.Select(TaskResponseMapper.ToSummaryResponse).ToList(),
             messages.Count,
             messages);
     }
 
     private static ProjectContextSummaryResponse ToSummaryResponse(
-        Guid projectId,
-        IReadOnlyList<ProjectTask> tasks,
-        IReadOnlyDictionary<Guid, int> messageCounts)
+        ProjectContext context,
+        IReadOnlyList<TaskRecord> records)
     {
-        var orderedTasks = OrderTasks(tasks).ToList();
-        var firstTask = orderedTasks.First();
-        var latestTask = GetLatestTask(orderedTasks)!;
+        var tasks = records
+            .GroupBy(record => record.TaskId)
+            .Select(group => TaskResponseMapper.ToTask(context, group.ToList()))
+            .ToList();
+        var latestTask = GetLatestTask(tasks);
+        var messageCount = records.Count(record => record.ToChatMessage() != null);
 
         return new ProjectContextSummaryResponse(
-            projectId.Normalize(),
-            firstTask.ContextId,
-            latestTask.Title,
-            latestTask.Id,
-            latestTask.Status,
+            context.ProjectId.Normalize(),
+            context.ContextId,
+            context.JobId,
+            context.Title,
+            latestTask?.TaskId,
+            latestTask?.Status,
             tasks.Count,
-            tasks.Sum(task => messageCounts.GetValueOrDefault(task.Id)),
-            orderedTasks.Min(task => task.CreateTime),
-            orderedTasks.Max(task => task.UpdateTime ?? task.CreateTime),
-            latestTask.ErrorMessage);
+            messageCount,
+            context.CreateTime,
+            context.UpdateTime,
+            latestTask?.ErrorMessage);
     }
 
-    private static IEnumerable<ProjectTask> OrderTasks(IEnumerable<ProjectTask> tasks) =>
-        tasks
-            .OrderBy(task => task.CreateTime)
-            .ThenBy(task => task.UpdateTime ?? task.CreateTime)
-            .ThenBy(task => task.Id);
+    private async Task<ProjectContext?> GetProjectContextAsync(Guid projectId, string contextId)
+    {
+        if (string.IsNullOrWhiteSpace(contextId))
+        {
+            return null;
+        }
 
-    private static ProjectTask? GetLatestTask(IEnumerable<ProjectTask> tasks) =>
+        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        if (project == null)
+        {
+            return null;
+        }
+
+        var normalizedContextId = contextId.Trim();
+        return await _contextRepository.SingleOrDefaultAsync(context =>
+            context.ProjectId == project.Id && context.ContextId == normalizedContextId);
+    }
+
+    private static TaskProjection? GetLatestTask(IEnumerable<TaskProjection> tasks) =>
         tasks
             .OrderByDescending(task => task.UpdateTime ?? task.CreateTime)
             .ThenByDescending(task => task.CreateTime)
-            .ThenByDescending(task => task.Id)
+            .ThenByDescending(task => task.TaskId)
             .FirstOrDefault();
+
+    private static bool HasConversationMessages(ProjectContextSummaryResponse context) =>
+        context.MessageCount > 0;
 }

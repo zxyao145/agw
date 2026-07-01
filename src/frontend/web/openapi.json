@@ -3162,17 +3162,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectTaskTitleUpdateRequest"
+                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectTaskTitleUpdateRequest"
+                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectTaskTitleUpdateRequest"
+                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
               }
             }
           },
@@ -6172,8 +6172,8 @@
         "required": [
           "jobCount",
           "projectCount",
-          "projectTaskCount",
-          "projectTaskRecordCount",
+          "projectContextCount",
+          "taskRecordCount",
           "agentCount",
           "agentflowCount"
         ],
@@ -6187,11 +6187,11 @@
             "type": "integer",
             "format": "int32"
           },
-          "projectTaskCount": {
+          "projectContextCount": {
             "type": "integer",
             "format": "int32"
           },
-          "projectTaskRecordCount": {
+          "taskRecordCount": {
             "type": "integer",
             "format": "int32"
           },
@@ -7411,7 +7411,7 @@
           "tasks": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProjectTask"
+              "$ref": "#/components/schemas/ProjectContext"
             }
           },
           "createTime": {
@@ -7443,6 +7443,7 @@
         "required": [
           "projectId",
           "contextId",
+          "jobId",
           "latestTaskId",
           "tasks",
           "messageCount",
@@ -7456,6 +7457,13 @@
           "contextId": {
             "type": "string"
           },
+          "jobId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "latestTaskId": {
             "type": [
               "null",
@@ -7466,7 +7474,7 @@
           "tasks": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProjectTaskSummaryResponse"
+              "$ref": "#/components/schemas/TaskSummaryResponse"
             }
           },
           "messageCount": {
@@ -7488,6 +7496,7 @@
         "required": [
           "projectId",
           "contextId",
+          "jobId",
           "title",
           "latestTaskId",
           "latestStatus",
@@ -7505,6 +7514,13 @@
           "contextId": {
             "type": "string"
           },
+          "jobId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "title": {
             "type": "string"
           },
@@ -7521,7 +7537,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ProjectTaskStatus"
+                "$ref": "#/components/schemas/TaskExecutionStatus"
               }
             ]
           },
@@ -7588,7 +7604,7 @@
           }
         }
       },
-      "ProjectTask": {
+      "ProjectContext": {
         "required": [
           "id",
           "projectId",
@@ -7636,7 +7652,7 @@
           },
           "status": {
             "description": "Task execution status.",
-            "$ref": "#/components/schemas/ProjectTaskStatus"
+            "$ref": "#/components/schemas/TaskExecutionStatus"
           },
           "errorMessage": {
             "type": [
@@ -7676,12 +7692,12 @@
           }
         }
       },
-      "ProjectTaskStatus": {
+      "TaskExecutionStatus": {
         "type": "integer"
       },
-      "ProjectTaskSummaryResponse": {
+      "TaskSummaryResponse": {
         "required": [
-          "id",
+          "taskId",
           "projectId",
           "contextId",
           "jobId",
@@ -7695,7 +7711,7 @@
         ],
         "type": "object",
         "properties": {
-          "id": {
+          "taskId": {
             "type": "string",
             "format": "uuid"
           },
@@ -7713,7 +7729,7 @@
             "format": "uuid"
           },
           "status": {
-            "$ref": "#/components/schemas/ProjectTaskStatus"
+            "$ref": "#/components/schemas/TaskExecutionStatus"
           },
           "title": {
             "type": "string"
@@ -7751,7 +7767,7 @@
           }
         }
       },
-      "ProjectTaskTitleUpdateRequest": {
+      "ProjectContextTitleUpdateRequest": {
         "required": [
           "title"
         ],

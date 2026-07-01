@@ -26,7 +26,10 @@ import { cn } from "@/lib/utils";
 interface ConversationListProps {
   projectId: string;
   currentContextId: string | null;
+  currentTaskId?: string | null;
+  refreshSignal?: number;
   onContextSelect: (context: ContextSummary) => void;
+  onActiveContextResolved?: (context: ContextSummary) => void;
   onNewTask: () => void;
   onAllTasksDeleted: () => void;
   headerActions?: React.ReactNode;
@@ -35,7 +38,10 @@ interface ConversationListProps {
 export function ConversationList({
   projectId,
   currentContextId,
+  currentTaskId,
+  refreshSignal,
   onContextSelect,
+  onActiveContextResolved,
   onNewTask,
   onAllTasksDeleted,
   headerActions,
@@ -47,29 +53,64 @@ export function ConversationList({
   const [contextToRename, setContextToRename] = React.useState<ContextSummary | null>(null);
   const [renameTitle, setRenameTitle] = React.useState("");
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const didObserveRefreshSignalRef = React.useRef(false);
+  const refreshRequestIdRef = React.useRef(0);
+  const normalizedCurrentTaskId = currentTaskId?.toLowerCase() ?? null;
+
+  const matchesCurrentSession = React.useCallback(
+    (context: ContextSummary) =>
+      context.contextId === currentContextId ||
+      Boolean(
+        normalizedCurrentTaskId &&
+          context.latestTaskId?.toLowerCase() === normalizedCurrentTaskId,
+      ),
+    [currentContextId, normalizedCurrentTaskId],
+  );
 
   const refreshContexts = React.useCallback(async (): Promise<ContextSummary[]> => {
+    const requestId = ++refreshRequestIdRef.current;
     setIsRefreshing(true);
     try {
       if (!projectId) {
-        setContexts([]);
+        if (requestId === refreshRequestIdRef.current) {
+          setContexts([]);
+        }
         return [];
       }
 
       const latestContexts = await getProjectContexts(projectId);
+      if (requestId !== refreshRequestIdRef.current) {
+        return latestContexts;
+      }
+
       setContexts(latestContexts);
       return latestContexts;
     } catch (error) {
       console.error("Failed to load chat contexts:", error);
       return [];
     } finally {
-      setIsRefreshing(false);
+      if (requestId === refreshRequestIdRef.current) {
+        setIsRefreshing(false);
+      }
     }
   }, [projectId]);
 
   React.useEffect(() => {
     void refreshContexts();
   }, [refreshContexts]);
+
+  React.useEffect(() => {
+    if (refreshSignal === undefined) {
+      return;
+    }
+
+    if (!didObserveRefreshSignalRef.current) {
+      didObserveRefreshSignalRef.current = true;
+      return;
+    }
+
+    void refreshContexts();
+  }, [refreshSignal, refreshContexts]);
 
   React.useEffect(() => {
     if (!projectId || !currentContextId) {
@@ -86,7 +127,7 @@ export function ConversationList({
       if (
         cancelled ||
         attempts >= 5 ||
-        latestContexts.some((context) => context.contextId === currentContextId)
+        latestContexts.some(matchesCurrentSession)
       ) {
         return;
       }
@@ -104,7 +145,23 @@ export function ConversationList({
         clearTimeout(timeoutId);
       }
     };
-  }, [currentContextId, projectId, refreshContexts]);
+  }, [currentContextId, matchesCurrentSession, projectId, refreshContexts]);
+
+  const activeContext = React.useMemo(() => {
+    if (!currentContextId && !normalizedCurrentTaskId) {
+      return null;
+    }
+
+    return contexts.find(matchesCurrentSession) ?? null;
+  }, [contexts, currentContextId, matchesCurrentSession, normalizedCurrentTaskId]);
+
+  React.useEffect(() => {
+    if (!activeContext || !onActiveContextResolved || activeContext.contextId === currentContextId) {
+      return;
+    }
+
+    onActiveContextResolved(activeContext);
+  }, [activeContext, currentContextId, onActiveContextResolved]);
 
   const handleClearAll = async () => {
     try {
@@ -223,7 +280,7 @@ export function ConversationList({
           <div className="text-center py-8 text-muted-foreground text-sm">No chat history yet</div>
         ) : (
           contexts.map((context) => {
-            const isActive = context.contextId === currentContextId;
+            const isActive = context.contextId === activeContext?.contextId;
 
             return (
               <div

@@ -34,6 +34,7 @@ public partial class AgentExecutionsController : ControllerBase
             new ExecutionTaskRequest(
                 TaskId: request.TaskId,
                 ProjectId: request.ProjectId,
+                ContextId: null,
                 Input: request.Input,
                 Resume: false,
                 User: User?.Identity?.Name ?? "system"),
@@ -45,7 +46,7 @@ public partial class AgentExecutionsController : ControllerBase
             return contextError;
         }
 
-        var req = new AgentExecuteByIdRequest(request.Input, id, request.TaskId, request.ProjectId, "");
+        var req = new AgentExecuteByIdRequest(request.Input, id, task!.TaskId, request.ProjectId, task.ContextId);
 
         var result = await _agentRuntimeService.ExecuteByIdAsync(req, cancellationToken);
         if (result == null)
@@ -65,6 +66,7 @@ public partial class AgentExecutionsController : ControllerBase
             new ExecutionTaskRequest(
                 TaskId: request.TaskId,
                 ProjectId: request.ProjectId,
+                ContextId: null,
                 Input: request.Input,
                 Resume: false,
                 User: User?.Identity?.Name ?? "system"),
@@ -78,11 +80,11 @@ public partial class AgentExecutionsController : ControllerBase
 
         var result = await _agentflowRuntimeService.ExecuteAsync(
              id,
-             request.TaskId!.Value,
+             task!.TaskId,
              request.Input,
              cancellationToken,
              request.ProjectId,
-             "");
+             task.ContextId);
         if (result == null)
         {
             return AgwApiResult.NotFound();

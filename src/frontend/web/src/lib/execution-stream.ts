@@ -8,8 +8,8 @@ import { MessageContentType, type AiMessage, type AiMessageContent } from "@/typ
 const default_user = "$agw";
 const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
 
-function isTextContent(content: AiMessageContent): boolean {
-  return TEXT_CONTENT_TYPES.has(content.type);
+function isTextContent(content: AiMessageContent): content is AiMessageContent & { content: string } {
+  return TEXT_CONTENT_TYPES.has(content.type) && typeof content.content === "string";
 }
 
 function cloneMessageContent(content: AiMessageContent): AiMessageContent {

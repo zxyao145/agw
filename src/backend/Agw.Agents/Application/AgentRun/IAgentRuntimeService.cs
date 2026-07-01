@@ -1,7 +1,7 @@
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Contracts.Tasks;
 
 using Microsoft.Agents.AI;
 
@@ -13,7 +13,7 @@ public interface IAgentRuntimeService
 
     Task<AgentExecSession?> CreateSessionAsync(
         Guid agentId,
-        ProjectTask task,
+        TaskProjection task,
         SettingCommand settings,
         CancellationToken cancellationToken = default);
 

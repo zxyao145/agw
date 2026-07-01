@@ -10,6 +10,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using AgwTaskProjection = Agw.Shared.Contracts.Tasks.TaskProjection;
 
 namespace Agw.A2A;
 
@@ -80,13 +81,12 @@ public sealed class A2AAgentExecutionBridge(IServiceScopeFactory serviceScopeFac
         }
 
         var taskId = ParseRequiredTaskId(context.TaskId);
-        var projectTask = new ProjectTask
+        var taskProjection = new AgwTaskProjection
         {
-            Id = taskId,
+            TaskId = taskId,
             ProjectId = ProjectDefaults.A2AId,
             ContextId = context.ContextId,
             Title = agent.Name,
-            CreateBy = Constants.DefaultInputAuthor,
             CreateTime = DateTime.UtcNow
         };
         var settings = new SettingCommand(ProjectDefaults.A2AId, taskId)
@@ -95,7 +95,7 @@ public sealed class A2AAgentExecutionBridge(IServiceScopeFactory serviceScopeFac
         };
 
         await using var session = await agentRuntimeService
-            .CreateSessionAsync(agent.Id, projectTask, settings, cancellationToken)
+            .CreateSessionAsync(agent.Id, taskProjection, settings, cancellationToken)
             .ConfigureAwait(false);
         if (session is null)
         {

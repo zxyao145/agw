@@ -17,7 +17,7 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
     private readonly ToolRegistryService _toolRegistry;
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
-    private readonly IProjectTaskSessionBindingService _projectTaskSessionBindingService;
+    private readonly ITaskSessionBindingService _taskSessionBindingService;
     private readonly IWebHostEnvironment _webHostEnvironment;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly AgentSessionStateStore _sessionStateStore;
@@ -29,7 +29,7 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
         ToolRegistryService toolRegistry,
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
-        IProjectTaskSessionBindingService projectTaskSessionBindingService,
+        ITaskSessionBindingService taskSessionBindingService,
         IWebHostEnvironment webHostEnvironment,
         IAgwFileSystemResolver fileSystemResolver,
         AgentSessionStateStore sessionStateStore,
@@ -41,7 +41,7 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
         _toolRegistry = toolRegistry;
         _chatHistoryProvider = chatHistoryProvider;
         _providerSessionState = providerSessionState;
-        _projectTaskSessionBindingService = projectTaskSessionBindingService;
+        _taskSessionBindingService = taskSessionBindingService;
         _webHostEnvironment = webHostEnvironment;
         _fileSystemResolver = fileSystemResolver;
         _sessionStateStore = sessionStateStore;

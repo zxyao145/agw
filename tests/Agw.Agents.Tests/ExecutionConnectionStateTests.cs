@@ -1,6 +1,6 @@
 using Agw.Agents.Application.Execution;
 using Agw.Agents.Contracts;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Contracts.Tasks;
 
 namespace Agw.Agents.Tests;
 
@@ -94,7 +94,7 @@ public class ExecutionConnectionStateTests
         var projectId = Guid.NewGuid();
         var settings = CreateSettings(projectId, Guid.NewGuid());
         var equivalentSettings = CreateSettings(projectId, settings.TaskId);
-        var task = new ProjectTask { Id = settings.TaskId, ProjectId = projectId };
+        var task = new TaskProjection { TaskId = settings.TaskId, ProjectId = projectId };
         var state = new ExecutionConnectionState();
 
         state.ApplySettings(settings);
@@ -111,7 +111,7 @@ public class ExecutionConnectionStateTests
     {
         var originalSettings = CreateSettings(taskId: Guid.NewGuid());
         var changedSettings = CreateSettings(taskId: Guid.NewGuid());
-        var task = new ProjectTask { Id = originalSettings.TaskId, ProjectId = originalSettings.ProjectId };
+        var task = new TaskProjection { TaskId = originalSettings.TaskId, ProjectId = originalSettings.ProjectId };
         var state = new ExecutionConnectionState();
 
         state.ApplySettings(originalSettings);

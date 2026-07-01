@@ -1,6 +1,6 @@
 namespace Agw.Shared.Contracts.Tasks;
 
-public enum ProjectTaskStatus
+public enum TaskExecutionStatus
 {
     Pending = 0,
     Running = 1,

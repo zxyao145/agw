@@ -14,11 +14,10 @@ public static class DependencyInjection
     public static IServiceCollection AddTasks(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<ProjectDomainService>();
-        services.AddScoped<ProjectTaskDomainService>();
         services.AddScoped<ITaskAppService, TaskAppService>();
         services.AddScoped<IProjectAppService, ProjectAppService>();
-        services.AddScoped<IProjectTaskSessionBindingService, ProjectTaskSessionBindingService>();
-        services.AddScoped<ProjectTaskAppService>();
+        services.AddScoped<ITaskSessionBindingService, TaskSessionBindingService>();
+        services.AddScoped<TaskExecutionAppService>();
         services.AddScoped<ProjectContextAppService>();
         services.AddScoped<ProjectResolver>();
         services.AddScoped<TaskRecordDomainService>();

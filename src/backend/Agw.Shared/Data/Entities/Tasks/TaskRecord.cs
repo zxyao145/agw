@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 
+using Agw.Shared.Contracts.Tasks;
+
 namespace Agw.Shared.Data.Entities.Tasks;
 
 [Table("project_task_record")]
@@ -8,10 +10,19 @@ public class TaskRecord
 {
     public Guid Id { get; set; }
 
-    /// <summary>
-    /// unified as ProjectTask.Id
-    /// </summary>
+    public Guid ProjectContextId { get; set; }
+
+    public ProjectContext? ProjectContext { get; set; }
+
     public Guid TaskId { get; set; }
+
+    public Guid? JobId { get; set; }
+
+    public TaskExecutionStatus Status { get; set; } = TaskExecutionStatus.Pending;
+
+    public DateTime? FinishedTime { get; set; }
+
+    public string? TaskErrorMessage { get; set; }
 
     public string? AgentName { get; set; }
 

@@ -1,5 +1,5 @@
 using Agw.Agents.Contracts;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Contracts.Tasks;
 
 namespace Agw.Agents.Application.Execution;
 
@@ -26,7 +26,7 @@ public sealed class ExecutionConnectionState
     /// <summary>
     /// Task resolved for the current settings. Reused while the SettingCommand is unchanged.
     /// </summary>
-    public ProjectTask? ResolvedTask { get; private set; }
+    public TaskProjection? ResolvedTask { get; private set; }
 
     /// <summary>
     /// A turn is considered running until its task has completed and been released by the controller loop.
@@ -78,7 +78,7 @@ public sealed class ExecutionConnectionState
         SessionSettings = null;
     }
 
-    public bool TryGetResolvedTask(SettingCommand settings, out ProjectTask? task)
+    public bool TryGetResolvedTask(SettingCommand settings, out TaskProjection? task)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -92,7 +92,7 @@ public sealed class ExecutionConnectionState
         return false;
     }
 
-    public void MarkTaskResolved(SettingCommand settings, ProjectTask task)
+    public void MarkTaskResolved(SettingCommand settings, TaskProjection task)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(task);
@@ -131,7 +131,8 @@ public sealed class ExecutionConnectionState
         return new SettingCommand(
             settings.ProjectId,
             settings.TaskId,
-            new Dictionary<string, string>(settings.EnvironmentVariables))
+            new Dictionary<string, string>(settings.EnvironmentVariables),
+            settings.ContextId)
         {
             Resume = settings.Resume
         };

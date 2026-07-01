@@ -2536,9 +2536,9 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["ProjectTaskTitleUpdateRequest"];
-                    "text/json": components["schemas"]["ProjectTaskTitleUpdateRequest"];
-                    "application/*+json": components["schemas"]["ProjectTaskTitleUpdateRequest"];
+                    "application/json": components["schemas"]["ProjectContextTitleUpdateRequest"];
+                    "text/json": components["schemas"]["ProjectContextTitleUpdateRequest"];
+                    "application/*+json": components["schemas"]["ProjectContextTitleUpdateRequest"];
                 };
             };
             responses: {
@@ -3439,9 +3439,9 @@ export interface components {
             /** Format: int32 */
             projectCount: number;
             /** Format: int32 */
-            projectTaskCount: number;
+            projectContextCount: number;
             /** Format: int32 */
-            projectTaskRecordCount: number;
+            taskRecordCount: number;
             /** Format: int32 */
             agentCount: number;
             /** Format: int32 */
@@ -3773,7 +3773,7 @@ export interface components {
             workspace: null | string;
             enable: boolean;
             extraSetting: null | string;
-            tasks?: components["schemas"]["ProjectTask"][];
+            tasks?: components["schemas"]["ProjectContext"][];
             /** Format: date-time */
             createTime: string;
             createBy: null | string;
@@ -3785,8 +3785,10 @@ export interface components {
             projectId: string;
             contextId: string;
             /** Format: uuid */
+            jobId: null | string;
+            /** Format: uuid */
             latestTaskId: null | string;
-            tasks: components["schemas"]["ProjectTaskSummaryResponse"][];
+            tasks: components["schemas"]["TaskSummaryResponse"][];
             /** Format: int32 */
             messageCount: number;
             messages: null | components["schemas"]["AgwMessage"][];
@@ -3794,10 +3796,12 @@ export interface components {
         ProjectContextSummaryResponse: {
             projectId: string;
             contextId: string;
+            /** Format: uuid */
+            jobId: null | string;
             title: string;
             /** Format: uuid */
             latestTaskId: null | string;
-            latestStatus: null | components["schemas"]["ProjectTaskStatus"];
+            latestStatus: null | components["schemas"]["TaskExecutionStatus"];
             /** Format: int32 */
             taskCount: number;
             /** Format: int32 */
@@ -3815,7 +3819,7 @@ export interface components {
             enable: boolean;
             extraSetting: null | string;
         };
-        ProjectTask: {
+        ProjectContext: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -3827,7 +3831,7 @@ export interface components {
             jobId?: null | string;
             title: string;
             /** @description Task execution status. */
-            status: components["schemas"]["ProjectTaskStatus"];
+            status: components["schemas"]["TaskExecutionStatus"];
             errorMessage: null | string;
             /** Format: date-time */
             finishedTime?: null | string;
@@ -3838,15 +3842,15 @@ export interface components {
             updateTime?: null | string;
             updateBy: null | string;
         };
-        ProjectTaskStatus: number;
-        ProjectTaskSummaryResponse: {
+        TaskExecutionStatus: number;
+        TaskSummaryResponse: {
             /** Format: uuid */
-            id: string;
+            taskId: string;
             projectId: string;
             contextId: string;
             /** Format: uuid */
             jobId: null | string;
-            status: components["schemas"]["ProjectTaskStatus"];
+            status: components["schemas"]["TaskExecutionStatus"];
             title: string;
             errorMessage: null | string;
             /** Format: date-time */
@@ -3858,7 +3862,7 @@ export interface components {
             /** Format: date-time */
             startedTime: null | string;
         };
-        ProjectTaskTitleUpdateRequest: {
+        ProjectContextTitleUpdateRequest: {
             title: string;
         };
         ProjectType: number;

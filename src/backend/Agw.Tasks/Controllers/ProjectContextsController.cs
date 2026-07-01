@@ -51,7 +51,7 @@ public class ProjectContextsController : ControllerBase
     public async Task<IActionResult> UpdateTitleAsync(
         Guid projectId,
         string contextId,
-        [FromBody] ProjectTaskTitleUpdateRequest request)
+        [FromBody] ProjectContextTitleUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
         var result = await _projectContextAppService.UpdateTitleAsync(projectId, contextId, request.Title, user);

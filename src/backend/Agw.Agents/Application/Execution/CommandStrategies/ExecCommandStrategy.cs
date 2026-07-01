@@ -8,7 +8,6 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tasks;
-using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 
@@ -23,7 +22,7 @@ public readonly record struct ExecutionStartResult(AgentExecSession? AgentSessio
 /// </summary>
 public sealed record StreamingExecutionStartRequest(
     Guid AgentId,
-    ProjectTask Task,
+    TaskProjection Task,
     ExecCommand Command,
     AgentExecSession? CurrentSession,
     SettingCommand Settings,
@@ -89,12 +88,13 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
             // Keep task resolution in ExecCommandStrategy rather than SettingCommandStrategy because resolving can
             // create/validate execution state. A SettingCommand should only configure the socket; side effects belong
             // to the command that actually starts a run.
-            // Resolve the project task once per unchanged SettingCommand, creating it when the client is starting fresh.
+            // Resolve the task once per unchanged SettingCommand, creating it when the client is starting fresh.
             var taskResolution = await _taskAppService.ResolveTaskAsync(
                 new ExecutionTaskRequest(
                     TaskId: settings.TaskId,
                     ProjectId: settings.ProjectId,
-                    Input: "",
+                    ContextId: settings.ContextId,
+                    Input: AgwUserInputUtil.ExtractInputText(execCommand.Input),
                     Resume: settings.Resume,
                     User: context.CurrentUser),
                 context.CancellationToken);
@@ -154,7 +154,8 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
     {
         return new SettingCommand(
             projectId: ProjectDefaults.DefaultBuiltInId,
-            taskId: Guid.NewGuid()
+            taskId: Guid.NewGuid(),
+            contextId: null
             );
     }
 

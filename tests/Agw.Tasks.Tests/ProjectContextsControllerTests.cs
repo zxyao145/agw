@@ -208,7 +208,7 @@ public class ProjectContextsControllerTests
         var result = await controller.UpdateTitleAsync(
             projectId,
             "context-1",
-            new ProjectTaskTitleUpdateRequest("   "));
+            new ProjectContextTitleUpdateRequest("   "));
 
         Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
     }
@@ -292,7 +292,7 @@ public class ProjectContextsControllerTests
             [
                 typeof(Guid),
                 typeof(string),
-                typeof(ProjectTaskTitleUpdateRequest)
+                typeof(ProjectContextTitleUpdateRequest)
             ]);
 
         Assert.NotNull(method);
@@ -341,11 +341,10 @@ public class ProjectContextsControllerTests
         var projectRepository = new EfRepository<Project>(dbContext);
 
         return new ProjectContextAppService(
-            new EfRepository<ProjectTask>(dbContext),
+            new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
             new UnitOfWork(dbContext),
             new ProjectResolver(projectRepository),
-            new ProjectTaskDomainService(),
             new TaskRecordDomainService());
     }
 }

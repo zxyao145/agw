@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
 using Agw.Tasks.Domain.Services;
@@ -103,9 +104,9 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void FindTask_ReturnsDirectMatchByTaskId()
     {
-        var task = new ProjectTask { Id = Guid.NewGuid(), ContextId = "context-1" };
+        var task = new TaskProjection { TaskId = Guid.NewGuid(), ContextId = "context-1" };
 
-        var result = _service.FindTask(task.Id.Normalize(), [task], []);
+        var result = _service.FindTask(task.TaskId.Normalize(), [task], []);
 
         Assert.Same(task, result);
     }
@@ -113,9 +114,9 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void FindTask_ReturnsDirectMatchByNormalizedTaskId()
     {
-        var task = new ProjectTask { Id = Guid.NewGuid(), ContextId = "context-1" };
+        var task = new TaskProjection { TaskId = Guid.NewGuid(), ContextId = "context-1" };
 
-        var result = _service.FindTask(task.Id.Normalize().ToUpperInvariant(), [task], []);
+        var result = _service.FindTask(task.TaskId.Normalize().ToUpperInvariant(), [task], []);
 
         Assert.Same(task, result);
     }
@@ -123,21 +124,21 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void FindTask_WhenDirectMatchMissing_UsesLatestRecordSession()
     {
-        var olderTask = new ProjectTask { Id = Guid.NewGuid(), ContextId = "context-a" };
-        var newerTask = new ProjectTask { Id = Guid.NewGuid(), ContextId = "context-b" };
+        var olderTask = new TaskProjection { TaskId = Guid.NewGuid(), ContextId = "context-a" };
+        var newerTask = new TaskProjection { TaskId = Guid.NewGuid(), ContextId = "context-b" };
         var records = new[]
         {
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                TaskId = olderTask.Id,
+                TaskId = olderTask.TaskId,
                 CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
                 UpdateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
             },
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
-                TaskId = newerTask.Id,
+                TaskId = newerTask.TaskId,
                 CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
                 UpdateTime = new DateTime(2024, 1, 1, 3, 0, 0, DateTimeKind.Utc),
             },
@@ -151,7 +152,7 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void FindTask_BlankTaskId_ReturnsNull()
     {
-        var task = new ProjectTask { Id = Guid.NewGuid(), ContextId = "context-1" };
+        var task = new TaskProjection { TaskId = Guid.NewGuid(), ContextId = "context-1" };
 
         var result = _service.FindTask(" ", [task], []);
 
@@ -161,7 +162,7 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void ShouldDeleteTask_ProjectBackedTask_ReturnsFalse()
     {
-        var task = new ProjectTask { ProjectId = Guid.NewGuid() };
+        var task = new TaskProjection { ProjectId = Guid.NewGuid() };
 
         var result = _service.ShouldDeleteTask(task);
 

@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Tasks.Tests;
 
-public class ProjectTaskSessionBindingServiceTests
+public class TaskSessionBindingServiceTests
 {
     [Fact]
     public async Task UpsertAsync_WhenBindingExists_UpdatesProviderSessionId()
@@ -43,21 +43,12 @@ public class ProjectTaskSessionBindingServiceTests
                 CreateBy = "tester",
                 CreateTime = DateTime.UtcNow
             });
-            seedContext.ProjectTasks.Add(new ProjectTask
-            {
-                Id = taskId,
-                ProjectId = projectId,
-                ContextId = taskId.ToString("D"),
-                Title = "Binding Task",
-                CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
-            });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
         await using var dbContext = new AgwDbContext(options);
-        var service = new ProjectTaskSessionBindingService(
-            new EfRepository<ProjectTaskSessionBinding>(dbContext),
+        var service = new TaskSessionBindingService(
+            new EfRepository<TaskSessionBinding>(dbContext),
             new UnitOfWork(dbContext));
 
         await service.UpsertAsync(
@@ -75,7 +66,7 @@ public class ProjectTaskSessionBindingServiceTests
             "tester",
             cancellationToken);
 
-        var bindings = await dbContext.Set<ProjectTaskSessionBinding>()
+        var bindings = await dbContext.Set<TaskSessionBinding>()
             .Where(binding => binding.TaskId == taskId)
             .ToListAsync(cancellationToken);
         var binding = Assert.Single(bindings);

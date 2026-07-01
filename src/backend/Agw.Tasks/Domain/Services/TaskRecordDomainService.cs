@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
 
@@ -20,9 +21,9 @@ public class TaskRecordDomainService
             .GroupBy(record => record.TaskId.Normalize(), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
 
-    public ProjectTask? FindTask(
+    public TaskProjection? FindTask(
         string taskId,
-        IReadOnlyList<ProjectTask> tasks,
+        IReadOnlyList<TaskProjection> tasks,
         IReadOnlyList<TaskRecord> records)
     {
         if (string.IsNullOrWhiteSpace(taskId) || tasks.Count == 0)
@@ -30,13 +31,13 @@ public class TaskRecordDomainService
             return null;
         }
 
-        var directTask = tasks.FirstOrDefault(task => string.Equals(task.Id.Normalize(), taskId, StringComparison.OrdinalIgnoreCase));
+        var directTask = tasks.FirstOrDefault(task => string.Equals(task.TaskId.Normalize(), taskId, StringComparison.OrdinalIgnoreCase));
         if (directTask != null)
         {
             return directTask;
         }
 
-        var taskById = tasks.ToDictionary(task => task.Id.Normalize(), StringComparer.OrdinalIgnoreCase);
+        var taskById = tasks.ToDictionary(task => task.TaskId.Normalize(), StringComparer.OrdinalIgnoreCase);
         var latestMatch = records
             .Where(record => taskById.ContainsKey(record.TaskId.Normalize()))
             .OrderByDescending(record => record.UpdateTime ?? record.CreateTime)
@@ -48,5 +49,5 @@ public class TaskRecordDomainService
             : taskById.GetValueOrDefault(latestMatch.TaskId.Normalize());
     }
 
-    public bool ShouldDeleteTask(ProjectTask task) => false;
+    public bool ShouldDeleteTask(TaskProjection task) => false;
 }
