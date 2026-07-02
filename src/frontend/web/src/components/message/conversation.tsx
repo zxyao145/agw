@@ -177,7 +177,7 @@ export function Conversation({
   }
 
   return (
-    <div className="flex-1 flex min-h-full pb-36 max-w-full">
+    <div className="flex-1 flex min-h-full w-full max-w-225 mx-auto pb-36">
       <div className="flex-1 overflow-y-auto space-y-4">
         {messagesStartRef ? <div ref={messagesStartRef} /> : null}
 
