@@ -15,7 +15,7 @@ namespace Agw.Infrastructure.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.7");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
 
             modelBuilder.Entity("Agw.Jobs.Domain.Entities.Job", b =>
                 {
@@ -318,11 +318,6 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
-                    b.Property<string>("ConfigurationJson")
-                        .HasMaxLength(16000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("configuration_json");
-
                     b.Property<string>("CreateBy")
                         .HasColumnType("TEXT")
                         .HasColumnName("create_by");
@@ -346,12 +341,9 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
-                    b.Property<int>("Pattern")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("pattern");
-
                     b.Property<string>("SystemPrompt")
                         .IsRequired()
+                        .HasMaxLength(4000)
                         .HasColumnType("TEXT")
                         .HasColumnName("system_prompt");
 
@@ -379,9 +371,15 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("edge_id");
 
-                    b.Property<bool>("Animated")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("animated");
+                    b.Property<string>("ConditionJson")
+                        .HasMaxLength(8000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("condition_json");
+
+                    b.Property<string>("ConfigJson")
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("config_json");
 
                     b.Property<string>("CreateBy")
                         .HasColumnType("TEXT")
@@ -390,6 +388,15 @@ namespace Agw.Infrastructure.Migrations
                     b.Property<DateTime>("CreateTime")
                         .HasColumnType("TEXT")
                         .HasColumnName("create_time");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("label");
 
                     b.Property<string>("SourceNodeId")
                         .IsRequired()
@@ -431,9 +438,10 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("node_id");
 
-                    b.Property<Guid?>("AgentId")
+                    b.Property<string>("ConfigJson")
+                        .HasMaxLength(16000)
                         .HasColumnType("TEXT")
-                        .HasColumnName("agent_id");
+                        .HasColumnName("config_json");
 
                     b.Property<string>("CreateBy")
                         .HasColumnType("TEXT")
@@ -443,13 +451,28 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
-                    b.Property<Guid>("RelateId")
+                    b.Property<string>("Instructions")
+                        .HasMaxLength(8000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("instructions");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PositionJson")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("position_json");
+
+                    b.Property<Guid?>("RelateId")
                         .HasColumnType("TEXT")
                         .HasColumnName("relate_id");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("type");
 
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT")
@@ -462,12 +485,8 @@ namespace Agw.Infrastructure.Migrations
                     b.HasKey("AgentflowId", "NodeId")
                         .HasName("pk_agentflow_node");
 
-                    b.HasIndex("AgentId")
-                        .HasDatabaseName("ix_agentflow_node_agent_id");
-
-                    b.HasIndex("AgentflowId", "Type", "RelateId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_agentflow_node_agentflow_id_type_relate_id");
+                    b.HasIndex("AgentflowId", "Kind", "RelateId")
+                        .HasDatabaseName("ix_agentflow_node_agentflow_id_kind_relate_id");
 
                     b.ToTable("agentflow_node", (string)null);
                 });
@@ -1128,6 +1147,9 @@ namespace Agw.Infrastructure.Migrations
                     b.HasIndex("ProjectContextId")
                         .HasDatabaseName("ix_project_task_record_project_context_id");
 
+                    b.HasIndex("ProjectContextId", "ConversationSequence")
+                        .HasDatabaseName("ix_project_task_record_project_context_id_conversation_sequence");
+
                     b.HasIndex("TaskId", "ConversationSequence")
                         .HasDatabaseName("ix_project_task_record_task_id_conversation_sequence");
 
@@ -1162,15 +1184,15 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("external_agent_name");
 
+                    b.Property<Guid>("ProjectContextId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_context_id");
+
                     b.Property<string>("ProviderSessionId")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
                         .HasColumnName("provider_session_id");
-
-                    b.Property<Guid>("TaskId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("task_id");
 
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT")
@@ -1186,9 +1208,9 @@ namespace Agw.Infrastructure.Migrations
                     b.HasIndex("ExternalAgentName", "ProviderSessionId")
                         .HasDatabaseName("ix_task_session_binding_external_agent_name_provider_session_id");
 
-                    b.HasIndex("TaskId", "AgentId", "ExternalAgentName")
+                    b.HasIndex("ProjectContextId", "AgentId", "ExternalAgentName")
                         .IsUnique()
-                        .HasDatabaseName("ix_task_session_binding_task_id_agent_id_external_agent_name");
+                        .HasDatabaseName("ix_task_session_binding_project_context_id_agent_id_external_agent_name");
 
                     b.ToTable("task_session_binding", (string)null);
                 });
@@ -1294,11 +1316,6 @@ namespace Agw.Infrastructure.Migrations
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowNode", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Agents.Agent", null)
-                        .WithMany("Agentflows")
-                        .HasForeignKey("AgentId")
-                        .HasConstraintName("fk_agentflow_node_agent_agent_id");
-
                     b.HasOne("Agw.Shared.Data.Entities.Agents.Agentflow", null)
                         .WithMany("Nodes")
                         .HasForeignKey("AgentflowId")
@@ -1374,6 +1391,18 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("ProjectContext");
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.TaskSessionBinding", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Tasks.ProjectContext", "ProjectContext")
+                        .WithMany()
+                        .HasForeignKey("ProjectContextId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_task_session_binding_project_context_project_context_id");
+
+                    b.Navigation("ProjectContext");
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agent", b =>
                 {
                     b.Navigation("AgentAppRelations");
@@ -1381,8 +1410,6 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("AgentMcpToolServers");
 
                     b.Navigation("AgentSkillRelations");
-
-                    b.Navigation("Agentflows");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agentflow", b =>

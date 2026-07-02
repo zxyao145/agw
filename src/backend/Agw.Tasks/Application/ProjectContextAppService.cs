@@ -15,19 +15,22 @@ public class ProjectContextAppService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectResolver _projectResolver;
     private readonly TaskRecordDomainService _taskRecordDomainService;
+    private readonly ITaskSessionBindingService _taskSessionBindingService;
 
     public ProjectContextAppService(
         IRepository<ProjectContext> contextRepository,
         IRepository<TaskRecord> recordRepository,
         IUnitOfWork unitOfWork,
         ProjectResolver projectResolver,
-        TaskRecordDomainService taskRecordDomainService)
+        TaskRecordDomainService taskRecordDomainService,
+        ITaskSessionBindingService taskSessionBindingService)
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
         _unitOfWork = unitOfWork;
         _projectResolver = projectResolver;
         _taskRecordDomainService = taskRecordDomainService;
+        _taskSessionBindingService = taskSessionBindingService;
     }
 
     public async Task<IReadOnlyList<ProjectContextSummaryResponse>> ListResponsesAsync(Guid projectId)
@@ -77,24 +80,6 @@ public class ProjectContextAppService
         return context == null ? null : await ToResponseAsync(context);
     }
 
-    public async Task<ProjectContextResponse?> GetResponseByTaskIdAsync(Guid projectId, Guid taskId)
-    {
-        var project = await _projectResolver.ResolveRequiredAsync(projectId);
-        if (project == null)
-        {
-            return null;
-        }
-
-        var records = await _recordRepository.ListAsync(record => record.TaskId == taskId);
-        if (records.Count == 0)
-        {
-            return null;
-        }
-
-        var context = await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
-        return context == null || context.ProjectId != project.Id ? null : await ToResponseAsync(context);
-    }
-
     public async Task<ApplicationResult> ClearRecordsAsync(Guid projectId, string contextId)
     {
         var context = await GetProjectContextAsync(projectId, contextId);
@@ -106,6 +91,8 @@ public class ProjectContextAppService
         await _recordRepository.Queryable
             .Where(record => record.ProjectContextId == context.Id)
             .ExecuteDeleteAsync();
+
+        await _taskSessionBindingService.DeleteByContextAsync(context.Id);
 
         await _unitOfWork.SaveChangesAsync();
         return ApplicationResult.Success();
@@ -140,6 +127,12 @@ public class ProjectContextAppService
             return ApplicationResult.NotFound();
         }
 
+        var contexts = await _contextRepository.ListAsync(context => context.ProjectId == project.Id);
+        foreach (var context in contexts)
+        {
+            await _taskSessionBindingService.DeleteByContextAsync(context.Id);
+        }
+
         await _contextRepository.Queryable
             .Where(context => context.ProjectId == project.Id)
             .ExecuteDeleteAsync();
@@ -160,6 +153,8 @@ public class ProjectContextAppService
             .Where(record => record.ProjectContextId == context.Id)
             .ExecuteDeleteAsync();
 
+        await _taskSessionBindingService.DeleteByContextAsync(context.Id);
+
         _contextRepository.Remove(context);
         await _unitOfWork.SaveChangesAsync();
         return true;
@@ -170,19 +165,13 @@ public class ProjectContextAppService
         var records = await _recordRepository.ListAsync(record => record.ProjectContextId == context.Id);
         var orderedTasks = records
             .GroupBy(record => record.TaskId)
-            .Select(group => TaskResponseMapper.ToTask(context, group.ToList()))
+            .Select(group => TaskExecutionMapper.ToTask(context, group.ToList()))
             .OrderBy(task => task.CreateTime)
             .ThenBy(task => task.UpdateTime ?? task.CreateTime)
             .ThenBy(task => task.TaskId)
             .ToList();
-        var recordsByTaskId = records
-            .GroupBy(record => record.TaskId)
-            .ToDictionary(
-                group => group.Key,
-                group => _taskRecordDomainService.Order(group));
-        var messages = orderedTasks
-            .SelectMany(task => recordsByTaskId.GetValueOrDefault(task.TaskId) ?? [])
-            .SelectMany(TaskResponseMapper.ToAiMessages)
+        var messages = _taskRecordDomainService.Order(records)
+            .SelectMany(TaskExecutionMapper.ToAiMessages)
             .ToList();
         var latestTask = GetLatestTask(orderedTasks);
 
@@ -190,9 +179,12 @@ public class ProjectContextAppService
             context.ProjectId.Normalize(),
             context.ContextId,
             context.JobId,
-            latestTask?.TaskId,
-            orderedTasks.Select(TaskResponseMapper.ToSummaryResponse).ToList(),
+            latestTask?.Status,
+            orderedTasks.Count,
             messages.Count,
+            context.CreateTime,
+            context.UpdateTime,
+            latestTask?.ErrorMessage,
             messages);
     }
 
@@ -202,7 +194,7 @@ public class ProjectContextAppService
     {
         var tasks = records
             .GroupBy(record => record.TaskId)
-            .Select(group => TaskResponseMapper.ToTask(context, group.ToList()))
+            .Select(group => TaskExecutionMapper.ToTask(context, group.ToList()))
             .ToList();
         var latestTask = GetLatestTask(tasks);
         var messageCount = records.Count(record => record.ToChatMessage() != null);
@@ -212,7 +204,6 @@ public class ProjectContextAppService
             context.ContextId,
             context.JobId,
             context.Title,
-            latestTask?.TaskId,
             latestTask?.Status,
             tasks.Count,
             messageCount,

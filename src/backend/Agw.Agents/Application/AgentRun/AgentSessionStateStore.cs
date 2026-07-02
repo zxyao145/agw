@@ -23,7 +23,7 @@ public sealed class AgentSessionStateStore
     public async Task<AgentSession> GetOrCreateAsync(
         Agent agent,
         AIAgent aiAgent,
-        string taskId,
+        string sessionKey,
         CancellationToken cancellationToken)
     {
         if (agent.Type == AgentType.External)
@@ -32,7 +32,7 @@ public sealed class AgentSessionStateStore
         }
 
         var serialized = await _cache.GetOrCreateAsync(
-            taskId,
+            sessionKey,
             _ => ValueTask.FromResult(string.Empty),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -50,14 +50,14 @@ public sealed class AgentSessionStateStore
         catch (JsonException)
         {
             _logger.LogWarning(
-                "Agent session cache deserialization failed for task {TaskId}. A new session will be created.",
-                taskId);
+                "Agent session cache deserialization failed for session {SessionKey}. A new session will be created.",
+                sessionKey);
             return await aiAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
     public async Task SaveAsync(
-        string taskId,
+        string sessionKey,
         AIAgent aiAgent,
         AgentSession session,
         CancellationToken cancellationToken)
@@ -65,6 +65,6 @@ public sealed class AgentSessionStateStore
         var serializedSession = await aiAgent.SerializeSessionAsync(session, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         var serialized = JsonSerializer.Serialize(serializedSession);
-        await _cache.SetAsync(taskId, serialized, cancellationToken: cancellationToken).ConfigureAwait(false);
+        await _cache.SetAsync(sessionKey, serialized, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 }

@@ -53,7 +53,7 @@ export function VisualAgentflowDialog({
               <UiDialogDescription>
                 {editingAgentflow
                   ? `Editing agentflow: ${editingAgentflow.name}`
-                  : "Design your agentflow by adding agents/agentflows as nodes and connecting them. The system will auto-detect the orchestration pattern based on your graph structure."}
+                  : "Design a DAG by adding agents, workflow-as-agent nodes, orchestration blocks, human gates, checkpoints, and MAF-aligned edges."}
               </UiDialogDescription>
             </div>
             <DialogClose asChild>

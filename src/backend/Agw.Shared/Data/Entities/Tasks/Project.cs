@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 using Agw.Shared.Contracts.Tasks;
 
@@ -16,6 +17,7 @@ public class Project : BaseEntity, IAggregateRoot
 
     public string? ExtraSetting { get; set; }
 
+    [JsonIgnore]
     public ICollection<ProjectContext> Contexts { get; set; } = new List<ProjectContext>();
 
     public string GetMustWorkspace()

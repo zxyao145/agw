@@ -11,8 +11,7 @@ import {
 } from "@/components/ui/table";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Pencil, Trash2, Play, Waypoints } from "lucide-react";
-import type { AgentflowDto, AgentflowDetailDto } from "@/types/agentflow";
-import { getPatternName } from "./utils";
+import type { AgentflowDto, AgentflowSaveRequest } from "@/types/agentflow";
 import { getApiErrorMessage } from "@/api/utils";
 
 interface AgentflowsTableProps {
@@ -20,7 +19,7 @@ interface AgentflowsTableProps {
   isLoading: boolean;
   isError: boolean;
   error: unknown;
-  updateMutation: UseMutationResult<unknown, Error, { id: string; body: AgentflowDetailDto }>;
+  updateMutation: UseMutationResult<unknown, Error, { id: string; body: AgentflowSaveRequest }>;
   deleteMutation: UseMutationResult<unknown, Error, string>;
   onToggleEnabled: (agentflow: AgentflowDto) => void;
   onEdit: (agentflow: AgentflowDto) => void;
@@ -69,7 +68,7 @@ export function AgentflowsTable({
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Description</TableHead>
-            <TableHead>Pattern</TableHead>
+            <TableHead>Mode</TableHead>
             <TableHead>Created</TableHead>
             <TableHead className="text-center">Enabled</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -80,7 +79,7 @@ export function AgentflowsTable({
             <TableRow key={agentflow.id}>
               <TableCell className="font-medium">{agentflow.name}</TableCell>
               <TableCell className="max-w-xs truncate">{agentflow.description || "-"}</TableCell>
-              <TableCell>{getPatternName(agentflow.pattern)}</TableCell>
+              <TableCell>DAG</TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {agentflow.createTime ? new Date(agentflow.createTime).toLocaleString() : "-"}
               </TableCell>

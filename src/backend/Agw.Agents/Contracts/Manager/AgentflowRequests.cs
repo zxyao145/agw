@@ -6,20 +6,25 @@ namespace Agw.Agents.Contracts.Manager;
 
 public record AgentflowNodeRequest(
     string NodeId,
-    AgentflowNodeType Type,
-    Guid RelateId);
+    AgentflowNodeKind Kind,
+    Guid? RelateId,
+    string? Name,
+    string? PositionJson,
+    string? Instructions,
+    string? ConfigJson);
 
 public record AgentflowEdgeRequest(
     string EdgeId,
     string SourceNodeId,
     string TargetNodeId,
-    bool Animated);
+    AgentflowEdgeKind Kind,
+    string? Label,
+    string? ConditionJson,
+    string? ConfigJson);
 
 public record AgentflowCreateRequest(
     string Name,
     string? Description,
-    AgentflowOrchestrationPattern Pattern,
-    string? ConfigurationJson,
     bool Enable,
     IReadOnlyList<AgentflowNodeRequest> Nodes,
     IReadOnlyList<AgentflowEdgeRequest> Edges);
@@ -27,8 +32,6 @@ public record AgentflowCreateRequest(
 public record AgentflowUpdateRequest(
     string Name,
     string? Description,
-    AgentflowOrchestrationPattern Pattern,
-    string? ConfigurationJson,
     bool Enable,
     IReadOnlyList<AgentflowNodeRequest> Nodes,
     IReadOnlyList<AgentflowEdgeRequest> Edges);
@@ -42,11 +45,11 @@ public record AgentflowExecutionAgentResultResponse(Guid AgentId, string AgentNa
 }
 
 public record AgentflowExecuteResponse(
-    string? TaskId,
+    string ContextId,
     IReadOnlyList<AgwMessage> Messages)
 {
     public static AgentflowExecuteResponse FromDomain(AgentflowExecutionResult result) =>
         new(
-            result.TaskId,
+            result.ContextId,
             result.Messages);
 }

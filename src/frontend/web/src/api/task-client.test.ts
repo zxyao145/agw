@@ -6,7 +6,6 @@ import {
   deleteAllProjectContexts,
   deleteProjectContext,
   getProjectContextDetails,
-  getProjectContextDetailsByTaskId,
   getProjectContexts,
   updateProjectContextTitle,
 } from "./task-client";
@@ -132,9 +131,8 @@ test("getProjectContexts gets context list for a project", async (t) => {
           contextId: "ctx-empty",
           jobId: null,
           title: "New Chat",
-          latestTaskId: "task-empty",
           latestStatus: 1,
-          taskCount: 1,
+          executionCount: 1,
           messageCount: 0,
           createTime: "2026-01-01T00:00:00Z",
           updateTime: "2026-01-02T00:00:00Z",
@@ -145,9 +143,8 @@ test("getProjectContexts gets context list for a project", async (t) => {
           contextId: "ctx-1",
           jobId: "job-1",
           title: "Tokyo trip",
-          latestTaskId: "task-2",
           latestStatus: 2,
-          taskCount: 2,
+          executionCount: 2,
           messageCount: 4,
           createTime: "2026-01-01T00:00:00Z",
           updateTime: "2026-01-02T00:00:00Z",
@@ -166,54 +163,10 @@ test("getProjectContexts gets context list for a project", async (t) => {
   assert.equal(result.length, 1);
   assert.equal(result[0].contextId, "ctx-1");
   assert.equal(result[0].jobId, "job-1");
+  assert.equal(result[0].executionCount, 2);
   assert.deepEqual(requests, [
     {
       url: "/api/projects/project-1/contexts",
-      init: {
-        method: "GET",
-        headers: {},
-        signal: undefined,
-      },
-    },
-  ]);
-});
-
-test("getProjectContextDetailsByTaskId gets the containing context for a task", async (t) => {
-  const originalFetch = globalThis.fetch;
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
-
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    requests.push({ url: String(input), init });
-    return Response.json({
-      data: {
-        projectId: "project-1",
-        contextId: "ctx-1",
-        jobId: "job-1",
-        title: "Tokyo trip",
-        latestTaskId: "task-2",
-        latestStatus: 2,
-        taskCount: 2,
-        messageCount: 1,
-        createTime: "2026-01-01T00:00:00Z",
-        updateTime: "2026-01-02T00:00:00Z",
-        errorMessage: null,
-        tasks: [],
-        messages: [],
-      },
-    });
-  }) as typeof fetch;
-
-  t.after(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  const result = await getProjectContextDetailsByTaskId("project-1", "task-1");
-
-  assert.equal(result.contextId, "ctx-1");
-  assert.equal(result.jobId, "job-1");
-  assert.deepEqual(requests, [
-    {
-      url: "/api/projects/project-1/contexts/by-task/task-1",
       init: {
         method: "GET",
         headers: {},
@@ -235,14 +188,12 @@ test("getProjectContextDetails encodes context id path parameter", async (t) => 
         contextId: "ctx/a b",
         jobId: "job-1",
         title: "Tokyo trip",
-        latestTaskId: "task-2",
         latestStatus: 2,
-        taskCount: 2,
+        executionCount: 2,
         messageCount: 1,
         createTime: "2026-01-01T00:00:00Z",
         updateTime: "2026-01-02T00:00:00Z",
         errorMessage: null,
-        tasks: [],
         messages: [],
       },
     });
@@ -256,6 +207,7 @@ test("getProjectContextDetails encodes context id path parameter", async (t) => 
 
   assert.equal(result.contextId, "ctx/a b");
   assert.equal(result.jobId, "job-1");
+  assert.equal(result.executionCount, 2);
   assert.deepEqual(requests, [
     {
       url: "/api/projects/project-1/contexts/ctx%2Fa%20b",

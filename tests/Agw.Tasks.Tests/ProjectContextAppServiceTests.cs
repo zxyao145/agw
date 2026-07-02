@@ -52,9 +52,8 @@ public class ProjectContextAppServiceTests
         Assert.Equal("context-1", context.ContextId);
         Assert.Equal(jobId, context.JobId);
         Assert.Equal("Trip", context.Title);
-        Assert.Equal(2, context.TaskCount);
+        Assert.Equal(2, context.ExecutionCount);
         Assert.Equal(2, context.MessageCount);
-        Assert.Equal(secondTaskId, context.LatestTaskId);
         Assert.Equal(TaskExecutionStatus.Running, context.LatestStatus);
     }
 
@@ -153,8 +152,44 @@ public class ProjectContextAppServiceTests
 
         Assert.NotNull(context);
         Assert.Equal(jobId, context.JobId);
-        Assert.Equal([firstTaskId, secondTaskId], context.Tasks.Select(task => task.TaskId));
+        Assert.Equal(2, context.ExecutionCount);
         Assert.Equal(["Tokyo trip", "Hotels"], context.Messages!.Select(GetMessageText));
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_OrdersMessagesByContextConversationSequenceAcrossExecutions()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        var contextId = Guid.NewGuid();
+        var firstTaskId = Guid.NewGuid();
+        var secondTaskId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
+            seedContext.TaskRecords.AddRange(
+                CreateRecord(contextId, firstTaskId, 2, "third", TaskExecutionStatus.Succeeded, now),
+                CreateRecord(contextId, secondTaskId, 0, "first", TaskExecutionStatus.Succeeded, now.AddSeconds(1)),
+                CreateRecord(contextId, firstTaskId, 1, "second", TaskExecutionStatus.Succeeded, now.AddSeconds(2)));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var context = await service.GetResponseAsync(projectId, "context-1");
+
+        Assert.NotNull(context);
+        Assert.Equal(2, context.ExecutionCount);
+        Assert.Equal(["first", "second", "third"], context.Messages!.Select(GetMessageText));
     }
 
     [Fact]
@@ -194,6 +229,114 @@ public class ProjectContextAppServiceTests
         Assert.Equal("context-2", remainingContext.ContextId);
         var remainingRecord = Assert.Single(assertContext.TaskRecords);
         Assert.Equal(otherContextId, remainingRecord.ProjectContextId);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DeletesContextSessionBindingsExplicitly()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        var contextId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var bindingService = new CapturingTaskSessionBindingService();
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext, bindingService);
+
+        var deleted = await service.DeleteAsync(projectId, "context-1");
+
+        Assert.True(deleted);
+        Assert.Equal([contextId], bindingService.DeletedContextIds);
+    }
+
+    [Fact]
+    public async Task DeleteAllAsync_DeletesEachContextSessionBindingExplicitly()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        var firstContextId = Guid.NewGuid();
+        var secondContextId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectContexts.AddRange(
+                CreateContext(firstContextId, projectId, "context-1", "Trip"),
+                CreateContext(secondContextId, projectId, "context-2", "Plan"));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var bindingService = new CapturingTaskSessionBindingService();
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext, bindingService);
+
+        var result = await service.DeleteAllAsync(projectId);
+
+        Assert.Equal(ApplicationResultType.Success, result.Type);
+        Assert.Equal(
+            new[] { firstContextId, secondContextId }.OrderBy(id => id),
+            bindingService.DeletedContextIds.OrderBy(id => id));
+    }
+
+    [Fact]
+    public async Task ClearRecordsAsync_RemovesContextSessionBindings()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        var contextId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
+            seedContext.TaskRecords.Add(CreateRecord(
+                contextId,
+                Guid.NewGuid(),
+                0,
+                "Clear me",
+                TaskExecutionStatus.Succeeded));
+            seedContext.TaskSessionBindings.Add(new TaskSessionBinding
+            {
+                Id = Guid.NewGuid(),
+                ProjectContextId = contextId,
+                AgentId = Guid.NewGuid(),
+                ExternalAgentName = "codex",
+                ProviderSessionId = Guid.NewGuid().Normalize(),
+                CreateBy = "tester",
+                CreateTime = DateTime.UtcNow
+            });
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var result = await service.ClearRecordsAsync(projectId, "context-1");
+
+        Assert.Equal(ApplicationResultType.Success, result.Type);
+        Assert.Empty(await dbContext.TaskRecords.ToListAsync(cancellationToken));
+        Assert.Empty(await dbContext.TaskSessionBindings.ToListAsync(cancellationToken));
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
@@ -241,7 +384,16 @@ public class ProjectContextAppServiceTests
         Guid taskId,
         long sequence,
         string text,
-        TaskExecutionStatus status) => new()
+        TaskExecutionStatus status) =>
+        CreateRecord(contextId, taskId, sequence, text, status, DateTime.UtcNow);
+
+    private static TaskRecord CreateRecord(
+        Guid contextId,
+        Guid taskId,
+        long sequence,
+        string text,
+        TaskExecutionStatus status,
+        DateTime createTime) => new()
     {
         Id = Guid.NewGuid(),
         ProjectContextId = contextId,
@@ -253,14 +405,16 @@ public class ProjectContextAppServiceTests
             MessageId = Guid.NewGuid().ToString(),
             AuthorName = Constants.DefaultInputAuthor
         }),
-        CreateTime = DateTime.UtcNow,
-        UpdateTime = DateTime.UtcNow
+        CreateTime = createTime,
+        UpdateTime = createTime
     };
 
     private static string? GetMessageText(AgwMessage message) =>
         (message.Contents[0] as AgwTextContent)?.Content;
 
-    private static ProjectContextAppService CreateService(AgwDbContext dbContext)
+    private static ProjectContextAppService CreateService(
+        AgwDbContext dbContext,
+        ITaskSessionBindingService? taskSessionBindingService = null)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
 
@@ -269,6 +423,41 @@ public class ProjectContextAppServiceTests
             new EfRepository<TaskRecord>(dbContext),
             new UnitOfWork(dbContext),
             new ProjectResolver(projectRepository),
-            new TaskRecordDomainService());
+            new TaskRecordDomainService(),
+            taskSessionBindingService ?? new TaskSessionBindingService(
+                new EfRepository<TaskSessionBinding>(dbContext),
+                new EfRepository<ProjectContext>(dbContext),
+                new UnitOfWork(dbContext)));
+    }
+
+    private sealed class CapturingTaskSessionBindingService : ITaskSessionBindingService
+    {
+        public List<Guid> DeletedContextIds { get; } = [];
+
+        public Task<TaskSessionBinding?> GetAsync(
+            Guid projectId,
+            string contextId,
+            Guid agentId,
+            string externalAgentName,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<TaskSessionBinding?>(null);
+
+        public Task<TaskSessionBinding> UpsertAsync(
+            Guid projectId,
+            string contextId,
+            Guid agentId,
+            string externalAgentName,
+            string providerSessionId,
+            string user,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task DeleteByContextAsync(
+            Guid projectContextId,
+            CancellationToken cancellationToken = default)
+        {
+            DeletedContextIds.Add(projectContextId);
+            return Task.CompletedTask;
+        }
     }
 }

@@ -7,7 +7,9 @@ public class TaskSessionBinding : BaseEntity
 {
     public Guid Id { get; set; }
 
-    public Guid TaskId { get; set; }
+    public Guid ProjectContextId { get; set; }
+
+    public ProjectContext? ProjectContext { get; set; }
 
     public Guid AgentId { get; set; }
 

@@ -30,14 +30,6 @@ public class ProjectContextsController : ControllerBase
         return context == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(context);
     }
 
-    [HttpGet("by-task/{taskId:guid}")]
-    [ProducesApiResult(typeof(ProjectContextResponse))]
-    public async Task<IActionResult> GetByTaskIdAsync(Guid projectId, Guid taskId)
-    {
-        var context = await _projectContextAppService.GetResponseByTaskIdAsync(projectId, taskId);
-        return context == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(context);
-    }
-
     [HttpDelete("{contextId}/clear-records")]
     [ProducesApiResult]
     public async Task<IActionResult> ClearRecordsAsync(Guid projectId, string contextId)

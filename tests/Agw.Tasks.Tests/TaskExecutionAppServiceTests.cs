@@ -60,7 +60,7 @@ public class TaskExecutionAppServiceTests
             "job-executor");
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
-        var response = Assert.IsType<TaskResponse>(result.Value);
+        var response = Assert.IsType<TaskExecutionSnapshot>(result.Value);
         Assert.Equal(jobId, response.JobId);
         Assert.Equal(TaskExecutionStatus.Running, response.Status);
         Assert.Equal(projectId.Normalize(), response.ProjectId);
@@ -79,6 +79,42 @@ public class TaskExecutionAppServiceTests
         Assert.Equal(jobId, record.JobId);
         Assert.Equal(TaskExecutionStatus.Running, record.Status);
         Assert.Null(record.ConversationPayload);
+    }
+
+    [Fact]
+    public async Task CreateForExecutionAsync_WhenContextIdMissing_DoesNotUseTaskIdAsContextId()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Jobs Project"));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        var taskId = Guid.NewGuid();
+
+        var result = await service.CreateForExecutionAsync(
+            projectId,
+            taskId,
+            new TaskCreateRequest(
+                JobId: null,
+                Input: "Run scheduled sync",
+                Title: "Nightly sync"),
+            "job-executor");
+
+        Assert.Equal(ApplicationResultType.Success, result.Type);
+        var response = Assert.IsType<TaskExecutionSnapshot>(result.Value);
+        Assert.Equal(taskId, response.TaskId);
+        Assert.NotEqual(taskId.Normalize(), response.ContextId);
     }
 
     [Fact]

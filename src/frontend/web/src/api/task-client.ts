@@ -3,23 +3,13 @@ import type { AiMessage } from "@/types";
 import { ApiError } from "./client";
 import * as client from "./client";
 
-export interface TaskSummary {
-  taskId: string;
-  projectId: string;
-  contextId: string;
-  title: string;
-  createTime: string;
-  updateTime?: string | null;
-}
-
 export interface ContextSummary {
   projectId: string;
   contextId: string;
   jobId?: string | null;
   title: string;
-  latestTaskId?: string | null;
   latestStatus?: number | null;
-  taskCount: number;
+  executionCount: number;
   messageCount: number;
   createTime: string;
   updateTime?: string | null;
@@ -27,32 +17,16 @@ export interface ContextSummary {
 }
 
 export interface ContextDetails extends ContextSummary {
-  tasks: TaskSummary[];
   messages: AiMessage[];
 }
-
-export type TaskSummaryResponse = {
-  taskId: string;
-  projectId: string;
-  contextId: string;
-  jobId?: string | null;
-  status: number;
-  title: string;
-  errorMessage?: string | null;
-  createTime: string;
-  updateTime?: string | null;
-  startedTime?: string | null;
-  finishedTime?: string | null;
-};
 
 export type ProjectContextSummaryResponse = {
   projectId: string;
   contextId: string;
   jobId?: string | null;
   title: string;
-  latestTaskId?: string | null;
   latestStatus?: number | null;
-  taskCount: number;
+  executionCount: number;
   messageCount: number;
   createTime: string;
   updateTime?: string | null;
@@ -60,20 +34,8 @@ export type ProjectContextSummaryResponse = {
 };
 
 export type ProjectContextResponse = ProjectContextSummaryResponse & {
-  tasks: TaskSummaryResponse[];
   messages?: AiMessage[] | null;
 };
-
-function toChatSessionSummary(task: TaskSummaryResponse): TaskSummary {
-  return {
-    taskId: task.taskId,
-    projectId: task.projectId,
-    contextId: task.contextId,
-    title: task.title,
-    createTime: task.createTime,
-    updateTime: task.updateTime ?? null,
-  };
-}
 
 function toContextSummary(context: ProjectContextSummaryResponse): ContextSummary {
   return {
@@ -81,9 +43,8 @@ function toContextSummary(context: ProjectContextSummaryResponse): ContextSummar
     contextId: context.contextId,
     jobId: context.jobId ?? null,
     title: context.title,
-    latestTaskId: context.latestTaskId ?? null,
     latestStatus: context.latestStatus ?? null,
-    taskCount: context.taskCount,
+    executionCount: context.executionCount,
     messageCount: context.messageCount,
     createTime: context.createTime,
     updateTime: context.updateTime ?? null,
@@ -98,24 +59,12 @@ function hasConversationMessages(context: ContextSummary): boolean {
 function toContextDetails(context: ProjectContextResponse): ContextDetails {
   return {
     ...toContextSummary(context),
-    tasks: context.tasks.map(toChatSessionSummary),
     messages: context.messages ?? [],
   };
 }
 
 function isNotFoundError(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
-}
-
-export async function getProjectContextDetailsByTaskId(
-  projectId: string,
-  taskId: string,
-): Promise<ContextDetails> {
-  const response = (await client.apiGet("/api/projects/{projectId}/contexts/by-task/{taskId}", {
-    params: { path: { projectId, taskId } },
-  })) as ProjectContextResponse;
-
-  return toContextDetails(response);
 }
 
 export async function getProjectContexts(projectId: string): Promise<ContextSummary[]> {

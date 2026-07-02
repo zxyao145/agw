@@ -58,7 +58,7 @@ type JobDto = {
 type JobExecutionLogDto = {
   id: string;
   jobId: string;
-  taskId: string;
+  contextId: string | null;
   startTime: string;
   endTime: string | null;
   success: boolean;

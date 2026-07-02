@@ -26,24 +26,22 @@ import { cn } from "@/lib/utils";
 interface ConversationListProps {
   projectId: string;
   currentContextId: string | null;
-  currentTaskId?: string | null;
   refreshSignal?: number;
   onContextSelect: (context: ContextSummary) => void;
   onActiveContextResolved?: (context: ContextSummary) => void;
-  onNewTask: () => void;
-  onAllTasksDeleted: () => void;
+  onNewConversation: () => void;
+  onAllConversationsDeleted: () => void;
   headerActions?: React.ReactNode;
 }
 
 export function ConversationList({
   projectId,
   currentContextId,
-  currentTaskId,
   refreshSignal,
   onContextSelect,
   onActiveContextResolved,
-  onNewTask,
-  onAllTasksDeleted,
+  onNewConversation,
+  onAllConversationsDeleted,
   headerActions,
 }: ConversationListProps) {
   const [contexts, setContexts] = React.useState<ContextSummary[]>([]);
@@ -55,16 +53,10 @@ export function ConversationList({
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const didObserveRefreshSignalRef = React.useRef(false);
   const refreshRequestIdRef = React.useRef(0);
-  const normalizedCurrentTaskId = currentTaskId?.toLowerCase() ?? null;
 
   const matchesCurrentSession = React.useCallback(
-    (context: ContextSummary) =>
-      context.contextId === currentContextId ||
-      Boolean(
-        normalizedCurrentTaskId &&
-          context.latestTaskId?.toLowerCase() === normalizedCurrentTaskId,
-      ),
-    [currentContextId, normalizedCurrentTaskId],
+    (context: ContextSummary) => context.contextId === currentContextId,
+    [currentContextId],
   );
 
   const refreshContexts = React.useCallback(async (): Promise<ContextSummary[]> => {
@@ -148,12 +140,12 @@ export function ConversationList({
   }, [currentContextId, matchesCurrentSession, projectId, refreshContexts]);
 
   const activeContext = React.useMemo(() => {
-    if (!currentContextId && !normalizedCurrentTaskId) {
+    if (!currentContextId) {
       return null;
     }
 
     return contexts.find(matchesCurrentSession) ?? null;
-  }, [contexts, currentContextId, matchesCurrentSession, normalizedCurrentTaskId]);
+  }, [contexts, currentContextId, matchesCurrentSession]);
 
   React.useEffect(() => {
     if (!activeContext || !onActiveContextResolved || activeContext.contextId === currentContextId) {
@@ -167,7 +159,7 @@ export function ConversationList({
     try {
       await deleteAllProjectContexts(projectId);
       toast.success("All chats cleared");
-      onAllTasksDeleted();
+      onAllConversationsDeleted();
       await refreshContexts();
     } catch (error) {
       console.error("Clear all error:", error);
@@ -186,7 +178,7 @@ export function ConversationList({
 
       toast.success("Conversation deleted");
       if (context.contextId === currentContextId) {
-        onAllTasksDeleted();
+        onAllConversationsDeleted();
       }
       await refreshContexts();
     } catch (error) {
@@ -257,7 +249,7 @@ export function ConversationList({
             size="sm"
             variant="ghost"
             onClick={async () => {
-              await Promise.resolve(onNewTask());
+              await Promise.resolve(onNewConversation());
               await refreshContexts();
             }}
           >
@@ -298,7 +290,8 @@ export function ConversationList({
                       {formatDate(context.updateTime ?? context.createTime)}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      {context.taskCount} {context.taskCount === 1 ? "task" : "tasks"} ·{" "}
+                      {context.executionCount}{" "}
+                      {context.executionCount === 1 ? "execution" : "executions"} ·{" "}
                       {context.messageCount} {context.messageCount === 1 ? "message" : "messages"}
                     </div>
                   </div>
@@ -420,7 +413,7 @@ export function ConversationList({
           <DialogHeader>
             <DialogTitle>Delete conversation</DialogTitle>
             <DialogDescription>
-              This will permanently delete "{contextToDelete?.title || "Untitled"}" and all tasks in this
+              This will permanently delete "{contextToDelete?.title || "Untitled"}" and all executions in this
               conversation.
             </DialogDescription>
           </DialogHeader>
@@ -451,7 +444,7 @@ export function ConversationList({
           <DialogHeader>
             <DialogTitle>Clear all chat history</DialogTitle>
             <DialogDescription>
-              This will permanently delete all conversations and tasks for this project.
+              This will permanently delete all conversations and executions for this project.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

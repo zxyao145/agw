@@ -2,6 +2,7 @@ using Agw.Jobs.Contracts;
 using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Domain.Enums;
 using Agw.Jobs.Domain.Events;
+using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
 
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,8 @@ namespace Agw.Jobs.Application.Services;
 public class JobAppService(
     IRepository<Job> jobTaskRepository,
     IRepository<JobLog> jobExecutionLogRepository,
+    IRepository<TaskRecord> taskRecordRepository,
+    IRepository<ProjectContext> projectContextRepository,
     IUnitOfWork unitOfWork,
     IJobTimeCalculator jobTimeCalculator,
     IJobDomainEventDispatcher jobDomainEventDispatcher)
@@ -30,14 +33,44 @@ public class JobAppService(
         return jobTaskRepository.GetByIdAsync(id);
     }
 
-    public async Task<IReadOnlyList<JobLog>> ListLogsAsync(Guid jobId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<JobLogResponse>> ListLogsAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
         var logs = await jobExecutionLogRepository.Queryable
             .Where(log => log.JobId == jobId)
             .ToListAsync(cancellationToken);
 
+        if (logs.Count == 0)
+        {
+            return [];
+        }
+
+        var taskIds = logs.Select(log => log.TaskId).ToHashSet();
+        var taskRecords = await taskRecordRepository.Queryable
+            .AsNoTracking()
+            .Where(record => taskIds.Contains(record.TaskId))
+            .ToListAsync(cancellationToken);
+        var contextIds = taskRecords.Select(record => record.ProjectContextId).ToHashSet();
+        var contexts = await projectContextRepository.Queryable
+            .AsNoTracking()
+            .Where(context => contextIds.Contains(context.Id))
+            .ToListAsync(cancellationToken);
+        var contextIdByTaskId = taskRecords
+            .GroupBy(record => record.TaskId)
+            .ToDictionary(
+                group => group.Key,
+                group => contexts.FirstOrDefault(context => context.Id == group.First().ProjectContextId)?.ContextId);
+
         return logs
             .OrderByDescending(log => log.StartTime)
+            .Select(log => new JobLogResponse(
+                log.Id,
+                log.JobId,
+                contextIdByTaskId.GetValueOrDefault(log.TaskId),
+                log.StartTime,
+                log.EndTime,
+                log.Success,
+                log.Attempt,
+                log.ErrorMessage))
             .ToList();
     }
 

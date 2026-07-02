@@ -6,8 +6,6 @@ using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 
-using ClaudeCodeSdk.MAF;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -25,6 +23,7 @@ public sealed class AgentExecSession : IAsyncDisposable
 
     private readonly ILogger _logger;
     public readonly string _taskId;
+    public readonly string SessionKey;
     public readonly Guid _projectId;
     public readonly string _contextId;
     private readonly AgentRuntimeType _agentType;
@@ -40,6 +39,7 @@ public sealed class AgentExecSession : IAsyncDisposable
         Guid projectId,
         string contextId,
         string? taskId,
+        string? sessionKey,
         AgentRuntimeType agentType,
         Guid? agentId,
         string? agentName,
@@ -53,6 +53,7 @@ public sealed class AgentExecSession : IAsyncDisposable
         _projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         _contextId = contextId;
         _taskId = taskId ?? Guid.NewGuid().ToString();
+        SessionKey = string.IsNullOrWhiteSpace(sessionKey) ? _taskId : sessionKey;
         _agentType = agentType;
         _agentId = agentId;
         _agentName = agentName;
@@ -101,7 +102,7 @@ public sealed class AgentExecSession : IAsyncDisposable
             }
         }
 
-        _logger.LogDebug("Saved thread state for task: {TaskId}", _taskId);
+        _logger.LogDebug("Saved thread state for context: {ContextId}", _contextId);
     }
     
     public void CancelActiveRequest()

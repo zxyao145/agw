@@ -25,6 +25,28 @@ public partial class AgentRuntimeService
         }, cancellationToken);
     }
 
+    public async Task<AIAgent?> CreateAiAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        Guid? taskId,
+        bool resume,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = await _agentAppService.GetAgentAsync(agentId);
+        if (agent == null)
+        {
+            return null;
+        }
+
+        return await CreateAiAgentAsync(new CreateAiAgentRequest
+        {
+            Agent = agent,
+            ProjectId = projectId,
+            TaskId = taskId,
+            Resume = resume,
+        }, cancellationToken);
+    }
+
     private async Task<AIAgent?> CreateAiAgentAsync(
         CreateAiAgentRequest request,
         CancellationToken cancellationToken = default)

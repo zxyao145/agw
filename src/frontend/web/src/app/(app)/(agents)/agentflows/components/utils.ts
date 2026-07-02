@@ -7,17 +7,6 @@ import {
   mergeStreamingMessagesById,
 } from "@/lib/execution-stream";
 
-export function getPatternName(pattern: number): string {
-  const PATTERN_NAMES: Record<number, string> = {
-    0: "Concurrent",
-    1: "Sequential",
-    2: "GroupChat",
-    3: "Handoff",
-    4: "Magentic",
-  };
-  return PATTERN_NAMES[pattern] ?? `Unknown (${pattern})`;
-}
-
 export function getTextContent(message: AiMessage): string {
   return getMessageTextContent(message);
 }
@@ -45,7 +34,7 @@ export async function fetchAgentflowDetails(id: string): Promise<AgentflowDetail
 
   return {
     id,
-    nodes: (nodes as AgentflowNodeDto[]) || [],
-    edges: (edges as AgentflowEdgeDto[]) || [],
+    nodes: (nodes as unknown as AgentflowNodeDto[]) || [],
+    edges: (edges as unknown as AgentflowEdgeDto[]) || [],
   } as AgentflowDetailDto;
 }

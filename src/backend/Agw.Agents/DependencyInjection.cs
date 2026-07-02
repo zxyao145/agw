@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddScoped<IAgentRuntimeService, AgentRuntimeService>();
         services.AddScoped<IExecutionCommandStrategy, SettingCommandStrategy>();
         services.AddScoped<IExecutionCommandStrategy, ExecCommandStrategy>();
+        services.AddScoped<IExecutionCommandStrategy, HumanResponseCommandStrategy>();
         services.AddScoped<IExecutionCommandStrategy, InterruptCommandStrategy>();
         services.AddScoped<CommandDispatcher>();
         services.AddSingleton<LoggingMiddleware>();

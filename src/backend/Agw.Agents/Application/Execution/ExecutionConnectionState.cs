@@ -130,7 +130,6 @@ public sealed class ExecutionConnectionState
     {
         return new SettingCommand(
             settings.ProjectId,
-            settings.TaskId,
             new Dictionary<string, string>(settings.EnvironmentVariables),
             settings.ContextId)
         {

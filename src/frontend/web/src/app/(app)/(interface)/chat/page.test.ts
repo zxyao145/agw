@@ -45,30 +45,32 @@ test("chat context list filters empty conversation placeholders", async () => {
   assert.match(taskClientSource, /\.filter\(hasConversationMessages\)/);
 });
 
-test("chat page resolves the active context from the current task id", async () => {
+test("chat page resolves the active context from context id only", async () => {
   const [pageSource, conversationListSource] = await Promise.all([
     readFile(CHAT_PAGE_URL, "utf8"),
     readFile(CONVERSATION_LIST_URL, "utf8"),
   ]);
 
-  assert.match(conversationListSource, /currentTaskId\?: string \| null;/);
-  assert.match(conversationListSource, /context\.latestTaskId/);
+  assert.doesNotMatch(conversationListSource, new RegExp("current" + "Task" + "Id"));
+  assert.doesNotMatch(conversationListSource, new RegExp("latest" + "Task" + "Id"));
+  assert.match(conversationListSource, /context\.contextId === currentContextId/);
   assert.match(conversationListSource, /onActiveContextResolved/);
-  assert.match(pageSource, /currentTaskId=\{taskId\}/);
+  assert.match(pageSource, /currentContextId=\{contextId\}/);
   assert.match(pageSource, /setContextId\(context\.contextId\)/);
   assert.match(pageSource, /syncRoute\(selectedProjectId, context\.contextId\)/);
 });
 
-test("chat routes do not read or generate taskId query parameters", async () => {
+test("chat routes do not read or generate execution id query parameters", async () => {
   const [pageSource, conversationDetailsSource, jobLogsSource] = await Promise.all([
     readFile(CHAT_PAGE_URL, "utf8"),
     readFile(CONVERSATION_DETAILS_PAGE_URL, "utf8"),
     readFile(JOB_LOGS_PAGE_URL, "utf8"),
   ]);
+  const forbidden = "task" + "Id";
 
-  assert.doesNotMatch(pageSource, /searchParams\.get\("taskId"\)/);
-  assert.doesNotMatch(pageSource, /nextParams\.set\("taskId"/);
-  assert.match(pageSource, /searchParams\.delete\("taskId"\)/);
-  assert.doesNotMatch(conversationDetailsSource, /searchParams\.set\("taskId"/);
-  assert.doesNotMatch(jobLogsSource, /\/chat\?[^`"]*taskId/);
+  assert.doesNotMatch(pageSource, new RegExp(`searchParams\\.get\\("${forbidden}"\\)`));
+  assert.doesNotMatch(pageSource, new RegExp(`nextParams\\.set\\("${forbidden}"`));
+  assert.doesNotMatch(pageSource, new RegExp(`searchParams\\.delete\\("${forbidden}"\\)`));
+  assert.doesNotMatch(conversationDetailsSource, new RegExp(`searchParams\\.set\\("${forbidden}"`));
+  assert.doesNotMatch(jobLogsSource, new RegExp(`/chat\\?[^"]*${forbidden}`));
 });

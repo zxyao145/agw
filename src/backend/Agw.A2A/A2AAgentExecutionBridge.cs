@@ -89,7 +89,7 @@ public sealed class A2AAgentExecutionBridge(IServiceScopeFactory serviceScopeFac
             Title = agent.Name,
             CreateTime = DateTime.UtcNow
         };
-        var settings = new SettingCommand(ProjectDefaults.A2AId, taskId)
+        var settings = new SettingCommand(ProjectDefaults.A2AId, contextId: context.ContextId)
         {
             Resume = context.IsContinuation
         };

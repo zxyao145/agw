@@ -8,7 +8,7 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Tasks.Application;
 
-public static class TaskResponseMapper
+public static class TaskExecutionMapper
 {
     public static TaskProjection ToTask(ProjectContext context, IReadOnlyList<TaskRecord> records)
     {
@@ -39,7 +39,7 @@ public static class TaskResponseMapper
         };
     }
 
-    public static TaskSummaryResponse ToSummaryResponse(TaskProjection task) =>
+    public static TaskExecutionSummary ToSummary(TaskProjection task) =>
         new(
             task.TaskId,
             task.ProjectId.Normalize(),
@@ -53,12 +53,12 @@ public static class TaskResponseMapper
             task.FinishedTime,
             GetStartedTime(task));
 
-    public static TaskResponse ToResponse(
+    public static TaskExecutionSnapshot ToSnapshot(
         TaskProjection task,
         IReadOnlyList<TaskRecord> records,
         IReadOnlyList<AgwMessage>? messages)
     {
-        return new TaskResponse(
+        return new TaskExecutionSnapshot(
             task.TaskId,
             task.ProjectId.Normalize(),
             task.ContextId,

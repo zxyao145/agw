@@ -1,5 +1,9 @@
 import {
+  buildHumanResponseCommandPayload,
   executeWithWebSocket,
+  getHumanGateRequest,
+  type HumanGateRequest,
+  type HumanGateResponse,
   type ExecutionWsUserInput,
   type ExecutionWsRequest,
 } from "@/api/execution-ws";
@@ -102,13 +106,28 @@ export async function executeWithWebSocketStream(params: {
   id: string;
   request: ExecutionWsRequest;
   onMessage: (message: AiMessage) => void;
+  onHumanGateRequest?: (
+    request: HumanGateRequest,
+  ) => HumanGateResponse | Promise<HumanGateResponse>;
   skipUserMessages?: boolean;
 }): Promise<void> {
-  const { id, request, onMessage, skipUserMessages = true } = params;
+  const { id, request, onMessage, onHumanGateRequest, skipUserMessages = true } = params;
 
-  await executeWithWebSocket(id, request, (payload) => {
+  await executeWithWebSocket(id, request, (payload, controls) => {
     const message = parseExecutionWsMessage(payload);
     if (!message) return;
+    const humanGateRequest = getHumanGateRequest(message);
+    if (humanGateRequest && onHumanGateRequest) {
+      void Promise.resolve(onHumanGateRequest(humanGateRequest))
+        .then((response) => {
+          controls.sendCommand(buildHumanResponseCommandPayload(response));
+        })
+        .catch((error) => {
+          console.error("HumanGate approval failed:", error);
+        });
+      return;
+    }
+
     if (skipUserMessages && message.role === "user") return;
     onMessage(message);
   });

@@ -168,6 +168,26 @@ public class AgentRuntimeServiceCompositionTests
     }
 
     [Fact]
+    public void ExecutionContextIdResolver_WhenContextMissing_GeneratesContextIdInsteadOfUsingTaskId()
+    {
+        var resolverType = typeof(AgentRuntimeService).Assembly.GetType(
+            "Agw.Agents.Application.AgentRun.ExecutionContextIdResolver");
+        Assert.NotNull(resolverType);
+        var method = resolverType!.GetMethod(
+            "Resolve",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var taskId = Guid.NewGuid().Normalize();
+        var generatedContextId = Assert.IsType<string>(method!.Invoke(null, [null, taskId]));
+        var suppliedContextId = Assert.IsType<string>(method.Invoke(null, [" context-1 ", taskId]));
+
+        Assert.False(string.IsNullOrWhiteSpace(generatedContextId));
+        Assert.NotEqual(taskId, generatedContextId);
+        Assert.Equal("context-1", suppliedContextId);
+    }
+
+    [Fact]
     public async Task CreateCodexAgent_WhenResumeRequested_CreatesSessionForTaskThread()
     {
         var service = CreateRuntimeServiceForReflection();

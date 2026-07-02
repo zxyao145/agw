@@ -28,7 +28,7 @@ public class JobsController(JobAppService jobAppService) : ControllerBase
     }
 
     [HttpGet("{id:guid}/logs")]
-    [ProducesApiResult(typeof(JobLog[]))]
+    [ProducesApiResult(typeof(JobLogResponse[]))]
     public async Task<IActionResult> ListLogsAsync(Guid id, CancellationToken cancellationToken)
     {
         var logs = await jobAppService.ListLogsAsync(id, cancellationToken);

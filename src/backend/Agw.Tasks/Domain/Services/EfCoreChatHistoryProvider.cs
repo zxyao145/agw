@@ -96,14 +96,24 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
-        Guid taskGuid = Guid.Parse(state.TaskId);
+        var projectContext = await dbContext.Set<ProjectContext>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                context => context.ProjectId == state.ProjectId && context.ContextId == state.ContextId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (projectContext == null)
+        {
+            return [];
+        }
 
         var payloads = await dbContext.Set<TaskRecord>()
             .AsNoTracking()
-            .Where(record => record.TaskId == taskGuid
+            .Where(record => record.ProjectContextId == projectContext.Id
                 && record.ConversationPayload != null)
-            .OrderBy(record => record.ConversationSequence)
+            .OrderBy(record => record.ConversationSequence ?? long.MinValue)
             .ThenBy(record => record.CreateTime)
+            .ThenBy(record => record.Id)
             .Select(record => record.ConversationPayload!)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -189,7 +199,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         state = state with { TaskId = taskGuid.Normalize() };
 
         var nextSequence = await dbContext.Set<TaskRecord>()
-            .Where(x => x.TaskId == taskGuid)
+            .Where(x => x.ProjectContextId == projectContext.Id)
             .Select(x => x.ConversationSequence)
             .MaxAsync(cancellationToken)
             .ConfigureAwait(false) ?? -1;

@@ -4,11 +4,11 @@ using Agw.Shared.AgwMsgVm;
 
 namespace Agw.Agents.Contracts;
 
-public record AgentExecutionResponse(string? TaskId, IReadOnlyList<AgwMessage> Messages)
+public record AgentExecutionResponse(string ContextId, IReadOnlyList<AgwMessage> Messages)
 {
     public static AgentExecutionResponse FromAgentResult(AgentExecutionResult result) =>
-        new(result.TaskId, result.Messages);
+        new(result.ContextId, result.Messages);
 
     public static AgentExecutionResponse FromAgentflowResult(AgentflowExecutionResult result) =>
-        new(result.TaskId, result.Messages);
+        new(result.ContextId, result.Messages);
 }

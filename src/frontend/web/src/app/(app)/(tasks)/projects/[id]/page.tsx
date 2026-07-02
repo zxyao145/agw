@@ -289,11 +289,7 @@ export default function ProjectDetailsPage() {
                           Context ID: <span className="font-mono">{conversation.contextId}</span>
                         </div>
                         <div>
-                          Latest Task ID:{" "}
-                          <span className="font-mono">{conversation.latestTaskId ?? "-"}</span>
-                        </div>
-                        <div>
-                          Tasks: {conversation.taskCount} · Messages: {conversation.messageCount}
+                          Executions: {conversation.executionCount} · Messages: {conversation.messageCount}
                         </div>
                         <div>
                           Created: {formatDate(conversation.createTime)} · Updated:{" "}

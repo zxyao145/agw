@@ -7,8 +7,6 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 
-using ClaudeCodeSdk.MAF;
-
 using Microsoft.Agents.AI;
 
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -36,7 +34,7 @@ public partial class AgentRuntimeService
         }
         finally
         {
-            await _sessionStateStore.SaveAsync(session._taskId, session.Agent, session.Session, cancellationToken);
+            await _sessionStateStore.SaveAsync(session.SessionKey, session.Agent, session.Session, cancellationToken);
         }
     }
 
@@ -110,18 +108,20 @@ public partial class AgentRuntimeService
         {
             taskId ??= Guid.NewGuid();
             string taskIdValue = taskId.Value.Normalize();
-            var session = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, taskIdValue, cancellationToken)
+            var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId, taskIdValue);
+            var sessionKey = CreateSessionKey(projectId.Value, resolvedContextId);
+            var session = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, sessionKey, cancellationToken)
                 .ConfigureAwait(false);
 
             _providerSessionState.InitializeSessionState(
                 session,
-                string.IsNullOrWhiteSpace(contextId) ? taskIdValue : contextId,
+                resolvedContextId,
                 taskIdValue,
                 ProjectDefaults.GetDefaultProjectIdentifier(projectId));
 
             var messages = await CollectStreamingMessagesAsync(aiAgent, chatMsg, session).ConfigureAwait(false);
 
-            return new AgentExecutionResult(taskIdValue, messages);
+            return new AgentExecutionResult(taskIdValue, resolvedContextId, messages);
         }
         finally
         {

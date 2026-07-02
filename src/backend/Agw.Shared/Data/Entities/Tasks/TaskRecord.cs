@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 using Agw.Shared.Contracts.Tasks;
 
@@ -12,6 +13,7 @@ public class TaskRecord
 
     public Guid ProjectContextId { get; set; }
 
+    [JsonIgnore]
     public ProjectContext? ProjectContext { get; set; }
 
     public Guid TaskId { get; set; }

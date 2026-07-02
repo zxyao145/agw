@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { VisualAgentflowDialog } from "./components/visual-agentflow-dialog";
-import { AgentDto, AgentflowDto, AgentflowDetailDto } from "@/types/agentflow";
+import { AgentDto, AgentflowDto, AgentflowDetailDto, AgentflowSaveRequest } from "@/types/agentflow";
 import { AgentflowsTable, ExecuteAgentflowDrawer, fetchAgentflowDetails } from "./components";
 import { Copy, X } from "lucide-react";
 
@@ -129,7 +129,7 @@ export default function AgentflowsPage() {
   }, [isMermaidLoading, mermaidOpen, normalizedMermaidText]);
 
   const updateAgentflowMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: string; body: AgentflowDetailDto }) => {
+    mutationFn: async ({ id, body }: { id: string; body: AgentflowSaveRequest }) => {
       return await apiPut("/api/agentflows/{id}", {
         params: { path: { id } },
         body,
@@ -167,9 +167,27 @@ export default function AgentflowsPage() {
         updateAgentflowMutation.mutate({
           id: agentflow.id,
           body: {
-            ...agentflow,
-            ...details,
+            name: agentflow.name,
+            description: agentflow.description,
             enable: !agentflow.enable,
+            nodes: details.nodes.map((node) => ({
+              nodeId: node.nodeId,
+              kind: node.kind,
+              relateId: node.relateId,
+              name: node.name,
+              positionJson: node.positionJson,
+              instructions: node.instructions,
+              configJson: node.configJson,
+            })),
+            edges: details.edges.map((edge) => ({
+              edgeId: edge.edgeId,
+              sourceNodeId: edge.sourceNodeId,
+              targetNodeId: edge.targetNodeId,
+              kind: edge.kind,
+              label: edge.label,
+              conditionJson: edge.conditionJson,
+              configJson: edge.configJson,
+            })),
           },
         });
       } catch {

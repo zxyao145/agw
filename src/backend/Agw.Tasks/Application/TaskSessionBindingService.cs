@@ -10,24 +10,40 @@ namespace Agw.Tasks.Application;
 public class TaskSessionBindingService : ITaskSessionBindingService
 {
     private readonly IRepository<TaskSessionBinding> _bindingRepository;
+    private readonly IRepository<ProjectContext> _contextRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public TaskSessionBindingService(
         IRepository<TaskSessionBinding> bindingRepository,
+        IRepository<ProjectContext> contextRepository,
         IUnitOfWork unitOfWork)
     {
         _bindingRepository = bindingRepository;
+        _contextRepository = contextRepository;
         _unitOfWork = unitOfWork;
     }
 
     public async Task<TaskSessionBinding?> GetAsync(
-        Guid taskId,
+        Guid projectId,
+        string contextId,
         Guid agentId,
         string externalAgentName,
         CancellationToken cancellationToken = default)
     {
         var normalizedAgentName = NormalizeExternalAgentName(externalAgentName);
-        if (string.IsNullOrWhiteSpace(normalizedAgentName))
+        var normalizedContextId = NormalizeContextId(contextId);
+        if (string.IsNullOrWhiteSpace(normalizedAgentName) || string.IsNullOrWhiteSpace(normalizedContextId))
+        {
+            return null;
+        }
+
+        var projectContext = await _contextRepository.Queryable
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                context => context.ProjectId == projectId && context.ContextId == normalizedContextId,
+                cancellationToken);
+
+        if (projectContext == null)
         {
             return null;
         }
@@ -35,14 +51,15 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         return await _bindingRepository.Queryable
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                binding => binding.TaskId == taskId
+                binding => binding.ProjectContextId == projectContext.Id
                     && binding.AgentId == agentId
                     && binding.ExternalAgentName == normalizedAgentName,
                 cancellationToken);
     }
 
     public async Task<TaskSessionBinding> UpsertAsync(
-        Guid taskId,
+        Guid projectId,
+        string contextId,
         Guid agentId,
         string externalAgentName,
         string providerSessionId,
@@ -50,13 +67,34 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         CancellationToken cancellationToken = default)
     {
         var normalizedAgentName = NormalizeExternalAgentName(externalAgentName);
+        var normalizedContextId = NormalizeContextId(contextId);
         var normalizedProviderSessionId = NormalizeProviderSessionId(providerSessionId);
         var normalizedUser = string.IsNullOrWhiteSpace(user) ? "system" : user.Trim();
         var now = DateTime.UtcNow;
 
+        if (string.IsNullOrWhiteSpace(normalizedAgentName))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "External agent name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedContextId))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Context id is required.");
+        }
+
+        var projectContext = await _contextRepository.Queryable
+            .SingleOrDefaultAsync(
+                context => context.ProjectId == projectId && context.ContextId == normalizedContextId,
+                cancellationToken);
+
+        if (projectContext == null)
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound, "Project context not found.");
+        }
+
         var binding = await _bindingRepository.Queryable
             .SingleOrDefaultAsync(
-                existing => existing.TaskId == taskId
+                existing => existing.ProjectContextId == projectContext.Id
                     && existing.AgentId == agentId
                     && existing.ExternalAgentName == normalizedAgentName,
                 cancellationToken);
@@ -66,7 +104,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             binding = new TaskSessionBinding
             {
                 Id = Guid.NewGuid(),
-                TaskId = taskId,
+                ProjectContextId = projectContext.Id,
                 AgentId = agentId,
                 ExternalAgentName = normalizedAgentName,
                 ProviderSessionId = normalizedProviderSessionId,
@@ -74,8 +112,28 @@ public class TaskSessionBindingService : ITaskSessionBindingService
                 CreateTime = now
             };
             await _bindingRepository.AddAsync(binding);
+            try
+            {
+                await _unitOfWork.SaveChangesAsync();
+                return binding;
+            }
+            catch (DbUpdateException)
+            {
+                _bindingRepository.Remove(binding);
+                binding = await _bindingRepository.Queryable
+                    .SingleOrDefaultAsync(
+                        existing => existing.ProjectContextId == projectContext.Id
+                            && existing.AgentId == agentId
+                            && existing.ExternalAgentName == normalizedAgentName,
+                        cancellationToken);
+                if (binding == null)
+                {
+                    throw;
+                }
+            }
         }
-        else if (binding.ProviderSessionId != normalizedProviderSessionId)
+
+        if (binding.ProviderSessionId != normalizedProviderSessionId)
         {
             binding.ProviderSessionId = normalizedProviderSessionId;
             binding.UpdateBy = normalizedUser;
@@ -85,6 +143,27 @@ public class TaskSessionBindingService : ITaskSessionBindingService
 
         await _unitOfWork.SaveChangesAsync();
         return binding;
+    }
+
+    public async Task DeleteByContextAsync(
+        Guid projectContextId,
+        CancellationToken cancellationToken = default)
+    {
+        await _bindingRepository.Queryable
+            .Where(binding => binding.ProjectContextId == projectContextId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    private static string NormalizeContextId(string contextId)
+    {
+        if (string.IsNullOrWhiteSpace(contextId))
+        {
+            return string.Empty;
+        }
+
+        return contextId.Trim();
     }
 
     private static string NormalizeExternalAgentName(string externalAgentName)

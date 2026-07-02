@@ -18,7 +18,12 @@ import { toast } from "sonner";
 
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
 import { apiGet, getApiKey } from "@/api/client";
-import { buildSettingCommandPayload } from "@/api/execution-ws";
+import {
+  buildHumanResponseCommandPayload,
+  buildSettingCommandPayload,
+  getHumanGateRequest,
+  type HumanGateRequest,
+} from "@/api/execution-ws";
 import {
   clearProjectContextRecords,
   getProjectContextDetails,
@@ -27,6 +32,7 @@ import {
 import { Explorer, FileContent } from "@/components/file-explorer";
 import type { LineComment } from "@/components/file-explorer";
 import { Conversation } from "@/components/message/conversation";
+import { HumanGateApproval } from "@/components/message/human-gate-approval";
 import { type UserInputRef } from "@/components/message/user-input";
 import { ConversationList } from "@/components/task/conversation-list";
 import { Button } from "@/components/ui/button";
@@ -131,7 +137,7 @@ function getRestoredTargetValue(messages: AiMessage[]): string | null {
   return null;
 }
 
-function nextTaskId(): string {
+function nextContextId(): string {
   return Uuid4.generate().toCanonical();
 }
 
@@ -171,7 +177,6 @@ function replaceCurrentChatSettingsHash(settingsParam: string | null): void {
 
   const searchParams = new URLSearchParams(window.location.search);
   searchParams.delete("settings");
-  searchParams.delete("taskId");
   const nextSearch = searchParams.toString();
   const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${getChatSettingsHash(settingsParam)}`;
   window.history.replaceState(window.history.state, "", nextUrl);
@@ -391,10 +396,11 @@ export default function ChatPage() {
   const [showChatHistory, setShowChatHistory] = React.useState(true);
   const [showFileExplorer, setShowFileExplorer] = React.useState(true);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
-  const [taskId, setTaskId] = React.useState<string | null>(null);
   const [contextId, setContextId] = React.useState<string | null>(queryContextId);
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
   const [isExecuting, setIsExecuting] = React.useState(false);
+  const [pendingHumanGate, setPendingHumanGate] =
+    React.useState<HumanGateRequest | null>(null);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
   const [fileContent, setFileContent] = React.useState("");
@@ -412,7 +418,7 @@ export default function ChatPage() {
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const userInputRef = React.useRef<UserInputRef | null>(null);
-  const hydratedTaskKeyRef = React.useRef<string | null>(null);
+  const hydratedContextKeyRef = React.useRef<string | null>(null);
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -609,8 +615,16 @@ export default function ChatPage() {
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data as string) as AiMessage;
+          const humanGateRequest = getHumanGateRequest(message);
+          if (humanGateRequest) {
+            setPendingHumanGate(humanGateRequest);
+            setIsExecuting(true);
+            return;
+          }
+
           if (isTurnFinishedMessage(message)) {
             setIsExecuting(false);
+            setPendingHumanGate(null);
             refreshConversationList();
             return;
           }
@@ -624,11 +638,13 @@ export default function ChatPage() {
       ws.onerror = () => {
         toast.error("WebSocket connection error");
         setIsExecuting(false);
+        setPendingHumanGate(null);
       };
 
       ws.onclose = (event) => {
         wsRef.current = null;
         setIsExecuting(false);
+        setPendingHumanGate(null);
         refreshConversationList();
 
         if (event.code !== 1000) {
@@ -759,12 +775,12 @@ export default function ChatPage() {
   );
 
   const buildSettingCommand = React.useCallback(
-    (nextTaskIdValue: string, nextContextIdValue: string) =>
+    (nextContextIdValue: string, shouldResume: boolean) =>
       buildSettingCommandPayload({
         environmentVariables: buildEnvironmentVariables(),
         projectId: selectedProjectId ?? "",
-        taskId: nextTaskIdValue,
         contextId: nextContextIdValue,
+        resume: shouldResume,
       }),
     [buildEnvironmentVariables, selectedProjectId],
   );
@@ -778,25 +794,24 @@ export default function ChatPage() {
     [selectedTarget],
   );
 
-  const ensureTaskId = React.useCallback(() => {
-    if (taskId) {
-      return taskId;
+  const ensureContextId = React.useCallback(() => {
+    if (contextId) {
+      return contextId;
     }
 
-    const nextId = nextTaskId();
-    const nextContextId = contextId ?? nextId;
-    hydratedTaskKeyRef.current = getContextHydrationKey(selectedProjectId, nextContextId);
-    setTaskId(nextId);
-    syncRoute(selectedProjectId, nextContextId);
+    const nextId = nextContextId();
+    hydratedContextKeyRef.current = getContextHydrationKey(selectedProjectId, nextId);
+    setContextId(nextId);
+    syncRoute(selectedProjectId, nextId);
     return nextId;
-  }, [contextId, selectedProjectId, syncRoute, taskId]);
+  }, [contextId, selectedProjectId, syncRoute]);
 
   const clearLocalSessionState = React.useCallback(() => {
     closeSocket("Session cleared");
-    hydratedTaskKeyRef.current = null;
+    hydratedContextKeyRef.current = null;
     setIsExecuting(false);
+    setPendingHumanGate(null);
     setMessages([]);
-    setTaskId(null);
     setContextId(null);
     userInputRef.current?.setInput("");
   }, [closeSocket]);
@@ -813,7 +828,7 @@ export default function ChatPage() {
     syncRoute(selectedProjectId, null);
   }, [clearActiveSessionState, selectedProjectId, syncRoute]);
 
-  const startNewTask = React.useCallback(() => {
+  const startNewConversation = React.useCallback(() => {
     clearLocalSessionState();
     syncRoute(selectedProjectId, null);
   }, [clearLocalSessionState, selectedProjectId, syncRoute]);
@@ -825,10 +840,9 @@ export default function ChatPage() {
       const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
 
       closeSocket("Session switched");
-      hydratedTaskKeyRef.current = getContextHydrationKey(projectId, details.contextId);
+      hydratedContextKeyRef.current = getContextHydrationKey(projectId, details.contextId);
       setSelectedProjectId(projectId);
       setIsExecuting(false);
-      setTaskId(details.latestTaskId ?? null);
       setContextId(details.contextId);
       setMessages(details.messages ?? []);
       if (restoredTargetValue) {
@@ -981,7 +995,7 @@ export default function ChatPage() {
     const routeAction = getChatRouteSessionAction({
       queryProjectId,
       queryContextId,
-      hydratedRouteKey: hydratedTaskKeyRef.current,
+      hydratedRouteKey: hydratedContextKeyRef.current,
     });
 
     if (routeAction.type === "clearLocal") {
@@ -1002,7 +1016,7 @@ export default function ChatPage() {
 
     const hydrationKey = getRouteHydrationKey(routeAction);
     if (hydrationKey) {
-      hydratedTaskKeyRef.current = hydrationKey;
+      hydratedContextKeyRef.current = hydrationKey;
     }
 
     let cancelled = false;
@@ -1017,10 +1031,9 @@ export default function ChatPage() {
           }
 
           closeSocket("History loaded");
-          hydratedTaskKeyRef.current = routeAction.hydrateKey;
+          hydratedContextKeyRef.current = routeAction.hydrateKey;
           setSelectedProjectId(routeAction.projectId);
           setIsExecuting(false);
-          setTaskId(details.latestTaskId ?? null);
           setContextId(details.contextId);
           setMessages(details.messages ?? []);
           const nextTargetValue = routeTargetValue ?? restoredTargetValue;
@@ -1033,8 +1046,8 @@ export default function ChatPage() {
 
       } catch (error) {
         if (!cancelled) {
-          if (hydrationKey && hydratedTaskKeyRef.current === hydrationKey) {
-            hydratedTaskKeyRef.current = null;
+          if (hydrationKey && hydratedContextKeyRef.current === hydrationKey) {
+            hydratedContextKeyRef.current = null;
           }
           toast.error(`Failed to load chat history: ${getApiErrorMessage(error)}`);
         }
@@ -1053,12 +1066,11 @@ export default function ChatPage() {
       }
 
       closeSocket("Project switched");
-      hydratedTaskKeyRef.current = null;
+      hydratedContextKeyRef.current = null;
       setIsExecuting(false);
       setSelectedProjectId(nextProjectId);
       setSelectedTargetValue(null);
       setMessages([]);
-      setTaskId(null);
       setContextId(null);
       syncRoute(nextProjectId, null, null);
     },
@@ -1100,6 +1112,7 @@ export default function ChatPage() {
       }
 
       setIsExecuting(true);
+      setPendingHumanGate(null);
 
       try {
         let ws = wsRef.current;
@@ -1126,12 +1139,9 @@ export default function ChatPage() {
 
         setMessages((prev) => [...prev, userMessage]);
 
-        const nextTaskIdValue = ensureTaskId();
-        const nextContextIdValue = contextId ?? nextTaskIdValue;
-        if (!contextId) {
-          setContextId(nextContextIdValue);
-        }
-        ws.send(JSON.stringify(buildSettingCommand(nextTaskIdValue, nextContextIdValue)));
+        const shouldResumeContext = Boolean(contextId);
+        const nextContextIdValue = ensureContextId();
+        ws.send(JSON.stringify(buildSettingCommand(nextContextIdValue, shouldResumeContext)));
         ws.send(JSON.stringify(buildExecRequest(userMessage)));
       } catch (error) {
         toast.error(`Execute failed: ${getApiErrorMessage(error)}`);
@@ -1141,8 +1151,8 @@ export default function ChatPage() {
     [
       buildExecRequest,
       buildSettingCommand,
-      ensureTaskId,
       contextId,
+      ensureContextId,
       selectedProjectId,
       selectedTarget,
       setupWebSocket,
@@ -1166,7 +1176,34 @@ export default function ChatPage() {
     );
     closeSocket("Stop requested by user.");
     setIsExecuting(false);
+    setPendingHumanGate(null);
   }, [closeSocket]);
+
+  const submitHumanGateResponse = React.useCallback(
+    (approved: boolean, responseText?: string) => {
+      const ws = wsRef.current;
+      if (!pendingHumanGate || !ws || ws.readyState !== WebSocket.OPEN) {
+        toast.error("No active HumanGate request");
+        setPendingHumanGate(null);
+        return;
+      }
+
+      ws.send(
+        JSON.stringify(
+          buildHumanResponseCommandPayload({
+            requestId: pendingHumanGate.requestId,
+            approved,
+            responseText,
+          }),
+        ),
+      );
+      setPendingHumanGate(null);
+      if (!approved) {
+        setIsExecuting(false);
+      }
+    },
+    [pendingHumanGate],
+  );
 
   const handleContextSelect = React.useCallback(
     async (context: ContextSummary) => {
@@ -1191,20 +1228,19 @@ export default function ChatPage() {
         return;
       }
 
-      hydratedTaskKeyRef.current = getContextHydrationKey(selectedProjectId, context.contextId);
-      setTaskId(context.latestTaskId ?? taskId);
+      hydratedContextKeyRef.current = getContextHydrationKey(selectedProjectId, context.contextId);
       setContextId(context.contextId);
       syncRoute(selectedProjectId, context.contextId);
     },
-    [selectedProjectId, syncRoute, taskId],
+    [selectedProjectId, syncRoute],
   );
 
-  const handleNewTask = React.useCallback(() => {
-    startNewTask();
+  const handleNewConversation = React.useCallback(() => {
+    startNewConversation();
     setIsDrawerOpen(false);
-  }, [startNewTask]);
+  }, [startNewConversation]);
 
-  const handleAllTasksDeleted = React.useCallback(() => {
+  const handleAllConversationsDeleted = React.useCallback(() => {
     resetSession();
     setIsDrawerOpen(false);
   }, [resetSession]);
@@ -1287,14 +1323,13 @@ export default function ChatPage() {
       <ConversationList
         projectId={selectedProjectId ?? ""}
         currentContextId={contextId}
-        currentTaskId={taskId}
         refreshSignal={conversationListRefreshSignal}
         onContextSelect={(nextContext) => {
           void handleContextSelect(nextContext);
         }}
         onActiveContextResolved={handleActiveContextResolved}
-        onNewTask={handleNewTask}
-        onAllTasksDeleted={handleAllTasksDeleted}
+        onNewConversation={handleNewConversation}
+        onAllConversationsDeleted={handleAllConversationsDeleted}
         headerActions={
           <ChatSettingsDialog
             selectedProjectId={selectedProjectId}
@@ -1309,9 +1344,9 @@ export default function ChatPage() {
       contextId,
       conversationListRefreshSignal,
       handleActiveContextResolved,
-      handleAllTasksDeleted,
+      handleAllConversationsDeleted,
       handleContextSelect,
-      handleNewTask,
+      handleNewConversation,
       handleSaveChatSettings,
       selectedProjectId,
     ],
@@ -1446,19 +1481,30 @@ export default function ChatPage() {
                       ? `Project: ${projects.find((project) => project.id === selectedProjectId)?.name ?? selectedProjectId}`
                       : "Select a project to begin"}
                     {selectedTarget ? ` · Target: ${selectedTarget.type}` : ""}
-                    {taskId ? ` · Task: ${taskId}` : ""}
                   </div>
                 </div> */}
 
                 <div className="relative flex h-[calc(100%-57px)] min-h-0 flex-1 flex-col border-t">
                   <Conversation
-                    taskId={taskId}
                     messages={messages}
                     messagesStartRef={messagesStartRef}
                     messagesEndRef={messagesEndRef}
                   />
 
                   <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent px-2">
+                    {pendingHumanGate ? (
+                      <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
+                        <HumanGateApproval
+                          request={pendingHumanGate}
+                          onApprove={(responseText) =>
+                            submitHumanGateResponse(true, responseText)
+                          }
+                          onReject={(responseText) =>
+                            submitHumanGateResponse(false, responseText)
+                          }
+                        />
+                      </div>
+                    ) : null}
                     <InputArea
                       isExecuting={isExecuting}
                       hasMessages={messages.length > 0}

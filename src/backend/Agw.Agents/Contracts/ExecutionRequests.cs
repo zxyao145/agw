@@ -10,6 +10,7 @@ namespace Agw.Agents.Contracts;
 [JsonDerivedType(typeof(SettingCommand), nameof(SettingCommand))]
 [JsonDerivedType(typeof(ExecCommand), nameof(ExecCommand))]
 [JsonDerivedType(typeof(InterruptCommand), nameof(InterruptCommand))]
+[JsonDerivedType(typeof(HumanResponseCommand), nameof(HumanResponseCommand))]
 public abstract class AgentRunCommand;
 
 public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
@@ -20,19 +21,15 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     [SetsRequiredMembers]
     public SettingCommand(
         Guid projectId,
-        Guid taskId,
         Dictionary<string, string>? environmentVariables = null,
         string? contextId = null)
     {
         ProjectId = projectId;
-        TaskId = taskId;
         ContextId = contextId;
         EnvironmentVariables = environmentVariables ?? new Dictionary<string, string>();
     }
 
     public Guid ProjectId { get; set; }
-
-    public Guid TaskId { get; set; }
 
     public string? ContextId { get; set; }
 
@@ -58,7 +55,6 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         }
 
         return left.ProjectId == right.ProjectId
-            && left.TaskId == right.TaskId
             && string.Equals(left.ContextId, right.ContextId, StringComparison.Ordinal)
             && EnvironmentVariablesEqual(left.EnvironmentVariables, right.EnvironmentVariables);
     }
@@ -72,7 +68,6 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public override int GetHashCode() =>
         HashCode.Combine(
             ProjectId,
-            TaskId,
             ContextId,
             GetEnvironmentVariablesHashCode(EnvironmentVariables));
 
@@ -139,4 +134,25 @@ public class ExecCommand : AgentRunCommand
 public class InterruptCommand : AgentRunCommand
 {
     public string? Reason { get; set; }
+}
+
+public class HumanResponseCommand : AgentRunCommand
+{
+    [JsonConstructor]
+    [SetsRequiredMembers]
+    public HumanResponseCommand(
+        string requestId,
+        bool approved,
+        string? responseText = null)
+    {
+        RequestId = requestId;
+        Approved = approved;
+        ResponseText = responseText;
+    }
+
+    public string RequestId { get; set; }
+
+    public bool Approved { get; set; }
+
+    public string? ResponseText { get; set; }
 }

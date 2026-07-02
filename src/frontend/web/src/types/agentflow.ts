@@ -30,18 +30,38 @@ export interface AgentDto extends BaseDto {
   }> | null;
 }
 
-export const AgentflowNodeType = {
-  AgentNode: 0,
-  AgentflowNode: 1,
+export const AgentflowNodeKind = {
+  Agent: 0,
+  WorkflowAsAgent: 1,
+  PromptAdapter: 2,
+  HumanGate: 3,
+  CheckpointMarker: 4,
+  ConcurrentBlock: 5,
+  HandoffBlock: 6,
+  GroupChatBlock: 7,
+  MagenticBlock: 8,
+  Output: 9,
 } as const;
 
-export type AgentflowNodeType = (typeof AgentflowNodeType)[keyof typeof AgentflowNodeType];
+export type AgentflowNodeKind = (typeof AgentflowNodeKind)[keyof typeof AgentflowNodeKind];
+
+export const AgentflowEdgeKind = {
+  Direct: 0,
+  FanOut: 1,
+  FanIn: 2,
+} as const;
+
+export type AgentflowEdgeKind = (typeof AgentflowEdgeKind)[keyof typeof AgentflowEdgeKind];
 
 export interface AgentflowNodeDto extends BaseDto {
   agentflowId: string;
   nodeId: string;
-  type: AgentflowNodeType;
-  relateId: string;
+  kind: AgentflowNodeKind;
+  relateId: string | null;
+  name: string | null;
+  positionJson: string | null;
+  instructions: string | null;
+  configJson: string | null;
 }
 
 export interface AgentflowEdgeDto extends BaseDto {
@@ -49,15 +69,45 @@ export interface AgentflowEdgeDto extends BaseDto {
   edgeId: string;
   sourceNodeId: string;
   targetNodeId: string;
-  animated: boolean;
+  kind: AgentflowEdgeKind;
+  label: string | null;
+  conditionJson: string | null;
+  configJson: string | null;
+}
+
+export interface AgentflowNodeRequest {
+  nodeId: string;
+  kind: AgentflowNodeKind;
+  relateId: string | null;
+  name: string | null;
+  positionJson: string | null;
+  instructions: string | null;
+  configJson: string | null;
+}
+
+export interface AgentflowEdgeRequest {
+  edgeId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  kind: AgentflowEdgeKind;
+  label: string | null;
+  conditionJson: string | null;
+  configJson: string | null;
+}
+
+export interface AgentflowSaveRequest {
+  name: string;
+  description: string | null;
+  enable: boolean;
+  nodes: AgentflowNodeRequest[];
+  edges: AgentflowEdgeRequest[];
 }
 
 export interface AgentflowDto extends BaseDto {
   id: string;
   name: string;
   description: string | null;
-  pattern: number;
-  configurationJson: string | null;
+  systemPrompt: string;
   enable: boolean;
 }
 

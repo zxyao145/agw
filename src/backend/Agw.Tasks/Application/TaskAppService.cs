@@ -93,23 +93,36 @@ public class TaskAppService : ITaskAppService
 
         if (request.Resume)
         {
-            if (!request.TaskId.HasValue || request.TaskId.Value == Guid.Empty)
+            if (request.TaskId.HasValue && request.TaskId.Value != Guid.Empty)
             {
-                return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("TaskId is required when resume is true."));
+                var existingTask = await GetTaskAsync(request.TaskId.Value);
+                if (existingTask == null)
+                {
+                    return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Task not found."));
+                }
+
+                if (existingTask.ProjectId != resolvedProjectId.Value)
+                {
+                    return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Task does not belong to the supplied projectId."));
+                }
+
+                return new ExecutionTaskResolutionResult(existingTask, null);
             }
 
-            var existingTask = await GetTaskAsync(request.TaskId.Value);
-            if (existingTask == null)
+            if (string.IsNullOrWhiteSpace(request.ContextId))
             {
-                return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Task not found."));
+                return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("ContextId is required when resume is true."));
             }
 
-            if (existingTask.ProjectId != resolvedProjectId.Value)
+            var latestTask = await GetLatestTaskByContextAsync(
+                resolvedProjectId.Value,
+                request.ContextId,
+                cancellationToken);
+            if (latestTask == null)
             {
-                return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Task does not belong to the supplied projectId."));
+                return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("ProjectContext not found."));
             }
-
-            return new ExecutionTaskResolutionResult(existingTask, null);
+            return new ExecutionTaskResolutionResult(latestTask, null);
         }
 
         if (!request.TaskId.HasValue || request.TaskId.Value == Guid.Empty)
@@ -141,6 +154,34 @@ public class TaskAppService : ITaskAppService
         }
 
         return new ExecutionTaskResolutionResult(task, null);
+    }
+
+    private async Task<TaskProjection?> GetLatestTaskByContextAsync(
+        Guid projectId,
+        string contextId,
+        CancellationToken cancellationToken)
+    {
+        var normalizedContextId = contextId.Trim();
+        var context = await _contextRepository.SingleOrDefaultAsync(
+            item => item.ProjectId == projectId && item.ContextId == normalizedContextId);
+        if (context == null)
+        {
+            return null;
+        }
+
+        var records = await _recordRepository.ListAsync(record => record.ProjectContextId == context.Id);
+        if (records.Count == 0)
+        {
+            return null;
+        }
+
+        return records
+            .GroupBy(record => record.TaskId)
+            .Select(group => TaskExecutionMapper.ToTask(context, group.ToList()))
+            .OrderByDescending(task => task.UpdateTime ?? task.CreateTime)
+            .ThenByDescending(task => task.CreateTime)
+            .ThenByDescending(task => task.TaskId)
+            .FirstOrDefault();
     }
 
 

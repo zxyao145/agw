@@ -29,7 +29,6 @@ public class ExecCommandStrategyTests
             null!,
             new UnusedFileSystemResolver());
         var projectId = Guid.NewGuid();
-        var taskId = Guid.NewGuid();
         var contextId = Guid.NewGuid().ToString("D");
         var context = new ExecutionCommandContext(
             Guid.NewGuid(),
@@ -41,7 +40,7 @@ public class ExecCommandStrategyTests
             CloseConnectionAsync = (_, _) => Task.CompletedTask,
             ObserveTurn = _ => { }
         };
-        context.ConnectionState.ApplySettings(new SettingCommand(projectId, taskId, contextId: contextId));
+        context.ConnectionState.ApplySettings(new SettingCommand(projectId, contextId: contextId));
 
         await strategy.ExecuteAsync(
             new ExecCommand(
@@ -57,6 +56,8 @@ public class ExecCommandStrategyTests
 
         Assert.NotNull(taskService.LastRequest);
         Assert.Equal("Write release notes", taskService.LastRequest!.Input);
+        Assert.Null(taskService.LastRequest.TaskId);
+        Assert.Equal(contextId, taskService.LastRequest.ContextId);
     }
 
     private sealed class CapturingTaskAppService : ITaskAppService
@@ -95,6 +96,14 @@ public class ExecCommandStrategyTests
     {
         public Task<AIAgent?> CreateAiAgentAsync(
             Guid agentId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<AIAgent?> CreateAiAgentAsync(
+            Guid agentId,
+            Guid? projectId,
+            Guid? taskId,
+            bool resume,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

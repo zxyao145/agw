@@ -34,12 +34,16 @@ public class ProjectContextsControllerTests
     }
 
     [Fact]
-    public void GetByTaskIdAsync_UsesContextByTaskRoute()
+    public void ProjectContextsController_DoesNotExposeTaskIdRoute()
     {
-        var method = GetByTaskIdMethod();
-        var attribute = Assert.Single(method.GetCustomAttributes<HttpGetAttribute>());
+        var taskIdRoutes = typeof(ProjectContextsController)
+            .GetMethods()
+            .SelectMany(method => method.GetCustomAttributes<HttpGetAttribute>())
+            .Select(attribute => attribute.Template)
+            .Where(template => template?.Contains("task", StringComparison.OrdinalIgnoreCase) == true)
+            .ToList();
 
-        Assert.Equal("by-task/{taskId:guid}", attribute.Template);
+        Assert.Empty(taskIdRoutes);
     }
 
     [Fact]
@@ -259,19 +263,6 @@ public class ProjectContextsControllerTests
         return method;
     }
 
-    private static MethodInfo GetByTaskIdMethod()
-    {
-        var method = typeof(ProjectContextsController).GetMethod(
-            "GetByTaskIdAsync",
-            [
-                typeof(Guid),
-                typeof(Guid)
-            ]);
-
-        Assert.NotNull(method);
-        return method;
-    }
-
     private static MethodInfo GetClearRecordsMethod()
     {
         var method = typeof(ProjectContextsController).GetMethod(
@@ -345,6 +336,10 @@ public class ProjectContextsControllerTests
             new EfRepository<TaskRecord>(dbContext),
             new UnitOfWork(dbContext),
             new ProjectResolver(projectRepository),
-            new TaskRecordDomainService());
+            new TaskRecordDomainService(),
+            new TaskSessionBindingService(
+                new EfRepository<TaskSessionBinding>(dbContext),
+                new EfRepository<ProjectContext>(dbContext),
+                new UnitOfWork(dbContext)));
     }
 }

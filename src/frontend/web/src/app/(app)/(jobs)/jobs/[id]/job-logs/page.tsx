@@ -23,7 +23,7 @@ type JobDto = {
 type JobLogDto = {
   id: string;
   jobId: string;
-  taskId: string;
+  contextId: string | null;
   startTime: string;
   endTime: string | null;
   success: boolean;
@@ -76,6 +76,22 @@ export default function JobLogsPage() {
   });
 
   const job = jobQuery.data;
+
+  const getChatHref = React.useCallback(
+    (log: JobLogDto) => {
+      if (!job) {
+        return "/chat";
+      }
+
+      const searchParams = new URLSearchParams({ projectId: job.projectId });
+      if (log.contextId) {
+        searchParams.set("contextId", log.contextId);
+      }
+
+      return `/chat?${searchParams.toString()}`;
+    },
+    [job],
+  );
 
   return (
     <div className="w-full space-y-6">
@@ -149,7 +165,7 @@ export default function JobLogsPage() {
                   <TableCell className="text-right">
                     {job ? (
                       <Button type="button" variant="outline" size="sm" asChild>
-                        <Link href={`/chat?projectId=${job.projectId}`}>
+                        <Link href={getChatHref(log)}>
                           <MessageSquareText className="mr-2 h-4 w-4" />
                           Go to Chat
                         </Link>

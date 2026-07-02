@@ -9,12 +9,12 @@ public class ExecutionConnectionStateEnvironmentVariablesTests
     public void ApplySettings_WhenEnvironmentVariablesChangedWhileIdle_RequiresImmediateSessionRefresh()
     {
         var projectId = Guid.NewGuid();
-        var taskId = Guid.NewGuid();
-        var originalSettings = CreateSettings(projectId, taskId, new Dictionary<string, string>
+        var contextId = Guid.NewGuid().ToString("D");
+        var originalSettings = CreateSettings(projectId, contextId, new Dictionary<string, string>
         {
             ["AGW_TOKEN"] = "one"
         });
-        var changedSettings = CreateSettings(projectId, taskId, new Dictionary<string, string>
+        var changedSettings = CreateSettings(projectId, contextId, new Dictionary<string, string>
         {
             ["AGW_TOKEN"] = "two"
         });
@@ -30,12 +30,12 @@ public class ExecutionConnectionStateEnvironmentVariablesTests
 
     private static SettingCommand CreateSettings(
         Guid projectId,
-        Guid taskId,
+        string contextId,
         IReadOnlyDictionary<string, string> environmentVariables)
     {
         return new SettingCommand(
             projectId,
-            taskId,
-            environmentVariables: new Dictionary<string, string>(environmentVariables));
+            environmentVariables: new Dictionary<string, string>(environmentVariables),
+            contextId: contextId);
     }
 }

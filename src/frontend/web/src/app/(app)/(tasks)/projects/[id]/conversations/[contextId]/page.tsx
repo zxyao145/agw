@@ -106,7 +106,7 @@ export default function ConversationDetailsPage() {
               </span>
             ) : null}
           </div>
-          <div className="text-sm text-muted-foreground">Conversation history across related tasks.</div>
+          <div className="text-sm text-muted-foreground">Conversation history across related executions.</div>
           {conversation ? (
             <div className="text-xs text-muted-foreground">
               <span className="font-mono">{conversation.contextId}</span>
@@ -137,7 +137,7 @@ export default function ConversationDetailsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Conversation Overview</CardTitle>
-              <CardDescription>Aggregate metadata for all tasks in this conversation.</CardDescription>
+              <CardDescription>Aggregate metadata for this conversation.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
               <div className="space-y-1">
@@ -146,13 +146,9 @@ export default function ConversationDetailsPage() {
               </div>
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Latest Task ID
+                  Execution Count
                 </div>
-                <div className="break-all font-mono text-xs">{conversation.latestTaskId ?? "-"}</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Task Count</div>
-                <div>{conversation.taskCount}</div>
+                <div>{conversation.executionCount}</div>
               </div>
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -168,36 +164,6 @@ export default function ConversationDetailsPage() {
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">Updated</div>
                 <div>{formatDate(conversation.updateTime)}</div>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Tasks</CardTitle>
-              <CardDescription>Concrete task executions attached to this conversation.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {conversation.tasks.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No tasks recorded.</div>
-              ) : (
-                <div className="space-y-3">
-                  {conversation.tasks.map((task) => (
-                    <div key={task.taskId} className="rounded-lg border p-4">
-                      <div className="space-y-2">
-                        <div className="font-medium">{task.title}</div>
-                        <div className="grid gap-1 text-xs text-muted-foreground">
-                          <div>
-                            Task ID: <span className="font-mono">{task.taskId}</span>
-                          </div>
-                          <div>
-                            Created: {formatDate(task.createTime)} · Updated: {formatDate(task.updateTime)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -218,7 +184,7 @@ export default function ConversationDetailsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Message History</CardTitle>
-              <CardDescription>Messages across all tasks in this conversation.</CardDescription>
+              <CardDescription>Messages in this conversation.</CardDescription>
             </CardHeader>
             <CardContent>
               {messages.length === 0 ? (

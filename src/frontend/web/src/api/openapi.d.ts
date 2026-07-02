@@ -1668,9 +1668,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ApiResultOfJobLog[]"];
-                        "application/json": components["schemas"]["ApiResultOfJobLog[]"];
-                        "text/json": components["schemas"]["ApiResultOfJobLog[]"];
+                        "text/plain": components["schemas"]["ApiResultOfJobLogResponse[]"];
+                        "application/json": components["schemas"]["ApiResultOfJobLogResponse[]"];
+                        "text/json": components["schemas"]["ApiResultOfJobLogResponse[]"];
                     };
                 };
             };
@@ -2436,46 +2436,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{projectId}/contexts/by-task/{taskId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    projectId: string;
-                    taskId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ApiResultOfProjectContextResponse"];
-                        "application/json": components["schemas"]["ApiResultOfProjectContextResponse"];
-                        "text/json": components["schemas"]["ApiResultOfProjectContextResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/projects/{projectId}/contexts/{contextId}/clear-records": {
         parameters: {
             query?: never;
@@ -2855,7 +2815,6 @@ export interface components {
             /** @description JSON object for additional data (e.g., environment variables). */
             extra: null | string;
             modelProvider?: null | components["schemas"]["ModelProviderRelation"];
-            agentflows?: components["schemas"]["AgentflowNode"][];
             agentAppRelations?: components["schemas"]["AgentAppRelation"][];
             agentMcpToolServers?: components["schemas"]["AgentMcpServerRelation"][];
             agentSkillRelations?: components["schemas"]["AgentSkillRelation"][];
@@ -2897,11 +2856,10 @@ export interface components {
             input: string;
             /** Format: uuid */
             projectId?: null | string;
-            /** Format: uuid */
-            taskId?: null | string;
+            contextId: null | string;
         };
         AgentExecutionResponse: {
-            taskId: null | string;
+            contextId: string;
             messages: components["schemas"]["AgwMessage"][];
         };
         Agentflow: {
@@ -2910,8 +2868,6 @@ export interface components {
             name: string;
             description: null | string;
             systemPrompt: string;
-            pattern: components["schemas"]["AgentflowOrchestrationPattern"];
-            configurationJson: null | string;
             enable: boolean;
             nodes?: components["schemas"]["AgentflowNode"][];
             edges?: components["schemas"]["AgentflowEdge"][];
@@ -2925,8 +2881,6 @@ export interface components {
         AgentflowCreateRequest: {
             name: string;
             description: null | string;
-            pattern: components["schemas"]["AgentflowOrchestrationPattern"];
-            configurationJson: null | string;
             enable: boolean;
             nodes: components["schemas"]["AgentflowNodeRequest"][];
             edges: components["schemas"]["AgentflowEdgeRequest"][];
@@ -2937,7 +2891,10 @@ export interface components {
             edgeId: string;
             sourceNodeId: string;
             targetNodeId: string;
-            animated: boolean;
+            kind: components["schemas"]["AgentflowEdgeKind"];
+            label: null | string;
+            conditionJson: null | string;
+            configJson: null | string;
             sourceNode?: components["schemas"]["AgentflowNode"];
             targetNode?: components["schemas"]["AgentflowNode"];
             /** Format: date-time */
@@ -2947,19 +2904,27 @@ export interface components {
             updateTime?: null | string;
             updateBy: null | string;
         };
+        AgentflowEdgeKind: number;
         AgentflowEdgeRequest: {
             edgeId: string;
             sourceNodeId: string;
             targetNodeId: string;
-            animated: boolean;
+            kind: components["schemas"]["AgentflowEdgeKind"];
+            label: null | string;
+            conditionJson: null | string;
+            configJson: null | string;
         };
         AgentflowNode: {
             /** Format: uuid */
             agentflowId: string;
             nodeId: string;
-            type: components["schemas"]["AgentflowNodeType"];
+            kind: components["schemas"]["AgentflowNodeKind"];
             /** Format: uuid */
-            relateId: string;
+            relateId?: null | string;
+            name: null | string;
+            positionJson: null | string;
+            instructions: null | string;
+            configJson: null | string;
             sourceEdges?: components["schemas"]["AgentflowEdge"][];
             targetEdges?: components["schemas"]["AgentflowEdge"][];
             /** Format: date-time */
@@ -2969,20 +2934,20 @@ export interface components {
             updateTime?: null | string;
             updateBy: null | string;
         };
+        AgentflowNodeKind: number;
         AgentflowNodeRequest: {
             nodeId: string;
-            type: components["schemas"]["AgentflowNodeType"];
+            kind: components["schemas"]["AgentflowNodeKind"];
             /** Format: uuid */
-            relateId: string;
+            relateId: null | string;
+            name: null | string;
+            positionJson: null | string;
+            instructions: null | string;
+            configJson: null | string;
         };
-        AgentflowNodeType: number;
-        /** @description Agentflow orchestration patterns. */
-        AgentflowOrchestrationPattern: number;
         AgentflowUpdateRequest: {
             name: string;
             description: null | string;
-            pattern: components["schemas"]["AgentflowOrchestrationPattern"];
-            configurationJson: null | string;
             enable: boolean;
             nodes: components["schemas"]["AgentflowNodeRequest"][];
             edges: components["schemas"]["AgentflowEdgeRequest"][];
@@ -3240,8 +3205,8 @@ export interface components {
             title: string;
             detail: null | string;
         };
-        "ApiResultOfJobLog[]": {
-            data?: null | components["schemas"]["JobLog"][];
+        "ApiResultOfJobLogResponse[]": {
+            data?: null | components["schemas"]["JobLogResponse"][];
             /** Format: int32 */
             code: number;
             title: string;
@@ -3514,27 +3479,20 @@ export interface components {
             maxRetryCount: number;
             isEnabled: boolean;
         };
-        JobLog: {
+        JobLogResponse: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             jobId: string;
-            /** Format: uuid */
-            taskId: string;
+            contextId: null | string;
             /** Format: date-time */
             startTime: string;
             /** Format: date-time */
-            endTime?: null | string;
+            endTime: null | string;
             success: boolean;
             /** Format: int32 */
             attempt: number;
             errorMessage: null | string;
-            /** Format: date-time */
-            createTime: string;
-            createBy: null | string;
-            /** Format: date-time */
-            updateTime?: null | string;
-            updateBy: null | string;
         };
         JobStatus: number;
         JobUpdateRequest: {
@@ -3773,7 +3731,6 @@ export interface components {
             workspace: null | string;
             enable: boolean;
             extraSetting: null | string;
-            tasks?: components["schemas"]["ProjectContext"][];
             /** Format: date-time */
             createTime: string;
             createBy: null | string;
@@ -3786,11 +3743,16 @@ export interface components {
             contextId: string;
             /** Format: uuid */
             jobId: null | string;
-            /** Format: uuid */
-            latestTaskId: null | string;
-            tasks: components["schemas"]["TaskSummaryResponse"][];
+            latestStatus: null | components["schemas"]["TaskExecutionStatus"];
+            /** Format: int32 */
+            executionCount: number;
             /** Format: int32 */
             messageCount: number;
+            /** Format: date-time */
+            createTime: string;
+            /** Format: date-time */
+            updateTime: null | string;
+            errorMessage: null | string;
             messages: null | components["schemas"]["AgwMessage"][];
         };
         ProjectContextSummaryResponse: {
@@ -3799,11 +3761,9 @@ export interface components {
             /** Format: uuid */
             jobId: null | string;
             title: string;
-            /** Format: uuid */
-            latestTaskId: null | string;
             latestStatus: null | components["schemas"]["TaskExecutionStatus"];
             /** Format: int32 */
-            taskCount: number;
+            executionCount: number;
             /** Format: int32 */
             messageCount: number;
             /** Format: date-time */
@@ -3812,58 +3772,15 @@ export interface components {
             updateTime: null | string;
             errorMessage: null | string;
         };
+        ProjectContextTitleUpdateRequest: {
+            title: string;
+        };
         ProjectCreateRequest: {
             name: string;
             description: null | string;
             workspace: null | string;
             enable: boolean;
             extraSetting: null | string;
-        };
-        ProjectContext: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            projectId: string;
-            project?: null | components["schemas"]["Project"];
-            /** @description ContextId identifies a conversation/session and may be shared by multiple tasks. */
-            contextId: string;
-            /** Format: uuid */
-            jobId?: null | string;
-            title: string;
-            /** @description Task execution status. */
-            status: components["schemas"]["TaskExecutionStatus"];
-            errorMessage: null | string;
-            /** Format: date-time */
-            finishedTime?: null | string;
-            /** Format: date-time */
-            createTime: string;
-            createBy: null | string;
-            /** Format: date-time */
-            updateTime?: null | string;
-            updateBy: null | string;
-        };
-        TaskExecutionStatus: number;
-        TaskSummaryResponse: {
-            /** Format: uuid */
-            taskId: string;
-            projectId: string;
-            contextId: string;
-            /** Format: uuid */
-            jobId: null | string;
-            status: components["schemas"]["TaskExecutionStatus"];
-            title: string;
-            errorMessage: null | string;
-            /** Format: date-time */
-            createTime: string;
-            /** Format: date-time */
-            updateTime: null | string;
-            /** Format: date-time */
-            finishedTime: null | string;
-            /** Format: date-time */
-            startedTime: null | string;
-        };
-        ProjectContextTitleUpdateRequest: {
-            title: string;
         };
         ProjectType: number;
         ProjectUpdateRequest: {
@@ -3945,6 +3862,7 @@ export interface components {
             updateTime: null | string;
             updateBy: null | string;
         };
+        TaskExecutionStatus: number;
         /** @description Represents information about a tool that can be used by an agent. */
         ToolInfo: {
             /** @description Gets the name of the tool (method name or custom name). */

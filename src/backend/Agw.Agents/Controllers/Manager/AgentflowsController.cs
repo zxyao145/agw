@@ -79,8 +79,6 @@ public class AgentflowsController : ControllerBase
         {
             Name = request.Name,
             Description = request.Description,
-            Pattern = request.Pattern,
-            ConfigurationJson = request.ConfigurationJson,
             Enable = request.Enable
         };
 
@@ -88,8 +86,12 @@ public class AgentflowsController : ControllerBase
             .Select(x => new AgentflowNode
             {
                 NodeId = x.NodeId,
-                Type = x.Type,
+                Kind = x.Kind,
                 RelateId = x.RelateId,
+                Name = x.Name,
+                PositionJson = x.PositionJson,
+                Instructions = x.Instructions,
+                ConfigJson = x.ConfigJson,
             })
             .ToList();
         var edges = request.Edges
@@ -98,7 +100,10 @@ public class AgentflowsController : ControllerBase
                 EdgeId = x.EdgeId,
                 SourceNodeId = x.SourceNodeId,
                 TargetNodeId = x.TargetNodeId,
-                Animated = x.Animated,
+                Kind = x.Kind,
+                Label = x.Label,
+                ConditionJson = x.ConditionJson,
+                ConfigJson = x.ConfigJson,
             })
             .ToList();
 
@@ -117,8 +122,12 @@ public class AgentflowsController : ControllerBase
             .Select(x => new AgentflowNode
             {
                 NodeId = x.NodeId,
-                Type = x.Type,
+                Kind = x.Kind,
                 RelateId = x.RelateId,
+                Name = x.Name,
+                PositionJson = x.PositionJson,
+                Instructions = x.Instructions,
+                ConfigJson = x.ConfigJson,
             })
             .ToList();
         var edges = request.Edges
@@ -127,7 +136,10 @@ public class AgentflowsController : ControllerBase
                 EdgeId = x.EdgeId,
                 SourceNodeId = x.SourceNodeId,
                 TargetNodeId = x.TargetNodeId,
-                Animated = x.Animated,
+                Kind = x.Kind,
+                Label = x.Label,
+                ConditionJson = x.ConditionJson,
+                ConfigJson = x.ConfigJson,
             })
             .ToList();
 
@@ -137,8 +149,6 @@ public class AgentflowsController : ControllerBase
             {
                 agentflow.Name = request.Name;
                 agentflow.Description = request.Description;
-                agentflow.Pattern = request.Pattern;
-                agentflow.ConfigurationJson = request.ConfigurationJson;
                 agentflow.Enable = request.Enable;
             },
             nodes,

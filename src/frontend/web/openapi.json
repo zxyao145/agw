@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:5515/"
+      "url": "http://localhost:5125/"
     }
   ],
   "paths": {
@@ -1979,17 +1979,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJobLog[]"
+                  "$ref": "#/components/schemas/ApiResultOfJobLogResponse[]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJobLog[]"
+                  "$ref": "#/components/schemas/ApiResultOfJobLogResponse[]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJobLog[]"
+                  "$ref": "#/components/schemas/ApiResultOfJobLogResponse[]"
                 }
               }
             }
@@ -3037,55 +3037,6 @@
         }
       }
     },
-    "/api/projects/{projectId}/contexts/by-task/{taskId}": {
-      "get": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/projects/{projectId}/contexts/{contextId}/clear-records": {
       "delete": {
         "tags": [
@@ -3584,12 +3535,6 @@
               }
             ]
           },
-          "agentflows": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgentflowNode"
-            }
-          },
           "agentAppRelations": {
             "type": "array",
             "items": {
@@ -3744,7 +3689,8 @@
       "AgentExecutionRequest": {
         "required": [
           "agentType",
-          "input"
+          "input",
+          "contextId"
         ],
         "type": "object",
         "properties": {
@@ -3761,27 +3707,23 @@
             ],
             "format": "uuid"
           },
-          "taskId": {
+          "contextId": {
             "type": [
               "null",
               "string"
-            ],
-            "format": "uuid"
+            ]
           }
         }
       },
       "AgentExecutionResponse": {
         "required": [
-          "taskId",
+          "contextId",
           "messages"
         ],
         "type": "object",
         "properties": {
-          "taskId": {
-            "type": [
-              "null",
-              "string"
-            ]
+          "contextId": {
+            "type": "string"
           },
           "messages": {
             "type": "array",
@@ -3797,8 +3739,6 @@
           "name",
           "description",
           "systemPrompt",
-          "pattern",
-          "configurationJson",
           "enable",
           "createTime",
           "createBy",
@@ -3821,15 +3761,6 @@
           },
           "systemPrompt": {
             "type": "string"
-          },
-          "pattern": {
-            "$ref": "#/components/schemas/AgentflowOrchestrationPattern"
-          },
-          "configurationJson": {
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "enable": {
             "type": "boolean"
@@ -3875,8 +3806,6 @@
         "required": [
           "name",
           "description",
-          "pattern",
-          "configurationJson",
           "enable",
           "nodes",
           "edges"
@@ -3887,15 +3816,6 @@
             "type": "string"
           },
           "description": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "pattern": {
-            "$ref": "#/components/schemas/AgentflowOrchestrationPattern"
-          },
-          "configurationJson": {
             "type": [
               "null",
               "string"
@@ -3924,7 +3844,10 @@
           "edgeId",
           "sourceNodeId",
           "targetNodeId",
-          "animated",
+          "kind",
+          "label",
+          "conditionJson",
+          "configJson",
           "createTime",
           "createBy",
           "updateBy"
@@ -3944,8 +3867,26 @@
           "targetNodeId": {
             "type": "string"
           },
-          "animated": {
-            "type": "boolean"
+          "kind": {
+            "$ref": "#/components/schemas/AgentflowEdgeKind"
+          },
+          "label": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conditionJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "configJson": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "sourceNode": {
             "$ref": "#/components/schemas/AgentflowNode"
@@ -3978,12 +3919,18 @@
           }
         }
       },
+      "AgentflowEdgeKind": {
+        "type": "integer"
+      },
       "AgentflowEdgeRequest": {
         "required": [
           "edgeId",
           "sourceNodeId",
           "targetNodeId",
-          "animated"
+          "kind",
+          "label",
+          "conditionJson",
+          "configJson"
         ],
         "type": "object",
         "properties": {
@@ -3996,8 +3943,26 @@
           "targetNodeId": {
             "type": "string"
           },
-          "animated": {
-            "type": "boolean"
+          "kind": {
+            "$ref": "#/components/schemas/AgentflowEdgeKind"
+          },
+          "label": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conditionJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "configJson": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -4005,8 +3970,11 @@
         "required": [
           "agentflowId",
           "nodeId",
-          "type",
-          "relateId",
+          "kind",
+          "name",
+          "positionJson",
+          "instructions",
+          "configJson",
           "createTime",
           "createBy",
           "updateBy"
@@ -4020,12 +3988,39 @@
           "nodeId": {
             "type": "string"
           },
-          "type": {
-            "$ref": "#/components/schemas/AgentflowNodeType"
+          "kind": {
+            "$ref": "#/components/schemas/AgentflowNodeKind"
           },
           "relateId": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "uuid"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "positionJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "configJson": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "sourceEdges": {
             "type": "array",
@@ -4064,39 +4059,64 @@
           }
         }
       },
+      "AgentflowNodeKind": {
+        "type": "integer"
+      },
       "AgentflowNodeRequest": {
         "required": [
           "nodeId",
-          "type",
-          "relateId"
+          "kind",
+          "relateId",
+          "name",
+          "positionJson",
+          "instructions",
+          "configJson"
         ],
         "type": "object",
         "properties": {
           "nodeId": {
             "type": "string"
           },
-          "type": {
-            "$ref": "#/components/schemas/AgentflowNodeType"
+          "kind": {
+            "$ref": "#/components/schemas/AgentflowNodeKind"
           },
           "relateId": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "uuid"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "positionJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "configJson": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
-      },
-      "AgentflowNodeType": {
-        "type": "integer"
-      },
-      "AgentflowOrchestrationPattern": {
-        "type": "integer",
-        "description": "Agentflow orchestration patterns."
       },
       "AgentflowUpdateRequest": {
         "required": [
           "name",
           "description",
-          "pattern",
-          "configurationJson",
           "enable",
           "nodes",
           "edges"
@@ -4107,15 +4127,6 @@
             "type": "string"
           },
           "description": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "pattern": {
-            "$ref": "#/components/schemas/AgentflowOrchestrationPattern"
-          },
-          "configurationJson": {
             "type": [
               "null",
               "string"
@@ -5282,7 +5293,7 @@
           }
         }
       },
-      "ApiResultOfJobLog[]": {
+      "ApiResultOfJobLogResponse[]": {
         "required": [
           "code",
           "title",
@@ -5297,7 +5308,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/JobLog"
+              "$ref": "#/components/schemas/JobLogResponse"
             }
           },
           "code": {
@@ -6462,18 +6473,16 @@
           }
         }
       },
-      "JobLog": {
+      "JobLogResponse": {
         "required": [
           "id",
           "jobId",
-          "taskId",
+          "contextId",
           "startTime",
+          "endTime",
           "success",
           "attempt",
-          "errorMessage",
-          "createTime",
-          "createBy",
-          "updateBy"
+          "errorMessage"
         ],
         "type": "object",
         "properties": {
@@ -6485,9 +6494,11 @@
             "type": "string",
             "format": "uuid"
           },
-          "taskId": {
-            "type": "string",
-            "format": "uuid"
+          "contextId": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "startTime": {
             "type": "string",
@@ -6508,29 +6519,6 @@
             "format": "int32"
           },
           "errorMessage": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "createTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "updateBy": {
             "type": [
               "null",
               "string"
@@ -7408,12 +7396,6 @@
               "string"
             ]
           },
-          "tasks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProjectContext"
-            }
-          },
           "createTime": {
             "type": "string",
             "format": "date-time"
@@ -7444,9 +7426,12 @@
           "projectId",
           "contextId",
           "jobId",
-          "latestTaskId",
-          "tasks",
+          "latestStatus",
+          "executionCount",
           "messageCount",
+          "createTime",
+          "updateTime",
+          "errorMessage",
           "messages"
         ],
         "type": "object",
@@ -7464,73 +7449,6 @@
             ],
             "format": "uuid"
           },
-          "latestTaskId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "tasks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TaskSummaryResponse"
-            }
-          },
-          "messageCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "messages": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/AgwMessage"
-            }
-          }
-        }
-      },
-      "ProjectContextSummaryResponse": {
-        "required": [
-          "projectId",
-          "contextId",
-          "jobId",
-          "title",
-          "latestTaskId",
-          "latestStatus",
-          "taskCount",
-          "messageCount",
-          "createTime",
-          "updateTime",
-          "errorMessage"
-        ],
-        "type": "object",
-        "properties": {
-          "projectId": {
-            "type": "string"
-          },
-          "contextId": {
-            "type": "string"
-          },
-          "jobId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "title": {
-            "type": "string"
-          },
-          "latestTaskId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
           "latestStatus": {
             "oneOf": [
               {
@@ -7541,7 +7459,7 @@
               }
             ]
           },
-          "taskCount": {
+          "executionCount": {
             "type": "integer",
             "format": "int32"
           },
@@ -7565,6 +7483,94 @@
               "null",
               "string"
             ]
+          },
+          "messages": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AgwMessage"
+            }
+          }
+        }
+      },
+      "ProjectContextSummaryResponse": {
+        "required": [
+          "projectId",
+          "contextId",
+          "jobId",
+          "title",
+          "latestStatus",
+          "executionCount",
+          "messageCount",
+          "createTime",
+          "updateTime",
+          "errorMessage"
+        ],
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "contextId": {
+            "type": "string"
+          },
+          "jobId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "latestStatus": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TaskExecutionStatus"
+              }
+            ]
+          },
+          "executionCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "messageCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updateTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "errorMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ProjectContextTitleUpdateRequest": {
+        "required": [
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
           }
         }
       },
@@ -7601,180 +7607,6 @@
               "null",
               "string"
             ]
-          }
-        }
-      },
-      "ProjectContext": {
-        "required": [
-          "id",
-          "projectId",
-          "contextId",
-          "title",
-          "status",
-          "errorMessage",
-          "createTime",
-          "createBy",
-          "updateBy"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "projectId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "project": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/Project"
-              }
-            ]
-          },
-          "contextId": {
-            "type": "string",
-            "description": "ContextId identifies a conversation/session and may be shared by multiple tasks."
-          },
-          "jobId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "title": {
-            "type": "string"
-          },
-          "status": {
-            "description": "Task execution status.",
-            "$ref": "#/components/schemas/TaskExecutionStatus"
-          },
-          "errorMessage": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "finishedTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "createTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "updateBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "TaskExecutionStatus": {
-        "type": "integer"
-      },
-      "TaskSummaryResponse": {
-        "required": [
-          "taskId",
-          "projectId",
-          "contextId",
-          "jobId",
-          "status",
-          "title",
-          "errorMessage",
-          "createTime",
-          "updateTime",
-          "finishedTime",
-          "startedTime"
-        ],
-        "type": "object",
-        "properties": {
-          "taskId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "projectId": {
-            "type": "string"
-          },
-          "contextId": {
-            "type": "string"
-          },
-          "jobId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "status": {
-            "$ref": "#/components/schemas/TaskExecutionStatus"
-          },
-          "title": {
-            "type": "string"
-          },
-          "errorMessage": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "createTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "finishedTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "startedTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          }
-        }
-      },
-      "ProjectContextTitleUpdateRequest": {
-        "required": [
-          "title"
-        ],
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string"
           }
         }
       },
@@ -8133,6 +7965,9 @@
             ]
           }
         }
+      },
+      "TaskExecutionStatus": {
+        "type": "integer"
       },
       "ToolInfo": {
         "required": [

@@ -82,7 +82,7 @@ public class TaskStore : ITaskStore
         foreach (var recordGroup in allRecords.GroupBy(record => record.TaskId))
         {
             var records = recordGroup.ToList();
-            var task = TaskResponseMapper.ToTask(contextById[records[0].ProjectContextId], records);
+            var task = TaskExecutionMapper.ToTask(contextById[records[0].ProjectContextId], records);
             var agentTask = TryReadSnapshot(records) ?? BuildFallbackTask(task);
             if (!MatchesStatus(agentTask, request.Status))
             {
@@ -141,7 +141,7 @@ public class TaskStore : ITaskStore
         var existingContext = records.Count == 0 ? null : await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
         var existingTask = existingContext == null || records.Count == 0
             ? null
-            : TaskResponseMapper.ToTask(existingContext, records);
+            : TaskExecutionMapper.ToTask(existingContext, records);
         if (existingTask != null && existingTask.ProjectId != ProjectDefaults.A2AId)
         {
             throw new AgwException(ErrorCodes.A2ATaskIdAlreadyUsed);
@@ -210,7 +210,7 @@ public class TaskStore : ITaskStore
         }
 
         var context = await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
-        return context == null ? null : TaskResponseMapper.ToTask(context, records);
+        return context == null ? null : TaskExecutionMapper.ToTask(context, records);
     }
 
     private static Dictionary<string, JsonElement> CreateSnapshotMetadata(AgentTask task) =>

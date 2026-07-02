@@ -4,7 +4,6 @@ using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Extensions;
-using Agw.Shared.Utils;
 
 using Microsoft.Extensions.Logging;
 
@@ -26,14 +25,12 @@ public partial class AgentRuntimeService
 
         Guid projectId = task.ProjectId;
         string taskIdString = task.TaskId.Normalize();
-        var providerSessionId = await GetCodexProviderSessionIdAsync(agent, task.TaskId, cancellationToken);
+        var resolvedContextId = ExecutionContextIdResolver.Resolve(task.ContextId, taskIdString);
+        var sessionKey = CreateSessionKey(projectId, resolvedContextId);
+        var providerSessionId = await GetCodexProviderSessionIdAsync(agent, projectId, resolvedContextId, cancellationToken);
         var resume = IsCodexExternalAgent(agent)
             ? providerSessionId.HasValue
             : settings.Resume;
-
-        var resolvedContextId = string.IsNullOrWhiteSpace(task.ContextId)
-            ? TaskUtil.GenContextId()
-            : task.ContextId;
 
         var fs = await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
         var rootStat = await fs.StatAsync("", cancellationToken);
@@ -50,14 +47,14 @@ public partial class AgentRuntimeService
             ProviderSessionId = providerSessionId,
             ProjectId = projectId,
             Resume = resume,
-            OnExternalSessionStartedAsync = CreateExternalSessionStartedCallback(agent, task),
+            OnExternalSessionStartedAsync = CreateExternalSessionStartedCallback(agent, task, resolvedContextId),
         }, cancellationToken);
         if (aiAgent == null)
         {
             return null;
         }
 
-        var agentSession = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, taskIdString, cancellationToken);
+        var agentSession = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, sessionKey, cancellationToken);
         _providerSessionState.InitializeSessionState(agentSession, resolvedContextId, taskIdString,
             ProjectDefaults.GetDefaultProjectIdentifier(projectId));
         return new AgentExecSession(
@@ -65,17 +62,19 @@ public partial class AgentRuntimeService
             agentSession,
             projectId: projectId,
             contextId: resolvedContextId,
-            taskIdString,
-            AgentRuntimeType.Agent,
-            agentId,
-            agent.Name,
-            _logger,
+            taskId: taskIdString,
+            sessionKey: sessionKey,
+            agentType: AgentRuntimeType.Agent,
+            agentId: agentId,
+            agentName: agent.Name,
+            logger: _logger,
             taskTitle: agent.Name);
     }
 
     private async Task<Guid?> GetCodexProviderSessionIdAsync(
         Agent agent,
-        Guid taskId,
+        Guid projectId,
+        string contextId,
         CancellationToken cancellationToken)
     {
         if (!IsCodexExternalAgent(agent))
@@ -84,7 +83,8 @@ public partial class AgentRuntimeService
         }
 
         var binding = await _taskSessionBindingService.GetAsync(
-            taskId,
+            projectId,
+            contextId,
             agent.Id,
             agent.Name,
             cancellationToken);
@@ -100,7 +100,8 @@ public partial class AgentRuntimeService
 
     private Func<string, CancellationToken, ValueTask>? CreateExternalSessionStartedCallback(
         Agent agent,
-        TaskProjection task)
+        TaskProjection task,
+        string contextId)
     {
         if (!IsCodexExternalAgent(agent))
         {
@@ -112,7 +113,8 @@ public partial class AgentRuntimeService
             try
             {
                 await _taskSessionBindingService.UpsertAsync(
-                    task.TaskId,
+                    task.ProjectId,
+                    contextId,
                     agent.Id,
                     agent.Name,
                     providerSessionId,
@@ -123,10 +125,13 @@ public partial class AgentRuntimeService
             {
                 _logger.LogError(
                     ex,
-                    "Failed to save provider session binding for task {TaskId}, agent {AgentId}.",
-                    task.TaskId,
+                    "Failed to save provider session binding for context {ContextId}, agent {AgentId}.",
+                    contextId,
                     agent.Id);
             }
         };
     }
+
+    private static string CreateSessionKey(Guid projectId, string contextId) =>
+        $"{ProjectDefaults.GetDefaultProjectIdentifier(projectId).Normalize()}:{contextId.Trim()}";
 }

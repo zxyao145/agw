@@ -232,19 +232,27 @@ public class AgwDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Description).HasMaxLength(1000);
-            entity.Property(e => e.ConfigurationJson).HasMaxLength(16000);
+            entity.Property(e => e.SystemPrompt).HasMaxLength(4000);
         });
 
         modelBuilder.Entity<AgentflowNode>(entity =>
         {
             entity.HasKey(e => new { e.AgentflowId, e.NodeId });
-            entity.HasIndex(e => new { e.AgentflowId, e.Type, e.RelateId })
-                .IsUnique(true);
+            entity.Property(e => e.Kind).HasConversion<int>();
+            entity.Property(e => e.Name).HasMaxLength(200);
+            entity.Property(e => e.PositionJson).HasMaxLength(1000);
+            entity.Property(e => e.Instructions).HasMaxLength(8000);
+            entity.Property(e => e.ConfigJson).HasMaxLength(16000);
+            entity.HasIndex(e => new { e.AgentflowId, e.Kind, e.RelateId });
         });
 
         modelBuilder.Entity<AgentflowEdge>(entity =>
         {
             entity.HasKey(e => new { e.AgentflowId, e.EdgeId });
+            entity.Property(e => e.Kind).HasConversion<int>();
+            entity.Property(e => e.Label).HasMaxLength(200);
+            entity.Property(e => e.ConditionJson).HasMaxLength(8000);
+            entity.Property(e => e.ConfigJson).HasMaxLength(16000);
 
             entity.HasOne(e => e.SourceNode)
                 .WithMany(n => n.SourceEdges)
@@ -292,9 +300,13 @@ public class AgwDbContext : DbContext
             entity.Property(e => e.ExternalAgentName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.ProviderSessionId).IsRequired().HasMaxLength(200);
 
-            entity.HasIndex(e => new { e.TaskId, e.AgentId, e.ExternalAgentName }).IsUnique();
+            entity.HasIndex(e => new { e.ProjectContextId, e.AgentId, e.ExternalAgentName }).IsUnique();
             entity.HasIndex(e => new { e.ExternalAgentName, e.ProviderSessionId });
 
+            entity.HasOne(e => e.ProjectContext)
+                .WithMany()
+                .HasForeignKey(e => e.ProjectContextId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TaskRecord>(entity =>
@@ -308,6 +320,7 @@ public class AgwDbContext : DbContext
             entity.Property(e => e.ConversationPayload).HasColumnType("text");
             entity.Property(e => e.Error).HasColumnType("text");
             entity.HasIndex(e => e.ProjectContextId);
+            entity.HasIndex(e => new { e.ProjectContextId, e.ConversationSequence });
             entity.HasIndex(e => new { e.TaskId, e.CreateTime });
             entity.HasIndex(e => new { e.TaskId, e.ConversationSequence }).IsUnique(false);
 

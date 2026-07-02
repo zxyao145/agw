@@ -10,43 +10,13 @@ public record TaskCreateRequest(
 
 public record ProjectContextTitleUpdateRequest(string Title);
 
-public record TaskSummaryResponse(
-    Guid TaskId,
-    string ProjectId,
-    string ContextId,
-    Guid? JobId,
-    TaskExecutionStatus Status,
-    string Title,
-    string? ErrorMessage,
-    DateTime CreateTime,
-    DateTime? UpdateTime,
-    DateTime? FinishedTime,
-    DateTime? StartedTime);
-
-public record TaskResponse(
-    Guid TaskId,
-    string ProjectId,
-    string ContextId,
-    Guid? JobId,
-    TaskExecutionStatus Status,
-    string Title,
-    string Input,
-    string? ErrorMessage,
-    DateTime CreateTime,
-    DateTime? UpdateTime,
-    DateTime? StartedTime,
-    DateTime? FinishedTime,
-    int MessageCount,
-    IReadOnlyList<AgwMessage>? Messages);
-
 public record ProjectContextSummaryResponse(
     string ProjectId,
     string ContextId,
     Guid? JobId,
     string Title,
-    Guid? LatestTaskId,
     TaskExecutionStatus? LatestStatus,
-    int TaskCount,
+    int ExecutionCount,
     int MessageCount,
     DateTime CreateTime,
     DateTime? UpdateTime,
@@ -56,7 +26,10 @@ public record ProjectContextResponse(
     string ProjectId,
     string ContextId,
     Guid? JobId,
-    Guid? LatestTaskId,
-    IReadOnlyList<TaskSummaryResponse> Tasks,
+    TaskExecutionStatus? LatestStatus,
+    int ExecutionCount,
     int MessageCount,
+    DateTime CreateTime,
+    DateTime? UpdateTime,
+    string? ErrorMessage,
     IReadOnlyList<AgwMessage>? Messages);

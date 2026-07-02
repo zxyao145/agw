@@ -95,9 +95,9 @@ public record AiAgentResponse(Guid Id, string Name, string SystemPrompt, string 
 }
 
 public record AgentExecuteResponse(
-    string TaskId,
+    string ContextId,
     IReadOnlyList<AgwMessage> Messages)
 {
     public static AgentExecuteResponse FromDomain(AgentExecutionResult result) =>
-        new(result.TaskId, result.Messages);
+        new(result.ContextId, result.Messages);
 }

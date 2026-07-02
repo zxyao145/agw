@@ -3,7 +3,7 @@ using System.Linq.Expressions;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
-using Agw.Shared.Extensions;
+using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
 
 using Microsoft.EntityFrameworkCore;
@@ -40,7 +40,7 @@ public class TaskExecutionAppService
 
     public Task<TaskProjection?> GetTaskAsync(Guid id) => GetProjectedTaskAsync(id);
 
-    public async Task<IReadOnlyList<TaskSummaryResponse>> ListResponsesAsync(Guid projectId)
+    public async Task<IReadOnlyList<TaskExecutionSummary>> ListResponsesAsync(Guid projectId)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
@@ -60,13 +60,13 @@ public class TaskExecutionAppService
 
         return records
             .GroupBy(record => record.TaskId)
-            .Select(group => TaskResponseMapper.ToTask(contextById[group.First().ProjectContextId], group.ToList()))
+            .Select(group => TaskExecutionMapper.ToTask(contextById[group.First().ProjectContextId], group.ToList()))
             .OrderByDescending(task => task.UpdateTime ?? task.CreateTime)
-            .Select(TaskResponseMapper.ToSummaryResponse)
+            .Select(TaskExecutionMapper.ToSummary)
             .ToList();
     }
 
-    public async Task<TaskResponse?> GetResponseAsync(Guid projectId, Guid taskId)
+    public async Task<TaskExecutionSnapshot?> GetResponseAsync(Guid projectId, Guid taskId)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
@@ -86,12 +86,12 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var task = TaskResponseMapper.ToTask(context, records);
-        var messages = records.SelectMany(TaskResponseMapper.ToAiMessages).ToList();
-        return TaskResponseMapper.ToResponse(task, records, messages);
+        var task = TaskExecutionMapper.ToTask(context, records);
+        var messages = records.SelectMany(TaskExecutionMapper.ToAiMessages).ToList();
+        return TaskExecutionMapper.ToSnapshot(task, records, messages);
     }
 
-    public Task<ApplicationResult<TaskResponse>> CreateAsync(
+    public Task<ApplicationResult<TaskExecutionSnapshot>> CreateAsync(
         Guid projectId,
         TaskCreateRequest request,
         string user)
@@ -99,7 +99,7 @@ public class TaskExecutionAppService
         return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending);
     }
 
-    public Task<ApplicationResult<TaskResponse>> CreateRunningAsync(
+    public Task<ApplicationResult<TaskExecutionSnapshot>> CreateRunningAsync(
         Guid projectId,
         TaskCreateRequest request,
         string user)
@@ -107,7 +107,7 @@ public class TaskExecutionAppService
         return CreateAsync(projectId, request, user, TaskExecutionStatus.Running);
     }
 
-    public Task<ApplicationResult<TaskResponse>> CreateForExecutionAsync(
+    public Task<ApplicationResult<TaskExecutionSnapshot>> CreateForExecutionAsync(
         Guid projectId,
         Guid? taskId,
         TaskCreateRequest request,
@@ -116,7 +116,7 @@ public class TaskExecutionAppService
         return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending, taskId);
     }
 
-    private async Task<ApplicationResult<TaskResponse>> CreateAsync(
+    private async Task<ApplicationResult<TaskExecutionSnapshot>> CreateAsync(
         Guid projectId,
         TaskCreateRequest request,
         string user,
@@ -126,7 +126,7 @@ public class TaskExecutionAppService
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
         {
-            return ApplicationResult<TaskResponse>.Invalid(
+            return ApplicationResult<TaskExecutionSnapshot>.Invalid(
                 "Failed to create task (project/target invalid, target mismatch, or input missing).");
         }
 
@@ -135,7 +135,7 @@ public class TaskExecutionAppService
             ? taskIdOverride.Value
             : Guid.NewGuid();
         var contextId = string.IsNullOrWhiteSpace(request.ContextId)
-            ? taskId.Normalize()
+            ? TaskUtil.GenContextId()
             : request.ContextId.Trim();
         var title = string.IsNullOrWhiteSpace(request.Title)
             ? TaskTitleFactory.Create(request.Input)
@@ -156,8 +156,8 @@ public class TaskExecutionAppService
         await _recordRepository.AddAsync(record);
         await _unitOfWork.SaveChangesAsync();
 
-        var task = TaskResponseMapper.ToTask(context, [record]);
-        return ApplicationResult<TaskResponse>.Success(TaskResponseMapper.ToResponse(task, [record], null));
+        var task = TaskExecutionMapper.ToTask(context, [record]);
+        return ApplicationResult<TaskExecutionSnapshot>.Success(TaskExecutionMapper.ToSnapshot(task, [record], null));
     }
 
     public async Task<ApplicationResult> UpdateTitleAsync(
@@ -244,7 +244,7 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var task = TaskResponseMapper.ToTask(context, records);
+        var task = TaskExecutionMapper.ToTask(context, records);
         if (task.Status != TaskExecutionStatus.Running)
         {
             return null;
@@ -265,7 +265,7 @@ public class TaskExecutionAppService
         _contextRepository.Update(context);
         await _unitOfWork.SaveChangesAsync();
 
-        return TaskResponseMapper.ToTask(context, records);
+        return TaskExecutionMapper.ToTask(context, records);
     }
 
     private async Task<ProjectContext> GetOrCreateContextAsync(
@@ -333,7 +333,7 @@ public class TaskExecutionAppService
         }
 
         var context = await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
-        return context == null ? null : TaskResponseMapper.ToTask(context, records);
+        return context == null ? null : TaskExecutionMapper.ToTask(context, records);
     }
 
     private async Task<IReadOnlyList<TaskProjection>> ListProjectedTasksAsync()
@@ -351,7 +351,7 @@ public class TaskExecutionAppService
         return records
             .GroupBy(record => record.TaskId)
             .Where(group => contextById.ContainsKey(group.First().ProjectContextId))
-            .Select(group => TaskResponseMapper.ToTask(contextById[group.First().ProjectContextId], group.ToList()))
+            .Select(group => TaskExecutionMapper.ToTask(contextById[group.First().ProjectContextId], group.ToList()))
             .ToList();
     }
 

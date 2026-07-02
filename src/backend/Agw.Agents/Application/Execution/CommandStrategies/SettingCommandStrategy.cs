@@ -1,35 +1,21 @@
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
-using Agw.Shared.Contracts.Tasks;
-
-using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Application.Execution.CommandStrategies;
 
 internal sealed class SettingCommandStrategy : IExecutionCommandStrategy
 {
-    private readonly ITaskAppService _taskAppService;
-    private readonly ILogger<SettingCommandStrategy> _logger;
-
-    public SettingCommandStrategy(ITaskAppService taskAppService, ILogger<SettingCommandStrategy> logger)
-    {
-        _taskAppService = taskAppService;
-        _logger = logger;
-    }
-
-    public async Task<SettingCommand> NormalizeSettingsAsync(SettingCommand settings, CancellationToken cancellationToken)
+    public Task<SettingCommand> NormalizeSettingsAsync(SettingCommand settings, CancellationToken cancellationToken)
     {
         var normalizedSettings = new SettingCommand(
             settings.ProjectId,
-            settings.TaskId,
             new Dictionary<string, string>(settings.EnvironmentVariables),
-            settings.ContextId);
-        if (await _taskAppService.HasTaskAsync(normalizedSettings.TaskId, cancellationToken: cancellationToken))
+            settings.ContextId)
         {
-            normalizedSettings.Resume = true;
-        }
+            Resume = settings.Resume
+        };
 
-        return normalizedSettings;
+        return Task.FromResult(normalizedSettings);
     }
 
     public bool CanHandle(AgentRunCommand command) => command is SettingCommand;

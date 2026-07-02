@@ -9,8 +9,8 @@ public class ExecutionConnectionStateTests
     [Fact]
     public void ApplySettings_WhenSettingsChangedWhileExecutionRunning_DefersImmediateSessionRefresh()
     {
-        var originalSettings = CreateSettings(taskId: Guid.NewGuid());
-        var changedSettings = CreateSettings(taskId: Guid.NewGuid());
+        var originalSettings = CreateSettings(contextId: Guid.NewGuid().ToString("D"));
+        var changedSettings = CreateSettings(contextId: Guid.NewGuid().ToString("D"));
         using var executionCts = new CancellationTokenSource();
         var pendingExecution = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var state = new ExecutionConnectionState();
@@ -29,8 +29,8 @@ public class ExecutionConnectionStateTests
     [Fact]
     public void ApplySettings_WhenSettingsChangedWhileIdle_RequiresImmediateSessionRefresh()
     {
-        var originalSettings = CreateSettings(taskId: Guid.NewGuid());
-        var changedSettings = CreateSettings(taskId: Guid.NewGuid());
+        var originalSettings = CreateSettings(contextId: Guid.NewGuid().ToString("D"));
+        var changedSettings = CreateSettings(contextId: Guid.NewGuid().ToString("D"));
         var state = new ExecutionConnectionState();
 
         state.ApplySettings(originalSettings);
@@ -47,12 +47,13 @@ public class ExecutionConnectionStateTests
     public void ApplySettings_WhenSettingsUnchanged_KeepsSessionReusable()
     {
         var projectId = Guid.NewGuid();
-        var settings = CreateSettings(projectId, Guid.NewGuid());
+        var contextId = Guid.NewGuid().ToString("D");
+        var settings = CreateSettings(projectId, contextId);
         var state = new ExecutionConnectionState();
 
         state.ApplySettings(settings);
         state.MarkSessionReady(settings);
-        state.ApplySettings(CreateSettings(projectId, settings.TaskId));
+        state.ApplySettings(CreateSettings(projectId, contextId));
 
         Assert.False(state.ShouldRefreshSessionImmediately);
         Assert.False(state.RequiresSessionRefreshBeforeNextExecution);
@@ -92,9 +93,11 @@ public class ExecutionConnectionStateTests
     public void TryGetResolvedTask_WhenSettingsUnchanged_ReturnsCachedTask()
     {
         var projectId = Guid.NewGuid();
-        var settings = CreateSettings(projectId, Guid.NewGuid());
-        var equivalentSettings = CreateSettings(projectId, settings.TaskId);
-        var task = new TaskProjection { TaskId = settings.TaskId, ProjectId = projectId };
+        var contextId = Guid.NewGuid().ToString("D");
+        var taskId = Guid.NewGuid();
+        var settings = CreateSettings(projectId, contextId);
+        var equivalentSettings = CreateSettings(projectId, contextId);
+        var task = new TaskProjection { TaskId = taskId, ProjectId = projectId, ContextId = contextId };
         var state = new ExecutionConnectionState();
 
         state.ApplySettings(settings);
@@ -109,9 +112,14 @@ public class ExecutionConnectionStateTests
     [Fact]
     public void ApplySettings_WhenSettingsChanged_ClearsCachedTask()
     {
-        var originalSettings = CreateSettings(taskId: Guid.NewGuid());
-        var changedSettings = CreateSettings(taskId: Guid.NewGuid());
-        var task = new TaskProjection { TaskId = originalSettings.TaskId, ProjectId = originalSettings.ProjectId };
+        var originalSettings = CreateSettings(contextId: Guid.NewGuid().ToString("D"));
+        var changedSettings = CreateSettings(contextId: Guid.NewGuid().ToString("D"));
+        var task = new TaskProjection
+        {
+            TaskId = Guid.NewGuid(),
+            ProjectId = originalSettings.ProjectId,
+            ContextId = originalSettings.ContextId!
+        };
         var state = new ExecutionConnectionState();
 
         state.ApplySettings(originalSettings);
@@ -123,15 +131,15 @@ public class ExecutionConnectionStateTests
         Assert.False(state.TryGetResolvedTask(originalSettings, out _));
     }
 
-    private static SettingCommand CreateSettings(Guid taskId)
+    private static SettingCommand CreateSettings(string contextId)
     {
-        return CreateSettings(Guid.NewGuid(), taskId);
+        return CreateSettings(Guid.NewGuid(), contextId);
     }
 
-    private static SettingCommand CreateSettings(Guid projectId, Guid taskId)
+    private static SettingCommand CreateSettings(Guid projectId, string contextId)
     {
         return new SettingCommand(
             projectId: projectId,
-            taskId: taskId);
+            contextId: contextId);
     }
 }

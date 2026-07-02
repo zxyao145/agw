@@ -1,4 +1,4 @@
-import { getApiKey } from "@/api/client";
+import { getApiKey } from "./client";
 import type { AiMessage } from "@/types";
 
 export type ExecutionWsUserInput = Pick<AiMessage, "messageId" | "author" | "contents">;
@@ -7,8 +7,7 @@ export type ExecutionWsEnvironmentVariables = Record<string, string>;
 
 export type ExecutionWsSettingCommandRequest = {
   projectId: string;
-  taskId?: string | null;
-  contextId?: string | null;
+  contextId: string;
   resume?: boolean;
   environmentVariables?: ExecutionWsEnvironmentVariables | null;
 };
@@ -16,10 +15,35 @@ export type ExecutionWsSettingCommandRequest = {
 export type ExecutionWsSettingCommandPayload = {
   type: "SettingCommand";
   projectId: string;
-  taskId: string | null;
-  contextId: string | null;
+  contextId: string;
   resume: boolean;
   environmentVariables?: ExecutionWsEnvironmentVariables | null;
+};
+
+export type HumanGateRequest = {
+  requestId: string;
+  nodeId: string;
+  nodeName?: string;
+  mode: string;
+  prompt: string;
+  inputPreview?: string;
+};
+
+export type HumanGateResponse = {
+  requestId: string;
+  approved: boolean;
+  responseText?: string | null;
+};
+
+export type ExecutionWsHumanResponseCommandPayload = {
+  type: "HumanResponseCommand";
+  requestId: string;
+  approved: boolean;
+  responseText?: string | null;
+};
+
+export type ExecutionWebSocketControls = {
+  sendCommand: (payload: unknown) => boolean;
 };
 
 export type ExecutionWsRequest = ExecutionWsSettingCommandRequest & {
@@ -51,6 +75,13 @@ function tryParseExecutionWsResult(payload: string): ExecutionWsResult | null {
       return null;
     }
 
+    if (message.additionalProperties?.type === "turn-finished") {
+      return {
+        status: "completed",
+        message: "Execution completed",
+      };
+    }
+
     const status = message.additionalProperties?.status;
     if (
       status !== "completed" &&
@@ -73,14 +104,17 @@ function tryParseExecutionWsResult(payload: string): ExecutionWsResult | null {
   }
 }
 
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
 export function buildSettingCommandPayload(
   request: ExecutionWsSettingCommandRequest,
 ): ExecutionWsSettingCommandPayload {
   const payload: ExecutionWsSettingCommandPayload = {
     type: "SettingCommand",
     projectId: request.projectId,
-    taskId: request.taskId ?? null,
-    contextId: request.contextId ?? null,
+    contextId: request.contextId,
     resume: request.resume ?? false,
   };
 
@@ -91,10 +125,53 @@ export function buildSettingCommandPayload(
   return payload;
 }
 
+export function buildHumanResponseCommandPayload(
+  response: HumanGateResponse,
+): ExecutionWsHumanResponseCommandPayload {
+  const payload: ExecutionWsHumanResponseCommandPayload = {
+    type: "HumanResponseCommand",
+    requestId: response.requestId,
+    approved: response.approved,
+  };
+
+  if (response.responseText !== undefined) {
+    payload.responseText = response.responseText;
+  }
+
+  return payload;
+}
+
+export function getHumanGateRequest(message: AiMessage): HumanGateRequest | null {
+  if (message.role !== "system" || message.additionalProperties?.type !== "human-gate-request") {
+    return null;
+  }
+
+  const requestId = readString(message.additionalProperties.requestId);
+  const nodeId = readString(message.additionalProperties.nodeId);
+  if (!requestId || !nodeId) {
+    return null;
+  }
+
+  const fallbackPrompt =
+    typeof message.contents?.[0]?.content === "string"
+      ? message.contents[0].content
+      : "Human approval is required to continue.";
+  const prompt = readString(message.additionalProperties.prompt) ?? fallbackPrompt;
+
+  return {
+    requestId,
+    nodeId,
+    nodeName: readString(message.additionalProperties.nodeName),
+    mode: readString(message.additionalProperties.mode) ?? "approval",
+    prompt,
+    inputPreview: readString(message.additionalProperties.inputPreview),
+  };
+}
+
 function openExecutionWebSocket(
   wsUrl: string,
   request: ExecutionWsRequest,
-  onMessage: (data: string) => void,
+  onMessage: (data: string, controls: ExecutionWebSocketControls) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
@@ -104,6 +181,17 @@ function openExecutionWebSocket(
       if (settled) return;
       settled = true;
       reject(new Error(message));
+    };
+
+    const controls: ExecutionWebSocketControls = {
+      sendCommand: (payload) => {
+        if (settled || ws.readyState !== WebSocket.OPEN) {
+          return false;
+        }
+
+        ws.send(JSON.stringify(payload));
+        return true;
+      },
     };
 
     ws.onopen = () => {
@@ -140,7 +228,7 @@ function openExecutionWebSocket(
         return;
       }
 
-      onMessage(event.data);
+      onMessage(event.data, controls);
     };
 
     ws.onerror = () => {
@@ -162,7 +250,7 @@ function openExecutionWebSocket(
 export async function executeWithWebSocket(
   id: string,
   request: ExecutionWsRequest,
-  onMessage: (data: string) => void,
+  onMessage: (data: string, controls: ExecutionWebSocketControls) => void,
 ): Promise<void> {
   const urls = buildExecutionWsUrls(id);
   let lastError: Error | null = null;

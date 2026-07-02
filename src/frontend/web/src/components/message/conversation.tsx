@@ -5,7 +5,6 @@ import {
   Accordion,
   AccordionContent,
   AccordionItem,
-  AccordionTrigger,
 } from "@/components/ui/accordion";
 import { AiMessageComponent, isResultMessage } from "./message";
 import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
@@ -20,7 +19,6 @@ import { cn } from "@/lib/utils";
 import { MessageTrigger } from "../MessageTrigger";
 
 export interface ChatSessionProps {
-  taskId?: string | null;
   messages: AiMessage[];
   messagesStartRef?: React.RefObject<HTMLDivElement>;
   messagesEndRef: React.RefObject<HTMLDivElement>;
@@ -161,7 +159,6 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
 };
 
 export function Conversation({
-  taskId,
   messages,
   messagesStartRef,
   messagesEndRef,
@@ -172,11 +169,7 @@ export function Conversation({
       <Empty>
         <EmptyHeader>
           <EmptyTitle>No Message Yet</EmptyTitle>
-          <EmptyDescription>
-            {taskId
-              ? `There are currently no messages in task ${taskId}.`
-              : "There are currently no messages."}
-          </EmptyDescription>
+          <EmptyDescription>There are currently no messages.</EmptyDescription>
         </EmptyHeader>
         <EmptyContent className="flex-row justify-center gap-2"></EmptyContent>
       </Empty>

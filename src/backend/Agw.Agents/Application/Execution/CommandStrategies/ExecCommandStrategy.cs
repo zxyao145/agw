@@ -8,7 +8,6 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tasks;
-using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 
 using Microsoft.Extensions.Logging;
@@ -91,7 +90,7 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
             // Resolve the task once per unchanged SettingCommand, creating it when the client is starting fresh.
             var taskResolution = await _taskAppService.ResolveTaskAsync(
                 new ExecutionTaskRequest(
-                    TaskId: settings.TaskId,
+                    TaskId: null,
                     ProjectId: settings.ProjectId,
                     ContextId: settings.ContextId,
                     Input: AgwUserInputUtil.ExtractInputText(execCommand.Input),
@@ -154,9 +153,7 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
     {
         return new SettingCommand(
             projectId: ProjectDefaults.DefaultBuiltInId,
-            taskId: Guid.NewGuid(),
-            contextId: null
-            );
+            contextId: null);
     }
 
     private static async Task<AgentExecSession?> DisposeSessionAsync(AgentExecSession? agentSession)
@@ -224,18 +221,25 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
 
             case AgentRuntimeType.Agentflow:
                 {
+                    var humanGateCoordinator = new HumanGateApprovalCoordinator();
                     // Agentflow does not carry a reusable agent session, so only the stream task and turn are tracked.
                     var execTask = ExecuteAgentflowStreamingAsync(
                         request.AgentId,
                         request.Command,
                         request.Settings,
                         request.Task.ContextId,
+                        request.Task.TaskId,
+                        humanGateCoordinator,
                         request.WebSocket,
                         request.SendLock,
                         executionCts.Token);
                     return new ExecutionStartResult(
                         request.CurrentSession,
-                        new ActiveTurn(execTask, executionCts));
+                        new ActiveTurn(
+                            execTask,
+                            executionCts,
+                            humanGateCoordinator.CancelAll,
+                            humanGateCoordinator.TrySubmitAsync));
                 }
 
             default:
@@ -251,10 +255,11 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
             return false;
         }
 
-        var requestedTaskId = settings.TaskId.Normalize();
+        var requestedContextId = settings.ContextId?.Trim();
         var requestedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);
 
-        return session._taskId == requestedTaskId
+        return !string.IsNullOrWhiteSpace(requestedContextId)
+            && string.Equals(session._contextId, requestedContextId, StringComparison.Ordinal)
             && session._projectId == requestedProjectId;
     }
 
@@ -284,16 +289,20 @@ internal sealed class ExecCommandStrategy : IExecutionCommandStrategy
         ExecCommand request,
         SettingCommand settings,
         string? contextId,
+        Guid taskId,
+        IHumanGateApprovalHandler humanGateApprovalHandler,
         WebSocket webSocket,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken)
     {
         await foreach (var message in _agentflowRuntimeService.ExecuteStreamingAsync(
-                           id,
-                           AgwUserInputUtil.ExtractAgentflowInputText(request.Input),
-                           cancellationToken,
-                           ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId),
-                           contextId))
+                           agentflowId: id,
+                           input: AgwUserInputUtil.ExtractAgentflowInputText(request.Input),
+                           cancellationToken: cancellationToken,
+                           projectId: ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId),
+                           contextId: contextId,
+                           taskId: taskId,
+                           humanGateApprovalHandler: humanGateApprovalHandler))
         {
             var json = JsonUtil.Serialize(message);
             await SendJsonAsync(webSocket, json, sendLock, cancellationToken);

@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Agw.Shared.Contracts.Agents;
+
 namespace Agw.Shared.Data.Entities.Agents;
 
 [Table("agentflow_edge")]
@@ -12,7 +14,14 @@ public class AgentflowEdge : BaseEntity
     public string SourceNodeId { get; set; } = null!;
 
     public string TargetNodeId { get; set; } = null!;
-    public bool Animated { get; set; } = true;
+
+    public AgentflowEdgeKind Kind { get; set; } = AgentflowEdgeKind.Direct;
+
+    public string? Label { get; set; }
+
+    public string? ConditionJson { get; set; }
+
+    public string? ConfigJson { get; set; }
 
     public virtual AgentflowNode SourceNode { get; set; } = null!;
     public virtual AgentflowNode TargetNode { get; set; } = null!;

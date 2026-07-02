@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace Agw.Shared.Data.Entities.Tasks;
 
@@ -16,7 +17,9 @@ public class ProjectContext : BaseEntity
     public string Title { get; set; } = "Untitled";
     
     
+    [JsonIgnore]
     public virtual Project? Project { get; set; }
 
+    [JsonIgnore]
     public virtual ICollection<TaskRecord> Records { get; set; } = new List<TaskRecord>();
 }
