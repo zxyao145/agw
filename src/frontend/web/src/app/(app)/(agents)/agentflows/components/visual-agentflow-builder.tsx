@@ -23,10 +23,13 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 
 import { apiPost, apiPut } from "@/api/client";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/SearchableSelect/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -50,9 +53,22 @@ import {
   AgentflowNodeKind,
   AgentflowSaveRequest,
 } from "@/types/agentflow";
-import { Bot, Grid, Maximize2, Workflow } from "lucide-react";
+import { Grid, Maximize2, Plus, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { createGraphLayout } from "./autoLayout";
+import {
+  addBlockParticipantId,
+  canDeleteBlockMember,
+  createBlockMembership,
+  getVisibleEdges,
+  getVisibleNodes,
+  isAgentParticipantKind,
+  isBlockNodeKind,
+  readBlockParticipantIds,
+  removeBlockParticipantId,
+  type BlockMemberView,
+  type BlockMembership,
+} from "./block-membership";
 
 type DagNodeData = {
   kind: AgentflowNodeKind;
@@ -60,6 +76,10 @@ type DagNodeData = {
   relateId: string | null;
   instructions: string;
   configJson: string;
+  presentation?: {
+    members?: BlockMemberView[];
+    onDelete?: (nodeId: string) => void;
+  };
 };
 
 type DagEdgeData = {
@@ -74,6 +94,14 @@ type VisualAgentflowBuilderProps = {
   agentflows?: AgentflowDto[];
   editingAgentflow?: AgentflowDetailDto | null;
   onAgentflowCreated?: () => void;
+  onActionStateChange?: (state: AgentflowBuilderActionState | null) => void;
+};
+
+export type AgentflowBuilderActionState = {
+  label: string;
+  disabled: boolean;
+  isSaving: boolean;
+  submit: () => void;
 };
 
 const NODE_META: Record<
@@ -149,9 +177,12 @@ const EDGE_LABELS: Record<AgentflowEdgeKind, string> = {
 };
 
 const EDGE_HELP_TEXT: Record<AgentflowEdgeKind, string> = {
-  [AgentflowEdgeKind.Direct]: "MAF AddEdge: one source to one target, optionally guarded by a predicate.",
-  [AgentflowEdgeKind.FanOut]: "MAF AddFanOutEdge: one source broadcasts the same input to multiple targets.",
-  [AgentflowEdgeKind.FanIn]: "MAF AddFanInBarrierEdge: multiple sources join before the target runs.",
+  [AgentflowEdgeKind.Direct]:
+    "MAF AddEdge: one source to one target, optionally guarded by a predicate.",
+  [AgentflowEdgeKind.FanOut]:
+    "MAF AddFanOutEdge: one source broadcasts the same input to multiple targets.",
+  [AgentflowEdgeKind.FanIn]:
+    "MAF AddFanInBarrierEdge: multiple sources join before the target runs.",
 };
 
 const CONDITION_KEYS = new Set([
@@ -164,38 +195,132 @@ const CONDITION_KEYS = new Set([
   "minMessages",
 ]);
 
-function DagNode({ data, selected }: NodeProps<DagNodeData>) {
+function DagNode({ id, data, selected }: NodeProps<DagNodeData>) {
   const meta = NODE_META[data.kind];
+  const members = data.presentation?.members ?? [];
+  const hasBlockWarning = members.some(
+    (member) => member.isExternallyLinked || member.isShared || member.isMissing,
+  );
 
   return (
     <Card
-      className={`w-[220px] gap-0 overflow-hidden rounded-md border-2 p-0 shadow-sm transition-shadow ${
-        selected ? "border-primary shadow-md" : "border-border"
+      className={`relative w-[220px] gap-0 overflow-hidden rounded-md border-2 p-0 shadow-sm transition-shadow ${
+        selected
+          ? "border-primary shadow-md"
+          : hasBlockWarning
+            ? "border-amber-400 shadow-amber-100"
+            : "border-border"
       }`}
     >
+      <button
+        type="button"
+        title="Delete node"
+        className="nodrag nopan absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded border border-border/70 bg-background/90 text-muted-foreground shadow-sm transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          data.presentation?.onDelete?.(id);
+        }}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
       <Handle
         type="target"
         position={Position.Left}
         className="h-3 w-3 border-2 border-background !bg-sky-600"
       />
-      <CardHeader className={`px-3 py-2 ${meta.tone}`}>
+      <CardHeader className={`px-3 py-2 pr-9 ${meta.tone}`}>
         <div className="flex min-w-0 items-center gap-2">
           <div className="grid h-7 w-7 shrink-0 place-items-center rounded border bg-background/80 text-xs font-semibold">
             {meta.symbol}
           </div>
           <div className="min-w-0">
             <CardTitle className="truncate text-sm">{data.title}</CardTitle>
-            <div className="mt-0.5 text-[10px] uppercase tracking-wide opacity-70">{meta.label}</div>
+            <div className="mt-0.5 text-[10px] uppercase tracking-wide opacity-70">
+              {meta.label}
+            </div>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="px-3 py-2 text-xs text-muted-foreground">{meta.body}</CardContent>
+      <CardContent className="px-3 py-2 text-xs text-muted-foreground">
+        {isBlockNodeKind(data.kind) ? (
+          <BlockNodeSummary kind={data.kind} members={members} fallback={meta.body} />
+        ) : (
+          meta.body
+        )}
+      </CardContent>
       <Handle
         type="source"
         position={Position.Right}
         className="h-3 w-3 border-2 border-background !bg-emerald-600"
       />
     </Card>
+  );
+}
+
+function BlockNodeSummary({
+  kind,
+  members,
+  fallback,
+}: {
+  kind: AgentflowNodeKind;
+  members: BlockMemberView[];
+  fallback: string;
+}) {
+  const visibleMembers = members.slice(0, 3);
+  const hiddenCount = Math.max(0, members.length - visibleMembers.length);
+  const manager =
+    kind === AgentflowNodeKind.MagenticBlock ? members.find((member) => member.isManager) : null;
+  const warningCount = members.filter(
+    (member) => member.isExternallyLinked || member.isShared || member.isMissing,
+  ).length;
+
+  if (members.length === 0) {
+    return <span>{fallback}</span>;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1 font-medium text-foreground">
+          <Users className="h-3.5 w-3.5" />
+          {members.length} {members.length === 1 ? "member" : "members"}
+        </span>
+        {warningCount > 0 ? (
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-800">
+            {warningCount} on canvas
+          </span>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {visibleMembers.map((member) => (
+          <span
+            key={member.nodeId}
+            className={`max-w-[92px] truncate rounded-full border px-2 py-0.5 text-[10px] ${
+              member.isExternallyLinked || member.isShared || member.isMissing
+                ? "border-amber-200 bg-amber-50 text-amber-800"
+                : "border-teal-200 bg-teal-50 text-teal-800"
+            }`}
+            title={member.title}
+          >
+            {member.title}
+          </span>
+        ))}
+        {hiddenCount > 0 ? (
+          <span className="rounded-full border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+            +{hiddenCount}
+          </span>
+        ) : null}
+      </div>
+      {manager ? (
+        <div className="flex min-w-0 items-center gap-1 text-[10px] text-blue-700">
+          <span>Manager</span>
+          <span className="truncate rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5">
+            {manager.title}
+          </span>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -223,13 +348,12 @@ export function VisualAgentflowBuilder({
   agentflows = [],
   editingAgentflow,
   onAgentflowCreated,
+  onActionStateChange,
 }: VisualAgentflowBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<DagNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<DagEdgeData>([]);
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
-  const [selectedAgentId, setSelectedAgentId] = React.useState<string>("");
-  const [selectedAgentflowId, setSelectedAgentflowId] = React.useState<string>("");
   const [agentflowName, setAgentflowName] = React.useState("");
   const [agentflowDescription, setAgentflowDescription] = React.useState("");
   const [agentflowEnabled, setAgentflowEnabled] = React.useState(true);
@@ -239,6 +363,73 @@ export function VisualAgentflowBuilder({
     if (!editingAgentflow) return agentflows;
     return agentflows.filter((agentflow) => agentflow.id !== editingAgentflow.id);
   }, [agentflows, editingAgentflow]);
+  const agentSelectOptions = React.useMemo<SearchableSelectOption[]>(
+    () =>
+      agents.map((agent) => ({
+        value: agent.id,
+        title: agent.name,
+        subtitle: agent.description?.trim() || undefined,
+      })),
+    [agents],
+  );
+  const agentflowSelectOptions = React.useMemo<SearchableSelectOption[]>(
+    () =>
+      availableAgentflows.map((agentflow) => ({
+        value: agentflow.id,
+        title: agentflow.name,
+        subtitle: agentflow.description?.trim() || undefined,
+      })),
+    [availableAgentflows],
+  );
+
+  const deleteFlowNode = React.useCallback(
+    (nodeId: string) => {
+      setNodes((current) =>
+        current
+          .filter((node) => node.id !== nodeId)
+          .map((node) =>
+            isBlockNodeKind(node.data.kind)
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    configJson: removeBlockParticipantId(node.data.configJson, nodeId),
+                  },
+                }
+              : node,
+          ),
+      );
+      setEdges((current) =>
+        current.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
+      );
+      setSelectedNodeId((current) => (current === nodeId ? null : current));
+      setSelectedEdgeId(null);
+    },
+    [setEdges, setNodes],
+  );
+
+  const blockMembership = React.useMemo(() => createBlockMembership(nodes, edges), [edges, nodes]);
+  const visibleNodes = React.useMemo(() => {
+    return getVisibleNodes(nodes, blockMembership).map((node) => {
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          presentation: {
+            ...node.data.presentation,
+            members: isBlockNodeKind(node.data.kind)
+              ? (blockMembership.membersByBlockId.get(node.id) ?? [])
+              : node.data.presentation?.members,
+            onDelete: deleteFlowNode,
+          },
+        },
+      };
+    });
+  }, [blockMembership, deleteFlowNode, nodes]);
+  const visibleEdges = React.useMemo(
+    () => getVisibleEdges(edges, blockMembership),
+    [blockMembership, edges],
+  );
 
   const selectedNode = React.useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -248,6 +439,13 @@ export function VisualAgentflowBuilder({
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
   );
+
+  React.useEffect(() => {
+    if (!selectedNodeId || !blockMembership.hiddenParticipantIds.has(selectedNodeId)) return;
+
+    setSelectedNodeId(blockMembership.participantOwnersByNodeId.get(selectedNodeId)?.[0] ?? null);
+    setSelectedEdgeId(null);
+  }, [blockMembership, selectedNodeId]);
 
   const updateNodeData = React.useCallback(
     (nodeId: string, update: Partial<DagNodeData>) => {
@@ -354,12 +552,7 @@ export function VisualAgentflowBuilder({
         data: createDefaultEdgeData(),
       };
 
-      setEdges((current) =>
-        addEdge(
-          applyEdgeVisuals(edge),
-          current,
-        ),
-      );
+      setEdges((current) => addEdge(applyEdgeVisuals(edge), current));
     },
     [setEdges],
   );
@@ -368,31 +561,101 @@ export function VisualAgentflowBuilder({
     const selectedNode = selection.nodes[0];
     const selectedEdge = selection.edges[0];
     setSelectedNodeId(selectedNode?.id ?? null);
-    setSelectedEdgeId(selectedNode ? null : selectedEdge?.id ?? null);
+    setSelectedEdgeId(selectedNode ? null : (selectedEdge?.id ?? null));
   }, []);
 
   const handleAutoLayout = React.useCallback(async () => {
-    if (nodes.length === 0) return;
-    const result = await createGraphLayout(nodes, edges);
-    setNodes(result.nodes as Node<DagNodeData>[]);
-    setEdges(result.edges as Edge<DagEdgeData>[]);
-  }, [edges, nodes, setEdges, setNodes]);
+    if (visibleNodes.length === 0) return;
+    const result = await createGraphLayout(visibleNodes, visibleEdges);
+    const positionByNodeId = new Map(result.nodes.map((node) => [node.id, node.position]));
+    setNodes((current) =>
+      current.map((node) => {
+        const position = positionByNodeId.get(node.id);
+        return position ? { ...node, position } : node;
+      }),
+    );
+  }, [setNodes, visibleEdges, visibleNodes]);
 
-  const handleDeleteSelection = React.useCallback(() => {
-    if (selectedNodeId) {
-      setNodes((current) => current.filter((node) => node.id !== selectedNodeId));
-      setEdges((current) =>
-        current.filter((edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId),
-      );
-      setSelectedNodeId(null);
-      return;
-    }
+  const addBlockParticipant = React.useCallback(
+    (blockId: string, kind: AgentflowNodeKind, title: string, relateId: string) => {
+      const nodeId = `${kind}-participant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    if (selectedEdgeId) {
-      setEdges((current) => current.filter((edge) => edge.id !== selectedEdgeId));
+      setNodes((current) => {
+        const blockNode = current.find((node) => node.id === blockId);
+        if (!blockNode) return current;
+
+        const participantIndex = readBlockParticipantIds(blockNode.data.configJson).length;
+        const participantNode: Node<DagNodeData> = {
+          id: nodeId,
+          type: "dagNode",
+          position: {
+            x: blockNode.position.x + 40 + participantIndex * 24,
+            y: blockNode.position.y + 136 + participantIndex * 24,
+          },
+          data: {
+            kind,
+            title,
+            relateId,
+            instructions: "",
+            configJson: "",
+          },
+        };
+
+        return [
+          ...current.map((node) =>
+            node.id === blockId
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    configJson: addBlockParticipantId(node.data.configJson, nodeId),
+                  },
+                }
+              : node,
+          ),
+          participantNode,
+        ];
+      });
+      setSelectedNodeId(blockId);
       setSelectedEdgeId(null);
-    }
-  }, [selectedEdgeId, selectedNodeId, setEdges, setNodes]);
+    },
+    [setNodes],
+  );
+
+  const removeBlockParticipant = React.useCallback(
+    (blockId: string, participantNodeId: string) => {
+      setNodes((current) =>
+        current.map((node) =>
+          node.id === blockId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  configJson: removeBlockParticipantId(node.data.configJson, participantNodeId),
+                },
+              }
+            : node,
+        ),
+      );
+      setSelectedNodeId(blockId);
+      setSelectedEdgeId(null);
+    },
+    [setNodes],
+  );
+
+  const deleteBlockParticipant = React.useCallback(
+    (blockId: string, participantNodeId: string) => {
+      if (!canDeleteBlockMember(blockMembership, participantNodeId)) {
+        toast.error("Remove canvas edges or other block memberships before deleting this member.");
+        return;
+      }
+
+      deleteFlowNode(participantNodeId);
+      setSelectedNodeId(blockId);
+      setSelectedEdgeId(null);
+    },
+    [blockMembership, deleteFlowNode],
+  );
 
   const graphValidation = React.useMemo(() => validateDag(nodes, edges), [nodes, edges]);
 
@@ -478,6 +741,21 @@ export function VisualAgentflowBuilder({
     setNodes,
   ]);
 
+  const actionState = React.useMemo<AgentflowBuilderActionState>(
+    () => ({
+      label: isSaving ? "Saving..." : editingAgentflow ? "Update" : "Create",
+      disabled: isSaving || !agentflowName.trim() || nodes.length === 0,
+      isSaving,
+      submit: handleBuild,
+    }),
+    [agentflowName, editingAgentflow, handleBuild, isSaving, nodes.length],
+  );
+
+  React.useEffect(() => {
+    onActionStateChange?.(actionState);
+    return () => onActionStateChange?.(null);
+  }, [actionState, onActionStateChange]);
+
   return (
     <div className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)_340px] gap-4">
       <aside className="min-h-0 overflow-auto rounded-md border bg-muted/20 p-3">
@@ -507,7 +785,11 @@ export function VisualAgentflowBuilder({
             <Label htmlFor="agentflowEnabled" className="cursor-pointer">
               Enabled
             </Label>
-            <Switch id="agentflowEnabled" checked={agentflowEnabled} onCheckedChange={setAgentflowEnabled} />
+            <Switch
+              id="agentflowEnabled"
+              checked={agentflowEnabled}
+              onCheckedChange={setAgentflowEnabled}
+            />
           </div>
         </div>
 
@@ -517,64 +799,34 @@ export function VisualAgentflowBuilder({
               Primitive Nodes
             </p>
             <div className="space-y-2">
-              <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Agents</SelectLabel>
-                    {agents.map((agent) => (
-                      <SelectItem key={agent.id} value={agent.id}>
-                        {agent.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start"
-                disabled={!selectedAgentId}
-                onClick={() => {
-                  const agent = agents.find((item) => item.id === selectedAgentId);
+              <SearchableSelect
+                id="agentflow-builder-agent-select"
+                ariaLabel="Select agent"
+                value=""
+                onValueChange={(value) => {
+                  const agent = agents.find((item) => item.id === value);
                   if (agent) addDagNode(AgentflowNodeKind.Agent, agent.name, agent.id);
                 }}
-              >
-                <Bot className="h-4 w-4" />
-                Add Agent
-              </Button>
-              <Select value={selectedAgentflowId} onValueChange={setSelectedAgentflowId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select workflow" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Agentflows</SelectLabel>
-                    {availableAgentflows.map((agentflow) => (
-                      <SelectItem key={agentflow.id} value={agentflow.id}>
-                        {agentflow.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start"
-                disabled={!selectedAgentflowId}
-                onClick={() => {
-                  const agentflow = availableAgentflows.find((item) => item.id === selectedAgentflowId);
+                options={agentSelectOptions}
+                placeholder="Select agent"
+                searchPlaceholder="Search agents..."
+                clearable={false}
+              />
+              <SearchableSelect
+                id="agentflow-builder-workflow-select"
+                ariaLabel="Select workflow"
+                value=""
+                onValueChange={(value) => {
+                  const agentflow = availableAgentflows.find((item) => item.id === value);
                   if (agentflow) {
                     addDagNode(AgentflowNodeKind.WorkflowAsAgent, agentflow.name, agentflow.id);
                   }
                 }}
-              >
-                <Workflow className="h-4 w-4" />
-                Add Workflow As Agent
-              </Button>
+                options={agentflowSelectOptions}
+                placeholder="Select workflow"
+                searchPlaceholder="Search workflows..."
+                clearable={false}
+              />
               <PaletteButton
                 label="Prompt Adapter"
                 onClick={() => addDagNode(AgentflowNodeKind.PromptAdapter, "Prompt Adapter")}
@@ -587,7 +839,10 @@ export function VisualAgentflowBuilder({
                 label="Checkpoint"
                 onClick={() => addDagNode(AgentflowNodeKind.CheckpointMarker, "Checkpoint")}
               />
-              <PaletteButton label="Output" onClick={() => addDagNode(AgentflowNodeKind.Output, "Output")} />
+              <PaletteButton
+                label="Output"
+                onClick={() => addDagNode(AgentflowNodeKind.Output, "Output")}
+              />
             </div>
           </div>
 
@@ -630,8 +885,8 @@ export function VisualAgentflowBuilder({
           </div>
         </div>
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={visibleNodes}
+          edges={visibleEdges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
@@ -659,7 +914,17 @@ export function VisualAgentflowBuilder({
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-3">
           {selectedNode ? (
-            <NodeInspector node={selectedNode} nodes={nodes} onChange={updateNodeData} />
+            <NodeInspector
+              node={selectedNode}
+              nodes={nodes}
+              agents={agents}
+              agentflows={availableAgentflows}
+              blockMembership={blockMembership}
+              onChange={updateNodeData}
+              onAddBlockParticipant={addBlockParticipant}
+              onRemoveBlockParticipant={removeBlockParticipant}
+              onDeleteBlockParticipant={deleteBlockParticipant}
+            />
           ) : selectedEdge ? (
             <EdgeInspector edge={selectedEdge} onChange={updateEdgeData} />
           ) : (
@@ -667,25 +932,6 @@ export function VisualAgentflowBuilder({
               Select a node or edge on the canvas.
             </div>
           )}
-        </div>
-        <div className="flex gap-2 border-t p-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1"
-            disabled={!selectedNodeId && !selectedEdgeId}
-            onClick={handleDeleteSelection}
-          >
-            Delete
-          </Button>
-          <Button
-            type="button"
-            className="flex-1"
-            disabled={isSaving || !agentflowName.trim() || nodes.length === 0}
-            onClick={handleBuild}
-          >
-            {isSaving ? "Saving..." : editingAgentflow ? "Update" : "Create"}
-          </Button>
         </div>
       </aside>
     </div>
@@ -703,14 +949,32 @@ function PaletteButton({ label, onClick }: { label: string; onClick: () => void 
 function NodeInspector({
   node,
   nodes,
+  agents,
+  agentflows,
+  blockMembership,
   onChange,
+  onAddBlockParticipant,
+  onRemoveBlockParticipant,
+  onDeleteBlockParticipant,
 }: {
   node: Node<DagNodeData>;
   nodes: Node<DagNodeData>[];
+  agents: AgentDto[];
+  agentflows: AgentflowDto[];
+  blockMembership: BlockMembership;
   onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onAddBlockParticipant: (
+    blockId: string,
+    kind: AgentflowNodeKind,
+    title: string,
+    relateId: string,
+  ) => void;
+  onRemoveBlockParticipant: (blockId: string, participantNodeId: string) => void;
+  onDeleteBlockParticipant: (blockId: string, participantNodeId: string) => void;
 }) {
   const meta = NODE_META[node.data.kind];
-  const configIsInvalid = node.data.configJson.trim().length > 0 && readConfigJson(node.data.configJson) === null;
+  const configIsInvalid =
+    node.data.configJson.trim().length > 0 && readConfigJson(node.data.configJson) === null;
   const usesInstructions =
     node.data.kind !== AgentflowNodeKind.Output &&
     node.data.kind !== AgentflowNodeKind.HumanGate &&
@@ -746,7 +1010,17 @@ function NodeInspector({
       ) : null}
 
       {isBlockNodeKind(node.data.kind) ? (
-        <BlockConfigInspector node={node} nodes={nodes} onChange={onChange} />
+        <BlockConfigInspector
+          node={node}
+          nodes={nodes}
+          agents={agents}
+          agentflows={agentflows}
+          blockMembership={blockMembership}
+          onChange={onChange}
+          onAddParticipant={onAddBlockParticipant}
+          onRemoveParticipant={onRemoveBlockParticipant}
+          onDeleteParticipant={onDeleteBlockParticipant}
+        />
       ) : null}
 
       {node.data.kind === AgentflowNodeKind.HumanGate ? (
@@ -773,68 +1047,147 @@ function NodeInspector({
 function BlockConfigInspector({
   node,
   nodes,
+  agents,
+  agentflows,
+  blockMembership,
   onChange,
+  onAddParticipant,
+  onRemoveParticipant,
+  onDeleteParticipant,
 }: {
   node: Node<DagNodeData>;
   nodes: Node<DagNodeData>[];
+  agents: AgentDto[];
+  agentflows: AgentflowDto[];
+  blockMembership: BlockMembership;
   onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onAddParticipant: (
+    blockId: string,
+    kind: AgentflowNodeKind,
+    title: string,
+    relateId: string,
+  ) => void;
+  onRemoveParticipant: (blockId: string, participantNodeId: string) => void;
+  onDeleteParticipant: (blockId: string, participantNodeId: string) => void;
 }) {
+  const [selectedAgentId, setSelectedAgentId] = React.useState("");
+  const [selectedAgentflowId, setSelectedAgentflowId] = React.useState("");
   const config = readConfigJson(node.data.configJson) ?? {};
-  const participantNodes = nodes.filter(
-    (item) => item.id !== node.id && isAgentParticipantKind(item.data.kind),
-  );
-  const participantNodeIds = readStringArray(config.participantNodeIds);
-  const selectedParticipants = participantNodes.filter((item) => participantNodeIds.includes(item.id));
+  const nodeById = React.useMemo(() => new Map(nodes.map((item) => [item.id, item])), [nodes]);
+  const members = blockMembership.membersByBlockId.get(node.id) ?? [];
+  const selectedParticipants = members
+    .map((member) => nodeById.get(member.nodeId))
+    .filter((item): item is Node<DagNodeData> =>
+      Boolean(item && isAgentParticipantKind(item.data.kind)),
+    );
   const managerNodeId = readString(config.managerNodeId);
+  const managerSelectValue = selectedParticipants.some(
+    (participant) => participant.id === managerNodeId,
+  )
+    ? managerNodeId
+    : "";
 
   const setConfig = (update: Record<string, unknown>) => {
     onChange(node.id, { configJson: updateConfigJson(node.data.configJson, update) });
   };
 
-  const toggleParticipant = (participantNodeId: string, checked: boolean) => {
-    const nextIds = checked
-      ? [...participantNodeIds, participantNodeId]
-      : participantNodeIds.filter((id) => id !== participantNodeId);
-    const nextUpdate: Record<string, unknown> = {
-      participantNodeIds: Array.from(new Set(nextIds)),
-    };
+  const handleAddAgent = () => {
+    const agent = agents.find((item) => item.id === selectedAgentId);
+    if (!agent) return;
 
-    if (managerNodeId && !nextIds.includes(managerNodeId)) {
-      nextUpdate.managerNodeId = undefined;
-    }
+    onAddParticipant(node.id, AgentflowNodeKind.Agent, agent.name, agent.id);
+    setSelectedAgentId("");
+  };
 
-    setConfig(nextUpdate);
+  const handleAddAgentflow = () => {
+    const agentflow = agentflows.find((item) => item.id === selectedAgentflowId);
+    if (!agentflow) return;
+
+    onAddParticipant(node.id, AgentflowNodeKind.WorkflowAsAgent, agentflow.name, agentflow.id);
+    setSelectedAgentflowId("");
   };
 
   return (
     <div className="space-y-3 rounded-md border bg-background p-3">
       <div className="flex items-center justify-between gap-2">
-        <Label>Participants</Label>
-        <Badge variant="outline">{selectedParticipants.length} selected</Badge>
+        <Label>Members</Label>
+        <Badge variant="outline">{members.length} total</Badge>
       </div>
 
-      {participantNodes.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Add Agent or Workflow-as-Agent nodes, then select them as block participants.
-        </p>
+      <div className="space-y-2 rounded-md border p-2">
+        <div className="grid gap-2">
+          <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select agent" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Agents</SelectLabel>
+                {agents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-start"
+            disabled={!selectedAgentId}
+            onClick={handleAddAgent}
+          >
+            <Plus className="h-4 w-4" />
+            Add Agent
+          </Button>
+        </div>
+        <div className="grid gap-2">
+          <Select value={selectedAgentflowId} onValueChange={setSelectedAgentflowId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select workflow" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Agentflows</SelectLabel>
+                {agentflows.map((agentflow) => (
+                  <SelectItem key={agentflow.id} value={agentflow.id}>
+                    {agentflow.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-start"
+            disabled={!selectedAgentflowId}
+            onClick={handleAddAgentflow}
+          >
+            <Plus className="h-4 w-4" />
+            Add Workflow As Agent
+          </Button>
+        </div>
+      </div>
+
+      {members.length === 0 ? (
+        <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+          Add members to configure this block.
+        </div>
       ) : (
         <div className="space-y-2">
-          {participantNodes.map((participant) => (
-            <label
-              key={participant.id}
-              className="flex cursor-pointer items-start gap-2 rounded-md border px-2 py-2 text-sm"
-            >
-              <Checkbox
-                checked={participantNodeIds.includes(participant.id)}
-                onCheckedChange={(checked) => toggleParticipant(participant.id, checked === true)}
-              />
-              <span className="min-w-0">
-                <span className="block truncate font-medium">{participant.data.title}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {NODE_META[participant.data.kind].label}
-                </span>
-              </span>
-            </label>
+          {members.map((member) => (
+            <BlockMemberEditor
+              key={member.nodeId}
+              blockId={node.id}
+              member={member}
+              memberNode={nodeById.get(member.nodeId) ?? null}
+              blockMembership={blockMembership}
+              onChange={onChange}
+              onRemove={onRemoveParticipant}
+              onDelete={onDeleteParticipant}
+            />
           ))}
         </div>
       )}
@@ -853,9 +1206,9 @@ function BlockConfigInspector({
           <div className="space-y-2">
             <Label>Manager</Label>
             <Select
-              value={participantNodeIds.includes(managerNodeId) ? managerNodeId : ""}
+              value={managerSelectValue}
               onValueChange={(value) => setConfig({ managerNodeId: value })}
-              disabled={participantNodeIds.length === 0}
+              disabled={selectedParticipants.length === 0}
             >
               <SelectTrigger>
                 <SelectValue placeholder="First participant" />
@@ -937,6 +1290,103 @@ function BlockConfigInspector({
       ) : null}
     </div>
   );
+}
+
+function BlockMemberEditor({
+  blockId,
+  member,
+  memberNode,
+  blockMembership,
+  onChange,
+  onRemove,
+  onDelete,
+}: {
+  blockId: string;
+  member: BlockMemberView;
+  memberNode: Node<DagNodeData> | null;
+  blockMembership: BlockMembership;
+  onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onRemove: (blockId: string, participantNodeId: string) => void;
+  onDelete: (blockId: string, participantNodeId: string) => void;
+}) {
+  const canDelete = canDeleteBlockMember(blockMembership, member.nodeId);
+  const deleteTitle = canDelete
+    ? memberNode
+      ? "Delete member"
+      : "Remove missing member reference"
+    : "Remove canvas edges or shared block memberships before deleting";
+
+  return (
+    <div className="space-y-2 rounded-md border p-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-1">
+            <Badge variant="outline">{getNodeKindLabel(member.kind)}</Badge>
+            {member.isManager ? <Badge variant="secondary">Manager</Badge> : null}
+            {member.isExternallyLinked ? (
+              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+                On Canvas
+              </Badge>
+            ) : null}
+            {member.isShared ? (
+              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+                Shared
+              </Badge>
+            ) : null}
+            {member.isMissing ? <Badge variant="destructive">Missing</Badge> : null}
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            title="Remove from block"
+            onClick={() => onRemove(blockId, member.nodeId)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            title={deleteTitle}
+            disabled={!canDelete}
+            onClick={() => onDelete(blockId, member.nodeId)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Name</Label>
+        <Input
+          value={memberNode?.data.title ?? member.title}
+          disabled={!memberNode}
+          onChange={(event) => onChange(member.nodeId, { title: event.target.value })}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>System Prompt / Instructions</Label>
+        <Textarea
+          value={memberNode?.data.instructions ?? ""}
+          disabled={!memberNode}
+          onChange={(event) => onChange(member.nodeId, { instructions: event.target.value })}
+          placeholder="Describe how this member should use the block input."
+          className="min-h-24"
+        />
+      </div>
+    </div>
+  );
+}
+
+function getNodeKindLabel(kind: number | null) {
+  if (kind === null || !Object.hasOwn(NODE_META, kind)) {
+    return "Missing";
+  }
+
+  return NODE_META[kind as AgentflowNodeKind].label;
 }
 
 function HumanGateConfigInspector({
@@ -1071,7 +1521,10 @@ function EdgeInspector({
       </div>
       <div className="space-y-2">
         <Label>Label</Label>
-        <Input value={data.label} onChange={(event) => onChange(edge.id, { label: event.target.value })} />
+        <Input
+          value={data.label}
+          onChange={(event) => onChange(edge.id, { label: event.target.value })}
+        />
       </div>
       {data.kind === AgentflowEdgeKind.Direct ? (
         <div className="space-y-2">
@@ -1141,7 +1594,11 @@ function applyEdgeVisuals(edge: Edge<DagEdgeData>): Edge<DagEdgeData> {
   };
 }
 
-function getEdgeVisual(kind: AgentflowEdgeKind): { color: string; width: number; animated: boolean } {
+function getEdgeVisual(kind: AgentflowEdgeKind): {
+  color: string;
+  width: number;
+  animated: boolean;
+} {
   if (kind === AgentflowEdgeKind.FanOut) {
     return { color: "#2563eb", width: 2, animated: true };
   }
@@ -1176,7 +1633,9 @@ function resolveNodeTitle(node: AgentflowNodeDto, agents: AgentDto[], agentflows
   }
 
   if (node.kind === AgentflowNodeKind.WorkflowAsAgent && node.relateId) {
-    return agentflows.find((agentflow) => agentflow.id === node.relateId)?.name || "Unknown Workflow";
+    return (
+      agentflows.find((agentflow) => agentflow.id === node.relateId)?.name || "Unknown Workflow"
+    );
   }
 
   return NODE_META[node.kind]?.label || "Node";
@@ -1198,7 +1657,8 @@ function validateDag(nodes: Node<DagNodeData>[], edges: Edge<DagEdgeData>[]) {
 
   for (const node of nodes) {
     if (
-      (node.data.kind === AgentflowNodeKind.Agent || node.data.kind === AgentflowNodeKind.WorkflowAsAgent) &&
+      (node.data.kind === AgentflowNodeKind.Agent ||
+        node.data.kind === AgentflowNodeKind.WorkflowAsAgent) &&
       !node.data.relateId
     ) {
       return { ok: false, message: `${node.data.title || node.id} needs a linked runtime` };
@@ -1221,7 +1681,10 @@ function validateDag(nodes: Node<DagNodeData>[], edges: Edge<DagEdgeData>[]) {
           node.data.kind === AgentflowNodeKind.MagenticBlock) &&
         participantNodeIds.length < 2
       ) {
-        return { ok: false, message: `${node.data.title || node.id} needs at least two participants` };
+        return {
+          ok: false,
+          message: `${node.data.title || node.id} needs at least two participants`,
+        };
       }
 
       for (const participantId of participantNodeIds) {
@@ -1237,7 +1700,10 @@ function validateDag(nodes: Node<DagNodeData>[], edges: Edge<DagEdgeData>[]) {
         managerNodeId &&
         !participantNodeIds.includes(managerNodeId)
       ) {
-        return { ok: false, message: `${node.data.title || node.id} manager must be a participant` };
+        return {
+          ok: false,
+          message: `${node.data.title || node.id} manager must be a participant`,
+        };
       }
     }
   }
@@ -1360,7 +1826,9 @@ function readBoolean(value: unknown) {
 }
 
 function readStringArray(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function parseOptionalInteger(value: string) {
@@ -1369,17 +1837,4 @@ function parseOptionalInteger(value: string) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return undefined;
   return Math.max(1, Math.trunc(parsed));
-}
-
-function isAgentParticipantKind(kind: AgentflowNodeKind) {
-  return kind === AgentflowNodeKind.Agent || kind === AgentflowNodeKind.WorkflowAsAgent;
-}
-
-function isBlockNodeKind(kind: AgentflowNodeKind) {
-  return (
-    kind === AgentflowNodeKind.ConcurrentBlock ||
-    kind === AgentflowNodeKind.HandoffBlock ||
-    kind === AgentflowNodeKind.GroupChatBlock ||
-    kind === AgentflowNodeKind.MagenticBlock
-  );
 }
