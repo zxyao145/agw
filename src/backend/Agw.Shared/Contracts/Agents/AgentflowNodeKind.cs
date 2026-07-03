@@ -12,4 +12,5 @@ public enum AgentflowNodeKind
     GroupChatBlock = 7,
     MagenticBlock = 8,
     Output = 9,
+    Input = 10,
 }

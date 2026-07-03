@@ -41,6 +41,7 @@ export const AgentflowNodeKind = {
   GroupChatBlock: 7,
   MagenticBlock: 8,
   Output: 9,
+  Input: 10,
 } as const;
 
 export type AgentflowNodeKind = (typeof AgentflowNodeKind)[keyof typeof AgentflowNodeKind];

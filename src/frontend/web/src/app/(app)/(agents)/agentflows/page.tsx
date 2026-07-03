@@ -317,6 +317,7 @@ export default function AgentflowsPage() {
             agentflows={agentflowsQuery.data || []}
             editingAgentflow={editingAgentflow}
             onAgentflowCreated={handleAgentflowCreated}
+            onViewMermaid={handleViewMermaid}
           />
         </div>
       </div>

@@ -232,6 +232,50 @@ public class AgentflowWorkflowCompilerTests
     }
 
     [Fact]
+    public async Task Compile_InputBeforeAgent_PassesInitialMessagesDownstream()
+    {
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "input-agent-flow" };
+        var chatClient = new CapturingChatClient("agent output");
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input, Name = "Input" },
+            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Agent" },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            Edge("input-agent", "input", "agent", AgentflowEdgeKind.FanOut),
+            Edge("agent-output", "agent", "output"),
+        };
+
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", chatClient) });
+
+        Assert.NotNull(workflow);
+
+        var input = new List<ChatMessage> { new(ChatRole.User, "Hello from Input") };
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            input,
+            cancellationToken: TestContext.Current.CancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        var events = new List<WorkflowEvent>();
+        await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
+        {
+            events.Add(_);
+        }
+
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+        Assert.Contains(events, evt =>
+            evt is ExecutorCompletedEvent completed &&
+            completed.ExecutorId.Contains("Agent", StringComparison.Ordinal));
+        Assert.Contains(chatClient.Messages, message => message.Text == "Hello from Input");
+    }
+
+    [Fact]
     public async Task Compile_WithSessionScope_InitializesInnerAgentSession()
     {
         var providerSessionState = new CapturingProviderSessionState();
@@ -363,6 +407,39 @@ public class AgentflowWorkflowCompilerTests
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _totalCalls);
+            await Task.Yield();
+            yield return new ChatResponseUpdate(ChatRole.Assistant, responseText);
+        }
+    }
+
+    private sealed class CapturingChatClient(string responseText) : IChatClient
+    {
+        public List<ChatMessage> Messages { get; } = [];
+
+        public void Dispose()
+        {
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null)
+        {
+            return serviceType.IsInstanceOfType(this) ? this : null;
+        }
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            Messages.AddRange(messages);
+            return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, responseText)]));
+        }
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Messages.AddRange(messages);
             await Task.Yield();
             yield return new ChatResponseUpdate(ChatRole.Assistant, responseText);
         }

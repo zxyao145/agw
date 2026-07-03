@@ -7,6 +7,8 @@ namespace Agw.Agents.Domain.Services;
 
 public class AgentflowDomainService
 {
+    private const string InputNodeId = "input";
+
     public bool TryPrepareForCreate(Agentflow agentflow, string user)
     {
         ArgumentNullException.ThrowIfNull(agentflow);
@@ -97,6 +99,11 @@ public class AgentflowDomainService
             }
         }
 
+        if (!IsValidInputRootedGraph(nodes, edges))
+        {
+            return (null, null);
+        }
+
         if (HasCycle(nodeIds, edges))
         {
             return (null, null);
@@ -180,6 +187,169 @@ public class AgentflowDomainService
         }
 
         return sorted.Count == nodes.Count ? sorted : nodes;
+    }
+
+    private static bool IsValidInputRootedGraph(
+        IReadOnlyList<AgentflowNode> nodes,
+        IReadOnlyList<AgentflowEdge> edges)
+    {
+        var inputNodes = nodes
+            .Where(node => node.NodeId == InputNodeId || node.Kind == AgentflowNodeKind.Input)
+            .ToList();
+        if (inputNodes.Count != 1)
+        {
+            return false;
+        }
+
+        var inputNode = inputNodes[0];
+        if (inputNode.NodeId != InputNodeId || inputNode.Kind != AgentflowNodeKind.Input)
+        {
+            return false;
+        }
+
+        if (edges.Any(edge => edge.TargetNodeId == InputNodeId))
+        {
+            return false;
+        }
+
+        if (edges.Any(edge => edge.SourceNodeId == InputNodeId && edge.Kind != AgentflowEdgeKind.FanOut))
+        {
+            return false;
+        }
+
+        var visibleNodeIds = GetRuntimeVisibleNodeIds(nodes, edges);
+        var reachableNodeIds = GetReachableNodeIds(InputNodeId, edges, visibleNodeIds);
+        return visibleNodeIds
+            .Where(nodeId => nodeId != InputNodeId)
+            .All(reachableNodeIds.Contains);
+    }
+
+    private static HashSet<string> GetRuntimeVisibleNodeIds(
+        IReadOnlyList<AgentflowNode> nodes,
+        IReadOnlyList<AgentflowEdge> edges)
+    {
+        var hiddenParticipantIds = GetHiddenBlockParticipantIds(nodes, edges);
+        return nodes
+            .Where(node => !hiddenParticipantIds.Contains(node.NodeId))
+            .Select(node => node.NodeId)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static HashSet<string> GetReachableNodeIds(
+        string startNodeId,
+        IReadOnlyList<AgentflowEdge> edges,
+        HashSet<string> visibleNodeIds)
+    {
+        var adjacency = visibleNodeIds.ToDictionary(
+            nodeId => nodeId,
+            _ => new List<string>(),
+            StringComparer.Ordinal);
+        foreach (var edge in edges)
+        {
+            if (visibleNodeIds.Contains(edge.SourceNodeId) && visibleNodeIds.Contains(edge.TargetNodeId))
+            {
+                adjacency[edge.SourceNodeId].Add(edge.TargetNodeId);
+            }
+        }
+
+        var reachableNodeIds = new HashSet<string>(StringComparer.Ordinal);
+        var queue = new Queue<string>([startNodeId]);
+        while (queue.Count > 0)
+        {
+            var nodeId = queue.Dequeue();
+            if (!reachableNodeIds.Add(nodeId))
+            {
+                continue;
+            }
+
+            foreach (var nextNodeId in adjacency.GetValueOrDefault(nodeId) ?? [])
+            {
+                queue.Enqueue(nextNodeId);
+            }
+        }
+
+        return reachableNodeIds;
+    }
+
+    private static HashSet<string> GetHiddenBlockParticipantIds(
+        IReadOnlyList<AgentflowNode> nodes,
+        IReadOnlyList<AgentflowEdge> edges)
+    {
+        var nodeById = nodes.ToDictionary(node => node.NodeId, StringComparer.Ordinal);
+        var edgeNodeIds = edges
+            .SelectMany(edge => new[] { edge.SourceNodeId, edge.TargetNodeId })
+            .ToHashSet(StringComparer.Ordinal);
+        var participantOwnersByNodeId = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+
+        foreach (var blockNode in nodes.Where(node => IsBlockNode(node.Kind)))
+        {
+            foreach (var participantNodeId in ReadBlockParticipantNodeIds(blockNode))
+            {
+                if (!participantOwnersByNodeId.TryGetValue(participantNodeId, out var owners))
+                {
+                    owners = [];
+                    participantOwnersByNodeId[participantNodeId] = owners;
+                }
+
+                owners.Add(blockNode.NodeId);
+            }
+        }
+
+        var hiddenParticipantIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (participantNodeId, ownerBlockIds) in participantOwnersByNodeId)
+        {
+            if (nodeById.TryGetValue(participantNodeId, out var participantNode) &&
+                IsAgentParticipantKind(participantNode.Kind) &&
+                ownerBlockIds.Count == 1 &&
+                !edgeNodeIds.Contains(participantNodeId))
+            {
+                hiddenParticipantIds.Add(participantNodeId);
+            }
+        }
+
+        return hiddenParticipantIds;
+    }
+
+    private static IReadOnlyList<string> ReadBlockParticipantNodeIds(AgentflowNode node)
+    {
+        if (string.IsNullOrWhiteSpace(node.ConfigJson))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(node.ConfigJson);
+            if (!doc.RootElement.TryGetProperty("participantNodeIds", out var participants) ||
+                participants.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            return participants
+                .EnumerateArray()
+                .Where(element => element.ValueKind == JsonValueKind.String)
+                .Select(element => element.GetString())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value!)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static bool IsAgentParticipantKind(AgentflowNodeKind kind)
+    {
+        return kind is AgentflowNodeKind.Agent or AgentflowNodeKind.WorkflowAsAgent;
+    }
+
+    private static bool IsBlockNode(AgentflowNodeKind kind)
+    {
+        return kind is AgentflowNodeKind.ConcurrentBlock or AgentflowNodeKind.HandoffBlock or
+            AgentflowNodeKind.GroupChatBlock or AgentflowNodeKind.MagenticBlock;
     }
 
     private static bool IsValidConditionJson(string? conditionJson)

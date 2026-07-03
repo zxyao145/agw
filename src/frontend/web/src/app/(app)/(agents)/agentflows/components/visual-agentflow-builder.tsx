@@ -11,6 +11,7 @@ import ReactFlow, {
   Handle,
   MarkerType,
   Node,
+  NodeChange,
   NodeProps,
   NodeTypes,
   OnSelectionChangeParams,
@@ -69,6 +70,12 @@ import {
   type BlockMemberView,
   type BlockMembership,
 } from "./block-membership";
+import {
+  createInputNode,
+  ensureInputGraph,
+  INPUT_NODE_ID,
+  validateInputGraph,
+} from "./agentflow-input-node";
 
 type DagNodeData = {
   kind: AgentflowNodeKind;
@@ -168,6 +175,12 @@ const NODE_META: Record<
     tone: "border-zinc-200 bg-zinc-50 text-zinc-900",
     body: "Terminal workflow output",
   },
+  [AgentflowNodeKind.Input]: {
+    label: "Input",
+    symbol: "I",
+    tone: "border-indigo-200 bg-indigo-50 text-indigo-900",
+    body: "User input that starts the agentflow",
+  },
 };
 
 const EDGE_LABELS: Record<AgentflowEdgeKind, string> = {
@@ -198,6 +211,7 @@ const CONDITION_KEYS = new Set([
 function DagNode({ id, data, selected }: NodeProps<DagNodeData>) {
   const meta = NODE_META[data.kind];
   const members = data.presentation?.members ?? [];
+  const isInput = data.kind === AgentflowNodeKind.Input;
   const hasBlockWarning = members.some(
     (member) => member.isExternallyLinked || member.isShared || member.isMissing,
   );
@@ -212,24 +226,28 @@ function DagNode({ id, data, selected }: NodeProps<DagNodeData>) {
             : "border-border"
       }`}
     >
-      <button
-        type="button"
-        title="Delete node"
-        className="nodrag nopan absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded border border-border/70 bg-background/90 text-muted-foreground shadow-sm transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => {
-          event.stopPropagation();
-          data.presentation?.onDelete?.(id);
-        }}
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
-      <Handle
-        type="target"
-        position={Position.Left}
-        className="h-3 w-3 border-2 border-background !bg-sky-600"
-      />
-      <CardHeader className={`px-3 py-2 pr-9 ${meta.tone}`}>
+      {isInput ? null : (
+        <button
+          type="button"
+          title="Delete node"
+          className="nodrag nopan absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded border border-border/70 bg-background/90 text-muted-foreground shadow-sm transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            data.presentation?.onDelete?.(id);
+          }}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {isInput ? null : (
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="h-3 w-3 border-2 border-background !bg-sky-600"
+        />
+      )}
+      <CardHeader className={`px-3 py-2 ${isInput ? "" : "pr-9"} ${meta.tone}`}>
         <div className="flex min-w-0 items-center gap-2">
           <div className="grid h-7 w-7 shrink-0 place-items-center rounded border bg-background/80 text-xs font-semibold">
             {meta.symbol}
@@ -384,6 +402,10 @@ export function VisualAgentflowBuilder({
 
   const deleteFlowNode = React.useCallback(
     (nodeId: string) => {
+      if (nodeId === INPUT_NODE_ID) {
+        return;
+      }
+
       setNodes((current) =>
         current
           .filter((node) => node.id !== nodeId)
@@ -406,6 +428,15 @@ export function VisualAgentflowBuilder({
       setSelectedEdgeId(null);
     },
     [setEdges, setNodes],
+  );
+
+  const handleNodesChange = React.useCallback(
+    (changes: NodeChange[]) => {
+      onNodesChange(
+        changes.filter((change) => change.type !== "remove" || change.id !== INPUT_NODE_ID),
+      );
+    },
+    [onNodesChange],
   );
 
   const blockMembership = React.useMemo(() => createBlockMembership(nodes, edges), [edges, nodes]);
@@ -464,7 +495,15 @@ export function VisualAgentflowBuilder({
         current.map((edge) => {
           if (edge.id !== edgeId) return edge;
 
-          const nextData = { ...createDefaultEdgeData(), ...edge.data, ...update };
+          const guardedUpdate =
+            edge.source === INPUT_NODE_ID
+              ? {
+                  ...update,
+                  kind: AgentflowEdgeKind.FanOut,
+                  conditionJson: "",
+                }
+              : update;
+          const nextData = { ...createDefaultEdgeData(), ...edge.data, ...guardedUpdate };
           return applyEdgeVisuals({
             ...edge,
             data: nextData,
@@ -505,9 +544,9 @@ export function VisualAgentflowBuilder({
       setAgentflowName("");
       setAgentflowDescription("");
       setAgentflowEnabled(true);
-      setNodes([]);
+      setNodes([createInputNode<DagNodeData>()]);
       setEdges([]);
-      setSelectedNodeId(null);
+      setSelectedNodeId(INPUT_NODE_ID);
       setSelectedEdgeId(null);
       return;
     }
@@ -533,15 +572,24 @@ export function VisualAgentflowBuilder({
     });
 
     const loadedEdges = editingAgentflow.edges.map((edge) => createFlowEdge(edge));
-    setNodes(loadedNodes);
-    setEdges(loadedEdges);
-    setSelectedNodeId(loadedNodes[0]?.id ?? null);
+    const normalizedGraph = ensureInputGraph(loadedNodes, loadedEdges);
+    setNodes(normalizedGraph.nodes);
+    setEdges(normalizedGraph.edges.map((edge) => applyEdgeVisuals(edge)));
+    setSelectedNodeId(INPUT_NODE_ID);
     setSelectedEdgeId(null);
   }, [agents, agentflows, editingAgentflow, setEdges, setNodes]);
 
   const onConnect = React.useCallback(
     (params: Connection) => {
       if (!params.source || !params.target) return;
+      if (params.target === INPUT_NODE_ID) {
+        toast.error("Input cannot have incoming edges");
+        return;
+      }
+
+      const edgeData = createDefaultEdgeData(
+        params.source === INPUT_NODE_ID ? AgentflowEdgeKind.FanOut : AgentflowEdgeKind.Direct,
+      );
 
       const edge: Edge<DagEdgeData> = {
         id: `edge-${params.source}-${params.target}-${Date.now()}`,
@@ -549,7 +597,7 @@ export function VisualAgentflowBuilder({
         target: params.target,
         sourceHandle: params.sourceHandle,
         targetHandle: params.targetHandle,
-        data: createDefaultEdgeData(),
+        data: edgeData,
       };
 
       setEdges((current) => addEdge(applyEdgeVisuals(edge), current));
@@ -718,9 +766,9 @@ export function VisualAgentflowBuilder({
       setAgentflowName("");
       setAgentflowDescription("");
       setAgentflowEnabled(true);
-      setNodes([]);
+      setNodes([createInputNode<DagNodeData>()]);
       setEdges([]);
-      setSelectedNodeId(null);
+      setSelectedNodeId(INPUT_NODE_ID);
       setSelectedEdgeId(null);
       onAgentflowCreated?.();
     } catch (error) {
@@ -744,11 +792,11 @@ export function VisualAgentflowBuilder({
   const actionState = React.useMemo<AgentflowBuilderActionState>(
     () => ({
       label: isSaving ? "Saving..." : editingAgentflow ? "Update" : "Create",
-      disabled: isSaving || !agentflowName.trim() || nodes.length === 0,
+      disabled: isSaving || !agentflowName.trim() || !graphValidation.ok,
       isSaving,
       submit: handleBuild,
     }),
-    [agentflowName, editingAgentflow, handleBuild, isSaving, nodes.length],
+    [agentflowName, editingAgentflow, graphValidation.ok, handleBuild, isSaving],
   );
 
   React.useEffect(() => {
@@ -888,7 +936,7 @@ export function VisualAgentflowBuilder({
           nodes={visibleNodes}
           edges={visibleEdges}
           nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange}
+          onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onSelectionChange={onSelectionChange}
@@ -975,6 +1023,24 @@ function NodeInspector({
   const meta = NODE_META[node.data.kind];
   const configIsInvalid =
     node.data.configJson.trim().length > 0 && readConfigJson(node.data.configJson) === null;
+  if (node.data.kind === AgentflowNodeKind.Input) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-md border bg-background p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">{meta.label}</p>
+            <Badge variant="outline">System</Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{meta.body}</p>
+        </div>
+        <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+          Input is the fixed user-input start node. It can fan out to downstream nodes and cannot
+          be deleted or used as a downstream target.
+        </div>
+      </div>
+    );
+  }
+
   const usesInstructions =
     node.data.kind !== AgentflowNodeKind.Output &&
     node.data.kind !== AgentflowNodeKind.HumanGate &&
@@ -1485,6 +1551,7 @@ function EdgeInspector({
   onChange: (edgeId: string, update: Partial<DagEdgeData>) => void;
 }) {
   const data = { ...createDefaultEdgeData(), ...edge.data };
+  const isInputSource = edge.source === INPUT_NODE_ID;
 
   return (
     <div className="space-y-3">
@@ -1499,7 +1566,10 @@ function EdgeInspector({
         <Label>Edge Type</Label>
         <Select
           value={String(data.kind)}
+          disabled={isInputSource}
           onValueChange={(value) => {
+            if (isInputSource) return;
+
             const kind = Number(value) as AgentflowEdgeKind;
             onChange(edge.id, {
               kind,
@@ -1556,9 +1626,9 @@ function EdgeInspector({
   );
 }
 
-function createDefaultEdgeData(): DagEdgeData {
+function createDefaultEdgeData(kind: AgentflowEdgeKind = AgentflowEdgeKind.Direct): DagEdgeData {
   return {
-    kind: AgentflowEdgeKind.Direct,
+    kind,
     label: "",
     conditionJson: "",
     configJson: "",
@@ -1644,6 +1714,11 @@ function resolveNodeTitle(node: AgentflowNodeDto, agents: AgentDto[], agentflows
 function validateDag(nodes: Node<DagNodeData>[], edges: Edge<DagEdgeData>[]) {
   if (nodes.length === 0) {
     return { ok: false, message: "Add at least one node" };
+  }
+
+  const inputValidation = validateInputGraph(nodes, edges);
+  if (!inputValidation.ok) {
+    return inputValidation;
   }
 
   if (!nodes.some((node) => isAgentParticipantKind(node.data.kind))) {

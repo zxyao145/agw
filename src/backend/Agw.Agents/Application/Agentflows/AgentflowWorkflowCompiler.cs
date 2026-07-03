@@ -149,6 +149,8 @@ public sealed class AgentflowWorkflowCompiler
                 BindChatTransform(node.NodeId, messages => ApplyInstructions(messages, node.Instructions)),
             AgentflowNodeKind.CheckpointMarker =>
                 BindChatTransform(node.NodeId, messages => messages),
+            AgentflowNodeKind.Input =>
+                new InputPassthroughAgent(node.NodeId, node.Name).BindAsExecutor(AgentHostOptions),
             AgentflowNodeKind.HumanGate =>
                 RequestPort.Create<List<ChatMessage>, List<ChatMessage>>(node.NodeId).BindAsExecutor(),
             AgentflowNodeKind.ConcurrentBlock =>
@@ -404,7 +406,11 @@ public sealed class AgentflowWorkflowCompiler
         {
             var source = GetSourceBinding(group.Key, bindings, humanGateOutputBindings);
             var targets = group.Select(edge => bindings[edge.TargetNodeId]).Distinct().ToList();
-            if (targets.Count > 0)
+            if (targets.Count == 1)
+            {
+                builder.AddEdge(source, targets[0], group.First().Label ?? group.First().EdgeId, idempotent: true);
+            }
+            else if (targets.Count > 1)
             {
                 builder.AddFanOutEdge(source, targets, group.First().Label ?? group.First().EdgeId);
             }
@@ -644,6 +650,71 @@ public sealed class AgentflowWorkflowCompiler
         public string? Role { get; init; }
         public int? MinMessages { get; init; }
     }
+
+    private sealed class InputPassthroughAgent(string nodeId, string? name) : AIAgent
+    {
+        protected override string? IdCore => nodeId;
+
+        public override string? Name => name ?? "Input";
+
+        public override string? Description => "User input";
+
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken)
+        {
+            return ValueTask.FromResult<AgentSession>(new InputPassthroughSession());
+        }
+
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken)
+        {
+            return ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+        }
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            JsonElement sessionState,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken)
+        {
+            return ValueTask.FromResult<AgentSession>(new InputPassthroughSession());
+        }
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session = null,
+            AgentRunOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new AgentResponse
+            {
+                Messages = messages.ToList(),
+                ResponseId = Guid.NewGuid().ToString("D"),
+            });
+        }
+
+        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session = null,
+            AgentRunOptions? options = null,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            foreach (var message in messages)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return new AgentResponseUpdate
+                {
+                    MessageId = Guid.NewGuid().ToString("D"),
+                    Role = message.Role,
+                    AuthorName = message.AuthorName,
+                    Contents = message.Contents,
+                };
+            }
+        }
+    }
+
+    private sealed class InputPassthroughSession : AgentSession;
 
     private sealed class NodeScopedAgent(
         AIAgent innerAgent,

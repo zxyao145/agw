@@ -14,7 +14,7 @@ import {
   type AgentflowBuilderActionState,
   VisualAgentflowBuilder,
 } from "./visual-agentflow-builder";
-import { X } from "lucide-react";
+import { Waypoints, X } from "lucide-react";
 import { AgentDto, AgentflowDetailDto, AgentflowDto } from "@/types/agentflow";
 
 type VisualAgentflowDialogProps = {
@@ -24,6 +24,7 @@ type VisualAgentflowDialogProps = {
   agentflows: AgentflowDto[];
   editingAgentflow?: AgentflowDetailDto | null;
   onAgentflowCreated?: () => void;
+  onViewMermaid: (agentflow: AgentflowDto) => void;
 };
 
 export function VisualAgentflowDialog({
@@ -33,6 +34,7 @@ export function VisualAgentflowDialog({
   agentflows,
   editingAgentflow,
   onAgentflowCreated,
+  onViewMermaid,
 }: VisualAgentflowDialogProps) {
   const [builderActionState, setBuilderActionState] =
     React.useState<AgentflowBuilderActionState | null>(null);
@@ -68,6 +70,19 @@ export function VisualAgentflowDialog({
               </UiDialogDescription>
             </div>
             <div className="flex items-center gap-2">
+              {editingAgentflow ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer"
+                  onClick={() => onViewMermaid(editingAgentflow)}
+                  title="View Mermaid chart"
+                >
+                  <Waypoints />
+                  Visualization
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
