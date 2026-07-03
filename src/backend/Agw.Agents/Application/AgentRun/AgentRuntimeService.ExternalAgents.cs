@@ -46,6 +46,16 @@ public partial class AgentRuntimeService
                 request.OnExternalSessionStartedAsync),
             _ => null
         };
+
+        if (aiAgent != null)
+        {
+            aiAgent = aiAgent.AsBuilder()
+                .Use(
+                    runFunc: _loggingMiddleware.LogRunMiddleware,
+                    runStreamingFunc: _loggingMiddleware.LogStreamingMiddleware)
+                .Build();
+        }
+        
         return aiAgent != null;
     }
 
