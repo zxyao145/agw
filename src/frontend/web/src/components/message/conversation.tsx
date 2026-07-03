@@ -1,11 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-} from "@/components/ui/accordion";
+import { Accordion, AccordionContent, AccordionItem } from "@/components/ui/accordion";
 import { AiMessageComponent, isResultMessage } from "./message";
 import { AiMessage, MessageContentType, ProcessedMessageItem } from "@/types";
 import {
@@ -23,6 +19,45 @@ export interface ChatSessionProps {
   messagesStartRef?: React.RefObject<HTMLDivElement>;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   processMessages?: (msgs: AiMessage[]) => ProcessedMessageItem[];
+}
+
+type AgentMessageMeta = {
+  name: string | null;
+  author: string | null;
+};
+
+const AGENT_NAME_KEYS = ["name", "agentName", "displayName", "agentDisplayName"];
+
+function readStringProperty(message: AiMessage, keys: string[]): string | null {
+  const messageRecord = message as unknown as Record<string, unknown>;
+
+  for (const key of keys) {
+    const value = message.additionalProperties?.[key] ?? messageRecord[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function getAgentMessageMeta(message: AiMessage): AgentMessageMeta | null {
+  if (message.role === "user" || isResultMessage(message)) {
+    return null;
+  }
+
+  const agentName = readStringProperty(message, AGENT_NAME_KEYS);
+  const agentAuthor = message.author?.trim() || null;
+  const displayName = agentName && agentName !== agentAuthor ? agentName : null;
+
+  if (!displayName && !agentAuthor) {
+    return null;
+  }
+
+  return {
+    name: displayName,
+    author: agentAuthor,
+  };
 }
 
 const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
@@ -216,17 +251,32 @@ export function Conversation({
             );
           } else {
             const isResult = isResultMessage(item.message);
-            
+            const agentMeta = getAgentMessageMeta(item.message);
+
             console.debug("isResult", isResult, "message", item.message);
             return (
               <div
-                className={cn(
-                  "mx-4 max-w-full",
-                  isResult ? "border-t pt-2" : "",
-                )}
+                className={cn("mx-4 max-w-full", isResult ? "border-t pt-2" : "")}
                 key={index}
                 data-msg-id={item.message.messageId}
               >
+                {agentMeta ? (
+                  <div className="mb-1 flex max-w-[80%] items-center gap-1.5 px-1 text-xs text-muted-foreground">
+                    {agentMeta.name ? (
+                      <span className="min-w-0 truncate font-medium text-foreground/70">
+                        {agentMeta.name}
+                      </span>
+                    ) : null}
+                    {agentMeta.name && agentMeta.author ? (
+                      <span className="shrink-0 text-muted-foreground/60">/</span>
+                    ) : null}
+                    {agentMeta.author ? (
+                      <span className="min-w-0 truncate font-mono text-[11px]">
+                        {agentMeta.author}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
                 <AiMessageComponent message={item.message} />
               </div>
             );

@@ -34,16 +34,14 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
     //  const prepared = prepare(lines[0], "16px Inter");
     //  const { height, lineCount } = layout(prepared, maxWidth, 20);
     // console.log("prepared height, lineCount", height, lineCount);
-    console.debug("prepared result", result.lines[0].text);
+    console.log("prepared result", result.lines[0].text);
     return result.lines[0].text;
   }, [node.content, containerRef]);
+
 
   return (
     <div className="msg-content text-muted-foreground ">
       <div className="flex justify-between items-start">
-        <div ref={containerRef} className="flex flex-1 flex-col">
-          <MdCard mdText={expanded ? node.content : preview} />
-        </div>
         <div>
           <Button
             variant="ghost"
@@ -53,6 +51,10 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
           >
             {expanded ? <ChevronDown size={4} /> : <ChevronUp size={4} />}
           </Button>
+        </div>
+
+        <div ref={containerRef} className="flex flex-1 flex-col">
+          <MdCard mdText={expanded ? node.content : preview} />
         </div>
       </div>
     </div>
