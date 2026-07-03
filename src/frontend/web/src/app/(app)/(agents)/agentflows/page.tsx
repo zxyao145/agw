@@ -14,10 +14,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { VisualAgentflowDialog } from "./components/visual-agentflow-dialog";
-import { AgentDto, AgentflowDto, AgentflowDetailDto, AgentflowSaveRequest } from "@/types/agentflow";
+import {
+  AgentDto,
+  AgentflowDto,
+  AgentflowDetailDto,
+  AgentflowSaveRequest,
+} from "@/types/agentflow";
 import { AgentflowsTable, ExecuteAgentflowDrawer, fetchAgentflowDetails } from "./components";
 import { Copy, X } from "lucide-react";
+import {
+  createDefaultMermaidViewport,
+  panViewport,
+  zoomViewport,
+  type MermaidViewportTransform,
+} from "./components/mermaid-viewport";
 
 export default function AgentflowsPage() {
   const queryClient = useQueryClient();
@@ -50,7 +62,16 @@ export default function AgentflowsPage() {
   const [mermaidText, setMermaidText] = React.useState("");
   const [mermaidRenderError, setMermaidRenderError] = React.useState<string | null>(null);
   const [isMermaidLoading, setIsMermaidLoading] = React.useState(false);
+  const [mermaidViewport, setMermaidViewport] = React.useState<MermaidViewportTransform>(() =>
+    createDefaultMermaidViewport(),
+  );
+  const [isMermaidDragging, setIsMermaidDragging] = React.useState(false);
   const mermaidContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const mermaidDragRef = React.useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const mermaidInitializedRef = React.useRef(false);
   const mermaidRequestIdRef = React.useRef(0);
 
@@ -68,6 +89,12 @@ export default function AgentflowsPage() {
 
     return trimmed;
   }, [mermaidText]);
+
+  React.useEffect(() => {
+    setMermaidViewport(createDefaultMermaidViewport());
+    setIsMermaidDragging(false);
+    mermaidDragRef.current = null;
+  }, [mermaidOpen, normalizedMermaidText]);
 
   React.useEffect(() => {
     if (mermaidInitializedRef.current) {
@@ -288,6 +315,81 @@ export default function AgentflowsPage() {
     }
   }, [mermaidText]);
 
+  const handleMermaidWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    setMermaidViewport((current) =>
+      zoomViewport({
+        viewport: current,
+        cursor: {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        },
+        deltaY: event.deltaY,
+        deltaMode: event.deltaMode,
+      }),
+    );
+  }, []);
+
+  const handleMermaidPointerDown = React.useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      mermaidDragRef.current = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+      };
+      setIsMermaidDragging(true);
+    },
+    [],
+  );
+
+  const handleMermaidPointerMove = React.useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const drag = mermaidDragRef.current;
+
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const movement = {
+        x: event.clientX - drag.x,
+        y: event.clientY - drag.y,
+      };
+
+      mermaidDragRef.current = {
+        ...drag,
+        x: event.clientX,
+        y: event.clientY,
+      };
+      setMermaidViewport((current) => panViewport({ viewport: current, movement }));
+    },
+    [],
+  );
+
+  const handleMermaidPointerEnd = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = mermaidDragRef.current;
+
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    mermaidDragRef.current = null;
+    setIsMermaidDragging(false);
+  }, []);
+
   return (
     <div className="space-y-6 w-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -317,7 +419,6 @@ export default function AgentflowsPage() {
             agentflows={agentflowsQuery.data || []}
             editingAgentflow={editingAgentflow}
             onAgentflowCreated={handleAgentflowCreated}
-            onViewMermaid={handleViewMermaid}
           />
         </div>
       </div>
@@ -359,7 +460,7 @@ export default function AgentflowsPage() {
             </DialogClose>
           </DialogHeader>
 
-          <div className="relative overflow-auto rounded-md border bg-muted/30 p-4 h-full">
+          <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-md border bg-muted/30 p-4">
             {isMermaidLoading ? (
               <p className="text-sm text-muted-foreground">Loading Mermaid text...</p>
             ) : (
@@ -368,7 +469,7 @@ export default function AgentflowsPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="absolute top-3 right-3"
+                  className="absolute top-3 right-3 z-10"
                   onClick={handleCopyMermaid}
                   disabled={isMermaidLoading || !mermaidText.trim()}
                 >
@@ -376,9 +477,26 @@ export default function AgentflowsPage() {
                 </Button>
                 {normalizedMermaidText ? (
                   <div
-                    className="px-4 flex justify-center items-center h-full"
-                    ref={mermaidContainerRef}
-                  />
+                    className={cn(
+                      "relative min-h-0 flex-1 overflow-hidden rounded-sm touch-none select-none",
+                      isMermaidDragging ? "cursor-grabbing" : "cursor-grab",
+                    )}
+                    onWheel={handleMermaidWheel}
+                    onPointerDown={handleMermaidPointerDown}
+                    onPointerMove={handleMermaidPointerMove}
+                    onPointerUp={handleMermaidPointerEnd}
+                    onPointerCancel={handleMermaidPointerEnd}
+                    onLostPointerCapture={handleMermaidPointerEnd}
+                  >
+                    <div
+                      className="flex h-full w-full items-center justify-center px-4 will-change-transform"
+                      ref={mermaidContainerRef}
+                      style={{
+                        transform: `translate(${mermaidViewport.x}px, ${mermaidViewport.y}px) scale(${mermaidViewport.scale})`,
+                        transformOrigin: "0 0",
+                      }}
+                    />
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">No Mermaid content returned.</p>
                 )}
@@ -386,7 +504,7 @@ export default function AgentflowsPage() {
             )}
 
             {mermaidRenderError ? (
-              <pre className="mt-3 rounded-md border bg-background/80 p-3 text-xs whitespace-pre-wrap">
+              <pre className="mt-3 max-h-32 overflow-auto rounded-md border bg-background/80 p-3 text-xs whitespace-pre-wrap">
                 Failed to render Mermaid: {mermaidRenderError}
               </pre>
             ) : null}
