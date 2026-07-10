@@ -74,6 +74,65 @@ test("createBlockMembership hides exclusive participants without edges", async (
   );
 });
 
+test("getBlockParticipantNodes returns current block participants for drill-in canvas", async () => {
+  const { createBlockMembership, getBlockParticipantNodes } = await loadBlockMembership();
+  const nodes = [
+    node("input", NodeKind.HumanGate),
+    node("block-a", NodeKind.ConcurrentBlock, {
+      participantNodeIds: ["french", "spanish", "missing"],
+    }),
+    node("block-b", NodeKind.GroupChatBlock, {
+      participantNodeIds: ["english"],
+    }),
+    node("french", NodeKind.Agent),
+    node("spanish", NodeKind.WorkflowAsAgent),
+    node("english", NodeKind.Agent),
+    node("output", NodeKind.Output),
+  ];
+
+  const membership = createBlockMembership(nodes, [
+    edge("in", "input", "block-a"),
+    edge("out", "block-a", "output"),
+  ]);
+
+  assert.deepEqual(Array.from(membership.hiddenParticipantIds).sort(), [
+    "english",
+    "french",
+    "spanish",
+  ]);
+  assert.deepEqual(
+    getBlockParticipantNodes(nodes, "block-a").map((item) => item.id),
+    ["french", "spanish"],
+  );
+});
+
+test("getBlockParticipantEdges returns no workflow edges for block drill-in canvas", async () => {
+  const { getBlockParticipantEdges } = await loadBlockMembership();
+  const edges = [edge("external", "french", "output"), edge("root", "input", "block")];
+
+  assert.deepEqual(
+    getBlockParticipantEdges(edges, "block").map((item) => item.id),
+    [],
+  );
+});
+
+test("getNextBlockParticipantPosition stays near laid-out block members", async () => {
+  const { getNextBlockParticipantPosition } = await loadBlockMembership();
+  const block = {
+    ...node("block", NodeKind.ConcurrentBlock, {
+      participantNodeIds: ["french", "spanish"],
+    }),
+    position: { x: 4000, y: 3000 },
+  };
+  const french = { ...node("french", NodeKind.Agent), position: { x: 12, y: 12 } };
+  const spanish = { ...node("spanish", NodeKind.Agent), position: { x: 12, y: 80 } };
+
+  assert.deepEqual(getNextBlockParticipantPosition([block, french, spanish], "block"), {
+    x: 272,
+    y: 12,
+  });
+});
+
 test("createBlockMembership keeps externally linked participants visible", async () => {
   const { createBlockMembership, getVisibleNodes } = await loadBlockMembership();
   const nodes = [

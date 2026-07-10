@@ -8,6 +8,7 @@ import ReactFlow, {
   ControlButton,
   Controls,
   Edge,
+  EdgeChange,
   Handle,
   MarkerType,
   Node,
@@ -16,6 +17,7 @@ import ReactFlow, {
   NodeTypes,
   OnSelectionChangeParams,
   Position,
+  ReactFlowInstance,
   addEdge,
   useEdgesState,
   useNodesState,
@@ -36,9 +38,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -54,18 +54,30 @@ import {
   AgentflowNodeKind,
   AgentflowSaveRequest,
 } from "@/types/agentflow";
-import { Grid, Maximize2, Plus, Trash2, Users, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Crown,
+  ExternalLink,
+  Grid,
+  Maximize2,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { createGraphLayout } from "./autoLayout";
 import {
   addBlockParticipantId,
   canDeleteBlockMember,
   createBlockMembership,
+  getBlockParticipantEdges,
+  getBlockParticipantNodes,
+  getNextBlockParticipantPosition,
   getVisibleEdges,
   getVisibleNodes,
   isAgentParticipantKind,
   isBlockNodeKind,
-  readBlockParticipantIds,
   removeBlockParticipantId,
   type BlockMemberView,
   type BlockMembership,
@@ -84,8 +96,11 @@ type DagNodeData = {
   instructions: string;
   configJson: string;
   presentation?: {
+    disableHandles?: boolean;
+    member?: BlockMemberView;
     members?: BlockMemberView[];
     onDelete?: (nodeId: string) => void;
+    onOpenBlock?: (blockId: string) => void;
   };
 };
 
@@ -110,6 +125,15 @@ export type AgentflowBuilderActionState = {
   isSaving: boolean;
   submit: () => void;
 };
+
+type CanvasScope =
+  | {
+      kind: "root";
+    }
+  | {
+      kind: "block";
+      blockId: string;
+    };
 
 const NODE_META: Record<
   AgentflowNodeKind,
@@ -210,11 +234,16 @@ const CONDITION_KEYS = new Set([
 
 function DagNode({ id, data, selected }: NodeProps<DagNodeData>) {
   const meta = NODE_META[data.kind];
+  const member = data.presentation?.member;
   const members = data.presentation?.members ?? [];
   const isInput = data.kind === AgentflowNodeKind.Input;
+  const isBlock = isBlockNodeKind(data.kind);
+  const showHandles = !data.presentation?.disableHandles;
+  const showOpenBlock = isBlock && data.presentation?.onOpenBlock;
   const hasBlockWarning = members.some(
     (member) => member.isExternallyLinked || member.isShared || member.isMissing,
   );
+  const headerPadding = isInput ? "" : showOpenBlock ? "pr-[4.75rem]" : "pr-9";
 
   return (
     <Card
@@ -240,14 +269,28 @@ function DagNode({ id, data, selected }: NodeProps<DagNodeData>) {
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       )}
-      {isInput ? null : (
+      {showOpenBlock ? (
+        <button
+          type="button"
+          title="Open block"
+          className="nodrag nopan absolute right-10 top-1.5 z-10 grid h-7 w-7 place-items-center rounded border border-border/70 bg-background/90 text-muted-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            data.presentation?.onOpenBlock?.(id);
+          }}
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+      {!isInput && showHandles ? (
         <Handle
           type="target"
           position={Position.Left}
           className="h-3 w-3 border-2 border-background !bg-sky-600"
         />
-      )}
-      <CardHeader className={`px-3 py-2 ${isInput ? "" : "pr-9"} ${meta.tone}`}>
+      ) : null}
+      <CardHeader className={`px-3 py-2 ${headerPadding} ${meta.tone}`}>
         <div className="flex min-w-0 items-center gap-2">
           <div className="grid h-7 w-7 shrink-0 place-items-center rounded border bg-background/80 text-xs font-semibold">
             {meta.symbol}
@@ -261,18 +304,54 @@ function DagNode({ id, data, selected }: NodeProps<DagNodeData>) {
         </div>
       </CardHeader>
       <CardContent className="px-3 py-2 text-xs text-muted-foreground">
-        {isBlockNodeKind(data.kind) ? (
+        {isBlock ? (
           <BlockNodeSummary kind={data.kind} members={members} fallback={meta.body} />
+        ) : member ? (
+          <BlockParticipantSummary member={member} fallback={meta.body} />
         ) : (
           meta.body
         )}
       </CardContent>
-      <Handle
-        type="source"
-        position={Position.Right}
-        className="h-3 w-3 border-2 border-background !bg-emerald-600"
-      />
+      {showHandles ? (
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="h-3 w-3 border-2 border-background !bg-emerald-600"
+        />
+      ) : null}
     </Card>
+  );
+}
+
+function BlockParticipantSummary({
+  member,
+  fallback,
+}: {
+  member: BlockMemberView;
+  fallback: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <span>{fallback}</span>
+      <div className="flex flex-wrap gap-1">
+        {member.isManager ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700">
+            <Crown className="h-3 w-3" />
+            Manager
+          </span>
+        ) : null}
+        {member.isExternallyLinked ? (
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
+            On Canvas
+          </span>
+        ) : null}
+        {member.isShared ? (
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
+            Shared
+          </span>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -372,6 +451,12 @@ export function VisualAgentflowBuilder({
   const [edges, setEdges, onEdgesChange] = useEdgesState<DagEdgeData>([]);
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
+  const [canvasScope, setCanvasScope] = React.useState<CanvasScope>({ kind: "root" });
+  const [reactFlowCanvas, setReactFlowCanvas] = React.useState<{
+    key: string;
+    instance: ReactFlowInstance<DagNodeData, DagEdgeData>;
+  } | null>(null);
+  const [pendingFocusNodeId, setPendingFocusNodeId] = React.useState<string | null>(null);
   const [agentflowName, setAgentflowName] = React.useState("");
   const [agentflowDescription, setAgentflowDescription] = React.useState("");
   const [agentflowEnabled, setAgentflowEnabled] = React.useState(true);
@@ -432,18 +517,49 @@ export function VisualAgentflowBuilder({
 
   const handleNodesChange = React.useCallback(
     (changes: NodeChange[]) => {
-      onNodesChange(
-        changes.filter((change) => change.type !== "remove" || change.id !== INPUT_NODE_ID),
-      );
+      onNodesChange(changes.filter((change) => change.type !== "remove"));
     },
     [onNodesChange],
   );
 
+  const handleEdgesChange = React.useCallback(
+    (changes: EdgeChange[]) => {
+      if (canvasScope.kind === "block") return;
+      onEdgesChange(changes);
+    },
+    [canvasScope, onEdgesChange],
+  );
+
   const blockMembership = React.useMemo(() => createBlockMembership(nodes, edges), [edges, nodes]);
-  const visibleNodes = React.useMemo(() => {
+  const activeBlockNode = React.useMemo(() => {
+    if (canvasScope.kind !== "block") return null;
+    const node = nodes.find((item) => item.id === canvasScope.blockId) ?? null;
+    return node && isBlockNodeKind(node.data.kind) ? node : null;
+  }, [canvasScope, nodes]);
+  const openBlockScope = React.useCallback((blockId: string) => {
+    setPendingFocusNodeId(null);
+    setCanvasScope({ kind: "block", blockId });
+    setSelectedNodeId(blockId);
+    setSelectedEdgeId(null);
+  }, []);
+  const exitBlockScope = React.useCallback(() => {
+    setPendingFocusNodeId(null);
+    if (canvasScope.kind === "block") {
+      setSelectedNodeId(canvasScope.blockId);
+      setSelectedEdgeId(null);
+    }
+    setCanvasScope({ kind: "root" });
+  }, [canvasScope]);
+  const selectBlockParticipant = React.useCallback((blockId: string, participantNodeId: string) => {
+    setCanvasScope({ kind: "block", blockId });
+    setSelectedNodeId(participantNodeId);
+    setSelectedEdgeId(null);
+  }, []);
+  const rootVisibleNodes = React.useMemo(() => {
     return getVisibleNodes(nodes, blockMembership).map((node) => {
       return {
         ...node,
+        selected: node.id === selectedNodeId,
         data: {
           ...node.data,
           presentation: {
@@ -452,31 +568,33 @@ export function VisualAgentflowBuilder({
               ? (blockMembership.membersByBlockId.get(node.id) ?? [])
               : node.data.presentation?.members,
             onDelete: deleteFlowNode,
+            onOpenBlock: openBlockScope,
           },
         },
       };
     });
-  }, [blockMembership, deleteFlowNode, nodes]);
-  const visibleEdges = React.useMemo(
+  }, [blockMembership, deleteFlowNode, nodes, openBlockScope, selectedNodeId]);
+  const rootVisibleEdges = React.useMemo(
     () => getVisibleEdges(edges, blockMembership),
     [blockMembership, edges],
   );
 
-  const selectedNode = React.useMemo(
-    () => nodes.find((node) => node.id === selectedNodeId) ?? null,
-    [nodes, selectedNodeId],
-  );
-  const selectedEdge = React.useMemo(
-    () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
-    [edges, selectedEdgeId],
-  );
-
   React.useEffect(() => {
+    if (canvasScope.kind !== "root") return;
     if (!selectedNodeId || !blockMembership.hiddenParticipantIds.has(selectedNodeId)) return;
 
     setSelectedNodeId(blockMembership.participantOwnersByNodeId.get(selectedNodeId)?.[0] ?? null);
     setSelectedEdgeId(null);
-  }, [blockMembership, selectedNodeId]);
+  }, [blockMembership, canvasScope, selectedNodeId]);
+
+  React.useEffect(() => {
+    if (canvasScope.kind === "root") return;
+    if (activeBlockNode) return;
+
+    setCanvasScope({ kind: "root" });
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+  }, [activeBlockNode, canvasScope]);
 
   const updateNodeData = React.useCallback(
     (nodeId: string, update: Partial<DagNodeData>) => {
@@ -546,6 +664,8 @@ export function VisualAgentflowBuilder({
       setAgentflowEnabled(true);
       setNodes([createInputNode<DagNodeData>()]);
       setEdges([]);
+      setCanvasScope({ kind: "root" });
+      setPendingFocusNodeId(null);
       setSelectedNodeId(INPUT_NODE_ID);
       setSelectedEdgeId(null);
       return;
@@ -575,12 +695,15 @@ export function VisualAgentflowBuilder({
     const normalizedGraph = ensureInputGraph(loadedNodes, loadedEdges);
     setNodes(normalizedGraph.nodes);
     setEdges(normalizedGraph.edges.map((edge) => applyEdgeVisuals(edge)));
+    setCanvasScope({ kind: "root" });
+    setPendingFocusNodeId(null);
     setSelectedNodeId(INPUT_NODE_ID);
     setSelectedEdgeId(null);
   }, [agents, agentflows, editingAgentflow, setEdges, setNodes]);
 
   const onConnect = React.useCallback(
     (params: Connection) => {
+      if (canvasScope.kind === "block") return;
       if (!params.source || !params.target) return;
       if (params.target === INPUT_NODE_ID) {
         toast.error("Input cannot have incoming edges");
@@ -602,27 +725,31 @@ export function VisualAgentflowBuilder({
 
       setEdges((current) => addEdge(applyEdgeVisuals(edge), current));
     },
-    [setEdges],
+    [canvasScope, setEdges],
   );
 
-  const onSelectionChange = React.useCallback((selection: OnSelectionChangeParams) => {
-    const selectedNode = selection.nodes[0];
-    const selectedEdge = selection.edges[0];
-    setSelectedNodeId(selectedNode?.id ?? null);
-    setSelectedEdgeId(selectedNode ? null : (selectedEdge?.id ?? null));
-  }, []);
+  const onSelectionChange = React.useCallback(
+    (selection: OnSelectionChangeParams) => {
+      const selectedNode = selection.nodes[0];
+      const selectedEdge = selection.edges[0];
 
-  const handleAutoLayout = React.useCallback(async () => {
-    if (visibleNodes.length === 0) return;
-    const result = await createGraphLayout(visibleNodes, visibleEdges);
-    const positionByNodeId = new Map(result.nodes.map((node) => [node.id, node.position]));
-    setNodes((current) =>
-      current.map((node) => {
-        const position = positionByNodeId.get(node.id);
-        return position ? { ...node, position } : node;
-      }),
-    );
-  }, [setNodes, visibleEdges, visibleNodes]);
+      if (selectedNode) {
+        setSelectedNodeId(selectedNode.id);
+        setSelectedEdgeId(null);
+        return;
+      }
+
+      if (selectedEdge && canvasScope.kind === "root") {
+        setSelectedEdgeId(selectedEdge.id);
+        setSelectedNodeId(null);
+        return;
+      }
+
+      // ReactFlow can emit a transient empty selection while controlled node selection is syncing.
+      // Pane clicks own the intentional clear/select-parent behavior below.
+    },
+    [canvasScope],
+  );
 
   const addBlockParticipant = React.useCallback(
     (blockId: string, kind: AgentflowNodeKind, title: string, relateId: string) => {
@@ -632,14 +759,10 @@ export function VisualAgentflowBuilder({
         const blockNode = current.find((node) => node.id === blockId);
         if (!blockNode) return current;
 
-        const participantIndex = readBlockParticipantIds(blockNode.data.configJson).length;
         const participantNode: Node<DagNodeData> = {
           id: nodeId,
           type: "dagNode",
-          position: {
-            x: blockNode.position.x + 40 + participantIndex * 24,
-            y: blockNode.position.y + 136 + participantIndex * 24,
-          },
+          position: getNextBlockParticipantPosition(current, blockId),
           data: {
             kind,
             title,
@@ -664,7 +787,9 @@ export function VisualAgentflowBuilder({
           participantNode,
         ];
       });
-      setSelectedNodeId(blockId);
+      setCanvasScope({ kind: "block", blockId });
+      setPendingFocusNodeId(nodeId);
+      setSelectedNodeId(nodeId);
       setSelectedEdgeId(null);
     },
     [setNodes],
@@ -694,7 +819,23 @@ export function VisualAgentflowBuilder({
   const deleteBlockParticipant = React.useCallback(
     (blockId: string, participantNodeId: string) => {
       if (!canDeleteBlockMember(blockMembership, participantNodeId)) {
-        toast.error("Remove canvas edges or other block memberships before deleting this member.");
+        setNodes((current) =>
+          current.map((node) =>
+            node.id === blockId
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    configJson: removeBlockParticipantId(node.data.configJson, participantNodeId),
+                  },
+                }
+              : node,
+          ),
+        );
+        setCanvasScope({ kind: "root" });
+        setSelectedNodeId(participantNodeId);
+        setSelectedEdgeId(null);
+        toast.info("Member removed from this block and kept in the workflow.");
         return;
       }
 
@@ -702,8 +843,88 @@ export function VisualAgentflowBuilder({
       setSelectedNodeId(blockId);
       setSelectedEdgeId(null);
     },
-    [blockMembership, deleteFlowNode],
+    [blockMembership, deleteFlowNode, setNodes],
   );
+
+  const blockCanvasNodes = React.useMemo(() => {
+    if (!activeBlockNode) return [];
+
+    const members = blockMembership.membersByBlockId.get(activeBlockNode.id) ?? [];
+    const memberByNodeId = new Map(members.map((member) => [member.nodeId, member]));
+
+    return getBlockParticipantNodes(nodes, activeBlockNode.id).map((node) => ({
+      ...node,
+      selected: node.id === selectedNodeId,
+      data: {
+        ...node.data,
+        presentation: {
+          ...node.data.presentation,
+          disableHandles: true,
+          member: memberByNodeId.get(node.id),
+          onDelete: (nodeId: string) => deleteBlockParticipant(activeBlockNode.id, nodeId),
+        },
+      },
+    }));
+  }, [activeBlockNode, blockMembership, deleteBlockParticipant, nodes, selectedNodeId]);
+  const blockCanvasEdges = React.useMemo(() => {
+    if (!activeBlockNode) return [];
+    return getBlockParticipantEdges(edges, activeBlockNode.id);
+  }, [activeBlockNode, edges]);
+  const canvasNodes = canvasScope.kind === "block" ? blockCanvasNodes : rootVisibleNodes;
+  const canvasEdges = canvasScope.kind === "block" ? blockCanvasEdges : rootVisibleEdges;
+  const canvasKey = canvasScope.kind === "block" ? `block-${canvasScope.blockId}` : "root";
+
+  React.useEffect(() => {
+    if (
+      !pendingFocusNodeId ||
+      canvasScope.kind !== "block" ||
+      reactFlowCanvas?.key !== canvasKey ||
+      !canvasNodes.some((node) => node.id === pendingFocusNodeId)
+    ) {
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      const didFitView = reactFlowCanvas.instance.fitView({
+        nodes: [{ id: pendingFocusNodeId }],
+        padding: 0.5,
+        maxZoom: 1,
+        duration: 200,
+      });
+      if (didFitView) {
+        setPendingFocusNodeId(null);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [canvasKey, canvasNodes, canvasScope, pendingFocusNodeId, reactFlowCanvas]);
+  const selectedNode = React.useMemo(
+    () => nodes.find((node) => node.id === selectedNodeId) ?? null,
+    [nodes, selectedNodeId],
+  );
+  const inspectorNode = selectedNode ?? (canvasScope.kind === "block" ? activeBlockNode : null);
+  const selectedEdge = React.useMemo(
+    () =>
+      canvasScope.kind === "root"
+        ? (edges.find((edge) => edge.id === selectedEdgeId) ?? null)
+        : null,
+    [canvasScope, edges, selectedEdgeId],
+  );
+  const activeBlockMembers = activeBlockNode
+    ? (blockMembership.membersByBlockId.get(activeBlockNode.id) ?? [])
+    : [];
+
+  const handleAutoLayout = React.useCallback(async () => {
+    if (canvasNodes.length === 0) return;
+    const result = await createGraphLayout(canvasNodes, canvasEdges);
+    const positionByNodeId = new Map(result.nodes.map((node) => [node.id, node.position]));
+    setNodes((current) =>
+      current.map((node) => {
+        const position = positionByNodeId.get(node.id);
+        return position ? { ...node, position } : node;
+      }),
+    );
+  }, [canvasEdges, canvasNodes, setNodes]);
 
   const graphValidation = React.useMemo(() => validateDag(nodes, edges), [nodes, edges]);
 
@@ -768,6 +989,8 @@ export function VisualAgentflowBuilder({
       setAgentflowEnabled(true);
       setNodes([createInputNode<DagNodeData>()]);
       setEdges([]);
+      setCanvasScope({ kind: "root" });
+      setPendingFocusNodeId(null);
       setSelectedNodeId(INPUT_NODE_ID);
       setSelectedEdgeId(null);
       onAgentflowCreated?.();
@@ -841,113 +1064,74 @@ export function VisualAgentflowBuilder({
           </div>
         </div>
 
-        <div className="mt-5 space-y-3">
-          <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Primitive Nodes
-            </p>
-            <div className="space-y-2">
-              <SearchableSelect
-                id="agentflow-builder-agent-select"
-                ariaLabel="Select agent"
-                value=""
-                onValueChange={(value) => {
-                  const agent = agents.find((item) => item.id === value);
-                  if (agent) addDagNode(AgentflowNodeKind.Agent, agent.name, agent.id);
-                }}
-                options={agentSelectOptions}
-                placeholder="Select agent"
-                searchPlaceholder="Search agents..."
-                clearable={false}
-              />
-              <SearchableSelect
-                id="agentflow-builder-workflow-select"
-                ariaLabel="Select workflow"
-                value=""
-                onValueChange={(value) => {
-                  const agentflow = availableAgentflows.find((item) => item.id === value);
-                  if (agentflow) {
-                    addDagNode(AgentflowNodeKind.WorkflowAsAgent, agentflow.name, agentflow.id);
-                  }
-                }}
-                options={agentflowSelectOptions}
-                placeholder="Select workflow"
-                searchPlaceholder="Search workflows..."
-                clearable={false}
-              />
-              <PaletteButton
-                label="Prompt Adapter"
-                onClick={() => addDagNode(AgentflowNodeKind.PromptAdapter, "Prompt Adapter")}
-              />
-              <PaletteButton
-                label="Human Gate"
-                onClick={() => addDagNode(AgentflowNodeKind.HumanGate, "Human Gate")}
-              />
-              <PaletteButton
-                label="Checkpoint"
-                onClick={() => addDagNode(AgentflowNodeKind.CheckpointMarker, "Checkpoint")}
-              />
-              <PaletteButton
-                label="Output"
-                onClick={() => addDagNode(AgentflowNodeKind.Output, "Output")}
-              />
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Orchestration Blocks
-            </p>
-            <div className="space-y-2">
-              <PaletteButton
-                label="Concurrent Block"
-                onClick={() => addDagNode(AgentflowNodeKind.ConcurrentBlock, "Concurrent Block")}
-              />
-              <PaletteButton
-                label="Handoff Group"
-                onClick={() => addDagNode(AgentflowNodeKind.HandoffBlock, "Handoff Group")}
-              />
-              <PaletteButton
-                label="GroupChat Room"
-                onClick={() => addDagNode(AgentflowNodeKind.GroupChatBlock, "GroupChat Room")}
-              />
-              <PaletteButton
-                label="Magentic Team"
-                onClick={() => addDagNode(AgentflowNodeKind.MagenticBlock, "Magentic Team")}
-              />
-            </div>
-          </div>
-        </div>
+        {canvasScope.kind === "block" && activeBlockNode ? (
+          <BlockScopePalette
+            blockNode={activeBlockNode}
+            members={activeBlockMembers}
+            agents={agents}
+            agentflows={availableAgentflows}
+            agentSelectOptions={agentSelectOptions}
+            agentflowSelectOptions={agentflowSelectOptions}
+            onAddParticipant={addBlockParticipant}
+            onSelectParticipant={selectBlockParticipant}
+          />
+        ) : (
+          <RootScopePalette
+            agents={agents}
+            availableAgentflows={availableAgentflows}
+            agentSelectOptions={agentSelectOptions}
+            agentflowSelectOptions={agentflowSelectOptions}
+            onAddNode={addDagNode}
+          />
+        )}
       </aside>
 
       <section className="relative min-h-0 overflow-hidden rounded-md border bg-background">
         <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
-          <div
-            className={`rounded-full border px-3 py-1 text-xs ${
-              graphValidation.ok
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-destructive/30 bg-destructive/10 text-destructive"
-            }`}
-          >
-            {graphValidation.message}
-          </div>
+          <ScopeBar
+            scope={canvasScope}
+            activeBlockNode={activeBlockNode}
+            validationMessage={graphValidation.message}
+            validationOk={graphValidation.ok}
+            onExitBlock={exitBlockScope}
+          />
         </div>
         <ReactFlow
-          nodes={visibleNodes}
-          edges={visibleEdges}
+          key={canvasKey}
+          nodes={canvasNodes}
+          edges={canvasEdges}
           nodeTypes={nodeTypes}
           onNodesChange={handleNodesChange}
-          onEdgesChange={onEdgesChange}
+          onEdgesChange={handleEdgesChange}
           onConnect={onConnect}
+          onInit={(instance) => setReactFlowCanvas({ key: canvasKey, instance })}
           onSelectionChange={onSelectionChange}
           onNodeClick={(_, node) => {
             setSelectedNodeId(node.id);
             setSelectedEdgeId(null);
           }}
+          onNodeDoubleClick={(_, node) => {
+            if (isBlockNodeKind(node.data.kind)) {
+              openBlockScope(node.id);
+            }
+          }}
           onEdgeClick={(_, edge) => {
+            if (canvasScope.kind === "block") return;
             setSelectedEdgeId(edge.id);
             setSelectedNodeId(null);
           }}
+          onPaneClick={() => {
+            if (canvasScope.kind === "block") {
+              setSelectedNodeId(canvasScope.blockId);
+              setSelectedEdgeId(null);
+              return;
+            }
+
+            setSelectedNodeId(null);
+            setSelectedEdgeId(null);
+          }}
+          nodesConnectable={canvasScope.kind === "root"}
+          deleteKeyCode={null}
           fitView
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
@@ -961,17 +1145,22 @@ export function VisualAgentflowBuilder({
           <p className="text-xs text-muted-foreground">Edit selected node or edge.</p>
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-3">
-          {selectedNode ? (
+          {inspectorNode ? (
             <NodeInspector
-              node={selectedNode}
+              node={inspectorNode}
               nodes={nodes}
               agents={agents}
               agentflows={availableAgentflows}
+              agentSelectOptions={agentSelectOptions}
+              agentflowSelectOptions={agentflowSelectOptions}
               blockMembership={blockMembership}
+              canvasScope={canvasScope}
+              activeBlockNode={activeBlockNode}
               onChange={updateNodeData}
               onAddBlockParticipant={addBlockParticipant}
               onRemoveBlockParticipant={removeBlockParticipant}
-              onDeleteBlockParticipant={deleteBlockParticipant}
+              onOpenBlock={openBlockScope}
+              onSelectBlockParticipant={selectBlockParticipant}
             />
           ) : selectedEdge ? (
             <EdgeInspector edge={selectedEdge} onChange={updateEdgeData} />
@@ -994,22 +1183,308 @@ function PaletteButton({ label, onClick }: { label: string; onClick: () => void 
   );
 }
 
+function ScopeBar({
+  scope,
+  activeBlockNode,
+  validationMessage,
+  validationOk,
+  onExitBlock,
+}: {
+  scope: CanvasScope;
+  activeBlockNode: Node<DagNodeData> | null;
+  validationMessage: string;
+  validationOk: boolean;
+  onExitBlock: () => void;
+}) {
+  const validationClassName = validationOk
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-destructive/30 bg-destructive/10 text-destructive";
+
+  if (scope.kind === "block" && activeBlockNode) {
+    return (
+      <div className="flex items-center gap-2 rounded-full border bg-background/95 px-2 py-1 text-xs shadow-sm">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="h-6 w-6"
+          onClick={onExitBlock}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+        </Button>
+        <span className="text-muted-foreground">Agentflow</span>
+        <ChevronRight className="h-3 w-3 text-muted-foreground" />
+        <span className="max-w-[220px] truncate font-medium">{activeBlockNode.data.title}</span>
+        <Badge variant="outline">Block Canvas</Badge>
+        <span className={`rounded-full border px-2 py-0.5 ${validationClassName}`}>
+          {validationMessage}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded-full border px-3 py-1 text-xs ${validationClassName}`}>
+      {validationMessage}
+    </div>
+  );
+}
+
+function RootScopePalette({
+  agents,
+  availableAgentflows,
+  agentSelectOptions,
+  agentflowSelectOptions,
+  onAddNode,
+}: {
+  agents: AgentDto[];
+  availableAgentflows: AgentflowDto[];
+  agentSelectOptions: SearchableSelectOption[];
+  agentflowSelectOptions: SearchableSelectOption[];
+  onAddNode: (kind: AgentflowNodeKind, title: string, relateId?: string | null) => void;
+}) {
+  return (
+    <div className="mt-5 space-y-3">
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Primitive Nodes
+        </p>
+        <div className="space-y-2">
+          <SearchableSelect
+            id="agentflow-builder-agent-select"
+            ariaLabel="Select agent"
+            value=""
+            onValueChange={(value) => {
+              const agent = agents.find((item) => item.id === value);
+              if (agent) onAddNode(AgentflowNodeKind.Agent, agent.name, agent.id);
+            }}
+            options={agentSelectOptions}
+            placeholder="Select agent"
+            searchPlaceholder="Search agents..."
+            clearable={false}
+          />
+          <SearchableSelect
+            id="agentflow-builder-workflow-select"
+            ariaLabel="Select workflow"
+            value=""
+            onValueChange={(value) => {
+              const agentflow = availableAgentflows.find((item) => item.id === value);
+              if (agentflow) {
+                onAddNode(AgentflowNodeKind.WorkflowAsAgent, agentflow.name, agentflow.id);
+              }
+            }}
+            options={agentflowSelectOptions}
+            placeholder="Select workflow"
+            searchPlaceholder="Search workflows..."
+            clearable={false}
+          />
+          <PaletteButton
+            label="Prompt Adapter"
+            onClick={() => onAddNode(AgentflowNodeKind.PromptAdapter, "Prompt Adapter")}
+          />
+          <PaletteButton
+            label="Human Gate"
+            onClick={() => onAddNode(AgentflowNodeKind.HumanGate, "Human Gate")}
+          />
+          <PaletteButton
+            label="Checkpoint"
+            onClick={() => onAddNode(AgentflowNodeKind.CheckpointMarker, "Checkpoint")}
+          />
+          <PaletteButton
+            label="Output"
+            onClick={() => onAddNode(AgentflowNodeKind.Output, "Output")}
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Orchestration Blocks
+        </p>
+        <div className="space-y-2">
+          <PaletteButton
+            label="Concurrent Block"
+            onClick={() => onAddNode(AgentflowNodeKind.ConcurrentBlock, "Concurrent Block")}
+          />
+          <PaletteButton
+            label="Handoff Group"
+            onClick={() => onAddNode(AgentflowNodeKind.HandoffBlock, "Handoff Group")}
+          />
+          <PaletteButton
+            label="GroupChat Room"
+            onClick={() => onAddNode(AgentflowNodeKind.GroupChatBlock, "GroupChat Room")}
+          />
+          <PaletteButton
+            label="Magentic Team"
+            onClick={() => onAddNode(AgentflowNodeKind.MagenticBlock, "Magentic Team")}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlockScopePalette({
+  blockNode,
+  members,
+  agents,
+  agentflows,
+  agentSelectOptions,
+  agentflowSelectOptions,
+  onAddParticipant,
+  onSelectParticipant,
+}: {
+  blockNode: Node<DagNodeData>;
+  members: BlockMemberView[];
+  agents: AgentDto[];
+  agentflows: AgentflowDto[];
+  agentSelectOptions: SearchableSelectOption[];
+  agentflowSelectOptions: SearchableSelectOption[];
+  onAddParticipant: (
+    blockId: string,
+    kind: AgentflowNodeKind,
+    title: string,
+    relateId: string,
+  ) => void;
+  onSelectParticipant: (blockId: string, participantNodeId: string) => void;
+}) {
+  return (
+    <div className="mt-5 space-y-4">
+      <div className="rounded-md border bg-background p-3">
+        <p className="truncate text-sm font-medium">{blockNode.data.title}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{NODE_META[blockNode.data.kind].label}</p>
+      </div>
+
+      <BlockMemberAddControls
+        idPrefix={`block-scope-${blockNode.id}`}
+        blockId={blockNode.id}
+        agents={agents}
+        agentflows={agentflows}
+        agentSelectOptions={agentSelectOptions}
+        agentflowSelectOptions={agentflowSelectOptions}
+        onAddParticipant={onAddParticipant}
+      />
+
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Members
+        </p>
+        {members.length === 0 ? (
+          <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+            No members.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {members.map((member) => (
+              <button
+                key={member.nodeId}
+                type="button"
+                className="w-full rounded-md border bg-background p-2 text-left text-xs transition-colors hover:border-primary/40 hover:bg-primary/5"
+                onClick={() => onSelectParticipant(blockNode.id, member.nodeId)}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-medium">{member.title}</span>
+                  <Badge variant="outline">{getNodeKindLabel(member.kind)}</Badge>
+                </div>
+                <BlockMemberBadges member={member} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BlockMemberAddControls({
+  idPrefix,
+  blockId,
+  agents,
+  agentflows,
+  agentSelectOptions,
+  agentflowSelectOptions,
+  onAddParticipant,
+}: {
+  idPrefix: string;
+  blockId: string;
+  agents: AgentDto[];
+  agentflows: AgentflowDto[];
+  agentSelectOptions: SearchableSelectOption[];
+  agentflowSelectOptions: SearchableSelectOption[];
+  onAddParticipant: (
+    blockId: string,
+    kind: AgentflowNodeKind,
+    title: string,
+    relateId: string,
+  ) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Add Member
+      </p>
+      <SearchableSelect
+        id={`${idPrefix}-agent-select`}
+        ariaLabel="Add agent member"
+        value=""
+        onValueChange={(value) => {
+          const agent = agents.find((item) => item.id === value);
+          if (agent) onAddParticipant(blockId, AgentflowNodeKind.Agent, agent.name, agent.id);
+        }}
+        options={agentSelectOptions}
+        placeholder="Add agent"
+        searchPlaceholder="Search agents..."
+        clearable={false}
+      />
+      <SearchableSelect
+        id={`${idPrefix}-workflow-select`}
+        ariaLabel="Add workflow member"
+        value=""
+        onValueChange={(value) => {
+          const agentflow = agentflows.find((item) => item.id === value);
+          if (agentflow) {
+            onAddParticipant(
+              blockId,
+              AgentflowNodeKind.WorkflowAsAgent,
+              agentflow.name,
+              agentflow.id,
+            );
+          }
+        }}
+        options={agentflowSelectOptions}
+        placeholder="Add workflow"
+        searchPlaceholder="Search workflows..."
+        clearable={false}
+      />
+    </div>
+  );
+}
+
 function NodeInspector({
   node,
   nodes,
   agents,
   agentflows,
+  agentSelectOptions,
+  agentflowSelectOptions,
   blockMembership,
+  canvasScope,
+  activeBlockNode,
   onChange,
   onAddBlockParticipant,
   onRemoveBlockParticipant,
-  onDeleteBlockParticipant,
+  onOpenBlock,
+  onSelectBlockParticipant,
 }: {
   node: Node<DagNodeData>;
   nodes: Node<DagNodeData>[];
   agents: AgentDto[];
   agentflows: AgentflowDto[];
+  agentSelectOptions: SearchableSelectOption[];
+  agentflowSelectOptions: SearchableSelectOption[];
   blockMembership: BlockMembership;
+  canvasScope: CanvasScope;
+  activeBlockNode: Node<DagNodeData> | null;
   onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
   onAddBlockParticipant: (
     blockId: string,
@@ -1018,7 +1493,8 @@ function NodeInspector({
     relateId: string,
   ) => void;
   onRemoveBlockParticipant: (blockId: string, participantNodeId: string) => void;
-  onDeleteBlockParticipant: (blockId: string, participantNodeId: string) => void;
+  onOpenBlock: (blockId: string) => void;
+  onSelectBlockParticipant: (blockId: string, participantNodeId: string) => void;
 }) {
   const meta = NODE_META[node.data.kind];
   const configIsInvalid =
@@ -1034,8 +1510,8 @@ function NodeInspector({
           <p className="mt-1 text-xs text-muted-foreground">{meta.body}</p>
         </div>
         <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-          Input is the fixed user-input start node. It can fan out to downstream nodes and cannot
-          be deleted or used as a downstream target.
+          Input is the fixed user-input start node. It can fan out to downstream nodes and cannot be
+          deleted or used as a downstream target.
         </div>
       </div>
     );
@@ -1081,11 +1557,25 @@ function NodeInspector({
           nodes={nodes}
           agents={agents}
           agentflows={agentflows}
+          agentSelectOptions={agentSelectOptions}
+          agentflowSelectOptions={agentflowSelectOptions}
           blockMembership={blockMembership}
+          canvasScope={canvasScope}
           onChange={onChange}
           onAddParticipant={onAddBlockParticipant}
           onRemoveParticipant={onRemoveBlockParticipant}
-          onDeleteParticipant={onDeleteBlockParticipant}
+          onOpenBlock={onOpenBlock}
+          onSelectParticipant={onSelectBlockParticipant}
+        />
+      ) : null}
+
+      {canvasScope.kind === "block" && activeBlockNode && isAgentParticipantKind(node.data.kind) ? (
+        <BlockParticipantContextInspector
+          blockNode={activeBlockNode}
+          memberNode={node}
+          blockMembership={blockMembership}
+          onChange={onChange}
+          onRemoveParticipant={onRemoveBlockParticipant}
         />
       ) : null}
 
@@ -1115,17 +1605,24 @@ function BlockConfigInspector({
   nodes,
   agents,
   agentflows,
+  agentSelectOptions,
+  agentflowSelectOptions,
   blockMembership,
+  canvasScope,
   onChange,
   onAddParticipant,
   onRemoveParticipant,
-  onDeleteParticipant,
+  onOpenBlock,
+  onSelectParticipant,
 }: {
   node: Node<DagNodeData>;
   nodes: Node<DagNodeData>[];
   agents: AgentDto[];
   agentflows: AgentflowDto[];
+  agentSelectOptions: SearchableSelectOption[];
+  agentflowSelectOptions: SearchableSelectOption[];
   blockMembership: BlockMembership;
+  canvasScope: CanvasScope;
   onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
   onAddParticipant: (
     blockId: string,
@@ -1134,10 +1631,9 @@ function BlockConfigInspector({
     relateId: string,
   ) => void;
   onRemoveParticipant: (blockId: string, participantNodeId: string) => void;
-  onDeleteParticipant: (blockId: string, participantNodeId: string) => void;
+  onOpenBlock: (blockId: string) => void;
+  onSelectParticipant: (blockId: string, participantNodeId: string) => void;
 }) {
-  const [selectedAgentId, setSelectedAgentId] = React.useState("");
-  const [selectedAgentflowId, setSelectedAgentflowId] = React.useState("");
   const config = readConfigJson(node.data.configJson) ?? {};
   const nodeById = React.useMemo(() => new Map(nodes.map((item) => [item.id, item])), [nodes]);
   const members = blockMembership.membersByBlockId.get(node.id) ?? [];
@@ -1157,102 +1653,50 @@ function BlockConfigInspector({
     onChange(node.id, { configJson: updateConfigJson(node.data.configJson, update) });
   };
 
-  const handleAddAgent = () => {
-    const agent = agents.find((item) => item.id === selectedAgentId);
-    if (!agent) return;
-
-    onAddParticipant(node.id, AgentflowNodeKind.Agent, agent.name, agent.id);
-    setSelectedAgentId("");
-  };
-
-  const handleAddAgentflow = () => {
-    const agentflow = agentflows.find((item) => item.id === selectedAgentflowId);
-    if (!agentflow) return;
-
-    onAddParticipant(node.id, AgentflowNodeKind.WorkflowAsAgent, agentflow.name, agentflow.id);
-    setSelectedAgentflowId("");
-  };
-
   return (
     <div className="space-y-3 rounded-md border bg-background p-3">
       <div className="flex items-center justify-between gap-2">
         <Label>Members</Label>
-        <Badge variant="outline">{members.length} total</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline">{members.length} total</Badge>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7"
+            onClick={() => onOpenBlock(node.id)}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open
+          </Button>
+        </div>
       </div>
 
-      <div className="space-y-2 rounded-md border p-2">
-        <div className="grid gap-2">
-          <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select agent" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectLabel>Agents</SelectLabel>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            variant="outline"
-            className="justify-start"
-            disabled={!selectedAgentId}
-            onClick={handleAddAgent}
-          >
-            <Plus className="h-4 w-4" />
-            Add Agent
-          </Button>
-        </div>
-        <div className="grid gap-2">
-          <Select value={selectedAgentflowId} onValueChange={setSelectedAgentflowId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select workflow" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectLabel>Agentflows</SelectLabel>
-                {agentflows.map((agentflow) => (
-                  <SelectItem key={agentflow.id} value={agentflow.id}>
-                    {agentflow.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            variant="outline"
-            className="justify-start"
-            disabled={!selectedAgentflowId}
-            onClick={handleAddAgentflow}
-          >
-            <Plus className="h-4 w-4" />
-            Add Workflow As Agent
-          </Button>
-        </div>
-      </div>
+      <BlockMemberAddControls
+        idPrefix={`block-inspector-${node.id}`}
+        blockId={node.id}
+        agents={agents}
+        agentflows={agentflows}
+        agentSelectOptions={agentSelectOptions}
+        agentflowSelectOptions={agentflowSelectOptions}
+        onAddParticipant={onAddParticipant}
+      />
 
       {members.length === 0 ? (
         <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-          Add members to configure this block.
+          No members.
         </div>
       ) : (
         <div className="space-y-2">
           {members.map((member) => (
-            <BlockMemberEditor
+            <BlockMemberListItem
               key={member.nodeId}
               blockId={node.id}
               member={member}
               memberNode={nodeById.get(member.nodeId) ?? null}
-              blockMembership={blockMembership}
-              onChange={onChange}
+              isCurrentBlockScope={canvasScope.kind === "block" && canvasScope.blockId === node.id}
+              onSelect={onSelectParticipant}
               onRemove={onRemoveParticipant}
-              onDelete={onDeleteParticipant}
             />
           ))}
         </div>
@@ -1358,91 +1802,136 @@ function BlockConfigInspector({
   );
 }
 
-function BlockMemberEditor({
+function BlockMemberListItem({
   blockId,
   member,
   memberNode,
-  blockMembership,
-  onChange,
+  isCurrentBlockScope,
+  onSelect,
   onRemove,
-  onDelete,
 }: {
   blockId: string;
   member: BlockMemberView;
   memberNode: Node<DagNodeData> | null;
+  isCurrentBlockScope: boolean;
+  onSelect: (blockId: string, participantNodeId: string) => void;
+  onRemove: (blockId: string, participantNodeId: string) => void;
+}) {
+  return (
+    <div
+      className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer ${
+        isCurrentBlockScope ? "bg-primary/5" : ""
+      }`}
+    >
+      <button
+        type="button"
+        disabled={!memberNode}
+        className="cursor-pointer min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
+        onClick={() => onSelect(blockId, member.nodeId)}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-sm font-medium">{member.title}</span>
+          <Badge variant="outline">{getNodeKindLabel(member.kind)}</Badge>
+        </div>
+        <BlockMemberBadges member={member} />
+      </button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        title="Remove from block"
+        onClick={() => onRemove(blockId, member.nodeId)}
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+function BlockParticipantContextInspector({
+  blockNode,
+  memberNode,
+  blockMembership,
+  onChange,
+  onRemoveParticipant,
+}: {
+  blockNode: Node<DagNodeData>;
+  memberNode: Node<DagNodeData>;
   blockMembership: BlockMembership;
   onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
-  onRemove: (blockId: string, participantNodeId: string) => void;
-  onDelete: (blockId: string, participantNodeId: string) => void;
+  onRemoveParticipant: (blockId: string, participantNodeId: string) => void;
 }) {
-  const canDelete = canDeleteBlockMember(blockMembership, member.nodeId);
-  const deleteTitle = canDelete
-    ? memberNode
-      ? "Delete member"
-      : "Remove missing member reference"
-    : "Remove canvas edges or shared block memberships before deleting";
+  const config = readConfigJson(blockNode.data.configJson) ?? {};
+  const member = blockMembership.membersByBlockId
+    .get(blockNode.id)
+    ?.find((item) => item.nodeId === memberNode.id);
+  const isMagentic = blockNode.data.kind === AgentflowNodeKind.MagenticBlock;
+  const isManager = readString(config.managerNodeId) === memberNode.id;
 
   return (
-    <div className="space-y-2 rounded-md border p-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-1">
-            <Badge variant="outline">{getNodeKindLabel(member.kind)}</Badge>
-            {member.isManager ? <Badge variant="secondary">Manager</Badge> : null}
-            {member.isExternallyLinked ? (
-              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
-                On Canvas
-              </Badge>
-            ) : null}
-            {member.isShared ? (
-              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
-                Shared
-              </Badge>
-            ) : null}
-            {member.isMissing ? <Badge variant="destructive">Missing</Badge> : null}
-          </div>
+    <div className="space-y-3 rounded-md border bg-background p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{blockNode.data.title}</p>
+          <p className="text-xs text-muted-foreground">{NODE_META[blockNode.data.kind].label}</p>
         </div>
-        <div className="flex shrink-0 gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            title="Remove from block"
-            onClick={() => onRemove(blockId, member.nodeId)}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            title={deleteTitle}
-            disabled={!canDelete}
-            onClick={() => onDelete(blockId, member.nodeId)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+        <Badge variant="outline">Member</Badge>
       </div>
 
-      <div className="space-y-2">
-        <Label>Name</Label>
-        <Input
-          value={memberNode?.data.title ?? member.title}
-          disabled={!memberNode}
-          onChange={(event) => onChange(member.nodeId, { title: event.target.value })}
-        />
+      {member ? <BlockMemberBadges member={member} /> : null}
+
+      <div className="flex flex-wrap gap-2">
+        {isMagentic ? (
+          <Button
+            type="button"
+            variant={isManager ? "secondary" : "outline"}
+            size="sm"
+            disabled={isManager}
+            onClick={() =>
+              onChange(blockNode.id, {
+                configJson: updateConfigJson(blockNode.data.configJson, {
+                  managerNodeId: memberNode.id,
+                }),
+              })
+            }
+          >
+            <Crown className="h-4 w-4" />
+            Manager
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onRemoveParticipant(blockNode.id, memberNode.id)}
+        >
+          <X className="h-4 w-4" />
+          Remove
+        </Button>
       </div>
-      <div className="space-y-2">
-        <Label>System Prompt / Instructions</Label>
-        <Textarea
-          value={memberNode?.data.instructions ?? ""}
-          disabled={!memberNode}
-          onChange={(event) => onChange(member.nodeId, { instructions: event.target.value })}
-          placeholder="Describe how this member should use the block input."
-          className="min-h-24"
-        />
-      </div>
+    </div>
+  );
+}
+
+function BlockMemberBadges({ member }: { member: BlockMemberView }) {
+  if (!member.isManager && !member.isExternallyLinked && !member.isShared && !member.isMissing) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1">
+      {member.isManager ? <Badge variant="secondary">Manager</Badge> : null}
+      {member.isExternallyLinked ? (
+        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+          On Canvas
+        </Badge>
+      ) : null}
+      {member.isShared ? (
+        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+          Shared
+        </Badge>
+      ) : null}
+      {member.isMissing ? <Badge variant="destructive">Missing</Badge> : null}
     </div>
   );
 }

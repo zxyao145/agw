@@ -1,4 +1,4 @@
-import type { Edge, Node } from "reactflow";
+import type { Edge, Node, XYPosition } from "reactflow";
 
 type MembershipNodeData = {
   kind: number;
@@ -34,6 +34,9 @@ const NodeKind = {
   GroupChatBlock: 7,
   MagenticBlock: 8,
 } as const;
+
+const BLOCK_PARTICIPANT_NODE_WIDTH = 220;
+const BLOCK_PARTICIPANT_NODE_GAP = 40;
 
 export function createBlockMembership<TNodeData extends MembershipNodeData>(
   nodes: Node<TNodeData>[],
@@ -140,6 +143,52 @@ export function getVisibleEdges<TEdgeData>(
       !membership.hiddenParticipantIds.has(edge.source) &&
       !membership.hiddenParticipantIds.has(edge.target),
   );
+}
+
+export function getBlockParticipantNodes<TNodeData extends MembershipNodeData>(
+  nodes: Node<TNodeData>[],
+  blockId: string,
+): Node<TNodeData>[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const blockNode = nodeById.get(blockId);
+  if (!blockNode || !isBlockNodeKind(blockNode.data.kind)) return [];
+
+  return readBlockParticipantIds(blockNode.data.configJson || "")
+    .map((participantNodeId) => nodeById.get(participantNodeId))
+    .filter((node): node is Node<TNodeData> =>
+      Boolean(node && isAgentParticipantKind(node.data.kind)),
+    );
+}
+
+export function getBlockParticipantEdges<TEdgeData>(
+  _edges: Edge<TEdgeData>[],
+  _blockId: string,
+): Edge<TEdgeData>[] {
+  return [];
+}
+
+export function getNextBlockParticipantPosition<TNodeData extends MembershipNodeData>(
+  nodes: Node<TNodeData>[],
+  blockId: string,
+): XYPosition {
+  const blockNode = nodes.find((node) => node.id === blockId);
+  if (!blockNode || !isBlockNodeKind(blockNode.data.kind)) return { x: 0, y: 0 };
+
+  const participants = getBlockParticipantNodes(nodes, blockId);
+  if (participants.length === 0) {
+    return { x: blockNode.position.x + 40, y: blockNode.position.y + 136 };
+  }
+
+  const anchor = participants.reduce((rightmost, participant) =>
+    participant.position.x > rightmost.position.x ? participant : rightmost,
+  );
+  return {
+    x:
+      anchor.position.x +
+      (anchor.width ?? BLOCK_PARTICIPANT_NODE_WIDTH) +
+      BLOCK_PARTICIPANT_NODE_GAP,
+    y: anchor.position.y,
+  };
 }
 
 export function updateBlockParticipantIds(currentJson: string, participantNodeIds: string[]) {
