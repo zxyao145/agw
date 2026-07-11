@@ -1,4 +1,3 @@
-import { getApiKey } from "./client";
 import type { AiMessage } from "@/types";
 
 export type ExecutionWsUserInput = Pick<AiMessage, "messageId" | "author" | "contents">;
@@ -60,9 +59,7 @@ type ExecutionWsResult = {
 
 function buildExecutionWsUrls(id: string): string[] {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const apiKey = getApiKey();
-  const apiKeyParam = apiKey ? `?X-API-Key=${encodeURIComponent(apiKey)}` : "";
-  const url = `${protocol}//${window.location.host}/api/executions/${id}/ws${apiKeyParam}`;
+  const url = `${protocol}//${window.location.host}/api/executions/${id}/ws`;
   const urls: string[] = [];
   urls.push(url);
   return urls;

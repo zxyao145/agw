@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-const { codeInspectorPlugin } = require('code-inspector-plugin');
+const { codeInspectorPlugin } = require("code-inspector-plugin");
 
 const backendBaseUrl =
   process.env.BACKEND_API_BASE_URL ??
@@ -11,9 +11,10 @@ const isStaticExport = outputMode === "export";
 
 const nextConfig: NextConfig = {
   output: outputMode === "export" || outputMode === "standalone" ? outputMode : undefined,
+  trailingSlash: isStaticExport,
   turbopack: {
     rules: codeInspectorPlugin({
-      bundler: 'turbopack',
+      bundler: "turbopack",
     }),
   },
 };

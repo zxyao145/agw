@@ -1,9 +1,6 @@
 import type { AgwMessage, AgwMessageContent } from "../../../api/agw-api-types";
 
-export type ExecutionWsUserInput = Pick<
-  AgwMessage,
-  "messageId" | "author" | "contents"
->;
+export type ExecutionWsUserInput = Pick<AgwMessage, "messageId" | "author" | "contents">;
 
 export type ExecutionWsSettingCommandRequest = {
   projectId: string;
@@ -44,11 +41,8 @@ const RESULT_STATUSES = new Set<ExecutionWsResultStatus>([
   "failed",
 ]);
 
-function buildExecutionWebSocketUrls(
-  serverDomain: string,
-  agentId: string
-): string[] {
-  const normalizedBaseUrl = serverDomain.replace(/\/+$/g, "");
+function buildExecutionWebSocketUrls(serverUrl: string, agentId: string): string[] {
+  const normalizedBaseUrl = serverUrl.replace(/\/+$/g, "");
   const parsed = new URL(normalizedBaseUrl);
   const basePath = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/+$/g, "");
   const protocol =
@@ -61,14 +55,12 @@ function buildExecutionWebSocketUrls(
           : "ws:";
 
   return [
-    `${protocol}//${parsed.host}${basePath}/api/executions/${encodeURIComponent(
-      agentId
-    )}/ws`,
+    `${protocol}//${parsed.host}${basePath}/api/executions/${encodeURIComponent(agentId)}/ws`,
   ];
 }
 
 function cloneAdditionalProperties(
-  additionalProperties: Record<string, unknown> | null | undefined
+  additionalProperties: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> | null | undefined {
   if (additionalProperties === null || additionalProperties === undefined) {
     return additionalProperties;
@@ -114,10 +106,11 @@ function tryParseExecutionWsResult(payload: string): ExecutionWsResult | null {
     return null;
   }
 
-  const status = message.additionalProperties?.status ?? message.contents[0]?.additionalProperties?.status;
+  const status =
+    message.additionalProperties?.status ?? message.contents[0]?.additionalProperties?.status;
   const contentType = message.contents[0]?.additionalProperties?.type;
   const hasTurnFinishedType = message.contents.some(
-    (content) => content.additionalProperties?.type === "turn-finished"
+    (content) => content.additionalProperties?.type === "turn-finished",
   );
 
   if (typeof status !== "string" || !RESULT_STATUSES.has(status as ExecutionWsResultStatus)) {
@@ -149,18 +142,16 @@ function getFirstTextContent(contents: AgwMessageContent[]): AgwMessageContent |
   return contents.find(isTextContent);
 }
 
-function getNonTextContents(
-  contents: AgwMessageContent[]
-): AgwMessageContent[] {
+function getNonTextContents(contents: AgwMessageContent[]): AgwMessageContent[] {
   return contents.filter((content) => !isTextContent(content)).map(cloneMessageContent);
 }
 
 function mergeStreamingMessage(
   currentMessages: AgwMessage[],
-  incomingMessage: AgwMessage
+  incomingMessage: AgwMessage,
 ): AgwMessage[] {
   const index = currentMessages.findIndex(
-    (message) => message.messageId === incomingMessage.messageId
+    (message) => message.messageId === incomingMessage.messageId,
   );
   if (index === -1) {
     return [...currentMessages, cloneMessage(incomingMessage)];
@@ -185,9 +176,7 @@ function mergeStreamingMessage(
   }
 
   if (incomingMessage.additionalProperties !== undefined) {
-    current.additionalProperties = cloneAdditionalProperties(
-      incomingMessage.additionalProperties
-    );
+    current.additionalProperties = cloneAdditionalProperties(incomingMessage.additionalProperties);
   }
 
   merged[index] = current;
@@ -196,16 +185,16 @@ function mergeStreamingMessage(
 
 export function mergeStreamingMessages(
   currentMessages: AgwMessage[],
-  incomingMessages: AgwMessage[]
+  incomingMessages: AgwMessage[],
 ): AgwMessage[] {
   return incomingMessages.reduce<AgwMessage[]>(
     (nextMessages, incomingMessage) => mergeStreamingMessage(nextMessages, incomingMessage),
-    [...currentMessages]
+    [...currentMessages],
   );
 }
 
 export function buildSettingCommandPayload(
-  request: ExecutionWsSettingCommandRequest
+  request: ExecutionWsSettingCommandRequest,
 ): ExecutionWsSettingCommandPayload {
   return {
     type: "SettingCommand",
@@ -220,11 +209,19 @@ export function buildSettingCommandPayload(
 
 function openExecutionWebSocket(
   wsUrl: string,
+  token: string,
   request: ExecutionWsRequest,
-  onMessage: (data: string) => void
+  onMessage: (data: string) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(wsUrl);
+    const NativeWebSocket = WebSocket as unknown as new (
+      uri: string,
+      protocols?: string | string[] | null,
+      options?: { headers: Record<string, string> },
+    ) => WebSocket;
+    const ws = new NativeWebSocket(wsUrl, null, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     let settled = false;
 
     const fail = (message: string) => {
@@ -240,7 +237,7 @@ function openExecutionWebSocket(
           type: "ExecCommand",
           agentType: request.agentType,
           input: request.input,
-        })
+        }),
       );
     };
 
@@ -286,17 +283,18 @@ function openExecutionWebSocket(
 }
 
 export async function executeWithWebSocket(
-  serverDomain: string,
+  serverUrl: string,
+  token: string,
   agentId: string,
   request: ExecutionWsRequest,
-  onMessage: (data: string) => void
+  onMessage: (data: string) => void,
 ): Promise<void> {
-  const urls = buildExecutionWebSocketUrls(serverDomain, agentId);
+  const urls = buildExecutionWebSocketUrls(serverUrl, agentId);
   let lastError: Error | null = null;
 
   for (const url of urls) {
     try {
-      await openExecutionWebSocket(url, request, onMessage);
+      await openExecutionWebSocket(url, token, request, onMessage);
       return;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error("WebSocket connection error");

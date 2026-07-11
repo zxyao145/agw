@@ -6,6 +6,7 @@ using Agw.Jobs.Domain.Events;
 using Agw.Jobs.Dtos;
 using Agw.Jobs.External;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,12 +22,14 @@ public class JobHostedService(
     IServiceScopeFactory scopeFactory,
     ILogger<JobHostedService> logger,
     IJobDomainEventDispatcher jobDomainEventDispatcher,
-    IProjectExecutionLock projectExecutionLock) : BackgroundService
+    IProjectExecutionLock projectExecutionLock,
+    IServerInitializationState serverInitializationState) : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly ILogger<JobHostedService> _logger = logger;
     private readonly IJobDomainEventDispatcher _jobDomainEventDispatcher = jobDomainEventDispatcher;
     private readonly IProjectExecutionLock _projectExecutionLock = projectExecutionLock;
+    private readonly IServerInitializationState _serverInitializationState = serverInitializationState;
 
     private readonly PriorityQueue<InMemoryJob, DateTimeOffset> _queue = new();
     private readonly ConcurrentDictionary<Guid, InMemoryJob> _taskMap = new();
@@ -43,6 +46,11 @@ public class JobHostedService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        while (!_serverInitializationState.IsInitialized)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(250), stoppingToken);
+        }
+
         _jobDomainEventDispatcher.DomainEventDispatched += HandleDomainEventAsync;
 
         try

@@ -70,21 +70,16 @@ jest.mock("../src/rn/config/config-store", () => ({
   writeLocalConfig: jest.fn(),
 }));
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const testConfig = {
-  version: 1 as const,
-  serverDomain: "http://localhost:5015",
-  apiKey: "test-api-key",
+  version: 2 as const,
+  apiMajorVersion: 1 as const,
+  serverUrl: "http://localhost:5015",
+  token: "test-api-key",
 };
-const readLocalConfigMock = readLocalConfig as jest.MockedFunction<
-  typeof readLocalConfig
->;
-const writeLocalConfigMock = writeLocalConfig as jest.MockedFunction<
-  typeof writeLocalConfig
->;
+const readLocalConfigMock = readLocalConfig as jest.MockedFunction<typeof readLocalConfig>;
+const writeLocalConfigMock = writeLocalConfig as jest.MockedFunction<typeof writeLocalConfig>;
 const fetchMock = jest.fn();
 
 describe("App", () => {
@@ -105,9 +100,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(
-        <App routeName="home" title="Home" source="SwiftUI" />
-      );
+      tree = renderer.create(<App routeName="home" title="Home" source="SwiftUI" />);
     });
     await settleAsync();
 
@@ -134,16 +127,12 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(
-        <App routeName="home" title="Home" source="Android" />
-      );
+      tree = renderer.create(<App routeName="home" title="Home" source="Android" />);
     });
 
     await settleAsync();
 
-    expect(collectText(tree?.toJSON())).toContain(
-      "Backend response from task history."
-    );
+    expect(collectText(tree?.toJSON())).toContain("Backend response from task history.");
     expect(collectText(tree?.toJSON())).not.toContain("Sarah is typing");
 
     const filesTab = tree!.root.findByProps({ testID: "agw-tab-files" });
@@ -161,9 +150,9 @@ describe("App", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:5015/api/files/list?diff=true&path=D%3A%5Cwork%5Cmobile&recursive=true",
       expect.objectContaining({
-        headers: { "X-API-Key": "test-api-key" },
+        headers: { Authorization: "Bearer test-api-key" },
         method: "GET",
-      })
+      }),
     );
   });
 
@@ -171,9 +160,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(
-        <App routeName="home" title="Home" source="SwiftUI" />
-      );
+      tree = renderer.create(<App routeName="home" title="Home" source="SwiftUI" />);
     });
 
     const openDrawer = tree!.root.findByProps({ testID: "agw-open-drawer" });
@@ -230,26 +217,22 @@ describe("App", () => {
     });
 
     await act(async () => {
-      tree!.root
-        .findByProps({ testID: "agw-project-option-project-2" })
-        .props.onPress();
+      tree!.root.findByProps({ testID: "agw-project-option-project-2" }).props.onPress();
     });
     await settleAsync();
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:5015/api/projects/project-2/contexts",
       expect.objectContaining({
-        headers: { "X-API-Key": "test-api-key" },
+        headers: { Authorization: "Bearer test-api-key" },
         method: "GET",
-      })
+      }),
     );
     expect(collectText(tree?.toJSON())).toContain("Project Two API Chat");
   });
 
   it("starts a websocket execution stream for default selections", async () => {
-    fetchMock.mockImplementation(
-      createAgwFetchMock({ includeDefaultSelections: true })
-    );
+    fetchMock.mockImplementation(createAgwFetchMock({ includeDefaultSelections: true }));
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
@@ -303,7 +286,7 @@ describe("App", () => {
               content: "Hello from stream.",
             },
           ],
-        })
+        }),
       );
     });
     await act(async () => {
@@ -321,7 +304,7 @@ describe("App", () => {
               },
             },
           ],
-        })
+        }),
       );
     });
 
@@ -342,14 +325,17 @@ describe("App", () => {
     const input = tree!.root.findByProps({
       testID: "agw-config-import-input",
     });
-    const importButtons = tree!.root.findAllByProps({
-      testID: "agw-config-import-save",
-    }).filter((node) => typeof node.props.onPress === "function");
+    const importButtons = tree!.root
+      .findAllByProps({
+        testID: "agw-config-import-save",
+      })
+      .filter((node) => typeof node.props.onPress === "function");
     const importButton = importButtons[importButtons.length - 1];
     const encodedConfig = encodeConfigBase64Url({
-      version: 1,
-      serverDomain: "https://api.example.com/",
-      apiKey: "imported-key",
+      version: 2,
+      apiMajorVersion: 1 as const,
+      serverUrl: "https://api.example.com/",
+      token: "imported-key",
     });
 
     await act(async () => {
@@ -361,9 +347,10 @@ describe("App", () => {
     });
 
     expect(writeLocalConfigMock).toHaveBeenCalledWith({
-      version: 1,
-      serverDomain: "https://api.example.com",
-      apiKey: "imported-key",
+      version: 2,
+      apiMajorVersion: 1 as const,
+      serverUrl: "https://api.example.com",
+      token: "imported-key",
     });
     await settleAsync();
     expect(collectText(tree?.toJSON())).toContain("Chat");
@@ -385,9 +372,7 @@ describe("App", () => {
     });
 
     expect(collectText(tree?.toJSON())).toContain("Local Configuration");
-    expect(
-      tree!.root.findAllByProps({ testID: "agw-settings-page" }).length
-    ).toBeGreaterThan(0);
+    expect(tree!.root.findAllByProps({ testID: "agw-settings-page" }).length).toBeGreaterThan(0);
     expect(tree!.root.findAllByProps({ testID: "agw-settings-sheet" })).toHaveLength(0);
     expect(collectText(tree?.toJSON())).not.toContain("Mobile API Chat");
     expect(getSettingsActionBottomPadding(tree!)).toBeGreaterThanOrEqual(24);
@@ -397,7 +382,7 @@ describe("App", () => {
         .findByProps({ testID: "agw-settings-domain-input" })
         .props.onChangeText("https://mobile.example.com/");
       tree!.root
-        .findByProps({ testID: "agw-settings-api-key-input" })
+        .findByProps({ testID: "agw-settings-token-input" })
         .props.onChangeText("updated-key");
     });
 
@@ -406,9 +391,10 @@ describe("App", () => {
     });
 
     expect(writeLocalConfigMock).toHaveBeenLastCalledWith({
-      version: 1,
-      serverDomain: "https://mobile.example.com",
-      apiKey: "updated-key",
+      version: 2,
+      apiMajorVersion: 1 as const,
+      serverUrl: "https://mobile.example.com",
+      token: "updated-key",
     });
     expect(collectText(tree?.toJSON())).not.toContain("Local Configuration");
     expect(collectText(tree?.toJSON())).toContain("Mobile API Chat");
@@ -499,7 +485,7 @@ describe("App", () => {
               content: "Execution response from stream.",
             },
           ],
-        })
+        }),
       );
     });
     await act(async () => {
@@ -517,15 +503,13 @@ describe("App", () => {
               },
             },
           ],
-        })
+        }),
       );
     });
 
     await settleAsync();
 
-    expect(collectText(tree?.toJSON())).toContain(
-      "Execution response from stream."
-    );
+    expect(collectText(tree?.toJSON())).toContain("Execution response from stream.");
   });
 
   it("matches the web composer top-right actions", async () => {
@@ -543,7 +527,7 @@ describe("App", () => {
           onScrollToTop={onScrollToTop}
           onSend={jest.fn()}
           safeBottom={0}
-        />
+        />,
       );
     });
 
@@ -551,13 +535,11 @@ describe("App", () => {
       tree!.root.findByProps({ testID: "agw-quick-text-open" }).props.onPress();
     });
     await act(async () => {
-      tree!.root
-        .findByProps({ testID: "agw-quick-text-option-analyze" })
-        .props.onPress();
+      tree!.root.findByProps({ testID: "agw-quick-text-option-analyze" }).props.onPress();
     });
 
     expect(onMessageChange).toHaveBeenCalledWith(
-      "Please analyze the code in this file and provide insights about "
+      "Please analyze the code in this file and provide insights about ",
     );
 
     await act(async () => {
@@ -580,13 +562,11 @@ describe("App", () => {
           onScrollToTop={onScrollToTop}
           onSend={jest.fn()}
           safeBottom={0}
-        />
+        />,
       );
     });
 
-    expect(
-      tree!.root.findByProps({ testID: "agw-clear-session" }).props.disabled
-    ).toBe(true);
+    expect(tree!.root.findByProps({ testID: "agw-clear-session" }).props.disabled).toBe(true);
   });
 
   it("clears current context records from the composer toolbar", async () => {
@@ -597,9 +577,7 @@ describe("App", () => {
     });
     await settleAsync();
 
-    expect(collectText(tree?.toJSON())).toContain(
-      "Backend response from task history."
-    );
+    expect(collectText(tree?.toJSON())).toContain("Backend response from task history.");
 
     await act(async () => {
       tree!.root.findByProps({ testID: "agw-clear-session" }).props.onPress();
@@ -609,13 +587,11 @@ describe("App", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:5015/api/projects/project-1/contexts/context-1/clear-records",
       expect.objectContaining({
-        headers: { "X-API-Key": "test-api-key" },
+        headers: { Authorization: "Bearer test-api-key" },
         method: "DELETE",
-      })
+      }),
     );
-    expect(collectText(tree?.toJSON())).not.toContain(
-      "Backend response from task history."
-    );
+    expect(collectText(tree?.toJSON())).not.toContain("Backend response from task history.");
   });
 });
 
@@ -628,11 +604,7 @@ async function settleAsync(): Promise<void> {
 }
 
 function collectText(
-  node:
-    | renderer.ReactTestRendererJSON
-    | renderer.ReactTestRendererJSON[]
-    | null
-    | undefined
+  node: renderer.ReactTestRendererJSON | renderer.ReactTestRendererJSON[] | null | undefined,
 ): string {
   if (!node) {
     return "";
@@ -647,21 +619,17 @@ function collectText(
     .join("");
 }
 
-function getSettingsActionBottomPadding(
-  tree: renderer.ReactTestRenderer
-): number {
+function getSettingsActionBottomPadding(tree: renderer.ReactTestRenderer): number {
   const actionRows = tree.root.findAll(
     (node) =>
       Array.isArray(node.props.style) &&
       node.props.style.includes(styles.configActionRow) &&
-      node.props.style.includes(styles.settingsActionRow)
+      node.props.style.includes(styles.settingsActionRow),
   );
   const styleEntries = actionRows[0]?.props.style ?? [];
   const inlineStyle = styleEntries.find(
     (entry: unknown): entry is { paddingBottom: number } =>
-      typeof entry === "object" &&
-      entry !== null &&
-      "paddingBottom" in entry
+      typeof entry === "object" && entry !== null && "paddingBottom" in entry,
   );
 
   return inlineStyle?.paddingBottom ?? 0;
@@ -675,6 +643,10 @@ function createAgwFetchMock({
   return async (input: RequestInfo | URL) => {
     const url = String(input);
     const pathname = new URL(url).pathname;
+
+    if (pathname === "/api/server-info") {
+      return jsonResponse({ serverVersion: "0.1.0-test", apiMajorVersion: 1, initialized: true });
+    }
 
     if (pathname === "/api/projects") {
       const projectResponses = [
@@ -915,17 +887,14 @@ function createAgwFetchMock({
 
 function jsonResponse(body: unknown, status = 200): Response {
   const envelope =
-    status >= 200 && status < 300
-      ? { code: 2000000, title: "OK", data: body }
-      : body;
+    status >= 200 && status < 300 ? { code: 2000000, title: "OK", data: body } : body;
 
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? "OK" : "Not Found",
     headers: {
-      get: (name: string) =>
-        name.toLowerCase() === "content-type" ? "application/json" : null,
+      get: (name: string) => (name.toLowerCase() === "content-type" ? "application/json" : null),
     },
     json: async () => envelope,
     text: async () => JSON.stringify(envelope),

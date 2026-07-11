@@ -2,9 +2,9 @@ using Agw.Agents.Application.Agents;
 using Agw.Domain.Services;
 using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Runtime;
 
 using Microsoft.Agents.AI;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Application.AgentRun;
@@ -18,7 +18,7 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
     private readonly ITaskSessionBindingService _taskSessionBindingService;
-    private readonly IWebHostEnvironment _webHostEnvironment;
+    private readonly AgwDataPaths _dataPaths;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly AgentSessionStateStore _sessionStateStore;
     private readonly LoggingMiddleware _loggingMiddleware;
@@ -30,7 +30,7 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
         ITaskSessionBindingService taskSessionBindingService,
-        IWebHostEnvironment webHostEnvironment,
+        AgwDataPaths dataPaths,
         IAgwFileSystemResolver fileSystemResolver,
         AgentSessionStateStore sessionStateStore,
         ILogger<AgentRuntimeService> logger,
@@ -42,7 +42,7 @@ public partial class AgentRuntimeService : RuntimeServiceBase, IAgentRuntimeServ
         _chatHistoryProvider = chatHistoryProvider;
         _providerSessionState = providerSessionState;
         _taskSessionBindingService = taskSessionBindingService;
-        _webHostEnvironment = webHostEnvironment;
+        _dataPaths = dataPaths;
         _fileSystemResolver = fileSystemResolver;
         _sessionStateStore = sessionStateStore;
         _logger = logger;

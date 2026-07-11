@@ -8,6 +8,7 @@ using Agw.Jobs.External;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Services;
+using Agw.Shared.Runtime;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -30,6 +31,13 @@ public static class DependencyInjection
                 .GetRequiredService<IOptionsMonitor<DatabaseSettings>>()
                 .CurrentValue;
 
+            var paths = serviceProvider.GetRequiredService<AgwDataPaths>();
+            settings = new DatabaseSettings
+            {
+                Provider = settings.Provider,
+                ConnectionString = DatabaseConnectionStringResolver.Resolve(settings.Provider, settings.ConnectionString, paths)
+            };
+
             ConfigureDatabaseProvider(options, settings);
             options.ReplaceService<IMigrationsModelDiffer, NoForeignKeyModelDiffer>();
         });
@@ -47,12 +55,18 @@ public static class DependencyInjection
 
         services.AddSingleton<IGitCommandService, GitCommandService>();
 
-        // Redis
-        var redisConnectionString = configuration.GetValue<string>("Redis:ConnectionString") ?? "localhost:6379,abortConnect=false";
-        var redisConfiguration = ConfigurationOptions.Parse(redisConnectionString);
-        redisConfiguration.AbortOnConnectFail = false;
-        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConfiguration));
-        services.AddSingleton<IProjectExecutionLock, RedisProjectExecutionLock>();
+        if (configuration.GetValue<bool>("Redis:Enabled"))
+        {
+            var redisConnectionString = configuration.GetValue<string>("Redis:ConnectionString") ?? "localhost:6379,abortConnect=false";
+            var redisConfiguration = ConfigurationOptions.Parse(redisConnectionString);
+            redisConfiguration.AbortOnConnectFail = false;
+            services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConfiguration));
+            services.AddSingleton<IProjectExecutionLock, RedisProjectExecutionLock>();
+        }
+        else
+        {
+            services.AddSingleton<IProjectExecutionLock, InMemoryProjectExecutionLock>();
+        }
 
         return services;
     }

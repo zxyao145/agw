@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, Share2 } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import {
   Sidebar,
@@ -23,9 +23,6 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { copyMobileLocalConfigToClipboard } from "./lib/mobile-local-config";
 
 export type MenuLink = { title: string; url: string; icon?: React.ReactNode };
 
@@ -51,21 +48,6 @@ const isActive = (pathname: string | null, href: string) =>
 
 export function AppSidebar({ menus }: AppSidebarProps) {
   const pathname = usePathname();
-  const [isCopyingMobileConfig, setIsCopyingMobileConfig] = React.useState(false);
-  const handleCopyMobileLocalConfig = React.useCallback(async () => {
-    setIsCopyingMobileConfig(true);
-    try {
-      await copyMobileLocalConfigToClipboard({
-        serverDomain: process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || window.location.origin,
-        writeText: navigator.clipboard.writeText.bind(navigator.clipboard),
-      });
-      toast.success("Mobile config copied");
-    } catch {
-      toast.error("Failed to copy mobile config");
-    } finally {
-      setIsCopyingMobileConfig(false);
-    }
-  }, []);
 
   return (
     <>
@@ -82,17 +64,6 @@ export function AppSidebar({ menus }: AppSidebarProps) {
                     Agw-Web
                   </p> */}
                   <span>Agw</span>
-                  <Button
-                    variant="ghost"
-                    className="cursor-pointer"
-                    size="sm"
-                    onClick={handleCopyMobileLocalConfig}
-                    disabled={isCopyingMobileConfig}
-                    title="Copy mobile local config"
-                    aria-label="Copy mobile local config"
-                  >
-                    <Share2 size={16} />
-                  </Button>
                 </div>
 
                 <SidebarTrigger className="-ml-1 group-data-[collapsible=icon]:mx-auto" />

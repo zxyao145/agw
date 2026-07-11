@@ -1,115 +1,230 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 using Agw.Infrastructure.Configuration;
 using Agw.Setup.Contracts;
-
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
+using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 
 namespace Agw.Setup.Services;
 
-public class JsonInitializationStateStore : IInitializationStateStore
+public sealed class JsonInitializationStateStore : IInitializationStateStore, IServerInitializationState
 {
-    private readonly string _settingsPath;
-    private readonly object _sync = new();
-    private readonly JsonSerializerOptions _serializerOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
+    private readonly AgwDataPaths _paths;
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly JsonSerializerOptions _serializerOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    private volatile ServerState _state;
 
-    private InitializationSnapshot _current;
-
-    public JsonInitializationStateStore(
-        IHostEnvironment hostEnvironment,
-        IOptionsMonitor<SystemInitializationSettings> initializationOptions)
+    public JsonInitializationStateStore(AgwDataPaths paths)
     {
-        _settingsPath = Path.Combine(hostEnvironment.ContentRootPath, "appsettings.setup.json");
-        var settings = initializationOptions.CurrentValue;
-        _current = new InitializationSnapshot(settings.IsInitialized, settings.ApiKey);
-        initializationOptions.OnChange(updated =>
-        {
-            lock (_sync)
-            {
-                _current = new InitializationSnapshot(updated.IsInitialized, updated.ApiKey);
-            }
-        });
+        _paths = paths;
+        _state = Load(paths.StateFile);
     }
 
     public InitializationSnapshot GetSnapshot()
     {
-        lock (_sync)
+        var state = _state;
+        return new InitializationSnapshot(
+            state.IsInitialized,
+            state.PasswordHash,
+            state.SessionVersion,
+            state.Tokens.Select(ToSummary).ToArray());
+    }
+
+    public bool IsInitialized => _state.IsInitialized;
+
+    public async Task PersistAsync(SetupRequest request, string passwordHash, CancellationToken cancellationToken = default)
+    {
+        await _writeLock.WaitAsync(cancellationToken);
+        try
         {
-            return _current;
+            var nextState = new ServerState
+            {
+                SchemaVersion = 1,
+                IsInitialized = true,
+                Database = new DatabaseSettings { Provider = request.Provider, ConnectionString = request.ConnectionString },
+                PasswordHash = passwordHash,
+                SessionVersion = 1,
+                Tokens = []
+            };
+            await WriteAsync(nextState, cancellationToken);
+            _state = nextState;
+        }
+        finally
+        {
+            _writeLock.Release();
         }
     }
 
-    public async Task PersistAsync(SetupRequest request, CancellationToken cancellationToken = default)
+    public async Task<CreatedApiToken> CreateTokenAsync(string name, CancellationToken cancellationToken = default)
     {
-        var payload = new SetupSettingsPayload
+        var normalizedName = name.Trim();
+        await _writeLock.WaitAsync(cancellationToken);
+        try
         {
-            Database = new DatabaseSettings
+            var currentState = _state;
+            if (currentState.Tokens.Any(x => string.Equals(x.Name, normalizedName, StringComparison.OrdinalIgnoreCase)))
             {
-                Provider = request.Provider,
-                ConnectionString = request.ConnectionString
-            },
-            SystemInitialization = new SystemInitializationSettings
-            {
-                IsInitialized = true,
-                ApiKey = string.IsNullOrWhiteSpace(request.ApiKey) ? null : request.ApiKey.Trim()
+                throw new AgwException(ErrorCodes.ApiTokenNameAlreadyExists);
             }
-        };
 
-        var settingsDirectory = Path.GetDirectoryName(_settingsPath);
-        if (!string.IsNullOrWhiteSpace(settingsDirectory) && !Directory.Exists(settingsDirectory))
-        {
-            Directory.CreateDirectory(settingsDirectory);
+            var token = $"agw_{Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_')}";
+            var record = new ApiTokenRecord
+            {
+                Id = Guid.NewGuid(),
+                Name = normalizedName,
+                Prefix = token[..Math.Min(token.Length, 12)],
+                SecretHash = Hash(token),
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            var nextState = Copy(currentState);
+            nextState.Tokens.Add(record);
+            await WriteAsync(nextState, cancellationToken);
+            _state = nextState;
+            return new CreatedApiToken(record.Id, record.Name, record.Prefix, record.CreatedAt, token);
         }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
 
-        var tempPath = $"{_settingsPath}.{Guid.NewGuid():N}.tmp";
+    public async Task<bool> RevokeTokenAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            var nextState = Copy(_state);
+            var removed = nextState.Tokens.RemoveAll(x => x.Id == id) > 0;
+            if (removed)
+            {
+                await WriteAsync(nextState, cancellationToken);
+                _state = nextState;
+            }
+            return removed;
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    public bool ValidateToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || !token.StartsWith("agw_", StringComparison.Ordinal)) return false;
+        var candidate = Convert.FromHexString(Hash(token));
+        return _state.Tokens.Any(x => CryptographicOperations.FixedTimeEquals(candidate, Convert.FromHexString(x.SecretHash)));
+    }
+
+    public async Task UpdatePasswordAsync(string passwordHash, CancellationToken cancellationToken = default)
+    {
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            var nextState = Copy(_state);
+            nextState.PasswordHash = passwordHash;
+            nextState.SessionVersion++;
+            await WriteAsync(nextState, cancellationToken);
+            _state = nextState;
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    private async Task WriteAsync(ServerState state, CancellationToken cancellationToken)
+    {
+        _paths.EnsureCreated();
+        var tempPath = $"{_paths.StateFile}.{Guid.NewGuid():N}.tmp";
+        var streamOptions = new FileStreamOptions
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None,
+            BufferSize = 4096,
+            Options = FileOptions.WriteThrough
+        };
+        if (!OperatingSystem.IsWindows())
+        {
+            streamOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
 
         try
         {
-            await using (var stream = new FileStream(
-                             tempPath,
-                             FileMode.CreateNew,
-                             FileAccess.Write,
-                             FileShare.None,
-                             bufferSize: 4096,
-                             options: FileOptions.WriteThrough))
+            await using (var stream = new FileStream(tempPath, streamOptions))
             {
-                await JsonSerializer.SerializeAsync(stream, payload, _serializerOptions, cancellationToken);
+                await JsonSerializer.SerializeAsync(stream, state, _serializerOptions, cancellationToken);
                 await stream.FlushAsync(cancellationToken);
             }
 
-            if (File.Exists(_settingsPath))
+            if (File.Exists(_paths.StateFile))
             {
-                File.Replace(tempPath, _settingsPath, destinationBackupFileName: null);
+                File.Replace(tempPath, _paths.StateFile, null);
             }
             else
             {
-                File.Move(tempPath, _settingsPath);
+                File.Move(tempPath, _paths.StateFile);
             }
-        }
-        catch
-        {
-            if (File.Exists(tempPath))
+            if (!OperatingSystem.IsWindows())
             {
-                File.Delete(tempPath);
+                File.SetUnixFileMode(_paths.StateFile, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
-
-            throw;
         }
-
-        lock (_sync)
+        finally
         {
-            _current = new InitializationSnapshot(true, payload.SystemInitialization.ApiKey);
+            if (File.Exists(tempPath)) File.Delete(tempPath);
         }
     }
 
-    private sealed class SetupSettingsPayload
+    private ServerState Load(string path)
     {
-        public DatabaseSettings Database { get; init; } = new();
+        if (!File.Exists(path)) return new ServerState();
+        return JsonSerializer.Deserialize<ServerState>(File.ReadAllText(path), _serializerOptions) ?? new ServerState();
+    }
 
-        public SystemInitializationSettings SystemInitialization { get; init; } = new();
+    private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+
+    private static ApiTokenSummary ToSummary(ApiTokenRecord token) => new(token.Id, token.Name, token.Prefix, token.CreatedAt);
+
+    private static ServerState Copy(ServerState state) => new()
+    {
+        SchemaVersion = state.SchemaVersion,
+        IsInitialized = state.IsInitialized,
+        Database = new DatabaseSettings
+        {
+            Provider = state.Database.Provider,
+            ConnectionString = state.Database.ConnectionString
+        },
+        PasswordHash = state.PasswordHash,
+        SessionVersion = state.SessionVersion,
+        Tokens = state.Tokens.Select(token => new ApiTokenRecord
+        {
+            Id = token.Id,
+            Name = token.Name,
+            Prefix = token.Prefix,
+            SecretHash = token.SecretHash,
+            CreatedAt = token.CreatedAt
+        }).ToList()
+    };
+
+    private sealed class ServerState
+    {
+        public int SchemaVersion { get; set; } = 1;
+        public bool IsInitialized { get; set; }
+        public DatabaseSettings Database { get; set; } = new();
+        public string? PasswordHash { get; set; }
+        public int SessionVersion { get; set; }
+        public List<ApiTokenRecord> Tokens { get; set; } = [];
+    }
+
+    private sealed class ApiTokenRecord
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Prefix { get; set; } = string.Empty;
+        public string SecretHash { get; set; } = string.Empty;
+        public DateTimeOffset CreatedAt { get; set; }
     }
 }

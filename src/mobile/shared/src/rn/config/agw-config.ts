@@ -1,9 +1,10 @@
 import { decodeUtf8Base64Url, encodeUtf8Base64Url } from "./base64";
 
 export type AgwLocalConfig = {
-  version: 1;
-  serverDomain: string;
-  apiKey: string;
+  version: 2;
+  apiMajorVersion: 1;
+  serverUrl: string;
+  token: string;
 };
 
 export class AgwConfigError extends Error {
@@ -14,16 +15,17 @@ export class AgwConfigError extends Error {
 }
 
 export function createLocalConfig({
-  apiKey,
-  serverDomain,
+  token,
+  serverUrl,
 }: {
-  apiKey: string;
-  serverDomain: string;
+  token: string;
+  serverUrl: string;
 }): AgwLocalConfig {
   return {
-    version: 1,
-    serverDomain: normalizeServerDomain(serverDomain),
-    apiKey: normalizeApiKey(apiKey),
+    version: 2,
+    apiMajorVersion: 1,
+    serverUrl: normalizeServerUrl(serverUrl),
+    token: normalizeToken(token),
   };
 }
 
@@ -36,9 +38,7 @@ export function parseEncodedConfig(encodedValue: string): AgwLocalConfig {
     }
 
     throw new AgwConfigError(
-      error instanceof Error
-        ? error.message
-        : "Base64URL configuration is invalid."
+      error instanceof Error ? error.message : "Base64URL configuration is invalid.",
     );
   }
 }
@@ -64,8 +64,9 @@ export function serializeConfig(config: AgwLocalConfig): string {
 
   return JSON.stringify({
     version: normalizedConfig.version,
-    serverDomain: normalizedConfig.serverDomain,
-    apiKey: normalizedConfig.apiKey,
+    apiMajorVersion: normalizedConfig.apiMajorVersion,
+    serverUrl: normalizedConfig.serverUrl,
+    token: normalizedConfig.token,
   });
 }
 
@@ -74,25 +75,25 @@ function normalizeRawConfig(rawConfig: unknown): AgwLocalConfig {
     throw new AgwConfigError("Configuration must be a JSON object.");
   }
 
-  const serverDomain =
-    readStringProperty(rawConfig, "serverDomain") ??
-    readStringProperty(rawConfig, "domain");
-  const apiKey =
-    readStringProperty(rawConfig, "apiKey") ??
-    readStringProperty(rawConfig, "api_key");
-
-  if (serverDomain === undefined) {
-    throw new AgwConfigError("Configuration is missing serverDomain.");
+  if (rawConfig.version !== 2 || rawConfig.apiMajorVersion !== 1) {
+    throw new AgwConfigError("Configuration version is not supported.");
   }
 
-  if (apiKey === undefined) {
-    throw new AgwConfigError("Configuration is missing apiKey.");
+  const serverUrl = readStringProperty(rawConfig, "serverUrl");
+  const token = readStringProperty(rawConfig, "token");
+
+  if (serverUrl === undefined) {
+    throw new AgwConfigError("Configuration is missing serverUrl.");
   }
 
-  return createLocalConfig({ apiKey, serverDomain });
+  if (token === undefined) {
+    throw new AgwConfigError("Configuration is missing token.");
+  }
+
+  return createLocalConfig({ token, serverUrl });
 }
 
-function normalizeServerDomain(value: string): string {
+function normalizeServerUrl(value: string): string {
   const trimmedValue = value.trim();
 
   if (!trimmedValue) {
@@ -119,28 +120,24 @@ function normalizeServerDomain(value: string): string {
     throw new AgwConfigError("Server domain must not include query or hash.");
   }
 
-  const path =
-    parsedUrl.pathname === "/"
-      ? ""
-      : parsedUrl.pathname.replace(/\/+$/g, "");
+  if (parsedUrl.pathname !== "/") {
+    throw new AgwConfigError("Server URL must not include a subpath.");
+  }
 
-  return `${parsedUrl.protocol}//${parsedUrl.host}${path}`;
+  return `${parsedUrl.protocol}//${parsedUrl.host}`;
 }
 
-function normalizeApiKey(value: string): string {
+function normalizeToken(value: string): string {
   const trimmedValue = value.trim();
 
   if (!trimmedValue) {
-    throw new AgwConfigError("API key is required.");
+    throw new AgwConfigError("API token is required.");
   }
 
   return trimmedValue;
 }
 
-function readStringProperty(
-  source: Record<string, unknown>,
-  key: string
-): string | undefined {
+function readStringProperty(source: Record<string, unknown>, key: string): string | undefined {
   const value = source[key];
 
   if (typeof value === "string") {

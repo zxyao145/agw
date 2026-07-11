@@ -655,7 +655,10 @@ export default function JobsPage() {
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
                     <Button type="button" variant="outline" size="sm" asChild>
-                      <Link href={`/jobs/${job.id}/job-logs`} aria-label={`View ${job.name} logs`}>
+                      <Link
+                        href={`/jobs/logs/?jobId=${encodeURIComponent(job.id)}`}
+                        aria-label={`View ${job.name} logs`}
+                      >
                         <ListChecks className="h-4 w-4" />
                       </Link>
                     </Button>

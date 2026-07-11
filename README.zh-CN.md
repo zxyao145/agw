@@ -34,7 +34,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/backend/Agw.Host
 ```
 
-开发环境后端默认监听 `http://localhost:5015`。首次运行时，打开 `http://localhost:5015/setup`，选择数据库 Provider、连接字符串和可选 API Key。初始化流程会完成数据库种子数据写入，并生成本地的 `appsettings.setup.json` 文件。如果配置了 API Key，请求后端 `/api` 时需要携带 `X-API-Key` 请求头。
+开发环境后端默认监听 `http://localhost:5015`。首次运行时，打开 `http://localhost:5015/setup`，选择数据库 Provider、连接字符串和管理员密码。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
 
 在另一个终端启动前端：
 
@@ -45,6 +45,8 @@ pnpm dev
 ```
 
 两个服务都启动后，打开 `http://localhost:3000`。Next.js 开发服务器会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:5015`。
+
+生产发布包会把静态 Web UI 嵌入 ASP.NET Core，由单一 Server 进程提供服务，详见下方部署指南。
 
 典型本地使用流程：
 
@@ -188,6 +190,8 @@ flowchart BT
 对外提供 A2A 协议本系统的接口。
 
 ## 文档
+
+- [部署指南](docs/4.Deployment.md)：单进程 Server、本地包、Docker、域名代理、数据目录与升级。
 
 本项目的详细文档位于： [`docs/`](docs/):
 

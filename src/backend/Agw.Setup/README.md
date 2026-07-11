@@ -1,139 +1,31 @@
 # Agw.Setup
 
-`Agw.Setup` provides the first-run setup UI and initialization guards for the Agw backend host. It is a Razor-enabled ASP.NET Core module that lets a new instance choose database settings, seed the database, persist initialization state, and optionally require an API key for `/api` requests.
+`Agw.Setup` owns first-run initialization and the single-administrator authentication state for Agw Server.
 
-## Module Responsibilities
+## Initialization
 
-- Expose the `/setup` Razor page before the system is initialized.
-- Persist setup output to `appsettings.setup.json` in the host content root.
-- Seed the configured database through `Agw.Infrastructure`.
-- Block normal host traffic until setup is complete.
-- Optionally require the `X-API-Key` header for `/api` routes after setup.
+Before initialization, normal UI requests redirect to `/setup`; APIs return 403 except Server info and health checks. The setup form selects SQLite, MySQL, or PostgreSQL and creates an administrator password of 12–256 characters.
 
-## Project Structure
+Direct loopback setup is trusted. Setup through a domain or forwarded request additionally requires the one-time Setup Code printed by the Server at startup.
 
-```text
-Agw.Setup/
-+-- Contracts/      # Setup request and initialization settings contracts
-+-- Controllers/    # /setup MVC controller
-+-- Middleware/     # Initialization and API key request guards
-+-- Services/       # Setup initialization and JSON-backed state store
-`-- Views/          # Razor setup page and layout
-```
+The resulting `server-state.json` lives below the Agw data directory, not the application directory. It contains database settings, a password hash, a session version, and hashed API Token metadata. It never stores Token plaintext.
 
-## Runtime Wiring
+## Authentication
 
-The module is loaded by `src/backend/Agw.Host/Program.cs`.
+- Direct loopback requests with a localhost Host and no forwarding headers are locally trusted.
+- Remote Web access signs in with the administrator password and receives an HttpOnly, SameSite=Strict cookie.
+- Desktop, Mobile, and automation clients use named `Authorization: Bearer agw_...` Tokens.
+- Unsafe Cookie/local browser requests require the `X-CSRF-TOKEN` antiforgery header.
+- Token management is available only to Cookie or locally trusted administrator sessions.
 
-Host configuration adds the generated setup file as an optional reloadable source:
+The old `X-API-Key` setting is intentionally not supported or migrated.
 
-```csharp
-builder.Configuration.AddJsonFile("appsettings.setup.json", optional: true, reloadOnChange: true);
-```
+## Recovery
 
-MVC discovers the setup controller through an application part:
-
-```csharp
-.AddApplicationPart(typeof(SetupController).Assembly)
-```
-
-Services are registered through:
-
-```csharp
-.AddSetup(builder.Configuration)
-```
-
-The request pipeline uses the setup middleware before file endpoint exception mapping:
-
-```csharp
-app.UseMiddleware<InitializationGuardMiddleware>();
-app.UseMiddleware<ApiKeyGuardMiddleware>();
-```
-
-## Initialization Flow
-
-1. `SystemInitialization:IsInitialized` starts as `false` in `src/backend/Agw.Host/appsettings.json`.
-2. When the host is not initialized:
-   - `GET` requests outside `/setup` redirect to `/setup`.
-   - `/api`, `/openapi`, and `/scalar` requests return `403`.
-   - non-GET requests outside `/setup` return `403`.
-3. `GET /setup` renders the setup form with default SQLite values.
-4. `POST /setup` validates `SetupRequest`, configures an `AgwDbContext`, runs `DbSeeder.SeedAsync()`, and persists setup state.
-5. After initialization, `/setup` returns `404` and normal host routes continue.
-
-The setup form currently offers SQLite, MySQL, and PostgreSQL options. `SetupInitializationService` maps `postgres` and `postgresql` to Npgsql, `mysql` to MySQL, and all other provider values to SQLite.
-
-## Usage
-
-Start the Agw host from the repository root:
+Stop the Server and run:
 
 ```bash
-dotnet run --project src/backend/Agw.Host
+agw-server auth reset-password
 ```
 
-Open the setup page before the system is initialized:
-
-```text
-http://localhost:5015/setup
-```
-
-Fill in the setup form:
-
-- `Provider`: choose `sqlite`, `mysql`, or `postgresql`.
-- `ConnectionString`: use `Data Source=agw.db` for the default local SQLite database, or provide a full MySQL/PostgreSQL connection string.
-- `ApiKey`: leave empty to disable the global API key guard, or enter a value to require `X-API-Key` on `/api` requests.
-
-Submit the form to seed the database and write `appsettings.setup.json`. After a successful initialization, the controller redirects to `/`, and `/setup` is no longer available.
-
-When an API key is configured, include it on API requests:
-
-```bash
-curl -H "X-API-Key: <configured-api-key>" "http://localhost:5015/api/your-route"
-```
-
-## Generated Configuration
-
-`JsonInitializationStateStore` writes `appsettings.setup.json` to the host content root. The file contains the selected database settings and initialization state:
-
-```json
-{
-  "database": {
-    "provider": "sqlite",
-    "connectionString": "Data Source=agw.db"
-  },
-  "systemInitialization": {
-    "isInitialized": true,
-    "apiKey": null
-  }
-}
-```
-
-The repository `.gitignore` excludes `appsettings.setup.json`, `agw.db`, SQLite sidecar files, and `logs/`. Keep connection strings and API keys out of committed configuration.
-
-## API Key Guard
-
-If setup stores a non-empty API key, `ApiKeyGuardMiddleware` requires every `/api` request to include:
-
-```text
-X-API-Key: <configured-api-key>
-```
-
-The guard only applies to `/api` paths. If the system is not initialized, or no API key is configured, the middleware lets the request continue to the next middleware.
-
-## Development
-
-Run backend commands from the repository root:
-
-```bash
-dotnet restore Agw.slnx
-dotnet build Agw.slnx
-dotnet run --project src/backend/Agw.Host
-```
-
-The development host uses `http://localhost:5015` by default. Visit `http://localhost:5015/setup` before initialization.
-
-There is no dedicated `Agw.Setup` test project in the repository at this time. Use the normal backend suite for broad verification:
-
-```bash
-dotnet test Agw.slnx
-```
+The command updates the password hash and invalidates existing Web sessions while preserving API Tokens.

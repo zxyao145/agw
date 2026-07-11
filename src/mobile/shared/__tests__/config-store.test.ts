@@ -29,16 +29,18 @@ describe("config-store", () => {
   it("reads Agw config from Expo SecureStore", async () => {
     getItemAsyncMock.mockResolvedValue(
       JSON.stringify({
-        version: 1,
-        serverDomain: "https://api.example.com/",
-        apiKey: "stored-key",
-      })
+        version: 2,
+        apiMajorVersion: 1 as const,
+        serverUrl: "https://api.example.com/",
+        token: "stored-key",
+      }),
     );
 
     await expect(readLocalConfig()).resolves.toEqual({
-      version: 1,
-      serverDomain: "https://api.example.com",
-      apiKey: "stored-key",
+      version: 2,
+      apiMajorVersion: 1 as const,
+      serverUrl: "https://api.example.com",
+      token: "stored-key",
     });
     expect(getItemAsyncMock).toHaveBeenCalledWith("agw.localConfig");
   });
@@ -51,17 +53,19 @@ describe("config-store", () => {
 
   it("writes normalized Agw config to Expo SecureStore", async () => {
     await writeLocalConfig({
-      version: 1,
-      serverDomain: "https://api.example.com",
-      apiKey: "stored-key",
+      version: 2,
+      apiMajorVersion: 1 as const,
+      serverUrl: "https://api.example.com",
+      token: "stored-key",
     });
 
     expect(setItemAsyncMock).toHaveBeenCalledTimes(1);
     expect(setItemAsyncMock.mock.calls[0][0]).toBe("agw.localConfig");
     expect(JSON.parse(setItemAsyncMock.mock.calls[0][1])).toEqual({
-      version: 1,
-      serverDomain: "https://api.example.com",
-      apiKey: "stored-key",
+      version: 2,
+      apiMajorVersion: 1 as const,
+      serverUrl: "https://api.example.com",
+      token: "stored-key",
     });
   });
 

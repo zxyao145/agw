@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { getProjectContextDetails, type ContextDetails } from "@/api/task-client";
@@ -78,9 +78,9 @@ function formatMessageContent(content: unknown): string {
 }
 
 export default function ConversationDetailsPage() {
-  const params = useParams<{ id: string; contextId: string }>();
-  const projectId = params.id;
-  const contextId = decodeURIComponent(params.contextId);
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId") ?? "";
+  const contextId = searchParams.get("contextId") ?? "";
 
   const conversationQuery = useQuery({
     queryKey: ["projects", projectId, "contexts", contextId],
@@ -96,7 +96,9 @@ export default function ConversationDetailsPage() {
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-xl font-semibold">
-              {conversationQuery.isLoading ? "Loading conversation..." : (conversation?.title ?? "Conversation")}
+              {conversationQuery.isLoading
+                ? "Loading conversation..."
+                : (conversation?.title ?? "Conversation")}
             </h1>
             {conversation?.latestStatus !== null && conversation?.latestStatus !== undefined ? (
               <span
@@ -106,7 +108,9 @@ export default function ConversationDetailsPage() {
               </span>
             ) : null}
           </div>
-          <div className="text-sm text-muted-foreground">Conversation history across related executions.</div>
+          <div className="text-sm text-muted-foreground">
+            Conversation history across related executions.
+          </div>
           {conversation ? (
             <div className="text-xs text-muted-foreground">
               <span className="font-mono">{conversation.contextId}</span>
@@ -121,7 +125,7 @@ export default function ConversationDetailsPage() {
             </Button>
           ) : null}
           <Button asChild variant="outline" size="sm">
-            <Link href={`/projects/${projectId}`}>Back</Link>
+            <Link href={`/projects/details/?projectId=${encodeURIComponent(projectId)}`}>Back</Link>
           </Button>
         </ButtonGroup>
       </div>
@@ -141,7 +145,9 @@ export default function ConversationDetailsPage() {
             </CardHeader>
             <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
               <div className="space-y-1">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Context ID</div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Context ID
+                </div>
                 <div className="break-all font-mono text-xs">{conversation.contextId}</div>
               </div>
               <div className="space-y-1">
@@ -171,7 +177,9 @@ export default function ConversationDetailsPage() {
             <Card className="border-destructive/50">
               <CardHeader>
                 <CardTitle className="text-destructive">Error</CardTitle>
-                <CardDescription>Latest terminal error recorded for this conversation.</CardDescription>
+                <CardDescription>
+                  Latest terminal error recorded for this conversation.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">

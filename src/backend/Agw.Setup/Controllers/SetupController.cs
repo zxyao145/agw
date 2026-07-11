@@ -11,11 +11,19 @@ public class SetupController : Controller
 {
     private readonly IInitializationStateStore _stateStore;
     private readonly ISetupInitializationService _setupInitializationService;
+    private readonly SetupCodeService _setupCodeService;
+    private readonly AuthenticationAttemptLimiter _attemptLimiter;
 
-    public SetupController(IInitializationStateStore stateStore, ISetupInitializationService setupInitializationService)
+    public SetupController(
+        IInitializationStateStore stateStore,
+        ISetupInitializationService setupInitializationService,
+        SetupCodeService setupCodeService,
+        AuthenticationAttemptLimiter attemptLimiter)
     {
         _stateStore = stateStore;
         _setupInitializationService = setupInitializationService;
+        _setupCodeService = setupCodeService;
+        _attemptLimiter = attemptLimiter;
     }
 
     [HttpGet("")]
@@ -28,6 +36,7 @@ public class SetupController : Controller
             return NotFound();
         }
 
+        ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
         return View(new SetupRequest
         {
             Provider = "sqlite",
@@ -41,8 +50,10 @@ public class SetupController : Controller
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Index(SetupRequest request, CancellationToken cancellationToken)
     {
+        ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
         if (_stateStore.GetSnapshot().IsInitialized)
         {
             return NotFound();
@@ -55,7 +66,29 @@ public class SetupController : Controller
 
         try
         {
+            var requiresSetupCode = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
+            var clientKey = AuthenticationAttemptLimiter.GetClientKey(HttpContext);
+            if (requiresSetupCode && _attemptLimiter.IsBlocked(clientKey, DateTimeOffset.UtcNow))
+            {
+                Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                ModelState.AddModelError(nameof(request.SetupCode), "Too many failed Setup Code attempts. Try again later.");
+                ViewData["RequireSetupCode"] = true;
+                return View(request);
+            }
+
+            if (requiresSetupCode && !_setupCodeService.Matches(request.SetupCode))
+            {
+                _attemptLimiter.RecordFailure(clientKey, DateTimeOffset.UtcNow);
+                ModelState.AddModelError(nameof(request.SetupCode), "Setup Code is invalid or has already been used.");
+                ViewData["RequireSetupCode"] = true;
+                return View(request);
+            }
+
             await _setupInitializationService.InitializeAsync(request, cancellationToken);
+            if (requiresSetupCode)
+            {
+                _setupCodeService.Consume(request.SetupCode);
+            }
             return Redirect("/");
         }
         catch (Exception ex)

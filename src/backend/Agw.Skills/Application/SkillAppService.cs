@@ -6,8 +6,8 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -23,7 +23,7 @@ public class SkillAppService
     private readonly IRepository<AgentSkillRelation> _agentSkillRelationRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly SkillDomainService _skillDomainService;
-    private readonly IWebHostEnvironment _webHostEnvironment;
+    private readonly AgwDataPaths _dataPaths;
     private readonly ILogger<SkillAppService> _logger;
 
     public SkillAppService(
@@ -32,7 +32,7 @@ public class SkillAppService
         IRepository<AgentSkillRelation> agentSkillRelationRepository,
         IUnitOfWork unitOfWork,
         SkillDomainService skillDomainService,
-        IWebHostEnvironment webHostEnvironment,
+        AgwDataPaths dataPaths,
         ILogger<SkillAppService> logger)
     {
         _skillRepository = skillRepository;
@@ -40,7 +40,7 @@ public class SkillAppService
         _agentSkillRelationRepository = agentSkillRelationRepository;
         _unitOfWork = unitOfWork;
         _skillDomainService = skillDomainService;
-        _webHostEnvironment = webHostEnvironment;
+        _dataPaths = dataPaths;
         _logger = logger;
     }
 
@@ -225,8 +225,7 @@ public class SkillAppService
             throw new AgwException(ErrorCodes.SkillArchiveMustBeZip);
         }
 
-        var exeRootPath = _webHostEnvironment.ContentRootPath;
-        var tempPath = Path.Combine(exeRootPath, "temp");
+        var tempPath = _dataPaths.TempDirectory;
         if (!Directory.Exists(tempPath))
         {
             Directory.CreateDirectory(tempPath);
@@ -404,13 +403,7 @@ public class SkillAppService
 
     private string GetSkillAbsolutePath(string skillName)
     {
-        var webRoot = _webHostEnvironment.WebRootPath;
-        if (string.IsNullOrWhiteSpace(webRoot))
-        {
-            webRoot = Path.Combine(_webHostEnvironment.ContentRootPath, "wwwroot");
-        }
-
-        return Path.Combine(webRoot, "skills", skillName);
+        return Path.Combine(_dataPaths.SkillsDirectory, skillName);
     }
 
     private static void ReplaceDirectory(string targetDirectory, string sourceDirectory, bool moveSourceDirectory = false)

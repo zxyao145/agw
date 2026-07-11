@@ -1,7 +1,8 @@
-using Agw.Setup.Contracts;
-
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Identity;
+
+using Agw.Shared.Runtime;
 
 namespace Agw.Setup.Services;
 
@@ -9,10 +10,13 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddSetup(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<SystemInitializationSettings>(configuration.GetSection(SystemInitializationSettings.SectionName));
-
         services
-            .AddSingleton<IInitializationStateStore, JsonInitializationStateStore>()
+            .AddSingleton<JsonInitializationStateStore>()
+            .AddSingleton<IInitializationStateStore>(provider => provider.GetRequiredService<JsonInitializationStateStore>())
+            .AddSingleton<IServerInitializationState>(provider => provider.GetRequiredService<JsonInitializationStateStore>())
+            .AddSingleton<SetupCodeService>()
+            .AddSingleton<AuthenticationAttemptLimiter>()
+            .AddSingleton<IPasswordHasher<object>, PasswordHasher<object>>()
             .AddScoped<ISetupInitializationService, SetupInitializationService>();
 
         return services;

@@ -36,7 +36,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/backend/Agw.Host
 ```
 
-The development backend listens on `http://localhost:5015`. On the first run, open `http://localhost:5015/setup` to choose the database provider, connection string, and optional API key. The setup process seeds the database and writes the local `appsettings.setup.json` file. If an API key is configured, backend `/api` requests must include the `X-API-Key` header.
+The development backend listens on `http://localhost:5015`. On the first run, open `http://localhost:5015/setup` to choose the database provider, connection string, and administrator password. Runtime data is stored in the current user's `agw` directory. Remote setup additionally requires the one-time code printed by the Server.
 
 Start the frontend in another terminal:
 
@@ -47,6 +47,8 @@ pnpm dev
 ```
 
 Open `http://localhost:3000` after both services are running. The Next.js dev server proxies `/api/*` and `/openapi/*` to the backend, using `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015`.
+
+Production packages use a single ASP.NET Core process with the exported Web UI embedded. See the deployment guide below.
 
 Typical local workflow:
 
@@ -192,6 +194,8 @@ flowchart BT
 Provides an interface for the A2A protocol to external systems.
 
 ## Documentation
+
+- [Deployment](docs/4.Deployment.md): single-process Server packages, Docker, domain proxying, data directories, and upgrades.
 
 The detailed project docs live under [`docs/`](docs/):
 

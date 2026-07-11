@@ -32,19 +32,9 @@ public partial class AgentRuntimeService
         if (!string.IsNullOrWhiteSpace(skill.ContentPath))
         {
             var normalizedPath = skill.ContentPath.Replace('/', Path.DirectorySeparatorChar);
-            return Path.Combine(GetWebRootPath(), normalizedPath);
+            return Path.Combine(_dataPaths.Root, normalizedPath);
         }
 
-        return Path.Combine(GetWebRootPath(), "skills", skill.Name);
-    }
-
-    private string GetWebRootPath()
-    {
-        if (!string.IsNullOrWhiteSpace(_webHostEnvironment.WebRootPath))
-        {
-            return _webHostEnvironment.WebRootPath;
-        }
-
-        return Path.Combine(_webHostEnvironment.ContentRootPath, "wwwroot");
+        return Path.Combine(_dataPaths.SkillsDirectory, skill.Name);
     }
 }

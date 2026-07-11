@@ -12,6 +12,12 @@ public class SetupRequest
     [Display(Name = "连接字符串")]
     public string ConnectionString { get; set; } = string.Empty;
 
-    [Display(Name = "API Key（可选）")]
-    public string? ApiKey { get; set; }
+    [Required]
+    [StringLength(256, MinimumLength = 12)]
+    [DataType(DataType.Password)]
+    [Display(Name = "管理员密码")]
+    public string AdminPassword { get; set; } = string.Empty;
+
+    [Display(Name = "Setup Code")]
+    public string? SetupCode { get; set; }
 }

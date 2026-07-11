@@ -341,7 +341,7 @@ export default function ProjectsPage() {
               <div className="min-w-0 space-y-1">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Link
-                    href={`/projects/${p.id}`}
+                    href={`/projects/details/?projectId=${encodeURIComponent(p.id)}`}
                     className="truncate font-medium underline-offset-4 hover:underline"
                   >
                     {p.name}
@@ -375,7 +375,9 @@ export default function ProjectsPage() {
 
               <div className="flex flex-wrap gap-2 sm:justify-end">
                 <Button asChild variant="outline" size="sm">
-                  <Link href={`/projects/${p.id}`}>View</Link>
+                  <Link href={`/projects/details/?projectId=${encodeURIComponent(p.id)}`}>
+                    View
+                  </Link>
                 </Button>
                 <Button
                   variant="outline"

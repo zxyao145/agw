@@ -1,0 +1,9 @@
+.git
+.worktrees
+**/bin
+**/obj
+**/node_modules
+**/.next
+**/out
+artifacts
+TestResults

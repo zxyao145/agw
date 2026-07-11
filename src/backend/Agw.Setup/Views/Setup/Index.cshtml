@@ -29,10 +29,20 @@
     </div>
 
     <div class="field">
-        <label asp-for="ApiKey"></label>
-        <input asp-for="ApiKey" placeholder="留空表示不启用统一 API Key" />
-        <div class="hint">配置后调用所有 /api 接口需携带请求头 X-API-Key。</div>
+        <label asp-for="AdminPassword"></label>
+        <input asp-for="AdminPassword" autocomplete="new-password" />
+        <div class="hint">至少 12 个字符。远程访问时使用此密码登录管理界面。</div>
+        <span asp-validation-for="AdminPassword" class="error"></span>
     </div>
+
+    @if (ViewData["RequireSetupCode"] as bool? == true)
+    {
+        <div class="field">
+            <label asp-for="SetupCode"></label>
+            <input asp-for="SetupCode" autocomplete="one-time-code" />
+            <div class="hint">输入 Server 启动日志中显示的一次性 Setup Code。</div>
+        </div>
+    }
 
     <button type="submit" class="button">初始化系统</button>
 </form>

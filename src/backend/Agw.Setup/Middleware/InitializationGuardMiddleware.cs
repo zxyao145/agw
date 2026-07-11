@@ -22,6 +22,14 @@ public class InitializationGuardMiddleware
 
         if (!snapshot.IsInitialized)
         {
+            if (path.StartsWithSegments("/api/server-info")
+                || path.StartsWithSegments("/health/live")
+                || path.StartsWithSegments("/health/ready"))
+            {
+                await _next(context);
+                return;
+            }
+
             if (path.StartsWithSegments(SetupPath))
             {
                 await _next(context);

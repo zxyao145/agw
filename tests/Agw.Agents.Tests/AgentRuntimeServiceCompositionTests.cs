@@ -258,7 +258,7 @@ public class AgentRuntimeServiceCompositionTests
         var project = new Project
         {
             ExtraSetting = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions()
-                { PermissionMode = PermissionMode.bypassPermissions, })
+            { PermissionMode = PermissionMode.bypassPermissions, })
         };
         var environmentVariables = new Dictionary<string, string>
         {
@@ -326,7 +326,7 @@ public class AgentRuntimeServiceCompositionTests
             chatHistoryProvider: null!,
             providerSessionState: null!,
             taskSessionBindingService: null!,
-            webHostEnvironment: null!,
+            dataPaths: null!,
             fileSystemResolver: null!,
             sessionStateStore: null!,
             logger: NullLogger<AgentRuntimeService>.Instance,

@@ -17,7 +17,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
-import { apiGet, getApiKey } from "@/api/client";
+import { apiGet } from "@/api/client";
 import {
   buildHumanResponseCommandPayload,
   buildSettingCommandPayload,
@@ -399,8 +399,7 @@ export default function ChatPage() {
   const [contextId, setContextId] = React.useState<string | null>(queryContextId);
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
   const [isExecuting, setIsExecuting] = React.useState(false);
-  const [pendingHumanGate, setPendingHumanGate] =
-    React.useState<HumanGateRequest | null>(null);
+  const [pendingHumanGate, setPendingHumanGate] = React.useState<HumanGateRequest | null>(null);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
   const [fileContent, setFileContent] = React.useState("");
@@ -577,7 +576,7 @@ export default function ChatPage() {
       return false;
     }
 
-    return message.additionalProperties?.type === "turn-finished"
+    return message.additionalProperties?.type === "turn-finished";
   }, []);
 
   const waitForWebSocketOpen = React.useCallback((ws: WebSocket): Promise<void> => {
@@ -605,10 +604,8 @@ export default function ChatPage() {
   const setupWebSocket = React.useCallback(
     (executionId: string) => {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const apiKey = getApiKey();
-      const apiKeyParam = apiKey ? `?X-API-Key=${encodeURIComponent(apiKey)}` : "";
       const ws = new WebSocket(
-        `${protocol}//${window.location.host}/api/executions/${executionId}/ws${apiKeyParam}`,
+        `${protocol}//${window.location.host}/api/executions/${executionId}/ws`,
       );
       wsRef.current = ws;
 
@@ -833,7 +830,6 @@ export default function ChatPage() {
     syncRoute(selectedProjectId, null);
   }, [clearLocalSessionState, selectedProjectId, syncRoute]);
 
-
   const loadContextHistory = React.useCallback(
     async (projectId: string, nextContextIdValue: string) => {
       const details = await getProjectContextDetails(projectId, nextContextIdValue);
@@ -1024,7 +1020,10 @@ export default function ChatPage() {
     void (async () => {
       try {
         if (routeAction.type === "hydrateContext") {
-          const details = await getProjectContextDetails(routeAction.projectId, routeAction.contextId);
+          const details = await getProjectContextDetails(
+            routeAction.projectId,
+            routeAction.contextId,
+          );
           const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
           if (cancelled) {
             return;
@@ -1043,7 +1042,6 @@ export default function ChatPage() {
           syncRoute(routeAction.projectId, details.contextId);
           return;
         }
-
       } catch (error) {
         if (!cancelled) {
           if (hydrationKey && hydratedContextKeyRef.current === hydrationKey) {
@@ -1057,7 +1055,14 @@ export default function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [clearLocalSessionState, closeSocket, queryContextId, queryProjectId, routeTargetValue, syncRoute]);
+  }, [
+    clearLocalSessionState,
+    closeSocket,
+    queryContextId,
+    queryProjectId,
+    routeTargetValue,
+    syncRoute,
+  ]);
 
   const handleProjectChange = React.useCallback(
     (nextProjectId: string) => {
@@ -1496,12 +1501,8 @@ export default function ChatPage() {
                       <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
                         <HumanGateApproval
                           request={pendingHumanGate}
-                          onApprove={(responseText) =>
-                            submitHumanGateResponse(true, responseText)
-                          }
-                          onReject={(responseText) =>
-                            submitHumanGateResponse(false, responseText)
-                          }
+                          onApprove={(responseText) => submitHumanGateResponse(true, responseText)}
+                          onReject={(responseText) => submitHumanGateResponse(false, responseText)}
                         />
                       </div>
                     ) : null}

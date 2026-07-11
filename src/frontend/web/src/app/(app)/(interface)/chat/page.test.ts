@@ -4,10 +4,10 @@ import test from "node:test";
 
 const CHAT_PAGE_URL = new URL("./page.tsx", import.meta.url);
 const CONVERSATION_DETAILS_PAGE_URL = new URL(
-  "../../(tasks)/projects/[id]/conversations/[contextId]/page.tsx",
+  "../../(tasks)/projects/conversations/details/page.tsx",
   import.meta.url,
 );
-const JOB_LOGS_PAGE_URL = new URL("../../(jobs)/jobs/[id]/job-logs/page.tsx", import.meta.url);
+const JOB_LOGS_PAGE_URL = new URL("../../(jobs)/jobs/logs/page.tsx", import.meta.url);
 const CONVERSATION_LIST_URL = new URL(
   "../../../../components/task/conversation-list.tsx",
   import.meta.url,

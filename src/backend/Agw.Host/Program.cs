@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using System.Net;
 
 using Agw.A2A;
 using Agw.A2A.Extensions;
@@ -13,12 +13,14 @@ using Agw.Integrations.Extensions;
 using Agw.Jobs;
 using Agw.Jobs.Controllers;
 using Agw.Manager.Api.Controllers;
+using Agw.Host.Controllers;
 using Agw.Providers;
 using Agw.Setup.Controllers;
 using Agw.Setup.Middleware;
 using Agw.Setup.Services;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Agw.Skills;
 using Agw.Skills.Controllers;
@@ -29,6 +31,9 @@ using Agw.Tools;
 using Bens.Results;
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi;
 
 using OpenTelemetry.Logs;
@@ -40,6 +45,25 @@ using Scalar.AspNetCore;
 
 using Serilog;
 using Serilog.Enrichers.OpenTelemetry;
+
+var dataPaths = AgwDataPaths.ResolveFromEnvironment();
+dataPaths.EnsureCreated();
+
+if (args.Length == 1 && string.Equals(args[0], "serve", StringComparison.OrdinalIgnoreCase))
+{
+    args = [];
+}
+
+if (await Agw.Host.ServerCommand.TryRunAsync(args, dataPaths))
+{
+    return;
+}
+
+if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
+    && !string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase))
+{
+    Environment.SetEnvironmentVariable("ASPNETCORE_URLS", "http://127.0.0.1:5015");
+}
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()
@@ -53,6 +77,12 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.WithThreadId()
     .Enrich.WithOpenTelemetryTraceId()
     .Enrich.WithOpenTelemetrySpanId()
+    .WriteTo.Async(sink => sink.File(
+        Path.Combine(dataPaths.LogsDirectory, "application-.log"),
+        rollingInterval: RollingInterval.Hour,
+        retainedFileCountLimit: 30,
+        shared: true,
+        flushToDiskInterval: TimeSpan.FromSeconds(1)))
     .CreateLogger();
 
 try
@@ -61,7 +91,9 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
-    builder.Configuration.AddJsonFile("appsettings.setup.json", optional: true, reloadOnChange: true);
+    builder.Configuration.AddJsonFile(dataPaths.StateFile, optional: true, reloadOnChange: true);
+    builder.Services.AddSingleton(dataPaths);
+    builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(dataPaths.KeysDirectory));
 
     // Use Serilog for logging
     builder.Host.UseSerilog();
@@ -168,6 +200,61 @@ try
     builder.Services.AddApiResult();
     builder.Services.AddHttpClient();
     builder.Services.AddSingleton<IocUtil>();
+    builder.Services.AddAntiforgery(options =>
+    {
+        options.HeaderName = "X-CSRF-TOKEN";
+        options.Cookie.Name = "agw.antiforgery";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    });
+    builder.Services.AddAuthentication(AuthController.CookieScheme)
+        .AddCookie(AuthController.CookieScheme, options =>
+        {
+            options.Cookie.Name = "agw.session";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Strict;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.ExpireTimeSpan = TimeSpan.FromHours(12);
+            options.SlidingExpiration = true;
+            options.Events = new CookieAuthenticationEvents
+            {
+                OnRedirectToLogin = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                },
+                OnRedirectToAccessDenied = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                },
+                OnValidatePrincipal = context =>
+                {
+                    var store = context.HttpContext.RequestServices.GetRequiredService<IInitializationStateStore>();
+                    var expected = store.GetSnapshot().SessionVersion.ToString();
+                    if (!string.Equals(context.Principal?.FindFirst("session_version")?.Value, expected, StringComparison.Ordinal))
+                    {
+                        context.RejectPrincipal();
+                    }
+                    return Task.CompletedTask;
+                }
+            };
+        });
+    builder.Services.AddAuthorization();
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = 1;
+        var configuredProxies = builder.Configuration
+            .GetSection("ReverseProxy:TrustedProxies")
+            .Get<string[]>() ?? [];
+        foreach (var configuredProxy in configuredProxies)
+        {
+            if (IPAddress.TryParse(configuredProxy, out var address)) options.KnownProxies.Add(address);
+        }
+    });
+    builder.Services.AddHealthChecks();
 
     // add module
     builder.Services
@@ -205,10 +292,8 @@ try
         app.MapOpenApi();
         app.MapScalarApiReference();
     }
-    else
-    {
-        app.UseHttpsRedirection();
-    }
+
+    app.UseForwardedHeaders();
 
     // Add Serilog request logging
     app.UseSerilogRequestLogging(options =>
@@ -222,19 +307,47 @@ try
 
     // Enable WebSocket support
     app.UseWebSockets();
+    app.UseMiddleware<InitializationGuardMiddleware>();
+    app.UseAuthentication();
+    app.UseMiddleware<AgwAuthenticationMiddleware>();
+    app.UseMiddleware<AgwAntiforgeryMiddleware>();
+    app.UseMiddleware<AgwAuthorizationGuardMiddleware>();
     app.UseDefaultFiles();
     app.UseStaticFiles();
-    app.UseMiddleware<InitializationGuardMiddleware>();
-    app.UseMiddleware<ApiKeyGuardMiddleware>();
+    app.UseRouting();
+    app.UseAuthorization();
     app.UseMiddleware<AgwApiExceptionMiddleware>();
     app.UseMiddleware<FileEndpointExceptionMappingMiddleware>();
 
     var a2AServerOptions = app.Services
         .GetRequiredService<Microsoft.Extensions.Options.IOptions<AgwA2AServerOptions>>()
         .Value;
-    app.MapAgwA2A(a2AServerOptions.Prefix);
+    app.MapAgwA2A(a2AServerOptions.Prefix).RequireAuthorization();
     app.MapControllers();
-    app.MapFallbackToFile("index.html");
+    app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
+    app.MapGet("/health/ready", async (IInitializationStateStore stateStore, AgwDbContext dbContext, IServiceProvider services, IConfiguration configuration) =>
+    {
+        if (!stateStore.GetSnapshot().IsInitialized || !await dbContext.Database.CanConnectAsync())
+        {
+            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        if (configuration.GetValue<bool>("Redis:Enabled"))
+        {
+            var redis = services.GetService<StackExchange.Redis.IConnectionMultiplexer>();
+            if (redis == null || !redis.IsConnected)
+            {
+                return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+        }
+        return Results.Ok(new { status = "ready" });
+    });
+    app.MapFallbackToFile("404.html");
+
+    var setupCodeService = app.Services.GetRequiredService<SetupCodeService>();
+    if (!app.Services.GetRequiredService<IInitializationStateStore>().GetSnapshot().IsInitialized)
+    {
+        Log.Warning("Agw remote setup code: {SetupCode}", setupCodeService.CurrentCode);
+    }
 
     Log.Information("Agw Host configured successfully");
     app.Run();

@@ -1,13 +1,11 @@
 import React from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { createAgwApiClient, AgwApiError } from "../../api/agw-api-client";
+import {
+  createAgwApiClient,
+  AgwApiError,
+  verifyServerCompatibility,
+} from "../../api/agw-api-client";
 import type {
   AgwAgent,
   AgwAgentflow,
@@ -29,10 +27,7 @@ import {
   parseExecutionWsMessage,
   toExecutionWsUserInput,
 } from "./lib/execution-ws";
-import {
-  DEFAULT_AGENT_LABEL,
-  DEFAULT_PROJECT_VALUE,
-} from "./lib/default-selections";
+import { DEFAULT_AGENT_LABEL, DEFAULT_PROJECT_VALUE } from "./lib/default-selections";
 import { buildAgwTargetOptions, getTargetValue } from "./lib/target-options";
 import { styles } from "./components/styles";
 import { TopBar } from "./components/top-bar";
@@ -52,63 +47,43 @@ function AgwMobilePage({
   const safeAreaInsets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = React.useState<AgwTabName>(initialTab);
   const [config, setConfig] = React.useState<AgwLocalConfig | null>(null);
-  const [configLoadState, setConfigLoadState] = React.useState<
-    "loading" | "ready" | "missing"
-  >("loading");
-  const [configLoadError, setConfigLoadError] = React.useState<string | null>(
-    null,
+  const [configLoadState, setConfigLoadState] = React.useState<"loading" | "ready" | "missing">(
+    "loading",
   );
+  const [configLoadError, setConfigLoadError] = React.useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(initialSettingsOpen);
-  const [isSettingsOpen, setIsSettingsOpen] =
-    React.useState(initialSettingsOpen);
+  const [isSettingsOpen, setIsSettingsOpen] = React.useState(initialSettingsOpen);
   const [projects, setProjects] = React.useState<AgwProject[]>([]);
   const [agents, setAgents] = React.useState<AgwAgent[]>([]);
   const [agentflows, setAgentflows] = React.useState<AgwAgentflow[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = React.useState<
-    string | null
-  >(null);
-  const [selectedTargetValue, setSelectedTargetValue] = React.useState<
-    string | null
-  >(null);
+  const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(null);
+  const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(null);
   const [contexts, setContexts] = React.useState<AgwContextSummary[]>([]);
   const [currentContextId, setCurrentContextId] = React.useState<string | null>(null);
   const [currentTaskId, setCurrentTaskId] = React.useState<string | null>(null);
   const [messages, setMessages] = React.useState<AgwMessage[]>([]);
-  const [isDependenciesLoading, setIsDependenciesLoading] =
-    React.useState(false);
-  const [dependenciesError, setDependenciesError] = React.useState<
-    string | null
-  >(null);
+  const [isDependenciesLoading, setIsDependenciesLoading] = React.useState(false);
+  const [dependenciesError, setDependenciesError] = React.useState<string | null>(null);
   const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
   const [historyError, setHistoryError] = React.useState<string | null>(null);
   const [isChatLoading, setIsChatLoading] = React.useState(false);
   const [chatError, setChatError] = React.useState<string | null>(null);
   const [composerText, setComposerText] = React.useState("");
   const [isExecuting, setIsExecuting] = React.useState(false);
-  const [executionError, setExecutionError] = React.useState<string | null>(
-    null,
-  );
+  const [executionError, setExecutionError] = React.useState<string | null>(null);
   const chatScrollRef = React.useRef<ScrollView | null>(null);
-  const isTurnFinishedMessage = React.useCallback(
-    (message: AgwMessage): boolean => {
-      if (message.role?.toLowerCase() !== "system") {
-        return false;
-      }
+  const isTurnFinishedMessage = React.useCallback((message: AgwMessage): boolean => {
+    if (message.role?.toLowerCase() !== "system") {
+      return false;
+    }
 
-      return (
-        message.author === "$agw-server" &&
-        message.contents.some(
-          (content) => content.additionalProperties?.type === "turn-finished",
-        )
-      );
-    },
-    [],
-  );
+    return (
+      message.author === "$agw-server" &&
+      message.contents.some((content) => content.additionalProperties?.type === "turn-finished")
+    );
+  }, []);
 
-  const apiClient = React.useMemo(
-    () => (config ? createAgwApiClient(config) : null),
-    [config],
-  );
+  const apiClient = React.useMemo(() => (config ? createAgwApiClient(config) : null), [config]);
 
   const selectedProject = React.useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
@@ -126,10 +101,7 @@ function AgwMobilePage({
   );
 
   const selectedTarget = React.useMemo(
-    () =>
-      targets.find(
-        (target) => getTargetValue(target) === selectedTargetValue,
-      ) ?? null,
+    () => targets.find((target) => getTargetValue(target) === selectedTargetValue) ?? null,
     [selectedTargetValue, targets],
   );
 
@@ -139,6 +111,10 @@ function AgwMobilePage({
     async function loadConfig() {
       try {
         const storedConfig = await readLocalConfig();
+
+        if (storedConfig) {
+          await verifyServerCompatibility(storedConfig);
+        }
 
         if (!isMounted) {
           return;
@@ -154,9 +130,7 @@ function AgwMobilePage({
 
         setConfig(null);
         setConfigLoadState("missing");
-        setConfigLoadError(
-          error instanceof Error ? error.message : "Configuration is invalid.",
-        );
+        setConfigLoadError(error instanceof Error ? error.message : "Configuration is invalid.");
       }
     }
 
@@ -168,6 +142,7 @@ function AgwMobilePage({
   }, []);
 
   async function saveConfig(nextConfig: AgwLocalConfig) {
+    await verifyServerCompatibility(nextConfig);
     await writeLocalConfig(nextConfig);
     setConfig(nextConfig);
     setConfigLoadState("ready");
@@ -205,9 +180,7 @@ function AgwMobilePage({
 
         setProjects(nextProjects.filter((project) => project.enable));
         setAgents(nextAgents);
-        setAgentflows(
-          nextAgentflows.filter((agentflow) => agentflow.enable !== false),
-        );
+        setAgentflows(nextAgentflows.filter((agentflow) => agentflow.enable !== false));
       } catch (error) {
         if (!isMounted) {
           return;
@@ -220,9 +193,7 @@ function AgwMobilePage({
         setCurrentContextId(null);
         setCurrentTaskId(null);
         setMessages([]);
-        setDependenciesError(
-          `Failed to load mobile data: ${getErrorMessage(error)}`,
-        );
+        setDependenciesError(`Failed to load mobile data: ${getErrorMessage(error)}`);
       } finally {
         if (isMounted) {
           setIsDependenciesLoading(false);
@@ -239,17 +210,12 @@ function AgwMobilePage({
 
   React.useEffect(() => {
     setSelectedProjectId((currentProjectId) => {
-      if (
-        currentProjectId &&
-        projects.some((project) => project.id === currentProjectId)
-      ) {
+      if (currentProjectId && projects.some((project) => project.id === currentProjectId)) {
         return currentProjectId;
       }
 
       const defaultProject = projects.find(
-        (project) =>
-          project.id === DEFAULT_PROJECT_VALUE ||
-          project.name === DEFAULT_PROJECT_VALUE,
+        (project) => project.id === DEFAULT_PROJECT_VALUE || project.name === DEFAULT_PROJECT_VALUE,
       );
 
       return defaultProject?.id ?? projects[0]?.id ?? null;
@@ -266,8 +232,7 @@ function AgwMobilePage({
       }
 
       const defaultTarget = targets.find(
-        (target) =>
-          target.type === "agent" && target.label === DEFAULT_AGENT_LABEL,
+        (target) => target.type === "agent" && target.label === DEFAULT_AGENT_LABEL,
       );
 
       return defaultTarget
@@ -432,14 +397,7 @@ function AgwMobilePage({
 
   async function sendMessage() {
     const input = composerText.trim();
-    if (
-      !apiClient ||
-      !config ||
-      !selectedProjectId ||
-      !selectedTarget ||
-      !input ||
-      isExecuting
-    ) {
+    if (!apiClient || !config || !selectedProjectId || !selectedTarget || !input || isExecuting) {
       return;
     }
 
@@ -454,7 +412,8 @@ function AgwMobilePage({
 
     try {
       await executeWithWebSocket(
-        config.serverDomain,
+        config.serverUrl,
+        config.token,
         selectedTarget.id,
         {
           projectId: selectedProjectId,
@@ -562,11 +521,7 @@ function AgwMobilePage({
             </View>
             <View style={{ paddingBottom: safeAreaInsets.bottom }}>
               <Composer
-                disabled={
-                  Boolean(dependenciesError) ||
-                  !selectedProjectId ||
-                  !selectedTarget
-                }
+                disabled={Boolean(dependenciesError) || !selectedProjectId || !selectedTarget}
                 isSending={isExecuting}
                 message={composerText}
                 onClear={clearCurrentContextRecords}

@@ -59,8 +59,11 @@ public static class ErrorCodes
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode SftpAuthenticationFailed = new(401_0002, "SFTP authentication failed.", HttpStatusCode.Unauthorized);
+    public static readonly ErrorCode AuthenticationRequired = new(401_0003, "Authentication is required.", HttpStatusCode.Unauthorized);
+    public static readonly ErrorCode InvalidAdminCredentials = new(401_0004, "Invalid administrator credentials.", HttpStatusCode.Unauthorized);
 
     public static readonly ErrorCode PathOutsideRoot = new(403_0001, "Path is outside the allowed root directory.", HttpStatusCode.Forbidden);
+    public static readonly ErrorCode InteractiveAdminRequired = new(403_0002, "An interactive administrator session is required.", HttpStatusCode.Forbidden);
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode DirectoryNotFound = new(404_0002, "Directory was not found.", HttpStatusCode.NotFound);
@@ -69,6 +72,7 @@ public static class ErrorCodes
     public static readonly ErrorCode A2AExtendedAgentCardNotConfigured = new(404_0005, "Extended agent card is not configured.", HttpStatusCode.NotFound);
     public static readonly ErrorCode AgentNotFound = new(404_0006, "Agent was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode ResourceNotFound = new(404_0007, "Resource was not found.", HttpStatusCode.NotFound);
+    public static readonly ErrorCode ApiTokenNotFound = new(404_0008, "API token was not found.", HttpStatusCode.NotFound);
 
     public static readonly ErrorCode SkillAlreadyExists = new(409_0001, "Skill already exists.", HttpStatusCode.Conflict);
     public static readonly ErrorCode A2ATaskIdAlreadyUsed = new(409_0002, "Task id is already used by a non-A2A task.", HttpStatusCode.Conflict);
@@ -76,6 +80,9 @@ public static class ErrorCodes
     public static readonly ErrorCode A2ATaskNotCancelable = new(409_0004, "Task is not cancelable.", HttpStatusCode.Conflict);
     public static readonly ErrorCode A2ATerminalTaskCannotAcceptMessages = new(409_0005, "Task is in a terminal state and cannot accept messages.", HttpStatusCode.Conflict);
     public static readonly ErrorCode A2ATerminalTaskCannotBeSubscribed = new(409_0006, "Task is in a terminal state and cannot be subscribed to.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode ApiTokenNameAlreadyExists = new(409_0007, "An API token with this name already exists.", HttpStatusCode.Conflict);
+
+    public static readonly ErrorCode TooManyAuthenticationAttempts = new(429_0001, "Too many authentication attempts.", HttpStatusCode.TooManyRequests);
 
     public static readonly ErrorCode CannotCreateInstance = new(500_0001, "Cannot create instance.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode A2ATaskSnapshotCloneFailed = new(500_0002, "Failed to clone A2A task snapshot.", HttpStatusCode.InternalServerError);

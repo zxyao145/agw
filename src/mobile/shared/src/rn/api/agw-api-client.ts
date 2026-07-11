@@ -1,10 +1,7 @@
 import { Platform } from "react-native";
 import type { AgwLocalConfig } from "../config/agw-config";
 
-export type AgwApiQuery = Record<
-  string,
-  string | number | boolean | null | undefined
->;
+export type AgwApiQuery = Record<string, string | number | boolean | null | undefined>;
 
 type AgwApiRequestOptions = {
   query?: AgwApiQuery;
@@ -46,10 +43,7 @@ export class AgwApiError extends Error {
   }
 }
 
-export function createAgwApiClient(
-  config: AgwLocalConfig,
-  options: AgwApiClientOptions = {}
-) {
+export function createAgwApiClient(config: AgwLocalConfig, options: AgwApiClientOptions = {}) {
   const platform = options.platform ?? Platform.OS;
 
   return {
@@ -59,20 +53,24 @@ export function createAgwApiClient(
       requestJson<T>(config, platform, path, "GET", undefined, options),
     getText: (path: string, options?: AgwApiRequestOptions) =>
       requestText(config, platform, path, "GET", options),
-    postJson: <T = unknown>(
-      path: string,
-      body?: unknown,
-      options?: AgwApiRequestOptions
-    ) => requestJson<T>(config, platform, path, "POST", body, options),
-    putJson: <T = unknown>(
-      path: string,
-      body?: unknown,
-      options?: AgwApiRequestOptions
-    ) => requestJson<T>(config, platform, path, "PUT", body, options),
+    postJson: <T = unknown>(path: string, body?: unknown, options?: AgwApiRequestOptions) =>
+      requestJson<T>(config, platform, path, "POST", body, options),
+    putJson: <T = unknown>(path: string, body?: unknown, options?: AgwApiRequestOptions) =>
+      requestJson<T>(config, platform, path, "PUT", body, options),
   };
 }
 
 export type AgwApiClient = ReturnType<typeof createAgwApiClient>;
+
+export async function verifyServerCompatibility(config: AgwLocalConfig): Promise<void> {
+  const client = createAgwApiClient(config);
+  const info = await client.getJson<{ apiMajorVersion: number }>("/api/server-info");
+  if (info.apiMajorVersion !== config.apiMajorVersion) {
+    throw new Error(
+      `Incompatible Agw Server API major ${info.apiMajorVersion}; client requires ${config.apiMajorVersion}.`,
+    );
+  }
+}
 
 async function requestJson<T>(
   config: AgwLocalConfig,
@@ -80,7 +78,7 @@ async function requestJson<T>(
   path: string,
   method: string,
   body?: unknown,
-  options?: AgwApiRequestOptions
+  options?: AgwApiRequestOptions,
 ): Promise<T> {
   const response = await request(config, platform, path, method, body, options);
   const responseBody = await readResponseBody(response);
@@ -102,7 +100,7 @@ async function requestText(
   platform: typeof Platform.OS,
   path: string,
   method: string,
-  options?: AgwApiRequestOptions
+  options?: AgwApiRequestOptions,
 ): Promise<string> {
   const response = await request(config, platform, path, method, undefined, options);
   const body = await response.text();
@@ -125,10 +123,10 @@ function request(
   path: string,
   method: string,
   body?: unknown,
-  options?: AgwApiRequestOptions
+  options?: AgwApiRequestOptions,
 ): Promise<Response> {
   const headers: Record<string, string> = {
-    "X-API-Key": config.apiKey,
+    Authorization: `Bearer ${config.token}`,
   };
   const init: RequestInit = {
     headers,
@@ -140,19 +138,16 @@ function request(
     init.body = JSON.stringify(body);
   }
 
-  return fetch(buildUrl(config.serverDomain, platform, path, options?.query), init);
+  return fetch(buildUrl(config.serverUrl, platform, path, options?.query), init);
 }
 
 function buildUrl(
   baseUrl: string,
   platform: typeof Platform.OS,
   path: string,
-  query?: AgwApiQuery
+  query?: AgwApiQuery,
 ): string {
-  const normalizedBaseUrl = normalizeBaseUrlForPlatform(
-    baseUrl.replace(/\/+$/g, ""),
-    platform
-  );
+  const normalizedBaseUrl = normalizeBaseUrlForPlatform(baseUrl.replace(/\/+$/g, ""), platform);
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${normalizedBaseUrl}${normalizedPath}`;
 
@@ -162,19 +157,13 @@ function buildUrl(
 
   const queryString = Object.entries(query)
     .filter(([, value]) => value !== undefined && value !== null)
-    .map(
-      ([key, value]) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`
-    )
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
     .join("&");
 
   return queryString ? `${url}?${queryString}` : url;
 }
 
-function normalizeBaseUrlForPlatform(
-  baseUrl: string,
-  platform: typeof Platform.OS
-): string {
+function normalizeBaseUrlForPlatform(baseUrl: string, platform: typeof Platform.OS): string {
   void platform;
   return baseUrl;
 }

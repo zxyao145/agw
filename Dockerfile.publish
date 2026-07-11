@@ -1,16 +1,25 @@
-FROM node:24-bookworm-slim AS node
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM node:24-bookworm-slim AS web-build
+WORKDIR /src/src/frontend/web
+RUN corepack enable
+COPY src/frontend/web/package.json src/frontend/web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY src/frontend/web ./
+RUN NEXT_OUTPUT_MODE=export pnpm build
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS server-build
+WORKDIR /src
+COPY src/backend ./src/backend
+RUN dotnet publish src/backend/Agw.Host/Agw.Host.csproj -c Release -o /out --self-contained false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
-
-COPY --from=node /usr/local/bin/node /usr/local/bin/node
-COPY backend ./backend
-COPY frontend ./frontend
-COPY docker-entrypoint.sh ./docker-entrypoint.sh
-
-ENV ASPNETCORE_ENVIRONMENT=Development \
-    BACKEND_PORT=5015 \
-    WEB_PORT=8080 \
-    HOSTNAME=0.0.0.0
+ENV ASPNETCORE_ENVIRONMENT=Production \
+    ASPNETCORE_URLS=http://0.0.0.0:8080 \
+    AGW_DATA_DIR=/data \
+    DOTNET_RUNNING_IN_CONTAINER=true
 EXPOSE 8080
-
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+COPY --from=server-build /out ./
+COPY --from=web-build /src/src/frontend/web/out ./wwwroot
+RUN mkdir -p /data && chown -R $APP_UID:$APP_UID /app /data
+USER $APP_UID
+ENTRYPOINT ["./agw-server", "serve"]

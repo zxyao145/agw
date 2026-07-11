@@ -15,14 +15,14 @@ export function ConfigSettingsPage({
   onSave: (config: AgwLocalConfig) => Promise<void>;
   safeBottom: number;
 }): React.JSX.Element {
-  const [serverDomain, setServerDomain] = React.useState(config.serverDomain);
-  const [apiKey, setApiKey] = React.useState(config.apiKey);
+  const [serverUrl, setServerUrl] = React.useState(config.serverUrl);
+  const [token, setToken] = React.useState(config.token);
   const [error, setError] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
 
   React.useEffect(() => {
-    setServerDomain(config.serverDomain);
-    setApiKey(config.apiKey);
+    setServerUrl(config.serverUrl);
+    setToken(config.token);
     setError(null);
   }, [config]);
 
@@ -35,7 +35,7 @@ export function ConfigSettingsPage({
     setError(null);
 
     try {
-      await onSave(createLocalConfig({ apiKey, serverDomain }));
+      await onSave(createLocalConfig({ token, serverUrl }));
       onClose();
     } catch (saveError) {
       const message =
@@ -50,10 +50,7 @@ export function ConfigSettingsPage({
   }
 
   return (
-    <View
-      style={styles.settingsPage}
-      testID="agw-settings-page"
-    >
+    <View style={styles.settingsPage} testID="agw-settings-page">
       <View style={styles.settingsHeader}>
         <View style={styles.settingsTitleColumn}>
           <Text style={styles.configEyebrow}>SETTINGS</Text>
@@ -67,12 +64,12 @@ export function ConfigSettingsPage({
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
-            onChangeText={setServerDomain}
+            onChangeText={setServerUrl}
             placeholder="https://api.example.com"
             placeholderTextColor="#7b8190"
             style={styles.settingsTextInput}
             testID="agw-settings-domain-input"
-            value={serverDomain}
+            value={serverUrl}
           />
         </View>
         <View style={styles.settingsField}>
@@ -80,12 +77,12 @@ export function ConfigSettingsPage({
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
-            onChangeText={setApiKey}
-            placeholder="agw_api_key"
+            onChangeText={setToken}
+            placeholder="agw_…"
             placeholderTextColor="#7b8190"
             style={styles.settingsTextInput}
-            testID="agw-settings-api-key-input"
-            value={apiKey}
+            testID="agw-settings-token-input"
+            value={token}
           />
         </View>
       </View>
@@ -106,10 +103,7 @@ export function ConfigSettingsPage({
         <Pressable
           accessibilityRole="button"
           onPress={onClose}
-          style={({ pressed }) => [
-            styles.configSecondaryButton,
-            pressed && styles.pressed,
-          ]}
+          style={({ pressed }) => [styles.configSecondaryButton, pressed && styles.pressed]}
           testID="agw-settings-cancel"
         >
           <Text style={styles.configSecondaryButtonText}>Cancel</Text>
@@ -117,15 +111,10 @@ export function ConfigSettingsPage({
         <Pressable
           accessibilityRole="button"
           onPress={handleSave}
-          style={({ pressed }) => [
-            styles.configPrimaryButton,
-            pressed && styles.pressed,
-          ]}
+          style={({ pressed }) => [styles.configPrimaryButton, pressed && styles.pressed]}
           testID="agw-settings-save"
         >
-          <Text style={styles.configPrimaryButtonText}>
-            {isSaving ? "Saving" : "Save"}
-          </Text>
+          <Text style={styles.configPrimaryButtonText}>{isSaving ? "Saving" : "Save"}</Text>
         </Pressable>
       </View>
     </View>

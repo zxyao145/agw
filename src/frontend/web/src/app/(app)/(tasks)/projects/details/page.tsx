@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -140,8 +140,8 @@ function statusClassName(status: number): string {
 }
 
 export default function ProjectDetailsPage() {
-  const params = useParams<{ id: string }>();
-  const projectId = params.id;
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId") ?? "";
   const queryClient = useQueryClient();
   const [detailsOpen, setDetailsOpen] = React.useState(false);
   const [createTaskOpen, setCreateTaskOpen] = React.useState(false);
@@ -256,7 +256,9 @@ export default function ProjectDetailsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Conversations</CardTitle>
-          <CardDescription>Read-only conversation history for chat sessions and job runs.</CardDescription>
+          <CardDescription>
+            Read-only conversation history for chat sessions and job runs.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {conversationsQuery.isLoading ? (
@@ -275,7 +277,8 @@ export default function ProjectDetailsPage() {
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="font-medium">{conversation.title}</div>
-                        {conversation.latestStatus !== null && conversation.latestStatus !== undefined ? (
+                        {conversation.latestStatus !== null &&
+                        conversation.latestStatus !== undefined ? (
                           <span
                             className={`rounded-md px-2 py-0.5 text-xs ${statusClassName(conversation.latestStatus)}`}
                           >
@@ -289,7 +292,8 @@ export default function ProjectDetailsPage() {
                           Context ID: <span className="font-mono">{conversation.contextId}</span>
                         </div>
                         <div>
-                          Executions: {conversation.executionCount} · Messages: {conversation.messageCount}
+                          Executions: {conversation.executionCount} · Messages:{" "}
+                          {conversation.messageCount}
                         </div>
                         <div>
                           Created: {formatDate(conversation.createTime)} · Updated:{" "}
@@ -298,12 +302,16 @@ export default function ProjectDetailsPage() {
                       </div>
 
                       {conversation.errorMessage ? (
-                        <div className="text-xs text-destructive">Error: {conversation.errorMessage}</div>
+                        <div className="text-xs text-destructive">
+                          Error: {conversation.errorMessage}
+                        </div>
                       ) : null}
                     </div>
 
                     <Button asChild variant="outline" size="sm">
-                      <Link href={`/projects/${projectId}/conversations/${conversation.contextId}`}>
+                      <Link
+                        href={`/projects/conversations/details/?projectId=${encodeURIComponent(projectId)}&contextId=${encodeURIComponent(conversation.contextId)}`}
+                      >
                         View History
                       </Link>
                     </Button>
