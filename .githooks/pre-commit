@@ -8,7 +8,7 @@ dotnet format Agw.slnx --verify-no-changes
 echo "Backend checks passed."
 
 
-FRONTEND_DIR="src/frontend/web"
+FRONTEND_DIR="src/clients/web"
 
 # 检查前端目录是否存在
 if [ -d "$FRONTEND_DIR" ]; then

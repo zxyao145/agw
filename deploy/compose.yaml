@@ -1,6 +1,6 @@
 services:
   agw:
-    image: agw:latest
+    image: agw/agw-server:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:5015:8080"
