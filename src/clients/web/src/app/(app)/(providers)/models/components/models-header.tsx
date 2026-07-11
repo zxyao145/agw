@@ -13,7 +13,7 @@ export function ModelsHeader({ onRefresh, isRefreshing, onCreateClick }: ModelsH
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <h1 className="truncate text-xl font-semibold">Models</h1>
-        <p className="text-sm text-muted-foreground">Manage LLM models (type/maxTokens).</p>
+        <p className="text-sm text-muted-foreground">Manage LLM models and token limits.</p>
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

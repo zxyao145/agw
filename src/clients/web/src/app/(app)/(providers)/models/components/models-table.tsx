@@ -8,7 +8,6 @@ import { apiDelete } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-import { getModelTypeLabel } from "./types";
 import type { ModelDto } from "./types";
 import { getApiErrorMessage } from "@/api/utils";
 import { StaticTable } from "@/components/static-table";
@@ -58,7 +57,6 @@ export function ModelsTable({ models, isLoading, isError, error }: ModelsTablePr
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Description</TableHead>
-            <TableHead>Type</TableHead>
             <TableHead>Max Tokens</TableHead>
             <TableHead>Created</TableHead>
             <TableHead className="w-24 text-right">Actions</TableHead>
@@ -69,12 +67,6 @@ export function ModelsTable({ models, isLoading, isError, error }: ModelsTablePr
             <TableRow key={model.id}>
               <TableCell className="font-medium">{model.name}</TableCell>
               <TableCell className="max-w-xs truncate">{model.description || "-"}</TableCell>
-              <TableCell>
-                <div className="text-sm">{getModelTypeLabel(model.type)}</div>
-                {/* <div className="text-xs text-muted-foreground font-mono">
-                      {model.type}
-                    </div> */}
-              </TableCell>
               <TableCell className="text-right">{model.maxTokens.toLocaleString()}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {model.createTime ? new Date(model.createTime).toLocaleString() : "-"}

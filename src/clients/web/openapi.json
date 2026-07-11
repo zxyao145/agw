@@ -6973,7 +6973,6 @@
           "id",
           "name",
           "description",
-          "type",
           "maxTokens",
           "createTime",
           "createBy",
@@ -6993,9 +6992,6 @@
               "null",
               "string"
             ]
-          },
-          "type": {
-            "$ref": "#/components/schemas/ModelType"
           },
           "maxTokens": {
             "type": "integer",
@@ -7368,7 +7364,6 @@
         "required": [
           "name",
           "description",
-          "type",
           "maxTokens"
         ],
         "type": "object",
@@ -7381,9 +7376,6 @@
               "null",
               "string"
             ]
-          },
-          "type": {
-            "$ref": "#/components/schemas/ModelType"
           },
           "maxTokens": {
             "type": "integer",
@@ -7606,14 +7598,10 @@
           }
         }
       },
-      "ModelType": {
-        "type": "integer"
-      },
       "ModelUpdateRequest": {
         "required": [
           "name",
           "description",
-          "type",
           "maxTokens"
         ],
         "type": "object",
@@ -7626,9 +7614,6 @@
               "null",
               "string"
             ]
-          },
-          "type": {
-            "$ref": "#/components/schemas/ModelType"
           },
           "maxTokens": {
             "type": "integer",

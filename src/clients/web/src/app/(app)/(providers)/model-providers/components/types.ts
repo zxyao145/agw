@@ -33,7 +33,6 @@ export type ModelDto = {
   id: string;
   name: string;
   description: string | null;
-  type: number;
   maxTokens: number;
   createBy?: string | null;
   createTime?: string | null;
@@ -52,4 +51,3 @@ export type ProviderDto = {
   updateBy?: string | null;
   updateTime?: string | null;
 };
-

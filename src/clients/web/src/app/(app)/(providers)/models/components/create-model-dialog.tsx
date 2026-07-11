@@ -17,9 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 
-import { MODEL_TYPE_OPTIONS, getModelTypeLabel } from "./types";
 import type { ModelCreateRequest } from "./types";
 import { parseIntOrNull } from "./utils";
 import { getApiErrorMessage } from "@/api/utils";
@@ -34,16 +32,7 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
 
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
-  const [selectedTypes, setSelectedTypes] = React.useState<number>(0);
   const [maxTokens, setMaxTokens] = React.useState("4096");
-
-  const toggleType = (typeValue: number) => {
-    setSelectedTypes((prev) => prev ^ typeValue); // XOR to toggle bit
-  };
-
-  const isTypeSelected = (typeValue: number) => {
-    return (selectedTypes & typeValue) === typeValue;
-  };
 
   const createModelMutation = useMutation({
     mutationFn: async (body: ModelCreateRequest) => {
@@ -54,7 +43,6 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
       onOpenChange(false);
       setName("");
       setDescription("");
-      setSelectedTypes(0);
       setMaxTokens("4096");
       await queryClient.invalidateQueries({ queryKey: ["models"] });
     },
@@ -65,11 +53,7 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
 
   const parsedMaxTokens = parseIntOrNull(maxTokens);
 
-  const createDisabled =
-    !name.trim() ||
-    selectedTypes === 0 ||
-    parsedMaxTokens === null ||
-    createModelMutation.isPending;
+  const createDisabled = !name.trim() || parsedMaxTokens === null || createModelMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,30 +75,6 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
               onChange={(e) => setName(e.target.value)}
               placeholder="gpt-4o-mini"
             />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Type (Flags enum - select one or more)</Label>
-            <div className="flex items-center gap-4">
-              {MODEL_TYPE_OPTIONS.map((option) => (
-                <div key={option.value} className="inline-flex items-center space-x-1">
-                  <Checkbox
-                    id={`type-${option.value}`}
-                    checked={isTypeSelected(option.value)}
-                    onCheckedChange={() => toggleType(option.value)}
-                  />
-                  <label
-                    htmlFor={`type-${option.value}`}
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                  >
-                    {option.label}
-                  </label>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Selected value: {selectedTypes} ({getModelTypeLabel(selectedTypes)})
-            </p>
           </div>
 
           <div className="grid gap-2">
@@ -153,7 +113,6 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
               createModelMutation.mutate({
                 name,
                 description: description.length ? description : null,
-                type: selectedTypes,
                 maxTokens: parsedMaxTokens ?? 0,
               })
             }

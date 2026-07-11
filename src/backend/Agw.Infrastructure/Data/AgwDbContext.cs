@@ -97,7 +97,6 @@ public class AgwDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Name).IsUnique();
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.Type).HasConversion<int>();
             entity.Property(e => e.Description).HasMaxLength(1000);
         });
 

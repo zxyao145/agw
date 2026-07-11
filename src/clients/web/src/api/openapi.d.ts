@@ -3968,7 +3968,6 @@ export interface components {
       id: string;
       name: string;
       description: null | string;
-      type: components["schemas"]["ModelType"];
       /** Format: int32 */
       maxTokens: number;
       providers?: components["schemas"]["ModelProviderRelation"][];
@@ -4078,7 +4077,6 @@ export interface components {
     ModelCreateRequest: {
       name: string;
       description: null | string;
-      type: components["schemas"]["ModelType"];
       /** Format: int32 */
       maxTokens: number;
     };
@@ -4136,11 +4134,9 @@ export interface components {
       /** Format: int32 */
       rpsLimit: number;
     };
-    ModelType: number;
     ModelUpdateRequest: {
       name: string;
       description: null | string;
-      type: components["schemas"]["ModelType"];
       /** Format: int32 */
       maxTokens: number;
     };

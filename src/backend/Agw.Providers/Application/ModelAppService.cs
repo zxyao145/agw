@@ -31,7 +31,6 @@ public class ModelAppService : IModelAppService
         {
             Name = request.Name,
             Description = request.Description,
-            Type = request.Type,
             MaxTokens = request.MaxTokens
         };
 
@@ -53,7 +52,6 @@ public class ModelAppService : IModelAppService
         {
             model.Name = request.Name;
             model.Description = request.Description;
-            model.Type = request.Type;
             model.MaxTokens = request.MaxTokens;
         }, user);
 
