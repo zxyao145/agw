@@ -1,4 +1,4 @@
-using Agw.Agents.Hubs;
+using Agw.Agents.Runtime.Hubs;
 
 using Microsoft.AspNetCore.Mvc.Routing;
 

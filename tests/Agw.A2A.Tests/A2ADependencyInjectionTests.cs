@@ -4,9 +4,9 @@ using System.Runtime.CompilerServices;
 using A2A;
 
 using Agw.A2A.Extensions;
-using Agw.Agents.Application.AgentRun;
-using Agw.Agents.Application.AgentRun.Dtos;
-using Agw.Agents.Contracts;
+using Agw.Agents.Runtime.AgentRun;
+using Agw.Agents.Runtime.AgentRun.Dtos;
+using Agw.Agents.Runtime.Contracts;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;

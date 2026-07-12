@@ -1,6 +1,6 @@
-using Agw.Agents.Application.Agentflows;
-using Agw.Agents.Application.Execution;
-using Agw.Agents.Contracts;
+using Agw.Agents.Runtime.Agentflows;
+using Agw.Agents.Runtime.Execution;
+using Agw.Agents.Runtime.Contracts;
 
 namespace Agw.Agents.Tests;
 

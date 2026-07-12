@@ -1,6 +1,6 @@
-using Agw.Agents.Application.Agentflows;
-using Agw.Agents.Application.AgentRun;
-using Agw.Agents.Application.AgentRun.Dtos;
+using Agw.Agents.Runtime.Agentflows;
+using Agw.Agents.Runtime.AgentRun;
+using Agw.Agents.Runtime.AgentRun.Dtos;
 using Agw.Jobs.Domain.Entities;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
@@ -13,7 +13,7 @@ namespace Agw.Jobs.Application.Services;
 
 public class AgentExecutor(
     IAgentRuntimeService agentRuntimeService,
-    AgentflowRuntimeService agentflowRuntimeService,
+    IAgentflowRuntimeService agentflowRuntimeService,
     TaskExecutionAppService taskExecutionAppService) : IAgentExecutor
 {
     private const string JobExecutorUser = "job-executor";

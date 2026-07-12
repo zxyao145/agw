@@ -1,6 +1,6 @@
-using Agw.Agents.Application.AgentRun;
-using Agw.Agents.Application.AgentRun.Dtos;
-using Agw.Agents.Application.Agents;
+using Agw.Agents.Runtime.AgentRun;
+using Agw.Agents.Runtime.AgentRun.Dtos;
+using Agw.Agents.Definitions.Agents;
 using Agw.Shared.Data.Repositories;
 
 namespace Agw.Agents.Tests;
