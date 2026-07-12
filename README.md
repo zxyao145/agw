@@ -33,7 +33,7 @@ Start the backend from the repository root:
 
 ```bash
 dotnet restore Agw.slnx
-dotnet run --project src/backend/Agw.Host
+dotnet run --project src/server/Agw.Host
 ```
 
 The development backend listens on `http://localhost:5015`. On the first run, open `http://localhost:5015/setup` to choose the database provider, connection string, and administrator password. Runtime data is stored in the current user's `agw` directory. Remote setup additionally requires the one-time code printed by the Server.
@@ -98,7 +98,7 @@ Below are screenshots of the main Agw UI pages:
 
 ## Architecture
 
-Agw uses a domain-based, modular monolithic architecture. `src/backend/Agw.Host` serves as the entry point for the ASP.NET Core application and is responsible for assembling the various modules; the Web client is located in `src/clients/web`, and the Expo mobile client is in `src/clients/mobile`.
+Agw uses a domain-based, modular monolithic architecture. `src/server/Agw.Host` serves as the entry point for the ASP.NET Core application and is responsible for assembling the various modules; the Web client is located in `src/clients/web`, and the Expo mobile client is in `src/clients/mobile`.
 
 A typical backend flow is:
 
@@ -203,11 +203,11 @@ The detailed project docs live under [`docs/`](docs/):
 - [Architecture](docs/2.Architecture.md): system overview, backend/frontend structure, and core domain concepts.
 - [Module Organization](docs/3.Module%20Organization.md): layering principles used inside modules.
 - [Agent Execution Flow](docs/ws-flow.md): SignalR commands, turn messages, runtime lifecycle, and disconnect behavior.
-- [Execution Subsystem](src/backend/Agw.Agents/Execution/README.md): detailed directory responsibilities, data flow, and command extension guidance.
+- [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): detailed directory responsibilities, data flow, and command extension guidance.
 
 ## Configuration
 
-Primary backend settings are in [`src/backend/Agw.Host/appsettings.json`](src/backend/Agw.Host/appsettings.json):
+Primary backend settings are in [`src/server/Agw.Host/appsettings.json`](src/server/Agw.Host/appsettings.json):
 
 ```json
 {

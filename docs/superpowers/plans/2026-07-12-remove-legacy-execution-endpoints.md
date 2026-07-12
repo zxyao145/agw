@@ -43,16 +43,16 @@ The test is the removal contract for Task 2.
 ### Task 2: Delete backend legacy endpoints and exclusive pipeline
 
 **Files:**
-- Delete: `src/backend/Agw.Agents/Controllers/AgentExecutionsController.cs`
-- Delete: `src/backend/Agw.Agents/Controllers/AgentExecutionsController.Execute.cs`
-- Delete: `src/backend/Agw.Agents/Contracts/AgentExecutionRequest.cs`
-- Delete: `src/backend/Agw.Agents/Contracts/AgentExecutionResponse.cs`
-- Delete: `src/backend/Agw.Agents/Application/Execution/CommandDispatcher.cs`
-- Delete: `src/backend/Agw.Agents/Application/Execution/ExecutionCommandContext.cs`
-- Delete: `src/backend/Agw.Agents/Application/Execution/ExecutionConnectionState.cs`
-- Delete: `src/backend/Agw.Agents/Application/Execution/CommandStrategies/`
-- Modify: `src/backend/Agw.Agents/Application/Execution/ExecutionRuntimeStarter.cs`
-- Modify: `src/backend/Agw.Agents/DependencyInjection.cs`
+- Delete: `src/server/Agw.Agents/Controllers/AgentExecutionsController.cs`
+- Delete: `src/server/Agw.Agents/Controllers/AgentExecutionsController.Execute.cs`
+- Delete: `src/server/Agw.Agents/Contracts/AgentExecutionRequest.cs`
+- Delete: `src/server/Agw.Agents/Contracts/AgentExecutionResponse.cs`
+- Delete: `src/server/Agw.Agents/Application/Execution/CommandDispatcher.cs`
+- Delete: `src/server/Agw.Agents/Application/Execution/ExecutionCommandContext.cs`
+- Delete: `src/server/Agw.Agents/Application/Execution/ExecutionConnectionState.cs`
+- Delete: `src/server/Agw.Agents/Application/Execution/CommandStrategies/`
+- Modify: `src/server/Agw.Agents/Application/Execution/ExecutionRuntimeStarter.cs`
+- Modify: `src/server/Agw.Agents/DependencyInjection.cs`
 - Delete/update: legacy-only tests under `tests/Agw.Agents.Tests/`
 
 **Interfaces:**
@@ -130,7 +130,7 @@ Document SignalR as the execution transport and remove references directing Web 
 
 - [ ] **Step 3: Verify no non-mobile legacy references remain**
 
-Run: `rg -n 'api/executions/.+(ws|execute)|execution-ws|AgentExecutionsController|CommandDispatcher|ExecutionCommandContext|ExecutionConnectionState' src/backend src/clients/web tests docs`
+Run: `rg -n 'api/executions/.+(ws|execute)|execution-ws|AgentExecutionsController|CommandDispatcher|ExecutionCommandContext|ExecutionConnectionState' src/server src/clients/web tests docs`
 
 Expected: no legacy implementation or route references except this historical implementation plan.
 

@@ -4,11 +4,11 @@ This file gives coding agents the minimum repo context needed to work safely in 
 
 ## Project Overview
 
-Agw is a modular ASP.NET Core backend plus a Next.js frontend for managing agents, agentflows, providers, tools, skills, projects/tasks, jobs, integrations, and external-agent/chat execution. The backend targets `.NET 10.0`, uses EF Core for persistence, and wires modules together from `src/backend/Agw.Host/Program.cs`.
+Agw is a modular ASP.NET Core backend plus a Next.js frontend for managing agents, agentflows, providers, tools, skills, projects/tasks, jobs, integrations, and external-agent/chat execution. The backend targets `.NET 10.0`, uses EF Core for persistence, and wires modules together from `src/server/Agw.Host/Program.cs`.
 
 ## Repository Map
 
-### Backend (`src/backend/`)
+### Backend (`src/server/`)
 
 ```text
 Agw.Host/            # ASP.NET Core entry point, OpenAPI, static files, websockets, DI, DB seeding
@@ -64,17 +64,17 @@ src/types/                   # Shared frontend types
 
 ## Key Runtime Entry Points
 
-- `src/backend/Agw.Host/Program.cs`: bootstraps logging, OpenTelemetry, DI modules, OpenAPI/Scalar, websockets, static files, and DB seeding.
-- `src/backend/Agw.Agents/Execution/README.md`: documents the SignalR command boundary, reusable runtimes, turn lifecycle, message flow, and command extension model.
-- `src/backend/Agw.Agents/Execution/Agents/AgentRuntimeService.cs`: builds runtime agents from persisted agent, provider, skill, and tool configuration.
-- `src/backend/Agw.Agents/Execution/Agentflows/AgentflowRuntimeService.cs`: executes multi-agent workflows for the supported orchestration patterns.
-- `src/backend/Agw.Jobs/HostedService/JobHostedService.cs`: in-memory scheduler backed by persistent job state and execution logs.
-- `src/backend/Agw.Integrations/Controllers/OauthController.cs`: OAuth authorization start/callback endpoints for integration connections.
-- `src/backend/Agw.Integrations/Tools/GitHub/GitHubTools.cs`: integration-backed GitHub tool implementations exposed to runtime agents.
-- `src/backend/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and manages extracted skill content under `wwwroot/skills/`.
-- `src/backend/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations and exposes them as runtime AI tools.
-- `src/backend/Agw.Tasks/Application/TaskAppService.cs`: resolves logical tasks from project contexts and task records for execution and history queries.
-- `src/backend/Agw.Shared/Exceptions/ErrorCodes.cs`: central catalog for backend `AgwException` error codes and HTTP status mapping.
+- `src/server/Agw.Host/Program.cs`: bootstraps logging, OpenTelemetry, DI modules, OpenAPI/Scalar, websockets, static files, and DB seeding.
+- `src/server/Agw.Agents/Execution/README.md`: documents the SignalR command boundary, reusable runtimes, turn lifecycle, message flow, and command extension model.
+- `src/server/Agw.Agents/Execution/Agents/AgentRuntimeService.cs`: builds runtime agents from persisted agent, provider, skill, and tool configuration.
+- `src/server/Agw.Agents/Execution/Agentflows/AgentflowRuntimeService.cs`: executes multi-agent workflows for the supported orchestration patterns.
+- `src/server/Agw.Jobs/HostedService/JobHostedService.cs`: in-memory scheduler backed by persistent job state and execution logs.
+- `src/server/Agw.Integrations/Controllers/OauthController.cs`: OAuth authorization start/callback endpoints for integration connections.
+- `src/server/Agw.Integrations/Tools/GitHub/GitHubTools.cs`: integration-backed GitHub tool implementations exposed to runtime agents.
+- `src/server/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and manages extracted skill content under `wwwroot/skills/`.
+- `src/server/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations and exposes them as runtime AI tools.
+- `src/server/Agw.Tasks/Application/TaskAppService.cs`: resolves logical tasks from project contexts and task records for execution and history queries.
+- `src/server/Agw.Shared/Exceptions/ErrorCodes.cs`: central catalog for backend `AgwException` error codes and HTTP status mapping.
 
 ## Important Domain Concepts
 
@@ -96,25 +96,25 @@ Run from the repo root:
 ```bash
 dotnet restore Agw.slnx
 dotnet build Agw.slnx
-dotnet run --project src/backend/Agw.Host
-dotnet watch --project src/backend/Agw.Host
+dotnet run --project src/server/Agw.Host
+dotnet watch --project src/server/Agw.Host
 dotnet test Agw.slnx
 dotnet format
 ```
 
 Notes:
 
-- The development host runs on `http://localhost:5015` by default via `src/backend/Agw.Host/Properties/launchSettings.json`.
+- The development host runs on `http://localhost:5015` by default via `src/server/Agw.Host/Properties/launchSettings.json`.
 - Do not add or apply EF Core migrations automatically. When needed, use:
 
 ```bash
 dotnet ef migrations add <MigrationName> \
-  -p src/backend/Agw.Infrastructure \
-  -s src/backend/Agw.Host
+  -p src/server/Agw.Infrastructure \
+  -s src/server/Agw.Host
 
 dotnet ef database update \
-  -p src/backend/Agw.Infrastructure \
-  -s src/backend/Agw.Host
+  -p src/server/Agw.Infrastructure \
+  -s src/server/Agw.Host
 ```
 
 ### Frontend
@@ -166,7 +166,7 @@ Follow Conventional Commits:
 
 ## Configuration
 
-Primary backend settings live in `src/backend/Agw.Host/appsettings.json`:
+Primary backend settings live in `src/server/Agw.Host/appsettings.json`:
 
 ```json
 {
@@ -186,7 +186,7 @@ Guidance:
 
 - Supported database providers are `sqlite`, `postgres`, and `mysql`.
 - Keep secrets out of `appsettings*.json` and frontend env files; prefer environment-variable overrides.
-- Register new backend services in the relevant module `DependencyInjection.cs` and wire the module into `src/backend/Agw.Host/Program.cs`.
+- Register new backend services in the relevant module `DependencyInjection.cs` and wire the module into `src/server/Agw.Host/Program.cs`.
 
 ## Frontend Integration Notes
 
@@ -199,8 +199,8 @@ Guidance:
 
 ## A2A Status
 
-- The `Agw.A2A` module is present in the codebase, including `src/backend/Agw.A2A/Extensions/A2ARoutesBuilderExtensions.cs`.
-- `src/backend/Agw.Host/Program.cs` currently registers A2A with `.AddA2A(...)` and maps it with `app.MapAgwA2A(...)`.
+- The `Agw.A2A` module is present in the codebase, including `src/server/Agw.A2A/Extensions/A2ARoutesBuilderExtensions.cs`.
+- `src/server/Agw.Host/Program.cs` currently registers A2A with `.AddA2A(...)` and maps it with `app.MapAgwA2A(...)`.
 - A2A routes require authentication at the host boundary.
 
 ## Coding Conventions
@@ -211,8 +211,8 @@ Guidance:
 - Controllers should end with `Controller`.
 - Prefer async methods for I/O and constructor injection for dependencies.
 - Do not use C# primary constructors. Declare explicit constructors and backing fields/properties; dependency-injected services must use explicit constructor injection.
-- For intentional backend errors, throw `Agw.Shared.Exceptions.AgwException` with an `ErrorCodes` entry. Do not add new `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, or protocol-specific exceptions in `src/backend`.
-- Add reusable errors to `src/backend/Agw.Shared/Exceptions/ErrorCodes.cs`. `ErrorCode.Code` is 7 digits: first 3 digits match the HTTP status code, and the last 4 digits increment within that status group, for example `400_0001` or `404_0003`. Reuse existing codes before adding new ones and do not renumber existing codes.
+- For intentional backend errors, throw `Agw.Shared.Exceptions.AgwException` with an `ErrorCodes` entry. Do not add new `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, or protocol-specific exceptions in `src/server`.
+- Add reusable errors to `src/server/Agw.Shared/Exceptions/ErrorCodes.cs`. `ErrorCode.Code` is 7 digits: first 3 digits match the HTTP status code, and the last 4 digits increment within that status group, for example `400_0001` or `404_0003`. Reuse existing codes before adding new ones and do not renumber existing codes.
 - Use `new AgwException(ErrorCodes.SomeCode)` when the catalog message is sufficient. Use `new AgwException(ErrorCodes.SomeCode, $"...")` when the message needs runtime context such as an id, file path, provider name, or validation value.
 - Preserve boundary-specific behavior by translating `AgwException` at the boundary instead of throwing protocol exceptions internally. For example, A2A implementation code throws `AgwException`, while `AgwA2AJsonRpcProcessor` maps it to A2A JSON-RPC errors.
 - Non-WebSocket JSON API endpoints in `Agw.Tools`, `Agw.Tasks`, `Agw.Skills`, `Agw.Providers`, `Agw.Jobs`, `Agw.Integrations`, and `Agw.Agents` must return Bens.Results envelopes through `Agw.Shared.Results.AgwApiResult` or the configured Bens.Results boundary mapping. Do not return raw `Ok(...)`, `BadRequest(...)`, `NotFound(...)`, or `NoContent()` from those controllers. Protocol endpoints such as WebSocket handlers and OAuth redirect callbacks keep their protocol-specific responses.

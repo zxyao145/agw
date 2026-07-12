@@ -14,12 +14,12 @@
 
 ### Backend
 
-- Create: `src/backend/Agw.Integrations/Contracts/Manager/AppInstanceCreateRequest.cs`
-- Create: `src/backend/Agw.Integrations/Contracts/Manager/AuthorizeStartResponse.cs`
-- Modify: `src/backend/Agw.Integrations/Controllers/IntegrationsController.cs`
-- Modify: `src/backend/Agw.Integrations/Controllers/OauthController.cs`
-- Modify: `src/backend/Agw.Integrations/Domain/Entities/AppDefinition.cs`
-- Modify: `src/backend/Agw.Integrations/IntegrationConstants.cs`
+- Create: `src/server/Agw.Integrations/Contracts/Manager/AppInstanceCreateRequest.cs`
+- Create: `src/server/Agw.Integrations/Contracts/Manager/AuthorizeStartResponse.cs`
+- Modify: `src/server/Agw.Integrations/Controllers/IntegrationsController.cs`
+- Modify: `src/server/Agw.Integrations/Controllers/OauthController.cs`
+- Modify: `src/server/Agw.Integrations/Domain/Entities/AppDefinition.cs`
+- Modify: `src/server/Agw.Integrations/IntegrationConstants.cs`
 - Test: `tests/Agw.Tasks.Tests/Integrations/IntegrationsControllerTests.cs`
 - Test: `tests/Agw.Tasks.Tests/Integrations/OauthControllerTests.cs`
 
@@ -36,8 +36,8 @@
 ## Task 1: Add AppInstance Create API
 
 **Files:**
-- Create: `src/backend/Agw.Integrations/Contracts/Manager/AppInstanceCreateRequest.cs`
-- Modify: `src/backend/Agw.Integrations/Controllers/IntegrationsController.cs`
+- Create: `src/server/Agw.Integrations/Contracts/Manager/AppInstanceCreateRequest.cs`
+- Modify: `src/server/Agw.Integrations/Controllers/IntegrationsController.cs`
 - Test: `tests/Agw.Tasks.Tests/Integrations/IntegrationsControllerTests.cs`
 
 - [ ] **Step 1: Write the failing backend tests**
@@ -121,18 +121,18 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tests/Agw.Tasks.Tests/Integrations/IntegrationsControllerTests.cs src/backend/Agw.Integrations/Contracts/Manager/AppInstanceCreateRequest.cs src/backend/Agw.Integrations/Controllers/IntegrationsController.cs
+git add tests/Agw.Tasks.Tests/Integrations/IntegrationsControllerTests.cs src/server/Agw.Integrations/Contracts/Manager/AppInstanceCreateRequest.cs src/server/Agw.Integrations/Controllers/IntegrationsController.cs
 git commit -m "feat: add integration app instance create api"
 ```
 
 ## Task 2: Add Instance-Based OAuth Start And Callback Resolution
 
 **Files:**
-- Create: `src/backend/Agw.Integrations/Contracts/Manager/AuthorizeStartResponse.cs`
-- Modify: `src/backend/Agw.Integrations/Domain/Entities/AppDefinition.cs`
-- Modify: `src/backend/Agw.Integrations/IntegrationConstants.cs`
-- Modify: `src/backend/Agw.Integrations/Controllers/IntegrationsController.cs`
-- Modify: `src/backend/Agw.Integrations/Controllers/OauthController.cs`
+- Create: `src/server/Agw.Integrations/Contracts/Manager/AuthorizeStartResponse.cs`
+- Modify: `src/server/Agw.Integrations/Domain/Entities/AppDefinition.cs`
+- Modify: `src/server/Agw.Integrations/IntegrationConstants.cs`
+- Modify: `src/server/Agw.Integrations/Controllers/IntegrationsController.cs`
+- Modify: `src/server/Agw.Integrations/Controllers/OauthController.cs`
 - Test: `tests/Agw.Tasks.Tests/Integrations/OauthControllerTests.cs`
 
 - [ ] **Step 1: Write the failing OAuth tests**
@@ -231,7 +231,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tests/Agw.Tasks.Tests/Integrations/OauthControllerTests.cs src/backend/Agw.Integrations/Contracts/Manager/AuthorizeStartResponse.cs src/backend/Agw.Integrations/Controllers/IntegrationsController.cs src/backend/Agw.Integrations/Controllers/OauthController.cs src/backend/Agw.Integrations/Domain/Entities/AppDefinition.cs src/backend/Agw.Integrations/IntegrationConstants.cs
+git add tests/Agw.Tasks.Tests/Integrations/OauthControllerTests.cs src/server/Agw.Integrations/Contracts/Manager/AuthorizeStartResponse.cs src/server/Agw.Integrations/Controllers/IntegrationsController.cs src/server/Agw.Integrations/Controllers/OauthController.cs src/server/Agw.Integrations/Domain/Entities/AppDefinition.cs src/server/Agw.Integrations/IntegrationConstants.cs
 git commit -m "feat: add instance based integration oauth flow"
 ```
 
@@ -371,7 +371,7 @@ git commit -m "feat: rebuild integrations page with live oauth management"
 - [ ] **Step 1: Regenerate frontend contract files**
 
 ```bash
-dotnet run --project src/backend/Agw.Host --no-build
+dotnet run --project src/server/Agw.Host --no-build
 ```
 
 ```bash
@@ -387,7 +387,7 @@ Expected: PASS
 
 - [ ] **Step 3: Verify the host still builds**
 
-Run: `dotnet build src/backend/Agw.Host/Agw.Host.csproj`
+Run: `dotnet build src/server/Agw.Host/Agw.Host.csproj`
 
 Expected: PASS
 

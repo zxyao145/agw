@@ -7,31 +7,31 @@
     <File Path="publish.sh" />
     <File Path="README.md" />
     <File Path="README.zh-CN.md" />
-    <File Path="src/backend/Directory.Build.props" />
-    <File Path="src/backend/Directory.Packages.props" />
+    <File Path="src/server/Directory.Build.props" />
+    <File Path="src/server/Directory.Packages.props" />
   </Folder>
   <Folder Name="/1.Host/">
-    <Project Path="src/backend/Agw.Host/Agw.Host.csproj" />
+    <Project Path="src/server/Agw.Host/Agw.Host.csproj" />
   </Folder>
   <Folder Name="/2.Api/">
-    <Project Path="src/backend/Agw.A2A/Agw.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
+    <Project Path="src/server/Agw.A2A/Agw.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
   </Folder>
   <Folder Name="/3.Core/">
-    <Project Path="src/backend/Agw.Agents/Agw.Agents.csproj" />
-    <Project Path="src/backend/Agw.Infrastructure/Agw.Infrastructure.csproj" />
-    <Project Path="src/backend/Agw.Integrations/Agw.Integrations.csproj" />
-    <Project Path="src/backend/Agw.Jobs/Agw.Jobs.csproj" />
-    <Project Path="src/backend/Agw.Providers/Agw.Providers.csproj" />
-    <Project Path="src/backend/Agw.Skills/Agw.Skills.csproj" />
-    <Project Path="src/backend/Agw.Tasks/Agw.Tasks.csproj" />
-    <Project Path="src/backend/Agw.Tools/Agw.Tools.csproj" Id="ba592b35-3c77-47d7-b977-396f0fa9acba" />
+    <Project Path="src/server/Agw.Agents/Agw.Agents.csproj" />
+    <Project Path="src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <Project Path="src/server/Agw.Integrations/Agw.Integrations.csproj" />
+    <Project Path="src/server/Agw.Jobs/Agw.Jobs.csproj" />
+    <Project Path="src/server/Agw.Providers/Agw.Providers.csproj" />
+    <Project Path="src/server/Agw.Skills/Agw.Skills.csproj" />
+    <Project Path="src/server/Agw.Tasks/Agw.Tasks.csproj" />
+    <Project Path="src/server/Agw.Tools/Agw.Tools.csproj" Id="ba592b35-3c77-47d7-b977-396f0fa9acba" />
   </Folder>
   <Folder Name="/4.Shared/">
-    <Project Path="src/backend/Agw.Shared/Agw.Shared.csproj" />
+    <Project Path="src/server/Agw.Shared/Agw.Shared.csproj" />
   </Folder>
   <Folder Name="/5.Support/">
-    <Project Path="src/backend/Agw.Files/Agw.Files.csproj" />
-    <Project Path="src/backend/Agw.Setup/Agw.Setup.csproj" />
+    <Project Path="src/server/Agw.Files/Agw.Files.csproj" />
+    <Project Path="src/server/Agw.Setup/Agw.Setup.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <File Path="tests/Directory.Build.props" />

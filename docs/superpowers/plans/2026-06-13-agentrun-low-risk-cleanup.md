@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `src/backend/Agw.Agents/Application/AgentRun/` easier to read by separating execution, session-state, external-agent, definition-agent, tools, and skills responsibilities without changing `IAgentRuntimeService` or caller behavior.
+**Goal:** Make `src/server/Agw.Agents/Application/AgentRun/` easier to read by separating execution, session-state, external-agent, definition-agent, tools, and skills responsibilities without changing `IAgentRuntimeService` or caller behavior.
 
 **Architecture:** Keep `AgentRuntimeService` as the public orchestration service. First split the existing partial class methods into responsibility-focused files with no behavior change, then extract cache-backed agent session persistence into `AgentSessionStateStore` and inject it into `AgentRuntimeService`. Public APIs remain unchanged.
 
@@ -12,25 +12,25 @@
 
 ## File Structure
 
-- Modify: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`
+- Modify: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`
   - Keep constructor, fields, and public class declaration only.
   - Add `AgentSessionStateStore` constructor dependency.
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Execution.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Execution.cs`
   - Move `ExecuteStreamingAsync`, `ExecuteByNameAsync`, `ExecuteByIdAsync`, `ExecuteAsync`, and `CollectStreamingMessagesAsync` here.
-- Modify: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Session.cs`
+- Modify: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Session.cs`
   - Keep project-task session creation and Codex provider session binding logic.
   - Replace direct cache session logic with `AgentSessionStateStore` calls.
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.ExternalAgents.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.ExternalAgents.cs`
   - Move `TryCreateExternalAgent`, `CreateClaudeCodeAgent`, `CreateCodexAgent`, `IsCodexExternalAgent`, and `IsEmptyJsonObject` here.
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.DefinitionAgents.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.DefinitionAgents.cs`
   - Move `CreateDefinitionAgentAsync`, `CreateOpenAiAgent`, `CreateAnthropicAgent`, and `ResolveApiKey` here.
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Tools.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Tools.cs`
   - Move `CreateAgentTools`, `AddUniqueTools`, and `ListToolsByAgentAsync` here.
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Skills.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Skills.cs`
   - Move `CreateSkillsProviderAsync`, `GetSkillAbsolutePath`, and `GetWebRootPath` here.
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentSessionStateStore.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentSessionStateStore.cs`
   - Own cache-backed session restore and save behavior.
-- Modify: `src/backend/Agw.Agents/DependencyInjection.cs`
+- Modify: `src/server/Agw.Agents/DependencyInjection.cs`
   - Register `AgentSessionStateStore` as scoped.
 - Modify: `tests/Agw.Agents.Tests/AgentRuntimeServiceDependencyTests.cs`
   - Update constructor-dependency expectations to include `AgentSessionStateStore`.
@@ -288,12 +288,12 @@ Expected: FAIL with a compile error similar to `The type or namespace name 'Agen
 ### Task 2: Implement `AgentSessionStateStore`
 
 **Files:**
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentSessionStateStore.cs`
-- Modify: `src/backend/Agw.Agents/DependencyInjection.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentSessionStateStore.cs`
+- Modify: `src/server/Agw.Agents/DependencyInjection.cs`
 
 - [ ] **Step 1: Add the session-state store**
 
-Create `src/backend/Agw.Agents/Application/AgentRun/AgentSessionStateStore.cs`:
+Create `src/server/Agw.Agents/Application/AgentRun/AgentSessionStateStore.cs`:
 
 ```csharp
 using System.Text.Json;
@@ -367,7 +367,7 @@ public sealed class AgentSessionStateStore
 
 - [ ] **Step 2: Register the store in DI**
 
-Open `src/backend/Agw.Agents/DependencyInjection.cs` and add this registration next to the existing runtime service registrations:
+Open `src/server/Agw.Agents/DependencyInjection.cs` and add this registration next to the existing runtime service registrations:
 
 ```csharp
 services.AddScoped<AgentSessionStateStore>();
@@ -398,14 +398,14 @@ Expected: PASS for all `AgentSessionStateStoreTests` tests.
 ### Task 3: Wire `AgentRuntimeService` to the session-state store
 
 **Files:**
-- Modify: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`
-- Modify: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Session.cs`
+- Modify: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`
+- Modify: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Session.cs`
 - Modify: `tests/Agw.Agents.Tests/AgentRuntimeServiceDependencyTests.cs`
 - Modify: `tests/Agw.Agents.Tests/AgentRuntimeServiceCompositionTests.cs`
 
 - [ ] **Step 1: Add the store dependency to `AgentRuntimeService`**
 
-In `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`, add a field:
+In `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`, add a field:
 
 ```csharp
 private readonly AgentSessionStateStore _sessionStateStore;
@@ -428,7 +428,7 @@ _sessionStateStore = sessionStateStore;
 
 - [ ] **Step 2: Replace session cache calls in project-task session creation**
 
-In `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Session.cs`, replace:
+In `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Session.cs`, replace:
 
 ```csharp
 var agentSession = await GetOrCreateThreadAsync(agent, aiAgent, taskIdString, cancellationToken);
@@ -442,7 +442,7 @@ var agentSession = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, tas
 
 - [ ] **Step 3: Replace direct execution session restore and save calls**
 
-In `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`, replace:
+In `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`, replace:
 
 ```csharp
 var session = await CreateOrRestoreSessionAsync(aiAgent, taskId).ConfigureAwait(false);
@@ -550,12 +550,12 @@ Expected: PASS.
 ### Task 4: Split execution methods into `AgentRuntimeService.Execution.cs`
 
 **Files:**
-- Modify: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Execution.cs`
+- Modify: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Execution.cs`
 
 - [ ] **Step 1: Create the execution partial file**
 
-Create `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Execution.cs` and move these methods from `AgentRuntimeService.cs` into it without changing method bodies except for already-applied `AgentSessionStateStore` calls:
+Create `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Execution.cs` and move these methods from `AgentRuntimeService.cs` into it without changing method bodies except for already-applied `AgentSessionStateStore` calls:
 
 ```csharp
 public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
@@ -609,7 +609,7 @@ public partial class AgentRuntimeService
 
 - [ ] **Step 2: Trim `AgentRuntimeService.cs` usings**
 
-After moving methods, `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs` should only need usings for constructor field types. Remove usings that no longer compile as used.
+After moving methods, `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs` should only need usings for constructor field types. Remove usings that no longer compile as used.
 
 - [ ] **Step 3: Run Agw.Agents tests**
 
@@ -626,12 +626,12 @@ Expected: PASS.
 ### Task 5: Split external-agent construction methods
 
 **Files:**
-- Modify: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.CreateAiAgent.cs`
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.ExternalAgents.cs`
+- Modify: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.CreateAiAgent.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.ExternalAgents.cs`
 
 - [ ] **Step 1: Create the external-agent partial file**
 
-Create `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.ExternalAgents.cs` and move these methods from `AgentRuntimeService.CreateAiAgent.cs` into it unchanged:
+Create `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.ExternalAgents.cs` and move these methods from `AgentRuntimeService.CreateAiAgent.cs` into it unchanged:
 
 ```csharp
 private bool TryCreateExternalAgent(CreateAiAgentRequest request, Project project, out AIAgent? aiAgent)
@@ -693,12 +693,12 @@ Expected: PASS.
 ### Task 6: Split definition-agent construction methods
 
 **Files:**
-- Modify: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.CreateAiAgent.cs`
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.DefinitionAgents.cs`
+- Modify: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.CreateAiAgent.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.DefinitionAgents.cs`
 
 - [ ] **Step 1: Create the definition-agent partial file**
 
-Create `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.DefinitionAgents.cs` and move these methods from `AgentRuntimeService.CreateAiAgent.cs` into it unchanged:
+Create `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.DefinitionAgents.cs` and move these methods from `AgentRuntimeService.CreateAiAgent.cs` into it unchanged:
 
 ```csharp
 private async Task<AIAgent?> CreateDefinitionAgentAsync(Agent agentDefinition, Project project, CancellationToken cancellationToken)
@@ -759,13 +759,13 @@ Expected: PASS.
 ### Task 7: Split tools and skills methods
 
 **Files:**
-- Modify: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.CreateAiAgent.cs`
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Tools.cs`
-- Create: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Skills.cs`
+- Modify: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.CreateAiAgent.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Tools.cs`
+- Create: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Skills.cs`
 
 - [ ] **Step 1: Create the tools partial file**
 
-Create `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Tools.cs` and move these methods from `AgentRuntimeService.CreateAiAgent.cs` into it unchanged:
+Create `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Tools.cs` and move these methods from `AgentRuntimeService.CreateAiAgent.cs` into it unchanged:
 
 ```csharp
 private async Task<IList<AITool>?> CreateAgentTools(Agent agent, Guid projectId, CancellationToken cancellationToken)
@@ -793,7 +793,7 @@ public partial class AgentRuntimeService
 
 - [ ] **Step 2: Create the skills partial file**
 
-Create `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.Skills.cs` and move these methods from `AgentRuntimeService.CreateAiAgent.cs` into it unchanged:
+Create `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.Skills.cs` and move these methods from `AgentRuntimeService.CreateAiAgent.cs` into it unchanged:
 
 ```csharp
 private async Task<AIContextProvider?> CreateSkillsProviderAsync(Guid agentId)
@@ -879,7 +879,7 @@ Expected: PASS for both commands.
 Run:
 
 ```bash
-git diff -- src/backend/Agw.Agents/Application/AgentRun src/backend/Agw.Agents/DependencyInjection.cs tests/Agw.Agents.Tests
+git diff -- src/server/Agw.Agents/Application/AgentRun src/server/Agw.Agents/DependencyInjection.cs tests/Agw.Agents.Tests
 ```
 
 Expected: Diff shows method moves, `AgentSessionStateStore` extraction, DI registration, and tests. No public `IAgentRuntimeService` signature changes.
@@ -889,7 +889,7 @@ Expected: Diff shows method moves, `AgentSessionStateStore` extraction, DI regis
 Run:
 
 ```bash
-git diff -- src/backend/Agw.Agents/Application/AgentRun/IAgentRuntimeService.cs
+git diff -- src/server/Agw.Agents/Application/AgentRun/IAgentRuntimeService.cs
 ```
 
 Expected: No diff.

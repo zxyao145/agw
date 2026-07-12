@@ -31,7 +31,7 @@ Frontend:
 
 ```bash
 dotnet restore Agw.slnx
-dotnet run --project src/backend/Agw.Host
+dotnet run --project src/server/Agw.Host
 ```
 
 开发环境后端默认监听 `http://localhost:5015`。首次运行时，打开 `http://localhost:5015/setup`，选择数据库 Provider、连接字符串和管理员密码。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
@@ -96,7 +96,7 @@ pnpm dev
 
 ## 架构
 
-Agw 采用基于领域的模块化单体架构。`src/backend/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；Web 客户端位于 `src/clients/web`，Expo 移动客户端位于 `src/clients/mobile`。
+Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；Web 客户端位于 `src/clients/web`，Expo 移动客户端位于 `src/clients/mobile`。
 
 典型的后端流程如下：
 
@@ -199,11 +199,11 @@ flowchart BT
 - [Architecture](docs/2.Architecture.md): 系统概述、后端/前端架构以及核心领域概念。
 - [Module Organization](docs/3.Module%20Organization.md): 模块内部采用的分层原则。
 - [Agent 执行流程](docs/ws-flow.md)：SignalR 命令、turn 消息、runtime 生命周期与断线行为。
-- [Execution 子系统](src/backend/Agw.Agents/Execution/README.md)：目录职责、数据流与 command 扩展方式。
+- [Execution 子系统](src/server/Agw.Agents/Execution/README.md)：目录职责、数据流与 command 扩展方式。
 
 ## 配置
 
-后端主要配置位于 [`src/backend/Agw.Host/appsettings.json`](src/backend/Agw.Host/appsettings.json):
+后端主要配置位于 [`src/server/Agw.Host/appsettings.json`](src/server/Agw.Host/appsettings.json):
 
 ```json
 {

@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Backend projects live in the repository-relative `src/backend/` directory: `Agw.Host` is the ASP.NET Core entry point, `Agw.Setup` contains setup Razor/UI services, `Agw.Infrastructure` owns EF Core persistence, and domain modules such as `Agw.Agents`, `Agw.Tasks`, `Agw.Skills`, `Agw.Tools`, and `Agw.Integrations` keep feature code isolated. Web client code is in `src/clients/web`, with app routes under `src/app/(app)`, typed API helpers in `src/api`, and shared UI/utilities in `src/components`, `src/hooks`, and `src/lib`. Tests are in `tests/Agw.*.Tests`; project documentation is under `docs/`. Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated.
+Backend projects live in the repository-relative `src/server/` directory: `Agw.Host` is the ASP.NET Core entry point, `Agw.Setup` contains setup Razor/UI services, `Agw.Infrastructure` owns EF Core persistence, and domain modules such as `Agw.Agents`, `Agw.Tasks`, `Agw.Skills`, `Agw.Tools`, and `Agw.Integrations` keep feature code isolated. Web client code is in `src/clients/web`, with app routes under `src/app/(app)`, typed API helpers in `src/api`, and shared UI/utilities in `src/components`, `src/hooks`, and `src/lib`. Tests are in `tests/Agw.*.Tests`; project documentation is under `docs/`. Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated.
 
 ## Build, Test, and Development Commands
 
@@ -11,7 +11,7 @@ Run backend commands from the repo root:
 - `dotnet restore Agw.slnx` restores backend dependencies.
 - `dotnet build Agw.slnx` compiles all solution projects.
 - `dotnet test Agw.slnx` runs the normal xUnit suite.
-- `dotnet run --project src/backend/Agw.Host` starts the API host, usually on `http://localhost:5015`.
+- `dotnet run --project src/server/Agw.Host` starts the API host, usually on `http://localhost:5015`.
 - `dotnet format` applies .NET formatting.
 
 For Web client work, run commands in `src/clients/web`: `pnpm install`, `pnpm dev`, `pnpm build`, `pnpm lint`, and `pnpm format:check`.

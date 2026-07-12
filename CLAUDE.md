@@ -10,9 +10,9 @@ The repository is a modular monolith with an ASP.NET Core + EF Core backend and 
 
 ## Architecture & Project Structure
 
-### Backend (`src/backend/`)
+### Backend (`src/server/`)
 
-`src/backend/Agw.Host` is the ASP.NET Core entry point. It wires controllers from module assemblies, middleware, OpenAPI/Scalar, Serilog, OpenTelemetry, static frontend hosting, and module service registration.
+`src/server/Agw.Host` is the ASP.NET Core entry point. It wires controllers from module assemblies, middleware, OpenAPI/Scalar, Serilog, OpenTelemetry, static frontend hosting, and module service registration.
 
 Core backend modules:
 
@@ -32,7 +32,7 @@ Agw.Files/             File/workspace APIs and endpoint exception mapping
 Agw.Setup/             First-run setup, initialization state, API-key guard middleware
 ```
 
-`Agw.slnx` is the root solution and includes backend projects plus tests. `src/backend/backend.sln` includes backend projects only.
+`Agw.slnx` is the root solution and includes backend projects plus tests. `src/server/backend.sln` includes backend projects only.
 
 `Agw.slnx` includes test projects for A2A, Agents, Files, Setup, Shared, Skills, Tasks, and Tools. `tests/Agw.Jobs.Tests` exists but is not currently included in `Agw.slnx`; run it explicitly when touching jobs/scheduler code.
 
@@ -81,10 +81,10 @@ dotnet restore Agw.slnx
 dotnet build Agw.slnx
 
 # Run the backend host; development backend listens on http://localhost:5015
-dotnet run --project src/backend/Agw.Host
+dotnet run --project src/server/Agw.Host
 
 # Run with hot reload
-dotnet watch --project src/backend/Agw.Host
+dotnet watch --project src/server/Agw.Host
 
 # Run all tests included in the root solution
 dotnet test Agw.slnx
@@ -110,12 +110,12 @@ dotnet format Agw.slnx
 
 # EF Core migrations; do not run automatically without user approval
 dotnet ef migrations add <MigrationName> \
-  -p src/backend/Agw.Infrastructure \
-  -s src/backend/Agw.Host
+  -p src/server/Agw.Infrastructure \
+  -s src/server/Agw.Host
 
 dotnet ef database update \
-  -p src/backend/Agw.Infrastructure \
-  -s src/backend/Agw.Host
+  -p src/server/Agw.Infrastructure \
+  -s src/server/Agw.Host
 ```
 
 ### Frontend
@@ -151,7 +151,7 @@ git config core.hooksPath .githooks
 
 On first backend run, open `http://localhost:5015/setup` to choose the database provider, connection string, and administrator password. Setup seeds the database and writes `server-state.json` below the Agw data directory. Remote Web access uses the administrator session cookie; desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API Tokens. The legacy `X-API-Key` setting is not supported.
 
-Primary backend settings live in `src/backend/Agw.Host/appsettings.json`:
+Primary backend settings live in `src/server/Agw.Host/appsettings.json`:
 
 - `Database:Provider`: supports `sqlite`, `postgres`, and `mysql`
 - `Database:ConnectionString`: defaults to `Data Source=agw.db`
@@ -167,7 +167,7 @@ Read `docs/rules.md` before backend coding. Its rules are mandatory.
 
 - Non-WebSocket JSON API endpoints in `Agw.Agents`, `Agw.Providers`, `Agw.Tasks`, `Agw.Jobs`, `Agw.Integrations`, `Agw.Skills`, and `Agw.Tools` must return the Bens.Results envelope via `AgwApiResult`/`ApiResult` helpers or configured boundary mapping.
 - Do not return raw `Ok(...)`, `BadRequest(...)`, `NotFound(...)`, `NoContent()`, or other bare MVC responses from those JSON controllers. WebSocket handlers, OAuth redirects, A2A protocol endpoints, and static file endpoints may keep protocol-specific formats.
-- Expected backend application failures should throw `AgwException` with an `ErrorCodes` entry from `src/backend/Agw.Shared/Exceptions/`.
+- Expected backend application failures should throw `AgwException` with an `ErrorCodes` entry from `src/server/Agw.Shared/Exceptions/`.
 - When adding an error code, use a 7-digit code whose first 3 digits match the HTTP status and whose last 4 digits increment within that group, e.g. `400_0001`, `404_0001`, `500_0001`.
 - Keep `ErrorCodes` messages stable and reusable. Pass runtime-specific details as the override message when needed.
 - Do not introduce new explicit `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, `HttpRequestException`, or protocol exceptions for expected backend application failures.
