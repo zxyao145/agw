@@ -8,6 +8,12 @@ namespace Agw.Agents.Application.Execution;
 public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
 {
     private readonly ConcurrentDictionary<string, PendingApproval> _pending = new(StringComparer.Ordinal);
+    private readonly Action<HumanGateApprovalRequest?>? _pendingChanged;
+
+    public HumanGateApprovalCoordinator(Action<HumanGateApprovalRequest?>? pendingChanged = null)
+    {
+        _pendingChanged = pendingChanged;
+    }
 
     public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
         HumanGateApprovalRequest request,
@@ -21,6 +27,7 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
                 request,
                 new TaskCompletionSource<HumanGateApprovalDecision>(
                     TaskCreationOptions.RunContinuationsAsynchronously)));
+        _pendingChanged?.Invoke(pending.Request);
 
         try
         {
@@ -31,6 +38,7 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
             if (pending.Source.Task.IsCompleted || cancellationToken.IsCancellationRequested)
             {
                 _pending.TryRemove(request.RequestId, out _);
+                _pendingChanged?.Invoke(null);
             }
         }
     }
@@ -52,7 +60,13 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
             command.RequestId,
             command.Approved,
             command.ResponseText);
-        return ValueTask.FromResult(pending.Source.TrySetResult(decision));
+        var submitted = pending.Source.TrySetResult(decision);
+        if (submitted)
+        {
+            _pendingChanged?.Invoke(null);
+        }
+
+        return ValueTask.FromResult(submitted);
     }
 
     public void CancelAll()
@@ -64,6 +78,8 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
                 pending.Source.TrySetCanceled();
             }
         }
+
+        _pendingChanged?.Invoke(null);
     }
 
     private sealed record PendingApproval(

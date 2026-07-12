@@ -111,6 +111,35 @@ public class ExecutionRequestsTests
     }
 
     [Fact]
+    public void Deserialize_SettingCommand_IgnoresResume()
+    {
+        var projectId = Guid.NewGuid();
+        var payload = $$"""
+                        {
+                          "type": "SettingCommand",
+                          "projectId": "{{projectId}}",
+                          "resume": true
+                        }
+                        """;
+
+        var request = JsonUtil.Deserialize<AgentRunCommand>(payload);
+
+        var settingRequest = Assert.IsType<SettingCommand>(request);
+        Assert.False(settingRequest.Resume);
+    }
+
+    [Fact]
+    public void Equals_WhenOnlyResumeDiffers_ReturnsTrue()
+    {
+        var projectId = Guid.NewGuid();
+        var contextId = Guid.NewGuid().ToString("D");
+        var left = new SettingCommand(projectId, contextId: contextId) { Resume = false };
+        var right = new SettingCommand(projectId, contextId: contextId) { Resume = true };
+
+        Assert.Equal(left, right);
+    }
+
+    [Fact]
     public void Equals_WhenEnvironmentVariablesDiffer_ReturnsFalse()
     {
         var projectId = Guid.NewGuid();
@@ -130,6 +159,40 @@ public class ExecutionRequestsTests
 
     [Fact]
     public void Deserialize_ExecCommand_ReturnsExecutionCommand()
+    {
+        var agentId = Guid.NewGuid();
+        const string json = """
+                            {
+                              "type": "ExecCommand",
+                              "agentId": "__AGENT_ID__",
+                              "agentType": 0,
+                              "stream": false,
+                              "input": {
+                                "messageId": "msg-1",
+                                "author": "$agw",
+                                "contents": [
+                                  {
+                                    "type": "TextContent",
+                                    "content": "hello"
+                                  }
+                                ]
+                              }
+                            }
+                            """;
+
+        var request = JsonUtil.Deserialize<AgentRunCommand>(
+            json.Replace("__AGENT_ID__", agentId.ToString("D")));
+
+        var executionRequest = Assert.IsType<ExecCommand>(request);
+        Assert.Equal(agentId, executionRequest.AgentId);
+        Assert.Equal(AgentRuntimeType.Agent, executionRequest.AgentType);
+        Assert.False(executionRequest.Stream);
+        var textContent = Assert.IsType<AgwTextContent>(Assert.Single(executionRequest.Input.Contents));
+        Assert.Equal("hello", textContent.Content);
+    }
+
+    [Fact]
+    public void Deserialize_LegacyExecCommand_DefaultsToStreamingWithoutAgentId()
     {
         const string json = """
                             {
@@ -151,9 +214,8 @@ public class ExecutionRequestsTests
         var request = JsonUtil.Deserialize<AgentRunCommand>(json);
 
         var executionRequest = Assert.IsType<ExecCommand>(request);
-        Assert.Equal(AgentRuntimeType.Agent, executionRequest.AgentType);
-        var textContent = Assert.IsType<AgwTextContent>(Assert.Single(executionRequest.Input.Contents));
-        Assert.Equal("hello", textContent.Content);
+        Assert.Null(executionRequest.AgentId);
+        Assert.True(executionRequest.Stream);
     }
 
     [Fact]

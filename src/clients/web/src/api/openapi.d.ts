@@ -4,4385 +4,4377 @@
  */
 
 export interface paths {
-  "/health/live": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/health/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/agents.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/a2a/{agentName}/.well-known/agent-card.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    agentName: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/a2a/{agentName}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    agentName: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/antiforgery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LoginRequest"];
+                    "text/json": components["schemas"]["LoginRequest"];
+                    "application/*+json": components["schemas"]["LoginRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ChangePasswordRequest"];
+                    "text/json": components["schemas"]["ChangePasswordRequest"];
+                    "application/*+json": components["schemas"]["ChangePasswordRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateTokenRequest"];
+                    "text/json": components["schemas"]["CreateTokenRequest"];
+                    "application/*+json": components["schemas"]["CreateTokenRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dashboard/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfDashboardStatsResponse"];
+                        "application/json": components["schemas"]["ApiResultOfDashboardStatsResponse"];
+                        "text/json": components["schemas"]["ApiResultOfDashboardStatsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server-info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/executions/{agentId}/ws": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    agentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Switching Protocols */
+                101: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/executions/{id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AgentExecutionRequest"];
+                    "text/json": components["schemas"]["AgentExecutionRequest"];
+                    "application/*+json": components["schemas"]["AgentExecutionRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentExecutionResponse"];
+                        "application/json": components["schemas"]["ApiResultOfAgentExecutionResponse"];
+                        "text/json": components["schemas"]["ApiResultOfAgentExecutionResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agentflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentflow[]"];
+                        "application/json": components["schemas"]["ApiResultOfAgentflow[]"];
+                        "text/json": components["schemas"]["ApiResultOfAgentflow[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AgentflowCreateRequest"];
+                    "text/json": components["schemas"]["AgentflowCreateRequest"];
+                    "application/*+json": components["schemas"]["AgentflowCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentflow"];
+                        "application/json": components["schemas"]["ApiResultOfAgentflow"];
+                        "text/json": components["schemas"]["ApiResultOfAgentflow"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agentflows/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentflow"];
+                        "application/json": components["schemas"]["ApiResultOfAgentflow"];
+                        "text/json": components["schemas"]["ApiResultOfAgentflow"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AgentflowUpdateRequest"];
+                    "text/json": components["schemas"]["AgentflowUpdateRequest"];
+                    "application/*+json": components["schemas"]["AgentflowUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentflow"];
+                        "application/json": components["schemas"]["ApiResultOfAgentflow"];
+                        "text/json": components["schemas"]["ApiResultOfAgentflow"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agentflows/mermaid/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfstring"];
+                        "application/json": components["schemas"]["ApiResultOfstring"];
+                        "text/json": components["schemas"]["ApiResultOfstring"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agentflows/{id}/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentflowNode[]"];
+                        "application/json": components["schemas"]["ApiResultOfAgentflowNode[]"];
+                        "text/json": components["schemas"]["ApiResultOfAgentflowNode[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agentflows/{id}/edges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentflowEdge[]"];
+                        "application/json": components["schemas"]["ApiResultOfAgentflowEdge[]"];
+                        "text/json": components["schemas"]["ApiResultOfAgentflowEdge[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentResponse[]"];
+                        "application/json": components["schemas"]["ApiResultOfAgentResponse[]"];
+                        "text/json": components["schemas"]["ApiResultOfAgentResponse[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AgentCreateRequest"];
+                    "text/json": components["schemas"]["AgentCreateRequest"];
+                    "application/*+json": components["schemas"]["AgentCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentResponse"];
+                        "application/json": components["schemas"]["ApiResultOfAgentResponse"];
+                        "text/json": components["schemas"]["ApiResultOfAgentResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentResponse"];
+                        "application/json": components["schemas"]["ApiResultOfAgentResponse"];
+                        "text/json": components["schemas"]["ApiResultOfAgentResponse"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AgentUpdateRequest"];
+                    "text/json": components["schemas"]["AgentUpdateRequest"];
+                    "application/*+json": components["schemas"]["AgentUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentResponse"];
+                        "application/json": components["schemas"]["ApiResultOfAgentResponse"];
+                        "text/json": components["schemas"]["ApiResultOfAgentResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-tool-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfMcpServer[]"];
+                        "application/json": components["schemas"]["ApiResultOfMcpServer[]"];
+                        "text/json": components["schemas"]["ApiResultOfMcpServer[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["McpToolServerCreateRequest"];
+                    "text/json": components["schemas"]["McpToolServerCreateRequest"];
+                    "application/*+json": components["schemas"]["McpToolServerCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfMcpServer"];
+                        "application/json": components["schemas"]["ApiResultOfMcpServer"];
+                        "text/json": components["schemas"]["ApiResultOfMcpServer"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-tool-servers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfMcpServer"];
+                        "application/json": components["schemas"]["ApiResultOfMcpServer"];
+                        "text/json": components["schemas"]["ApiResultOfMcpServer"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["McpToolServerUpdateRequest"];
+                    "text/json": components["schemas"]["McpToolServerUpdateRequest"];
+                    "application/*+json": components["schemas"]["McpToolServerUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfMcpServer"];
+                        "application/json": components["schemas"]["ApiResultOfMcpServer"];
+                        "text/json": components["schemas"]["ApiResultOfMcpServer"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-tool-servers/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["McpToolServerConnectRequest"];
+                    "text/json": components["schemas"]["McpToolServerConnectRequest"];
+                    "application/*+json": components["schemas"]["McpToolServerConnectRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfMcpToolServerConnectResponse"];
+                        "application/json": components["schemas"]["ApiResultOfMcpToolServerConnectResponse"];
+                        "text/json": components["schemas"]["ApiResultOfMcpToolServerConnectResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    path?: string;
+                    diff?: boolean;
+                    recursive?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["FileListResponse"];
+                        "application/json": components["schemas"]["FileListResponse"];
+                        "text/json": components["schemas"]["FileListResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    path?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": string;
+                        "application/json": string;
+                        "text/json": string;
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    path?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": unknown;
+                        "application/json": unknown;
+                        "text/json": unknown;
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: {
+                    path?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": unknown;
+                        "application/json": unknown;
+                        "text/json": unknown;
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: {
+                    path?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": unknown;
+                        "application/json": unknown;
+                        "text/json": unknown;
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    path?: string;
+                    keyword?: string;
+                    limit?: number;
+                    recursive?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["FileSearchResponse"];
+                        "application/json": components["schemas"]["FileSearchResponse"];
+                        "text/json": components["schemas"]["FileSearchResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/app-definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAppDefinitionListItemResponse[]"];
+                        "application/json": components["schemas"]["ApiResultOfAppDefinitionListItemResponse[]"];
+                        "text/json": components["schemas"]["ApiResultOfAppDefinitionListItemResponse[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/app-instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAppInstanceListItemResponse[]"];
+                        "application/json": components["schemas"]["ApiResultOfAppInstanceListItemResponse[]"];
+                        "text/json": components["schemas"]["ApiResultOfAppInstanceListItemResponse[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AppInstanceCreateRequest"];
+                    "text/json": components["schemas"]["AppInstanceCreateRequest"];
+                    "application/*+json": components["schemas"]["AppInstanceCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAppInstanceListItemResponse"];
+                        "application/json": components["schemas"]["ApiResultOfAppInstanceListItemResponse"];
+                        "text/json": components["schemas"]["ApiResultOfAppInstanceListItemResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/app-instances/{id}/authorize-start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAuthorizeStartResponse"];
+                        "application/json": components["schemas"]["ApiResultOfAuthorizeStartResponse"];
+                        "text/json": components["schemas"]["ApiResultOfAuthorizeStartResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/app-instances/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/oauth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Found */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfJob[]"];
+                        "application/json": components["schemas"]["ApiResultOfJob[]"];
+                        "text/json": components["schemas"]["ApiResultOfJob[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["JobCreateRequest"];
+                    "text/json": components["schemas"]["JobCreateRequest"];
+                    "application/*+json": components["schemas"]["JobCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfJob"];
+                        "application/json": components["schemas"]["ApiResultOfJob"];
+                        "text/json": components["schemas"]["ApiResultOfJob"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfJob"];
+                        "application/json": components["schemas"]["ApiResultOfJob"];
+                        "text/json": components["schemas"]["ApiResultOfJob"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["JobUpdateRequest"];
+                    "text/json": components["schemas"]["JobUpdateRequest"];
+                    "application/*+json": components["schemas"]["JobUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfJob"];
+                        "application/json": components["schemas"]["ApiResultOfJob"];
+                        "text/json": components["schemas"]["ApiResultOfJob"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{id}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfJobLogResponse[]"];
+                        "application/json": components["schemas"]["ApiResultOfJobLogResponse[]"];
+                        "text/json": components["schemas"]["ApiResultOfJobLogResponse[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    modelId?: string;
+                    providerId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfObject[]"];
+                        "application/json": components["schemas"]["ApiResultOfObject[]"];
+                        "text/json": components["schemas"]["ApiResultOfObject[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ModelProviderCreateRequest"];
+                    "text/json": components["schemas"]["ModelProviderCreateRequest"];
+                    "application/*+json": components["schemas"]["ModelProviderCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfModelProviderRelation"];
+                        "application/json": components["schemas"]["ApiResultOfModelProviderRelation"];
+                        "text/json": components["schemas"]["ApiResultOfModelProviderRelation"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-providers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfModelProviderRelation"];
+                        "application/json": components["schemas"]["ApiResultOfModelProviderRelation"];
+                        "text/json": components["schemas"]["ApiResultOfModelProviderRelation"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ModelProviderUpdateRequest"];
+                    "text/json": components["schemas"]["ModelProviderUpdateRequest"];
+                    "application/*+json": components["schemas"]["ModelProviderUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfModelProviderRelation"];
+                        "application/json": components["schemas"]["ApiResultOfModelProviderRelation"];
+                        "text/json": components["schemas"]["ApiResultOfModelProviderRelation"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfLlmModel[]"];
+                        "application/json": components["schemas"]["ApiResultOfLlmModel[]"];
+                        "text/json": components["schemas"]["ApiResultOfLlmModel[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ModelCreateRequest"];
+                    "text/json": components["schemas"]["ModelCreateRequest"];
+                    "application/*+json": components["schemas"]["ModelCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfLlmModel"];
+                        "application/json": components["schemas"]["ApiResultOfLlmModel"];
+                        "text/json": components["schemas"]["ApiResultOfLlmModel"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfLlmModel"];
+                        "application/json": components["schemas"]["ApiResultOfLlmModel"];
+                        "text/json": components["schemas"]["ApiResultOfLlmModel"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ModelUpdateRequest"];
+                    "text/json": components["schemas"]["ModelUpdateRequest"];
+                    "application/*+json": components["schemas"]["ModelUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfLlmModel"];
+                        "application/json": components["schemas"]["ApiResultOfLlmModel"];
+                        "text/json": components["schemas"]["ApiResultOfLlmModel"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfProvider[]"];
+                        "application/json": components["schemas"]["ApiResultOfProvider[]"];
+                        "text/json": components["schemas"]["ApiResultOfProvider[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProviderCreateRequest"];
+                    "text/json": components["schemas"]["ProviderCreateRequest"];
+                    "application/*+json": components["schemas"]["ProviderCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfProvider"];
+                        "application/json": components["schemas"]["ApiResultOfProvider"];
+                        "text/json": components["schemas"]["ApiResultOfProvider"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/providers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfProvider"];
+                        "application/json": components["schemas"]["ApiResultOfProvider"];
+                        "text/json": components["schemas"]["ApiResultOfProvider"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProviderUpdateRequest"];
+                    "text/json": components["schemas"]["ProviderUpdateRequest"];
+                    "application/*+json": components["schemas"]["ProviderUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfProvider"];
+                        "application/json": components["schemas"]["ApiResultOfProvider"];
+                        "text/json": components["schemas"]["ApiResultOfProvider"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfSkillResponse[]"];
+                        "application/json": components["schemas"]["ApiResultOfSkillResponse[]"];
+                        "text/json": components["schemas"]["ApiResultOfSkillResponse[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        Name?: string;
+                        Description?: string;
+                        Archive?: components["schemas"]["IFormFile"];
+                    };
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfSkillResponse"];
+                        "application/json": components["schemas"]["ApiResultOfSkillResponse"];
+                        "text/json": components["schemas"]["ApiResultOfSkillResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfSkillResponse"];
+                        "application/json": components["schemas"]["ApiResultOfSkillResponse"];
+                        "text/json": components["schemas"]["ApiResultOfSkillResponse"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        Name?: string;
+                        Description?: string;
+                        Archive?: components["schemas"]["IFormFile"];
+                    };
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfSkillResponse"];
+                        "application/json": components["schemas"]["ApiResultOfSkillResponse"];
+                        "text/json": components["schemas"]["ApiResultOfSkillResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{projectId}/contexts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfProjectContextSummaryResponse[]"];
+                        "application/json": components["schemas"]["ApiResultOfProjectContextSummaryResponse[]"];
+                        "text/json": components["schemas"]["ApiResultOfProjectContextSummaryResponse[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{projectId}/contexts/{contextId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: string;
+                    contextId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfProjectContextResponse"];
+                        "application/json": components["schemas"]["ApiResultOfProjectContextResponse"];
+                        "text/json": components["schemas"]["ApiResultOfProjectContextResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: string;
+                    contextId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{projectId}/contexts/{contextId}/clear-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: string;
+                    contextId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{projectId}/contexts/{contextId}/title": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    projectId: string;
+                    contextId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProjectContextTitleUpdateRequest"];
+                    "text/json": components["schemas"]["ProjectContextTitleUpdateRequest"];
+                    "application/*+json": components["schemas"]["ProjectContextTitleUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfProject[]"];
+                        "application/json": components["schemas"]["ApiResultOfProject[]"];
+                        "text/json": components["schemas"]["ApiResultOfProject[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProjectCreateRequest"];
+                    "text/json": components["schemas"]["ProjectCreateRequest"];
+                    "application/*+json": components["schemas"]["ProjectCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfProject"];
+                        "application/json": components["schemas"]["ApiResultOfProject"];
+                        "text/json": components["schemas"]["ApiResultOfProject"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfProject"];
+                        "application/json": components["schemas"]["ApiResultOfProject"];
+                        "text/json": components["schemas"]["ApiResultOfProject"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProjectUpdateRequest"];
+                    "text/json": components["schemas"]["ProjectUpdateRequest"];
+                    "application/*+json": components["schemas"]["ProjectUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfProject"];
+                        "application/json": components["schemas"]["ApiResultOfProject"];
+                        "text/json": components["schemas"]["ApiResultOfProject"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResult"];
+                        "application/json": components["schemas"]["ApiResult"];
+                        "text/json": components["schemas"]["ApiResult"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gets all available tools. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfToolInfo[]"];
+                        "application/json": components["schemas"]["ApiResultOfToolInfo[]"];
+                        "text/json": components["schemas"]["ApiResultOfToolInfo[]"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tools/by-category": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gets tools grouped by category. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolInfo"];
+                        "application/json": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolInfo"];
+                        "text/json": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolInfo"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tools/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gets a specific tool by name. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfToolInfo"];
+                        "application/json": components["schemas"]["ApiResultOfToolInfo"];
+                        "text/json": components["schemas"]["ApiResultOfToolInfo"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/health/ready": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/.well-known/agents.json": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/a2a/{agentName}/.well-known/agent-card.json": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          agentName: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/a2a/{agentName}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          agentName: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/session": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/antiforgery": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/login": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["LoginRequest"];
-          "text/json": components["schemas"]["LoginRequest"];
-          "application/*+json": components["schemas"]["LoginRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Unauthorized */
-        401: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Too Many Requests */
-        429: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/logout": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/password": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ChangePasswordRequest"];
-          "text/json": components["schemas"]["ChangePasswordRequest"];
-          "application/*+json": components["schemas"]["ChangePasswordRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Unauthorized */
-        401: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Forbidden */
-        403: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/tokens": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Forbidden */
-        403: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CreateTokenRequest"];
-          "text/json": components["schemas"]["CreateTokenRequest"];
-          "application/*+json": components["schemas"]["CreateTokenRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Bad Request */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Forbidden */
-        403: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Conflict */
-        409: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/tokens/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Forbidden */
-        403: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/dashboard/stats": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfDashboardStatsResponse"];
-            "application/json": components["schemas"]["ApiResultOfDashboardStatsResponse"];
-            "text/json": components["schemas"]["ApiResultOfDashboardStatsResponse"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/server-info": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/executions/{agentId}/ws": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          agentId: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Switching Protocols */
-        101: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Bad Request */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/executions/{id}/execute": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["AgentExecutionRequest"];
-          "text/json": components["schemas"]["AgentExecutionRequest"];
-          "application/*+json": components["schemas"]["AgentExecutionRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentExecutionResponse"];
-            "application/json": components["schemas"]["ApiResultOfAgentExecutionResponse"];
-            "text/json": components["schemas"]["ApiResultOfAgentExecutionResponse"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agentflows": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflow[]"];
-            "application/json": components["schemas"]["ApiResultOfAgentflow[]"];
-            "text/json": components["schemas"]["ApiResultOfAgentflow[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["AgentflowCreateRequest"];
-          "text/json": components["schemas"]["AgentflowCreateRequest"];
-          "application/*+json": components["schemas"]["AgentflowCreateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflow"];
-            "application/json": components["schemas"]["ApiResultOfAgentflow"];
-            "text/json": components["schemas"]["ApiResultOfAgentflow"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agentflows/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflow"];
-            "application/json": components["schemas"]["ApiResultOfAgentflow"];
-            "text/json": components["schemas"]["ApiResultOfAgentflow"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["AgentflowUpdateRequest"];
-          "text/json": components["schemas"]["AgentflowUpdateRequest"];
-          "application/*+json": components["schemas"]["AgentflowUpdateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflow"];
-            "application/json": components["schemas"]["ApiResultOfAgentflow"];
-            "text/json": components["schemas"]["ApiResultOfAgentflow"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agentflows/mermaid/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfstring"];
-            "application/json": components["schemas"]["ApiResultOfstring"];
-            "text/json": components["schemas"]["ApiResultOfstring"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agentflows/{id}/nodes": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflowNode[]"];
-            "application/json": components["schemas"]["ApiResultOfAgentflowNode[]"];
-            "text/json": components["schemas"]["ApiResultOfAgentflowNode[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agentflows/{id}/edges": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentflowEdge[]"];
-            "application/json": components["schemas"]["ApiResultOfAgentflowEdge[]"];
-            "text/json": components["schemas"]["ApiResultOfAgentflowEdge[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agents": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentResponse[]"];
-            "application/json": components["schemas"]["ApiResultOfAgentResponse[]"];
-            "text/json": components["schemas"]["ApiResultOfAgentResponse[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["AgentCreateRequest"];
-          "text/json": components["schemas"]["AgentCreateRequest"];
-          "application/*+json": components["schemas"]["AgentCreateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentResponse"];
-            "application/json": components["schemas"]["ApiResultOfAgentResponse"];
-            "text/json": components["schemas"]["ApiResultOfAgentResponse"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/agents/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentResponse"];
-            "application/json": components["schemas"]["ApiResultOfAgentResponse"];
-            "text/json": components["schemas"]["ApiResultOfAgentResponse"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["AgentUpdateRequest"];
-          "text/json": components["schemas"]["AgentUpdateRequest"];
-          "application/*+json": components["schemas"]["AgentUpdateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAgentResponse"];
-            "application/json": components["schemas"]["ApiResultOfAgentResponse"];
-            "text/json": components["schemas"]["ApiResultOfAgentResponse"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/mcp-tool-servers": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfMcpServer[]"];
-            "application/json": components["schemas"]["ApiResultOfMcpServer[]"];
-            "text/json": components["schemas"]["ApiResultOfMcpServer[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["McpToolServerCreateRequest"];
-          "text/json": components["schemas"]["McpToolServerCreateRequest"];
-          "application/*+json": components["schemas"]["McpToolServerCreateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfMcpServer"];
-            "application/json": components["schemas"]["ApiResultOfMcpServer"];
-            "text/json": components["schemas"]["ApiResultOfMcpServer"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/mcp-tool-servers/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfMcpServer"];
-            "application/json": components["schemas"]["ApiResultOfMcpServer"];
-            "text/json": components["schemas"]["ApiResultOfMcpServer"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["McpToolServerUpdateRequest"];
-          "text/json": components["schemas"]["McpToolServerUpdateRequest"];
-          "application/*+json": components["schemas"]["McpToolServerUpdateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfMcpServer"];
-            "application/json": components["schemas"]["ApiResultOfMcpServer"];
-            "text/json": components["schemas"]["ApiResultOfMcpServer"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/mcp-tool-servers/connect": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["McpToolServerConnectRequest"];
-          "text/json": components["schemas"]["McpToolServerConnectRequest"];
-          "application/*+json": components["schemas"]["McpToolServerConnectRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfMcpToolServerConnectResponse"];
-            "application/json": components["schemas"]["ApiResultOfMcpToolServerConnectResponse"];
-            "text/json": components["schemas"]["ApiResultOfMcpToolServerConnectResponse"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/files/list": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: {
-          path?: string;
-          diff?: boolean;
-          recursive?: boolean;
-        };
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["FileListResponse"];
-            "application/json": components["schemas"]["FileListResponse"];
-            "text/json": components["schemas"]["FileListResponse"];
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/files/read": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: {
-          path?: string;
-        };
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": string;
-            "application/json": string;
-            "text/json": string;
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/files/diff": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: {
-          path?: string;
-        };
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": unknown;
-            "application/json": unknown;
-            "text/json": unknown;
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/files/delete": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete: {
-      parameters: {
-        query?: {
-          path?: string;
-        };
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": unknown;
-            "application/json": unknown;
-            "text/json": unknown;
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/files/reset": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: {
-          path?: string;
-        };
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": unknown;
-            "application/json": unknown;
-            "text/json": unknown;
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Internal Server Error */
-        500: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/files/search": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: {
-          path?: string;
-          keyword?: string;
-          limit?: number;
-          recursive?: boolean;
-        };
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["FileSearchResponse"];
-            "application/json": components["schemas"]["FileSearchResponse"];
-            "text/json": components["schemas"]["FileSearchResponse"];
-          };
-        };
-        /** @description Bad Request */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/integrations/app-definitions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAppDefinitionListItemResponse[]"];
-            "application/json": components["schemas"]["ApiResultOfAppDefinitionListItemResponse[]"];
-            "text/json": components["schemas"]["ApiResultOfAppDefinitionListItemResponse[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/integrations/app-instances": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAppInstanceListItemResponse[]"];
-            "application/json": components["schemas"]["ApiResultOfAppInstanceListItemResponse[]"];
-            "text/json": components["schemas"]["ApiResultOfAppInstanceListItemResponse[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["AppInstanceCreateRequest"];
-          "text/json": components["schemas"]["AppInstanceCreateRequest"];
-          "application/*+json": components["schemas"]["AppInstanceCreateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAppInstanceListItemResponse"];
-            "application/json": components["schemas"]["ApiResultOfAppInstanceListItemResponse"];
-            "text/json": components["schemas"]["ApiResultOfAppInstanceListItemResponse"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/integrations/app-instances/{id}/authorize-start": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfAuthorizeStartResponse"];
-            "application/json": components["schemas"]["ApiResultOfAuthorizeStartResponse"];
-            "text/json": components["schemas"]["ApiResultOfAuthorizeStartResponse"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/integrations/app-instances/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/integrations/oauth/callback": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description Found */
-        302: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/jobs": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfJob[]"];
-            "application/json": components["schemas"]["ApiResultOfJob[]"];
-            "text/json": components["schemas"]["ApiResultOfJob[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["JobCreateRequest"];
-          "text/json": components["schemas"]["JobCreateRequest"];
-          "application/*+json": components["schemas"]["JobCreateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfJob"];
-            "application/json": components["schemas"]["ApiResultOfJob"];
-            "text/json": components["schemas"]["ApiResultOfJob"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/jobs/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfJob"];
-            "application/json": components["schemas"]["ApiResultOfJob"];
-            "text/json": components["schemas"]["ApiResultOfJob"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["JobUpdateRequest"];
-          "text/json": components["schemas"]["JobUpdateRequest"];
-          "application/*+json": components["schemas"]["JobUpdateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfJob"];
-            "application/json": components["schemas"]["ApiResultOfJob"];
-            "text/json": components["schemas"]["ApiResultOfJob"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/jobs/{id}/logs": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfJobLogResponse[]"];
-            "application/json": components["schemas"]["ApiResultOfJobLogResponse[]"];
-            "text/json": components["schemas"]["ApiResultOfJobLogResponse[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/model-providers": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: {
-          modelId?: string;
-          providerId?: string;
-        };
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfObject[]"];
-            "application/json": components["schemas"]["ApiResultOfObject[]"];
-            "text/json": components["schemas"]["ApiResultOfObject[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ModelProviderCreateRequest"];
-          "text/json": components["schemas"]["ModelProviderCreateRequest"];
-          "application/*+json": components["schemas"]["ModelProviderCreateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfModelProviderRelation"];
-            "application/json": components["schemas"]["ApiResultOfModelProviderRelation"];
-            "text/json": components["schemas"]["ApiResultOfModelProviderRelation"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/model-providers/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfModelProviderRelation"];
-            "application/json": components["schemas"]["ApiResultOfModelProviderRelation"];
-            "text/json": components["schemas"]["ApiResultOfModelProviderRelation"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ModelProviderUpdateRequest"];
-          "text/json": components["schemas"]["ModelProviderUpdateRequest"];
-          "application/*+json": components["schemas"]["ModelProviderUpdateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfModelProviderRelation"];
-            "application/json": components["schemas"]["ApiResultOfModelProviderRelation"];
-            "text/json": components["schemas"]["ApiResultOfModelProviderRelation"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/models": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfLlmModel[]"];
-            "application/json": components["schemas"]["ApiResultOfLlmModel[]"];
-            "text/json": components["schemas"]["ApiResultOfLlmModel[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ModelCreateRequest"];
-          "text/json": components["schemas"]["ModelCreateRequest"];
-          "application/*+json": components["schemas"]["ModelCreateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfLlmModel"];
-            "application/json": components["schemas"]["ApiResultOfLlmModel"];
-            "text/json": components["schemas"]["ApiResultOfLlmModel"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/models/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfLlmModel"];
-            "application/json": components["schemas"]["ApiResultOfLlmModel"];
-            "text/json": components["schemas"]["ApiResultOfLlmModel"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ModelUpdateRequest"];
-          "text/json": components["schemas"]["ModelUpdateRequest"];
-          "application/*+json": components["schemas"]["ModelUpdateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfLlmModel"];
-            "application/json": components["schemas"]["ApiResultOfLlmModel"];
-            "text/json": components["schemas"]["ApiResultOfLlmModel"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/providers": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfProvider[]"];
-            "application/json": components["schemas"]["ApiResultOfProvider[]"];
-            "text/json": components["schemas"]["ApiResultOfProvider[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ProviderCreateRequest"];
-          "text/json": components["schemas"]["ProviderCreateRequest"];
-          "application/*+json": components["schemas"]["ProviderCreateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfProvider"];
-            "application/json": components["schemas"]["ApiResultOfProvider"];
-            "text/json": components["schemas"]["ApiResultOfProvider"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/providers/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfProvider"];
-            "application/json": components["schemas"]["ApiResultOfProvider"];
-            "text/json": components["schemas"]["ApiResultOfProvider"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ProviderUpdateRequest"];
-          "text/json": components["schemas"]["ProviderUpdateRequest"];
-          "application/*+json": components["schemas"]["ProviderUpdateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfProvider"];
-            "application/json": components["schemas"]["ApiResultOfProvider"];
-            "text/json": components["schemas"]["ApiResultOfProvider"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/skills": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfSkillResponse[]"];
-            "application/json": components["schemas"]["ApiResultOfSkillResponse[]"];
-            "text/json": components["schemas"]["ApiResultOfSkillResponse[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "multipart/form-data": {
-            Name?: string;
-            Description?: string;
-            Archive?: components["schemas"]["IFormFile"];
-          };
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfSkillResponse"];
-            "application/json": components["schemas"]["ApiResultOfSkillResponse"];
-            "text/json": components["schemas"]["ApiResultOfSkillResponse"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/skills/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfSkillResponse"];
-            "application/json": components["schemas"]["ApiResultOfSkillResponse"];
-            "text/json": components["schemas"]["ApiResultOfSkillResponse"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "multipart/form-data": {
-            Name?: string;
-            Description?: string;
-            Archive?: components["schemas"]["IFormFile"];
-          };
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfSkillResponse"];
-            "application/json": components["schemas"]["ApiResultOfSkillResponse"];
-            "text/json": components["schemas"]["ApiResultOfSkillResponse"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/projects/{projectId}/contexts": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          projectId: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfProjectContextSummaryResponse[]"];
-            "application/json": components["schemas"]["ApiResultOfProjectContextSummaryResponse[]"];
-            "text/json": components["schemas"]["ApiResultOfProjectContextSummaryResponse[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          projectId: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/projects/{projectId}/contexts/{contextId}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          projectId: string;
-          contextId: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfProjectContextResponse"];
-            "application/json": components["schemas"]["ApiResultOfProjectContextResponse"];
-            "text/json": components["schemas"]["ApiResultOfProjectContextResponse"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          projectId: string;
-          contextId: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/projects/{projectId}/contexts/{contextId}/clear-records": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          projectId: string;
-          contextId: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/projects/{projectId}/contexts/{contextId}/title": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          projectId: string;
-          contextId: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ProjectContextTitleUpdateRequest"];
-          "text/json": components["schemas"]["ProjectContextTitleUpdateRequest"];
-          "application/*+json": components["schemas"]["ProjectContextTitleUpdateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/projects": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfProject[]"];
-            "application/json": components["schemas"]["ApiResultOfProject[]"];
-            "text/json": components["schemas"]["ApiResultOfProject[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ProjectCreateRequest"];
-          "text/json": components["schemas"]["ProjectCreateRequest"];
-          "application/*+json": components["schemas"]["ProjectCreateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfProject"];
-            "application/json": components["schemas"]["ApiResultOfProject"];
-            "text/json": components["schemas"]["ApiResultOfProject"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/projects/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfProject"];
-            "application/json": components["schemas"]["ApiResultOfProject"];
-            "text/json": components["schemas"]["ApiResultOfProject"];
-          };
-        };
-      };
-    };
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ProjectUpdateRequest"];
-          "text/json": components["schemas"]["ProjectUpdateRequest"];
-          "application/*+json": components["schemas"]["ProjectUpdateRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfProject"];
-            "application/json": components["schemas"]["ApiResultOfProject"];
-            "text/json": components["schemas"]["ApiResultOfProject"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResult"];
-            "application/json": components["schemas"]["ApiResult"];
-            "text/json": components["schemas"]["ApiResult"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/tools": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Gets all available tools. */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfToolInfo[]"];
-            "application/json": components["schemas"]["ApiResultOfToolInfo[]"];
-            "text/json": components["schemas"]["ApiResultOfToolInfo[]"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/tools/by-category": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Gets tools grouped by category. */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolInfo"];
-            "application/json": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolInfo"];
-            "text/json": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolInfo"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/tools/{name}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Gets a specific tool by name. */
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          name: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfToolInfo"];
-            "application/json": components["schemas"]["ApiResultOfToolInfo"];
-            "text/json": components["schemas"]["ApiResultOfToolInfo"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    Agent: {
-      /** Format: uuid */
-      id: string;
-      displayName: string;
-      name: string;
-      description: string;
-      /** @description System prompt / instructions for the agent's LLM. */
-      systemPrompt: string;
-      /**
-       * Format: uuid
-       * @description Model Provider ID. Required for System agents, optional for External agents.
-       */
-      modelProviderId?: null | string;
-      tools: null | string;
-      type: components["schemas"]["AgentType"];
-      /** @description JSON object for additional data (e.g., environment variables). */
-      extra: null | string;
-      modelProvider?: null | components["schemas"]["ModelProviderRelation"];
-      agentAppRelations?: components["schemas"]["AgentAppRelation"][];
-      agentMcpToolServers?: components["schemas"]["AgentMcpServerRelation"][];
-      agentSkillRelations?: components["schemas"]["AgentSkillRelation"][];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    AgentAppRelation: {
-      /** Format: uuid */
-      agentId: string;
-      /** Format: uuid */
-      appInstanceId: string;
-      agent?: components["schemas"]["Agent"];
-      appInstance?: components["schemas"]["AppInstance"];
-    };
-    AgentAppRelationResponse: {
-      /** Format: uuid */
-      agentId: string;
-      /** Format: uuid */
-      appInstanceId: string;
-    };
-    AgentCreateRequest: {
-      displayName: string;
-      name: string;
-      description: string;
-      systemPrompt: string;
-      /** Format: uuid */
-      modelProviderId: null | string;
-      tools: null | string;
-      mcpToolServerIds?: null | string[];
-      skillIds?: null | string[];
-      appInstanceIds?: null | string[];
-    };
-    AgentExecutionRequest: {
-      agentType: components["schemas"]["AgentRuntimeType"];
-      input: string;
-      /** Format: uuid */
-      projectId?: null | string;
-      contextId: null | string;
-    };
-    AgentExecutionResponse: {
-      contextId: string;
-      messages: components["schemas"]["AgwMessage"][];
-    };
-    Agentflow: {
-      /** Format: uuid */
-      id: string;
-      name: string;
-      description: null | string;
-      systemPrompt: string;
-      enable: boolean;
-      nodes?: components["schemas"]["AgentflowNode"][];
-      edges?: components["schemas"]["AgentflowEdge"][];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    AgentflowCreateRequest: {
-      name: string;
-      description: null | string;
-      enable: boolean;
-      nodes: components["schemas"]["AgentflowNodeRequest"][];
-      edges: components["schemas"]["AgentflowEdgeRequest"][];
-    };
-    AgentflowEdge: {
-      /** Format: uuid */
-      agentflowId: string;
-      edgeId: string;
-      sourceNodeId: string;
-      targetNodeId: string;
-      kind: components["schemas"]["AgentflowEdgeKind"];
-      label: null | string;
-      conditionJson: null | string;
-      configJson: null | string;
-      sourceNode?: components["schemas"]["AgentflowNode"];
-      targetNode?: components["schemas"]["AgentflowNode"];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    AgentflowEdgeKind: number;
-    AgentflowEdgeRequest: {
-      edgeId: string;
-      sourceNodeId: string;
-      targetNodeId: string;
-      kind: components["schemas"]["AgentflowEdgeKind"];
-      label: null | string;
-      conditionJson: null | string;
-      configJson: null | string;
-    };
-    AgentflowNode: {
-      /** Format: uuid */
-      agentflowId: string;
-      nodeId: string;
-      kind: components["schemas"]["AgentflowNodeKind"];
-      /** Format: uuid */
-      relateId?: null | string;
-      name: null | string;
-      positionJson: null | string;
-      instructions: null | string;
-      configJson: null | string;
-      sourceEdges?: components["schemas"]["AgentflowEdge"][];
-      targetEdges?: components["schemas"]["AgentflowEdge"][];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    AgentflowNodeKind: number;
-    AgentflowNodeRequest: {
-      nodeId: string;
-      kind: components["schemas"]["AgentflowNodeKind"];
-      /** Format: uuid */
-      relateId: null | string;
-      name: null | string;
-      positionJson: null | string;
-      instructions: null | string;
-      configJson: null | string;
-    };
-    AgentflowUpdateRequest: {
-      name: string;
-      description: null | string;
-      enable: boolean;
-      nodes: components["schemas"]["AgentflowNodeRequest"][];
-      edges: components["schemas"]["AgentflowEdgeRequest"][];
-    };
-    AgentMcpServerRelation: {
-      /** Format: uuid */
-      agentId: string;
-      /** Format: uuid */
-      mcpToolServerId: string;
-      agent?: components["schemas"]["Agent"];
-      mcpToolServer?: components["schemas"]["McpServer"];
-    };
-    AgentMcpToolServerRelationResponse: {
-      /** Format: uuid */
-      agentId: string;
-      /** Format: uuid */
-      mcpToolServerId: string;
-    };
-    AgentResponse: {
-      /** Format: uuid */
-      id: string;
-      displayName: string;
-      name: string;
-      description: string;
-      systemPrompt: string;
-      /** Format: uuid */
-      modelProviderId: null | string;
-      tools: null | string;
-      type: components["schemas"]["AgentType"];
-      extra: null | string;
-      agentMcpToolServers: components["schemas"]["AgentMcpToolServerRelationResponse"][];
-      agentSkillRelations: components["schemas"]["AgentSkillRelationResponse"][];
-      agentAppRelations: components["schemas"]["AgentAppRelationResponse"][];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime: null | string;
-      updateBy: null | string;
-    };
-    /** @description Agent Runtime Type */
-    AgentRuntimeType: number;
-    AgentSkillRelation: {
-      /** Format: uuid */
-      agentId: string;
-      /** Format: uuid */
-      skillId: string;
-      agent?: null | components["schemas"]["Agent"];
-    };
-    AgentSkillRelationResponse: {
-      /** Format: uuid */
-      agentId: string;
-      /** Format: uuid */
-      skillId: string;
-    };
-    /** @description Agent Definition Type */
-    AgentType: number;
-    AgentUpdateRequest: {
-      displayName: string;
-      description: string;
-      systemPrompt: string;
-      /** Format: uuid */
-      modelProviderId: null | string;
-      tools: null | string;
-      mcpToolServerIds?: null | string[];
-      skillIds?: null | string[];
-      appInstanceIds?: null | string[];
-    };
-    AgwContent:
-      | components["schemas"]["AgwContentAgwTextContent"]
-      | components["schemas"]["AgwContentAgwTextReasoningContent"]
-      | components["schemas"]["AgwContentAgwFunctionCallContent"]
-      | components["schemas"]["AgwContentAgwFunctionResultContent"]
-      | components["schemas"]["AgwContentAgwErrorContent"]
-      | components["schemas"]["AgwContentAgwUsageContent"]
-      | components["schemas"]["AgwContentAgwUriContent"]
-      | components["schemas"]["AgwContentAgwDataContent"];
-    AgwContentAgwDataContent: {
-      /** @enum {string} */
-      type?: "DataContent";
-      kind: null | string;
-      /** @description A data URI representing the content. */
-      uri: string;
-      name: null | string;
-      additionalProperties?: null | Record<string, never>;
-    };
-    AgwContentAgwErrorContent: {
-      /** @enum {string} */
-      type?: "ErrorContent";
-      kind: null | string;
-      errorCode: null | string;
-      details: null | string;
-      content: string;
-      additionalProperties?: null | Record<string, never>;
-    };
-    AgwContentAgwFunctionCallContent: {
-      /** @enum {string} */
-      type?: "FunctionCallContent";
-      kind: null | string;
-      content: null | string;
-      additionalProperties?: null | Record<string, never>;
-    };
-    AgwContentAgwFunctionResultContent: {
-      /** @enum {string} */
-      type?: "FunctionResultContent";
-      kind: null | string;
-      content: null | string;
-      additionalProperties?: null | Record<string, never>;
-    };
-    AgwContentAgwTextContent: {
-      /** @enum {string} */
-      type?: "TextContent";
-      kind: null | string;
-      content: null | string;
-      additionalProperties?: null | Record<string, never>;
-    };
-    AgwContentAgwTextReasoningContent: {
-      /** @enum {string} */
-      type?: "TextReasoningContent";
-      kind: null | string;
-      content: null | string;
-      additionalProperties?: null | Record<string, never>;
-    };
-    AgwContentAgwUriContent: {
-      /** @enum {string} */
-      type?: "UriContent";
-      kind: null | string;
-      /** Format: uri */
-      uri: string;
-      mediaType: string;
-      additionalProperties?: null | Record<string, never>;
-    };
-    AgwContentAgwUsageContent: {
-      /** @enum {string} */
-      type?: "UsageContent";
-      kind: null | string;
-      content?: components["schemas"]["UsageDetails"];
-      additionalProperties?: null | Record<string, never>;
-    };
-    /** @description AI message with role, author, and content blocks. */
-    AgwMessage: {
-      messageId: string;
-      author: null | string;
-      role: components["schemas"]["AiRole"];
-      contents: components["schemas"]["AgwContent"][];
-      additionalProperties?: null | Record<string, never>;
-    };
-    /**
-     * @description copy from ChatRole
-     *     https://github.com/dotnet/extensions/blob/main/src/Libraries/Microsoft.Extensions.AI.Abstractions/ChatCompletion/ChatRole.cs
-     */
-    AiRole: unknown;
-    ApiResult: {
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfAgentExecutionResponse: {
-      data?: null | components["schemas"]["AgentExecutionResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfAgentflow: {
-      data?: null | components["schemas"]["Agentflow"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfAgentflow[]": {
-      data?: null | components["schemas"]["Agentflow"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfAgentflowEdge[]": {
-      data?: null | components["schemas"]["AgentflowEdge"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfAgentflowNode[]": {
-      data?: null | components["schemas"]["AgentflowNode"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfAgentResponse: {
-      data?: null | components["schemas"]["AgentResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfAgentResponse[]": {
-      data?: null | components["schemas"]["AgentResponse"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfAppDefinitionListItemResponse[]": {
-      data?: null | components["schemas"]["AppDefinitionListItemResponse"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfAppInstanceListItemResponse: {
-      data?: null | components["schemas"]["AppInstanceListItemResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfAppInstanceListItemResponse[]": {
-      data?: null | components["schemas"]["AppInstanceListItemResponse"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfAuthorizeStartResponse: {
-      data?: null | components["schemas"]["AuthorizeStartResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfDashboardStatsResponse: {
-      data?: null | components["schemas"]["DashboardStatsResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfDictionaryOfstringAndListOfToolInfo: {
-      data?: null | {
-        [key: string]: components["schemas"]["ToolInfo"][];
-      };
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfJob: {
-      data?: null | components["schemas"]["Job"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfJob[]": {
-      data?: null | components["schemas"]["Job"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfJobLogResponse[]": {
-      data?: null | components["schemas"]["JobLogResponse"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfLlmModel: {
-      data?: null | components["schemas"]["LlmModel"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfLlmModel[]": {
-      data?: null | components["schemas"]["LlmModel"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfMcpServer: {
-      data?: null | components["schemas"]["McpServer"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfMcpServer[]": {
-      data?: null | components["schemas"]["McpServer"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfMcpToolServerConnectResponse: {
-      data?: null | components["schemas"]["McpToolServerConnectResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfModelProviderRelation: {
-      data?: null | components["schemas"]["ModelProviderRelation"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfObject[]": {
-      data?: null | unknown[];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfProject: {
-      data?: null | components["schemas"]["Project"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfProject[]": {
-      data?: null | components["schemas"]["Project"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfProjectContextResponse: {
-      data?: null | components["schemas"]["ProjectContextResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfProjectContextSummaryResponse[]": {
-      data?: null | components["schemas"]["ProjectContextSummaryResponse"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfProvider: {
-      data?: null | components["schemas"]["Provider"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfProvider[]": {
-      data?: null | components["schemas"]["Provider"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfSkillResponse: {
-      data?: null | components["schemas"]["SkillResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfSkillResponse[]": {
-      data?: null | components["schemas"]["SkillResponse"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfstring: {
-      data: null | string;
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfToolInfo: {
-      data?: null | components["schemas"]["ToolInfo"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfToolInfo[]": {
-      data?: null | components["schemas"]["ToolInfo"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    AppDefinitionListItemResponse: {
-      name: string;
-      displayName: string;
-      category: components["schemas"]["CategoryType"];
-      provider: string;
-      description: string;
-      authUrl: string;
-      scopes: string[];
-      usePkce: boolean;
-      tags: string[];
-      toolNames: string[];
-    };
-    AppInstance: {
-      /** Format: uuid */
-      id: string;
-      /** @description AppDefinition.Name, used to identify the app type and link to the app definitions */
-      appName: string;
-      usePkce: boolean;
-      clientId: string;
-      clientSecret: string;
-      authorizationToken?: null | components["schemas"]["OAuthAuthorizationToken"];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    AppInstanceCreateRequest: {
-      appName: string;
-      clientId: string;
-      clientSecret: string;
-      usePkce: boolean;
-    };
-    AppInstanceListItemResponse: {
-      /** Format: uuid */
-      id: string;
-      appName: string;
-      displayName: string;
-      provider: string;
-      category: null | components["schemas"]["CategoryType"];
-      usePkce: boolean;
-      clientId: string;
-      hasClientSecret: boolean;
-      isAuthorized: boolean;
-      isAuthorizationExpired: boolean;
-      /** Format: date-time */
-      authorizationExpiresAtUtc: null | string;
-      authorizationSubject: null | string;
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime: null | string;
-      updateBy: null | string;
-    };
-    AuthorizeStartResponse: {
-      authorizeUrl: string;
-    };
-    CategoryType: number;
-    ChangePasswordRequest: {
-      currentPassword: null | string;
-      newPassword: string;
-    };
-    CreateTokenRequest: {
-      name: string;
-    };
-    DashboardStatsResponse: {
-      /** Format: int32 */
-      jobCount: number;
-      /** Format: int32 */
-      projectCount: number;
-      /** Format: int32 */
-      projectContextCount: number;
-      /** Format: int32 */
-      taskRecordCount: number;
-      /** Format: int32 */
-      agentCount: number;
-      /** Format: int32 */
-      agentflowCount: number;
-    };
-    FileItem: {
-      name: string;
-      path: string;
-      type: string;
-      /** Format: int64 */
-      size?: null | number | string;
-      /** Format: date-time */
-      modifiedTime?: null | string;
-      gitStatus: null | string;
-    };
-    FileListResponse: {
-      items?: components["schemas"]["FileItem"][];
-    };
-    FileSearchResponse: {
-      results?: components["schemas"]["FileSearchResult"][];
-    };
-    FileSearchResult: {
-      fullPath: string;
-      relativePath: string;
-      type: string;
-    };
-    /** Format: binary */
-    IFormFile: string;
-    Job: {
-      /** Format: uuid */
-      id: string;
-      /** Format: uuid */
-      projectId: string;
-      agentType?: null | components["schemas"]["AgentRuntimeType"];
-      /** Format: uuid */
-      agentId?: null | string;
-      name: string;
-      prompt: null | string;
-      triggerType: components["schemas"]["TriggerType"];
-      triggerValue: string;
-      /** Format: date-time */
-      nextRunTime: string;
-      status: components["schemas"]["JobStatus"];
-      isEnabled: boolean;
-      /** Format: int32 */
-      retryCount: number;
-      /** Format: int32 */
-      maxRetryCount: number;
-      lastError: null | string;
-      /** Format: byte */
-      rowVersion?: string;
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    JobCreateRequest: {
-      /** Format: uuid */
-      projectId: string;
-      agentType?: null | components["schemas"]["AgentRuntimeType"];
-      /** Format: uuid */
-      agentId?: null | string;
-      name: string;
-      prompt: null | string;
-      triggerType: components["schemas"]["TriggerType"];
-      triggerValue: string;
-      /** Format: int32 */
-      maxRetryCount: number;
-      isEnabled: boolean;
-    };
-    JobLogResponse: {
-      /** Format: uuid */
-      id: string;
-      /** Format: uuid */
-      jobId: string;
-      contextId: null | string;
-      /** Format: date-time */
-      startTime: string;
-      /** Format: date-time */
-      endTime: null | string;
-      success: boolean;
-      /** Format: int32 */
-      attempt: number;
-      errorMessage: null | string;
-    };
-    JobStatus: number;
-    JobUpdateRequest: {
-      /** Format: uuid */
-      projectId: string;
-      agentType?: null | components["schemas"]["AgentRuntimeType"];
-      /** Format: uuid */
-      agentId?: null | string;
-      name: string;
-      prompt: null | string;
-      triggerType: components["schemas"]["TriggerType"];
-      triggerValue: string;
-      /** Format: int32 */
-      maxRetryCount: number;
-      isEnabled: boolean;
-      status: components["schemas"]["JobStatus"];
-    };
-    LlmModel: {
-      /** Format: uuid */
-      id: string;
-      name: string;
-      description: null | string;
-      /** Format: int32 */
-      maxTokens: number;
-      providers?: components["schemas"]["ModelProviderRelation"][];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    LoginRequest: {
-      password: string;
-    };
-    McpServer: {
-      /**
-       * Format: uuid
-       * @description Unique identifier for the MCP server (e.g., "github-mcp").
-       */
-      id: string;
-      /** @description Human-readable display name (e.g., "GitHub MCP Server"). */
-      name: string;
-      /** @description Description of the server's capabilities. */
-      description: null | string;
-      /** @description Transport type: "stdio", "http". */
-      transportType: string;
-      /**
-       * @description Command to launch the MCP server process (stdio transport only).
-       *     Examples: "dnx", "npx", "python"
-       */
-      command: null | string;
-      /**
-       * @description Arguments for the command (stdio transport only).
-       *     Example: ["-y", "@modelcontextprotocol/server-github"]
-       */
-      arguments?: string[];
-      /** @description Working directory for the stdio process. */
-      workingDirectory: null | string;
-      /**
-       * @description Environment variables for the stdio process.
-       *     Values may reference secrets using {{secret:key_name}} syntax.
-       */
-      environmentVariables?: {
-        [key: string]: string;
-      };
-      /** @description URL for HTTP/SSE transport. */
-      url: null | string;
-      /** @description HTTP headers for HTTP/SSE transport (e.g., auth tokens). */
-      headers?: {
-        [key: string]: string;
-      };
-      /** @description Whether this server is enabled for tool discovery and agent use. */
-      enabled: boolean;
-      agentMcpToolServers?: components["schemas"]["AgentMcpServerRelation"][];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    McpToolItem: {
-      name: string;
-    };
-    McpToolServerConnectRequest: {
-      /** Format: uuid */
-      mcpToolServerId: string;
-    };
-    McpToolServerConnectResponse: {
-      status: string;
-      tools: components["schemas"]["McpToolItem"][];
-    };
-    McpToolServerCreateRequest: {
-      name: string;
-      agentIds: null | string[];
-      description: null | string;
-      transportType: string;
-      command: null | string;
-      arguments: null | string[];
-      workingDirectory: null | string;
-      environmentVariables: null | {
-        [key: string]: string;
-      };
-      url: null | string;
-      headers: null | {
-        [key: string]: string;
-      };
-      /** @default true */
-      enabled: boolean;
-    };
-    McpToolServerUpdateRequest: {
-      name: string;
-      description: null | string;
-      transportType: string;
-      command: null | string;
-      arguments: null | string[];
-      workingDirectory: null | string;
-      environmentVariables: null | {
-        [key: string]: string;
-      };
-      url: null | string;
-      headers: null | {
-        [key: string]: string;
-      };
-      /** @default true */
-      enabled: boolean;
-    };
-    ModelCreateRequest: {
-      name: string;
-      description: null | string;
-      /** Format: int32 */
-      maxTokens: number;
-    };
-    ModelProviderCreateRequest: {
-      /** Format: uuid */
-      modelId: string;
-      /** Format: uuid */
-      providerId: string;
-      /** Format: double */
-      inputPrice: number | string;
-      /** Format: double */
-      outputPrice: number | string;
-      /** Format: double */
-      cacheRead: number | string;
-      /** Format: double */
-      cacheWrite: number | string;
-      /** Format: int32 */
-      rpsLimit: number;
-    };
-    ModelProviderRelation: {
-      /** Format: uuid */
-      id: string;
-      /** Format: uuid */
-      modelId: string;
-      /** Format: uuid */
-      providerId: string;
-      /** Format: double */
-      inputPrice: number | string;
-      /** Format: double */
-      outputPrice: number | string;
-      /** Format: double */
-      cacheRead: number | string;
-      /** Format: double */
-      cacheWrite: number | string;
-      /** Format: int32 */
-      rpsLimit: number;
-      model?: null | components["schemas"]["LlmModel"];
-      provider?: null | components["schemas"]["Provider"];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    ModelProviderUpdateRequest: {
-      /** Format: double */
-      inputPrice: number | string;
-      /** Format: double */
-      outputPrice: number | string;
-      /** Format: double */
-      cacheRead: number | string;
-      /** Format: double */
-      cacheWrite: number | string;
-      /** Format: int32 */
-      rpsLimit: number;
-    };
-    ModelUpdateRequest: {
-      name: string;
-      description: null | string;
-      /** Format: int32 */
-      maxTokens: number;
-    };
-    /** @description Persists provider-issued OAuth tokens for a specific authenticated subject. */
-    OAuthAuthorizationToken: {
-      /**
-       * Format: uuid
-       * @description Gets or sets the unique identifier for the stored token record.
-       */
-      id: string;
-      /** Format: uuid */
-      appInstanceId: string;
-      /** @description Gets or sets the provider-specific subject or account identifier the token belongs to. */
-      subject: string;
-      /** @description Gets or sets the access token used for authenticated provider requests. */
-      accessToken: string;
-      /** @description Gets or sets the optional refresh token used to obtain a new access token. */
-      refreshToken: null | string;
-      /** @description Gets or sets the token type returned by the provider, such as Bearer. */
-      tokenType: string;
-      /**
-       * Format: date-time
-       * @description Gets or sets the UTC timestamp when the access token expires, if known.
-       */
-      expiresAtUtc?: null | string;
-    };
-    ProblemDetails: {
-      type: null | string;
-      title: null | string;
-      /** Format: int32 */
-      status?: number;
-      detail: null | string;
-      instance: null | string;
-    };
-    Project: {
-      /** Format: uuid */
-      id: string;
-      name: string;
-      type: components["schemas"]["ProjectType"];
-      description: null | string;
-      workspace: null | string;
-      enable: boolean;
-      extraSetting: null | string;
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    ProjectContextResponse: {
-      projectId: string;
-      contextId: string;
-      /** Format: uuid */
-      jobId: null | string;
-      latestStatus: null | components["schemas"]["TaskExecutionStatus"];
-      /** Format: int32 */
-      executionCount: number;
-      /** Format: int32 */
-      messageCount: number;
-      /** Format: date-time */
-      createTime: string;
-      /** Format: date-time */
-      updateTime: null | string;
-      errorMessage: null | string;
-      messages: null | components["schemas"]["AgwMessage"][];
-    };
-    ProjectContextSummaryResponse: {
-      projectId: string;
-      contextId: string;
-      /** Format: uuid */
-      jobId: null | string;
-      title: string;
-      latestStatus: null | components["schemas"]["TaskExecutionStatus"];
-      /** Format: int32 */
-      executionCount: number;
-      /** Format: int32 */
-      messageCount: number;
-      /** Format: date-time */
-      createTime: string;
-      /** Format: date-time */
-      updateTime: null | string;
-      errorMessage: null | string;
-    };
-    ProjectContextTitleUpdateRequest: {
-      title: string;
-    };
-    ProjectCreateRequest: {
-      name: string;
-      description: null | string;
-      workspace: null | string;
-      enable: boolean;
-      extraSetting: null | string;
-    };
-    ProjectType: number;
-    ProjectUpdateRequest: {
-      name: string;
-      description: null | string;
-      workspace: null | string;
-      enable: boolean;
-      extraSetting: null | string;
-    };
-    Provider: {
-      /** Format: uuid */
-      id: string;
-      name: string;
-      providerType: components["schemas"]["ProviderType"];
-      endpoint: string;
-      description: null | string;
-      models?: components["schemas"]["ModelProviderRelation"][];
-      authConfigs?: components["schemas"]["ProviderAuthConfig"][];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    ProviderAuthConfig: {
-      /** Format: uuid */
-      id: string;
-      /** Format: uuid */
-      providerId: string;
-      authType: components["schemas"]["ProviderAuthType"];
-      apiKey: null | string;
-      envName: null | string;
-      enable: boolean;
-      provider?: null | components["schemas"]["Provider"];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
-    ProviderAuthConfigRequest: {
-      authType: components["schemas"]["ProviderAuthType"];
-      apiKey: null | string;
-      envKey: null | string;
-      /** @default true */
-      enable: boolean;
-    };
-    /** @enum {unknown} */
-    ProviderAuthType: "ApiKey" | "EnvVariable";
-    ProviderCreateRequest: {
-      name: string;
-      providerType: components["schemas"]["ProviderType"];
-      description: null | string;
-      endpoint: string;
-      authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
-    };
-    /** @enum {unknown} */
-    ProviderType: "OpenAI" | "Anthropic";
-    ProviderUpdateRequest: {
-      name: string;
-      providerType: components["schemas"]["ProviderType"];
-      description: null | string;
-      endpoint: string;
-      authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
-    };
-    SkillResponse: {
-      /** Format: uuid */
-      id: string;
-      name: string;
-      description: string;
-      contentPath: string;
-      agentIds: string[];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime: null | string;
-      updateBy: null | string;
-    };
-    TaskExecutionStatus: number;
-    /** @description Represents information about a tool that can be used by an agent. */
-    ToolInfo: {
-      /** @description Gets the name of the tool (method name or custom name). */
-      name: string;
-      /** @description Gets the description of the tool. */
-      description: string;
-      /** @description Gets the category of the tool for grouping purposes. */
-      category: string;
-      /** @description Gets the full type name of the class containing the tool. */
-      typeName: string;
-      /** @description Gets the parameters of the tool. */
-      parameters: components["schemas"]["ToolParameterInfo"][];
-      /** @description Gets whether this is an asynchronous tool. */
-      isAsync: boolean;
-      /** @description Gets whether this tool requires user confirmation before execution. */
-      requiresConfirmation: boolean;
-      /**
-       * Format: int32
-       * @description Gets the execution timeout in milliseconds.
-       */
-      timeoutMs: number;
-    };
-    /** @description Represents information about a parameter of a tool. */
-    ToolParameterInfo: {
-      /** @description Gets the name of the parameter. */
-      name: string;
-      /** @description Gets the type of the parameter. */
-      type: string;
-      /** @description Gets the description of the parameter. */
-      description: null | string;
-      /** @description Gets whether the parameter is optional. */
-      isOptional: boolean;
-      /** @description Gets the default value for the parameter if it has one. */
-      defaultValue?: unknown;
-      /** @description Gets the JSON schema type hint (e.g., "string", "number", "boolean"). */
-      schemaType: null | string;
-      /** @description Gets the format hint (e.g., "date-time", "email", "uri"). */
-      format: null | string;
-      /** @description Gets allowed enum values if applicable. */
-      enumValues?: null | string[];
-    };
-    TriggerType: number;
-    UsageDetails: {
-      /** Format: int64 */
-      inputTokenCount?: null | number | string;
-      /** Format: int64 */
-      outputTokenCount?: null | number | string;
-      /** Format: int64 */
-      totalTokenCount?: null | number | string;
-      /** Format: int64 */
-      cachedInputTokenCount?: null | number | string;
-      /** Format: int64 */
-      reasoningTokenCount?: null | number | string;
-      /** Format: int64 */
-      inputAudioTokenCount?: null | number | string;
-      /** Format: int64 */
-      inputTextTokenCount?: null | number | string;
-      /** Format: int64 */
-      outputAudioTokenCount?: null | number | string;
-      /** Format: int64 */
-      outputTextTokenCount?: null | number | string;
-      additionalCounts?: null | {
-        [key: string]: number | string;
-      };
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    schemas: {
+        Agent: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            name: string;
+            description: string;
+            /** @description System prompt / instructions for the agent's LLM. */
+            systemPrompt: string;
+            /**
+             * Format: uuid
+             * @description Model Provider ID. Required for System agents, optional for External agents.
+             */
+            modelProviderId?: null | string;
+            tools: null | string;
+            type: components["schemas"]["AgentType"];
+            /** @description JSON object for additional data (e.g., environment variables). */
+            extra: null | string;
+            modelProvider?: null | components["schemas"]["ModelProviderRelation"];
+            agentAppRelations?: components["schemas"]["AgentAppRelation"][];
+            agentMcpToolServers?: components["schemas"]["AgentMcpServerRelation"][];
+            agentSkillRelations?: components["schemas"]["AgentSkillRelation"][];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        AgentAppRelation: {
+            /** Format: uuid */
+            agentId: string;
+            /** Format: uuid */
+            appInstanceId: string;
+            agent?: components["schemas"]["Agent"];
+            appInstance?: components["schemas"]["AppInstance"];
+        };
+        AgentAppRelationResponse: {
+            /** Format: uuid */
+            agentId: string;
+            /** Format: uuid */
+            appInstanceId: string;
+        };
+        AgentCreateRequest: {
+            displayName: string;
+            name: string;
+            description: string;
+            systemPrompt: string;
+            /** Format: uuid */
+            modelProviderId: null | string;
+            tools: null | string;
+            mcpToolServerIds?: null | string[];
+            skillIds?: null | string[];
+            appInstanceIds?: null | string[];
+        };
+        AgentExecutionRequest: {
+            agentType: components["schemas"]["AgentRuntimeType"];
+            input: string;
+            /** Format: uuid */
+            projectId?: null | string;
+            contextId: null | string;
+        };
+        AgentExecutionResponse: {
+            contextId: string;
+            messages: components["schemas"]["AgwMessage"][];
+        };
+        Agentflow: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: null | string;
+            systemPrompt: string;
+            enable: boolean;
+            nodes?: components["schemas"]["AgentflowNode"][];
+            edges?: components["schemas"]["AgentflowEdge"][];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        AgentflowCreateRequest: {
+            name: string;
+            description: null | string;
+            enable: boolean;
+            nodes: components["schemas"]["AgentflowNodeRequest"][];
+            edges: components["schemas"]["AgentflowEdgeRequest"][];
+        };
+        AgentflowEdge: {
+            /** Format: uuid */
+            agentflowId: string;
+            edgeId: string;
+            sourceNodeId: string;
+            targetNodeId: string;
+            kind: components["schemas"]["AgentflowEdgeKind"];
+            label: null | string;
+            conditionJson: null | string;
+            configJson: null | string;
+            sourceNode?: components["schemas"]["AgentflowNode"];
+            targetNode?: components["schemas"]["AgentflowNode"];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        AgentflowEdgeKind: number;
+        AgentflowEdgeRequest: {
+            edgeId: string;
+            sourceNodeId: string;
+            targetNodeId: string;
+            kind: components["schemas"]["AgentflowEdgeKind"];
+            label: null | string;
+            conditionJson: null | string;
+            configJson: null | string;
+        };
+        AgentflowNode: {
+            /** Format: uuid */
+            agentflowId: string;
+            nodeId: string;
+            kind: components["schemas"]["AgentflowNodeKind"];
+            /** Format: uuid */
+            relateId?: null | string;
+            name: null | string;
+            positionJson: null | string;
+            instructions: null | string;
+            configJson: null | string;
+            sourceEdges?: components["schemas"]["AgentflowEdge"][];
+            targetEdges?: components["schemas"]["AgentflowEdge"][];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        AgentflowNodeKind: number;
+        AgentflowNodeRequest: {
+            nodeId: string;
+            kind: components["schemas"]["AgentflowNodeKind"];
+            /** Format: uuid */
+            relateId: null | string;
+            name: null | string;
+            positionJson: null | string;
+            instructions: null | string;
+            configJson: null | string;
+        };
+        AgentflowUpdateRequest: {
+            name: string;
+            description: null | string;
+            enable: boolean;
+            nodes: components["schemas"]["AgentflowNodeRequest"][];
+            edges: components["schemas"]["AgentflowEdgeRequest"][];
+        };
+        AgentMcpServerRelation: {
+            /** Format: uuid */
+            agentId: string;
+            /** Format: uuid */
+            mcpToolServerId: string;
+            agent?: components["schemas"]["Agent"];
+            mcpToolServer?: components["schemas"]["McpServer"];
+        };
+        AgentMcpToolServerRelationResponse: {
+            /** Format: uuid */
+            agentId: string;
+            /** Format: uuid */
+            mcpToolServerId: string;
+        };
+        AgentResponse: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            name: string;
+            description: string;
+            systemPrompt: string;
+            /** Format: uuid */
+            modelProviderId: null | string;
+            tools: null | string;
+            type: components["schemas"]["AgentType"];
+            extra: null | string;
+            agentMcpToolServers: components["schemas"]["AgentMcpToolServerRelationResponse"][];
+            agentSkillRelations: components["schemas"]["AgentSkillRelationResponse"][];
+            agentAppRelations: components["schemas"]["AgentAppRelationResponse"][];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime: null | string;
+            updateBy: null | string;
+        };
+        /** @description Agent Runtime Type */
+        AgentRuntimeType: number;
+        AgentSkillRelation: {
+            /** Format: uuid */
+            agentId: string;
+            /** Format: uuid */
+            skillId: string;
+            agent?: null | components["schemas"]["Agent"];
+        };
+        AgentSkillRelationResponse: {
+            /** Format: uuid */
+            agentId: string;
+            /** Format: uuid */
+            skillId: string;
+        };
+        /** @description Agent Definition Type */
+        AgentType: number;
+        AgentUpdateRequest: {
+            displayName: string;
+            description: string;
+            systemPrompt: string;
+            /** Format: uuid */
+            modelProviderId: null | string;
+            tools: null | string;
+            mcpToolServerIds?: null | string[];
+            skillIds?: null | string[];
+            appInstanceIds?: null | string[];
+        };
+        AgwContent: components["schemas"]["AgwContentAgwTextContent"] | components["schemas"]["AgwContentAgwTextReasoningContent"] | components["schemas"]["AgwContentAgwFunctionCallContent"] | components["schemas"]["AgwContentAgwFunctionResultContent"] | components["schemas"]["AgwContentAgwErrorContent"] | components["schemas"]["AgwContentAgwUsageContent"] | components["schemas"]["AgwContentAgwUriContent"] | components["schemas"]["AgwContentAgwDataContent"];
+        AgwContentAgwDataContent: {
+            /** @enum {string} */
+            type?: "DataContent";
+            kind: null | string;
+            /** @description A data URI representing the content. */
+            uri: string;
+            name: null | string;
+            additionalProperties?: null | Record<string, never>;
+        };
+        AgwContentAgwErrorContent: {
+            /** @enum {string} */
+            type?: "ErrorContent";
+            kind: null | string;
+            errorCode: null | string;
+            details: null | string;
+            content: string;
+            additionalProperties?: null | Record<string, never>;
+        };
+        AgwContentAgwFunctionCallContent: {
+            /** @enum {string} */
+            type?: "FunctionCallContent";
+            kind: null | string;
+            content: null | string;
+            additionalProperties?: null | Record<string, never>;
+        };
+        AgwContentAgwFunctionResultContent: {
+            /** @enum {string} */
+            type?: "FunctionResultContent";
+            kind: null | string;
+            content: null | string;
+            additionalProperties?: null | Record<string, never>;
+        };
+        AgwContentAgwTextContent: {
+            /** @enum {string} */
+            type?: "TextContent";
+            kind: null | string;
+            content: null | string;
+            additionalProperties?: null | Record<string, never>;
+        };
+        AgwContentAgwTextReasoningContent: {
+            /** @enum {string} */
+            type?: "TextReasoningContent";
+            kind: null | string;
+            content: null | string;
+            additionalProperties?: null | Record<string, never>;
+        };
+        AgwContentAgwUriContent: {
+            /** @enum {string} */
+            type?: "UriContent";
+            kind: null | string;
+            /** Format: uri */
+            uri: string;
+            mediaType: string;
+            additionalProperties?: null | Record<string, never>;
+        };
+        AgwContentAgwUsageContent: {
+            /** @enum {string} */
+            type?: "UsageContent";
+            kind: null | string;
+            content?: components["schemas"]["UsageDetails"];
+            additionalProperties?: null | Record<string, never>;
+        };
+        /** @description AI message with role, author, and content blocks. */
+        AgwMessage: {
+            messageId: string;
+            author: null | string;
+            role: components["schemas"]["AiRole"];
+            contents: components["schemas"]["AgwContent"][];
+            additionalProperties?: null | Record<string, never>;
+        };
+        /**
+         * @description copy from ChatRole
+         *     https://github.com/dotnet/extensions/blob/main/src/Libraries/Microsoft.Extensions.AI.Abstractions/ChatCompletion/ChatRole.cs
+         */
+        AiRole: unknown;
+        ApiResult: {
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfAgentExecutionResponse: {
+            data?: null | components["schemas"]["AgentExecutionResponse"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfAgentflow: {
+            data?: null | components["schemas"]["Agentflow"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfAgentflow[]": {
+            data?: null | components["schemas"]["Agentflow"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfAgentflowEdge[]": {
+            data?: null | components["schemas"]["AgentflowEdge"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfAgentflowNode[]": {
+            data?: null | components["schemas"]["AgentflowNode"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfAgentResponse: {
+            data?: null | components["schemas"]["AgentResponse"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfAgentResponse[]": {
+            data?: null | components["schemas"]["AgentResponse"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfAppDefinitionListItemResponse[]": {
+            data?: null | components["schemas"]["AppDefinitionListItemResponse"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfAppInstanceListItemResponse: {
+            data?: null | components["schemas"]["AppInstanceListItemResponse"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfAppInstanceListItemResponse[]": {
+            data?: null | components["schemas"]["AppInstanceListItemResponse"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfAuthorizeStartResponse: {
+            data?: null | components["schemas"]["AuthorizeStartResponse"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfDashboardStatsResponse: {
+            data?: null | components["schemas"]["DashboardStatsResponse"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfDictionaryOfstringAndListOfToolInfo: {
+            data?: null | {
+                [key: string]: components["schemas"]["ToolInfo"][];
+            };
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfJob: {
+            data?: null | components["schemas"]["Job"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfJob[]": {
+            data?: null | components["schemas"]["Job"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfJobLogResponse[]": {
+            data?: null | components["schemas"]["JobLogResponse"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfLlmModel: {
+            data?: null | components["schemas"]["LlmModel"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfLlmModel[]": {
+            data?: null | components["schemas"]["LlmModel"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfMcpServer: {
+            data?: null | components["schemas"]["McpServer"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfMcpServer[]": {
+            data?: null | components["schemas"]["McpServer"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfMcpToolServerConnectResponse: {
+            data?: null | components["schemas"]["McpToolServerConnectResponse"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfModelProviderRelation: {
+            data?: null | components["schemas"]["ModelProviderRelation"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfObject[]": {
+            data?: null | unknown[];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfProject: {
+            data?: null | components["schemas"]["Project"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfProject[]": {
+            data?: null | components["schemas"]["Project"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfProjectContextResponse: {
+            data?: null | components["schemas"]["ProjectContextResponse"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfProjectContextSummaryResponse[]": {
+            data?: null | components["schemas"]["ProjectContextSummaryResponse"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfProvider: {
+            data?: null | components["schemas"]["Provider"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfProvider[]": {
+            data?: null | components["schemas"]["Provider"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfSkillResponse: {
+            data?: null | components["schemas"]["SkillResponse"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfSkillResponse[]": {
+            data?: null | components["schemas"]["SkillResponse"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfstring: {
+            data: null | string;
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfToolInfo: {
+            data?: null | components["schemas"]["ToolInfo"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfToolInfo[]": {
+            data?: null | components["schemas"]["ToolInfo"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        AppDefinitionListItemResponse: {
+            name: string;
+            displayName: string;
+            category: components["schemas"]["CategoryType"];
+            provider: string;
+            description: string;
+            authUrl: string;
+            scopes: string[];
+            usePkce: boolean;
+            tags: string[];
+            toolNames: string[];
+        };
+        AppInstance: {
+            /** Format: uuid */
+            id: string;
+            /** @description AppDefinition.Name, used to identify the app type and link to the app definitions */
+            appName: string;
+            usePkce: boolean;
+            clientId: string;
+            clientSecret: string;
+            authorizationToken?: null | components["schemas"]["OAuthAuthorizationToken"];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        AppInstanceCreateRequest: {
+            appName: string;
+            clientId: string;
+            clientSecret: string;
+            usePkce: boolean;
+        };
+        AppInstanceListItemResponse: {
+            /** Format: uuid */
+            id: string;
+            appName: string;
+            displayName: string;
+            provider: string;
+            category: null | components["schemas"]["CategoryType"];
+            usePkce: boolean;
+            clientId: string;
+            hasClientSecret: boolean;
+            isAuthorized: boolean;
+            isAuthorizationExpired: boolean;
+            /** Format: date-time */
+            authorizationExpiresAtUtc: null | string;
+            authorizationSubject: null | string;
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime: null | string;
+            updateBy: null | string;
+        };
+        AuthorizeStartResponse: {
+            authorizeUrl: string;
+        };
+        CategoryType: number;
+        ChangePasswordRequest: {
+            currentPassword: null | string;
+            newPassword: string;
+        };
+        CreateTokenRequest: {
+            name: string;
+        };
+        DashboardStatsResponse: {
+            /** Format: int32 */
+            jobCount: number;
+            /** Format: int32 */
+            projectCount: number;
+            /** Format: int32 */
+            projectContextCount: number;
+            /** Format: int32 */
+            taskRecordCount: number;
+            /** Format: int32 */
+            agentCount: number;
+            /** Format: int32 */
+            agentflowCount: number;
+        };
+        FileItem: {
+            name: string;
+            path: string;
+            type: string;
+            /** Format: int64 */
+            size?: null | number | string;
+            /** Format: date-time */
+            modifiedTime?: null | string;
+            gitStatus: null | string;
+        };
+        FileListResponse: {
+            items?: components["schemas"]["FileItem"][];
+        };
+        FileSearchResponse: {
+            results?: components["schemas"]["FileSearchResult"][];
+        };
+        FileSearchResult: {
+            fullPath: string;
+            relativePath: string;
+            type: string;
+        };
+        /** Format: binary */
+        IFormFile: string;
+        Job: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            agentType?: null | components["schemas"]["AgentRuntimeType"];
+            /** Format: uuid */
+            agentId?: null | string;
+            name: string;
+            prompt: null | string;
+            triggerType: components["schemas"]["TriggerType"];
+            triggerValue: string;
+            /** Format: date-time */
+            nextRunTime: string;
+            status: components["schemas"]["JobStatus"];
+            isEnabled: boolean;
+            /** Format: int32 */
+            retryCount: number;
+            /** Format: int32 */
+            maxRetryCount: number;
+            lastError: null | string;
+            /** Format: byte */
+            rowVersion?: string;
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        JobCreateRequest: {
+            /** Format: uuid */
+            projectId: string;
+            agentType?: null | components["schemas"]["AgentRuntimeType"];
+            /** Format: uuid */
+            agentId?: null | string;
+            name: string;
+            prompt: null | string;
+            triggerType: components["schemas"]["TriggerType"];
+            triggerValue: string;
+            /** Format: int32 */
+            maxRetryCount: number;
+            isEnabled: boolean;
+        };
+        JobLogResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            jobId: string;
+            contextId: null | string;
+            /** Format: date-time */
+            startTime: string;
+            /** Format: date-time */
+            endTime: null | string;
+            success: boolean;
+            /** Format: int32 */
+            attempt: number;
+            errorMessage: null | string;
+        };
+        JobStatus: number;
+        JobUpdateRequest: {
+            /** Format: uuid */
+            projectId: string;
+            agentType?: null | components["schemas"]["AgentRuntimeType"];
+            /** Format: uuid */
+            agentId?: null | string;
+            name: string;
+            prompt: null | string;
+            triggerType: components["schemas"]["TriggerType"];
+            triggerValue: string;
+            /** Format: int32 */
+            maxRetryCount: number;
+            isEnabled: boolean;
+            status: components["schemas"]["JobStatus"];
+        };
+        LlmModel: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: null | string;
+            /** Format: int32 */
+            maxTokens: number;
+            providers?: components["schemas"]["ModelProviderRelation"][];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        LoginRequest: {
+            password: string;
+        };
+        McpServer: {
+            /**
+             * Format: uuid
+             * @description Unique identifier for the MCP server (e.g., "github-mcp").
+             */
+            id: string;
+            /** @description Human-readable display name (e.g., "GitHub MCP Server"). */
+            name: string;
+            /** @description Description of the server's capabilities. */
+            description: null | string;
+            /** @description Transport type: "stdio", "http". */
+            transportType: string;
+            /**
+             * @description Command to launch the MCP server process (stdio transport only).
+             *     Examples: "dnx", "npx", "python"
+             */
+            command: null | string;
+            /**
+             * @description Arguments for the command (stdio transport only).
+             *     Example: ["-y", "@modelcontextprotocol/server-github"]
+             */
+            arguments?: string[];
+            /** @description Working directory for the stdio process. */
+            workingDirectory: null | string;
+            /**
+             * @description Environment variables for the stdio process.
+             *     Values may reference secrets using {{secret:key_name}} syntax.
+             */
+            environmentVariables?: {
+                [key: string]: string;
+            };
+            /** @description URL for HTTP/SSE transport. */
+            url: null | string;
+            /** @description HTTP headers for HTTP/SSE transport (e.g., auth tokens). */
+            headers?: {
+                [key: string]: string;
+            };
+            /** @description Whether this server is enabled for tool discovery and agent use. */
+            enabled: boolean;
+            agentMcpToolServers?: components["schemas"]["AgentMcpServerRelation"][];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        McpToolItem: {
+            name: string;
+        };
+        McpToolServerConnectRequest: {
+            /** Format: uuid */
+            mcpToolServerId: string;
+        };
+        McpToolServerConnectResponse: {
+            status: string;
+            tools: components["schemas"]["McpToolItem"][];
+        };
+        McpToolServerCreateRequest: {
+            name: string;
+            agentIds: null | string[];
+            description: null | string;
+            transportType: string;
+            command: null | string;
+            arguments: null | string[];
+            workingDirectory: null | string;
+            environmentVariables: null | {
+                [key: string]: string;
+            };
+            url: null | string;
+            headers: null | {
+                [key: string]: string;
+            };
+            /** @default true */
+            enabled: boolean;
+        };
+        McpToolServerUpdateRequest: {
+            name: string;
+            description: null | string;
+            transportType: string;
+            command: null | string;
+            arguments: null | string[];
+            workingDirectory: null | string;
+            environmentVariables: null | {
+                [key: string]: string;
+            };
+            url: null | string;
+            headers: null | {
+                [key: string]: string;
+            };
+            /** @default true */
+            enabled: boolean;
+        };
+        ModelCreateRequest: {
+            name: string;
+            description: null | string;
+            /** Format: int32 */
+            maxTokens: number;
+        };
+        ModelProviderCreateRequest: {
+            /** Format: uuid */
+            modelId: string;
+            /** Format: uuid */
+            providerId: string;
+            /** Format: double */
+            inputPrice: number | string;
+            /** Format: double */
+            outputPrice: number | string;
+            /** Format: double */
+            cacheRead: number | string;
+            /** Format: double */
+            cacheWrite: number | string;
+            /** Format: int32 */
+            rpsLimit: number;
+        };
+        ModelProviderRelation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            modelId: string;
+            /** Format: uuid */
+            providerId: string;
+            /** Format: double */
+            inputPrice: number | string;
+            /** Format: double */
+            outputPrice: number | string;
+            /** Format: double */
+            cacheRead: number | string;
+            /** Format: double */
+            cacheWrite: number | string;
+            /** Format: int32 */
+            rpsLimit: number;
+            model?: null | components["schemas"]["LlmModel"];
+            provider?: null | components["schemas"]["Provider"];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        ModelProviderUpdateRequest: {
+            /** Format: double */
+            inputPrice: number | string;
+            /** Format: double */
+            outputPrice: number | string;
+            /** Format: double */
+            cacheRead: number | string;
+            /** Format: double */
+            cacheWrite: number | string;
+            /** Format: int32 */
+            rpsLimit: number;
+        };
+        ModelUpdateRequest: {
+            name: string;
+            description: null | string;
+            /** Format: int32 */
+            maxTokens: number;
+        };
+        /** @description Persists provider-issued OAuth tokens for a specific authenticated subject. */
+        OAuthAuthorizationToken: {
+            /**
+             * Format: uuid
+             * @description Gets or sets the unique identifier for the stored token record.
+             */
+            id: string;
+            /** Format: uuid */
+            appInstanceId: string;
+            /** @description Gets or sets the provider-specific subject or account identifier the token belongs to. */
+            subject: string;
+            /** @description Gets or sets the access token used for authenticated provider requests. */
+            accessToken: string;
+            /** @description Gets or sets the optional refresh token used to obtain a new access token. */
+            refreshToken: null | string;
+            /** @description Gets or sets the token type returned by the provider, such as Bearer. */
+            tokenType: string;
+            /**
+             * Format: date-time
+             * @description Gets or sets the UTC timestamp when the access token expires, if known.
+             */
+            expiresAtUtc?: null | string;
+        };
+        ProblemDetails: {
+            type: null | string;
+            title: null | string;
+            /** Format: int32 */
+            status?: number;
+            detail: null | string;
+            instance: null | string;
+        };
+        Project: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            type: components["schemas"]["ProjectType"];
+            description: null | string;
+            workspace: null | string;
+            enable: boolean;
+            extraSetting: null | string;
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        ProjectContextResponse: {
+            projectId: string;
+            contextId: string;
+            /** Format: uuid */
+            jobId: null | string;
+            latestStatus: null | components["schemas"]["TaskExecutionStatus"];
+            /** Format: int32 */
+            executionCount: number;
+            /** Format: int32 */
+            messageCount: number;
+            /** Format: date-time */
+            createTime: string;
+            /** Format: date-time */
+            updateTime: null | string;
+            errorMessage: null | string;
+            messages: null | components["schemas"]["AgwMessage"][];
+        };
+        ProjectContextSummaryResponse: {
+            projectId: string;
+            contextId: string;
+            /** Format: uuid */
+            jobId: null | string;
+            title: string;
+            latestStatus: null | components["schemas"]["TaskExecutionStatus"];
+            /** Format: int32 */
+            executionCount: number;
+            /** Format: int32 */
+            messageCount: number;
+            /** Format: date-time */
+            createTime: string;
+            /** Format: date-time */
+            updateTime: null | string;
+            errorMessage: null | string;
+        };
+        ProjectContextTitleUpdateRequest: {
+            title: string;
+        };
+        ProjectCreateRequest: {
+            name: string;
+            description: null | string;
+            workspace: null | string;
+            enable: boolean;
+            extraSetting: null | string;
+        };
+        ProjectType: number;
+        ProjectUpdateRequest: {
+            name: string;
+            description: null | string;
+            workspace: null | string;
+            enable: boolean;
+            extraSetting: null | string;
+        };
+        Provider: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            providerType: components["schemas"]["ProviderType"];
+            endpoint: string;
+            description: null | string;
+            models?: components["schemas"]["ModelProviderRelation"][];
+            authConfigs?: components["schemas"]["ProviderAuthConfig"][];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        ProviderAuthConfig: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            providerId: string;
+            authType: components["schemas"]["ProviderAuthType"];
+            apiKey: null | string;
+            envName: null | string;
+            enable: boolean;
+            provider?: null | components["schemas"]["Provider"];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime?: null | string;
+            updateBy: null | string;
+        };
+        ProviderAuthConfigRequest: {
+            authType: components["schemas"]["ProviderAuthType"];
+            apiKey: null | string;
+            envKey: null | string;
+            /** @default true */
+            enable: boolean;
+        };
+        /** @enum {unknown} */
+        ProviderAuthType: "ApiKey" | "EnvVariable";
+        ProviderCreateRequest: {
+            name: string;
+            providerType: components["schemas"]["ProviderType"];
+            description: null | string;
+            endpoint: string;
+            authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
+        };
+        /** @enum {unknown} */
+        ProviderType: "OpenAI" | "Anthropic";
+        ProviderUpdateRequest: {
+            name: string;
+            providerType: components["schemas"]["ProviderType"];
+            description: null | string;
+            endpoint: string;
+            authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
+        };
+        SkillResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            contentPath: string;
+            agentIds: string[];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime: null | string;
+            updateBy: null | string;
+        };
+        TaskExecutionStatus: number;
+        /** @description Represents information about a tool that can be used by an agent. */
+        ToolInfo: {
+            /** @description Gets the name of the tool (method name or custom name). */
+            name: string;
+            /** @description Gets the description of the tool. */
+            description: string;
+            /** @description Gets the category of the tool for grouping purposes. */
+            category: string;
+            /** @description Gets the full type name of the class containing the tool. */
+            typeName: string;
+            /** @description Gets the parameters of the tool. */
+            parameters: components["schemas"]["ToolParameterInfo"][];
+            /** @description Gets whether this is an asynchronous tool. */
+            isAsync: boolean;
+            /** @description Gets whether this tool requires user confirmation before execution. */
+            requiresConfirmation: boolean;
+            /**
+             * Format: int32
+             * @description Gets the execution timeout in milliseconds.
+             */
+            timeoutMs: number;
+        };
+        /** @description Represents information about a parameter of a tool. */
+        ToolParameterInfo: {
+            /** @description Gets the name of the parameter. */
+            name: string;
+            /** @description Gets the type of the parameter. */
+            type: string;
+            /** @description Gets the description of the parameter. */
+            description: null | string;
+            /** @description Gets whether the parameter is optional. */
+            isOptional: boolean;
+            /** @description Gets the default value for the parameter if it has one. */
+            defaultValue?: unknown;
+            /** @description Gets the JSON schema type hint (e.g., "string", "number", "boolean"). */
+            schemaType: null | string;
+            /** @description Gets the format hint (e.g., "date-time", "email", "uri"). */
+            format: null | string;
+            /** @description Gets allowed enum values if applicable. */
+            enumValues?: null | string[];
+        };
+        TriggerType: number;
+        UsageDetails: {
+            /** Format: int64 */
+            inputTokenCount?: null | number | string;
+            /** Format: int64 */
+            outputTokenCount?: null | number | string;
+            /** Format: int64 */
+            totalTokenCount?: null | number | string;
+            /** Format: int64 */
+            cachedInputTokenCount?: null | number | string;
+            /** Format: int64 */
+            reasoningTokenCount?: null | number | string;
+            /** Format: int64 */
+            inputAudioTokenCount?: null | number | string;
+            /** Format: int64 */
+            inputTextTokenCount?: null | number | string;
+            /** Format: int64 */
+            outputAudioTokenCount?: null | number | string;
+            /** Format: int64 */
+            outputTextTokenCount?: null | number | string;
+            additionalCounts?: null | {
+                [key: string]: number | string;
+            };
+        };
+    };
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export type operations = Record<string, never>;

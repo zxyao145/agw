@@ -15,10 +15,14 @@ public sealed class AgwAntiforgeryMiddleware
     public async Task InvokeAsync(HttpContext context, IAntiforgery antiforgery)
     {
         var method = context.Request.Method;
+        var isExecutionHubNegotiate = context.Request.Path.Equals(
+            "/api/hubs/exec/negotiate",
+            StringComparison.OrdinalIgnoreCase);
         var requiresValidation = context.Request.Path.StartsWithSegments("/api")
             && method is "POST" or "PUT" or "PATCH" or "DELETE"
             && context.User.Identity?.AuthenticationType is "AgwCookie" or "LocalTrusted"
-            && !context.WebSockets.IsWebSocketRequest;
+            && !context.WebSockets.IsWebSocketRequest
+            && !isExecutionHubNegotiate;
 
         if (requiresValidation)
         {

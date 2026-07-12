@@ -1,4 +1,3 @@
-using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
 
 namespace Agw.Agents.Application.Execution.CommandStrategies;
@@ -25,6 +24,12 @@ internal sealed class SettingCommandStrategy : IExecutionCommandStrategy
         ExecutionCommandContext context)
     {
         var settingCommand = (SettingCommand)command;
+        if (context.RuntimeSession is { HasActiveTurn: true })
+        {
+            await context.SendErrorAsync("The previous session is currently in progress, please wait and execute again.");
+            return default;
+        }
+
         var normalizedSettings = await NormalizeSettingsAsync(
             settingCommand,
             context.CancellationToken);
@@ -36,19 +41,7 @@ internal sealed class SettingCommandStrategy : IExecutionCommandStrategy
         }
 
         context.ConnectionState.ClearSession();
-        context.AgentSession = await DisposeSessionAsync(context.AgentSession);
+        context.RuntimeSession = await ExecutionRuntimeStarter.DisposeSessionAsync(context.RuntimeSession);
         return default;
-    }
-
-    private static async Task<AgentExecSession?> DisposeSessionAsync(AgentExecSession? agentSession)
-    {
-        if (agentSession == null)
-        {
-            return null;
-        }
-
-        agentSession.CancelActiveRequest();
-        await agentSession.DisposeAsync();
-        return null;
     }
 }

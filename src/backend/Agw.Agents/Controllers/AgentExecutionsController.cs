@@ -2,7 +2,6 @@ using System.Net.WebSockets;
 
 using Agw.Agents.Application.Agentflows;
 using Agw.Agents.Application.AgentRun;
-using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Application.Execution;
 using Agw.Agents.Contracts;
 using Agw.Shared.Contracts.Tasks;
@@ -58,7 +57,7 @@ public partial class AgentExecutionsController : ControllerBase
 
         var commandContext = new ExecutionCommandContext(agentId, User?.Identity?.Name ?? "system", cancellationToken, webSocket, sendLock)
         {
-            AgentSession = null,
+            RuntimeSession = null,
             CloseConnectionAsync = (status, reason) => TryCloseAsync(webSocket, status, reason),
             ObserveTurn = ObserveActiveExecTask
         };
@@ -67,9 +66,6 @@ public partial class AgentExecutionsController : ControllerBase
         {
             while (webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
             {
-                // A completed turn is released before reading the next command so the connection state stays clean.
-                await commandContext.ConnectionState.ReleaseCompletedExecutionAsync();
-
                 var command = await ReceiveRequestAsync<AgentRunCommand>(webSocket, cancellationToken);
                 if (command == null)
                 {
@@ -103,7 +99,7 @@ public partial class AgentExecutionsController : ControllerBase
         }
         finally
         {
-            await DisposeConnectionResourcesAsync(commandContext.ConnectionState, commandContext.AgentSession);
+            await DisposeConnectionResourcesAsync(commandContext.RuntimeSession);
             _logger.LogDebug("WebSocket connection closed");
         }
     }
@@ -124,16 +120,6 @@ public partial class AgentExecutionsController : ControllerBase
                 }
             },
             TaskScheduler.Default);
-    }
-
-    private async Task AwaitActiveExecTaskAsync(Task inputTask)
-    {
-        try { await inputTask; }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error while awaiting ClaudeCode input task");
-        }
     }
 
     private async Task<T?> ReceiveRequestAsync<T>(WebSocket webSocket, CancellationToken cancellationToken)
@@ -192,26 +178,15 @@ public partial class AgentExecutionsController : ControllerBase
     }
 
 
-    private async Task DisposeConnectionResourcesAsync(
-        ExecutionConnectionState connectionState,
-        AgentExecSession? agentSession)
+    private static async Task DisposeConnectionResourcesAsync(RuntimeExecSessionBase? runtimeSession)
     {
-        // ActiveTurn is the execution task owned by the socket; finish it first so no background work keeps sending.
-        if (connectionState.ActiveExecution != null)
-        {
-            connectionState.ActiveExecution.RequestInterrupt(null);
-            await AwaitActiveExecTaskAsync(connectionState.ActiveExecution.ExecutionTask);
-            await connectionState.ActiveExecution.DisposeAsync();
-        }
-
-        // Agent sessions carry model/runtime state and must be released independently of the WebSocket turn.
-        if (agentSession == null)
+        // Runtime sessions own their active turn and settle it before releasing model/runtime resources.
+        if (runtimeSession == null)
         {
             return;
         }
 
-        agentSession.CancelActiveRequest();
-        await agentSession.DisposeAsync();
+        await runtimeSession.DisposeAsync();
     }
 
     private static Task TryCloseAsync(WebSocket webSocket, WebSocketCloseStatus status, string reason)

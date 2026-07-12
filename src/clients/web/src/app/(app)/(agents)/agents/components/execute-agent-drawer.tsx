@@ -49,9 +49,10 @@ export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAge
 
         <Chat
           className="px-4 pb-4 h-[calc(100vh-62px)]"
-          executionId={executingAgent.id}
+          targetId={executingAgent.id}
           agentType={0}
           projectId={projectId}
+          active={open}
           resetSignal={`${executingAgent.id}:${resetSignal}`}
           placeholder="请输入要发送给 agent 的内容..."
         />

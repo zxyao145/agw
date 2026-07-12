@@ -12,7 +12,6 @@ using Agw.Shared.Contracts.Tasks;
 
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
@@ -23,11 +22,11 @@ public class ExecCommandStrategyTests
     {
         var taskService = new CapturingTaskAppService();
         var strategy = new ExecCommandStrategy(
-            NullLogger<ExecCommandStrategy>.Instance,
-            taskService,
-            new UnusedAgentRuntimeService(),
-            null!,
-            new UnusedFileSystemResolver());
+            new ExecutionRuntimeStarter(
+                taskService,
+                new UnusedAgentRuntimeService(),
+                null!,
+                new UnusedFileSystemResolver()));
         var projectId = Guid.NewGuid();
         var contextId = Guid.NewGuid().ToString("D");
         var context = new ExecutionCommandContext(
@@ -115,6 +114,12 @@ public class ExecCommandStrategyTests
             throw new NotSupportedException();
 
         public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+            AgentExecSession session,
+            AgwUserInput input,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
             AgentExecSession session,
             AgwUserInput input,
             CancellationToken cancellationToken = default) =>

@@ -34,7 +34,26 @@ public partial class AgentRuntimeService
         }
         finally
         {
-            await _sessionStateStore.SaveAsync(session.SessionKey, session.Agent, session.Session, cancellationToken);
+            await _sessionStateStore.SaveAsync(session.SessionKey, session.Agent, session.Session, CancellationToken.None);
+        }
+    }
+
+    public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
+        AgentExecSession session,
+        AgwUserInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(input);
+
+        try
+        {
+            var messages = await session.ExecuteAsync(input, cancellationToken);
+            return messages.Select(message => AgentUtil.PostAgwMessage(session, message)).ToArray();
+        }
+        finally
+        {
+            await _sessionStateStore.SaveAsync(session.SessionKey, session.Agent, session.Session, CancellationToken.None);
         }
     }
 
@@ -108,7 +127,7 @@ public partial class AgentRuntimeService
         {
             taskId ??= Guid.NewGuid();
             string taskIdValue = taskId.Value.Normalize();
-            var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId, taskIdValue);
+            var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId);
             var sessionKey = CreateSessionKey(projectId.Value, resolvedContextId);
             var session = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, sessionKey, cancellationToken)
                 .ConfigureAwait(false);
@@ -116,7 +135,6 @@ public partial class AgentRuntimeService
             _providerSessionState.InitializeSessionState(
                 session,
                 resolvedContextId,
-                taskIdValue,
                 ProjectDefaults.GetDefaultProjectIdentifier(projectId));
 
             var messages = await CollectStreamingMessagesAsync(aiAgent, chatMsg, session).ConfigureAwait(false);

@@ -64,7 +64,7 @@ public class EfCoreChatHistoryProviderTests
             jsonOptions);
 
         var session = new FakeAgentSession();
-        provider.InitializeSessionState(session, "context-1", currentTaskId.ToString("D"), projectId);
+        provider.InitializeSessionState(session, "context-1", projectId);
 
         var messages = await InvokeProvideChatHistoryAsync(
             provider,
@@ -75,7 +75,7 @@ public class EfCoreChatHistoryProviderTests
     }
 
     [Fact]
-    public async Task StoreChatHistoryAsync_UsesContextScopedConversationSequence()
+    public async Task StoreChatHistoryAsync_GeneratesTaskIdPerSaveBatch()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
@@ -94,7 +94,6 @@ public class EfCoreChatHistoryProviderTests
 
         var projectId = Guid.NewGuid();
         var projectContextId = Guid.NewGuid();
-        var currentTaskId = Guid.NewGuid();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         await using (var seedContext = new AgwDbContext(options))
         {
@@ -114,7 +113,7 @@ public class EfCoreChatHistoryProviderTests
             jsonOptions);
 
         var session = new FakeAgentSession();
-        provider.InitializeSessionState(session, "context-1", currentTaskId.ToString("D"), projectId);
+        provider.InitializeSessionState(session, "context-1", projectId);
 
         await InvokeStoreChatHistoryAsync(
             provider,
@@ -122,6 +121,15 @@ public class EfCoreChatHistoryProviderTests
                 new FakeAgent(),
                 session,
                 [new ChatMessage(ChatRole.User, "new")],
+                [new ChatMessage(ChatRole.Assistant, "response")]),
+            cancellationToken);
+
+        await InvokeStoreChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokedContext(
+                new FakeAgent(),
+                session,
+                [new ChatMessage(ChatRole.User, "next")],
                 []),
             cancellationToken);
 
@@ -131,8 +139,10 @@ public class EfCoreChatHistoryProviderTests
             .OrderBy(record => record.ConversationSequence)
             .ToListAsync(cancellationToken);
 
-        Assert.Equal([0, 1], records.Select(record => record.ConversationSequence));
-        Assert.Equal(currentTaskId, records[1].TaskId);
+        Assert.Equal([0, 1, 2, 3], records.Select(record => record.ConversationSequence));
+        Assert.NotEqual(Guid.Empty, records[1].TaskId);
+        Assert.Equal(records[1].TaskId, records[2].TaskId);
+        Assert.NotEqual(records[1].TaskId, records[3].TaskId);
     }
 
     [Fact]
@@ -178,7 +188,7 @@ public class EfCoreChatHistoryProviderTests
             NullLogger<EfCoreChatHistoryProvider>.Instance);
 
         var session = new FakeAgentSession();
-        provider.InitializeSessionState(session, "context-1", Guid.NewGuid().ToString("D"), projectId);
+        provider.InitializeSessionState(session, "context-1", projectId);
         var message = new ChatMessage(ChatRole.User, "Draft the launch plan")
         {
             MessageId = Guid.NewGuid().ToString(),
@@ -229,8 +239,7 @@ public class EfCoreChatHistoryProviderTests
             NullLogger<EfCoreChatHistoryProvider>.Instance);
 
         var session = new FakeAgentSession();
-        var taskId = Guid.NewGuid();
-        provider.InitializeSessionState(session, "context-1", taskId.ToString("D"), projectId);
+        provider.InitializeSessionState(session, "context-1", projectId);
 
         var message = new ChatMessage(
             ChatRole.User,
@@ -258,9 +267,7 @@ public class EfCoreChatHistoryProviderTests
         await InvokeStoreChatHistoryAsync(provider, context, cancellationToken);
 
         await using var verifyContext = new AgwDbContext(options);
-        var record = await verifyContext.TaskRecords.SingleAsync(
-            x => x.TaskId == taskId,
-            cancellationToken);
+        var record = await verifyContext.TaskRecords.SingleAsync(cancellationToken);
 
         Assert.NotNull(record.Metadata);
         Assert.Equal("agent", record.Metadata!["targetType"].GetString());
@@ -295,16 +302,16 @@ public class EfCoreChatHistoryProviderTests
         long sequence,
         string text,
         JsonSerializerOptions jsonOptions) => new()
-    {
-        Id = Guid.NewGuid(),
-        ProjectContextId = projectContextId,
-        TaskId = taskId,
-        Status = TaskExecutionStatus.Succeeded,
-        ConversationSequence = sequence,
-        ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, text), jsonOptions),
-        CreateTime = DateTime.UtcNow,
-        UpdateTime = DateTime.UtcNow
-    };
+        {
+            Id = Guid.NewGuid(),
+            ProjectContextId = projectContextId,
+            TaskId = taskId,
+            Status = TaskExecutionStatus.Succeeded,
+            ConversationSequence = sequence,
+            ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, text), jsonOptions),
+            CreateTime = DateTime.UtcNow,
+            UpdateTime = DateTime.UtcNow
+        };
 
     private static async Task<IEnumerable<ChatMessage>> InvokeProvideChatHistoryAsync(
         EfCoreChatHistoryProvider provider,

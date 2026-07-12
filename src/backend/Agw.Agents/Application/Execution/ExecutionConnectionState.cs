@@ -19,11 +19,6 @@ public sealed class ExecutionConnectionState
     public SettingCommand? SessionSettings { get; private set; }
 
     /// <summary>
-    /// The active execution turn currently owned by the WebSocket connection.
-    /// </summary>
-    public ActiveTurn? ActiveExecution { get; private set; }
-
-    /// <summary>
     /// Task resolved for the current settings. Reused while the SettingCommand is unchanged.
     /// </summary>
     public TaskProjection? ResolvedTask { get; private set; }
@@ -31,8 +26,6 @@ public sealed class ExecutionConnectionState
     /// <summary>
     /// A turn is considered running until its task has completed and been released by the controller loop.
     /// </summary>
-    public bool HasRunningExecution => ActiveExecution is { IsCompleted: false };
-
     /// <summary>
     /// The current settings can reuse the existing session when both setting snapshots are identical.
     /// </summary>
@@ -53,7 +46,7 @@ public sealed class ExecutionConnectionState
     /// If no turn is running and settings changed, clear the old session before the next exec command starts.
     /// </summary>
     public bool ShouldRefreshSessionImmediately =>
-        !HasRunningExecution && RequiresSessionRefreshBeforeNextExecution;
+        RequiresSessionRefreshBeforeNextExecution;
 
     public void ApplySettings(SettingCommand settings)
     {
@@ -99,31 +92,6 @@ public sealed class ExecutionConnectionState
 
         _resolvedTaskSettings = CloneSettings(settings);
         ResolvedTask = task;
-    }
-
-    public bool TryStartExecution(ActiveTurn activeExecution)
-    {
-        ArgumentNullException.ThrowIfNull(activeExecution);
-
-        if (HasRunningExecution)
-        {
-            return false;
-        }
-
-        ActiveExecution = activeExecution;
-        return true;
-    }
-
-    public async Task ReleaseCompletedExecutionAsync()
-    {
-        if (ActiveExecution == null || !ActiveExecution.IsCompleted)
-        {
-            return;
-        }
-
-        // Once the task is complete, dispose the turn so the next command can start from a clean slate.
-        await ActiveExecution.DisposeAsync();
-        ActiveExecution = null;
     }
 
     private static SettingCommand CloneSettings(SettingCommand settings)

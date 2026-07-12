@@ -129,6 +129,12 @@ public class A2ADependencyInjectionTests
             yield break;
         }
 
+        public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
+            AgentExecSession session,
+            AgwUserInput input,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<AgwMessage>>([]);
+
         public Task<AgentExecutionResult?> ExecuteByNameAsync(
             AgentExecuteByNameRequest request,
             CancellationToken cancellationToken = default) =>

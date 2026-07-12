@@ -11,7 +11,7 @@ internal sealed class InterruptCommandStrategy : IExecutionCommandStrategy
         ExecutionCommandContext context)
     {
         var interruptCommand = (InterruptCommand)command;
-        if (!context.ConnectionState.HasRunningExecution || context.ConnectionState.ActiveExecution == null)
+        if (context.RuntimeSession is not { HasActiveTurn: true })
         {
             var message = string.IsNullOrWhiteSpace(interruptCommand.Reason)
                 ? "No active request is currently running."
@@ -20,7 +20,7 @@ internal sealed class InterruptCommandStrategy : IExecutionCommandStrategy
             return default;
         }
 
-        context.ConnectionState.ActiveExecution.RequestInterrupt(interruptCommand.Reason);
+        context.RuntimeSession.RequestInterrupt(interruptCommand.Reason);
         return default;
     }
 }

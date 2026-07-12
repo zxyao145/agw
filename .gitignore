@@ -365,6 +365,9 @@ FodyWeavers.xsd
 agw.db
 agw.db-wal
 agw.db-shm
+*.db
+*.db-shm
+*.db-wal
 /logs/
 
 tmpclaude-*

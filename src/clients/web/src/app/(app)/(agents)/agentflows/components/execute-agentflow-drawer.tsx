@@ -53,9 +53,10 @@ export function ExecuteAgentflowDrawer({
 
         <Chat
           className="px-4 pb-4 h-[calc(100vh-62px)]"
-          executionId={agentflow.id}
+          targetId={agentflow.id}
           agentType={1}
           projectId={projectId}
+          active={open}
           resetSignal={`${agentflow?.id ?? "none"}:${resetSignal}`}
           placeholder="请输入要发送给 agentflow 的内容..."
         />

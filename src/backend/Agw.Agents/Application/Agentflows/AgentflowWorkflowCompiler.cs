@@ -4,7 +4,6 @@ using System.Text.Json.Serialization;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Extensions;
 
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -25,7 +24,6 @@ internal sealed record AgentflowAgentSessionScope(
         ProviderSessionState.InitializeSessionState(
             session,
             ContextId,
-            TaskId?.Normalize(),
             ProjectId);
     }
 }

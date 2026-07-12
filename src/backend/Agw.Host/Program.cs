@@ -4,6 +4,7 @@ using Agw.A2A;
 using Agw.A2A.Extensions;
 using Agw.Agents;
 using Agw.Agents.Controllers.Manager;
+using Agw.Agents.Hubs;
 using Agw.Files;
 using Agw.Files.Controllers;
 using Agw.Infrastructure;
@@ -34,6 +35,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.OpenApi;
 
 using OpenTelemetry.Logs;
@@ -242,6 +244,10 @@ try
             };
         });
     builder.Services.AddAuthorization();
+    builder.Services.AddSignalR(options =>
+    {
+        options.MaximumReceiveMessageSize = 64 * 1024;
+    });
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
         options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
@@ -324,6 +330,10 @@ try
         .Value;
     app.MapAgwA2A(a2AServerOptions.Prefix).RequireAuthorization();
     app.MapControllers();
+    app.MapHub<ExecutionHub>("/api/hubs/exec", options =>
+    {
+        options.Transports = HttpTransportType.WebSockets;
+    }).RequireAuthorization();
     app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
     app.MapGet("/health/ready", async (IInitializationStateStore stateStore, AgwDbContext dbContext, IServiceProvider services, IConfiguration configuration) =>
     {

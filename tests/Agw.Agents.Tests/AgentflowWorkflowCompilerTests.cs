@@ -317,8 +317,7 @@ public class AgentflowWorkflowCompilerTests
 
         Assert.Contains(providerSessionState.Calls, call =>
             call.ProjectId == projectId &&
-            call.ContextId == "context-1" &&
-            call.TaskId == taskId.ToString("D"));
+            call.ContextId == "context-1");
     }
 
     private static AgentflowEdge Edge(
@@ -447,15 +446,14 @@ public class AgentflowWorkflowCompilerTests
 
     private sealed class CapturingProviderSessionState : IProviderSessionState
     {
-        public List<(Guid ProjectId, string ContextId, string? TaskId)> Calls { get; } = [];
+        public List<(Guid ProjectId, string ContextId)> Calls { get; } = [];
 
         public void InitializeSessionState(
             AgentSession session,
             string contextId,
-            string? taskId,
             Guid projectId)
         {
-            Calls.Add((projectId, contextId, taskId));
+            Calls.Add((projectId, contextId));
         }
     }
 }

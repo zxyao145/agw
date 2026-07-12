@@ -26,8 +26,10 @@ public static class DependencyInjection
         services.AddScoped<IExecutionCommandStrategy, HumanResponseCommandStrategy>();
         services.AddScoped<IExecutionCommandStrategy, InterruptCommandStrategy>();
         services.AddScoped<CommandDispatcher>();
+        services.AddScoped<ExecutionRuntimeStarter>();
+        services.AddSingleton<HubExecutionConnectionRegistry>();
         services.AddSingleton<LoggingMiddleware>();
-        
+
         return services;
     }
 }

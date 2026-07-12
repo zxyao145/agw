@@ -52,8 +52,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             _ =>
             {
                 var contextId = TaskUtil.GenContextId();
-                var taskId = Guid.NewGuid().Normalize();
-                return new State(contextId, taskId, ProjectDefaults.DefaultBuiltInId);
+                return new State(contextId, ProjectDefaults.DefaultBuiltInId);
             },
             nameof(EfCoreChatHistoryProvider),
             _jsonSerializerOptions);
@@ -62,7 +61,6 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     public void InitializeSessionState(
         AgentSession session,
         string contextId,
-        string? taskId,
         Guid projectId)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -74,7 +72,6 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         var state = new State(
             contextId.Trim(),
-            string.IsNullOrWhiteSpace(taskId) ? contextId.Trim() : taskId.Trim(),
             projectId);
         _state.SaveState(session, state);
     }
@@ -195,8 +192,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             projectContext.UpdateTime = now;
         }
 
-        var taskGuid = ParseSessionTaskId(state.TaskId) ?? Guid.NewGuid();
-        state = state with { TaskId = taskGuid.Normalize() };
+        var taskId = Guid.NewGuid();
 
         var nextSequence = await dbContext.Set<TaskRecord>()
             .Where(x => x.ProjectContextId == projectContext.Id)
@@ -213,7 +209,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             {
                 Id = Guid.NewGuid(),
                 ProjectContextId = projectContext.Id,
-                TaskId = taskGuid,
+                TaskId = taskId,
                 Status = TaskExecutionStatus.Succeeded,
                 AgentName = message.AuthorName,
                 ConversationSequence = nextSequence,
@@ -224,7 +220,6 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             });
         }
 
-        _state.SaveState(context.Session, state);
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -252,8 +247,16 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .Trim();
     }
 
-    private static Guid? ParseSessionTaskId(string taskIdString) =>
-        Guid.TryParse(taskIdString, out var taskId) ? taskId : null;
+    public sealed record State
+    {
+        public string ContextId { get; init; }
 
-    public sealed record State(string ContextId, string TaskId, Guid ProjectId);
+        public Guid ProjectId { get; init; }
+
+        public State(string contextId, Guid projectId)
+        {
+            ContextId = contextId;
+            ProjectId = projectId;
+        }
+    }
 }

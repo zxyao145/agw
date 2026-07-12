@@ -42,7 +42,6 @@ public partial class AgentRuntimeService
         {
             Agent = agent,
             ProjectId = projectId,
-            TaskId = taskId,
             Resume = resume,
         }, cancellationToken);
     }
