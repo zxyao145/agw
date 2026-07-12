@@ -28,7 +28,6 @@ public partial class AgentRuntimeService
     public async Task<AIAgent?> CreateAiAgentAsync(
         Guid agentId,
         Guid? projectId,
-        Guid? taskId,
         bool resume,
         CancellationToken cancellationToken = default)
     {

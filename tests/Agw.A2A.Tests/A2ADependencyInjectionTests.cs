@@ -108,7 +108,6 @@ public class A2ADependencyInjectionTests
         public Task<AIAgent?> CreateAiAgentAsync(
             Guid agentId,
             Guid? projectId,
-            Guid? taskId,
             bool resume,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<AIAgent?>(null);
