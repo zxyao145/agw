@@ -2,7 +2,6 @@ using Agw.Agents.Application.Agentflows;
 using Agw.Agents.Application.AgentRun;
 using Agw.Agents.Application.Agents;
 using Agw.Agents.Application.Execution;
-using Agw.Agents.Application.Execution.CommandStrategies;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,11 +20,6 @@ public static class DependencyInjection
         services.AddScoped<McpToolServerAppService>();
         services.AddScoped<AgentSessionStateStore>();
         services.AddScoped<IAgentRuntimeService, AgentRuntimeService>();
-        services.AddScoped<IExecutionCommandStrategy, SettingCommandStrategy>();
-        services.AddScoped<IExecutionCommandStrategy, ExecCommandStrategy>();
-        services.AddScoped<IExecutionCommandStrategy, HumanResponseCommandStrategy>();
-        services.AddScoped<IExecutionCommandStrategy, InterruptCommandStrategy>();
-        services.AddScoped<CommandDispatcher>();
         services.AddScoped<ExecutionRuntimeStarter>();
         services.AddSingleton<HubExecutionConnectionRegistry>();
         services.AddSingleton<LoggingMiddleware>();

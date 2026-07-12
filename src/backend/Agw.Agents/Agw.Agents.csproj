@@ -17,4 +17,7 @@
         <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
         <ProjectReference Include="..\Agw.Tools\Agw.Tools.csproj" />
     </ItemGroup>
+    <ItemGroup>
+      <Folder Include="Definitions\" />
+    </ItemGroup>
 </Project>

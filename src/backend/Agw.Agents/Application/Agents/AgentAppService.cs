@@ -80,9 +80,6 @@ public class AgentAppService
         return matches.FirstOrDefault();
     }
 
-    public Task<Agent?> GetAgentByNameAsync(string name) =>
-        _agentRepository.SingleOrDefaultAsync(a => a.Name == name);
-
     public async Task<AgentModelRuntimeConfiguration?> GetModelRuntimeConfigurationAsync(Guid modelProviderId)
     {
         var modelProvider = await _modelProviderRepository.GetByIdAsync(modelProviderId);

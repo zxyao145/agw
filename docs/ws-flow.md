@@ -1,11 +1,6 @@
-# Agent execution transports
+# Agent execution flow
 
-Agw exposes two authenticated real-time execution transports:
-
-- SignalR Hub at `/api/hubs/exec`, used by `clients/web`.
-- Legacy WebSocket at `GET /api/executions/{agentId}/ws`, retained for existing clients.
-
-Both transports use the `AgentRunCommand` command family and return raw `AgwMessage` values. They share the runtime starter, runtime sessions, and turn lifecycle, but their connection-disconnect behavior is intentionally different.
+Agw exposes the authenticated SignalR Hub at `/api/hubs/exec` for real-time agent execution. The Hub accepts the `AgentRunCommand` command family and returns raw `AgwMessage` values.
 
 ## SignalR command flow
 
@@ -98,11 +93,3 @@ With `stream=false`, normal runtime messages are buffered until the run complete
 - Host shutdown interrupts and disposes all connection sessions.
 
 There is no execution id, replay buffer, active-execution REST endpoint, automatic reconnect, or cross-process recovery in this protocol.
-
-## Legacy WebSocket flow
-
-The legacy endpoint continues accepting one JSON command per WebSocket message. The route supplies `agentId`, so old `ExecCommand` payloads may omit it; an omitted `stream` remains equivalent to `true`.
-
-The controller receives and dispatches Setting, Exec, Interrupt, and HumanResponse commands while the socket stays open. Runtime output is written directly as serialized `AgwMessage` values. Consecutive Agent turns reuse the runtime session when settings are unchanged.
-
-Unlike SignalR, closing the legacy WebSocket cancels the active turn and disposes its runtime session. This preserves the endpoint's existing disconnect-cancels behavior.

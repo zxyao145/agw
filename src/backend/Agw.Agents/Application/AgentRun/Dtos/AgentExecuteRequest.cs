@@ -4,43 +4,6 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Application.AgentRun.Dtos;
 
-public sealed class AgentExecuteByNameRequest
-{
-    public AgentExecuteByNameRequest(string input, string agentName, Guid? taskId, Guid? projectId, string? contextId)
-    {
-        var chatMsg = new ChatMessage(ChatRole.User, input)
-        {
-            AuthorName = Constants.DefaultInputAuthor
-        };
-
-        AgentName = agentName;
-        TaskId = taskId;
-        Input = [chatMsg];
-        ProjectId = projectId;
-        ContextId = contextId;
-    }
-
-
-    public AgentExecuteByNameRequest(List<ChatMessage> input, string agentName, Guid? taskId, Guid? projectId, string? contextId)
-    {
-        AgentName = agentName;
-        TaskId = taskId;
-        Input = input;
-        ProjectId = projectId;
-        ContextId = contextId;
-    }
-
-    public List<ChatMessage> Input { get; private set; }
-
-    public string AgentName { get; private set; }
-
-    public Guid? TaskId { get; private set; }
-
-    public Guid? ProjectId { get; private set; }
-
-    public string? ContextId { get; private set; }
-}
-
 public sealed class AgentExecuteByIdRequest
 {
     public AgentExecuteByIdRequest(string input, Guid agentId, Guid? taskId, Guid? projectId, string? contextId)

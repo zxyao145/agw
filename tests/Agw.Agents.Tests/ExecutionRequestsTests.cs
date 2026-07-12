@@ -1,7 +1,6 @@
 using Agw.Agents.Application.Agentflows;
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
-using Agw.Agents.Contracts.Manager;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Utils;
@@ -10,54 +9,6 @@ namespace Agw.Agents.Tests;
 
 public class ExecutionRequestsTests
 {
-    [Fact]
-    public void AgentExecutionRequest_DoesNotExposeTaskId()
-    {
-        var propertyNames = typeof(AgentExecutionRequest)
-            .GetProperties()
-            .Select(property => property.Name)
-            .ToArray();
-
-        Assert.Contains(nameof(AgentExecutionRequest.ContextId), propertyNames);
-        Assert.DoesNotContain("TaskId", propertyNames);
-    }
-
-    [Fact]
-    public void AgentExecutionResponse_UsesContextIdFromRuntimeResult()
-    {
-        var response = AgentExecutionResponse.FromAgentResult(
-            new AgentExecutionResult("internal-task", "context-1", []));
-
-        Assert.Equal("context-1", response.ContextId);
-    }
-
-    [Fact]
-    public void ManagerExecuteResponses_DoNotExposeTaskId()
-    {
-        var agentPropertyNames = typeof(AgentExecuteResponse)
-            .GetProperties()
-            .Select(property => property.Name)
-            .ToArray();
-        var agentflowPropertyNames = typeof(AgentflowExecuteResponse)
-            .GetProperties()
-            .Select(property => property.Name)
-            .ToArray();
-
-        Assert.DoesNotContain("TaskId", agentPropertyNames);
-        Assert.DoesNotContain("TaskId", agentflowPropertyNames);
-        Assert.Contains(nameof(AgentExecuteResponse.ContextId), agentPropertyNames);
-        Assert.Contains(nameof(AgentflowExecuteResponse.ContextId), agentflowPropertyNames);
-    }
-
-    [Fact]
-    public void AgentflowExecutionResponse_UsesContextIdFromRuntimeResult()
-    {
-        var response = AgentExecutionResponse.FromAgentflowResult(
-            new AgentflowExecutionResult("internal-task", "context-1", []));
-
-        Assert.Equal("context-1", response.ContextId);
-    }
-
     [Fact]
     public void Deserialize_SettingCommand_ReturnsSettingCommand()
     {

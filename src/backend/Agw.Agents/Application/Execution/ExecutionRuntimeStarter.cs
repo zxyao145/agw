@@ -1,5 +1,3 @@
-using System.Net.WebSockets;
-
 using Agw.Agents.Application.Agentflows;
 using Agw.Agents.Application.AgentRun;
 using Agw.Agents.Application.AgentRun.Dtos;
@@ -26,39 +24,6 @@ public sealed record StreamingExecutionStartRequest(
 public interface IExecutionMessageSink
 {
     ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken);
-}
-
-public sealed class WebSocketExecutionMessageSink : IExecutionMessageSink
-{
-    private readonly WebSocket _webSocket;
-    private readonly SemaphoreSlim _sendLock;
-
-    public WebSocketExecutionMessageSink(WebSocket webSocket, SemaphoreSlim sendLock)
-    {
-        _webSocket = webSocket;
-        _sendLock = sendLock;
-    }
-
-    public async ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken)
-    {
-        if (_webSocket.State != WebSocketState.Open) return;
-
-        await _sendLock.WaitAsync(cancellationToken);
-        try
-        {
-            if (_webSocket.State != WebSocketState.Open) return;
-            var data = Encoding.UTF8.GetBytes(Agw.Shared.Utils.JsonUtil.Serialize(message));
-            await _webSocket.SendAsync(
-                new ArraySegment<byte>(data),
-                WebSocketMessageType.Text,
-                endOfMessage: true,
-                cancellationToken);
-        }
-        finally
-        {
-            _sendLock.Release();
-        }
-    }
 }
 
 public sealed class ExecutionRuntimeStarter

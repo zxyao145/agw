@@ -57,28 +57,6 @@ public partial class AgentRuntimeService
         }
     }
 
-    public async Task<AgentExecutionResult?> ExecuteByNameAsync(
-        AgentExecuteByNameRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        var agent = await _agentAppService.GetAgentByNameAsync(request.AgentName);
-        if (agent == null)
-        {
-            return null;
-        }
-
-        var req = new AgentExecuteRequest
-        {
-            Agent = agent,
-            Input = request.Input,
-            TaskId = request.TaskId,
-            ProjectId = request.ProjectId,
-            ContextId = request.ContextId,
-        };
-
-        return await ExecuteAsync(req, cancellationToken);
-    }
-
     public async Task<AgentExecutionResult?> ExecuteByIdAsync(
         AgentExecuteByIdRequest request,
         CancellationToken cancellationToken = default)

@@ -311,8 +311,6 @@ try
         };
     });
 
-    // Enable WebSocket support
-    app.UseWebSockets();
     app.UseMiddleware<InitializationGuardMiddleware>();
     app.UseAuthentication();
     app.UseMiddleware<AgwAuthenticationMiddleware>();
