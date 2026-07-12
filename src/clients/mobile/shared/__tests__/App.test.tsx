@@ -55,6 +55,101 @@ function getLatestWebSocket(): MockWebSocket | undefined {
   return MockWebSocket.instances[MockWebSocket.instances.length - 1];
 }
 
+const mockSignalRConnections: MockSignalRConnection[] = [];
+
+class MockSignalRConnection {
+  public state = "Disconnected";
+  public commands: unknown[] = [];
+  private receiveHandler: ((message: unknown) => void) | null = null;
+  private closeHandler: ((error?: Error) => void) | null = null;
+
+  public on(eventName: string, handler: (message: unknown) => void): void {
+    if (eventName === "ReceiveMessage") {
+      this.receiveHandler = handler;
+    }
+  }
+
+  public onclose(handler: (error?: Error) => void): void {
+    this.closeHandler = handler;
+  }
+
+  public async start(): Promise<void> {
+    this.state = "Connected";
+  }
+
+  public async stop(): Promise<void> {
+    this.state = "Disconnected";
+    this.closeHandler?.();
+  }
+
+  public async invoke(methodName: string, command: unknown): Promise<void> {
+    if (methodName !== "DispatchCommand") {
+      throw new Error(`Unexpected SignalR method: ${methodName}`);
+    }
+    this.commands.push(command);
+  }
+
+  public emitMessage(message: unknown): void {
+    this.receiveHandler?.(message);
+  }
+}
+
+function getLatestSignalRConnection(): MockSignalRConnection | undefined {
+  return mockSignalRConnections[mockSignalRConnections.length - 1];
+}
+
+jest.mock("@microsoft/signalr", () => {
+  class HubConnectionBuilder {
+    public withUrl(): HubConnectionBuilder {
+      return this;
+    }
+
+    public configureLogging(): HubConnectionBuilder {
+      return this;
+    }
+
+    public build(): MockSignalRConnection {
+      const connection = {
+        state: "Disconnected",
+        commands: [] as unknown[],
+        receiveHandler: null as ((message: unknown) => void) | null,
+        closeHandler: null as ((error?: Error) => void) | null,
+        on(eventName: string, handler: (message: unknown) => void): void {
+          if (eventName === "ReceiveMessage") this.receiveHandler = handler;
+        },
+        onclose(handler: (error?: Error) => void): void {
+          this.closeHandler = handler;
+        },
+        async start(): Promise<void> {
+          this.state = "Connected";
+        },
+        async stop(): Promise<void> {
+          this.state = "Disconnected";
+          this.closeHandler?.();
+        },
+        async invoke(methodName: string, command: unknown): Promise<void> {
+          if (methodName !== "DispatchCommand") {
+            throw new Error(`Unexpected SignalR method: ${methodName}`);
+          }
+          this.commands.push(command);
+        },
+        emitMessage(message: unknown): void {
+          this.receiveHandler?.(message);
+        },
+      } as MockSignalRConnection;
+      mockSignalRConnections.push(connection);
+      return connection;
+    }
+  }
+
+  return {
+    HubConnectionBuilder,
+    HubConnectionState: { Connected: "Connected", Disconnected: "Disconnected" },
+    HttpTransportType: { WebSockets: 1 },
+    LogLevel: { Warning: 3 },
+  };
+});
+
 jest.mock("react-native-safe-area-context", () => {
   const React = require("react");
 
@@ -90,6 +185,7 @@ describe("App", () => {
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
     MockWebSocket.reset();
+    mockSignalRConnections.length = 0;
   });
 
   afterEach(() => {
@@ -231,7 +327,7 @@ describe("App", () => {
     expect(collectText(tree?.toJSON())).toContain("Project Two API Chat");
   });
 
-  it("starts a websocket execution stream for default selections", async () => {
+  it("starts a SignalR execution stream for default selections", async () => {
     fetchMock.mockImplementation(createAgwFetchMock({ includeDefaultSelections: true }));
     let tree: renderer.ReactTestRenderer | undefined;
 
@@ -259,24 +355,23 @@ describe("App", () => {
     });
     await settleAsync();
 
-    const ws = getLatestWebSocket();
+    const connection = getLatestSignalRConnection();
 
-    expect(ws).toBeDefined();
+    expect(connection).toBeDefined();
 
-    const sentPayloads = ws!.sentData.map((payload) => JSON.parse(payload));
-    expect(sentPayloads[0]).toMatchObject({
+    expect(connection!.commands[0]).toMatchObject({
       type: "SettingCommand",
       projectId: "default-built-in",
-      taskId: "task-default",
+      contextId: "context-default",
     });
-    expect(sentPayloads[1]).toMatchObject({
+    expect(connection!.commands[1]).toMatchObject({
       type: "ExecCommand",
+      agentId: "agent-default",
       agentType: 0,
     });
 
     await act(async () => {
-      ws!.emitMessage(
-        JSON.stringify({
+      connection!.emitMessage({
           messageId: "hello-assistant",
           author: "Hello",
           role: "assistant",
@@ -286,12 +381,10 @@ describe("App", () => {
               content: "Hello from stream.",
             },
           ],
-        }),
-      );
+        });
     });
     await act(async () => {
-      ws!.emitMessage(
-        JSON.stringify({
+      connection!.emitMessage({
           messageId: "hello-system",
           author: "$agw-server",
           role: "system",
@@ -304,8 +397,7 @@ describe("App", () => {
               },
             },
           ],
-        }),
-      );
+        });
     });
 
     await settleAsync();
@@ -430,7 +522,7 @@ describe("App", () => {
     expect(output).toContain("Settings");
   });
 
-  it("sends composer input through websocket stream", async () => {
+  it("sends composer input through SignalR stream", async () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
@@ -448,23 +540,23 @@ describe("App", () => {
       tree!.root.findByProps({ testID: "agw-send-message" }).props.onPress();
     });
     await settleAsync();
-    const ws = getLatestWebSocket();
+    const connection = getLatestSignalRConnection();
 
-    expect(ws).toBeDefined();
-    expect(ws!.sentData[0]).toBeDefined();
-    expect(ws!.sentData[1]).toBeDefined();
+    expect(connection).toBeDefined();
+    expect(connection!.commands[0]).toBeDefined();
+    expect(connection!.commands[1]).toBeDefined();
 
-    const settingCommand = JSON.parse(ws!.sentData[0]);
-    const execCommand = JSON.parse(ws!.sentData[1]);
+    const settingCommand = connection!.commands[0];
+    const execCommand = connection!.commands[1];
 
     expect(settingCommand).toMatchObject({
       type: "SettingCommand",
       projectId: "project-1",
-      taskId: "task-1",
-      settingContent: "{}",
+      contextId: "context-1",
     });
     expect(execCommand).toMatchObject({
       type: "ExecCommand",
+      agentId: "agent-1",
       agentType: 0,
       input: {
         messageId: expect.any(String),
@@ -474,8 +566,7 @@ describe("App", () => {
     });
 
     await act(async () => {
-      ws!.emitMessage(
-        JSON.stringify({
+      connection!.emitMessage({
           messageId: "assistant-stream",
           author: "Mobile Agent",
           role: "assistant",
@@ -485,12 +576,10 @@ describe("App", () => {
               content: "Execution response from stream.",
             },
           ],
-        }),
-      );
+        });
     });
     await act(async () => {
-      ws!.emitMessage(
-        JSON.stringify({
+      connection!.emitMessage({
           messageId: "system-end",
           author: "$agw-server",
           role: "system",
@@ -503,8 +592,7 @@ describe("App", () => {
               },
             },
           ],
-        }),
-      );
+        });
     });
 
     await settleAsync();

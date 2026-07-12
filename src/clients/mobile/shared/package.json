@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@microsoft/signalr": "10.0.0",
     "expo": "~55.0.26",
     "expo-dev-client": "~55.0.35",
     "expo-secure-store": "~55.0.14",

@@ -22,11 +22,11 @@ import { ConfigSetupSheet } from "./components/config-setup-sheet";
 import { FilesPanel } from "./components/files-panel";
 import { HistoryDrawer } from "./components/history-drawer";
 import {
-  executeWithWebSocket,
+  ExecutionHubClient,
+  isTurnFinishedMessage,
   mergeStreamingMessages,
-  parseExecutionWsMessage,
-  toExecutionWsUserInput,
-} from "./lib/execution-ws";
+  toExecutionHubUserInput,
+} from "./lib/execution-hub";
 import { DEFAULT_AGENT_LABEL, DEFAULT_PROJECT_VALUE } from "./lib/default-selections";
 import { buildAgwTargetOptions, getTargetValue } from "./lib/target-options";
 import { styles } from "./components/styles";
@@ -411,21 +411,16 @@ function AgwMobilePage({
     setIsExecuting(true);
 
     try {
-      await executeWithWebSocket(
-        config.serverUrl,
-        config.token,
-        selectedTarget.id,
-        {
-          projectId: selectedProjectId,
-          taskId: executionTaskId,
-          workspace: selectedProject?.workspace,
-          settingContent: selectedProject?.extraSetting,
-          agentType: selectedTarget.agentType,
-          input: toExecutionWsUserInput(userMessage),
-        },
-        (data) => {
-          const incomingMessage = parseExecutionWsMessage(data);
-          if (!incomingMessage || incomingMessage.role === "user") {
+      const executionContextId = currentContextId ?? executionTaskId;
+      let finishExecution: (() => void) | null = null;
+      let failExecution: ((error: Error) => void) | null = null;
+      const executionFinished = new Promise<void>((resolve, reject) => {
+        finishExecution = resolve;
+        failExecution = reject;
+      });
+      const hubClient = new ExecutionHubClient(config.serverUrl, config.token, {
+        onMessage: (incomingMessage) => {
+          if (incomingMessage.role === "user") {
             return;
           }
 
@@ -435,9 +430,31 @@ function AgwMobilePage({
 
           if (isTurnFinishedMessage(incomingMessage)) {
             setIsExecuting(false);
+            finishExecution?.();
           }
         },
-      );
+        onError: (error) => failExecution?.(error),
+        onClose: (error) => {
+          if (error) failExecution?.(error);
+        },
+      });
+
+      try {
+        await hubClient.configure({
+          projectId: selectedProjectId,
+          contextId: executionContextId,
+        });
+        await hubClient.execute({
+          projectId: selectedProjectId,
+          contextId: executionContextId,
+          agentId: selectedTarget.id,
+          agentType: selectedTarget.agentType,
+          input: toExecutionHubUserInput(userMessage),
+        });
+        await executionFinished;
+      } finally {
+        await hubClient.dispose();
+      }
 
       setCurrentTaskId(executionTaskId);
 
