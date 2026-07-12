@@ -1,4 +1,4 @@
-using Agw.Agents.Domain.Services;
+using Agw.Agents.Definitions.Domain;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 

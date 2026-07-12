@@ -1,7 +1,7 @@
-using Agw.Agents.Application.Agentflows;
-using Agw.Agents.Application.AgentRun;
-using Agw.Agents.Application.Agents;
-using Agw.Agents.Application.Execution;
+using Agw.Agents.Runtime.Agentflows;
+using Agw.Agents.Runtime.AgentRun;
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Runtime.Execution;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,7 +13,9 @@ public static class DependencyInjection
     public static IServiceCollection AddAgents(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<AgentflowDomainService>();
+        services.AddScoped<AgentflowAppService>();
         services.AddScoped<AgentflowRuntimeService>();
+        services.AddScoped<IAgentflowRuntimeService, AgentflowRuntimeService>();
         services.AddScoped<McpToolServerDomainService>();
         services.AddScoped<AgentDomainService>();
         services.AddScoped<AgentAppService>();

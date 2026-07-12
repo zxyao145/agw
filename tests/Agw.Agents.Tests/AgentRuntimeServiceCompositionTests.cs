@@ -1,4 +1,4 @@
-using Agw.Agents.Application.AgentRun;
+using Agw.Agents.Runtime.AgentRun;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
@@ -138,7 +138,7 @@ public class AgentRuntimeServiceCompositionTests
     public void ExecutionContextIdResolver_WhenContextMissing_GeneratesContextIdInsteadOfUsingTaskId()
     {
         var resolverType = typeof(AgentRuntimeService).Assembly.GetType(
-            "Agw.Agents.Application.AgentRun.ExecutionContextIdResolver");
+            "Agw.Agents.Runtime.AgentRun.ExecutionContextIdResolver");
         Assert.NotNull(resolverType);
         var method = resolverType!.GetMethod(
             "Resolve",

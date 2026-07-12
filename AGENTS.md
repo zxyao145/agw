@@ -65,8 +65,8 @@ src/types/                   # Shared frontend types
 ## Key Runtime Entry Points
 
 - `src/backend/Agw.Host/Program.cs`: bootstraps logging, OpenTelemetry, DI modules, OpenAPI/Scalar, websockets, static files, and DB seeding.
-- `src/backend/Agw.Agents/Application/Agents/AgentRuntimeService.cs`: builds runtime agents from persisted agent, provider, skill, and tool configuration.
-- `src/backend/Agw.Agents/Application/Agentflows/AgentflowRuntimeService.cs`: executes multi-agent workflows for the supported orchestration patterns.
+- `src/backend/Agw.Agents/Runtime/AgentRun/AgentRuntimeService.cs`: builds runtime agents from persisted agent, provider, skill, and tool configuration.
+- `src/backend/Agw.Agents/Runtime/Agentflows/AgentflowRuntimeService.cs`: executes multi-agent workflows for the supported orchestration patterns.
 - `src/backend/Agw.Jobs/HostedService/JobHostedService.cs`: in-memory scheduler backed by persistent job state and execution logs.
 - `src/backend/Agw.Integrations/Controllers/OauthController.cs`: OAuth authorization start/callback endpoints for integration connections.
 - `src/backend/Agw.Integrations/Tools/GitHub/GitHubTools.cs`: integration-backed GitHub tool implementations exposed to runtime agents.

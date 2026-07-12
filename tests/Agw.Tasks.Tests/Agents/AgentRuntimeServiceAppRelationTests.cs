@@ -1,5 +1,5 @@
-using Agw.Agents.Application.Agents;
-using Agw.Agents.Domain.Services;
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Domain;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Contracts.Agents;

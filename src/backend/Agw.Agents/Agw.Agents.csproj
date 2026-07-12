@@ -19,5 +19,6 @@
     </ItemGroup>
     <ItemGroup>
       <Folder Include="Definitions\" />
+      <Folder Include="Runtime\" />
     </ItemGroup>
 </Project>
