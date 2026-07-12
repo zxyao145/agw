@@ -16,7 +16,7 @@ The page will show existing app connections in the top section, available app de
   - create a new `AppInstance`
   - start OAuth authorization for a specific `AppInstance`
   - reconnect an existing `AppInstance`
-- `src/backend/Agw.Integrations/Controllers/OauthController.cs` currently exchanges tokens using configuration keyed by provider and assumes a single configured `AppInstanceId` per provider.
+- `src/server/Agw.Integrations/Controllers/OauthController.cs` currently exchanges tokens using configuration keyed by provider and assumes a single configured `AppInstanceId` per provider.
 - `src/frontend/web/src/app/(app)/integrations/callback/page.tsx` already renders the OAuth callback result and can remain the landing page after token exchange.
 
 ## Requirements

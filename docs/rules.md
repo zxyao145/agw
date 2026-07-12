@@ -58,7 +58,7 @@ All HTTP client usage must go through `IHttpClientFactory`. Never instantiate `H
 
 ### Applicable modules
 
-- All backend modules under `src/backend/`
+- All backend modules under `src/server/`
 
 ### What to do
 

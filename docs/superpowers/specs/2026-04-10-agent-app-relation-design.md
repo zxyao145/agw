@@ -9,16 +9,16 @@ This change also extends the existing Agent management APIs and frontend page so
 
 ## Current Context
 
-- `src/backend/Agw.Agents/Domain/Entities/Agent.cs` currently supports:
+- `src/server/Agw.Agents/Domain/Entities/Agent.cs` currently supports:
   - direct JSON tool selection through `Tools`
   - `AgentSkillRelation`
   - `AgentMcpServerRelation`
-- `src/backend/Agw.Integrations/Domain/Entities/AppInstance.cs` persists OAuth client configuration and authorization state, but nothing in the Agent domain currently references it.
-- `src/backend/Agw.Agents/Application/Agents/AgentRuntimeService.cs` currently builds runtime tools from:
+- `src/server/Agw.Integrations/Domain/Entities/AppInstance.cs` persists OAuth client configuration and authorization state, but nothing in the Agent domain currently references it.
+- `src/server/Agw.Agents/Application/Agents/AgentRuntimeService.cs` currently builds runtime tools from:
   - `agent.Tools`
   - MCP tool servers linked through `AgentMcpServerRelation`
 - `AppDefinition` is a static catalog entry loaded from `IntegrationConstants.AppList` and already exposes `ToolNames`.
-- `src/backend/Agw.Agents/Controllers/Manager/AgentsController.cs` and its request contracts currently support:
+- `src/server/Agw.Agents/Controllers/Manager/AgentsController.cs` and its request contracts currently support:
   - base agent fields
   - `skillIds`
   - `mcpToolServerIds`
@@ -61,7 +61,7 @@ This change also extends the existing Agent management APIs and frontend page so
 
 ## Data Model
 
-Add a new relation entity in `src/backend/Agw.Agents/Domain/Entities/AgentAppRelation.cs`.
+Add a new relation entity in `src/server/Agw.Agents/Domain/Entities/AgentAppRelation.cs`.
 
 Fields:
 

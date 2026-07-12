@@ -12,31 +12,31 @@
 
 ## File Structure
 
-- Create: `src/backend/Agw.Tasks/Application/Files/IPathSecurityService.cs`
+- Create: `src/server/Agw.Tasks/Application/Files/IPathSecurityService.cs`
   - Defines the path resolution contract used by controllers.
-- Create: `src/backend/Agw.Tasks/Application/Files/PathSecurityService.cs`
+- Create: `src/server/Agw.Tasks/Application/Files/PathSecurityService.cs`
   - Resolves paths under the allowed content root and rejects traversal.
-- Modify: `src/backend/Agw.Tasks/DependencyInjection.cs`
+- Modify: `src/server/Agw.Tasks/DependencyInjection.cs`
   - Registers `IPathSecurityService`.
-- Modify: `src/backend/Agw.Tasks/Controllers/FilesController.cs`
+- Modify: `src/server/Agw.Tasks/Controllers/FilesController.cs`
   - Injects path security, removes repeated invalid traversal checks, removes `Task.Run` search wrapper.
 - Create: `tests/Agw.Tasks.Tests/PathSecurityServiceTests.cs`
   - Covers root, child, relative child, absolute escape, relative escape, and sibling-prefix safety.
 - Create: `tests/Agw.Tasks.Tests/FilesControllerPathSecurityTests.cs`
   - Verifies file endpoints reject paths denied by the path security service.
-- Move: `src/backend/Agw.Agents/Application/AgentRun/RuntimServiceBase.cs` to `src/backend/Agw.Agents/Application/AgentRun/RuntimeServiceBase.cs`
+- Move: `src/server/Agw.Agents/Application/AgentRun/RuntimServiceBase.cs` to `src/server/Agw.Agents/Application/AgentRun/RuntimeServiceBase.cs`
   - Fixes spelling and updates references.
-- Modify: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`
+- Modify: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`
   - Updates base type name and replaces `throw new Exception("aiAgent not found")`.
-- Modify: `src/backend/Agw.Agents/Application/Agentflows/AgentflowRuntimeService.cs`
+- Modify: `src/server/Agw.Agents/Application/Agentflows/AgentflowRuntimeService.cs`
   - Updates base type name.
-- Modify: `src/backend/Agw.A2A/AgwA2ARequestHandler.cs`
+- Modify: `src/server/Agw.A2A/AgwA2ARequestHandler.cs`
   - Replaces generic handler lookup exception with `A2AException`.
-- Modify: `src/backend/Agw.Tools/Impl/Files/LsTool.cs`
+- Modify: `src/server/Agw.Tools/Impl/Files/LsTool.cs`
   - Replaces generic exceptions with precise argument and directory exceptions.
-- Modify: `src/backend/Agw.Tools/Impl/Files/ReadFileTool.cs`
+- Modify: `src/server/Agw.Tools/Impl/Files/ReadFileTool.cs`
   - Replaces generic exceptions with precise argument and file exceptions.
-- Modify: `src/backend/Agw.Integrations/Tools/GitHub/GitHubTools.cs`
+- Modify: `src/server/Agw.Integrations/Tools/GitHub/GitHubTools.cs`
   - Replaces generic missing OAuth token exception.
 
 ---
@@ -179,13 +179,13 @@ Expected: build fails because `Agw.Tasks.Application.Files.PathSecurityService` 
 ### Task 2: Path Security Service Implementation
 
 **Files:**
-- Create: `src/backend/Agw.Tasks/Application/Files/IPathSecurityService.cs`
-- Create: `src/backend/Agw.Tasks/Application/Files/PathSecurityService.cs`
-- Modify: `src/backend/Agw.Tasks/DependencyInjection.cs`
+- Create: `src/server/Agw.Tasks/Application/Files/IPathSecurityService.cs`
+- Create: `src/server/Agw.Tasks/Application/Files/PathSecurityService.cs`
+- Modify: `src/server/Agw.Tasks/DependencyInjection.cs`
 
 - [ ] **Step 1: Add the interface**
 
-Create `src/backend/Agw.Tasks/Application/Files/IPathSecurityService.cs`:
+Create `src/server/Agw.Tasks/Application/Files/IPathSecurityService.cs`:
 
 ```csharp
 namespace Agw.Tasks.Application.Files;
@@ -200,7 +200,7 @@ public interface IPathSecurityService
 
 - [ ] **Step 2: Add the implementation**
 
-Create `src/backend/Agw.Tasks/Application/Files/PathSecurityService.cs`:
+Create `src/server/Agw.Tasks/Application/Files/PathSecurityService.cs`:
 
 ```csharp
 using Microsoft.AspNetCore.Hosting;
@@ -290,7 +290,7 @@ public sealed class PathSecurityService : IPathSecurityService
 
 - [ ] **Step 3: Register the service**
 
-Modify `src/backend/Agw.Tasks/DependencyInjection.cs`:
+Modify `src/server/Agw.Tasks/DependencyInjection.cs`:
 
 ```csharp
 using Agw.Domain.Services;
@@ -322,7 +322,7 @@ Expected: all `PathSecurityServiceTests` pass.
 
 **Files:**
 - Create: `tests/Agw.Tasks.Tests/FilesControllerPathSecurityTests.cs`
-- Modify: `src/backend/Agw.Tasks/Controllers/FilesController.cs`
+- Modify: `src/server/Agw.Tasks/Controllers/FilesController.cs`
 
 - [ ] **Step 1: Write the failing controller tests**
 
@@ -418,7 +418,7 @@ Expected: build fails because `FilesController` does not yet accept `IPathSecuri
 
 - [ ] **Step 3: Inject and use path security in `FilesController`**
 
-Modify the using block in `src/backend/Agw.Tasks/Controllers/FilesController.cs`:
+Modify the using block in `src/server/Agw.Tasks/Controllers/FilesController.cs`:
 
 ```csharp
 using Agw.Shared.Contracts.Tasks;
@@ -566,13 +566,13 @@ Expected: all `FilesControllerPathSecurityTests` pass.
 ### Task 4: Exception and Runtime Base Cleanup
 
 **Files:**
-- Move: `src/backend/Agw.Agents/Application/AgentRun/RuntimServiceBase.cs` to `src/backend/Agw.Agents/Application/AgentRun/RuntimeServiceBase.cs`
-- Modify: `src/backend/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`
-- Modify: `src/backend/Agw.Agents/Application/Agentflows/AgentflowRuntimeService.cs`
-- Modify: `src/backend/Agw.A2A/AgwA2ARequestHandler.cs`
-- Modify: `src/backend/Agw.Tools/Impl/Files/LsTool.cs`
-- Modify: `src/backend/Agw.Tools/Impl/Files/ReadFileTool.cs`
-- Modify: `src/backend/Agw.Integrations/Tools/GitHub/GitHubTools.cs`
+- Move: `src/server/Agw.Agents/Application/AgentRun/RuntimServiceBase.cs` to `src/server/Agw.Agents/Application/AgentRun/RuntimeServiceBase.cs`
+- Modify: `src/server/Agw.Agents/Application/AgentRun/AgentRuntimeService.cs`
+- Modify: `src/server/Agw.Agents/Application/Agentflows/AgentflowRuntimeService.cs`
+- Modify: `src/server/Agw.A2A/AgwA2ARequestHandler.cs`
+- Modify: `src/server/Agw.Tools/Impl/Files/LsTool.cs`
+- Modify: `src/server/Agw.Tools/Impl/Files/ReadFileTool.cs`
+- Modify: `src/server/Agw.Integrations/Tools/GitHub/GitHubTools.cs`
 
 - [ ] **Step 1: Rename the base class**
 
@@ -691,7 +691,7 @@ Expected: solution tests pass.
 Run:
 
 ```bash
-rg -n "throw new Exception|Contains\\(\"\\.\\.\"\\)|Task.Run\\(\\(\\) =>" src/backend/Agw.Tasks src/backend/Agw.Agents src/backend/Agw.A2A src/backend/Agw.Tools src/backend/Agw.Integrations -g *.cs
+rg -n "throw new Exception|Contains\\(\"\\.\\.\"\\)|Task.Run\\(\\(\\) =>" src/server/Agw.Tasks src/server/Agw.Agents src/server/Agw.A2A src/server/Agw.Tools src/server/Agw.Integrations -g *.cs
 ```
 
 Expected: no matches for the audit-pointed generic exceptions, no `Contains("..")` path checks in `FilesController`, and no `Task.Run(() =>` wrapper in `FilesController.SearchAsync`.
@@ -701,7 +701,7 @@ Expected: no matches for the audit-pointed generic exceptions, no `Contains(".."
 Run:
 
 ```bash
-git diff -- src/backend/Agw.Tasks src/backend/Agw.Agents src/backend/Agw.A2A src/backend/Agw.Tools src/backend/Agw.Integrations tests/Agw.Tasks.Tests
+git diff -- src/server/Agw.Tasks src/server/Agw.Agents src/server/Agw.A2A src/server/Agw.Tools src/server/Agw.Integrations tests/Agw.Tasks.Tests
 ```
 
 Expected: diff is limited to the files listed in this plan. Existing unrelated local changes remain untouched.
