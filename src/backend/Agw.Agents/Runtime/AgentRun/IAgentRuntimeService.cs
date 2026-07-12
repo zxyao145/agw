@@ -14,7 +14,6 @@ public interface IAgentRuntimeService
     Task<AIAgent?> CreateAiAgentAsync(
         Guid agentId,
         Guid? projectId,
-        Guid? taskId,
         bool resume,
         CancellationToken cancellationToken = default);
 

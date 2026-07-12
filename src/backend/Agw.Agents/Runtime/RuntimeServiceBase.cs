@@ -3,7 +3,7 @@ using Agw.Shared.Extensions;
 
 using Microsoft.Extensions.AI;
 
-namespace Agw.Agents.Runtime.AgentRun;
+namespace Agw.Agents.Runtime;
 
 public class RuntimeServiceBase
 {

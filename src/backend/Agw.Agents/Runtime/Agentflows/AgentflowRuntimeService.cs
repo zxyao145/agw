@@ -421,7 +421,6 @@ public class AgentflowRuntimeService : RuntimeServiceBase, IAgentflowRuntimeServ
                 aiAgent = await _agentRuntimeService.CreateAiAgentAsync(
                     node.RelateId.Value,
                     sessionScope?.ProjectId,
-                    sessionScope?.TaskId,
                     resume: false,
                     cancellationToken: cancellationToken);
             }
