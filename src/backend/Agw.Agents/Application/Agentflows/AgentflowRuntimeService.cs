@@ -18,8 +18,6 @@ using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Application.Agentflows;
 
-public record AgentflowExecutionAgentResult(Guid AgentId, string AgentName, int Order, string Output);
-
 public record AgentflowExecutionResult(
     string TaskId,
     string ContextId,

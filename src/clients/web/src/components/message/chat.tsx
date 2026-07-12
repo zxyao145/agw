@@ -17,7 +17,7 @@ import {
 import {
   createUserTextMessage,
   mergeStreamingMessagesById,
-  toExecutionWsUserInput,
+  toExecutionUserInput,
 } from "@/lib/execution-stream";
 import { UserInput, UserInputRef } from "./user-input";
 import { HumanGateApproval } from "./human-gate-approval";
@@ -186,7 +186,7 @@ export function Chat({
           agentId: targetId,
           agentType,
           stream: true,
-          input: toExecutionWsUserInput(userMessage),
+          input: toExecutionUserInput(userMessage),
         });
       } catch (error) {
         console.error("Execute failed:", error);

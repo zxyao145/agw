@@ -1,5 +1,3 @@
-using Agw.Agents.Application.AgentRun.Dtos;
-using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 
@@ -86,18 +84,4 @@ public sealed record AgentResponse(
             agent.CreateBy,
             agent.UpdateTime,
             agent.UpdateBy);
-}
-
-public record AiAgentResponse(Guid Id, string Name, string SystemPrompt, string ProviderName, string ModelName, string Endpoint, string ApiKey)
-{
-    public static AiAgentResponse FromDomain(AgentDefinitionDto agent) =>
-        new(agent.Id, agent.Name, agent.SystemPrompt, agent.ProviderName, agent.ModelName, agent.Endpoint, agent.ApiKey);
-}
-
-public record AgentExecuteResponse(
-    string ContextId,
-    IReadOnlyList<AgwMessage> Messages)
-{
-    public static AgentExecuteResponse FromDomain(AgentExecutionResult result) =>
-        new(result.ContextId, result.Messages);
 }

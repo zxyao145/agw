@@ -3,13 +3,13 @@
 import * as React from "react";
 import { Check, ShieldCheck, X } from "lucide-react";
 
-import type { HumanGateRequest } from "@/api/execution-ws";
+import type { PendingHumanGate } from "@/api/execution-hub";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 
 type HumanGateApprovalProps = {
-  request: HumanGateRequest;
+  request: PendingHumanGate;
   onApprove: (responseText?: string) => void;
   onReject: (responseText?: string) => void;
 };

@@ -1,4 +1,4 @@
-using Agw.Api.Controllers;
+using Agw.Agents.Hubs;
 
 namespace Agw.Agents.Tests;
 
@@ -11,15 +11,12 @@ public class ExecutionStructureTests
         {
             ["ActiveTurn"] = "Agw.Agents.Application.Execution",
             ["AgwUserInputUtil"] = "Agw.Agents.Application.Execution",
-            ["CommandDispatcher"] = "Agw.Agents.Application.Execution",
-            ["ExecutionCommandContext"] = "Agw.Agents.Application.Execution",
-            ["ExecutionConnectionState"] = "Agw.Agents.Application.Execution",
-            ["ExecCommandStrategy"] = "Agw.Agents.Application.Execution.CommandStrategies",
-            ["IExecutionCommandStrategy"] = "Agw.Agents.Application.Execution.CommandStrategies",
-            ["InterruptCommandStrategy"] = "Agw.Agents.Application.Execution.CommandStrategies",
-            ["SettingCommandStrategy"] = "Agw.Agents.Application.Execution.CommandStrategies",
+            ["ExecutionRuntimeStarter"] = "Agw.Agents.Application.Execution",
+            ["ExecutionTurnRunner"] = "Agw.Agents.Application.Execution",
+            ["HubExecutionConnectionRegistry"] = "Agw.Agents.Application.Execution",
+            ["RuntimeExecSessionBase"] = "Agw.Agents.Application.Execution",
         };
-        var assembly = typeof(AgentExecutionsController).Assembly;
+        var assembly = typeof(ExecutionHub).Assembly;
 
         foreach (var (typeName, expectedNamespace) in executionTypes)
         {

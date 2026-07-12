@@ -135,11 +135,6 @@ public class A2ADependencyInjectionTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<AgwMessage>>([]);
 
-        public Task<AgentExecutionResult?> ExecuteByNameAsync(
-            AgentExecuteByNameRequest request,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<AgentExecutionResult?>(null);
-
         public Task<AgentExecutionResult?> ExecuteByIdAsync(
             AgentExecuteByIdRequest request,
             CancellationToken cancellationToken = default)

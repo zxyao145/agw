@@ -1,14 +1,8 @@
-import {
-  buildHumanResponseCommandPayload,
-  executeWithWebSocket,
-  getHumanGateRequest,
-  type HumanGateRequest,
-  type HumanGateResponse,
-  type ExecutionWsUserInput,
-  type ExecutionWsRequest,
-} from "@/api/execution-ws";
 import { Ulid } from "id128";
 import { MessageContentType, type AiMessage, type AiMessageContent } from "@/types";
+
+export type ExecutionUserInput = Pick<AiMessage, "messageId" | "author" | "contents">;
+
 const default_user = "$agw";
 const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
 
@@ -44,7 +38,7 @@ export function createUserTextMessage(input: string): AiMessage {
   };
 }
 
-export function toExecutionWsUserInput(message: AiMessage): ExecutionWsUserInput {
+export function toExecutionUserInput(message: AiMessage): ExecutionUserInput {
   return {
     messageId: message.messageId,
     author: message.author,
@@ -91,44 +85,4 @@ export function mergeStreamingMessagesById(messages: AiMessage[]): AiMessage[] {
     (accumulator, message) => mergeStreamingMessage(accumulator, message),
     [],
   );
-}
-
-export function parseExecutionWsMessage(payload: string): AiMessage | null {
-  try {
-    return JSON.parse(payload) as AiMessage;
-  } catch (error) {
-    console.error("Parse error:", error);
-    return null;
-  }
-}
-
-export async function executeWithWebSocketStream(params: {
-  id: string;
-  request: ExecutionWsRequest;
-  onMessage: (message: AiMessage) => void;
-  onHumanGateRequest?: (
-    request: HumanGateRequest,
-  ) => HumanGateResponse | Promise<HumanGateResponse>;
-  skipUserMessages?: boolean;
-}): Promise<void> {
-  const { id, request, onMessage, onHumanGateRequest, skipUserMessages = true } = params;
-
-  await executeWithWebSocket(id, request, (payload, controls) => {
-    const message = parseExecutionWsMessage(payload);
-    if (!message) return;
-    const humanGateRequest = getHumanGateRequest(message);
-    if (humanGateRequest && onHumanGateRequest) {
-      void Promise.resolve(onHumanGateRequest(humanGateRequest))
-        .then((response) => {
-          controls.sendCommand(buildHumanResponseCommandPayload(response));
-        })
-        .catch((error) => {
-          console.error("HumanGate approval failed:", error);
-        });
-      return;
-    }
-
-    if (skipUserMessages && message.role === "user") return;
-    onMessage(message);
-  });
 }

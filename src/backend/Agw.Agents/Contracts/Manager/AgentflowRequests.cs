@@ -1,5 +1,3 @@
-using Agw.Agents.Application.Agentflows;
-using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 
 namespace Agw.Agents.Contracts.Manager;
@@ -35,21 +33,3 @@ public record AgentflowUpdateRequest(
     bool Enable,
     IReadOnlyList<AgentflowNodeRequest> Nodes,
     IReadOnlyList<AgentflowEdgeRequest> Edges);
-
-public record AgentflowExecuteRequest(string Input);
-
-public record AgentflowExecutionAgentResultResponse(Guid AgentId, string AgentName, int Order, string Output)
-{
-    public static AgentflowExecutionAgentResultResponse FromDomain(AgentflowExecutionAgentResult result) =>
-        new(result.AgentId, result.AgentName, result.Order, result.Output);
-}
-
-public record AgentflowExecuteResponse(
-    string ContextId,
-    IReadOnlyList<AgwMessage> Messages)
-{
-    public static AgentflowExecuteResponse FromDomain(AgentflowExecutionResult result) =>
-        new(
-            result.ContextId,
-            result.Messages);
-}

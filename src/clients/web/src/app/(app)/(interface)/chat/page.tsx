@@ -58,7 +58,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   createUserTextMessage,
   mergeStreamingMessagesById,
-  toExecutionWsUserInput,
+  toExecutionUserInput,
 } from "@/lib/execution-stream";
 import type { AiMessage } from "@/types";
 import { chatSettingsStorage } from "./settings-storage";
@@ -1063,7 +1063,7 @@ export default function ChatPage() {
           agentId: selectedTarget.id,
           agentType: selectedTarget.type === "agent" ? 0 : 1,
           stream: true,
-          input: toExecutionWsUserInput(userMessage),
+          input: toExecutionUserInput(userMessage),
         });
         refreshConversationList();
       } catch (error) {
