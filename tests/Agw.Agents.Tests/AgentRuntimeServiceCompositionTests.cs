@@ -1,4 +1,6 @@
-using Agw.Agents.Runtime.AgentRun;
+using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
@@ -138,19 +140,17 @@ public class AgentRuntimeServiceCompositionTests
     public void ExecutionContextIdResolver_WhenContextMissing_GeneratesContextIdInsteadOfUsingTaskId()
     {
         var resolverType = typeof(AgentRuntimeService).Assembly.GetType(
-            "Agw.Agents.Runtime.AgentRun.ExecutionContextIdResolver");
+            "Agw.Agents.Execution.Agents.ExecutionContextIdResolver");
         Assert.NotNull(resolverType);
         var method = resolverType!.GetMethod(
             "Resolve",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(method);
 
-        var taskId = Guid.NewGuid().Normalize();
-        var generatedContextId = Assert.IsType<string>(method!.Invoke(null, [null, taskId]));
-        var suppliedContextId = Assert.IsType<string>(method.Invoke(null, [" context-1 ", taskId]));
+        var generatedContextId = Assert.IsType<string>(method!.Invoke(null, [null]));
+        var suppliedContextId = Assert.IsType<string>(method.Invoke(null, [" context-1 "]));
 
         Assert.False(string.IsNullOrWhiteSpace(generatedContextId));
-        Assert.NotEqual(taskId, generatedContextId);
         Assert.Equal("context-1", suppliedContextId);
     }
 

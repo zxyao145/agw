@@ -70,7 +70,7 @@ npm run prebuild
 - `shared/src/rn/routes.ts`：页面 route 定义。
 - `shared/src/rn/config/config-store.ts`：通过 `expo-secure-store` 保存本地配置。
 
-本地配置中的 API key 存在 Expo SecureStore 中。旧安装里的文件配置路径不再读取，也不做迁移；用户需要重新导入或保存配置。
+本地配置使用版本 2，保存 Server 根 URL、API major version 和 Bearer API Token。Token 存在 Expo SecureStore 中，请求通过 `Authorization: Bearer agw_...` 发送。旧安装里的文件配置路径不再读取，也不做迁移；用户需要重新导入或保存配置。
 
 ## 测试
 

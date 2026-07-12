@@ -1,7 +1,7 @@
 using A2A;
 
-using Agw.Agents.Runtime.AgentRun.Dtos;
-using Agw.Agents.Runtime.Contracts;
+using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Agents.Execution.Contracts;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
@@ -95,7 +95,7 @@ public sealed class A2AAgentExecutionBridge(IServiceScopeFactory serviceScopeFac
         };
 
         await using var session = await agentRuntimeService
-            .CreateSessionAsync(agent.Id, taskProjection, settings, cancellationToken)
+            .CreateRuntimeAsync(agent.Id, taskProjection, settings, cancellationToken)
             .ConfigureAwait(false);
         if (session is null)
         {

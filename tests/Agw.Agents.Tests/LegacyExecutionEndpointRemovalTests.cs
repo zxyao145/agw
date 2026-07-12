@@ -1,4 +1,4 @@
-using Agw.Agents.Runtime.Hubs;
+using Agw.Agents.Execution.Transport.SignalR;
 
 using Microsoft.AspNetCore.Mvc.Routing;
 

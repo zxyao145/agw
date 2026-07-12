@@ -4,9 +4,10 @@ using System.Runtime.CompilerServices;
 using A2A;
 
 using Agw.A2A.Extensions;
-using Agw.Agents.Runtime.AgentRun;
-using Agw.Agents.Runtime.AgentRun.Dtos;
-using Agw.Agents.Runtime.Contracts;
+using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
@@ -112,15 +113,15 @@ public class A2ADependencyInjectionTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<AIAgent?>(null);
 
-        public Task<AgentExecSession?> CreateSessionAsync(
+        public Task<AgentRuntime?> CreateRuntimeAsync(
             Guid agentId,
             AgwTaskProjection task,
             SettingCommand settings,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<AgentExecSession?>(null);
+            Task.FromResult<AgentRuntime?>(null);
 
         public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-            AgentExecSession session,
+            AgentRuntime session,
             AgwUserInput input,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
@@ -129,7 +130,7 @@ public class A2ADependencyInjectionTests
         }
 
         public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-            AgentExecSession session,
+            AgentRuntime session,
             AgwUserInput input,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<AgwMessage>>([]);

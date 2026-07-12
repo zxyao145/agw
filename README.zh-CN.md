@@ -39,7 +39,7 @@ dotnet run --project src/backend/Agw.Host
 在另一个终端启动前端：
 
 ```bash
-cd src/frontend/web
+cd src/clients/web
 pnpm install
 pnpm dev
 ```
@@ -96,7 +96,7 @@ pnpm dev
 
 ## 架构
 
-Agw 采用基于领域的模块化单体架构。`src/backend/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；而前端则位于 `src/frontend/web` 目录下。
+Agw 采用基于领域的模块化单体架构。`src/backend/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；Web 客户端位于 `src/clients/web`，Expo 移动客户端位于 `src/clients/mobile`。
 
 典型的后端流程如下：
 
@@ -197,7 +197,9 @@ flowchart BT
 
 - [Development Guide](docs/1.Development.md): 本地环境配置、构建/测试/代码检查/格式化命令，以及 Git 钩子配置。
 - [Architecture](docs/2.Architecture.md): 系统概述、后端/前端架构以及核心领域概念。
-- [Module Organization](docs/3.%20Module%20Organization.md): 模块内部采用的分层原则。
+- [Module Organization](docs/3.Module%20Organization.md): 模块内部采用的分层原则。
+- [Agent 执行流程](docs/ws-flow.md)：SignalR 命令、turn 消息、runtime 生命周期与断线行为。
+- [Execution 子系统](src/backend/Agw.Agents/Execution/README.md)：目录职责、数据流与 command 扩展方式。
 
 ## 配置
 

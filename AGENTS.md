@@ -27,27 +27,27 @@ Agw.Tools/           # Tool discovery, metadata, and AI tool factory/registry
 
 Notes:
 
-- `Agw.slnx` includes all backend projects above plus `tests/Agw.A2A.Tests`, `tests/Agw.Agents.Tests`, `tests/Agw.Files.Tests`, `tests/Agw.Shared.Tests`, `tests/Agw.Tasks.Tests`, and `tests/Agw.Skills.Tests`.
+- `Agw.slnx` includes all backend projects above plus the A2A, Agents, Files, Setup, Shared, Skills, Tasks, and Tools test projects.
 - `tests/Agw.Jobs.Tests` exists in the repo but is not currently included in `Agw.slnx`.
 
-### Frontend (`src/frontend/web/`)
+### Web Client (`src/clients/web/`)
 
 ```text
 src/app/(app)/
   (agents)/agents            # Agent CRUD
   (agents)/agentflows        # Workflow editor
-  (agents)/mcp-tool-servers  # MCP server management
-  (agents)/skills            # Skill archive management
-  (external-agents)/claude-code
   (interface)/chat
+  (jobs)/jobs
   (overview)/dashboard
   (overview)/traces
   (providers)/models
   (providers)/providers
   (providers)/model-providers
   (tasks)/projects
-  (tasks)/jobs
+  (tools)/mcp-tool-servers
   integrations
+  settings
+  skills
 src/api/                     # Typed fetch helpers and generated OpenAPI types
 src/components/              # Shared UI components
 src/hooks/                   # Shared React hooks
@@ -58,21 +58,22 @@ src/types/                   # Shared frontend types
 ### Other Top-Level Paths
 
 - `docs/` contains project documentation.
-- `scripts/` contains helper scripts such as API smoke tests.
+- `src/clients/mobile/` contains the Expo mobile client.
 - `tests/` contains xUnit projects.
 - Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated artifacts.
 
 ## Key Runtime Entry Points
 
 - `src/backend/Agw.Host/Program.cs`: bootstraps logging, OpenTelemetry, DI modules, OpenAPI/Scalar, websockets, static files, and DB seeding.
-- `src/backend/Agw.Agents/Runtime/AgentRun/AgentRuntimeService.cs`: builds runtime agents from persisted agent, provider, skill, and tool configuration.
-- `src/backend/Agw.Agents/Runtime/Agentflows/AgentflowRuntimeService.cs`: executes multi-agent workflows for the supported orchestration patterns.
+- `src/backend/Agw.Agents/Execution/README.md`: documents the SignalR command boundary, reusable runtimes, turn lifecycle, message flow, and command extension model.
+- `src/backend/Agw.Agents/Execution/Agents/AgentRuntimeService.cs`: builds runtime agents from persisted agent, provider, skill, and tool configuration.
+- `src/backend/Agw.Agents/Execution/Agentflows/AgentflowRuntimeService.cs`: executes multi-agent workflows for the supported orchestration patterns.
 - `src/backend/Agw.Jobs/HostedService/JobHostedService.cs`: in-memory scheduler backed by persistent job state and execution logs.
 - `src/backend/Agw.Integrations/Controllers/OauthController.cs`: OAuth authorization start/callback endpoints for integration connections.
 - `src/backend/Agw.Integrations/Tools/GitHub/GitHubTools.cs`: integration-backed GitHub tool implementations exposed to runtime agents.
 - `src/backend/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and manages extracted skill content under `wwwroot/skills/`.
 - `src/backend/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations and exposes them as runtime AI tools.
-- `src/backend/Agw.Tasks/Application/ProjectTaskAppService.cs`: coordinates project task persistence, chat history, and task lifecycle operations.
+- `src/backend/Agw.Tasks/Application/TaskAppService.cs`: resolves logical tasks from project contexts and task records for execution and history queries.
 - `src/backend/Agw.Shared/Exceptions/ErrorCodes.cs`: central catalog for backend `AgwException` error codes and HTTP status mapping.
 
 ## Important Domain Concepts
@@ -82,7 +83,7 @@ src/types/                   # Shared frontend types
 - `McpToolServer`: MCP server configuration for stdio, HTTP, or SSE transport.
 - `LlmModel`, `Provider`, `ModelProvider`, `ProviderAuthConfig`: provider/model catalog and authentication setup.
 - `Skill`: uploaded skill archive with validated `SKILL.md` metadata plus agent-skill relations.
-- `Project`, `ProjectTask`, `TaskRecord`: project-scoped execution, persisted task state, and chat history.
+- `Project`, `ProjectContext`, `TaskRecord`, `TaskProjection`: workspace configuration, conversation grouping, persisted execution records, and the logical task view reconstructed from those records.
 - `Job`, `JobLog`: scheduled background execution and per-run logging.
 - `AppDefinition`, `AppInstance`, `OAuthAuthorizationToken`: integration catalog, authorized app connections, and OAuth authorization state/token persistence.
 
@@ -118,7 +119,7 @@ dotnet ef database update \
 
 ### Frontend
 
-Run from `src/frontend/web`:
+Run from `src/clients/web`:
 
 ```bash
 pnpm install
@@ -136,8 +137,8 @@ Notes:
 
 - The Next.js dev server runs on `http://localhost:3000` by default.
 - Linting and formatting use `oxlint` and `oxfmt`, not ESLint/Prettier.
-- `src/frontend/web/next.config.ts` rewrites `/api/*` and `/openapi/*` to `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015`.
-- Regenerate `src/frontend/web/src/api/openapi.d.ts` after backend contract changes.
+- `src/clients/web/next.config.ts` rewrites `/api/*` and `/openapi/*` to `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015` unless static export mode is enabled.
+- Regenerate `src/clients/web/src/api/openapi.d.ts` after backend contract changes.
 
 ### Tests
 
@@ -183,24 +184,24 @@ Primary backend settings live in `src/backend/Agw.Host/appsettings.json`:
 
 Guidance:
 
-- Supported database providers are `sqlite` and `postgres`.
+- Supported database providers are `sqlite`, `postgres`, and `mysql`.
 - Keep secrets out of `appsettings*.json` and frontend env files; prefer environment-variable overrides.
 - Register new backend services in the relevant module `DependencyInjection.cs` and wire the module into `src/backend/Agw.Host/Program.cs`.
 
 ## Frontend Integration Notes
 
-- Prefer the typed helpers in `src/frontend/web/src/api/client.ts` for REST calls.
-- `src/frontend/web/src/api/client.ts` unwraps Bens.Results response envelopes before data reaches pages; update that central helper when the backend result wrapper contract changes.
-- Use `src/frontend/web/src/api/task-client.ts` for project-task history/session helpers.
-- Use `src/frontend/web/src/api/execution-ws.ts` for task execution websocket flows.
-- Use `src/frontend/web/src/api/files.ts` for backend file-management endpoints used by the UI.
+- Prefer the typed helpers in `src/clients/web/src/api/client.ts` for REST calls.
+- `src/clients/web/src/api/client.ts` unwraps Bens.Results response envelopes before data reaches pages; update that central helper when the backend result wrapper contract changes.
+- Use `src/clients/web/src/api/task-client.ts` for project task/context history helpers.
+- Use `src/clients/web/src/api/execution-hub.ts` for SignalR execution flows.
+- Use `src/clients/web/src/api/files.ts` for backend file-management endpoints used by the UI.
 - Keep route-specific UI inside the matching `src/app/(app)/...` segment and shared UI in `src/components/`.
 
 ## A2A Status
 
 - The `Agw.A2A` module is present in the codebase, including `src/backend/Agw.A2A/Extensions/A2ARoutesBuilderExtensions.cs`.
-- In the current host wiring, `.AddA2A(...)` and `app.MapAgwA2A(...)` are commented out in `src/backend/Agw.Host/Program.cs`.
-- Do not assume A2A endpoints are live until that wiring is re-enabled.
+- `src/backend/Agw.Host/Program.cs` currently registers A2A with `.AddA2A(...)` and maps it with `app.MapAgwA2A(...)`.
+- A2A routes require authentication at the host boundary.
 
 ## Coding Conventions
 
@@ -209,6 +210,7 @@ Guidance:
 - Keep request/response DTOs in `Contracts/` folders inside the owning module when adding new API contracts.
 - Controllers should end with `Controller`.
 - Prefer async methods for I/O and constructor injection for dependencies.
+- Do not use C# primary constructors. Declare explicit constructors and backing fields/properties; dependency-injected services must use explicit constructor injection.
 - For intentional backend errors, throw `Agw.Shared.Exceptions.AgwException` with an `ErrorCodes` entry. Do not add new `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, or protocol-specific exceptions in `src/backend`.
 - Add reusable errors to `src/backend/Agw.Shared/Exceptions/ErrorCodes.cs`. `ErrorCode.Code` is 7 digits: first 3 digits match the HTTP status code, and the last 4 digits increment within that status group, for example `400_0001` or `404_0003`. Reuse existing codes before adding new ones and do not renumber existing codes.
 - Use `new AgwException(ErrorCodes.SomeCode)` when the catalog message is sufficient. Use `new AgwException(ErrorCodes.SomeCode, $"...")` when the message needs runtime context such as an id, file path, provider name, or validation value.

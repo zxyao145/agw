@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The repo root is `D:\source\repos\agw-gwt\main`. Backend projects live in `src/backend/`: `Agw.Host` is the ASP.NET Core entry point, `Agw.Setup` contains setup Razor/UI services, `Agw.Infrastructure` owns EF Core persistence, and domain modules such as `Agw.Agents`, `Agw.Tasks`, `Agw.Skills`, `Agw.Tools`, and `Agw.Integrations` keep feature code isolated. Frontend code is in `src/frontend/web`, with app routes under `src/app/(app)`, typed API helpers in `src/api`, and shared UI/utilities in `src/components`, `src/hooks`, and `src/lib`. Tests are in `tests/Agw.*.Tests`. Use `docs/` for documentation and `scripts/` for helper automation. Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated.
+Backend projects live in the repository-relative `src/backend/` directory: `Agw.Host` is the ASP.NET Core entry point, `Agw.Setup` contains setup Razor/UI services, `Agw.Infrastructure` owns EF Core persistence, and domain modules such as `Agw.Agents`, `Agw.Tasks`, `Agw.Skills`, `Agw.Tools`, and `Agw.Integrations` keep feature code isolated. Web client code is in `src/clients/web`, with app routes under `src/app/(app)`, typed API helpers in `src/api`, and shared UI/utilities in `src/components`, `src/hooks`, and `src/lib`. Tests are in `tests/Agw.*.Tests`; project documentation is under `docs/`. Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated.
 
 ## Build, Test, and Development Commands
 
@@ -14,7 +14,7 @@ Run backend commands from the repo root:
 - `dotnet run --project src/backend/Agw.Host` starts the API host, usually on `http://localhost:5015`.
 - `dotnet format` applies .NET formatting.
 
-For frontend work, run commands in `src/frontend/web`: `pnpm install`, `pnpm dev`, `pnpm build`, `pnpm lint`, and `pnpm format:check`.
+For Web client work, run commands in `src/clients/web`: `pnpm install`, `pnpm dev`, `pnpm build`, `pnpm lint`, and `pnpm format:check`.
 
 ## Coding Style & Naming Conventions
 
