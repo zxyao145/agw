@@ -209,6 +209,7 @@ Guidance:
 - Use the `I` prefix for interfaces.
 - Keep request/response DTOs in `Contracts/` folders inside the owning module when adding new API contracts.
 - Controllers should end with `Controller`.
+- Do not use path parameters in API routes unless specifically justified; pass identifiers and filters via query parameters or request body instead.
 - Prefer async methods for I/O and constructor injection for dependencies.
 - Do not use C# primary constructors. Declare explicit constructors and backing fields/properties; dependency-injected services must use explicit constructor injection.
 - For intentional backend errors, throw `Agw.Shared.Exceptions.AgwException` with an `ErrorCodes` entry. Do not add new `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, or protocol-specific exceptions in `src/server`.

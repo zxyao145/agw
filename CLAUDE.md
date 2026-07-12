@@ -167,6 +167,7 @@ Read `docs/rules.md` before backend coding. Its rules are mandatory.
 
 - Non-WebSocket JSON API endpoints in `Agw.Agents`, `Agw.Providers`, `Agw.Tasks`, `Agw.Jobs`, `Agw.Integrations`, `Agw.Skills`, and `Agw.Tools` must return the Bens.Results envelope via `AgwApiResult`/`ApiResult` helpers or configured boundary mapping.
 - Do not return raw `Ok(...)`, `BadRequest(...)`, `NotFound(...)`, `NoContent()`, or other bare MVC responses from those JSON controllers. WebSocket handlers, OAuth redirects, A2A protocol endpoints, and static file endpoints may keep protocol-specific formats.
+- Do not use path parameters in API routes unless specifically justified; pass identifiers and filters via query parameters or request body instead.
 - Expected backend application failures should throw `AgwException` with an `ErrorCodes` entry from `src/server/Agw.Shared/Exceptions/`.
 - When adding an error code, use a 7-digit code whose first 3 digits match the HTTP status and whose last 4 digits increment within that group, e.g. `400_0001`, `404_0001`, `500_0001`.
 - Keep `ErrorCodes` messages stable and reusable. Pass runtime-specific details as the override message when needed.
