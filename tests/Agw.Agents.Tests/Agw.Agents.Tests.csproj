@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -14,5 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/server/Agw.Agents/Agw.Agents.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

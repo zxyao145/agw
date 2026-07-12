@@ -66,6 +66,9 @@ public partial class AgentRuntimeService
             .Use(
                 runFunc: _observabilityMiddleware.LogRunMiddleware,
                 runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware)
+            .Use(
+                runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
+                runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware)
             .Build();
         return aiAgent;
     }

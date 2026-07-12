@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Agw.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Agw.Infrastructure.Migrations
 {
     [DbContext(typeof(AgwDbContext))]
-    partial class LlmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260712143949_SyncDb")]
+    partial class SyncDb
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -492,7 +495,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("agentflow_node", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowTrace", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowNodeExecutionTrace", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -565,15 +568,15 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("task_id");
 
                     b.HasKey("Id")
-                        .HasName("pk_agentflow_trace");
+                        .HasName("pk_agentflow_node_execution_trace");
 
                     b.HasIndex("AgentflowId", "NodeId", "StartTimeUtc")
-                        .HasDatabaseName("ix_agentflow_trace_agentflow_id_node_id_start_time_utc");
+                        .HasDatabaseName("ix_agentflow_node_execution_trace_agentflow_id_node_id_start_time_utc");
 
                     b.HasIndex("ProjectId", "ContextId", "TaskId", "StartTimeUtc")
-                        .HasDatabaseName("ix_agentflow_trace_project_id_context_id_task_id_start_time_utc");
+                        .HasDatabaseName("ix_agentflow_node_execution_trace_project_id_context_id_task_id_start_time_utc");
 
-                    b.ToTable("agentflow_trace", (string)null);
+                    b.ToTable("agentflow_node_execution_trace", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.McpServer", b =>

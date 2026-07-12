@@ -8,8 +8,8 @@ RUN NEXT_OUTPUT_MODE=export pnpm build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS server-build
 WORKDIR /src
-COPY src/backend ./src/backend
-RUN dotnet publish src/backend/Agw.Host/Agw.Host.csproj -c Release -o /out --self-contained false
+COPY src/server ./src/server
+RUN dotnet publish src/server/Agw.Host/Agw.Host.csproj -c Release -o /out --self-contained false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app

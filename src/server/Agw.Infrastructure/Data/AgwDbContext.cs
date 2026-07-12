@@ -50,6 +50,7 @@ public class AgwDbContext : DbContext
     public DbSet<Agentflow> Agentflows => Set<Agentflow>();
     public DbSet<AgentflowNode> AgentflowNodes => Set<AgentflowNode>();
     public DbSet<AgentflowEdge> AgentflowEdges => Set<AgentflowEdge>();
+    public DbSet<AgentflowTrace> AgentflowNodeExecutionTraces => Set<AgentflowTrace>();
 
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectContext> ProjectContexts => Set<ProjectContext>();
@@ -264,6 +265,21 @@ public class AgwDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<AgentflowTrace>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.NodeId).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.NodeName).HasMaxLength(200);
+            entity.Property(e => e.NodeKind).HasConversion<string>().HasMaxLength(32);
+            entity.Property(e => e.AgentName).HasMaxLength(200);
+            entity.Property(e => e.Input).IsRequired().HasColumnType("text");
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.Error).HasColumnType("text");
+            entity.HasIndex(e => new { e.ProjectId, e.ContextId, e.TaskId, e.StartTimeUtc });
+            entity.HasIndex(e => new { e.AgentflowId, e.NodeId, e.StartTimeUtc });
+        });
+
         modelBuilder.Entity<Project>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -281,6 +297,24 @@ public class AgwDbContext : DbContext
             entity.Property(e => e.JobId);
             entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue("Untitled");
+            entity.ComplexProperty(e => e.Usage, usage =>
+            {
+                usage.Property(e => e.InputTokenCount)
+                    .HasColumnName("usage_input_token_count")
+                    .HasDefaultValue(0L);
+                usage.Property(e => e.OutputTokenCount)
+                    .HasColumnName("usage_output_token_count")
+                    .HasDefaultValue(0L);
+                usage.Property(e => e.TotalTokenCount)
+                    .HasColumnName("usage_total_token_count")
+                    .HasDefaultValue(0L);
+                usage.Property(e => e.CachedInputTokenCount)
+                    .HasColumnName("usage_cached_input_token_count")
+                    .HasDefaultValue(0L);
+                usage.Property(e => e.ReasoningTokenCount)
+                    .HasColumnName("usage_reasoning_token_count")
+                    .HasDefaultValue(0L);
+            });
 
             entity.HasIndex(e => new { e.ProjectId, e.ContextId }).IsUnique();
             entity.HasIndex(e => e.ProjectId);

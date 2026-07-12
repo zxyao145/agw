@@ -1,4 +1,5 @@
 using Agw.Shared.AgwMsgVm;
+using Agw.Shared.Data.Entities.Tasks;
 
 namespace Agw.Shared.Contracts.Tasks;
 
@@ -32,4 +33,5 @@ public record ProjectContextResponse(
     DateTime CreateTime,
     DateTime? UpdateTime,
     string? ErrorMessage,
+    ProjectContextUsage Usage,
     IReadOnlyList<AgwMessage>? Messages);

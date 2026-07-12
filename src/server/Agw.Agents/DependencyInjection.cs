@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Runtimes;
@@ -18,6 +19,7 @@ public static class DependencyInjection
     {
         services.AddScoped<AgentflowDomainService>();
         services.AddScoped<AgentflowAppService>();
+        services.AddScoped<AgentflowTraceAppService>();
         services.AddScoped<AgentflowRuntimeService>();
         services.AddScoped<IAgentflowRuntimeService, AgentflowRuntimeService>();
         services.AddScoped<McpToolServerDomainService>();
@@ -36,6 +38,11 @@ public static class DependencyInjection
         services.AddSingleton<RuntimeTurnContextAccessor>();
         services.AddSingleton<IRuntimeTurnContextAccessor, RuntimeTurnContextAccessor>();
         services.AddSingleton<ObservabilityMiddleware>();
+        services.AddSingleton<UsageTrackingMiddleware>();
+        services.AddSingleton<IAgentflowNodeExecutionTraceStore, AgentflowNodeExecutionTraceStore>();
+        services.AddSingleton<AgentflowNodeExecutionTraceCollector>();
+        services.AddHostedService(serviceProvider =>
+            serviceProvider.GetRequiredService<AgentflowNodeExecutionTraceCollector>());
 
         return services;
     }

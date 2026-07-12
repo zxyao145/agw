@@ -41,7 +41,7 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
 
         while (directory is not null)
         {
-            var hostDirectory = Path.Combine(directory.FullName, "src", "backend", "Agw.Host");
+            var hostDirectory = Path.Combine(directory.FullName, "src", "server", "Agw.Host");
             if (File.Exists(Path.Combine(hostDirectory, "appsettings.json")))
             {
                 return hostDirectory;

@@ -32,7 +32,7 @@ public class ApiResultMetadataTests
     public void ControllerActions_ReturningAgwApiResultDeclareProducesApiResult()
     {
         var repoRoot = FindRepositoryRoot();
-        var backendRoot = Path.Combine(repoRoot, "src", "backend");
+        var backendRoot = Path.Combine(repoRoot, "src", "server");
         var actionPattern = CreateHttpActionPattern();
         var violations = new List<string>();
 
@@ -74,7 +74,7 @@ public class ApiResultMetadataTests
     public void ControllerActions_DeclareProducesMetadata()
     {
         var repoRoot = FindRepositoryRoot();
-        var backendRoot = Path.Combine(repoRoot, "src", "backend");
+        var backendRoot = Path.Combine(repoRoot, "src", "server");
         var actionPattern = CreateHttpActionPattern();
         var violations = new List<string>();
 

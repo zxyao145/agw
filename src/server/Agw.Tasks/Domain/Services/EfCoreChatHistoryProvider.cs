@@ -76,6 +76,21 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         _state.SaveState(session, state);
     }
 
+    public bool TryGetProjectContext(AgentSession session, out Guid projectId, out string contextId)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!session.StateBag.TryGetValue(_state.StateKey, out State? state, _jsonSerializerOptions) || state == null)
+        {
+            projectId = Guid.Empty;
+            contextId = string.Empty;
+            return false;
+        }
+
+        projectId = state.ProjectId;
+        contextId = state.ContextId;
+        return true;
+    }
+
     /// <summary>
     /// 获取历史消息
     /// </summary>

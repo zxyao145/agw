@@ -20,10 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/backend/Agw.Integrations/Agw.Integrations.csproj" />
-    <ProjectReference Include="../../src/backend/Agw.Infrastructure/Agw.Infrastructure.csproj" />
-    <ProjectReference Include="../../src/backend/Agw.Jobs/Agw.Jobs.csproj" />
-    <ProjectReference Include="../../src/backend/Agw.Providers/Agw.Providers.csproj" />
-    <ProjectReference Include="../../src/backend/Agw.Tasks/Agw.Tasks.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Integrations/Agw.Integrations.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Jobs/Agw.Jobs.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Providers/Agw.Providers.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Tasks/Agw.Tasks.csproj" />
   </ItemGroup>
 </Project>

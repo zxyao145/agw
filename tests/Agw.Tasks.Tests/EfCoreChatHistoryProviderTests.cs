@@ -19,6 +19,47 @@ namespace Agw.Tasks.Tests;
 public class EfCoreChatHistoryProviderTests
 {
     [Fact]
+    public void TryGetProjectContext_InitializedSession_ReturnsProjectAndContext()
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => null!);
+        using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance);
+        var session = new FakeAgentSession();
+        var projectId = Guid.NewGuid();
+
+        provider.InitializeSessionState(session, " context-1 ", projectId);
+
+        var found = provider.TryGetProjectContext(session, out var resolvedProjectId, out var contextId);
+
+        Assert.True(found);
+        Assert.Equal(projectId, resolvedProjectId);
+        Assert.Equal("context-1", contextId);
+    }
+
+    [Fact]
+    public void TryGetProjectContext_UninitializedSession_ReturnsFalse()
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => null!);
+        using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance);
+
+        var found = provider.TryGetProjectContext(
+            new FakeAgentSession(),
+            out var projectId,
+            out var contextId);
+
+        Assert.False(found);
+        Assert.Equal(Guid.Empty, projectId);
+        Assert.Equal(string.Empty, contextId);
+    }
+
+    [Fact]
     public async Task ProvideChatHistoryAsync_WhenContextHasMultipleTasks_ReturnsAllContextMessages()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

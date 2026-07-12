@@ -64,7 +64,7 @@ public class AgwExceptionTests
     public void BackendSource_OnlyThrowsAgwExceptionWithThrowNew()
     {
         var repoRoot = FindRepositoryRoot();
-        var backendRoot = Path.Combine(repoRoot, "src", "backend");
+        var backendRoot = Path.Combine(repoRoot, "src", "server");
         var throwPattern = new Regex(@"throw\s+new\s+(?<type>[A-Za-z0-9_.]+)", RegexOptions.Compiled);
         var violations = Directory
             .EnumerateFiles(backendRoot, "*.cs", SearchOption.AllDirectories)

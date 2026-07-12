@@ -3,6 +3,7 @@ using System.Text.Json;
 
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Utils;
+using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
@@ -101,8 +102,18 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         }
 
         var resolvedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
+        var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId);
+        var resolvedTaskId = taskId ?? Guid.NewGuid();
+        var executionTraceContext = new AgentflowExecutionTraceContext(
+            resolvedProjectId,
+            resolvedContextId,
+            resolvedTaskId);
         var sessionScope = CreateSessionScope(resolvedProjectId, contextId, taskId);
-        var workflow = await CreateAiWorkflow(agentflow, cancellationToken, sessionScope);
+        var workflow = await CreateAiWorkflow(
+            agentflow,
+            cancellationToken,
+            sessionScope,
+            executionTraceContext);
         if (workflow == null)
         {
             yield break;
@@ -135,59 +146,91 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                     break;
 
                 case RequestInfoEvent requestInfo:
-                    var externalRequest = requestInfo.Request;
-                    _logger.LogInformation(
-                        "External request {RequestId} from port {PortId}",
-                        externalRequest.RequestId,
-                        externalRequest.PortInfo.PortId);
-
-                    if (!humanGateNodes.TryGetValue(externalRequest.PortInfo.PortId, out var humanGateNode))
                     {
+                        var externalRequest = requestInfo.Request;
+                        _logger.LogInformation(
+                            "External request {RequestId} from port {PortId}",
+                            externalRequest.RequestId,
+                            externalRequest.PortInfo.PortId);
+
+                        if (!humanGateNodes.TryGetValue(externalRequest.PortInfo.PortId, out var humanGateNode))
+                        {
+                            break;
+                        }
+
+                        var approvalRequest = CreateHumanGateApprovalRequest(externalRequest, humanGateNode);
+                        using var humanGateActivity = AgentflowNodeExecutionActivity.StartHumanGate(
+                            executionTraceContext,
+                            agentflow.Id,
+                            humanGateNode.NodeId,
+                            humanGateNode.Name,
+                            approvalRequest.Messages);
+
+                        if (humanGateApprovalHandler == null)
+                        {
+                            humanGateActivity.Fail("HumanGateApprovalHandlerUnavailable: No approval handler was provided.");
+                            _logger.LogWarning(
+                                "HumanGate {PortId} requested approval but no approval handler was provided.",
+                                externalRequest.PortInfo.PortId);
+                            await run.CancelRunAsync();
+                            yield return CreateHumanGateUnavailableMessage(humanGateNode);
+                            yield return TurnMessageFactory.CreateFinished();
+                            yield break;
+                        }
+
+                        var approvalTask = humanGateApprovalHandler
+                            .WaitForApprovalAsync(approvalRequest, cancellationToken)
+                            .AsTask();
+
+                        yield return CreateHumanGateApprovalRequestMessage(approvalRequest);
+
+                        HumanGateApprovalDecision decision;
+                        try
+                        {
+                            decision = await approvalTask;
+                        }
+                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                        {
+                            humanGateActivity.Cancel();
+                            await run.CancelRunAsync();
+                            yield break;
+                        }
+                        catch (Exception exception)
+                        {
+                            humanGateActivity.Fail(exception);
+                            throw;
+                        }
+
+                        if (!decision.Approved)
+                        {
+                            humanGateActivity.Reject();
+                            await run.CancelRunAsync();
+                            yield return CreateHumanGateRejectedMessage(approvalRequest);
+                            yield return TurnMessageFactory.CreateFinished();
+                            yield break;
+                        }
+
+                        var responseMessages = CreateHumanGateResponseMessages(
+                            approvalRequest.Messages,
+                            decision);
+                        try
+                        {
+                            await run.SendResponseAsync(externalRequest.CreateResponse(responseMessages));
+                            humanGateActivity.Complete();
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            humanGateActivity.Cancel();
+                            throw;
+                        }
+                        catch (Exception exception)
+                        {
+                            humanGateActivity.Fail(exception);
+                            throw;
+                        }
+
                         break;
                     }
-
-                    if (humanGateApprovalHandler == null)
-                    {
-                        _logger.LogWarning(
-                            "HumanGate {PortId} requested approval but no approval handler was provided.",
-                            externalRequest.PortInfo.PortId);
-                        await run.CancelRunAsync();
-                        yield return CreateHumanGateUnavailableMessage(humanGateNode);
-                        yield return TurnMessageFactory.CreateFinished();
-                        yield break;
-                    }
-
-                    var approvalRequest = CreateHumanGateApprovalRequest(externalRequest, humanGateNode);
-                    var approvalTask = humanGateApprovalHandler
-                        .WaitForApprovalAsync(approvalRequest, cancellationToken)
-                        .AsTask();
-
-                    yield return CreateHumanGateApprovalRequestMessage(approvalRequest);
-
-                    HumanGateApprovalDecision decision;
-                    try
-                    {
-                        decision = await approvalTask;
-                    }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                    {
-                        await run.CancelRunAsync();
-                        yield break;
-                    }
-
-                    if (!decision.Approved)
-                    {
-                        await run.CancelRunAsync();
-                        yield return CreateHumanGateRejectedMessage(approvalRequest);
-                        yield return TurnMessageFactory.CreateFinished();
-                        yield break;
-                    }
-
-                    var responseMessages = CreateHumanGateResponseMessages(
-                        approvalRequest.Messages,
-                        decision);
-                    await run.SendResponseAsync(externalRequest.CreateResponse(responseMessages));
-                    break;
 
                 case AgentResponseUpdateEvent updateEvt when updateEvt.Data is AgentResponseUpdate update:
                     _logger.LogInformation("AgentResponseUpdateEvent {ExecutorId}, {Data}", updateEvt.ExecutorId,
@@ -304,7 +347,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private async Task<Workflow?> CreateAiWorkflow(
         Guid agentflowId,
         CancellationToken cancellationToken,
-        AgentflowAgentSessionScope? sessionScope)
+        AgentflowAgentSessionScope? sessionScope,
+        AgentflowExecutionTraceContext? executionTraceContext = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
@@ -312,7 +356,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             return null;
         }
 
-        return await CreateAiWorkflow(agentflow, cancellationToken, sessionScope);
+        return await CreateAiWorkflow(agentflow, cancellationToken, sessionScope, executionTraceContext);
     }
 
     private async Task<AgentflowExecutionResult?> ExecuteAsync(
@@ -334,8 +378,17 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             taskId = Guid.NewGuid();
         }
 
+        var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId);
+        var executionTraceContext = new AgentflowExecutionTraceContext(
+            projectId,
+            resolvedContextId,
+            taskId.Value);
         var sessionScope = CreateSessionScope(projectId, contextId, taskId);
-        var workflow = await CreateAiWorkflow(agentflow, cancellationToken, sessionScope);
+        var workflow = await CreateAiWorkflow(
+            agentflow,
+            cancellationToken,
+            sessionScope,
+            executionTraceContext);
         if (workflow == null)
         {
             return null;
@@ -359,7 +412,6 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         }
 
         var taskIdString = taskId.Value.Normalize();
-        var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId);
 
         return new AgentflowExecutionResult(taskIdString, resolvedContextId, outputs);
     }
@@ -403,7 +455,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private async Task<Workflow?> CreateAiWorkflow(
         Agentflow agentflow,
         CancellationToken cancellationToken,
-        AgentflowAgentSessionScope? sessionScope = null)
+        AgentflowAgentSessionScope? sessionScope = null,
+        AgentflowExecutionTraceContext? executionTraceContext = null)
     {
         var agentflowNodes = await _agentflowNodeRepository.ListAsync(x => x.AgentflowId == agentflow.Id);
         var agentflowEdges = await _agentflowEdgeRepository.ListAsync(x => x.AgentflowId == agentflow.Id);
@@ -428,7 +481,11 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             }
             else if (node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
             {
-                var flowNode = await CreateAiWorkflow(node.RelateId.Value, cancellationToken, sessionScope);
+                var flowNode = await CreateAiWorkflow(
+                    node.RelateId.Value,
+                    cancellationToken,
+                    sessionScope,
+                    executionTraceContext);
                 aiAgent = flowNode?.AsAIAgent();
             }
             else
@@ -449,7 +506,13 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             return null;
         }
 
-        return _workflowCompiler.Compile(agentflow, orderedNodes, agentflowEdges, nodeIdToAgent, sessionScope);
+        return _workflowCompiler.Compile(
+            agentflow,
+            orderedNodes,
+            agentflowEdges,
+            nodeIdToAgent,
+            sessionScope,
+            executionTraceContext);
     }
 
     private static HumanGateApprovalRequest CreateHumanGateApprovalRequest(

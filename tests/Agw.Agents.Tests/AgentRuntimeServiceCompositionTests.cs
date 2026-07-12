@@ -297,7 +297,8 @@ public class AgentRuntimeServiceCompositionTests
             fileSystemResolver: null!,
             sessionStateStore: null!,
             logger: NullLogger<AgentRuntimeService>.Instance,
-            observabilityMiddleware: new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance));
+            observabilityMiddleware: new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance),
+            usageTrackingMiddleware: null!);
     }
 
     private static CodexAIAgentOptions? BuildCodexAIAgentOptions(

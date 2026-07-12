@@ -132,11 +132,21 @@ public class ProjectContextAppServiceTests
         var firstTaskId = Guid.NewGuid();
         var secondTaskId = Guid.NewGuid();
         var otherTaskId = Guid.NewGuid();
+        var expectedUsage = new ProjectContextUsage
+        {
+            InputTokenCount = 10,
+            OutputTokenCount = 20,
+            TotalTokenCount = 30,
+            CachedInputTokenCount = 4,
+            ReasoningTokenCount = 5
+        };
         await using (var seedContext = new AgwDbContext(options))
         {
+            var requestedContext = CreateContext(contextId, projectId, "context-1", "Trip", jobId);
+            requestedContext.Usage = expectedUsage;
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
             seedContext.ProjectContexts.AddRange(
-                CreateContext(contextId, projectId, "context-1", "Trip", jobId),
+                requestedContext,
                 CreateContext(otherContextId, projectId, "context-2", "Other"));
             seedContext.TaskRecords.AddRange(
                 CreateRecord(contextId, firstTaskId, 0, "Tokyo trip", TaskExecutionStatus.Succeeded),
@@ -153,6 +163,7 @@ public class ProjectContextAppServiceTests
         Assert.NotNull(context);
         Assert.Equal(jobId, context.JobId);
         Assert.Equal(2, context.ExecutionCount);
+        Assert.Equal(expectedUsage, context.Usage);
         Assert.Equal(["Tokyo trip", "Hotels"], context.Messages!.Select(GetMessageText));
     }
 
@@ -308,8 +319,17 @@ public class ProjectContextAppServiceTests
         var contextId = Guid.NewGuid();
         await using (var seedContext = new AgwDbContext(options))
         {
+            var projectContext = CreateContext(contextId, projectId, "context-1", "Trip");
+            projectContext.Usage = new ProjectContextUsage
+            {
+                InputTokenCount = 10,
+                OutputTokenCount = 20,
+                TotalTokenCount = 30,
+                CachedInputTokenCount = 4,
+                ReasoningTokenCount = 5
+            };
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
+            seedContext.ProjectContexts.Add(projectContext);
             seedContext.TaskRecords.Add(CreateRecord(
                 contextId,
                 Guid.NewGuid(),
@@ -337,6 +357,8 @@ public class ProjectContextAppServiceTests
         Assert.Equal(ApplicationResultType.Success, result.Type);
         Assert.Empty(await dbContext.TaskRecords.ToListAsync(cancellationToken));
         Assert.Empty(await dbContext.TaskSessionBindings.ToListAsync(cancellationToken));
+        var clearedContext = await dbContext.ProjectContexts.SingleAsync(cancellationToken);
+        Assert.Equal(new ProjectContextUsage(), clearedContext.Usage);
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>

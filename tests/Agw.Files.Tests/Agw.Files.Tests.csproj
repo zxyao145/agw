@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/backend/Agw.Files/Agw.Files.csproj" />
-    <ProjectReference Include="../../src/backend/Agw.Shared/Agw.Shared.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Files/Agw.Files.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Shared/Agw.Shared.csproj" />
   </ItemGroup>
 </Project>

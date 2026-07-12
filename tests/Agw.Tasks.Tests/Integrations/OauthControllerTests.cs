@@ -43,7 +43,7 @@ public class OauthControllerTests
         var controller = scope.CreateIntegrationsController(httpContext =>
         {
             httpContext.Request.Scheme = "https";
-            httpContext.Request.Host = new HostString("backend.example.com");
+            httpContext.Request.Host = new HostString("server.example.com");
             httpContext.Request.Headers.Origin = "https://frontend.example.com";
         });
 

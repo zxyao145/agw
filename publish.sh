@@ -10,7 +10,7 @@ RIDS="${RIDS:-win-x64 win-arm64 osx-x64 osx-arm64 linux-x64 linux-arm64}"
 DOCKER_PLATFORMS="${DOCKER_PLATFORMS:-linux/amd64,linux/arm64}"
 DOCKER_PUSH="${DOCKER_PUSH:-false}"
 WEB_DIR="$ROOT_DIR/src/frontend/web"
-HOST_PROJECT="$ROOT_DIR/src/backend/Agw.Host/Agw.Host.csproj"
+HOST_PROJECT="$ROOT_DIR/src/server/Agw.Host/Agw.Host.csproj"
 
 case "$PUBLISH_MODE" in
   docker|portable|all) ;;

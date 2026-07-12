@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 
 using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
@@ -16,6 +17,7 @@ using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Tests;
 
+[Collection(AgentflowExecutionTraceTestCollection.Name)]
 public class AgentflowWorkflowCompilerTests
 {
     private readonly AgentflowWorkflowCompiler _compiler = new();
@@ -75,6 +77,66 @@ public class AgentflowWorkflowCompilerTests
             Equals(activity.GetTagItem("gen_ai.agent.name"), "persisted-agent"));
         Assert.DoesNotContain(activities.SelectMany(activity => activity.TagObjects), tag =>
             tag.Key is "executor.input" or "executor.output" or "message.content");
+    }
+
+    [Fact]
+    public async Task Compile_AgentNode_PersistsNodeExecutionInputAndPersistentAgentName()
+    {
+        var store = new CapturingExecutionTraceStore();
+        using var collector = new AgentflowNodeExecutionTraceCollector(
+            store,
+            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
+        await collector.StartAsync(TestContext.Current.CancellationToken);
+
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "persisted-flow" };
+        var agentId = Guid.NewGuid();
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                NodeId = "agent-node",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Node Alias",
+                RelateId = agentId,
+                Instructions = "Node instruction",
+            },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var execution = new AgentflowExecutionTraceContext(Guid.NewGuid(), "context-1", Guid.NewGuid());
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            [Edge("agent-output", "agent-node", "output")],
+            new Dictionary<string, AIAgent>
+            {
+                ["agent-node"] = CreateAgent("agent-id", "persisted-agent"),
+            },
+            sessionScope: null,
+            execution);
+
+        Assert.NotNull(workflow);
+        await using (var run = await InProcessExecution.RunStreamingAsync(
+                         workflow!,
+                         new List<ChatMessage> { new(ChatRole.User, "workflow input") },
+                         cancellationToken: TestContext.Current.CancellationToken))
+        {
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
+            {
+            }
+        }
+
+        var trace = await store.WaitForTraceAsync();
+        Assert.Equal(agentflow.Id, trace.AgentflowId);
+        Assert.Equal("agent-node", trace.NodeId);
+        Assert.Equal("Node Alias", trace.NodeName);
+        Assert.Equal(agentId, trace.AgentId);
+        Assert.Equal("persisted-agent", trace.AgentName);
+        Assert.Contains("workflow input", trace.Input, StringComparison.Ordinal);
+        Assert.Contains("Node instruction", trace.Input, StringComparison.Ordinal);
+        Assert.Equal(AgentflowNodeExecutionStatus.Succeeded, trace.Status);
+
+        await collector.StopAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -176,6 +238,161 @@ public class AgentflowWorkflowCompilerTests
 
         Assert.NotNull(workflow);
         Assert.Contains("group", WorkflowVisualizer.ToMermaidString(workflow!));
+    }
+
+    [Fact]
+    public async Task Compile_ConcurrentBlock_PersistsOnlyParticipantAgents()
+    {
+        var store = new CollectingExecutionTraceStore();
+        using var collector = new AgentflowNodeExecutionTraceCollector(
+            store,
+            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
+        await collector.StartAsync(TestContext.Current.CancellationToken);
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "parallel-trace-flow" };
+        var agentAId = Guid.NewGuid();
+        var agentBId = Guid.NewGuid();
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                NodeId = "agent-a",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent A Node",
+                RelateId = agentAId,
+            },
+            new AgentflowNode
+            {
+                NodeId = "agent-b",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent B Node",
+                RelateId = agentBId,
+            },
+            new AgentflowNode
+            {
+                NodeId = "parallel",
+                Kind = AgentflowNodeKind.ConcurrentBlock,
+                Name = "Parallel Block",
+                ConfigJson = """{"participantNodeIds":["agent-a","agent-b"]}""",
+            },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            [Edge("parallel-output", "parallel", "output")],
+            new Dictionary<string, AIAgent>
+            {
+                ["agent-a"] = CreateAgent("agent-a", "persisted-agent-a"),
+                ["agent-b"] = CreateAgent("agent-b", "persisted-agent-b"),
+            },
+            sessionScope: null,
+            new AgentflowExecutionTraceContext(Guid.NewGuid(), "context-parallel", Guid.NewGuid()));
+
+        Assert.NotNull(workflow);
+        await using (var run = await InProcessExecution.RunStreamingAsync(
+                         workflow!,
+                         new List<ChatMessage> { new(ChatRole.User, "parallel input") },
+                         cancellationToken: TestContext.Current.CancellationToken))
+        {
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
+            {
+            }
+        }
+
+        var traces = await store.WaitForCountAsync(2);
+        Assert.Equal(2, traces.Count);
+        Assert.Contains(traces, trace =>
+            trace.NodeId == "agent-a" &&
+            trace.AgentId == agentAId &&
+            trace.AgentName == "persisted-agent-a");
+        Assert.Contains(traces, trace =>
+            trace.NodeId == "agent-b" &&
+            trace.AgentId == agentBId &&
+            trace.AgentName == "persisted-agent-b");
+        Assert.DoesNotContain(traces, trace => trace.NodeId == "parallel");
+
+        await collector.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Compile_BlockWithWorkflowAsAgentParticipant_PersistsOnlyNestedAgent()
+    {
+        var store = new CollectingExecutionTraceStore();
+        using var collector = new AgentflowNodeExecutionTraceCollector(
+            store,
+            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
+        await collector.StartAsync(TestContext.Current.CancellationToken);
+        var execution = new AgentflowExecutionTraceContext(Guid.NewGuid(), "context-nested", Guid.NewGuid());
+        var nestedAgentId = Guid.NewGuid();
+        var nestedAgentflow = new Agentflow { Id = Guid.NewGuid(), Name = "nested-flow" };
+        var nestedWorkflow = _compiler.Compile(
+            nestedAgentflow,
+            [
+                new AgentflowNode
+                {
+                    NodeId = "nested-agent",
+                    Kind = AgentflowNodeKind.Agent,
+                    Name = "Nested Agent Node",
+                    RelateId = nestedAgentId,
+                },
+                new AgentflowNode { NodeId = "nested-output", Kind = AgentflowNodeKind.Output },
+            ],
+            [Edge("nested-output", "nested-agent", "nested-output")],
+            new Dictionary<string, AIAgent>
+            {
+                ["nested-agent"] = CreateAgent("nested-agent", "persisted-nested-agent"),
+            },
+            sessionScope: null,
+            execution);
+        Assert.NotNull(nestedWorkflow);
+
+        var outerAgentflow = new Agentflow { Id = Guid.NewGuid(), Name = "outer-flow" };
+        var outerWorkflow = _compiler.Compile(
+            outerAgentflow,
+            [
+                new AgentflowNode
+                {
+                    NodeId = "nested-participant",
+                    Kind = AgentflowNodeKind.WorkflowAsAgent,
+                    Name = "Nested Workflow Node",
+                    RelateId = nestedAgentflow.Id,
+                },
+                new AgentflowNode
+                {
+                    NodeId = "parallel",
+                    Kind = AgentflowNodeKind.ConcurrentBlock,
+                    Name = "Parallel Block",
+                    ConfigJson = """{"participantNodeIds":["nested-participant"]}""",
+                },
+                new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+            ],
+            [Edge("parallel-output", "parallel", "output")],
+            new Dictionary<string, AIAgent>
+            {
+                ["nested-participant"] = nestedWorkflow!.AsAIAgent(),
+            },
+            sessionScope: null,
+            execution);
+        Assert.NotNull(outerWorkflow);
+
+        await using (var run = await InProcessExecution.RunStreamingAsync(
+                         outerWorkflow!,
+                         new List<ChatMessage> { new(ChatRole.User, "nested input") },
+                         cancellationToken: TestContext.Current.CancellationToken))
+        {
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
+            {
+            }
+        }
+
+        await collector.StopAsync(TestContext.Current.CancellationToken);
+        var trace = Assert.Single(store.GetTraces());
+        Assert.Equal(nestedAgentflow.Id, trace.AgentflowId);
+        Assert.Equal("nested-agent", trace.NodeId);
+        Assert.Equal(nestedAgentId, trace.AgentId);
+        Assert.Equal("persisted-nested-agent", trace.AgentName);
     }
 
     [Fact]
@@ -565,6 +782,71 @@ public class AgentflowWorkflowCompilerTests
             Guid projectId)
         {
             Calls.Add((projectId, contextId));
+        }
+
+        public bool TryGetProjectContext(AgentSession session, out Guid projectId, out string contextId)
+        {
+            var call = Calls.LastOrDefault();
+            projectId = call.ProjectId;
+            contextId = call.ContextId ?? string.Empty;
+            return Calls.Count > 0;
+        }
+    }
+
+    private sealed class CapturingExecutionTraceStore : IAgentflowNodeExecutionTraceStore
+    {
+        private readonly TaskCompletionSource<AgentflowTrace> _trace =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task SaveAsync(AgentflowTrace trace, CancellationToken cancellationToken)
+        {
+            _trace.TrySetResult(trace);
+            return Task.CompletedTask;
+        }
+
+        public Task<AgentflowTrace> WaitForTraceAsync() =>
+            _trace.Task.WaitAsync(TestContext.Current.CancellationToken);
+    }
+
+    private sealed class CollectingExecutionTraceStore : IAgentflowNodeExecutionTraceStore
+    {
+        private readonly object _lock = new();
+        private readonly List<AgentflowTrace> _traces = [];
+
+        public Task SaveAsync(AgentflowTrace trace, CancellationToken cancellationToken)
+        {
+            lock (_lock)
+            {
+                _traces.Add(trace);
+                Monitor.PulseAll(_lock);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<AgentflowTrace>> WaitForCountAsync(int count)
+        {
+            return Task.Run<IReadOnlyList<AgentflowTrace>>(() =>
+            {
+                var timeout = DateTime.UtcNow.AddSeconds(2);
+                lock (_lock)
+                {
+                    while (_traces.Count < count && DateTime.UtcNow < timeout)
+                    {
+                        Monitor.Wait(_lock, TimeSpan.FromMilliseconds(20));
+                    }
+
+                    return _traces.ToList();
+                }
+            }, TestContext.Current.CancellationToken);
+        }
+
+        public IReadOnlyList<AgentflowTrace> GetTraces()
+        {
+            lock (_lock)
+            {
+                return _traces.ToList();
+            }
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Agw.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Agw.Infrastructure.Migrations
 {
     [DbContext(typeof(AgwDbContext))]
-    partial class LlmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260712153543_ModifyTableName")]
+    partial class ModifyTableName
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -492,7 +495,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("agentflow_node", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowTrace", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowNodeExecutionTrace", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()

@@ -2,6 +2,7 @@ using Agw.Domain.Services;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Tasks.Application;
 using Agw.Tasks.Domain.Services;
+using Agw.Tasks.Infrastructure;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
@@ -31,6 +32,7 @@ public static class DependencyInjection
         {
             return sp.GetRequiredService<EfCoreChatHistoryProvider>();
         });
+        services.AddSingleton<IProjectContextUsageRecorder, ProjectContextUsageRecorder>();
 
         return services;
     }

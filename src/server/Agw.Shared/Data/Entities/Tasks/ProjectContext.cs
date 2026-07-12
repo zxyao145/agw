@@ -15,6 +15,8 @@ public class ProjectContext : BaseEntity
     public string ContextId { get; set; } = string.Empty;
 
     public string Title { get; set; } = "Untitled";
+
+    public ProjectContextUsage Usage { get; set; } = new();
     
     
     [JsonIgnore]

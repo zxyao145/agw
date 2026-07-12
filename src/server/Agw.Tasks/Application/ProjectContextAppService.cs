@@ -94,6 +94,8 @@ public class ProjectContextAppService
 
         await _taskSessionBindingService.DeleteByContextAsync(context.Id);
 
+        context.Usage = new ProjectContextUsage();
+        _contextRepository.Update(context);
         await _unitOfWork.SaveChangesAsync();
         return ApplicationResult.Success();
     }
@@ -185,6 +187,7 @@ public class ProjectContextAppService
             context.CreateTime,
             context.UpdateTime,
             latestTask?.ErrorMessage,
+            context.Usage,
             messages);
     }
 

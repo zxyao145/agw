@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Agents.Execution.Agentflows.Observability;
 
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -53,7 +54,13 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyList<AgentflowEdge> edges,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent)
     {
-        return Compile(agentflow, orderedNodes, edges, nodeIdToAgent, sessionScope: null);
+        return Compile(
+            agentflow,
+            orderedNodes,
+            edges,
+            nodeIdToAgent,
+            sessionScope: null,
+            executionTraceContext: null);
     }
 
     internal Workflow? Compile(
@@ -61,7 +68,8 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyList<AgentflowNode> orderedNodes,
         IReadOnlyList<AgentflowEdge> edges,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
-        AgentflowAgentSessionScope? sessionScope)
+        AgentflowAgentSessionScope? sessionScope,
+        AgentflowExecutionTraceContext? executionTraceContext = null)
     {
         if (orderedNodes.Count == 0)
         {
@@ -83,7 +91,13 @@ public sealed class AgentflowWorkflowCompiler
                 continue;
             }
 
-            var binding = CreateBinding(node, orderedNodes, nodeIdToAgent, sessionScope);
+            var binding = CreateBinding(
+                agentflow.Id,
+                node,
+                orderedNodes,
+                nodeIdToAgent,
+                sessionScope,
+                executionTraceContext);
             if (binding != null)
             {
                 bindings[node.NodeId] = binding;
@@ -133,16 +147,37 @@ public sealed class AgentflowWorkflowCompiler
     }
 
     private static ExecutorBinding? CreateBinding(
+        Guid agentflowId,
         AgentflowNode node,
         IReadOnlyList<AgentflowNode> orderedNodes,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
-        AgentflowAgentSessionScope? sessionScope)
+        AgentflowAgentSessionScope? sessionScope,
+        AgentflowExecutionTraceContext? executionTraceContext)
     {
         return node.Kind switch
         {
-            AgentflowNodeKind.Agent or AgentflowNodeKind.WorkflowAsAgent =>
+            AgentflowNodeKind.Agent =>
                 nodeIdToAgent.TryGetValue(node.NodeId, out var agent)
-                    ? new NodeScopedAgent(agent, node.NodeId, node.Name, node.Instructions, sessionScope)
+                    ? new NodeScopedAgent(
+                            agent,
+                            node.NodeId,
+                            node.Name,
+                            node.Instructions,
+                            sessionScope,
+                            executionTraceContext,
+                            agentflowId,
+                            node.NodeId,
+                            node.RelateId)
+                        .BindAsExecutor(AgentHostOptions)
+                    : null,
+            AgentflowNodeKind.WorkflowAsAgent =>
+                nodeIdToAgent.TryGetValue(node.NodeId, out var workflowAgent)
+                    ? new NodeScopedAgent(
+                            workflowAgent,
+                            node.NodeId,
+                            node.Name,
+                            node.Instructions,
+                            sessionScope)
                         .BindAsExecutor(AgentHostOptions)
                     : null,
             AgentflowNodeKind.PromptAdapter =>
@@ -154,9 +189,21 @@ public sealed class AgentflowWorkflowCompiler
             AgentflowNodeKind.HumanGate =>
                 RequestPort.Create<List<ChatMessage>, List<ChatMessage>>(node.NodeId).BindAsExecutor(),
             AgentflowNodeKind.ConcurrentBlock =>
-                CreateConcurrentBlockBinding(node, orderedNodes, nodeIdToAgent, sessionScope),
+                CreateConcurrentBlockBinding(
+                    agentflowId,
+                    node,
+                    orderedNodes,
+                    nodeIdToAgent,
+                    sessionScope,
+                    executionTraceContext),
             AgentflowNodeKind.HandoffBlock or AgentflowNodeKind.GroupChatBlock or AgentflowNodeKind.MagenticBlock =>
-                CreateBlockAgent(node, orderedNodes, nodeIdToAgent, sessionScope) is { } blockAgent
+                CreateBlockAgent(
+                    agentflowId,
+                    node,
+                    orderedNodes,
+                    nodeIdToAgent,
+                    sessionScope,
+                    executionTraceContext) is { } blockAgent
                     ? new NodeScopedAgent(blockAgent, node.NodeId, node.Name, node.Instructions, sessionScope)
                         .BindAsExecutor(AgentHostOptions)
                     : null,
@@ -167,10 +214,12 @@ public sealed class AgentflowWorkflowCompiler
     }
 
     private static ExecutorBinding? CreateConcurrentBlockBinding(
+        Guid agentflowId,
         AgentflowNode blockNode,
         IReadOnlyList<AgentflowNode> orderedNodes,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
-        AgentflowAgentSessionScope? sessionScope)
+        AgentflowAgentSessionScope? sessionScope,
+        AgentflowExecutionTraceContext? executionTraceContext)
     {
         var nodeMap = orderedNodes.ToDictionary(node => node.NodeId, StringComparer.Ordinal);
         var config = ReadBlockConfig(blockNode);
@@ -192,12 +241,13 @@ public sealed class AgentflowWorkflowCompiler
                 return null;
             }
 
-            participants.Add(new NodeScopedAgent(
+            participants.Add(CreateBlockParticipantAgent(
                 participantAgent,
+                agentflowId,
                 $"{blockNode.NodeId}.{participantNode.NodeId}",
-                participantNode.Name,
-                participantNode.Instructions,
-                sessionScope));
+                participantNode,
+                sessionScope,
+                executionTraceContext));
         }
 
         Func<List<ChatMessage>, CancellationToken, ValueTask<List<ChatMessage>>> runConcurrentAsync =
@@ -218,10 +268,12 @@ public sealed class AgentflowWorkflowCompiler
     }
 
     private static AIAgent? CreateBlockAgent(
+        Guid agentflowId,
         AgentflowNode blockNode,
         IReadOnlyList<AgentflowNode> orderedNodes,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
-        AgentflowAgentSessionScope? sessionScope)
+        AgentflowAgentSessionScope? sessionScope,
+        AgentflowExecutionTraceContext? executionTraceContext)
     {
         var nodeMap = orderedNodes.ToDictionary(node => node.NodeId, StringComparer.Ordinal);
         var config = ReadBlockConfig(blockNode);
@@ -243,12 +295,13 @@ public sealed class AgentflowWorkflowCompiler
                 return null;
             }
 
-            participants.Add((participantId, new NodeScopedAgent(
+            participants.Add((participantId, CreateBlockParticipantAgent(
                 participantAgent,
+                agentflowId,
                 $"{blockNode.NodeId}.{participantNode.NodeId}",
-                participantNode.Name,
-                participantNode.Instructions,
-                sessionScope)));
+                participantNode,
+                sessionScope,
+                executionTraceContext)));
         }
 
         return blockNode.Kind switch
@@ -258,7 +311,15 @@ public sealed class AgentflowWorkflowCompiler
             AgentflowNodeKind.GroupChatBlock =>
                 BuildGroupChatBlock(blockNode, participants.Select(x => x.Agent).ToList(), config),
             AgentflowNodeKind.MagenticBlock =>
-                BuildMagenticBlock(blockNode, participants, config, nodeMap, nodeIdToAgent, sessionScope),
+                BuildMagenticBlock(
+                    agentflowId,
+                    blockNode,
+                    participants,
+                    config,
+                    nodeMap,
+                    nodeIdToAgent,
+                    sessionScope,
+                    executionTraceContext),
             _ => null,
         };
     }
@@ -315,12 +376,14 @@ public sealed class AgentflowWorkflowCompiler
     }
 
     private static AIAgent? BuildMagenticBlock(
+        Guid agentflowId,
         AgentflowNode blockNode,
         IReadOnlyList<(string NodeId, AIAgent Agent)> participants,
         AgentflowBlockConfig config,
         IReadOnlyDictionary<string, AgentflowNode> nodeMap,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
-        AgentflowAgentSessionScope? sessionScope)
+        AgentflowAgentSessionScope? sessionScope,
+        AgentflowExecutionTraceContext? executionTraceContext)
     {
         var managerNodeId = participants[0].NodeId;
         var manager = participants[0].Agent;
@@ -333,12 +396,13 @@ public sealed class AgentflowWorkflowCompiler
                 return null;
             }
 
-            manager = new NodeScopedAgent(
+            manager = CreateBlockParticipantAgent(
                 managerAgent,
+                agentflowId,
                 $"{blockNode.NodeId}.{managerNode.NodeId}.manager",
-                managerNode.Name,
-                managerNode.Instructions,
-                sessionScope);
+                managerNode,
+                sessionScope,
+                executionTraceContext);
             managerNodeId = config.ManagerNodeId;
             team = participants
                 .Where(participant => !string.Equals(participant.NodeId, managerNodeId, StringComparison.Ordinal))
@@ -369,6 +433,27 @@ public sealed class AgentflowWorkflowCompiler
         }
 
         return CreateBlockWorkflowAgent(builder.Build(), blockNode);
+    }
+
+    private static AIAgent CreateBlockParticipantAgent(
+        AIAgent participantAgent,
+        Guid agentflowId,
+        string runtimeNodeId,
+        AgentflowNode participantNode,
+        AgentflowAgentSessionScope? sessionScope,
+        AgentflowExecutionTraceContext? executionTraceContext)
+    {
+        var shouldTrace = participantNode.Kind == AgentflowNodeKind.Agent;
+        return new NodeScopedAgent(
+            participantAgent,
+            runtimeNodeId,
+            participantNode.Name,
+            participantNode.Instructions,
+            sessionScope,
+            shouldTrace ? executionTraceContext : null,
+            shouldTrace ? agentflowId : null,
+            shouldTrace ? participantNode.NodeId : null,
+            shouldTrace ? participantNode.RelateId : null);
     }
 
     private static AIAgent CreateBlockWorkflowAgent(Workflow workflow, AgentflowNode blockNode)
@@ -720,16 +805,41 @@ public sealed class AgentflowWorkflowCompiler
 
     private sealed class InputPassthroughSession : AgentSession;
 
-    private sealed class NodeScopedAgent(
-        AIAgent innerAgent,
-        string nodeId,
-        string? name,
-        string? instructions,
-        AgentflowAgentSessionScope? sessionScope) : DelegatingAIAgent(innerAgent)
+    private sealed class NodeScopedAgent : DelegatingAIAgent
     {
-        protected override string? IdCore => nodeId;
+        private readonly string _nodeId;
+        private readonly string? _name;
+        private readonly string? _instructions;
+        private readonly AgentflowAgentSessionScope? _sessionScope;
+        private readonly AgentflowExecutionTraceContext? _executionTraceContext;
+        private readonly Guid? _agentflowId;
+        private readonly string? _traceNodeId;
+        private readonly Guid? _agentId;
 
-        public override string? Name => name ?? InnerAgent.Name ?? nodeId;
+        public NodeScopedAgent(
+            AIAgent innerAgent,
+            string nodeId,
+            string? name,
+            string? instructions,
+            AgentflowAgentSessionScope? sessionScope,
+            AgentflowExecutionTraceContext? executionTraceContext = null,
+            Guid? agentflowId = null,
+            string? traceNodeId = null,
+            Guid? agentId = null) : base(innerAgent)
+        {
+            _nodeId = nodeId;
+            _name = name;
+            _instructions = instructions;
+            _sessionScope = sessionScope;
+            _executionTraceContext = executionTraceContext;
+            _agentflowId = agentflowId;
+            _traceNodeId = traceNodeId;
+            _agentId = agentId;
+        }
+
+        protected override string? IdCore => _nodeId;
+
+        public override string? Name => _name ?? InnerAgent.Name ?? _nodeId;
 
         public override string? Description => InnerAgent.Description;
 
@@ -740,9 +850,26 @@ public sealed class AgentflowWorkflowCompiler
             CancellationToken cancellationToken = default)
         {
             var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
-            return await InnerAgent
-                .RunAsync(ApplyInstructions(messages.ToList(), instructions), scopedSession, options, cancellationToken)
-                .ConfigureAwait(false);
+            var input = ApplyInstructions(messages.ToList(), _instructions);
+            using var activity = StartExecutionActivity(input);
+            try
+            {
+                var response = await InnerAgent
+                    .RunAsync(input, scopedSession, options, cancellationToken)
+                    .ConfigureAwait(false);
+                activity?.Complete();
+                return response;
+            }
+            catch (OperationCanceledException)
+            {
+                activity?.Cancel();
+                throw;
+            }
+            catch (Exception exception)
+            {
+                activity?.Fail(exception);
+                throw;
+            }
         }
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
@@ -753,13 +880,55 @@ public sealed class AgentflowWorkflowCompiler
             CancellationToken cancellationToken = default)
         {
             var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
-            await foreach (var update in InnerAgent
-                               .RunStreamingAsync(ApplyInstructions(messages.ToList(), instructions), scopedSession,
-                                   options, cancellationToken)
-                               .ConfigureAwait(false))
+            var input = ApplyInstructions(messages.ToList(), _instructions);
+            using var activity = StartExecutionActivity(input);
+            await using var enumerator = InnerAgent
+                .RunStreamingAsync(input, scopedSession, options, cancellationToken)
+                .GetAsyncEnumerator(cancellationToken);
+            while (true)
             {
+                AgentResponseUpdate update;
+                try
+                {
+                    if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                    {
+                        break;
+                    }
+
+                    update = enumerator.Current;
+                }
+                catch (OperationCanceledException)
+                {
+                    activity?.Cancel();
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    activity?.Fail(exception);
+                    throw;
+                }
+
                 yield return update;
             }
+
+            activity?.Complete();
+        }
+
+        private AgentflowNodeExecutionActivityScope? StartExecutionActivity(IReadOnlyList<ChatMessage> input)
+        {
+            if (_executionTraceContext == null || !_agentflowId.HasValue || string.IsNullOrWhiteSpace(_traceNodeId))
+            {
+                return null;
+            }
+
+            return AgentflowNodeExecutionActivity.StartAgent(
+                _executionTraceContext,
+                _agentflowId.Value,
+                _traceNodeId,
+                _name,
+                _agentId,
+                InnerAgent.Name,
+                input);
         }
 
         private async Task<AgentSession?> PrepareSessionAsync(
@@ -768,7 +937,7 @@ public sealed class AgentflowWorkflowCompiler
         {
             AgentSession scopedSession =
                 session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
-            sessionScope?.Initialize(scopedSession);
+            _sessionScope?.Initialize(scopedSession);
             return scopedSession;
         }
     }
