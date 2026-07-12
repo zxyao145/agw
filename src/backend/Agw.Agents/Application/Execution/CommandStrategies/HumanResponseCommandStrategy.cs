@@ -11,13 +11,13 @@ internal sealed class HumanResponseCommandStrategy : IExecutionCommandStrategy
         ExecutionCommandContext context)
     {
         var humanResponseCommand = (HumanResponseCommand)command;
-        if (!context.ConnectionState.HasRunningExecution || context.ConnectionState.ActiveExecution == null)
+        if (context.RuntimeSession is not { HasActiveTurn: true })
         {
             await context.SendSystemMessageAsync("No active workflow is waiting for human approval.");
             return default;
         }
 
-        var accepted = await context.ConnectionState.ActiveExecution.TrySubmitHumanResponseAsync(
+        var accepted = await context.RuntimeSession.TrySubmitHumanResponseAsync(
             humanResponseCommand,
             context.CancellationToken);
         if (!accepted)

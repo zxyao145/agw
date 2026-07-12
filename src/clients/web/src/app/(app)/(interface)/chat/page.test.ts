@@ -30,6 +30,21 @@ test("chat page refreshes the conversation list after an execution completes", a
   assert.match(pageSource, /refreshSignal=\{conversationListRefreshSignal\}/);
 });
 
+test("chat page preserves streamed messages after an execution completes", async () => {
+  const pageSource = await readFile(CHAT_PAGE_URL, "utf8");
+  const terminalBranchStart = pageSource.indexOf("const terminalStatus =");
+  const nextMessageBranchStart = pageSource.indexOf(
+    'if (message.role !== "user")',
+    terminalBranchStart,
+  );
+
+  assert.notEqual(terminalBranchStart, -1);
+  assert.notEqual(nextMessageBranchStart, -1);
+
+  const terminalBranch = pageSource.slice(terminalBranchStart, nextMessageBranchStart);
+  assert.doesNotMatch(terminalBranch, /getProjectContextDetails|setMessages/);
+});
+
 test("conversation list ignores stale refresh responses", async () => {
   const conversationListSource = await readFile(CONVERSATION_LIST_URL, "utf8");
 

@@ -6,8 +6,6 @@ public sealed class CreateAiAgentRequest
 {
     public Guid? ProjectId { get; init; }
 
-    public Guid? TaskId { get; init; }
-
     /// <summary>
     /// external agent session id
     /// </summary>

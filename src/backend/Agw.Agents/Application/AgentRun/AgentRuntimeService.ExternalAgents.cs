@@ -35,7 +35,7 @@ public partial class AgentRuntimeService
         {
             AgentNames.ClaudeCode => CreateClaudeCodeAgent(
                 project,
-                request.TaskId,
+                request.ProviderSessionId,
                 request.Resume,
                 request.EnvironmentVariables),
             AgentNames.Codex => CreateCodexAgent(
@@ -61,7 +61,7 @@ public partial class AgentRuntimeService
 
     private AIAgent? CreateClaudeCodeAgent(
         Project project,
-        Guid? taskId,
+        Guid? contextId,
         bool resume,
         IReadOnlyDictionary<string, string>? environmentVariables)
     {
@@ -87,11 +87,11 @@ public partial class AgentRuntimeService
             ChatHistoryProvider = _chatHistoryProvider
         };
 
-        if (taskId != null)
+        if (contextId != null)
         {
             options = resume
-                ? options with { Resume = taskId.Value.Normalize(), SessionId = null }
-                : options with { Resume = null, SessionId = taskId };
+                ? options with { Resume = contextId.Value.Normalize(), SessionId = null }
+                : options with { Resume = null, SessionId = contextId };
         }
 
         options = AgentRuntimeServiceUtil.ApplyEnvironmentVariables(options, environmentVariables);

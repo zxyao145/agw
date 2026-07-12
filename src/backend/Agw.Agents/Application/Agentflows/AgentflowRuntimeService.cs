@@ -508,7 +508,7 @@ public class AgentflowRuntimeService : RuntimeServiceBase
         }
 
         var taskIdString = taskId.Value.Normalize();
-        var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId, taskIdString);
+        var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId);
 
         return new AgentflowExecutionResult(taskIdString, resolvedContextId, outputs);
     }

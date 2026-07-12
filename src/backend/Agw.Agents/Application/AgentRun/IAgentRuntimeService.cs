@@ -29,6 +29,11 @@ public interface IAgentRuntimeService
         AgwUserInput input,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
+        AgentExecSession session,
+        AgwUserInput input,
+        CancellationToken cancellationToken = default);
+
     Task<AgentExecutionResult?> ExecuteByNameAsync(AgentExecuteByNameRequest request, CancellationToken cancellationToken = default);
 
     Task<AgentExecutionResult?> ExecuteByIdAsync(AgentExecuteByIdRequest request, CancellationToken cancellationToken = default);

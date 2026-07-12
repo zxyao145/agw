@@ -19,11 +19,11 @@ import { toast } from "sonner";
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
 import { apiGet } from "@/api/client";
 import {
-  buildHumanResponseCommandPayload,
-  buildSettingCommandPayload,
-  getHumanGateRequest,
-  type HumanGateRequest,
-} from "@/api/execution-ws";
+  ExecutionHubClient,
+  getPendingHumanGate,
+  getTurnFinishedStatus,
+  type PendingHumanGate,
+} from "@/api/execution-hub";
 import {
   clearProjectContextRecords,
   getProjectContextDetails,
@@ -64,7 +64,6 @@ import type { AiMessage } from "@/types";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
 import { InputArea } from "./components/user-input/input-area";
-import { handleAiMessage, type AiMessageAction } from "./lib/ai-message-handlers";
 import {
   CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME,
   CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME,
@@ -399,7 +398,7 @@ export default function ChatPage() {
   const [contextId, setContextId] = React.useState<string | null>(queryContextId);
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
   const [isExecuting, setIsExecuting] = React.useState(false);
-  const [pendingHumanGate, setPendingHumanGate] = React.useState<HumanGateRequest | null>(null);
+  const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
   const [fileContent, setFileContent] = React.useState("");
@@ -413,7 +412,9 @@ export default function ChatPage() {
     routeSettings?.chatSettings?.envVars ?? [],
   );
 
-  const wsRef = React.useRef<WebSocket | null>(null);
+  const executionClientRef = React.useRef<ExecutionHubClient | null>(null);
+  const configuredExecutionSessionRef = React.useRef<string | null>(null);
+  const executionGenerationRef = React.useRef(0);
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const userInputRef = React.useRef<UserInputRef | null>(null);
@@ -492,16 +493,12 @@ export default function ChatPage() {
     );
   }, [envVars, selectedTarget]);
 
-  const closeSocket = React.useCallback((reason: string) => {
-    const ws = wsRef.current;
-    if (!ws) {
-      return;
-    }
-
-    wsRef.current = null;
-    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-      ws.close(1000, reason);
-    }
+  const detachExecution = React.useCallback(() => {
+    executionGenerationRef.current += 1;
+    configuredExecutionSessionRef.current = null;
+    const client = executionClientRef.current;
+    executionClientRef.current = null;
+    if (client) void client.dispose();
   }, []);
 
   const syncRoute = React.useCallback(
@@ -537,127 +534,35 @@ export default function ChatPage() {
     setConversationListRefreshSignal((signal) => signal + 1);
   }, []);
 
-  const applyAiMessageActions = React.useCallback(
-    (actions: AiMessageAction[]) => {
-      const pendingMessages: AiMessage[] = [];
-      let shouldRefreshConversationList = false;
+  const applyExecutionMessage = React.useCallback(
+    (message: AiMessage, generation: number) => {
+      if (generation !== executionGenerationRef.current) return;
 
-      actions.forEach((action) => {
-        switch (action.type) {
-          case "append":
-            pendingMessages.push(action.message);
-            break;
-          case "setIsExecuting":
-            setIsExecuting(action.value);
-            shouldRefreshConversationList = shouldRefreshConversationList || !action.value;
-            break;
-          default:
-            break;
-        }
-      });
-
-      if (pendingMessages.length > 0) {
-        setMessages((prev) => mergeStreamingMessagesById([...prev, ...pendingMessages]));
+      const humanGate = getPendingHumanGate(message);
+      if (humanGate) {
+        setPendingHumanGate(humanGate);
+        return;
       }
 
-      if (shouldRefreshConversationList) {
+      if (message.additionalProperties?.type === "turn-start") {
+        setIsExecuting(true);
+        return;
+      }
+
+      const terminalStatus = getTurnFinishedStatus(message);
+      if (terminalStatus) {
+        setIsExecuting(false);
+        setPendingHumanGate(null);
         refreshConversationList();
+        if (terminalStatus === "failed") toast.error("Execution failed");
+        return;
+      }
+
+      if (message.role !== "user") {
+        setMessages((current) => mergeStreamingMessagesById([...current, message]));
       }
     },
     [refreshConversationList],
-  );
-
-  const isTurnFinishedMessage = React.useCallback((message: AiMessage): boolean => {
-    if (message.role?.toLowerCase() !== "system") {
-      return false;
-    }
-
-    if (message.author !== "$agw-server") {
-      return false;
-    }
-
-    return message.additionalProperties?.type === "turn-finished";
-  }, []);
-
-  const waitForWebSocketOpen = React.useCallback((ws: WebSocket): Promise<void> => {
-    if (ws.readyState === WebSocket.OPEN) {
-      return Promise.resolve();
-    }
-
-    return new Promise<void>((resolve, reject) => {
-      const onOpen = () => {
-        ws.removeEventListener("open", onOpen);
-        ws.removeEventListener("error", onError);
-        resolve();
-      };
-      const onError = () => {
-        ws.removeEventListener("open", onOpen);
-        ws.removeEventListener("error", onError);
-        reject(new Error("Failed to connect"));
-      };
-
-      ws.addEventListener("open", onOpen);
-      ws.addEventListener("error", onError);
-    });
-  }, []);
-
-  const setupWebSocket = React.useCallback(
-    (executionId: string) => {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(
-        `${protocol}//${window.location.host}/api/executions/${executionId}/ws`,
-      );
-      wsRef.current = ws;
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data as string) as AiMessage;
-          const humanGateRequest = getHumanGateRequest(message);
-          if (humanGateRequest) {
-            setPendingHumanGate(humanGateRequest);
-            setIsExecuting(true);
-            return;
-          }
-
-          if (isTurnFinishedMessage(message)) {
-            setIsExecuting(false);
-            setPendingHumanGate(null);
-            refreshConversationList();
-            return;
-          }
-
-          applyAiMessageActions(handleAiMessage(message));
-        } catch (error) {
-          console.error("Parse error:", error);
-        }
-      };
-
-      ws.onerror = () => {
-        toast.error("WebSocket connection error");
-        setIsExecuting(false);
-        setPendingHumanGate(null);
-      };
-
-      ws.onclose = (event) => {
-        wsRef.current = null;
-        setIsExecuting(false);
-        setPendingHumanGate(null);
-        refreshConversationList();
-
-        if (event.code !== 1000) {
-          if (event.code === 1003) {
-            toast.error("Invalid request data");
-          } else if (event.code === 1007) {
-            toast.error(event.reason || "Invalid request payload");
-          } else if (event.code === 1011) {
-            toast.error("Server error during execution");
-          }
-        }
-      };
-
-      return ws;
-    },
-    [applyAiMessageActions, isTurnFinishedMessage, refreshConversationList],
   );
 
   const clearFilePreview = React.useCallback(() => {
@@ -771,26 +676,6 @@ export default function ChatPage() {
     [isMobile, loadFileContent, selectedFile],
   );
 
-  const buildSettingCommand = React.useCallback(
-    (nextContextIdValue: string, shouldResume: boolean) =>
-      buildSettingCommandPayload({
-        environmentVariables: buildEnvironmentVariables(),
-        projectId: selectedProjectId ?? "",
-        contextId: nextContextIdValue,
-        resume: shouldResume,
-      }),
-    [buildEnvironmentVariables, selectedProjectId],
-  );
-
-  const buildExecRequest = React.useCallback(
-    (message: AiMessage) => ({
-      type: "ExecCommand",
-      agentType: selectedTarget?.type === "agent" ? 0 : 1,
-      input: toExecutionWsUserInput(message),
-    }),
-    [selectedTarget],
-  );
-
   const ensureContextId = React.useCallback(() => {
     if (contextId) {
       return contextId;
@@ -804,14 +689,14 @@ export default function ChatPage() {
   }, [contextId, selectedProjectId, syncRoute]);
 
   const clearLocalSessionState = React.useCallback(() => {
-    closeSocket("Session cleared");
+    detachExecution();
     hydratedContextKeyRef.current = null;
     setIsExecuting(false);
     setPendingHumanGate(null);
     setMessages([]);
     setContextId(null);
     userInputRef.current?.setInput("");
-  }, [closeSocket]);
+  }, [detachExecution]);
 
   const clearActiveSessionState = React.useCallback(() => {
     if (selectedProjectId && contextId) {
@@ -835,7 +720,7 @@ export default function ChatPage() {
       const details = await getProjectContextDetails(projectId, nextContextIdValue);
       const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
 
-      closeSocket("Session switched");
+      detachExecution();
       hydratedContextKeyRef.current = getContextHydrationKey(projectId, details.contextId);
       setSelectedProjectId(projectId);
       setIsExecuting(false);
@@ -845,15 +730,16 @@ export default function ChatPage() {
         setSelectedTargetValue(restoredTargetValue);
       }
       syncRoute(projectId, details.contextId, null);
+      return details;
     },
-    [closeSocket, syncRoute],
+    [detachExecution, syncRoute],
   );
 
   React.useEffect(() => {
     return () => {
-      closeSocket("Component unmounted");
+      detachExecution();
     };
-  }, [closeSocket]);
+  }, [detachExecution]);
 
   React.useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 768px)");
@@ -1029,7 +915,7 @@ export default function ChatPage() {
             return;
           }
 
-          closeSocket("History loaded");
+          detachExecution();
           hydratedContextKeyRef.current = routeAction.hydrateKey;
           setSelectedProjectId(routeAction.projectId);
           setIsExecuting(false);
@@ -1057,7 +943,7 @@ export default function ChatPage() {
     };
   }, [
     clearLocalSessionState,
-    closeSocket,
+    detachExecution,
     queryContextId,
     queryProjectId,
     routeTargetValue,
@@ -1070,7 +956,7 @@ export default function ChatPage() {
         return;
       }
 
-      closeSocket("Project switched");
+      detachExecution();
       hydratedContextKeyRef.current = null;
       setIsExecuting(false);
       setSelectedProjectId(nextProjectId);
@@ -1079,7 +965,7 @@ export default function ChatPage() {
       setContextId(null);
       syncRoute(nextProjectId, null, null);
     },
-    [closeSocket, selectedProjectId, syncRoute],
+    [detachExecution, selectedProjectId, syncRoute],
   );
 
   const handleTargetChange = React.useCallback(
@@ -1088,14 +974,14 @@ export default function ChatPage() {
         return;
       }
 
-      closeSocket("Target switched");
+      detachExecution();
       setIsExecuting(false);
       setSelectedTargetValue(nextTargetValue);
       if (selectedProjectId) {
         chatSettingsStorage.set(selectedProjectId, { targetValue: nextTargetValue });
       }
     },
-    [closeSocket, selectedProjectId, selectedTargetValue],
+    [detachExecution, selectedProjectId, selectedTargetValue],
   );
 
   const handleExecute = React.useCallback(
@@ -1118,20 +1004,9 @@ export default function ChatPage() {
 
       setIsExecuting(true);
       setPendingHumanGate(null);
+      let generation: number | null = null;
 
       try {
-        let ws = wsRef.current;
-        if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-          ws = setupWebSocket(selectedTarget.id);
-          await waitForWebSocketOpen(ws);
-        } else if (ws.readyState === WebSocket.CONNECTING) {
-          await waitForWebSocketOpen(ws);
-        }
-
-        if (ws.readyState !== WebSocket.OPEN) {
-          throw new Error("WebSocket is not open");
-        }
-
         const userMessage = createUserTextMessage(trimmedValue);
         const firstContent = userMessage.contents[0];
         if (firstContent) {
@@ -1142,70 +1017,99 @@ export default function ChatPage() {
           };
         }
 
-        setMessages((prev) => [...prev, userMessage]);
-
-        const shouldResumeContext = Boolean(contextId);
         const nextContextIdValue = ensureContextId();
-        ws.send(JSON.stringify(buildSettingCommand(nextContextIdValue, shouldResumeContext)));
-        ws.send(JSON.stringify(buildExecRequest(userMessage)));
+        const initialMessages = [...messages, userMessage];
+        generation = executionGenerationRef.current;
+        setMessages(initialMessages);
+
+        const handlers = {
+          onMessage: (message: AiMessage) => applyExecutionMessage(message, generation!),
+          onError: (error: Error) => {
+            if (generation === executionGenerationRef.current) {
+              toast.error(`Execution failed: ${getApiErrorMessage(error)}`);
+              setIsExecuting(false);
+            }
+          },
+          onClose: (error?: Error) => {
+            if (generation === executionGenerationRef.current) {
+              setIsExecuting(false);
+              if (error) toast.error(`Execution connection closed: ${error.message}`);
+            }
+          },
+        };
+        let client = executionClientRef.current;
+        if (!client) {
+          client = new ExecutionHubClient(handlers);
+          executionClientRef.current = client;
+        } else {
+          client.setHandlers(handlers);
+        }
+
+        const environmentVariables = buildEnvironmentVariables();
+        const configurationKey = JSON.stringify({
+          projectId: selectedProjectId,
+          contextId: nextContextIdValue,
+          environmentVariables,
+        });
+        if (configuredExecutionSessionRef.current !== configurationKey) {
+          await client.configure({
+            projectId: selectedProjectId,
+            contextId: nextContextIdValue,
+            environmentVariables,
+          });
+          configuredExecutionSessionRef.current = configurationKey;
+        }
+        await client.execute({
+          agentId: selectedTarget.id,
+          agentType: selectedTarget.type === "agent" ? 0 : 1,
+          stream: true,
+          input: toExecutionWsUserInput(userMessage),
+        });
+        refreshConversationList();
       } catch (error) {
-        toast.error(`Execute failed: ${getApiErrorMessage(error)}`);
-        setIsExecuting(false);
+        if (generation === null || generation === executionGenerationRef.current) {
+          detachExecution();
+          toast.error(`Execute failed: ${getApiErrorMessage(error)}`);
+          setIsExecuting(false);
+        }
       }
     },
     [
-      buildExecRequest,
-      buildSettingCommand,
+      applyExecutionMessage,
+      buildEnvironmentVariables,
       contextId,
       ensureContextId,
+      messages,
+      refreshConversationList,
       selectedProjectId,
       selectedTarget,
-      setupWebSocket,
-      waitForWebSocketOpen,
     ],
   );
 
-  const handleInterrupt = React.useCallback(() => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+  const handleInterrupt = React.useCallback(async () => {
+    const client = executionClientRef.current;
+    if (!client) {
       toast.error("No active session to interrupt");
-      setIsExecuting(false);
       return;
     }
 
-    ws.send(
-      JSON.stringify({
-        type: "InterruptCommand",
-        reason: "Stop requested by user.",
-      }),
-    );
-    closeSocket("Stop requested by user.");
-    setIsExecuting(false);
-    setPendingHumanGate(null);
-  }, [closeSocket]);
+    await client.interrupt("Stop requested by user.");
+  }, []);
 
   const submitHumanGateResponse = React.useCallback(
-    (approved: boolean, responseText?: string) => {
-      const ws = wsRef.current;
-      if (!pendingHumanGate || !ws || ws.readyState !== WebSocket.OPEN) {
+    async (approved: boolean, responseText?: string) => {
+      const client = executionClientRef.current;
+      if (!pendingHumanGate || !client) {
         toast.error("No active HumanGate request");
-        setPendingHumanGate(null);
         return;
       }
 
-      ws.send(
-        JSON.stringify(
-          buildHumanResponseCommandPayload({
-            requestId: pendingHumanGate.requestId,
-            approved,
-            responseText,
-          }),
-        ),
-      );
+      await client.submitHumanResponse({
+        requestId: pendingHumanGate.requestId,
+        approved,
+        responseText,
+      });
       setPendingHumanGate(null);
-      if (!approved) {
-        setIsExecuting(false);
-      }
     },
     [pendingHumanGate],
   );

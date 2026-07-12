@@ -128,6 +128,10 @@ public class ExecCommand : AgentRunCommand
 
     public AgentRuntimeType AgentType { get; set; }
 
+    public Guid? AgentId { get; set; }
+
+    public bool Stream { get; set; } = true;
+
     public AgwUserInput Input { get; set; }
 }
 

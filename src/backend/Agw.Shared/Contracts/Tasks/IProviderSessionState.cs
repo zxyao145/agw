@@ -4,5 +4,5 @@ namespace Agw.Shared.Contracts.Tasks;
 
 public interface IProviderSessionState
 {
-    void InitializeSessionState(AgentSession session, string contextId, string? taskId, Guid projectId);
+    void InitializeSessionState(AgentSession session, string contextId, Guid projectId);
 }

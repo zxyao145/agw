@@ -1,6 +1,5 @@
 using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Agents.Contracts;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Extensions;
@@ -24,10 +23,10 @@ public partial class AgentRuntimeService
         }
 
         Guid projectId = task.ProjectId;
-        string taskIdString = task.TaskId.Normalize();
-        var resolvedContextId = ExecutionContextIdResolver.Resolve(task.ContextId, taskIdString);
+        var resolvedContextId = ExecutionContextIdResolver.Resolve(task.ContextId);
         var sessionKey = CreateSessionKey(projectId, resolvedContextId);
-        var providerSessionId = await GetCodexProviderSessionIdAsync(agent, projectId, resolvedContextId, cancellationToken);
+        var providerSessionId =
+            await GetCodexProviderSessionIdAsync(agent, projectId, resolvedContextId, cancellationToken);
         var resume = IsCodexExternalAgent(agent)
             ? providerSessionId.HasValue
             : settings.Resume;
@@ -43,7 +42,6 @@ public partial class AgentRuntimeService
         {
             Agent = agent,
             EnvironmentVariables = settings.EnvironmentVariables,
-            TaskId = task.TaskId,
             ProviderSessionId = providerSessionId,
             ProjectId = projectId,
             Resume = resume,
@@ -55,20 +53,15 @@ public partial class AgentRuntimeService
         }
 
         var agentSession = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, sessionKey, cancellationToken);
-        _providerSessionState.InitializeSessionState(agentSession, resolvedContextId, taskIdString,
+        _providerSessionState.InitializeSessionState(agentSession, resolvedContextId,
             ProjectDefaults.GetDefaultProjectIdentifier(projectId));
         return new AgentExecSession(
+            logger: _logger,
             aiAgent,
             agentSession,
             projectId: projectId,
             contextId: resolvedContextId,
-            taskId: taskIdString,
-            sessionKey: sessionKey,
-            agentType: AgentRuntimeType.Agent,
-            agentId: agentId,
-            agentName: agent.Name,
-            logger: _logger,
-            taskTitle: agent.Name);
+            sessionKey: sessionKey);
     }
 
     private async Task<Guid?> GetCodexProviderSessionIdAsync(

@@ -1,6 +1,5 @@
 using System.Net.WebSockets;
 
-using Agw.Agents.Application.AgentRun.Dtos;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Utils;
 
@@ -57,9 +56,9 @@ public sealed class ExecutionCommandContext
     }
 
     /// <summary>
-    /// Reusable agent runtime session for agent executions. Agentflow executions do not populate this.
+    /// Reusable runtime session for agent or agentflow executions.
     /// </summary>
-    public AgentExecSession? AgentSession { get; set; }
+    public RuntimeExecSessionBase? RuntimeSession { get; set; }
 
     /// <summary>
     /// Controller-owned close callback so strategies can terminate the socket without owning close semantics.
