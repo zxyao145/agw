@@ -35,7 +35,7 @@ public static class DependencyInjection
         services.AddSingleton<ExecutionConnectionRegistry>();
         services.AddSingleton<RuntimeTurnContextAccessor>();
         services.AddSingleton<IRuntimeTurnContextAccessor, RuntimeTurnContextAccessor>();
-        services.AddSingleton<LoggingMiddleware>();
+        services.AddSingleton<ObservabilityMiddleware>();
 
         return services;
     }

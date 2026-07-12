@@ -64,8 +64,8 @@ public partial class AgentRuntimeService
 
         aiAgent = aiAgent.AsBuilder()
             .Use(
-                runFunc: _loggingMiddleware.LogRunMiddleware,
-                runStreamingFunc: _loggingMiddleware.LogStreamingMiddleware)
+                runFunc: _observabilityMiddleware.LogRunMiddleware,
+                runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware)
             .Build();
         return aiAgent;
     }

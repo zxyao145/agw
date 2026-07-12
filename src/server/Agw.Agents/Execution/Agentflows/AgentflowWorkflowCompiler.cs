@@ -40,6 +40,7 @@ public sealed class AgentflowWorkflowCompiler
     {
         EmitAgentResponseEvents = true,
         EmitAgentUpdateEvents = true,
+        // 避免转发前面所有节点的输出
         ForwardIncomingMessages = false,
         ReassignOtherAgentsAsUsers = false,
     };
@@ -116,7 +117,8 @@ public sealed class AgentflowWorkflowCompiler
             : BindChatTransform(GeneratedStartNodeId, messages => messages);
         var builder = new WorkflowBuilder(start)
             .WithName(agentflow.Name)
-            .WithDescription(agentflow.Description ?? string.Empty);
+            .WithDescription(agentflow.Description ?? string.Empty)
+            .WithOpenTelemetry(options => options.EnableSensitiveData = false);
 
         if (roots.Count > 1)
         {
@@ -200,14 +202,14 @@ public sealed class AgentflowWorkflowCompiler
 
         Func<List<ChatMessage>, CancellationToken, ValueTask<List<ChatMessage>>> runConcurrentAsync =
             async (messages, cancellationToken) =>
-        {
-            var input = ApplyInstructions(messages, blockNode.Instructions);
-            var tasks = participants
-                .Select(agent => agent.RunAsync(input, cancellationToken: cancellationToken))
-                .ToArray();
-            var responses = await Task.WhenAll(tasks).ConfigureAwait(false);
-            return responses.SelectMany(response => response.Messages).ToList();
-        };
+            {
+                var input = ApplyInstructions(messages, blockNode.Instructions);
+                var tasks = participants
+                    .Select(agent => agent.RunAsync(input, cancellationToken: cancellationToken))
+                    .ToArray();
+                var responses = await Task.WhenAll(tasks).ConfigureAwait(false);
+                return responses.SelectMany(response => response.Messages).ToList();
+            };
 
         return runConcurrentAsync.BindAsExecutor<List<ChatMessage>, List<ChatMessage>>(
             blockNode.NodeId,
@@ -400,7 +402,8 @@ public sealed class AgentflowWorkflowCompiler
             }
         }
 
-        foreach (var group in edges.Where(edge => edge.Kind == AgentflowEdgeKind.FanOut).GroupBy(edge => edge.SourceNodeId))
+        foreach (var group in edges.Where(edge => edge.Kind == AgentflowEdgeKind.FanOut)
+                     .GroupBy(edge => edge.SourceNodeId))
         {
             var source = GetSourceBinding(group.Key, bindings, humanGateOutputBindings);
             var targets = group.Select(edge => bindings[edge.TargetNodeId]).Distinct().ToList();
@@ -414,7 +417,8 @@ public sealed class AgentflowWorkflowCompiler
             }
         }
 
-        foreach (var group in edges.Where(edge => edge.Kind == AgentflowEdgeKind.FanIn).GroupBy(edge => edge.TargetNodeId))
+        foreach (var group in edges.Where(edge => edge.Kind == AgentflowEdgeKind.FanIn)
+                     .GroupBy(edge => edge.TargetNodeId))
         {
             var sources = group
                 .Select(edge => GetSourceBinding(edge.SourceNodeId, bindings, humanGateOutputBindings))
@@ -528,13 +532,15 @@ public sealed class AgentflowWorkflowCompiler
             }
 
             if (!string.IsNullOrEmpty(config.Author) &&
-                messages.All(message => !string.Equals(message.AuthorName, config.Author, StringComparison.OrdinalIgnoreCase)))
+                messages.All(message =>
+                    !string.Equals(message.AuthorName, config.Author, StringComparison.OrdinalIgnoreCase)))
             {
                 return false;
             }
 
             if (!string.IsNullOrEmpty(config.Role) &&
-                messages.All(message => !string.Equals(message.Role.Value, config.Role, StringComparison.OrdinalIgnoreCase)))
+                messages.All(message =>
+                    !string.Equals(message.Role.Value, config.Role, StringComparison.OrdinalIgnoreCase)))
             {
                 return false;
             }
@@ -614,7 +620,7 @@ public sealed class AgentflowWorkflowCompiler
         try
         {
             return JsonSerializer.Deserialize<AgentflowBlockConfig>(node.ConfigJson, JsonOptions) ??
-                new AgentflowBlockConfig();
+                   new AgentflowBlockConfig();
         }
         catch (JsonException)
         {
@@ -642,8 +648,7 @@ public sealed class AgentflowWorkflowCompiler
         public bool? Always { get; init; }
         public string? Contains { get; init; }
         public string? NotContains { get; init; }
-        [JsonPropertyName("equals")]
-        public string? EqualsText { get; init; }
+        [JsonPropertyName("equals")] public string? EqualsText { get; init; }
         public string? Author { get; init; }
         public string? Role { get; init; }
         public int? MinMessages { get; init; }
@@ -695,7 +700,8 @@ public sealed class AgentflowWorkflowCompiler
             IEnumerable<ChatMessage> messages,
             AgentSession? session = null,
             AgentRunOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken cancellationToken = default)
         {
             await Task.Yield();
             foreach (var message in messages)
@@ -743,11 +749,13 @@ public sealed class AgentflowWorkflowCompiler
             IEnumerable<ChatMessage> messages,
             AgentSession? session = null,
             AgentRunOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken cancellationToken = default)
         {
             var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
             await foreach (var update in InnerAgent
-                               .RunStreamingAsync(ApplyInstructions(messages.ToList(), instructions), scopedSession, options, cancellationToken)
+                               .RunStreamingAsync(ApplyInstructions(messages.ToList(), instructions), scopedSession,
+                                   options, cancellationToken)
                                .ConfigureAwait(false))
             {
                 yield return update;
@@ -758,7 +766,8 @@ public sealed class AgentflowWorkflowCompiler
             AgentSession? session,
             CancellationToken cancellationToken)
         {
-            AgentSession scopedSession = session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+            AgentSession scopedSession =
+                session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
             sessionScope?.Initialize(scopedSession);
             return scopedSession;
         }

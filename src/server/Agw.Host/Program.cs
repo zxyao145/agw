@@ -15,6 +15,7 @@ using Agw.Jobs;
 using Agw.Jobs.Controllers;
 using Agw.Manager.Api.Controllers;
 using Agw.Host.Controllers;
+using Agw.Host.Middleware;
 using Agw.Providers;
 using Agw.Setup.Controllers;
 using Agw.Setup.Middleware;
@@ -118,6 +119,7 @@ try
                 };
             })
             .AddSource("Agw.*")
+            .AddSource("Microsoft.Agents.AI.Workflows")
             .AddOtlpExporter(options =>
             {
                 options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint") ?? "http://localhost:4317");
@@ -300,6 +302,7 @@ try
     }
 
     app.UseForwardedHeaders();
+    app.UseMiddleware<TraceIdResponseHeaderMiddleware>();
 
     // Add Serilog request logging
     app.UseSerilogRequestLogging(options =>
