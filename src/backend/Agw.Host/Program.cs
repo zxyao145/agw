@@ -4,7 +4,7 @@ using Agw.A2A;
 using Agw.A2A.Extensions;
 using Agw.Agents;
 using Agw.Agents.Definitions.Controllers;
-using Agw.Agents.Runtime.Hubs;
+using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Files;
 using Agw.Files.Controllers;
 using Agw.Infrastructure;

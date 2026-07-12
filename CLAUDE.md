@@ -61,11 +61,11 @@ Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUni
 
 - `AgentRuntimeService`: builds `AIAgent` instances from persisted agents, hydrates provider config, selects enabled auth config, attaches registered/MCP tools, and supports OpenAI, Anthropic, Claude Code, and Codex-backed execution through Microsoft.Agents.AI integrations.
 - `AgentflowRuntimeService`: executes multi-agent workflows, including Concurrent, Sequential, GroupChat, and Handoff orchestration patterns. Magentic scaffolding exists, but runtime execution currently returns `MagenticNotSupported`.
-- `ProjectTaskSchedulerHostedService`: polls pending project tasks, limits concurrent project execution, and uses DB-backed `ProjectLease` records for distributed locking.
+- `JobHostedService`: prefetches persistent jobs into an in-memory priority queue, serializes execution per project, and coordinates execution through `IProjectExecutionLock`.
 - `ToolRegistryService`: discovers `[AiTool]` methods and `IAgwTool` implementations, caches metadata, and creates `AITool` instances via `AgwToolFactory`.
 - `SkillAppService`: uploads/extracts skill archives, validates and rewrites `SKILL.md` metadata, and stores extracted skills under `wwwroot/skills/{skillName}/`.
 
-### Frontend (`src/frontend/web`)
+### Web Client (`src/clients/web`)
 
 The frontend uses Next.js 16 App Router, React 19, Tailwind CSS 4, Radix UI/Shadcn components, React Query, and `openapi-fetch` generated types. `next.config.ts` proxies `/api/*` and `/openapi/*` to the backend unless `NEXT_OUTPUT_MODE=export`.
 
@@ -121,7 +121,7 @@ dotnet ef database update \
 ### Frontend
 
 ```bash
-cd src/frontend/web
+cd src/clients/web
 
 pnpm install
 pnpm dev          # Next.js dev server on http://localhost:3000
@@ -135,6 +135,10 @@ pnpm gen:openapi  # openapi-typescript ./openapi.json -o src/api/openapi.d.ts
 
 The frontend proxy target is resolved in this order: `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015`.
 
+### Mobile Client (`src/clients/mobile`)
+
+The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients/mobile/AGENTS.md` and run mobile npm commands from `shared/`; generated native projects are not hand-maintained source.
+
 ### Git Hooks
 
 After first clone, configure the repository hooks:
@@ -145,7 +149,7 @@ git config core.hooksPath .githooks
 
 ## Local Setup and Configuration
 
-On first backend run, open `http://localhost:5015/setup` to choose the database provider, connection string, and optional API key. Setup seeds the database and writes local setup state to `appsettings.setup.json`. If an API key is configured, backend `/api` requests must include `X-API-Key`.
+On first backend run, open `http://localhost:5015/setup` to choose the database provider, connection string, and administrator password. Setup seeds the database and writes `server-state.json` below the Agw data directory. Remote Web access uses the administrator session cookie; desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API Tokens. The legacy `X-API-Key` setting is not supported.
 
 Primary backend settings live in `src/backend/Agw.Host/appsettings.json`:
 
@@ -180,6 +184,7 @@ Read `docs/rules.md` before backend coding. Its rules are mandatory.
 ## Coding Style
 
 - C#: 4-space indentation, `PascalCase` for types/members, `camelCase` for locals/parameters, `I` prefix for interfaces, async methods for I/O, constructor injection for dependencies.
+- Do not use C# primary constructors. Declare explicit constructors and backing fields/properties; dependency-injected services must use explicit constructor injection.
 - Backend DTOs/contracts live under module `Contracts/` folders.
 - Frontend: TypeScript React function components, App Router conventions, and kebab-case filenames.
 

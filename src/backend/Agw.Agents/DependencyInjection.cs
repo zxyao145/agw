@@ -1,7 +1,11 @@
-using Agw.Agents.Runtime.Agentflows;
-using Agw.Agents.Runtime.AgentRun;
+using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Commands;
+using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Transport.SignalR;
+using Agw.Agents.Execution.Turns;
 using Agw.Agents.Definitions.Agents;
-using Agw.Agents.Runtime.Execution;
+using Agw.Agents.Execution.Agents.Middleware;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,8 +26,15 @@ public static class DependencyInjection
         services.AddScoped<McpToolServerAppService>();
         services.AddScoped<AgentSessionStateStore>();
         services.AddScoped<IAgentRuntimeService, AgentRuntimeService>();
-        services.AddScoped<ExecutionRuntimeStarter>();
-        services.AddSingleton<HubExecutionConnectionRegistry>();
+        services.AddScoped<IRuntimeFactory, RuntimeFactory>();
+        services.AddScoped<IExecutionCommandHandler, SettingCommandHandler>();
+        services.AddScoped<IExecutionCommandHandler, ExecCommandHandler>();
+        services.AddScoped<IExecutionCommandHandler, InterruptCommandHandler>();
+        services.AddScoped<IExecutionCommandHandler, HumanResponseCommandHandler>();
+        services.AddScoped<ExecutionCommandDispatcher>();
+        services.AddSingleton<ExecutionConnectionRegistry>();
+        services.AddSingleton<RuntimeTurnContextAccessor>();
+        services.AddSingleton<IRuntimeTurnContextAccessor, RuntimeTurnContextAccessor>();
         services.AddSingleton<LoggingMiddleware>();
 
         return services;

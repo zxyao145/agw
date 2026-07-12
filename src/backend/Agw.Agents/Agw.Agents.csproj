@@ -19,5 +19,6 @@
     </ItemGroup>
     <ItemGroup>
       <Folder Include="Definitions\" />
+      <Folder Include="Execution\Agents\Store\" />
     </ItemGroup>
 </Project>

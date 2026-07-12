@@ -2,7 +2,7 @@
 
 `file-explorer` is a reusable frontend module for browsing a workspace, viewing file content or git diff output, and attaching line comments to files or diff sides.
 
-It is designed to be reusable across pages, but it is still intentionally aligned with the current Agw file API in [`@/api/files`](../api/files.ts). In practice, this means it is a reusable "workspace/code explorer", not a storage-agnostic file manager.
+It is designed to be reusable across pages, but it is still intentionally aligned with the current Agw file API in [`@/api/files`](../../api/files.ts). In practice, this means it is a reusable "workspace/code explorer", not a storage-agnostic file manager.
 
 ## Exports
 
@@ -119,7 +119,7 @@ This separation is intentional:
 
 ## API Assumptions
 
-This module currently depends on [`@/api/files`](../api/files.ts) for:
+This module currently depends on [`@/api/files`](../../api/files.ts) for:
 
 - `listFiles`
 - `readFile`

@@ -1,0 +1,28 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
+
+using Agw.Shared.AgwMsgVm;
+using Agw.Shared.Contracts.Agents;
+
+namespace Agw.Agents.Execution.Contracts;
+
+public class ExecCommand : AgentRunCommand
+{
+    [JsonConstructor]
+    [SetsRequiredMembers]
+    public ExecCommand(
+        AgentRuntimeType agentType,
+        AgwUserInput input)
+    {
+        AgentType = agentType;
+        Input = input;
+    }
+
+    public AgentRuntimeType AgentType { get; set; }
+
+    public Guid? AgentId { get; set; }
+
+    public bool Stream { get; set; } = true;
+
+    public AgwUserInput Input { get; set; }
+}

@@ -1,5 +1,5 @@
-using Agw.Agents.Runtime.Contracts;
-using Agw.Agents.Runtime.Hubs;
+using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Shared.AgwMsgVm;
 
 namespace Agw.Agents.Tests;

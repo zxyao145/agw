@@ -41,7 +41,7 @@ The development backend listens on `http://localhost:5015`. On the first run, op
 Start the frontend in another terminal:
 
 ```bash
-cd src/frontend/web
+cd src/clients/web
 pnpm install
 pnpm dev
 ```
@@ -98,7 +98,7 @@ Below are screenshots of the main Agw UI pages:
 
 ## Architecture
 
-Agw uses a domain-based, modular monolithic architecture. `src/backend/Agw.Host` serves as the entry point for the ASP.NET Core application and is responsible for assembling the various modules; the frontend is located in the `src/frontend/web` directory.
+Agw uses a domain-based, modular monolithic architecture. `src/backend/Agw.Host` serves as the entry point for the ASP.NET Core application and is responsible for assembling the various modules; the Web client is located in `src/clients/web`, and the Expo mobile client is in `src/clients/mobile`.
 
 A typical backend flow is:
 
@@ -189,7 +189,7 @@ flowchart BT
   
   - Scheduled tasks: Tasks that are repeated at specified times on a regular basis.
 
-- [ ] Agw.A2A
+- [x] Agw.A2A
 
 Provides an interface for the A2A protocol to external systems.
 
@@ -201,7 +201,9 @@ The detailed project docs live under [`docs/`](docs/):
 
 - [Development Guide](docs/1.Development.md): local setup, build/test/lint/format commands, and git hook configuration.
 - [Architecture](docs/2.Architecture.md): system overview, backend/frontend structure, and core domain concepts.
-- [Module Organization](docs/3.%20Module%20Organization.md): layering principles used inside modules.
+- [Module Organization](docs/3.Module%20Organization.md): layering principles used inside modules.
+- [Agent Execution Flow](docs/ws-flow.md): SignalR commands, turn messages, runtime lifecycle, and disconnect behavior.
+- [Execution Subsystem](src/backend/Agw.Agents/Execution/README.md): detailed directory responsibilities, data flow, and command extension guidance.
 
 ## Configuration
 
@@ -223,4 +225,4 @@ Primary backend settings are in [`src/backend/Agw.Host/appsettings.json`](src/ba
 
 - Supported database providers are `sqlite`, `postgres`, and `mysql`.
 - Keep secrets out of committed config files; prefer environment-variable overrides.
-- After backend contract changes, regenerate `src/frontend/web/src/api/openapi.d.ts` with `pnpm gen:openapi`.
+- After backend contract changes, regenerate `src/clients/web/src/api/openapi.d.ts` with `pnpm gen:openapi`.
