@@ -83,7 +83,9 @@ public class ProviderAppService : IProviderAppService
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var existing = await _providerRepository.GetByIdAsync(id);
+        var existing = await _providerRepository.Queryable
+            .Include(provider => provider.AuthConfigs)
+            .FirstOrDefaultAsync(provider => provider.Id == id);
         if (existing == null)
         {
             return false;
