@@ -1301,10 +1301,14 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[calc(100vh-58px)] w-full min-w-0 flex-col gap-4 px-2 md:px-0 md:pr-2">
-      {projectsQuery.isError || agentsQuery.isError || agentflowsQuery.isError ? (
+      {projectsQuery.isError ||
+      agentsQuery.isError ||
+      agentflowsQuery.isError ? (
         <div className="text-sm text-destructive">
           Failed to load chat dependencies:{" "}
-          {getApiErrorMessage(projectsQuery.error ?? agentsQuery.error ?? agentflowsQuery.error)}
+          {getApiErrorMessage(
+            projectsQuery.error ?? agentsQuery.error ?? agentflowsQuery.error,
+          )}
         </div>
       ) : null}
 
@@ -1394,33 +1398,44 @@ export default function ChatPage() {
                 </div> */}
 
                 <div className="relative flex h-[calc(100%-57px)] min-h-0 flex-1 flex-col border-t">
-                  <Conversation
-                    messages={messages}
-                    messagesStartRef={messagesStartRef}
-                    messagesEndRef={messagesEndRef}
-                  />
+                  <div className="h-full w-full flex flex-row">
+                    <div className="h-full w-full flex flex-row min-w-225">
+                      <Conversation
+                        messages={messages}
+                        messagesStartRef={messagesStartRef}
+                        messagesEndRef={messagesEndRef}
+                      />
 
-                  <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent px-2">
-                    {pendingHumanGate ? (
-                      <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
-                        <HumanGateApproval
-                          request={pendingHumanGate}
-                          onApprove={(responseText) => submitHumanGateResponse(true, responseText)}
-                          onReject={(responseText) => submitHumanGateResponse(false, responseText)}
+                      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent px-2">
+                        {pendingHumanGate ? (
+                          <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
+                            <HumanGateApproval
+                              request={pendingHumanGate}
+                              onApprove={(responseText) =>
+                                submitHumanGateResponse(true, responseText)
+                              }
+                              onReject={(responseText) =>
+                                submitHumanGateResponse(false, responseText)
+                              }
+                            />
+                          </div>
+                        ) : null}
+                        <InputArea
+                          isExecuting={isExecuting}
+                          hasMessages={messages.length > 0}
+                          onExecute={(value) => {
+                            void handleExecute(value);
+                          }}
+                          onInterrupt={handleInterrupt}
+                          onClearSession={resetSession}
+                          onScrollToTop={handleScrollToTop}
+                          userInputRef={userInputRef}
                         />
                       </div>
-                    ) : null}
-                    <InputArea
-                      isExecuting={isExecuting}
-                      hasMessages={messages.length > 0}
-                      onExecute={(value) => {
-                        void handleExecute(value);
-                      }}
-                      onInterrupt={handleInterrupt}
-                      onClearSession={resetSession}
-                      onScrollToTop={handleScrollToTop}
-                      userInputRef={userInputRef}
-                    />
+                    </div>
+                    <div className="h-full flex flex-1">
+                      {/* asidebar */}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1467,7 +1482,11 @@ export default function ChatPage() {
         </TabsContent>
       </Tabs>
 
-      <Drawer direction="left" open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+      <Drawer
+        direction="left"
+        open={isDrawerOpen}
+        onOpenChange={setIsDrawerOpen}
+      >
         <DrawerContent className="h-screen max-h-screen">
           <DrawerHeader>
             <DrawerTitle>
