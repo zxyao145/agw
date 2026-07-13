@@ -153,7 +153,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
       <div
         className={cn(
           "min-w-0 ",
-          isResult? "w-full rounded-lg px-2 py-2 border bg-[#f3f3f4] shadow-sm " : "max-w-full",
+          isResult? "w-full rounded-lg px-2 py-2 border bg-[##fffeff] " : "max-w-full",
           IsSideRight
             ? "rounded-lg px-2 py-1 bg-primary text-primary-foreground ml-12"
             : // debug
