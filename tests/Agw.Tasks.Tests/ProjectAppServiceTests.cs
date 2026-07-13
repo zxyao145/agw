@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Tasks.Application;
 using Agw.Tasks.Domain.Services;
@@ -65,6 +66,7 @@ public class ProjectAppServiceTests
 
         return new ProjectAppService(
             projectRepository,
+            new EfRepository<AgentflowTrace>(dbContext),
             new UnitOfWork(dbContext),
             new ProjectDomainService(),
             new ProjectResolver(projectRepository));

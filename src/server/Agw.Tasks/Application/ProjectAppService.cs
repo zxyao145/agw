@@ -1,27 +1,33 @@
 using System.Linq.Expressions;
 
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
+
+using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Tasks.Application;
 
 public class ProjectAppService : IProjectAppService
 {
     private readonly IRepository<Project> _projectRepository;
+    private readonly IRepository<AgentflowTrace> _traceRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectDomainService _projectDomainService;
     private readonly ProjectResolver _projectResolver;
 
     public ProjectAppService(
         IRepository<Project> projectRepository,
+        IRepository<AgentflowTrace> traceRepository,
         IUnitOfWork unitOfWork,
         ProjectDomainService projectDomainService,
         ProjectResolver projectResolver)
     {
         _projectRepository = projectRepository;
+        _traceRepository = traceRepository;
         _unitOfWork = unitOfWork;
         _projectDomainService = projectDomainService;
         _projectResolver = projectResolver;
@@ -72,6 +78,9 @@ public class ProjectAppService : IProjectAppService
             return false;
         }
 
+        await _traceRepository.Queryable
+            .Where(trace => trace.ProjectId == id)
+            .ExecuteDeleteAsync();
         _projectRepository.Remove(existing);
         await _unitOfWork.SaveChangesAsync();
         return true;

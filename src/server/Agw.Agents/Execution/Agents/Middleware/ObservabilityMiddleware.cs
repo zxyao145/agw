@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 using Microsoft.Agents.AI;
@@ -9,9 +8,6 @@ namespace Agw.Agents.Execution.Agents.Middleware;
 
 public sealed class ObservabilityMiddleware
 {
-    private const string WorkflowActivitySourceName = "Microsoft.Agents.AI.Workflows";
-    private const string ExecutorProcessActivityName = "executor.process";
-
     private readonly ILogger<ObservabilityMiddleware> _logger;
 
     public ObservabilityMiddleware(ILogger<ObservabilityMiddleware> logger)
@@ -28,7 +24,6 @@ public sealed class ObservabilityMiddleware
     {
         var agentName = innerAgent.Name;
         var inputMessages = messages.ToList();
-        TagCurrentWorkflowExecutor(agentName);
         _logger.LogInformation("Executing agent {AgentName}", agentName);
         _logger.LogDebug("Agent {AgentName} input: {@Input}", agentName, inputMessages);
 
@@ -52,7 +47,6 @@ public sealed class ObservabilityMiddleware
     {
         var agentName = innerAgent.Name;
         var inputMessages = messages.ToList();
-        TagCurrentWorkflowExecutor(agentName);
         _logger.LogInformation("Executing agent {AgentName}", agentName);
         _logger.LogDebug("Agent {AgentName} input: {@Input}", agentName, inputMessages);
 
@@ -63,13 +57,4 @@ public sealed class ObservabilityMiddleware
         return response;
     }
 
-    private static void TagCurrentWorkflowExecutor(string? agentName)
-    {
-        var activity = Activity.Current;
-        if (activity?.Source.Name == WorkflowActivitySourceName &&
-            activity.OperationName.StartsWith(ExecutorProcessActivityName, StringComparison.Ordinal))
-        {
-            activity.SetTag("gen_ai.agent.name", agentName);
-        }
-    }
 }

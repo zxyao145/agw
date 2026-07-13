@@ -10,7 +10,7 @@ namespace Agw.Agents.Execution.Agentflows.Observability;
 
 internal static class AgentflowNodeExecutionActivity
 {
-    internal const string SourceName = "Agentflow.Execution.Persistence";
+    internal const string SourceName = "Agw.Agentflow.Execution.Persistence";
     private const string CapturePropertyName = "AgentflowNodeExecutionCapture";
     private static readonly ActivitySource Source = new(SourceName);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

@@ -71,7 +71,7 @@ public class ObservabilityMiddlewareTests
     }
 
     [Fact]
-    public async Task LogRunMiddleware_WorkflowExecutorSpan_AddsPersistedAgentNameTag()
+    public async Task LogRunMiddleware_WorkflowExecutorSpan_DoesNotAddAgentNameTag()
     {
         using var listener = new ActivityListener
         {
@@ -93,7 +93,7 @@ public class ObservabilityMiddlewareTests
             agent,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal("persisted-agent", activity.GetTagItem("gen_ai.agent.name"));
+        Assert.Null(activity.GetTagItem("gen_ai.agent.name"));
     }
 
     private static AIAgent CreateAgent(string name)

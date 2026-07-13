@@ -1,4 +1,5 @@
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Extensions;
@@ -12,6 +13,7 @@ public class ProjectContextAppService
 {
     private readonly IRepository<ProjectContext> _contextRepository;
     private readonly IRepository<TaskRecord> _recordRepository;
+    private readonly IRepository<AgentflowTrace> _traceRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectResolver _projectResolver;
     private readonly TaskRecordDomainService _taskRecordDomainService;
@@ -20,6 +22,7 @@ public class ProjectContextAppService
     public ProjectContextAppService(
         IRepository<ProjectContext> contextRepository,
         IRepository<TaskRecord> recordRepository,
+        IRepository<AgentflowTrace> traceRepository,
         IUnitOfWork unitOfWork,
         ProjectResolver projectResolver,
         TaskRecordDomainService taskRecordDomainService,
@@ -27,6 +30,7 @@ public class ProjectContextAppService
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
+        _traceRepository = traceRepository;
         _unitOfWork = unitOfWork;
         _projectResolver = projectResolver;
         _taskRecordDomainService = taskRecordDomainService;
@@ -91,6 +95,9 @@ public class ProjectContextAppService
         await _recordRepository.Queryable
             .Where(record => record.ProjectContextId == context.Id)
             .ExecuteDeleteAsync();
+        await _traceRepository.Queryable
+            .Where(trace => trace.ProjectId == context.ProjectId && trace.ContextId == context.ContextId)
+            .ExecuteDeleteAsync();
 
         await _taskSessionBindingService.DeleteByContextAsync(context.Id);
 
@@ -135,6 +142,10 @@ public class ProjectContextAppService
             await _taskSessionBindingService.DeleteByContextAsync(context.Id);
         }
 
+        await _traceRepository.Queryable
+            .Where(trace => trace.ProjectId == project.Id)
+            .ExecuteDeleteAsync();
+
         await _contextRepository.Queryable
             .Where(context => context.ProjectId == project.Id)
             .ExecuteDeleteAsync();
@@ -153,6 +164,9 @@ public class ProjectContextAppService
 
         await _recordRepository.Queryable
             .Where(record => record.ProjectContextId == context.Id)
+            .ExecuteDeleteAsync();
+        await _traceRepository.Queryable
+            .Where(trace => trace.ProjectId == context.ProjectId && trace.ContextId == context.ContextId)
             .ExecuteDeleteAsync();
 
         await _taskSessionBindingService.DeleteByContextAsync(context.Id);

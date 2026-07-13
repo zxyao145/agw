@@ -3,6 +3,7 @@ using System.Reflection;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Tasks.Application;
 using Agw.Tasks.Controllers;
@@ -334,6 +335,7 @@ public class ProjectContextsControllerTests
         return new ProjectContextAppService(
             new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
+            new EfRepository<AgentflowTrace>(dbContext),
             new UnitOfWork(dbContext),
             new ProjectResolver(projectRepository),
             new TaskRecordDomainService(),

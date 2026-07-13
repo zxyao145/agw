@@ -41,6 +41,7 @@ public class AgentflowTraceTests
                    [new ChatMessage(ChatRole.User, "hello")]))
         {
             Assert.NotNull(scope.Activity);
+            Assert.Equal("Agw.Agentflow.Execution.Persistence", scope.Activity.Source.Name);
             Assert.DoesNotContain(scope.Activity.TagObjects, tag => tag.Key.Contains("input", StringComparison.OrdinalIgnoreCase));
             scope.Complete();
         }

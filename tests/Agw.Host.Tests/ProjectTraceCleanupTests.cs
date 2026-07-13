@@ -1,0 +1,183 @@
+using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Repositories;
+using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Tasks;
+using Agw.Tasks.Application;
+using Agw.Tasks.Domain.Services;
+
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+
+using Xunit;
+
+namespace Agw.Host.Tests;
+
+public class ProjectTraceCleanupTests
+{
+    [Fact]
+    public async Task ClearRecordsAsync_ContextHasTraces_RemovesOnlyContextTraces()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        var projectId = Guid.NewGuid();
+        await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
+        var service = CreateProjectContextService(dbContext);
+
+        await service.ClearRecordsAsync(projectId, "context-1");
+
+        var trace = Assert.Single(await dbContext.AgentflowNodeExecutionTraces.ToListAsync(cancellationToken));
+        Assert.Equal("context-2", trace.ContextId);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ContextHasTraces_RemovesOnlyContextTraces()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        var projectId = Guid.NewGuid();
+        await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
+        var service = CreateProjectContextService(dbContext);
+
+        await service.DeleteAsync(projectId, "context-1");
+
+        var trace = Assert.Single(await dbContext.AgentflowNodeExecutionTraces.ToListAsync(cancellationToken));
+        Assert.Equal("context-2", trace.ContextId);
+    }
+
+    [Fact]
+    public async Task DeleteAllAsync_ProjectHasTraces_RemovesOnlyProjectTraces()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        var projectId = Guid.NewGuid();
+        var otherProjectId = Guid.NewGuid();
+        await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
+        await SeedProjectContextsAndTracesAsync(dbContext, otherProjectId, cancellationToken, "other-");
+        var service = CreateProjectContextService(dbContext);
+
+        await service.DeleteAllAsync(projectId);
+
+        var traces = await dbContext.AgentflowNodeExecutionTraces.ToListAsync(cancellationToken);
+        Assert.Equal(2, traces.Count);
+        Assert.All(traces, trace => Assert.Equal(otherProjectId, trace.ProjectId));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ProjectHasTraces_RemovesOnlyProjectTraces()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        var projectId = Guid.NewGuid();
+        var otherProjectId = Guid.NewGuid();
+        await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
+        await SeedProjectContextsAndTracesAsync(dbContext, otherProjectId, cancellationToken, "other-");
+        var service = CreateProjectService(dbContext);
+
+        await service.DeleteAsync(projectId);
+
+        var traces = await dbContext.AgentflowNodeExecutionTraces.ToListAsync(cancellationToken);
+        Assert.Equal(2, traces.Count);
+        Assert.All(traces, trace => Assert.Equal(otherProjectId, trace.ProjectId));
+    }
+
+    private static async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        return connection;
+    }
+
+    private static async Task<AgwDbContext> CreateDbContextAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        var dbContext = new AgwDbContext(options);
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        return dbContext;
+    }
+
+    private static async Task SeedProjectContextsAndTracesAsync(
+        AgwDbContext dbContext,
+        Guid projectId,
+        CancellationToken cancellationToken,
+        string contextPrefix = "")
+    {
+        dbContext.Projects.Add(new Project
+        {
+            Id = projectId,
+            Name = $"Project-{projectId:N}",
+            Type = ProjectType.UserDefined,
+            Enable = true,
+            CreateBy = "tester",
+            CreateTime = DateTime.UtcNow,
+        });
+        dbContext.ProjectContexts.AddRange(
+            CreateProjectContext(projectId, $"{contextPrefix}context-1"),
+            CreateProjectContext(projectId, $"{contextPrefix}context-2"));
+        dbContext.AgentflowNodeExecutionTraces.AddRange(
+            CreateTrace(projectId, $"{contextPrefix}context-1"),
+            CreateTrace(projectId, $"{contextPrefix}context-2"));
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static ProjectContext CreateProjectContext(Guid projectId, string contextId) => new()
+    {
+        Id = Guid.NewGuid(),
+        ProjectId = projectId,
+        ContextId = contextId,
+        Title = contextId,
+        CreateBy = "tester",
+        CreateTime = DateTime.UtcNow,
+    };
+
+    private static AgentflowTrace CreateTrace(Guid projectId, string contextId) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        StartTimeUtc = DateTime.UtcNow,
+        ProjectId = projectId,
+        ContextId = contextId,
+        TaskId = Guid.NewGuid(),
+        AgentflowId = Guid.NewGuid(),
+        NodeId = "node-1",
+        NodeKind = AgentflowNodeKind.Agent,
+        Input = "input",
+        Status = AgentflowNodeExecutionStatus.Succeeded,
+    };
+
+    private static ProjectContextAppService CreateProjectContextService(AgwDbContext dbContext)
+    {
+        var projectRepository = new EfRepository<Project>(dbContext);
+        return new ProjectContextAppService(
+            new EfRepository<ProjectContext>(dbContext),
+            new EfRepository<TaskRecord>(dbContext),
+            new EfRepository<AgentflowTrace>(dbContext),
+            new UnitOfWork(dbContext),
+            new ProjectResolver(projectRepository),
+            new TaskRecordDomainService(),
+            new TaskSessionBindingService(
+                new EfRepository<TaskSessionBinding>(dbContext),
+                new EfRepository<ProjectContext>(dbContext),
+                new UnitOfWork(dbContext)));
+    }
+
+    private static ProjectAppService CreateProjectService(AgwDbContext dbContext)
+    {
+        var projectRepository = new EfRepository<Project>(dbContext);
+        return new ProjectAppService(
+            projectRepository,
+            new EfRepository<AgentflowTrace>(dbContext),
+            new UnitOfWork(dbContext),
+            new ProjectDomainService(),
+            new ProjectResolver(projectRepository));
+    }
+}

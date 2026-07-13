@@ -3,6 +3,7 @@ using Agw.Infrastructure.Repositories;
 using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
@@ -443,6 +444,7 @@ public class ProjectContextAppServiceTests
         return new ProjectContextAppService(
             new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
+            new EfRepository<AgentflowTrace>(dbContext),
             new UnitOfWork(dbContext),
             new ProjectResolver(projectRepository),
             new TaskRecordDomainService(),

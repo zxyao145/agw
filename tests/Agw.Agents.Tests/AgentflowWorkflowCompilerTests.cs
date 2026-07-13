@@ -73,8 +73,6 @@ public class AgentflowWorkflowCompilerTests
         Assert.Contains(activities, activity => activity.OperationName.StartsWith("executor.process", StringComparison.Ordinal));
         Assert.Contains(activities, activity => activity.OperationName == "edge_group.process");
         Assert.Contains(activities, activity => activity.OperationName == "message.send");
-        Assert.Contains(activities, activity =>
-            Equals(activity.GetTagItem("gen_ai.agent.name"), "persisted-agent"));
         Assert.DoesNotContain(activities.SelectMany(activity => activity.TagObjects), tag =>
             tag.Key is "executor.input" or "executor.output" or "message.content");
     }
