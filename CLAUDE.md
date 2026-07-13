@@ -34,7 +34,7 @@ Agw.Setup/             First-run setup, initialization state, API-key guard midd
 
 `Agw.slnx` is the root solution and includes backend projects plus tests. `src/server/backend.sln` includes backend projects only.
 
-`Agw.slnx` includes test projects for A2A, Agents, Files, Setup, Shared, Skills, Tasks, and Tools. `tests/Agw.Jobs.Tests` exists but is not currently included in `Agw.slnx`; run it explicitly when touching jobs/scheduler code.
+`Agw.slnx` includes test projects for A2A, Agents, Files, Host, Jobs, Setup, Shared, Skills, Tasks, and Tools.
 
 ### Module Layering
 
@@ -99,7 +99,6 @@ dotnet test tests/Agw.Setup.Tests
 dotnet test tests/Agw.Shared.Tests
 dotnet test tests/Agw.Tools.Tests
 
-# Agw.Jobs.Tests is not in Agw.slnx; run it explicitly when needed
 dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj
 
 # Run one test by method/class name match
@@ -153,9 +152,10 @@ On first backend run, open `http://localhost:5015/setup` to choose the database 
 
 Primary backend settings live in `src/server/Agw.Host/appsettings.json`:
 
-- `Database:Provider`: supports `sqlite`, `postgres`, and `mysql`
+- `Database:Provider`: supports `sqlite` and `postgres`
 - `Database:ConnectionString`: defaults to `Data Source=agw.db`
-- `Redis:ConnectionString`: defaults to `localhost:6379,abortConnect=false`
+- `DistributedLock:Provider`: supports `inmemory` and `postgres`; null or missing follows `Database:Provider`
+- `DistributedLock:ConnectionString`: when empty, a PostgreSQL lock reuses `Database:ConnectionString`
 - `OpenTelemetry:OtlpEndpoint`: defaults to `http://localhost:4317`
 - `SystemInitialization`: controls first-run initialization/API-key state
 

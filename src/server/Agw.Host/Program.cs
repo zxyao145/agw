@@ -336,19 +336,11 @@ try
         options.Transports = HttpTransportType.WebSockets;
     }).RequireAuthorization();
     app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
-    app.MapGet("/health/ready", async (IInitializationStateStore stateStore, AgwDbContext dbContext, IServiceProvider services, IConfiguration configuration) =>
+    app.MapGet("/health/ready", async (IInitializationStateStore stateStore, AgwDbContext dbContext) =>
     {
         if (!stateStore.GetSnapshot().IsInitialized || !await dbContext.Database.CanConnectAsync())
         {
             return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
-        }
-        if (configuration.GetValue<bool>("Redis:Enabled"))
-        {
-            var redis = services.GetService<StackExchange.Redis.IConnectionMultiplexer>();
-            if (redis == null || !redis.IsConnected)
-            {
-                return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
-            }
         }
         return Results.Ok(new { status = "ready" });
     });

@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Setup.Contracts;
+using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 
 using Microsoft.EntityFrameworkCore;
@@ -34,7 +35,10 @@ public class SetupInitializationService : ISetupInitializationService
         var resolvedRequest = new SetupRequest
         {
             Provider = request.Provider,
-            ConnectionString = DatabaseConnectionStringResolver.Resolve(request.Provider, request.ConnectionString, _paths),
+            ConnectionString = DatabaseConnectionStringResolver.Resolve(
+                request.Provider,
+                request.ConnectionString,
+                _paths),
             AdminPassword = request.AdminPassword,
             SetupCode = request.SetupCode
         };
@@ -50,27 +54,12 @@ public class SetupInitializationService : ISetupInitializationService
 
     private static void ConfigureDatabaseProvider(DbContextOptionsBuilder<AgwDbContext> dbOptions, SetupRequest request)
     {
-        var settings = new DatabaseSettings
+        if (request.Provider == DatabaseProvider.Postgres)
         {
-            Provider = request.Provider,
-            ConnectionString = request.ConnectionString
-        };
-
-        var provider = settings.Provider.Trim().ToLowerInvariant();
-
-        switch (provider)
-        {
-            case "postgres":
-            case "postgresql":
-                dbOptions.UseNpgsql(settings.ConnectionString).UseSnakeCaseNamingConvention();
-                break;
-            case "mysql":
-                dbOptions.UseMySql(settings.ConnectionString, ServerVersion.AutoDetect(settings.ConnectionString))
-                    .UseSnakeCaseNamingConvention();
-                break;
-            default:
-                dbOptions.UseSqlite(settings.ConnectionString).UseSnakeCaseNamingConvention();
-                break;
+            dbOptions.UseNpgsql(request.ConnectionString).UseSnakeCaseNamingConvention();
+            return;
         }
+
+        dbOptions.UseSqlite(request.ConnectionString).UseSnakeCaseNamingConvention();
     }
 }

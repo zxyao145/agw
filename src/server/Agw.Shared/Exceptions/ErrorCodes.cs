@@ -56,6 +56,8 @@ public static class ErrorCodes
     public static readonly ErrorCode FetchFailed = new(400_0050, "Failed to fetch content.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode QueryRequired = new(400_0051, "Query is required.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode InvalidParameters = new(400_0052, "Invalid parameters.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode UnsupportedDatabaseProvider = new(400_0053, "Database provider is not supported.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode UnsupportedDistributedLockProvider = new(400_0054, "Distributed lock provider is not supported.", HttpStatusCode.BadRequest);
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode SftpAuthenticationFailed = new(401_0002, "SFTP authentication failed.", HttpStatusCode.Unauthorized);

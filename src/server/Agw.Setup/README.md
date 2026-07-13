@@ -4,7 +4,7 @@
 
 ## Initialization
 
-Before initialization, normal UI requests redirect to `/setup`; APIs return 403 except Server info and health checks. The setup form selects SQLite, MySQL, or PostgreSQL and creates an administrator password of 12–256 characters.
+Before initialization, normal UI requests redirect to `/setup`; APIs return 403 except Server info and health checks. The setup form selects SQLite or PostgreSQL and creates an administrator password of 12–256 characters.
 
 Direct loopback setup is trusted. Setup through a domain or forwarded request additionally requires the one-time Setup Code printed by the Server at startup.
 

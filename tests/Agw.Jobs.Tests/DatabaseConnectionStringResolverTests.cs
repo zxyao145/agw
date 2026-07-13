@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Configuration;
+using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 
 namespace Agw.Jobs.Tests;
@@ -10,7 +11,10 @@ public class DatabaseConnectionStringResolverTests
     {
         var paths = AgwDataPaths.Resolve("/tmp/agw-data", "/unused");
 
-        var result = DatabaseConnectionStringResolver.Resolve("sqlite", "Data Source=custom.db", paths);
+        var result = DatabaseConnectionStringResolver.Resolve(
+            DatabaseProvider.Sqlite,
+            "Data Source=custom.db",
+            paths);
 
         Assert.Equal($"Data Source={Path.Combine(paths.Root, "database", "custom.db")}", result);
     }
@@ -21,8 +25,12 @@ public class DatabaseConnectionStringResolverTests
         const string connectionString = "Host=db;Database=agw";
         var paths = AgwDataPaths.Resolve("/tmp/agw-data", "/unused");
 
-        var result = DatabaseConnectionStringResolver.Resolve("postgres", connectionString, paths);
+        var result = DatabaseConnectionStringResolver.Resolve(
+            DatabaseProvider.Postgres,
+            connectionString,
+            paths);
 
         Assert.Equal(connectionString, result);
     }
+
 }

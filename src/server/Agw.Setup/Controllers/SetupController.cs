@@ -1,5 +1,6 @@
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
+using Agw.Shared.Configuration;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -39,7 +40,7 @@ public class SetupController : Controller
         ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
         return View(new SetupRequest
         {
-            Provider = "sqlite",
+            Provider = DatabaseProvider.Sqlite,
             ConnectionString = "Data Source=agw.db"
         });
     }

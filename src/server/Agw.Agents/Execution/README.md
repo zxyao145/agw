@@ -375,8 +375,6 @@ dotnet test tests/Agw.A2A.Tests/Agw.A2A.Tests.csproj
 dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj
 ```
 
-`Agw.Jobs.Tests` 当前不在 `Agw.slnx` 中，必须单独执行。
-
 ## 非 SignalR 调用
 
 A2A 和 Jobs 不经过 `ExecutionHub`、connection registry 或 command dispatcher。它们直接调用 `IAgentRuntimeService` / `IAgentflowRuntimeService`：

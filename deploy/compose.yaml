@@ -6,7 +6,6 @@ services:
       - "127.0.0.1:5015:8080"
     environment:
       AllowedHosts: "agw.example.com"
-      Redis__Enabled: "false"
       ReverseProxy__TrustedProxies__0: "172.28.0.1"
     volumes:
       - agw-data:/data

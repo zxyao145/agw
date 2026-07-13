@@ -1,12 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 
+using Agw.Shared.Configuration;
+
 namespace Agw.Setup.Contracts;
 
 public class SetupRequest
 {
     [Required]
     [Display(Name = "数据库类型")]
-    public string Provider { get; set; } = "sqlite";
+    public DatabaseProvider Provider { get; set; } = DatabaseProvider.Sqlite;
 
     [Required]
     [Display(Name = "连接字符串")]

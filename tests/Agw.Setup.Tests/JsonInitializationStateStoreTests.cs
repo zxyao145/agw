@@ -1,5 +1,6 @@
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
+using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 
 using Xunit;
@@ -18,16 +19,21 @@ public class JsonInitializationStateStoreTests
 
             await store.PersistAsync(new SetupRequest
             {
-                Provider = "sqlite",
+                Provider = DatabaseProvider.Sqlite,
                 ConnectionString = "Data Source=agw.db",
                 AdminPassword = "password-password"
             }, "hashed-password", TestContext.Current.CancellationToken);
 
-            var reloaded = new JsonInitializationStateStore(paths).GetSnapshot();
+            var reloadedStore = new JsonInitializationStateStore(paths);
+            var reloaded = reloadedStore.GetSnapshot();
             Assert.True(reloaded.IsInitialized);
             Assert.Equal("hashed-password", reloaded.PasswordHash);
             Assert.Equal(1, reloaded.SessionVersion);
+            Assert.Equal(DatabaseProvider.Sqlite, reloadedStore.DatabaseProvider);
             Assert.True(File.Exists(paths.StateFile));
+            Assert.Contains(
+                "\"provider\": \"sqlite\"",
+                await File.ReadAllTextAsync(paths.StateFile, TestContext.Current.CancellationToken));
             if (!OperatingSystem.IsWindows())
             {
                 Assert.Equal(
@@ -50,7 +56,7 @@ public class JsonInitializationStateStoreTests
             var store = new JsonInitializationStateStore(paths);
             await store.PersistAsync(new SetupRequest
             {
-                Provider = "sqlite",
+                Provider = DatabaseProvider.Sqlite,
                 ConnectionString = "Data Source=agw.db",
                 AdminPassword = "password-password"
             }, "hashed-password", TestContext.Current.CancellationToken);
@@ -77,7 +83,7 @@ public class JsonInitializationStateStoreTests
             var store = new JsonInitializationStateStore(paths);
             await store.PersistAsync(new SetupRequest
             {
-                Provider = "sqlite",
+                Provider = DatabaseProvider.Sqlite,
                 ConnectionString = "Data Source=agw.db",
                 AdminPassword = "password-password"
             }, "hashed-password", TestContext.Current.CancellationToken);

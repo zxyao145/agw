@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Configuration;
+using Agw.Shared.Configuration;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -11,6 +12,12 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
     public AgwDbContext CreateDbContext(string[] args)
     {
         var configuration = BuildConfiguration();
+        var configuredProvider = configuration[$"{DatabaseSettings.SectionName}:Provider"];
+        if (configuredProvider != null)
+        {
+            DatabaseProviderResolver.Parse(configuredProvider);
+        }
+
         var settings = configuration
             .GetSection(DatabaseSettings.SectionName)
             .Get<DatabaseSettings>() ?? new DatabaseSettings();
@@ -61,29 +68,16 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
 
     private static void ConfigureDatabaseProvider(DbContextOptionsBuilder options, DatabaseSettings settings)
     {
-        var provider = settings.Provider?.Trim().ToLowerInvariant();
-
-        switch (provider)
+        if (settings.Provider == DatabaseProvider.Postgres)
         {
-            case "postgres":
-            case "postgresql":
-                options.UseNpgsql(settings.ConnectionString)
-                    .UseSnakeCaseNamingConvention();
-                break;
-
-            case "mysql":
-                options.UseMySql(
-                        settings.ConnectionString,
-                        ServerVersion.AutoDetect(settings.ConnectionString))
-                    .UseSnakeCaseNamingConvention();
-                break;
-
-            default:
-                options.UseSqlite(string.IsNullOrWhiteSpace(settings.ConnectionString)
-                        ? "Data Source=d_system.db"
-                        : settings.ConnectionString)
-                    .UseSnakeCaseNamingConvention();
-                break;
+            options.UseNpgsql(settings.ConnectionString)
+                .UseSnakeCaseNamingConvention();
+            return;
         }
+
+        options.UseSqlite(string.IsNullOrWhiteSpace(settings.ConnectionString)
+                ? "Data Source=d_system.db"
+                : settings.ConnectionString)
+            .UseSnakeCaseNamingConvention();
     }
 }

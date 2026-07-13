@@ -7,6 +7,8 @@ using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.External;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Configuration;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Services;
 using Agw.Shared.Runtime;
 
@@ -16,7 +18,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-using StackExchange.Redis;
+using Medallion.Threading;
+using Medallion.Threading.Postgres;
 
 namespace Agw.Infrastructure;
 
@@ -24,7 +27,35 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        var configuredDatabaseProvider = configuration[$"{DatabaseSettings.SectionName}:Provider"];
+        if (configuredDatabaseProvider != null)
+        {
+            DatabaseProviderResolver.Parse(configuredDatabaseProvider);
+        }
+
+        var configuredDistributedLockProvider = configuration[$"{DistributedLockSettings.SectionName}:Provider"];
+        if (configuredDistributedLockProvider != null)
+        {
+            DistributedLockSettingsResolver.ParseProvider(configuredDistributedLockProvider);
+        }
+
+        var databaseSettings = configuration
+            .GetSection(DatabaseSettings.SectionName)
+            .Get<DatabaseSettings>() ?? new DatabaseSettings();
+        var distributedLockSettings = configuration
+            .GetSection(DistributedLockSettings.SectionName)
+            .Get<DistributedLockSettings>() ?? new DistributedLockSettings();
+        if (distributedLockSettings.Provider.HasValue)
+        {
+            DistributedLockSettingsResolver.Resolve(
+                distributedLockSettings,
+                databaseSettings.Provider,
+                databaseSettings.ConnectionString);
+        }
+
         services.Configure<DatabaseSettings>(configuration.GetSection(DatabaseSettings.SectionName));
+        services.Configure<DistributedLockSettings>(
+            configuration.GetSection(DistributedLockSettings.SectionName));
         services.AddDbContext<AgwDbContext>((serviceProvider, options) =>
         {
             var settings = serviceProvider
@@ -55,47 +86,33 @@ public static class DependencyInjection
 
         services.AddSingleton<IGitCommandService, GitCommandService>();
 
-        if (configuration.GetValue<bool>("Redis:Enabled"))
-        {
-            var redisConnectionString = configuration.GetValue<string>("Redis:ConnectionString") ?? "localhost:6379,abortConnect=false";
-            var redisConfiguration = ConfigurationOptions.Parse(redisConnectionString);
-            redisConfiguration.AbortOnConnectFail = false;
-            services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConfiguration));
-            services.AddSingleton<IProjectExecutionLock, RedisProjectExecutionLock>();
-        }
-        else
-        {
-            services.AddSingleton<IProjectExecutionLock, InMemoryProjectExecutionLock>();
-        }
+        services.AddSingleton<InMemoryProjectExecutionLock>();
+        services.AddSingleton<Func<DistributedLockProvider, string, IDistributedLockProvider>>(_ =>
+            (provider, connectionString) => provider switch
+            {
+                DistributedLockProvider.Postgres =>
+                    new PostgresDistributedSynchronizationProvider(connectionString),
+                _ => throw new AgwException(
+                    ErrorCodes.UnsupportedDistributedLockProvider,
+                    $"Distributed lock provider '{provider}' is not supported.")
+            });
+        services.AddSingleton<IProjectExecutionLock, ProjectExecutionLockRouter>();
 
         return services;
     }
 
     private static void ConfigureDatabaseProvider(DbContextOptionsBuilder options, DatabaseSettings settings)
     {
-        var provider = settings.Provider?.Trim().ToLowerInvariant();
-
-        switch (provider)
+        if (settings.Provider == DatabaseProvider.Postgres)
         {
-            case "postgres":
-            case "postgresql":
-                options.UseNpgsql(settings.ConnectionString)
-                    .UseSnakeCaseNamingConvention();
-                break;
-
-            case "mysql":
-                options.UseMySql(
-                        settings.ConnectionString,
-                        ServerVersion.AutoDetect(settings.ConnectionString))
-                    .UseSnakeCaseNamingConvention();
-                break;
-
-            default:
-                options.UseSqlite(string.IsNullOrWhiteSpace(settings.ConnectionString)
-                        ? "Data Source=d_system.db"
-                        : settings.ConnectionString)
-                    .UseSnakeCaseNamingConvention();
-                break;
+            options.UseNpgsql(settings.ConnectionString)
+                .UseSnakeCaseNamingConvention();
+            return;
         }
+
+        options.UseSqlite(string.IsNullOrWhiteSpace(settings.ConnectionString)
+                ? "Data Source=d_system.db"
+                : settings.ConnectionString)
+            .UseSnakeCaseNamingConvention();
     }
 }

@@ -1,18 +1,23 @@
 using Microsoft.Data.Sqlite;
 
+using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 
 namespace Agw.Infrastructure.Configuration;
 
 public static class DatabaseConnectionStringResolver
 {
-    public static string Resolve(string? provider, string connectionString, AgwDataPaths paths)
+    public static string Resolve(DatabaseProvider provider, string connectionString, AgwDataPaths paths)
     {
-        if (!string.Equals(provider?.Trim(), "sqlite", StringComparison.OrdinalIgnoreCase))
+        if (provider != DatabaseProvider.Sqlite)
         {
             return connectionString;
         }
 
+        return ResolveSqlite(connectionString, paths);
+    }
+    private static string ResolveSqlite(string connectionString, AgwDataPaths paths)
+    {
         var builder = new SqliteConnectionStringBuilder(connectionString);
         if (string.IsNullOrWhiteSpace(builder.DataSource))
         {

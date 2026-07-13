@@ -22,7 +22,7 @@ Use 4-space indentation for C#. Follow standard .NET naming: `PascalCase` for ty
 
 ## Testing Guidelines
 
-Backend tests use xUnit. Mirror production namespaces where practical and prefer method names like `Method_Condition_ExpectedResult`. Run `dotnet test Agw.slnx` before completing backend changes. If touching `Agw.Jobs`, also run `dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj`, because that project is not currently included in `Agw.slnx`.
+Backend tests use xUnit. Mirror production namespaces where practical and prefer method names like `Method_Condition_ExpectedResult`. Run `dotnet test Agw.slnx` before completing backend changes.
 
 ## Commit & Pull Request Guidelines
 

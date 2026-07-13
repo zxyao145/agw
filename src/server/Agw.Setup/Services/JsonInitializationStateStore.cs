@@ -1,9 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
-using Agw.Infrastructure.Configuration;
 using Agw.Setup.Contracts;
+using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 
@@ -13,7 +14,7 @@ public sealed class JsonInitializationStateStore : IInitializationStateStore, IS
 {
     private readonly AgwDataPaths _paths;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
-    private readonly JsonSerializerOptions _serializerOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    private readonly JsonSerializerOptions _serializerOptions = CreateSerializerOptions();
     private volatile ServerState _state;
 
     public JsonInitializationStateStore(AgwDataPaths paths)
@@ -33,6 +34,8 @@ public sealed class JsonInitializationStateStore : IInitializationStateStore, IS
     }
 
     public bool IsInitialized => _state.IsInitialized;
+    public DatabaseProvider DatabaseProvider => _state.Database.Provider;
+    public string DatabaseConnectionString => _state.Database.ConnectionString;
 
     public async Task PersistAsync(SetupRequest request, string passwordHash, CancellationToken cancellationToken = default)
     {
@@ -43,7 +46,11 @@ public sealed class JsonInitializationStateStore : IInitializationStateStore, IS
             {
                 SchemaVersion = 1,
                 IsInitialized = true,
-                Database = new DatabaseSettings { Provider = request.Provider, ConnectionString = request.ConnectionString },
+                Database = new ServerDatabaseState
+                {
+                    Provider = request.Provider,
+                    ConnectionString = request.ConnectionString
+                },
                 PasswordHash = passwordHash,
                 SessionVersion = 1,
                 Tokens = []
@@ -184,6 +191,13 @@ public sealed class JsonInitializationStateStore : IInitializationStateStore, IS
         return JsonSerializer.Deserialize<ServerState>(File.ReadAllText(path), _serializerOptions) ?? new ServerState();
     }
 
+    private static JsonSerializerOptions CreateSerializerOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true };
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+        return options;
+    }
+
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
     private static ApiTokenSummary ToSummary(ApiTokenRecord token) => new(token.Id, token.Name, token.Prefix, token.CreatedAt);
@@ -192,7 +206,7 @@ public sealed class JsonInitializationStateStore : IInitializationStateStore, IS
     {
         SchemaVersion = state.SchemaVersion,
         IsInitialized = state.IsInitialized,
-        Database = new DatabaseSettings
+        Database = new ServerDatabaseState
         {
             Provider = state.Database.Provider,
             ConnectionString = state.Database.ConnectionString
@@ -213,10 +227,16 @@ public sealed class JsonInitializationStateStore : IInitializationStateStore, IS
     {
         public int SchemaVersion { get; set; } = 1;
         public bool IsInitialized { get; set; }
-        public DatabaseSettings Database { get; set; } = new();
+        public ServerDatabaseState Database { get; set; } = new();
         public string? PasswordHash { get; set; }
         public int SessionVersion { get; set; }
         public List<ApiTokenRecord> Tokens { get; set; } = [];
+    }
+
+    private sealed class ServerDatabaseState
+    {
+        public DatabaseProvider Provider { get; set; } = DatabaseProvider.Sqlite;
+        public string ConnectionString { get; set; } = string.Empty;
     }
 
     private sealed class ApiTokenRecord

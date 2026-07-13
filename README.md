@@ -215,6 +215,10 @@ Primary backend settings are in [`src/server/Agw.Host/appsettings.json`](src/ser
     "Provider": "sqlite",
     "ConnectionString": "Data Source=agw.db"
   },
+  "DistributedLock": {
+    "Provider": null,
+    "ConnectionString": ""
+  },
   "OpenTelemetry": {
     "ServiceName": "Agw",
     "ServiceVersion": "1.0.0",
@@ -223,6 +227,7 @@ Primary backend settings are in [`src/server/Agw.Host/appsettings.json`](src/ser
 }
 ```
 
-- Supported database providers are `sqlite`, `postgres`, and `mysql`.
+- Supported database providers are `sqlite` and `postgres`.
+- Distributed-lock providers are `inmemory` and `postgres`. When `DistributedLock:Provider` is null or absent, SQLite uses the in-memory lock and PostgreSQL uses PostgreSQL advisory locks. An empty PostgreSQL lock connection string reuses `Database:ConnectionString`.
 - Keep secrets out of committed config files; prefer environment-variable overrides.
 - After backend contract changes, regenerate `src/clients/web/src/api/openapi.d.ts` with `pnpm gen:openapi`.

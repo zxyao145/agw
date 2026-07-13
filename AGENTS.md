@@ -27,8 +27,7 @@ Agw.Tools/           # Tool discovery, metadata, and AI tool factory/registry
 
 Notes:
 
-- `Agw.slnx` includes all backend projects above plus the A2A, Agents, Files, Setup, Shared, Skills, Tasks, and Tools test projects.
-- `tests/Agw.Jobs.Tests` exists in the repo but is not currently included in `Agw.slnx`.
+- `Agw.slnx` includes all backend projects above plus the A2A, Agents, Files, Host, Jobs, Setup, Shared, Skills, Tasks, and Tools test projects.
 
 ### Web Client (`src/clients/web/`)
 
@@ -144,7 +143,6 @@ Notes:
 
 - Backend tests use xUnit.
 - Run `dotnet test Agw.slnx` for the normal repo-wide backend test pass.
-- If you touch `Agw.Jobs`, also run `dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj` because that project is not currently part of `Agw.slnx`.
 - Prefer test namespaces that mirror production namespaces and method names like `Method_Condition_ExpectedResult`.
 
 ## Rules
@@ -174,6 +172,10 @@ Primary backend settings live in `src/server/Agw.Host/appsettings.json`:
     "Provider": "sqlite",
     "ConnectionString": "Data Source=agw.db"
   },
+  "DistributedLock": {
+    "Provider": null,
+    "ConnectionString": ""
+  },
   "OpenTelemetry": {
     "ServiceName": "Agw",
     "ServiceVersion": "1.0.0",
@@ -184,7 +186,8 @@ Primary backend settings live in `src/server/Agw.Host/appsettings.json`:
 
 Guidance:
 
-- Supported database providers are `sqlite`, `postgres`, and `mysql`.
+- Supported database providers are `sqlite` and `postgres`.
+- `DistributedLock:Provider` supports `inmemory` and `postgres`. A null or missing value follows the database provider; an empty PostgreSQL lock connection string reuses `Database:ConnectionString`.
 - Keep secrets out of `appsettings*.json` and frontend env files; prefer environment-variable overrides.
 - Register new backend services in the relevant module `DependencyInjection.cs` and wire the module into `src/server/Agw.Host/Program.cs`.
 

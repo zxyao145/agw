@@ -211,6 +211,10 @@ flowchart BT
     "Provider": "sqlite",
     "ConnectionString": "Data Source=agw.db"
   },
+  "DistributedLock": {
+    "Provider": null,
+    "ConnectionString": ""
+  },
   "OpenTelemetry": {
     "ServiceName": "Agw",
     "ServiceVersion": "1.0.0",
@@ -219,5 +223,6 @@ flowchart BT
 }
 ```
 
-- 数据库 Provider 支持： `sqlite`、`postgres` 和 `MySQL`.
+- 数据库 Provider 支持：`sqlite` 和 `postgres`。
+- 分布式执行锁 Provider 支持 `inmemory` 和 `postgres`。`DistributedLock:Provider` 为 `null` 或不存在时，SQLite 使用进程内锁，PostgreSQL 使用 advisory lock；PostgreSQL 锁连接串为空时复用 `Database:ConnectionString`。
 - 请勿将机密信息写入固定配置文件；建议优先使用环境变量进行覆盖。

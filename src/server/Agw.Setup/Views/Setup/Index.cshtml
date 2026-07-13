@@ -15,8 +15,7 @@
         <label asp-for="Provider"></label>
         <select asp-for="Provider">
             <option value="sqlite">SQLite</option>
-            <option value="mysql">MySQL</option>
-            <option value="postgresql">PostgreSQL</option>
+            <option value="postgres">PostgreSQL</option>
         </select>
         <div class="hint">后续可扩展更多数据库类型。</div>
     </div>
@@ -24,7 +23,7 @@
     <div class="field">
         <label asp-for="ConnectionString"></label>
         <input asp-for="ConnectionString" />
-        <div class="hint">示例：SQLite = Data Source=agw.db；MySQL/PostgreSQL 请填写完整连接字符串。</div>
+        <div class="hint">示例：SQLite = Data Source=agw.db；PostgreSQL 请填写完整连接字符串。</div>
         <span asp-validation-for="ConnectionString" class="error"></span>
     </div>
 
