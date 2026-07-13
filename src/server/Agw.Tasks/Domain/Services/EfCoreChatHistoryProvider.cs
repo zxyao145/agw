@@ -37,16 +37,19 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger<EfCoreChatHistoryProvider> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly JsonSerializerOptions _jsonSerializerOptions;
     private readonly ProviderSessionState<State> _state;
 
     public EfCoreChatHistoryProvider(
         IServiceScopeFactory serviceScopeFactory,
         ILogger<EfCoreChatHistoryProvider> logger,
+        TimeProvider timeProvider,
         JsonSerializerOptions? jsonSerializerOptions = null)
     {
         _serviceScopeFactory = serviceScopeFactory;
         _logger = logger;
+        _timeProvider = timeProvider;
         _jsonSerializerOptions = jsonSerializerOptions ?? DefaultJsonSerializerOptions;
         _state = new ProviderSessionState<State>(
             _ =>
@@ -119,16 +122,18 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             return [];
         }
 
-        var payloads = await dbContext.Set<TaskRecord>()
+        var records = await dbContext.Set<TaskRecord>()
             .AsNoTracking()
             .Where(record => record.ProjectContextId == projectContext.Id
                 && record.ConversationPayload != null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var payloads = records
             .OrderBy(record => record.ConversationSequence ?? long.MinValue)
             .ThenBy(record => record.CreateTime)
             .ThenBy(record => record.Id)
             .Select(record => record.ConversationPayload!)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+            .ToList();
 
         var messages = new List<ChatMessage>(payloads.Count);
         foreach (var payload in payloads)
@@ -170,7 +175,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var firstUserText = ExtractFirstText(newMessages.FirstOrDefault(message => message.Role == ChatRole.User));
         var projectContext = await dbContext.Set<ProjectContext>()
             .SingleOrDefaultAsync(

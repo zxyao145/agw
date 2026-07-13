@@ -9,18 +9,40 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Jobs.Application.Services;
 
-public class JobAppService(
-    IRepository<Job> jobTaskRepository,
-    IRepository<JobLog> jobExecutionLogRepository,
-    IRepository<TaskRecord> taskRecordRepository,
-    IRepository<ProjectContext> projectContextRepository,
-    IUnitOfWork unitOfWork,
-    IJobTimeCalculator jobTimeCalculator,
-    IJobDomainEventDispatcher jobDomainEventDispatcher)
+public class JobAppService
 {
+    private readonly IRepository<Job> _jobTaskRepository;
+    private readonly IRepository<JobLog> _jobExecutionLogRepository;
+    private readonly IRepository<TaskRecord> _taskRecordRepository;
+    private readonly IRepository<ProjectContext> _projectContextRepository;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IJobTimeCalculator _jobTimeCalculator;
+    private readonly IJobDomainEventDispatcher _jobDomainEventDispatcher;
+    private readonly TimeProvider _timeProvider;
+
+    public JobAppService(
+        IRepository<Job> jobTaskRepository,
+        IRepository<JobLog> jobExecutionLogRepository,
+        IRepository<TaskRecord> taskRecordRepository,
+        IRepository<ProjectContext> projectContextRepository,
+        IUnitOfWork unitOfWork,
+        IJobTimeCalculator jobTimeCalculator,
+        IJobDomainEventDispatcher jobDomainEventDispatcher,
+        TimeProvider timeProvider)
+    {
+        _jobTaskRepository = jobTaskRepository;
+        _jobExecutionLogRepository = jobExecutionLogRepository;
+        _taskRecordRepository = taskRecordRepository;
+        _projectContextRepository = projectContextRepository;
+        _unitOfWork = unitOfWork;
+        _jobTimeCalculator = jobTimeCalculator;
+        _jobDomainEventDispatcher = jobDomainEventDispatcher;
+        _timeProvider = timeProvider;
+    }
+
     public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
     {
-        var jobs = await jobTaskRepository.Queryable
+        var jobs = await _jobTaskRepository.Queryable
             .ToListAsync(cancellationToken);
 
         return jobs
@@ -30,12 +52,12 @@ public class JobAppService(
 
     public Task<Job?> GetAsync(Guid id)
     {
-        return jobTaskRepository.GetByIdAsync(id);
+        return _jobTaskRepository.GetByIdAsync(id);
     }
 
     public async Task<IReadOnlyList<JobLogResponse>> ListLogsAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var logs = await jobExecutionLogRepository.Queryable
+        var logs = await _jobExecutionLogRepository.Queryable
             .Where(log => log.JobId == jobId)
             .ToListAsync(cancellationToken);
 
@@ -45,12 +67,12 @@ public class JobAppService(
         }
 
         var taskIds = logs.Select(log => log.TaskId).ToHashSet();
-        var taskRecords = await taskRecordRepository.Queryable
+        var taskRecords = await _taskRecordRepository.Queryable
             .AsNoTracking()
             .Where(record => taskIds.Contains(record.TaskId))
             .ToListAsync(cancellationToken);
         var contextIds = taskRecords.Select(record => record.ProjectContextId).ToHashSet();
-        var contexts = await projectContextRepository.Queryable
+        var contexts = await _projectContextRepository.Queryable
             .AsNoTracking()
             .Where(context => contextIds.Contains(context.Id))
             .ToListAsync(cancellationToken);
@@ -76,7 +98,7 @@ public class JobAppService(
 
     public async Task<Job> CreateAsync(JobCreateRequest request, string user)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var entity = new Job
         {
             Id = Guid.NewGuid(),
@@ -87,7 +109,7 @@ public class JobAppService(
             Prompt = request.Prompt,
             TriggerType = request.TriggerType,
             TriggerValue = request.TriggerValue,
-            NextRunTime = DateTimeOffset.UtcNow,
+            NextRunTime = now,
             MaxRetryCount = request.MaxRetryCount,
             IsEnabled = request.IsEnabled,
             Status = JobStatus.Pending,
@@ -96,17 +118,17 @@ public class JobAppService(
             UpdateBy = user,
             UpdateTime = now
         };
-        entity.NextRunTime = ResolveNextRunTime(entity);
+        entity.NextRunTime = ResolveNextRunTime(entity, now);
 
-        await jobTaskRepository.AddAsync(entity);
-        await unitOfWork.SaveChangesAsync();
-        await jobDomainEventDispatcher.DispatchAsync(new JobCreatedDomainEvent(entity));
+        await _jobTaskRepository.AddAsync(entity);
+        await _unitOfWork.SaveChangesAsync();
+        await _jobDomainEventDispatcher.DispatchAsync(new JobCreatedDomainEvent(entity));
         return entity;
     }
 
     public async Task<Job?> UpdateAsync(Guid id, JobUpdateRequest request, string user)
     {
-        var entity = await jobTaskRepository.GetByIdAsync(id);
+        var entity = await _jobTaskRepository.GetByIdAsync(id);
         if (entity == null)
         {
             return null;
@@ -123,30 +145,31 @@ public class JobAppService(
         entity.IsEnabled = request.IsEnabled;
         entity.Status = request.Status;
         entity.UpdateBy = user;
-        entity.UpdateTime = DateTime.UtcNow;
-        entity.NextRunTime = ResolveNextRunTime(entity);
+        var now = _timeProvider.GetUtcNow();
+        entity.UpdateTime = now;
+        entity.NextRunTime = ResolveNextRunTime(entity, now);
 
-        jobTaskRepository.Update(entity);
-        await unitOfWork.SaveChangesAsync();
+        _jobTaskRepository.Update(entity);
+        await _unitOfWork.SaveChangesAsync();
         return entity;
     }
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var entity = await jobTaskRepository.GetByIdAsync(id);
+        var entity = await _jobTaskRepository.GetByIdAsync(id);
         if (entity == null)
         {
             return false;
         }
 
-        jobTaskRepository.Remove(entity);
-        await unitOfWork.SaveChangesAsync();
+        _jobTaskRepository.Remove(entity);
+        await _unitOfWork.SaveChangesAsync();
         return true;
     }
 
-    private DateTimeOffset ResolveNextRunTime(Job entity)
+    private DateTimeOffset ResolveNextRunTime(Job entity, DateTimeOffset now)
     {
-        var nextRunTime = jobTimeCalculator.GetNextRunTime(entity, DateTimeOffset.UtcNow);
+        var nextRunTime = _jobTimeCalculator.GetNextRunTime(entity, now);
         if (!nextRunTime.HasValue)
         {
             return DateTimeOffset.MaxValue;

@@ -25,6 +25,7 @@ public class OAuthController : ControllerBase
     private readonly IRepository<OAuthAuthorizationToken> _oAuthAuthorizationTokenRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<OAuthController> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public OAuthController(
         IConfiguration configuration,
@@ -33,7 +34,8 @@ public class OAuthController : ControllerBase
         IRepository<AppInstance> appInstanceRepository,
         IRepository<OAuthAuthorizationToken> oAuthAuthorizationTokenRepository,
         IUnitOfWork unitOfWork,
-        ILogger<OAuthController> logger)
+        ILogger<OAuthController> logger,
+        TimeProvider timeProvider)
     {
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
@@ -42,6 +44,7 @@ public class OAuthController : ControllerBase
         _oAuthAuthorizationTokenRepository = oAuthAuthorizationTokenRepository;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     [HttpGet("callback")]
@@ -152,7 +155,7 @@ public class OAuthController : ControllerBase
             }
 
             var subject = ResolveSubject(root, providerConfiguration, callbackState);
-            var now = DateTime.UtcNow;
+            var now = _timeProvider.GetUtcNow();
             var tokenEntity = await _oAuthAuthorizationTokenRepository.Queryable
                 .FirstOrDefaultAsync(
                     token => token.AppInstanceId == providerConfiguration.AppInstanceId,
@@ -369,11 +372,11 @@ public class OAuthController : ControllerBase
         return Truncate(Guid.NewGuid().ToString("N"), 200);
     }
 
-    private static DateTimeOffset? ResolveExpiresAtUtc(JsonElement tokenResponse, DateTime nowUtc)
+    private static DateTimeOffset? ResolveExpiresAtUtc(JsonElement tokenResponse, DateTimeOffset nowUtc)
     {
         if (TryGetLong(tokenResponse, "expires_in") is long expiresIn)
         {
-            return new DateTimeOffset(nowUtc.AddSeconds(expiresIn), TimeSpan.Zero);
+            return nowUtc.AddSeconds(expiresIn);
         }
 
         if (TryGetLong(tokenResponse, "expires_at") is long expiresAtEpochSeconds)

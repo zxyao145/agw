@@ -27,8 +27,8 @@ public class TodoTaskItem
     public List<string> Blocks { get; set; } = [];
     public List<string> BlockedBy { get; set; } = [];
     public Dictionary<string, object?>? Metadata { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; } = TimeProvider.System.GetUtcNow();
+    public DateTimeOffset UpdatedAt { get; set; } = TimeProvider.System.GetUtcNow();
 }
 
 /// <summary>
@@ -64,6 +64,7 @@ internal static class TodoTaskStore
         Dictionary<string, object?>? metadata)
     {
         var id = Interlocked.Increment(ref _nextId).ToString();
+        var now = TimeProvider.System.GetUtcNow();
         var task = new TodoTaskItem
         {
             Id = id,
@@ -72,8 +73,8 @@ internal static class TodoTaskStore
             ActiveForm = activeForm,
             Status = "pending",
             Metadata = metadata,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            CreatedAt = now,
+            UpdatedAt = now
         };
         _tasks[id] = task;
         return task;
@@ -97,7 +98,7 @@ internal static class TodoTaskStore
     {
         if (!_tasks.TryGetValue(id, out var task)) return false;
         updater(task);
-        task.UpdatedAt = DateTime.UtcNow;
+        task.UpdatedAt = TimeProvider.System.GetUtcNow();
         return true;
     }
 

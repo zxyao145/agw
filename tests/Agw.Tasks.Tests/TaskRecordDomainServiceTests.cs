@@ -19,23 +19,23 @@ public class TaskRecordDomainServiceTests
                 Id = Guid.NewGuid(),
                 TaskId = Guid.NewGuid(),
                 ConversationSequence = 2,
-                CreateTime = new DateTime(2024, 1, 1, 3, 0, 0, DateTimeKind.Utc),
-                UpdateTime = new DateTime(2024, 1, 1, 3, 0, 1, DateTimeKind.Utc),
+                CreateTime = new DateTimeOffset(2024, 1, 1, 3, 0, 0, TimeSpan.Zero),
+                UpdateTime = new DateTimeOffset(2024, 1, 1, 3, 0, 1, TimeSpan.Zero),
             },
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
                 TaskId = Guid.NewGuid(),
                 ConversationSequence = null,
-                CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
+                CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
             },
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
                 TaskId = Guid.NewGuid(),
                 ConversationSequence = 2,
-                CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
-                UpdateTime = new DateTime(2024, 1, 1, 2, 0, 1, DateTimeKind.Utc),
+                CreateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 0, TimeSpan.Zero),
+                UpdateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 1, TimeSpan.Zero),
             },
         };
 
@@ -52,14 +52,14 @@ public class TaskRecordDomainServiceTests
             Id = Guid.NewGuid(),
             TaskId = Guid.NewGuid(),
             ConversationSequence = 1,
-            CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
+            CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
         };
         var second = new TaskRecord
         {
             Id = Guid.NewGuid(),
             TaskId = Guid.NewGuid(),
             ConversationSequence = 2,
-            CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
+            CreateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 0, TimeSpan.Zero),
         };
 
         var result = _service.GetLatest([second, first]);
@@ -78,21 +78,21 @@ public class TaskRecordDomainServiceTests
             Id = Guid.NewGuid(),
             TaskId = taskIdA,
             ConversationSequence = 1,
-            CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
+            CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
         };
         var later = new TaskRecord
         {
             Id = Guid.NewGuid(),
             TaskId = taskIdA,
             ConversationSequence = 2,
-            CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
+            CreateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 0, TimeSpan.Zero),
         };
         var other = new TaskRecord
         {
             Id = Guid.NewGuid(),
             TaskId = taskIdB,
             ConversationSequence = 1,
-            CreateTime = new DateTime(2024, 1, 1, 3, 0, 0, DateTimeKind.Utc),
+            CreateTime = new DateTimeOffset(2024, 1, 1, 3, 0, 0, TimeSpan.Zero),
         };
 
         var groups = _service.GroupByTaskId([later, other, earlier]);
@@ -132,15 +132,15 @@ public class TaskRecordDomainServiceTests
             {
                 Id = Guid.NewGuid(),
                 TaskId = olderTask.TaskId,
-                CreateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
-                UpdateTime = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc),
+                CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
+                UpdateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
             },
             new TaskRecord
             {
                 Id = Guid.NewGuid(),
                 TaskId = newerTask.TaskId,
-                CreateTime = new DateTime(2024, 1, 1, 2, 0, 0, DateTimeKind.Utc),
-                UpdateTime = new DateTime(2024, 1, 1, 3, 0, 0, DateTimeKind.Utc),
+                CreateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 0, TimeSpan.Zero),
+                UpdateTime = new DateTimeOffset(2024, 1, 1, 3, 0, 0, TimeSpan.Zero),
             },
         };
 

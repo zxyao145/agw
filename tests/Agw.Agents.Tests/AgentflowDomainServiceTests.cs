@@ -1,12 +1,14 @@
 using Agw.Agents.Definitions.Domain;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Testing;
 
 namespace Agw.Agents.Tests;
 
 public class AgentflowDomainServiceTests
 {
-    private readonly AgentflowDomainService _service = new();
+    private static readonly DateTimeOffset UtcNow = new(2026, 7, 13, 9, 0, 0, TimeSpan.Zero);
+    private readonly AgentflowDomainService _service = new(new TestTimeProvider(UtcNow));
 
     [Fact]
     public void TryPrepareForCreate_BlankName_ReturnsFalse()
@@ -23,7 +25,6 @@ public class AgentflowDomainServiceTests
     [Fact]
     public void TryPrepareForCreate_ValidName_AssignsMetadata()
     {
-        var before = DateTime.UtcNow;
         var agentflow = new Agentflow { Name = "workflow" };
 
         var result = _service.TryPrepareForCreate(agentflow, "tester");
@@ -31,7 +32,7 @@ public class AgentflowDomainServiceTests
         Assert.True(result);
         Assert.NotEqual(Guid.Empty, agentflow.Id);
         Assert.Equal("tester", agentflow.CreateBy);
-        Assert.InRange(agentflow.CreateTime, before, DateTime.UtcNow);
+        Assert.Equal(UtcNow, agentflow.CreateTime);
     }
 
     [Fact]
@@ -49,7 +50,6 @@ public class AgentflowDomainServiceTests
     [Fact]
     public void TryApplyUpdate_ValidUpdate_SetsMetadata()
     {
-        var before = DateTime.UtcNow;
         var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "workflow" };
 
         var result = _service.TryApplyUpdate(agentflow, current => current.Description = "updated", "tester");
@@ -57,7 +57,7 @@ public class AgentflowDomainServiceTests
         Assert.True(result);
         Assert.Equal("updated", agentflow.Description);
         Assert.Equal("tester", agentflow.UpdateBy);
-        Assert.InRange(agentflow.UpdateTime!.Value, before, DateTime.UtcNow);
+        Assert.Equal(UtcNow, agentflow.UpdateTime);
     }
 
     [Fact]

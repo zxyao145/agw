@@ -1,6 +1,7 @@
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
 using Agw.Shared.Runtime;
+using Agw.Testing;
 
 using Xunit;
 
@@ -8,13 +9,16 @@ namespace Agw.Setup.Tests;
 
 public class JsonInitializationStateStoreTests
 {
+    private static readonly DateTimeOffset UtcNow = new(2026, 7, 13, 10, 0, 0, TimeSpan.Zero);
+    private static readonly TimeProvider TimeProvider = new TestTimeProvider(UtcNow);
+
     [Fact]
     public async Task PersistAsync_WhenInitialized_WritesReloadableServerState()
     {
         var paths = CreatePaths();
         try
         {
-            var store = new JsonInitializationStateStore(paths);
+            var store = new JsonInitializationStateStore(paths, TimeProvider);
 
             await store.PersistAsync(new SetupRequest
             {
@@ -23,7 +27,7 @@ public class JsonInitializationStateStoreTests
                 AdminPassword = "password-password"
             }, "hashed-password", TestContext.Current.CancellationToken);
 
-            var reloaded = new JsonInitializationStateStore(paths).GetSnapshot();
+            var reloaded = new JsonInitializationStateStore(paths, TimeProvider).GetSnapshot();
             Assert.True(reloaded.IsInitialized);
             Assert.Equal("hashed-password", reloaded.PasswordHash);
             Assert.Equal(1, reloaded.SessionVersion);
@@ -47,7 +51,7 @@ public class JsonInitializationStateStoreTests
         var paths = CreatePaths();
         try
         {
-            var store = new JsonInitializationStateStore(paths);
+            var store = new JsonInitializationStateStore(paths, TimeProvider);
             await store.PersistAsync(new SetupRequest
             {
                 Provider = "sqlite",
@@ -58,6 +62,7 @@ public class JsonInitializationStateStoreTests
             var created = await store.CreateTokenAsync("Mobile", TestContext.Current.CancellationToken);
 
             Assert.StartsWith("agw_", created.Token);
+            Assert.Equal(UtcNow, created.CreatedAt);
             Assert.True(store.ValidateToken(created.Token));
             Assert.DoesNotContain(created.Token, await File.ReadAllTextAsync(paths.StateFile, TestContext.Current.CancellationToken));
             Assert.Single(store.GetSnapshot().Tokens);
@@ -74,7 +79,7 @@ public class JsonInitializationStateStoreTests
         var paths = CreatePaths();
         try
         {
-            var store = new JsonInitializationStateStore(paths);
+            var store = new JsonInitializationStateStore(paths, TimeProvider);
             await store.PersistAsync(new SetupRequest
             {
                 Provider = "sqlite",

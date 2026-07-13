@@ -40,7 +40,7 @@ public class ProviderAppServiceTests
                 ProviderType = ProviderType.OpenAI,
                 Endpoint = "https://api.openai.com/v1",
                 CreateBy = "seed",
-                CreateTime = DateTime.UtcNow,
+                CreateTime = TimeProvider.System.GetUtcNow(),
                 AuthConfigs =
                 [
                     new ProviderAuthConfig
@@ -51,7 +51,7 @@ public class ProviderAppServiceTests
                         ApiKey = "test-key",
                         Enable = true,
                         CreateBy = "seed",
-                        CreateTime = DateTime.UtcNow
+                        CreateTime = TimeProvider.System.GetUtcNow()
                     }
                 ]
             });
@@ -108,7 +108,7 @@ public class ProviderAppServiceTests
                 Endpoint = "https://api.openai.com/v1",
                 Description = "Original description",
                 CreateBy = "seed",
-                CreateTime = DateTime.UtcNow,
+                CreateTime = TimeProvider.System.GetUtcNow(),
                 AuthConfigs =
                 [
                     new ProviderAuthConfig
@@ -119,7 +119,7 @@ public class ProviderAppServiceTests
                         ApiKey = "old-key",
                         Enable = true,
                         CreateBy = "seed",
-                        CreateTime = DateTime.UtcNow
+                        CreateTime = TimeProvider.System.GetUtcNow()
                     }
                 ]
             });
@@ -168,6 +168,6 @@ public class ProviderAppServiceTests
         return new ProviderAppService(
             new EfRepository<Provider>(dbContext),
             new UnitOfWork(dbContext),
-            new ProviderDomainService());
+            new ProviderDomainService(TimeProvider.System));
     }
 }

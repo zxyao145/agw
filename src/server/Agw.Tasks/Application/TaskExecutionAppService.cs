@@ -17,19 +17,22 @@ public class TaskExecutionAppService
     private readonly IUnitOfWork _unitOfWork;
     private readonly TaskRecordDomainService _taskRecordDomainService;
     private readonly ProjectResolver _projectResolver;
+    private readonly TimeProvider _timeProvider;
 
     public TaskExecutionAppService(
         IRepository<ProjectContext> contextRepository,
         IRepository<TaskRecord> recordRepository,
         IUnitOfWork unitOfWork,
         TaskRecordDomainService taskRecordDomainService,
-        ProjectResolver projectResolver)
+        ProjectResolver projectResolver,
+        TimeProvider timeProvider)
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
         _unitOfWork = unitOfWork;
         _taskRecordDomainService = taskRecordDomainService;
         _projectResolver = projectResolver;
+        _timeProvider = timeProvider;
     }
 
     public async Task<IReadOnlyList<TaskProjection>> ListAsync(Expression<Func<TaskProjection, bool>>? predicate = null)
@@ -130,7 +133,7 @@ public class TaskExecutionAppService
                 "Failed to create task (project/target invalid, target mismatch, or input missing).");
         }
 
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var taskId = taskIdOverride.HasValue && taskIdOverride.Value != Guid.Empty
             ? taskIdOverride.Value
             : Guid.NewGuid();
@@ -179,7 +182,7 @@ public class TaskExecutionAppService
 
         context.Title = title.Trim();
         context.UpdateBy = user;
-        context.UpdateTime = DateTime.UtcNow;
+        context.UpdateTime = _timeProvider.GetUtcNow();
         _contextRepository.Update(context);
         await _unitOfWork.SaveChangesAsync();
         return ApplicationResult.Success();
@@ -250,7 +253,7 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         foreach (var record in records)
         {
             record.Status = status;
@@ -274,7 +277,7 @@ public class TaskExecutionAppService
         Guid? jobId,
         string title,
         string user,
-        DateTime now)
+        DateTimeOffset now)
     {
         var context = await _contextRepository.SingleOrDefaultAsync(
             item => item.ProjectId == projectId && item.ContextId == contextId);

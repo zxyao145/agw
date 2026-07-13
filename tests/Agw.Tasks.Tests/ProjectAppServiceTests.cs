@@ -68,7 +68,7 @@ public class ProjectAppServiceTests
             projectRepository,
             new EfRepository<AgentflowTrace>(dbContext),
             new UnitOfWork(dbContext),
-            new ProjectDomainService(),
+            new ProjectDomainService(TimeProvider.System),
             new ProjectResolver(projectRepository));
     }
 }

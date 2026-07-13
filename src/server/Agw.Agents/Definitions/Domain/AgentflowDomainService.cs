@@ -8,6 +8,12 @@ namespace Agw.Agents.Definitions.Domain;
 public class AgentflowDomainService
 {
     private const string InputNodeId = "input";
+    private readonly TimeProvider _timeProvider;
+
+    public AgentflowDomainService(TimeProvider timeProvider)
+    {
+        _timeProvider = timeProvider;
+    }
 
     public bool TryPrepareForCreate(Agentflow agentflow, string user)
     {
@@ -19,7 +25,7 @@ public class AgentflowDomainService
 
         agentflow.Id = agentflow.Id == Guid.Empty ? Guid.NewGuid() : agentflow.Id;
         agentflow.CreateBy = user;
-        agentflow.CreateTime = DateTime.UtcNow;
+        agentflow.CreateTime = _timeProvider.GetUtcNow();
         return true;
     }
 
@@ -35,7 +41,7 @@ public class AgentflowDomainService
         }
 
         existing.UpdateBy = user;
-        existing.UpdateTime = DateTime.UtcNow;
+        existing.UpdateTime = _timeProvider.GetUtcNow();
         return true;
     }
 

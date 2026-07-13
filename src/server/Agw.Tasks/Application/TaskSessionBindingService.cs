@@ -12,15 +12,18 @@ public class TaskSessionBindingService : ITaskSessionBindingService
     private readonly IRepository<TaskSessionBinding> _bindingRepository;
     private readonly IRepository<ProjectContext> _contextRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly TimeProvider _timeProvider;
 
     public TaskSessionBindingService(
         IRepository<TaskSessionBinding> bindingRepository,
         IRepository<ProjectContext> contextRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        TimeProvider timeProvider)
     {
         _bindingRepository = bindingRepository;
         _contextRepository = contextRepository;
         _unitOfWork = unitOfWork;
+        _timeProvider = timeProvider;
     }
 
     public async Task<TaskSessionBinding?> GetAsync(
@@ -70,7 +73,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         var normalizedContextId = NormalizeContextId(contextId);
         var normalizedProviderSessionId = NormalizeProviderSessionId(providerSessionId);
         var normalizedUser = string.IsNullOrWhiteSpace(user) ? "system" : user.Trim();
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow();
 
         if (string.IsNullOrWhiteSpace(normalizedAgentName))
         {

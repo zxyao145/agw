@@ -26,7 +26,8 @@ public class EfCoreChatHistoryProviderTests
         using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<EfCoreChatHistoryProvider>.Instance);
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
         var session = new FakeAgentSession();
         var projectId = Guid.NewGuid();
 
@@ -47,7 +48,8 @@ public class EfCoreChatHistoryProviderTests
         using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<EfCoreChatHistoryProvider>.Instance);
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
 
         var found = provider.TryGetProjectContext(
             new FakeAgentSession(),
@@ -102,6 +104,7 @@ public class EfCoreChatHistoryProviderTests
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
             jsonOptions);
 
         var session = new FakeAgentSession();
@@ -151,6 +154,7 @@ public class EfCoreChatHistoryProviderTests
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
             jsonOptions);
 
         var session = new FakeAgentSession();
@@ -215,7 +219,7 @@ public class EfCoreChatHistoryProviderTests
                 ContextId = "context-1",
                 Title = "New Chat",
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -226,7 +230,8 @@ public class EfCoreChatHistoryProviderTests
 
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<EfCoreChatHistoryProvider>.Instance);
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
 
         var session = new FakeAgentSession();
         provider.InitializeSessionState(session, "context-1", projectId);
@@ -277,7 +282,8 @@ public class EfCoreChatHistoryProviderTests
 
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<EfCoreChatHistoryProvider>.Instance);
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
 
         var session = new FakeAgentSession();
         provider.InitializeSessionState(session, "context-1", projectId);
@@ -322,7 +328,7 @@ public class EfCoreChatHistoryProviderTests
         Type = ProjectType.UserDefined,
         Enable = true,
         CreateBy = "tester",
-        CreateTime = DateTime.UtcNow
+        CreateTime = TimeProvider.System.GetUtcNow()
     };
 
     private static ProjectContext CreateContext(Guid id, Guid projectId, string contextId) => new()
@@ -332,9 +338,9 @@ public class EfCoreChatHistoryProviderTests
         ContextId = contextId,
         Title = "Chat",
         CreateBy = "tester",
-        CreateTime = DateTime.UtcNow,
+        CreateTime = TimeProvider.System.GetUtcNow(),
         UpdateBy = "tester",
-        UpdateTime = DateTime.UtcNow
+        UpdateTime = TimeProvider.System.GetUtcNow()
     };
 
     private static TaskRecord CreateRecord(
@@ -350,8 +356,8 @@ public class EfCoreChatHistoryProviderTests
             Status = TaskExecutionStatus.Succeeded,
             ConversationSequence = sequence,
             ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, text), jsonOptions),
-            CreateTime = DateTime.UtcNow,
-            UpdateTime = DateTime.UtcNow
+            CreateTime = TimeProvider.System.GetUtcNow(),
+            UpdateTime = TimeProvider.System.GetUtcNow()
         };
 
     private static async Task<IEnumerable<ChatMessage>> InvokeProvideChatHistoryAsync(

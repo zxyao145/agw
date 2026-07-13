@@ -33,7 +33,7 @@ public static class ServerCommand
         }
 
         var hasher = new PasswordHasher<object>();
-        var store = new JsonInitializationStateStore(paths);
+        var store = new JsonInitializationStateStore(paths, TimeProvider.System);
         await store.UpdatePasswordAsync(hasher.HashPassword(new object(), password));
         Console.WriteLine("Administrator password reset. Existing web sessions were invalidated.");
         return true;

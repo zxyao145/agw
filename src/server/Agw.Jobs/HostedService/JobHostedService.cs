@@ -18,18 +18,14 @@ namespace Agw.Jobs.HostedService;
 /// In-memory scheduler backed by persistent task state in DB.
 /// DB handles durability and coarse scheduling; memory queue handles precise execution.
 /// </summary>
-public class JobHostedService(
-    IServiceScopeFactory scopeFactory,
-    ILogger<JobHostedService> logger,
-    IJobDomainEventDispatcher jobDomainEventDispatcher,
-    IProjectExecutionLock projectExecutionLock,
-    IServerInitializationState serverInitializationState) : BackgroundService
+public class JobHostedService : BackgroundService
 {
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    private readonly ILogger<JobHostedService> _logger = logger;
-    private readonly IJobDomainEventDispatcher _jobDomainEventDispatcher = jobDomainEventDispatcher;
-    private readonly IProjectExecutionLock _projectExecutionLock = projectExecutionLock;
-    private readonly IServerInitializationState _serverInitializationState = serverInitializationState;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<JobHostedService> _logger;
+    private readonly IJobDomainEventDispatcher _jobDomainEventDispatcher;
+    private readonly IProjectExecutionLock _projectExecutionLock;
+    private readonly IServerInitializationState _serverInitializationState;
+    private readonly TimeProvider _timeProvider;
 
     private readonly PriorityQueue<InMemoryJob, DateTimeOffset> _queue = new();
     private readonly ConcurrentDictionary<Guid, InMemoryJob> _taskMap = new();
@@ -44,11 +40,27 @@ public class JobHostedService(
     private readonly TimeSpan _prefetchWindow = TimeSpan.FromMinutes(10);
     private readonly TimeSpan _retryDelay = TimeSpan.FromSeconds(30);
 
+    public JobHostedService(
+        IServiceScopeFactory scopeFactory,
+        ILogger<JobHostedService> logger,
+        IJobDomainEventDispatcher jobDomainEventDispatcher,
+        IProjectExecutionLock projectExecutionLock,
+        IServerInitializationState serverInitializationState,
+        TimeProvider timeProvider)
+    {
+        _scopeFactory = scopeFactory;
+        _logger = logger;
+        _jobDomainEventDispatcher = jobDomainEventDispatcher;
+        _projectExecutionLock = projectExecutionLock;
+        _serverInitializationState = serverInitializationState;
+        _timeProvider = timeProvider;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!_serverInitializationState.IsInitialized)
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(250), stoppingToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(250), _timeProvider, stoppingToken);
         }
 
         _jobDomainEventDispatcher.DomainEventDispatched += HandleDomainEventAsync;
@@ -74,7 +86,7 @@ public class JobHostedService(
                 using var scope = _scopeFactory.CreateScope();
                 var jobTaskStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
 
-                var now = DateTimeOffset.UtcNow;
+                var now = _timeProvider.GetUtcNow();
                 var tasks = await jobTaskStore.PrefetchAsync(now, now.Add(_prefetchWindow), cancellationToken);
                 foreach (var task in tasks)
                 {
@@ -89,7 +101,7 @@ public class JobHostedService(
             try
             {
                 using var waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                var delayTask = Task.Delay(_prefetchInterval, waitCancellation.Token);
+                var delayTask = Task.Delay(_prefetchInterval, _timeProvider, waitCancellation.Token);
                 var signalTask = _prefetchSignal.WaitAsync(waitCancellation.Token);
                 var completedTask = await Task.WhenAny(delayTask, signalTask);
                 waitCancellation.Cancel();
@@ -111,7 +123,7 @@ public class JobHostedService(
         }
 
         var job = createdEvent.Job;
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         if (job.TriggerType != Agw.Jobs.Domain.Enums.TriggerType.Once)
         {
             return Task.CompletedTask;
@@ -142,11 +154,11 @@ public class JobHostedService(
                 continue;
             }
 
-            var now = DateTimeOffset.UtcNow;
+            var now = _timeProvider.GetUtcNow();
             if (nextTask.NextRunTime > now)
             {
                 var delay = nextTask.NextRunTime - now;
-                var delayTask = Task.Delay(delay, cancellationToken);
+                var delayTask = Task.Delay(delay, _timeProvider, cancellationToken);
                 var signalTask = _wakeSignal.WaitAsync(cancellationToken);
                 await Task.WhenAny(delayTask, signalTask);
                 continue;
@@ -251,7 +263,7 @@ public class JobHostedService(
     {
         await using var projectLock = await _projectExecutionLock.AcquireAsync(inMemoryTask.ProjectId, cancellationToken);
 
-        var start = DateTimeOffset.UtcNow;
+        var start = _timeProvider.GetUtcNow();
         using var scope = _scopeFactory.CreateScope();
         var jobTaskStore = scope.ServiceProvider.GetRequiredService<IJobStore>();
         var timeCalculator = scope.ServiceProvider.GetRequiredService<IJobTimeCalculator>();
@@ -273,13 +285,13 @@ public class JobHostedService(
             var job = ToJob(inMemoryTask);
             taskId = await agentExecutor.ExecuteAsync(job, cancellationToken);
 
-            var nextRunTime = timeCalculator.GetNextRunTime(job, DateTimeOffset.UtcNow);
+            var nextRunTime = timeCalculator.GetNextRunTime(job, _timeProvider.GetUtcNow());
             await jobTaskStore.MarkSucceededAsync(inMemoryTask.JobId, nextRunTime, cancellationToken);
             await jobTaskStore.AddExecutionLogAsync(
                 inMemoryTask.JobId,
                 taskId,
                 start,
-                DateTimeOffset.UtcNow,
+                _timeProvider.GetUtcNow(),
                 success: true,
                 attempt: inMemoryTask.RetryCount + 1,
                 errorMessage: null,
@@ -311,7 +323,7 @@ public class JobHostedService(
 
             if (retryCount <= inMemoryTask.MaxRetryCount)
             {
-                var nextRunTime = DateTimeOffset.UtcNow.Add(_retryDelay);
+                var nextRunTime = _timeProvider.GetUtcNow().Add(_retryDelay);
                 try
                 {
                     await jobTaskStore.MarkRetryAsync(inMemoryTask.JobId, nextRunTime, retryCount, ex.Message, cancellationToken);
@@ -319,7 +331,7 @@ public class JobHostedService(
                         inMemoryTask.JobId,
                         taskId,
                         start,
-                        DateTimeOffset.UtcNow,
+                        _timeProvider.GetUtcNow(),
                         success: false,
                         attempt: retryCount,
                         errorMessage: ex.Message,
@@ -346,7 +358,7 @@ public class JobHostedService(
                         inMemoryTask.JobId,
                         taskId,
                         start,
-                        DateTimeOffset.UtcNow,
+                        _timeProvider.GetUtcNow(),
                         success: false,
                         attempt: retryCount,
                         errorMessage: ex.Message,

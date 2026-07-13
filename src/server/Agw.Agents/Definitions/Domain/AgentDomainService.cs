@@ -7,6 +7,13 @@ namespace Agw.Agents.Definitions.Domain;
 
 public class AgentDomainService
 {
+    private readonly TimeProvider _timeProvider;
+
+    public AgentDomainService(TimeProvider timeProvider)
+    {
+        _timeProvider = timeProvider;
+    }
+
     public void PrepareForCreate(Agent agent, string user)
     {
         ArgumentNullException.ThrowIfNull(agent);
@@ -15,7 +22,7 @@ public class AgentDomainService
         agent.Id = agent.Id == Guid.Empty ? Guid.NewGuid() : agent.Id;
         agent.Name = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id.Normalize() : agent.Name;
         agent.CreateBy = user;
-        agent.CreateTime = DateTime.UtcNow;
+        agent.CreateTime = _timeProvider.GetUtcNow();
     }
 
     public void ApplyUpdate(Agent existing, Action<Agent> updateAction, string user)
@@ -47,7 +54,7 @@ public class AgentDomainService
         EnsureModelProviderIsPresentWhenRequired(existing);
         existing.Name = string.IsNullOrWhiteSpace(existing.Name) ? existing.Id.Normalize() : existing.Name;
         existing.UpdateBy = user;
-        existing.UpdateTime = DateTime.UtcNow;
+        existing.UpdateTime = _timeProvider.GetUtcNow();
     }
 
     public IReadOnlyList<Guid> NormalizeMcpToolServerIds(IEnumerable<Guid>? mcpToolServerIds)

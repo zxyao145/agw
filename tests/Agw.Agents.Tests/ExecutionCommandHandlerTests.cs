@@ -203,7 +203,7 @@ public class ExecutionCommandHandlerTests
             ProjectId = Guid.NewGuid(),
             ContextId = contextId,
             Title = "test",
-            CreateTime = DateTime.UtcNow,
+            CreateTime = TimeProvider.System.GetUtcNow(),
         };
 
     private sealed class FakeRuntimeFactory : IRuntimeFactory

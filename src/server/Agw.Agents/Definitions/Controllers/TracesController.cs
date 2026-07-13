@@ -24,8 +24,8 @@ public class TracesController : ControllerBase
         [FromQuery] Guid? projectId,
         [FromQuery] string? contextId,
         [FromQuery] Guid? agentflowId,
-        [FromQuery] DateTime? fromUtc,
-        [FromQuery] DateTime? toUtc,
+        [FromQuery] DateTimeOffset? fromUtc,
+        [FromQuery] DateTimeOffset? toUtc,
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)

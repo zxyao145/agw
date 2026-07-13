@@ -13,17 +13,20 @@ public class SetupController : Controller
     private readonly ISetupInitializationService _setupInitializationService;
     private readonly SetupCodeService _setupCodeService;
     private readonly AuthenticationAttemptLimiter _attemptLimiter;
+    private readonly TimeProvider _timeProvider;
 
     public SetupController(
         IInitializationStateStore stateStore,
         ISetupInitializationService setupInitializationService,
         SetupCodeService setupCodeService,
-        AuthenticationAttemptLimiter attemptLimiter)
+        AuthenticationAttemptLimiter attemptLimiter,
+        TimeProvider timeProvider)
     {
         _stateStore = stateStore;
         _setupInitializationService = setupInitializationService;
         _setupCodeService = setupCodeService;
         _attemptLimiter = attemptLimiter;
+        _timeProvider = timeProvider;
     }
 
     [HttpGet("")]
@@ -68,7 +71,8 @@ public class SetupController : Controller
         {
             var requiresSetupCode = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
             var clientKey = AuthenticationAttemptLimiter.GetClientKey(HttpContext);
-            if (requiresSetupCode && _attemptLimiter.IsBlocked(clientKey, DateTimeOffset.UtcNow))
+            var now = _timeProvider.GetUtcNow();
+            if (requiresSetupCode && _attemptLimiter.IsBlocked(clientKey, now))
             {
                 Response.StatusCode = StatusCodes.Status429TooManyRequests;
                 ModelState.AddModelError(nameof(request.SetupCode), "Too many failed Setup Code attempts. Try again later.");
@@ -78,7 +82,7 @@ public class SetupController : Controller
 
             if (requiresSetupCode && !_setupCodeService.Matches(request.SetupCode))
             {
-                _attemptLimiter.RecordFailure(clientKey, DateTimeOffset.UtcNow);
+                _attemptLimiter.RecordFailure(clientKey, now);
                 ModelState.AddModelError(nameof(request.SetupCode), "Setup Code is invalid or has already been used.");
                 ViewData["RequireSetupCode"] = true;
                 return View(request);

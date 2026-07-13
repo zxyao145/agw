@@ -96,6 +96,7 @@ try
 
     builder.Configuration.AddJsonFile(dataPaths.StateFile, optional: true, reloadOnChange: true);
     builder.Services.AddSingleton(dataPaths);
+    builder.Services.AddSingleton(TimeProvider.System);
     builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(dataPaths.KeysDirectory));
 
     // Use Serilog for logging
@@ -185,7 +186,7 @@ try
                 {
                     var propertyType = property.PropertyType;
 
-                    // 非 nullable value type，例如 int、long、bool、DateTime
+                    // 非 nullable value type，例如 int、long、bool、DateTimeOffset
                     if ((propertyType.IsValueType || propertyType == typeof(string)) &&
                         Nullable.GetUnderlyingType(propertyType) is null)
                     {

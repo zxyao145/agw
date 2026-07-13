@@ -15,7 +15,7 @@ public sealed record AppInstanceListItemResponse(
     bool IsAuthorizationExpired,
     DateTimeOffset? AuthorizationExpiresAtUtc,
     string? AuthorizationSubject,
-    DateTime CreateTime,
+    DateTimeOffset CreateTime,
     string? CreateBy,
-    DateTime? UpdateTime,
+    DateTimeOffset? UpdateTime,
     string? UpdateBy);

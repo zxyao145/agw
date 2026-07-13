@@ -92,7 +92,7 @@ public class DashboardControllerTests
         Type = ProjectType.UserDefined,
         Enable = true,
         CreateBy = "tester",
-        CreateTime = DateTime.UtcNow,
+        CreateTime = TimeProvider.System.GetUtcNow(),
     };
 
     private static ProjectContext CreateProjectContext(
@@ -113,7 +113,7 @@ public class DashboardControllerTests
             TotalTokenCount = totalTokenCount,
         },
         CreateBy = "tester",
-        CreateTime = DateTime.UtcNow,
+        CreateTime = TimeProvider.System.GetUtcNow(),
     };
 
     private static DashboardStatsResponse ReadStats(IActionResult result)

@@ -16,6 +16,7 @@ public sealed class RedisLock
     private readonly TimeSpan _lockTtl;
     private readonly TimeSpan _retryDelay;
     private readonly TimeSpan _renewInterval;
+    private readonly TimeProvider _timeProvider;
 
     private const string UnlockScript = """
         if redis.call('get', KEYS[1]) == ARGV[1] then
@@ -33,12 +34,15 @@ public sealed class RedisLock
         end
         """;
 
-    public RedisLock(IConnectionMultiplexer connectionMultiplexer,
+    public RedisLock(
+        IConnectionMultiplexer connectionMultiplexer,
+        TimeProvider timeProvider,
         TimeSpan? lockTtl = null,
         TimeSpan? retryDelay = null,
         TimeSpan? renewInterval = null)
     {
         _database = connectionMultiplexer.GetDatabase();
+        _timeProvider = timeProvider;
         _lockTtl = lockTtl ?? DefaultLockTtl;
         _retryDelay = retryDelay ?? DefaultRetryDelay;
         _renewInterval = renewInterval ?? DefaultRenewInterval;
@@ -57,10 +61,10 @@ public sealed class RedisLock
             var acquired = await _database.StringSetAsync(lockKey, lockValue, _lockTtl, When.NotExists);
             if (acquired)
             {
-                return new RedisLockLease(_database, lockKey, lockValue, _lockTtl, _renewInterval);
+                return new RedisLockLease(_database, lockKey, lockValue, _lockTtl, _renewInterval, _timeProvider);
             }
 
-            await Task.Delay(_retryDelay, cancellationToken);
+            await Task.Delay(_retryDelay, _timeProvider, cancellationToken);
         }
 
         return await Task.FromCanceled<IAsyncDisposable>(cancellationToken);
@@ -73,18 +77,26 @@ public sealed class RedisLock
         private readonly string _lockValue;
         private readonly TimeSpan _lockTtl;
         private readonly TimeSpan _renewInterval;
+        private readonly TimeProvider _timeProvider;
         private readonly CancellationTokenSource _renewCancellation;
         private readonly Task _renewTask;
 
         private bool _disposed;
 
-        public RedisLockLease(IDatabase database, string lockKey, string lockValue, TimeSpan lockTtl, TimeSpan renewInterval)
+        public RedisLockLease(
+            IDatabase database,
+            string lockKey,
+            string lockValue,
+            TimeSpan lockTtl,
+            TimeSpan renewInterval,
+            TimeProvider timeProvider)
         {
             _database = database;
             _lockKey = lockKey;
             _lockValue = lockValue;
             _lockTtl = lockTtl;
             _renewInterval = renewInterval;
+            _timeProvider = timeProvider;
             _renewCancellation = new CancellationTokenSource();
             _renewTask = Task.Run(RunRenewLoopAsync);
         }
@@ -95,7 +107,7 @@ public sealed class RedisLock
             {
                 try
                 {
-                    await Task.Delay(_renewInterval, _renewCancellation.Token);
+                    await Task.Delay(_renewInterval, _timeProvider, _renewCancellation.Token);
                     var redisResult = await _database.ScriptEvaluateAsync(
                         RenewScript,
                         [new RedisKey(_lockKey)],

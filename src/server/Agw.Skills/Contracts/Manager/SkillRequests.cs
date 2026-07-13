@@ -22,7 +22,7 @@ public sealed record SkillResponse(
     string Description,
     string ContentPath,
     IReadOnlyList<Guid> AgentIds,
-    DateTime CreateTime,
+    DateTimeOffset CreateTime,
     string? CreateBy,
-    DateTime? UpdateTime,
+    DateTimeOffset? UpdateTime,
     string? UpdateBy);

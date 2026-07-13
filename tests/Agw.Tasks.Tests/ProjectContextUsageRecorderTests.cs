@@ -166,7 +166,7 @@ public class ProjectContextUsageRecorderTests
             Type = ProjectType.UserDefined,
             Enable = true,
             CreateBy = "tester",
-            CreateTime = DateTime.UtcNow
+            CreateTime = TimeProvider.System.GetUtcNow()
         });
         dbContext.ProjectContexts.Add(new ProjectContext
         {
@@ -175,7 +175,7 @@ public class ProjectContextUsageRecorderTests
             ContextId = contextId,
             Title = "Context",
             CreateBy = "tester",
-            CreateTime = DateTime.UtcNow
+            CreateTime = TimeProvider.System.GetUtcNow()
         });
         await dbContext.SaveChangesAsync(cancellationToken);
     }

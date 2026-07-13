@@ -86,8 +86,8 @@ public class ProjectContextAppServiceTests
                     ProjectContextId = transientContextId,
                     TaskId = Guid.NewGuid(),
                     Status = TaskExecutionStatus.Running,
-                    CreateTime = DateTime.UtcNow,
-                    UpdateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                    UpdateTime = TimeProvider.System.GetUtcNow()
                 },
                 new TaskRecord
                 {
@@ -95,8 +95,8 @@ public class ProjectContextAppServiceTests
                     ProjectContextId = emptyTitledContextId,
                     TaskId = Guid.NewGuid(),
                     Status = TaskExecutionStatus.Running,
-                    CreateTime = DateTime.UtcNow,
-                    UpdateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                    UpdateTime = TimeProvider.System.GetUtcNow()
                 },
                 CreateRecord(
                     persistedContextId,
@@ -182,7 +182,7 @@ public class ProjectContextAppServiceTests
         var contextId = Guid.NewGuid();
         var firstTaskId = Guid.NewGuid();
         var secondTaskId = Guid.NewGuid();
-        var now = DateTime.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
@@ -345,7 +345,7 @@ public class ProjectContextAppServiceTests
                 ExternalAgentName = "codex",
                 ProviderSessionId = Guid.NewGuid().Normalize(),
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -381,7 +381,7 @@ public class ProjectContextAppServiceTests
         Type = ProjectType.UserDefined,
         Enable = true,
         CreateBy = "tester",
-        CreateTime = DateTime.UtcNow
+        CreateTime = TimeProvider.System.GetUtcNow()
     };
 
     private static ProjectContext CreateContext(
@@ -397,9 +397,9 @@ public class ProjectContextAppServiceTests
         JobId = jobId,
         Title = title,
         CreateBy = "tester",
-        CreateTime = DateTime.UtcNow,
+        CreateTime = TimeProvider.System.GetUtcNow(),
         UpdateBy = "tester",
-        UpdateTime = DateTime.UtcNow
+        UpdateTime = TimeProvider.System.GetUtcNow()
     };
 
     private static TaskRecord CreateRecord(
@@ -408,7 +408,7 @@ public class ProjectContextAppServiceTests
         long sequence,
         string text,
         TaskExecutionStatus status) =>
-        CreateRecord(contextId, taskId, sequence, text, status, DateTime.UtcNow);
+        CreateRecord(contextId, taskId, sequence, text, status, TimeProvider.System.GetUtcNow());
 
     private static TaskRecord CreateRecord(
         Guid contextId,
@@ -416,7 +416,7 @@ public class ProjectContextAppServiceTests
         long sequence,
         string text,
         TaskExecutionStatus status,
-        DateTime createTime) => new()
+        DateTimeOffset createTime) => new()
     {
         Id = Guid.NewGuid(),
         ProjectContextId = contextId,
@@ -451,7 +451,9 @@ public class ProjectContextAppServiceTests
             taskSessionBindingService ?? new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
                 new EfRepository<ProjectContext>(dbContext),
-                new UnitOfWork(dbContext)));
+                new UnitOfWork(dbContext),
+                TimeProvider.System),
+            TimeProvider.System);
     }
 
     private sealed class CapturingTaskSessionBindingService : ITaskSessionBindingService

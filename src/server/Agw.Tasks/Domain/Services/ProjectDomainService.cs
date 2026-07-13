@@ -31,6 +31,13 @@ public class ProjectDomainService
         "LPT9"
     ];
 
+    private readonly TimeProvider _timeProvider;
+
+    public ProjectDomainService(TimeProvider timeProvider)
+    {
+        _timeProvider = timeProvider;
+    }
+
     public bool TryPrepareForCreate(Project project, string user)
     {
         if (!TryFormatFolderName(project.Name, out var projectName))
@@ -44,7 +51,7 @@ public class ProjectDomainService
             : project.Workspace.Trim();
         project.Id = project.Id == Guid.Empty ? Guid.NewGuid() : project.Id;
         project.CreateBy = user;
-        project.CreateTime = DateTime.UtcNow;
+        project.CreateTime = _timeProvider.GetUtcNow();
         return true;
     }
 
@@ -58,7 +65,7 @@ public class ProjectDomainService
         }
 
         project.UpdateBy = user;
-        project.UpdateTime = DateTime.UtcNow;
+        project.UpdateTime = _timeProvider.GetUtcNow();
         return true;
     }
 

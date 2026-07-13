@@ -18,6 +18,7 @@ public class ProjectContextAppService
     private readonly ProjectResolver _projectResolver;
     private readonly TaskRecordDomainService _taskRecordDomainService;
     private readonly ITaskSessionBindingService _taskSessionBindingService;
+    private readonly TimeProvider _timeProvider;
 
     public ProjectContextAppService(
         IRepository<ProjectContext> contextRepository,
@@ -26,7 +27,8 @@ public class ProjectContextAppService
         IUnitOfWork unitOfWork,
         ProjectResolver projectResolver,
         TaskRecordDomainService taskRecordDomainService,
-        ITaskSessionBindingService taskSessionBindingService)
+        ITaskSessionBindingService taskSessionBindingService,
+        TimeProvider timeProvider)
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
@@ -35,6 +37,7 @@ public class ProjectContextAppService
         _projectResolver = projectResolver;
         _taskRecordDomainService = taskRecordDomainService;
         _taskSessionBindingService = taskSessionBindingService;
+        _timeProvider = timeProvider;
     }
 
     public async Task<IReadOnlyList<ProjectContextSummaryResponse>> ListResponsesAsync(Guid projectId)
@@ -122,7 +125,7 @@ public class ProjectContextAppService
 
         context.Title = title.Trim();
         context.UpdateBy = user;
-        context.UpdateTime = DateTime.UtcNow;
+        context.UpdateTime = _timeProvider.GetUtcNow();
         _contextRepository.Update(context);
         await _unitOfWork.SaveChangesAsync();
         return ApplicationResult.Success();

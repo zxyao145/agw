@@ -29,15 +29,24 @@ public interface IAgentExecutionBridge
         CancellationToken cancellationToken);
 }
 
-public sealed class A2AAgentExecutionBridge(IServiceScopeFactory serviceScopeFactory) : IAgentExecutionBridge
+public sealed class A2AAgentExecutionBridge : IAgentExecutionBridge
 {
+    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly TimeProvider _timeProvider;
+
+    public A2AAgentExecutionBridge(IServiceScopeFactory serviceScopeFactory, TimeProvider timeProvider)
+    {
+        _serviceScopeFactory = serviceScopeFactory;
+        _timeProvider = timeProvider;
+    }
+
     public async Task<AgentExecutionResult?> ExecuteAsync(
         string agentName,
         RequestContext context,
         AgwUserInput input,
         CancellationToken cancellationToken)
     {
-        using var scope = serviceScopeFactory.CreateScope();
+        using var scope = _serviceScopeFactory.CreateScope();
         var agentRepository = scope.ServiceProvider.GetRequiredService<IRepository<Agent>>();
         var agentRuntimeService = scope.ServiceProvider.GetRequiredService<IAgentRuntimeService>();
 
@@ -68,7 +77,7 @@ public sealed class A2AAgentExecutionBridge(IServiceScopeFactory serviceScopeFac
         AgwUserInput input,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        using var scope = serviceScopeFactory.CreateScope();
+        using var scope = _serviceScopeFactory.CreateScope();
         var agentRepository = scope.ServiceProvider.GetRequiredService<IRepository<Agent>>();
         var agentRuntimeService = scope.ServiceProvider.GetRequiredService<IAgentRuntimeService>();
 
@@ -87,7 +96,7 @@ public sealed class A2AAgentExecutionBridge(IServiceScopeFactory serviceScopeFac
             ProjectId = ProjectDefaults.A2AId,
             ContextId = context.ContextId,
             Title = agent.Name,
-            CreateTime = DateTime.UtcNow
+            CreateTime = _timeProvider.GetUtcNow()
         };
         var settings = new SettingCommand(ProjectDefaults.A2AId, contextId: context.ContextId)
         {

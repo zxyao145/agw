@@ -826,10 +826,10 @@ public class AgentflowWorkflowCompilerTests
         {
             return Task.Run<IReadOnlyList<AgentflowTrace>>(() =>
             {
-                var timeout = DateTime.UtcNow.AddSeconds(2);
+                var timeout = TimeProvider.System.GetUtcNow().AddSeconds(2);
                 lock (_lock)
                 {
-                    while (_traces.Count < count && DateTime.UtcNow < timeout)
+                    while (_traces.Count < count && TimeProvider.System.GetUtcNow() < timeout)
                     {
                         Monitor.Wait(_lock, TimeSpan.FromMilliseconds(20));
                     }

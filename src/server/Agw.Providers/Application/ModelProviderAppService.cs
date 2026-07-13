@@ -21,20 +21,26 @@ public class ModelProviderAppService : IModelProviderAppService
         _domainService = domainService;
     }
 
-    public Task<IReadOnlyList<ModelProviderRelation>> ListAsync(Guid? modelId = null, Guid? providerId = null)
+    public async Task<IReadOnlyList<ModelProviderRelation>> ListAsync(Guid? modelId = null, Guid? providerId = null)
     {
+        IReadOnlyList<ModelProviderRelation> modelProviders;
         if (!modelId.HasValue && !providerId.HasValue)
         {
-            return _repository.ListAsync(null, modelProvider => modelProvider.OrderByDescending(x => x.CreateTime), modelProvider => modelProvider.Model!, modelProvider => modelProvider.Provider!);
+            modelProviders = await _repository.ListAsync(
+                includes: [modelProvider => modelProvider.Model!, modelProvider => modelProvider.Provider!]);
+        }
+        else
+        {
+            modelProviders = await _repository.ListAsync(
+                modelProvider =>
+                    (!modelId.HasValue || modelProvider.ModelId == modelId.Value) &&
+                    (!providerId.HasValue || modelProvider.ProviderId == providerId.Value),
+                null,
+                modelProvider => modelProvider.Model!,
+                modelProvider => modelProvider.Provider!);
         }
 
-        return _repository.ListAsync(
-            modelProvider =>
-                (!modelId.HasValue || modelProvider.ModelId == modelId.Value) &&
-                (!providerId.HasValue || modelProvider.ProviderId == providerId.Value),
-            modelProvider => modelProvider.OrderByDescending(x => x.CreateTime),
-            modelProvider => modelProvider.Model!,
-            modelProvider => modelProvider.Provider!);
+        return modelProviders.OrderByDescending(modelProvider => modelProvider.CreateTime).ToList();
     }
 
     public async Task<ModelProviderRelation?> GetAsync(Guid id)

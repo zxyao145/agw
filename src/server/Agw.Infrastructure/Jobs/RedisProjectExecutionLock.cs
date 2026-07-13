@@ -13,9 +13,9 @@ public sealed class RedisProjectExecutionLock : IProjectExecutionLock
 
     private readonly RedisLock _redisLock;
 
-    public RedisProjectExecutionLock(IConnectionMultiplexer connectionMultiplexer)
+    public RedisProjectExecutionLock(IConnectionMultiplexer connectionMultiplexer, TimeProvider timeProvider)
     {
-        _redisLock = new RedisLock(connectionMultiplexer, LockTtl, RetryDelay, RenewInterval);
+        _redisLock = new RedisLock(connectionMultiplexer, timeProvider, LockTtl, RetryDelay, RenewInterval);
     }
 
     public Task<IAsyncDisposable> AcquireAsync(Guid projectId, CancellationToken cancellationToken)

@@ -10,8 +10,11 @@ namespace Agw.Infrastructure.Repositories;
 
 public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
 {
-    public JobRepo(DbContext dbContext) : base(dbContext)
+    private readonly TimeProvider _timeProvider;
+
+    public JobRepo(DbContext dbContext, TimeProvider timeProvider) : base(dbContext)
     {
+        _timeProvider = timeProvider;
     }
 
 
@@ -30,7 +33,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
 
     public async Task<bool> MarkRunningAsync(Guid jobId, CancellationToken cancellationToken)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var job = await _dbSet
             .FirstOrDefaultAsync(t => t.Id == jobId && t.IsEnabled, cancellationToken);
 
@@ -80,7 +83,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
             task.Status = JobStatus.Paused;
         }
 
-        task.UpdateTime = DateTime.UtcNow;
+        task.UpdateTime = _timeProvider.GetUtcNow();
         task.UpdateBy = "scheduler";
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -95,7 +98,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         task.RetryCount = retryCount;
         task.NextRunTime = nextRunTime;
         task.LastError = errorMessage;
-        task.UpdateTime = DateTime.UtcNow;
+        task.UpdateTime = _timeProvider.GetUtcNow();
         task.UpdateBy = "scheduler";
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -110,7 +113,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         task.IsEnabled = false;
         task.RetryCount = retryCount;
         task.LastError = errorMessage;
-        task.UpdateTime = DateTime.UtcNow;
+        task.UpdateTime = _timeProvider.GetUtcNow();
         task.UpdateBy = "scheduler";
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -118,6 +121,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
 
     public async Task AddExecutionLogAsync(Guid jobId, Guid taskId, DateTimeOffset startTime, DateTimeOffset endTime, bool success, int attempt, string? errorMessage, CancellationToken cancellationToken)
     {
+        var now = _timeProvider.GetUtcNow();
         var log = new JobLog
         {
             Id = Guid.NewGuid(),
@@ -129,9 +133,9 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
             Attempt = attempt,
             ErrorMessage = errorMessage,
             CreateBy = "scheduler",
-            CreateTime = DateTime.UtcNow,
+            CreateTime = now,
             UpdateBy = "scheduler",
-            UpdateTime = DateTime.UtcNow
+            UpdateTime = now
         };
 
         await _dbContext.Set<JobLog>().AddAsync(log, cancellationToken);

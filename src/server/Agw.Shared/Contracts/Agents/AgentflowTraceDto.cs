@@ -4,7 +4,7 @@ public sealed class AgentflowTraceDto
 {
     public Guid Id { get; init; }
 
-    public DateTime StartTimeUtc { get; init; }
+    public DateTimeOffset StartTimeUtc { get; init; }
 
     public Guid ProjectId { get; init; }
 

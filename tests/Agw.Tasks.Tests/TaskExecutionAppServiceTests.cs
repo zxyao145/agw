@@ -177,7 +177,7 @@ public class TaskExecutionAppServiceTests
         Type = ProjectType.UserDefined,
         Enable = true,
         CreateBy = "tester",
-        CreateTime = DateTime.UtcNow
+        CreateTime = TimeProvider.System.GetUtcNow()
     };
 
     private static ProjectContext CreateContext(Guid id, Guid projectId, string contextId, string title) => new()
@@ -187,9 +187,9 @@ public class TaskExecutionAppServiceTests
         ContextId = contextId,
         Title = title,
         CreateBy = "tester",
-        CreateTime = DateTime.UtcNow,
+        CreateTime = TimeProvider.System.GetUtcNow(),
         UpdateBy = "tester",
-        UpdateTime = DateTime.UtcNow
+        UpdateTime = TimeProvider.System.GetUtcNow()
     };
 
     private static TaskRecord CreateRecord(Guid contextId, Guid taskId) => new()
@@ -198,8 +198,8 @@ public class TaskExecutionAppServiceTests
         ProjectContextId = contextId,
         TaskId = taskId,
         Status = TaskExecutionStatus.Running,
-        CreateTime = DateTime.UtcNow,
-        UpdateTime = DateTime.UtcNow
+        CreateTime = TimeProvider.System.GetUtcNow(),
+        UpdateTime = TimeProvider.System.GetUtcNow()
     };
 
     private static TaskExecutionAppService CreateService(AgwDbContext dbContext)
@@ -211,6 +211,7 @@ public class TaskExecutionAppServiceTests
             new EfRepository<TaskRecord>(dbContext),
             new UnitOfWork(dbContext),
             new TaskRecordDomainService(),
-            new ProjectResolver(projectRepository));
+            new ProjectResolver(projectRepository),
+            TimeProvider.System);
     }
 }

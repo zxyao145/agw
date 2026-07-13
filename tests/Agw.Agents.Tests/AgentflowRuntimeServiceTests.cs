@@ -78,7 +78,7 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(),
+            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState());
         var projectId = Guid.NewGuid();

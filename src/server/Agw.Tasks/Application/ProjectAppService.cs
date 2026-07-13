@@ -33,8 +33,14 @@ public class ProjectAppService : IProjectAppService
         _projectResolver = projectResolver;
     }
 
-    public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
-        _projectRepository.ListAsync(predicate, p => p.OrderByDescending(p => p.CreateTime).ThenBy(p => p.Name));
+    public async Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null)
+    {
+        var projects = await _projectRepository.ListAsync(predicate);
+        return projects
+            .OrderByDescending(project => project.CreateTime)
+            .ThenBy(project => project.Name)
+            .ToList();
+    }
 
     public Task<Project?> GetAsync(Guid id) => _projectRepository.GetByIdAsync(id);
 

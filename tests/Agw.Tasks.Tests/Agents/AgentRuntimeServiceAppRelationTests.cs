@@ -190,7 +190,7 @@ public class AgentRuntimeServiceAppRelationTests
                     SystemPrompt = "prompt",
                     Type = AgentType.External,
                     CreateBy = "tester",
-                    CreateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow()
                 });
                 seedContext.AppInstances.AddRange(
                     new AppInstance
@@ -200,7 +200,7 @@ public class AgentRuntimeServiceAppRelationTests
                         ClientId = "github-client",
                         ClientSecret = "github-secret",
                         CreateBy = "tester",
-                        CreateTime = DateTime.UtcNow
+                        CreateTime = TimeProvider.System.GetUtcNow()
                     },
                     new AppInstance
                     {
@@ -209,7 +209,7 @@ public class AgentRuntimeServiceAppRelationTests
                         ClientId = "google-client",
                         ClientSecret = "google-secret",
                         CreateBy = "tester",
-                        CreateTime = DateTime.UtcNow
+                        CreateTime = TimeProvider.System.GetUtcNow()
                     });
 
                 if (includeDuplicateGithubApp)
@@ -221,7 +221,7 @@ public class AgentRuntimeServiceAppRelationTests
                         ClientId = "github-client-2",
                         ClientSecret = "github-secret-2",
                         CreateBy = "tester",
-                        CreateTime = DateTime.UtcNow
+                        CreateTime = TimeProvider.System.GetUtcNow()
                     });
                 }
 
@@ -234,7 +234,7 @@ public class AgentRuntimeServiceAppRelationTests
                         ClientId = "missing-client",
                         ClientSecret = "missing-secret",
                         CreateBy = "tester",
-                        CreateTime = DateTime.UtcNow
+                        CreateTime = TimeProvider.System.GetUtcNow()
                     });
                 }
 
@@ -292,7 +292,7 @@ public class AgentRuntimeServiceAppRelationTests
                 new EfRepository<Skill>(dbContext),
                 new EfRepository<AgentSkillRelation>(dbContext),
                 new UnitOfWork(dbContext),
-                new AgentDomainService());
+                new AgentDomainService(TimeProvider.System));
         }
 
         public async ValueTask DisposeAsync()

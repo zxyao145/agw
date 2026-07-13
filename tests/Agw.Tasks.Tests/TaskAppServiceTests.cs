@@ -60,7 +60,7 @@ public class TaskAppServiceTests
                 Type = ProjectType.UserDefined,
                 Enable = true,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -115,7 +115,7 @@ public class TaskAppServiceTests
                 Type = ProjectType.UserDefined,
                 Enable = true,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             seedContext.ProjectContexts.Add(new ProjectContext
             {
@@ -124,9 +124,9 @@ public class TaskAppServiceTests
                 ContextId = "context-1",
                 Title = "Chat",
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow.AddMinutes(-2),
+                CreateTime = TimeProvider.System.GetUtcNow().AddMinutes(-2),
                 UpdateBy = "tester",
-                UpdateTime = DateTime.UtcNow.AddMinutes(-1)
+                UpdateTime = TimeProvider.System.GetUtcNow().AddMinutes(-1)
             });
             seedContext.TaskRecords.AddRange(
                 new TaskRecord
@@ -135,8 +135,8 @@ public class TaskAppServiceTests
                     ProjectContextId = contextRowId,
                     TaskId = oldTaskId,
                     Status = TaskExecutionStatus.Succeeded,
-                    CreateTime = DateTime.UtcNow.AddMinutes(-2),
-                    UpdateTime = DateTime.UtcNow.AddMinutes(-2)
+                    CreateTime = TimeProvider.System.GetUtcNow().AddMinutes(-2),
+                    UpdateTime = TimeProvider.System.GetUtcNow().AddMinutes(-2)
                 },
                 new TaskRecord
                 {
@@ -144,8 +144,8 @@ public class TaskAppServiceTests
                     ProjectContextId = contextRowId,
                     TaskId = latestTaskId,
                     Status = TaskExecutionStatus.Running,
-                    CreateTime = DateTime.UtcNow.AddMinutes(-1),
-                    UpdateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow().AddMinutes(-1),
+                    UpdateTime = TimeProvider.System.GetUtcNow()
                 });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -177,7 +177,8 @@ public class TaskAppServiceTests
             new EfRepository<TaskRecord>(dbContext),
             new UnitOfWork(dbContext),
             new Domain.Services.TaskRecordDomainService(),
-            new ProjectResolver(projectRepository));
+            new ProjectResolver(projectRepository),
+            TimeProvider.System);
 
         return new TaskAppService(
             new EfRepository<ProjectContext>(dbContext),
