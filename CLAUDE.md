@@ -185,6 +185,8 @@ Read `docs/rules.md` before backend coding. Its rules are mandatory.
 ## Coding Style
 
 - C#: 4-space indentation, `PascalCase` for types/members, `camelCase` for locals/parameters, `I` prefix for interfaces, async methods for I/O, constructor injection for dependencies.
+- Do not use `DateTime` in backend code; use `DateTimeOffset` instead.
+- Use `TimeProvider` whenever it is applicable.
 - Do not use C# primary constructors. Declare explicit constructors and backing fields/properties; dependency-injected services must use explicit constructor injection.
 - Backend DTOs/contracts live under module `Contracts/` folders.
 - Frontend: TypeScript React function components, App Router conventions, and kebab-case filenames.
