@@ -893,51 +893,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/traces": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: {
-                    projectId?: string;
-                    contextId?: string;
-                    agentflowId?: string;
-                    fromUtc?: string;
-                    toUtc?: string;
-                    pageIndex?: number;
-                    pageSize?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
-                        "application/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
-                        "text/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/agents": {
         parameters: {
             query?: never;
@@ -1285,6 +1240,51 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/traces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    projectId?: string;
+                    contextId?: string;
+                    agentflowId?: string;
+                    fromUtc?: string;
+                    toUtc?: string;
+                    pageIndex?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
+                        "application/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
+                        "text/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3204,8 +3204,11 @@ export interface components {
             modelProviderId?: null | string;
             tools: null | string;
             type: components["schemas"]["AgentType"];
-            /** @description JSON object for additional data (e.g., environment variables). */
+            /** @description JSON object for additional external agent settings. */
             extra: null | string;
+            environmentVariables?: {
+                [key: string]: string;
+            };
             modelProvider?: null | components["schemas"]["ModelProviderRelation"];
             agentAppRelations?: components["schemas"]["AgentAppRelation"][];
             agentMcpToolServers?: components["schemas"]["AgentMcpServerRelation"][];
@@ -3242,6 +3245,9 @@ export interface components {
             mcpToolServerIds?: null | string[];
             skillIds?: null | string[];
             appInstanceIds?: null | string[];
+            environmentVariables?: null | {
+                [key: string]: string;
+            };
         };
         Agentflow: {
             /** Format: uuid */
@@ -3384,6 +3390,9 @@ export interface components {
             tools: null | string;
             type: components["schemas"]["AgentType"];
             extra: null | string;
+            environmentVariables: {
+                [key: string]: string;
+            };
             agentMcpToolServers: components["schemas"]["AgentMcpToolServerRelationResponse"][];
             agentSkillRelations: components["schemas"]["AgentSkillRelationResponse"][];
             agentAppRelations: components["schemas"]["AgentAppRelationResponse"][];
@@ -3420,6 +3429,10 @@ export interface components {
             mcpToolServerIds?: null | string[];
             skillIds?: null | string[];
             appInstanceIds?: null | string[];
+            extra: null | string;
+            environmentVariables?: null | {
+                [key: string]: string;
+            };
         };
         AgwContent: components["schemas"]["AgwContentAgwTextContent"] | components["schemas"]["AgwContentAgwTextReasoningContent"] | components["schemas"]["AgwContentAgwFunctionCallContent"] | components["schemas"]["AgwContentAgwFunctionResultContent"] | components["schemas"]["AgwContentAgwErrorContent"] | components["schemas"]["AgwContentAgwUsageContent"] | components["schemas"]["AgwContentAgwUriContent"] | components["schemas"]["AgwContentAgwDataContent"];
         AgwContentAgwDataContent: {
@@ -3823,6 +3836,12 @@ export interface components {
             agentCount: number;
             /** Format: int32 */
             agentflowCount: number;
+            /** Format: int64 */
+            usageInputTokenCount: number | string;
+            /** Format: int64 */
+            usageOutputTokenCount: number | string;
+            /** Format: int64 */
+            usageTotalTokenCount: number | string;
         };
         FileItem: {
             name: string;

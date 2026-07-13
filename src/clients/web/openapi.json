@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:5015/"
+      "url": "http://127.0.0.1:5016/"
     }
   ],
   "paths": {
@@ -828,94 +828,6 @@
         }
       }
     },
-    "/api/traces": {
-      "get": {
-        "tags": [
-          "AgentflowTraces"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "contextId",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "agentflowId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "fromUtc",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          {
-            "name": "toUtc",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          {
-            "name": "pageIndex",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 1
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowTraceDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowTraceDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowTraceDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/agents": {
       "get": {
         "tags": [
@@ -1389,6 +1301,94 @@
         }
       }
     },
+    "/api/traces": {
+      "get": {
+        "tags": [
+          "Traces"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "contextId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentflowId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "fromUtc",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "toUtc",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowTraceDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowTraceDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowTraceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/list": {
       "get": {
         "tags": [
@@ -1580,13 +1580,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": {}
+                "schema": { }
               },
               "application/json": {
-                "schema": {}
+                "schema": { }
               },
               "text/json": {
-                "schema": {}
+                "schema": { }
               }
             }
           },
@@ -1652,13 +1652,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": {}
+                "schema": { }
               },
               "application/json": {
-                "schema": {}
+                "schema": { }
               },
               "text/json": {
-                "schema": {}
+                "schema": { }
               }
             }
           },
@@ -1724,13 +1724,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": {}
+                "schema": { }
               },
               "application/json": {
-                "schema": {}
+                "schema": { }
               },
               "text/json": {
-                "schema": {}
+                "schema": { }
               }
             }
           },
@@ -3857,7 +3857,13 @@
               "null",
               "string"
             ],
-            "description": "JSON object for additional data (e.g., environment variables)."
+            "description": "JSON object for additional external agent settings."
+          },
+          "environmentVariables": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "modelProvider": {
             "oneOf": [
@@ -4016,6 +4022,15 @@
             "items": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          "environmentVariables": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
             }
           }
         }
@@ -4579,6 +4594,7 @@
           "tools",
           "type",
           "extra",
+          "environmentVariables",
           "agentMcpToolServers",
           "agentSkillRelations",
           "agentAppRelations",
@@ -4626,6 +4642,12 @@
               "null",
               "string"
             ]
+          },
+          "environmentVariables": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           },
           "agentMcpToolServers": {
             "type": "array",
@@ -4727,7 +4749,8 @@
           "description",
           "systemPrompt",
           "modelProviderId",
-          "tools"
+          "tools",
+          "extra"
         ],
         "type": "object",
         "properties": {
@@ -4781,6 +4804,21 @@
             "items": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          "extra": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "environmentVariables": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
             }
           }
         }
@@ -6593,7 +6631,10 @@
           "projectContextCount",
           "taskRecordCount",
           "agentCount",
-          "agentflowCount"
+          "agentflowCount",
+          "usageInputTokenCount",
+          "usageOutputTokenCount",
+          "usageTotalTokenCount"
         ],
         "type": "object",
         "properties": {
@@ -6620,6 +6661,30 @@
           "agentflowCount": {
             "type": "integer",
             "format": "int32"
+          },
+          "usageInputTokenCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "usageOutputTokenCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "usageTotalTokenCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -8681,13 +8746,13 @@
       "name": "Agentflows"
     },
     {
-      "name": "AgentflowTraces"
-    },
-    {
       "name": "Agents"
     },
     {
       "name": "McpToolServers"
+    },
+    {
+      "name": "Traces"
     },
     {
       "name": "Files"

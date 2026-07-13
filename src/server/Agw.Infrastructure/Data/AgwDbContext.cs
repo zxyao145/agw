@@ -129,6 +129,12 @@ public class AgwDbContext : DbContext
             entity.Property(e => e.Description).HasMaxLength(200);
             entity.Property(e => e.SystemPrompt).HasMaxLength(4000);
             entity.Property(e => e.Tools).HasMaxLength(4000);  // JSON array of tool names
+            entity.Property(e => e.EnvironmentVariables).HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? new Dictionary<string, string>()
+                    : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null)
+                    ?? new Dictionary<string, string>());
 
             // ModelProviderId is optional - required for System agents, optional for External agents
             //entity.HasOne(e => e.ModelProvider)

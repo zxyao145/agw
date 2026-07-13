@@ -11,23 +11,35 @@ public static class McpToolServerToolClient
         McpServer server,
         CancellationToken cancellationToken = default)
     {
-        var transport = CreateTransport(server);
+        return await ListToolsAsync(server, null, cancellationToken).ConfigureAwait(false);
+    }
+
+    public static async Task<IReadOnlyList<McpClientTool>> ListToolsAsync(
+        McpServer server,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        CancellationToken cancellationToken = default)
+    {
+        var transport = CreateTransport(server, environmentVariables);
         var client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken).ConfigureAwait(false);
         var tools = await client.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         return tools.AsReadOnly();
     }
 
-    private static IClientTransport CreateTransport(McpServer server)
+    private static IClientTransport CreateTransport(
+        McpServer server,
+        IReadOnlyDictionary<string, string>? environmentVariables)
     {
         return server.TransportType.ToLowerInvariant() switch
         {
-            "stdio" => CreateStdioTransport(server),
+            "stdio" => CreateStdioTransport(server, environmentVariables),
             "http" or "sse" => CreateHttpTransport(server),
             _ => throw new AgwException(ErrorCodes.UnsupportedTransportType, $"Transport type '{server.TransportType}' is not supported")
         };
     }
 
-    private static StdioClientTransport CreateStdioTransport(McpServer server)
+    private static StdioClientTransport CreateStdioTransport(
+        McpServer server,
+        IReadOnlyDictionary<string, string>? environmentVariables)
     {
         if (string.IsNullOrWhiteSpace(server.Command))
         {
@@ -41,10 +53,12 @@ public static class McpToolServerToolClient
             Arguments = [.. server.Arguments],
         };
 
-        if (server.EnvironmentVariables.Count > 0)
+        var mergedEnvironmentVariables = MergeEnvironmentVariables(
+            server.EnvironmentVariables,
+            environmentVariables);
+        if (mergedEnvironmentVariables != null)
         {
-            options.EnvironmentVariables = new Dictionary<string, string?>(
-                server.EnvironmentVariables.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)));
+            options.EnvironmentVariables = mergedEnvironmentVariables;
         }
 
         if (!string.IsNullOrWhiteSpace(server.WorkingDirectory))
@@ -53,6 +67,32 @@ public static class McpToolServerToolClient
         }
 
         return new StdioClientTransport(options);
+    }
+
+    internal static Dictionary<string, string?>? MergeEnvironmentVariables(
+        IReadOnlyDictionary<string, string> serverVariables,
+        IReadOnlyDictionary<string, string>? effectiveAgentVariables)
+    {
+        if (serverVariables.Count == 0 && effectiveAgentVariables is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var merged = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var (key, value) in serverVariables)
+        {
+            merged[key] = value;
+        }
+
+        if (effectiveAgentVariables != null)
+        {
+            foreach (var (key, value) in effectiveAgentVariables)
+            {
+                merged[key] = value;
+            }
+        }
+
+        return merged;
     }
 
     private static HttpClientTransport CreateHttpTransport(McpServer server)

@@ -23,6 +23,7 @@ public partial class AgentRuntimeService
     private async Task<AIAgent?> CreateDefinitionAgentAsync(
         Agent agentDefinition,
         Project project,
+        IReadOnlyDictionary<string, string> environmentVariables,
         CancellationToken cancellationToken)
     {
         if (!agentDefinition.ModelProviderId.HasValue)
@@ -48,7 +49,8 @@ public partial class AgentRuntimeService
 
         var authConfig = authConfigs[Random.Shared.Next(authConfigs.Count)];
         IList<AITool>? tools =
-            await CreateAgentTools(agentDefinition, project.Id, cancellationToken).ConfigureAwait(false);
+            await CreateAgentTools(agentDefinition, project.Id, environmentVariables, cancellationToken)
+                .ConfigureAwait(false);
         var skillsProvider = await CreateSkillsProviderAsync(agentDefinition.Id).ConfigureAwait(false);
 
         string workspace = project.GetMustWorkspace();

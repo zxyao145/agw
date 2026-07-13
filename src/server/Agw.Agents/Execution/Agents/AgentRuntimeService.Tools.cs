@@ -13,6 +13,7 @@ public partial class AgentRuntimeService
     private async Task<IList<AITool>?> CreateAgentTools(
         Agent agent,
         Guid projectId,
+        IReadOnlyDictionary<string, string> environmentVariables,
         CancellationToken cancellationToken)
     {
         var mergedTools = new List<AITool>();
@@ -29,7 +30,8 @@ public partial class AgentRuntimeService
             }
         }
 
-        var mcpTools = await ListToolsByAgentAsync(agent.Id, cancellationToken).ConfigureAwait(false);
+        var mcpTools = await ListToolsByAgentAsync(agent.Id, environmentVariables, cancellationToken)
+            .ConfigureAwait(false);
         if (mcpTools.Count > 0)
         {
             AddUniqueTools(mergedTools, registeredToolNames, mcpTools);
@@ -56,6 +58,7 @@ public partial class AgentRuntimeService
 
     private async Task<IReadOnlyList<McpClientTool>> ListToolsByAgentAsync(
         Guid agentId,
+        IReadOnlyDictionary<string, string> environmentVariables,
         CancellationToken cancellationToken)
     {
         var servers = await _agentAppService.ListEnabledMcpToolServersByAgentAsync(agentId);
@@ -64,7 +67,10 @@ public partial class AgentRuntimeService
         {
             try
             {
-                var serverTools = await McpToolServerToolClient.ListToolsAsync(server, cancellationToken)
+                var serverTools = await McpToolServerToolClient.ListToolsAsync(
+                        server,
+                        environmentVariables,
+                        cancellationToken)
                     .ConfigureAwait(false);
                 if (serverTools.Count > 0)
                 {

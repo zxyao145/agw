@@ -23,17 +23,22 @@ public class Agent : BaseEntity, IAggregateRoot
     /// </summary>
     public Guid? ModelProviderId { get; set; }
 
-    public string? Tools { get; set; }  // JSON array of tool method names
     public AgentType Type { get; set; } = AgentType.System;
 
     /// <summary>
-    /// JSON object for additional data (e.g., environment variables).
+    /// JSON object for additional external agent settings.
     /// </summary>
     public string? Extra { get; set; }
 
+    public string? Tools { get; set; } // JSON array of tool method names
+
+    public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
+
     public ModelProviderRelation? ModelProvider { get; set; }
 
-    public ICollection<AgentAppRelation> AgentAppRelations { get; set; } = new List<AgentAppRelation>();
-    public ICollection<AgentMcpServerRelation> AgentMcpToolServers { get; set; } = new List<AgentMcpServerRelation>();
     public ICollection<AgentSkillRelation> AgentSkillRelations { get; set; } = new List<AgentSkillRelation>();
+    
+    public ICollection<AgentMcpServerRelation> AgentMcpToolServers { get; set; } = new List<AgentMcpServerRelation>();
+
+    public ICollection<AgentAppRelation> AgentAppRelations { get; set; } = new List<AgentAppRelation>();
 }

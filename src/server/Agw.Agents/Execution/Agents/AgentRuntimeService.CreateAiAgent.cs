@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Agents.Execution.Agents.Utils;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
@@ -54,14 +55,21 @@ public partial class AgentRuntimeService
         Project? project = await _projectAppService
             .GetAsync(request.ProjectId ?? ProjectDefaults.DefaultBuiltInId);
         ArgumentNullException.ThrowIfNull(project);
+        var environmentVariables = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
+            request.Agent.EnvironmentVariables,
+            request.EnvironmentVariables);
 
         if (request.Agent.Type == AgentType.External)
         {
-            TryCreateExternalAgent(request, project, out var externalAgent);
+            TryCreateExternalAgent(request, project, environmentVariables, out var externalAgent);
             return externalAgent;
         }
 
-        return await CreateDefinitionAgentAsync(request.Agent, project, cancellationToken)
+        return await CreateDefinitionAgentAsync(
+                request.Agent,
+                project,
+                environmentVariables,
+                cancellationToken)
             .ConfigureAwait(false);
     }
 }
