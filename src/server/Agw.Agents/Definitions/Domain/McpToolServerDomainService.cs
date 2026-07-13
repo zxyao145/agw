@@ -4,6 +4,13 @@ namespace Agw.Agents.Definitions.Domain;
 
 public class McpToolServerDomainService
 {
+    private readonly TimeProvider _timeProvider;
+
+    public McpToolServerDomainService(TimeProvider timeProvider)
+    {
+        _timeProvider = timeProvider;
+    }
+
     public void PrepareForCreate(McpServer server, string user)
     {
         ArgumentNullException.ThrowIfNull(server);
@@ -11,7 +18,7 @@ public class McpToolServerDomainService
         NormalizeCollections(server);
         server.Id = server.Id == Guid.Empty ? Guid.NewGuid() : server.Id;
         server.CreateBy = user;
-        server.CreateTime = DateTime.UtcNow;
+        server.CreateTime = _timeProvider.GetUtcNow();
     }
 
     public void ApplyUpdate(McpServer existing, Action<McpServer> updateAction, string user)
@@ -22,7 +29,7 @@ public class McpToolServerDomainService
         updateAction(existing);
         NormalizeCollections(existing);
         existing.UpdateBy = user;
-        existing.UpdateTime = DateTime.UtcNow;
+        existing.UpdateTime = _timeProvider.GetUtcNow();
     }
 
     public IReadOnlyList<Guid> NormalizeAgentIds(IEnumerable<Guid>? agentIds)

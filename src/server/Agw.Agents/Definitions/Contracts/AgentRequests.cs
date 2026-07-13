@@ -61,9 +61,9 @@ public sealed record AgentResponse(
     IReadOnlyList<AgentMcpToolServerRelationResponse> AgentMcpToolServers,
     IReadOnlyList<AgentSkillRelationResponse> AgentSkillRelations,
     IReadOnlyList<AgentAppRelationResponse> AgentAppRelations,
-    DateTime CreateTime,
+    DateTimeOffset CreateTime,
     string? CreateBy,
-    DateTime? UpdateTime,
+    DateTimeOffset? UpdateTime,
     string? UpdateBy)
 {
     public static AgentResponse FromDomain(Agent agent) =>

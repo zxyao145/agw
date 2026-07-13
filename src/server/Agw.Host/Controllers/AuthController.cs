@@ -22,17 +22,20 @@ public sealed class AuthController : ControllerBase
     private readonly IPasswordHasher<object> _passwordHasher;
     private readonly IAntiforgery _antiforgery;
     private readonly AuthenticationAttemptLimiter _attemptLimiter;
+    private readonly TimeProvider _timeProvider;
 
     public AuthController(
         IInitializationStateStore stateStore,
         IPasswordHasher<object> passwordHasher,
         IAntiforgery antiforgery,
-        AuthenticationAttemptLimiter attemptLimiter)
+        AuthenticationAttemptLimiter attemptLimiter,
+        TimeProvider timeProvider)
     {
         _stateStore = stateStore;
         _passwordHasher = passwordHasher;
         _antiforgery = antiforgery;
         _attemptLimiter = attemptLimiter;
+        _timeProvider = timeProvider;
     }
 
     [HttpGet("session")]
@@ -71,7 +74,8 @@ public sealed class AuthController : ControllerBase
     public async Task<IActionResult> Login(LoginRequest request)
     {
         var clientKey = AuthenticationAttemptLimiter.GetClientKey(HttpContext);
-        if (_attemptLimiter.IsBlocked(clientKey, DateTimeOffset.UtcNow))
+        var now = _timeProvider.GetUtcNow();
+        if (_attemptLimiter.IsBlocked(clientKey, now))
         {
             return AgwApiResult.FromError(ErrorCodes.TooManyAuthenticationAttempts);
         }
@@ -80,7 +84,7 @@ public sealed class AuthController : ControllerBase
         if (snapshot.PasswordHash == null
             || _passwordHasher.VerifyHashedPassword(new object(), snapshot.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
         {
-            _attemptLimiter.RecordFailure(clientKey, DateTimeOffset.UtcNow);
+            _attemptLimiter.RecordFailure(clientKey, now);
             return AgwApiResult.FromError(ErrorCodes.InvalidAdminCredentials);
         }
 

@@ -42,23 +42,62 @@ public class AgentflowTraceAppService
             queryable = queryable.Where(trace => trace.AgentflowId == query.AgentflowId.Value);
         }
 
+        var filteredQueryable = queryable;
+
         if (query.FromUtc.HasValue)
         {
-            queryable = queryable.Where(trace => trace.StartTimeUtc >= query.FromUtc.Value);
+            filteredQueryable = filteredQueryable.Where(trace => trace.StartTimeUtc >= query.FromUtc.Value);
         }
 
         if (query.ToUtc.HasValue)
         {
-            queryable = queryable.Where(trace => trace.StartTimeUtc <= query.ToUtc.Value);
+            filteredQueryable = filteredQueryable.Where(trace => trace.StartTimeUtc <= query.ToUtc.Value);
         }
 
-        var ordered = queryable.OrderByDescending(trace => trace.StartTimeUtc);
-        var total = await ordered.CountAsync(cancellationToken);
+        try
+        {
+            var total = await filteredQueryable.CountAsync(cancellationToken);
+            var traces = await filteredQueryable
+                .OrderByDescending(trace => trace.StartTimeUtc)
+                .Skip((query.PageIndex - 1) * query.PageSize)
+                .Take(query.PageSize)
+                .ToListAsync(cancellationToken);
 
-        var items = await ordered
-            .Skip((query.PageIndex - 1) * query.PageSize)
-            .Take(query.PageSize)
-            .Select(trace => new AgentflowTraceDto
+            return CreatePagedResult(query, traces, total);
+        }
+        catch (Exception exception) when (IsDateTimeOffsetQueryTranslationException(exception))
+        {
+            var traces = await queryable.ToListAsync(cancellationToken);
+            IEnumerable<AgentflowTrace> filtered = traces;
+
+            if (query.FromUtc.HasValue)
+            {
+                filtered = filtered.Where(trace => trace.StartTimeUtc >= query.FromUtc.Value);
+            }
+
+            if (query.ToUtc.HasValue)
+            {
+                filtered = filtered.Where(trace => trace.StartTimeUtc <= query.ToUtc.Value);
+            }
+
+            var ordered = filtered.OrderByDescending(trace => trace.StartTimeUtc).ToList();
+            var page = ordered
+                .Skip((query.PageIndex - 1) * query.PageSize)
+                .Take(query.PageSize)
+                .ToList();
+
+            return CreatePagedResult(query, page, ordered.Count);
+        }
+    }
+
+    private static PagedResult<AgentflowTraceDto> CreatePagedResult(
+        AgentflowTraceQuery query,
+        IReadOnlyList<AgentflowTrace> traces,
+        int total)
+    {
+        return new PagedResult<AgentflowTraceDto>
+        {
+            Items = traces.Select(trace => new AgentflowTraceDto
             {
                 Id = trace.Id,
                 StartTimeUtc = trace.StartTimeUtc,
@@ -76,15 +115,22 @@ public class AgentflowTraceAppService
                 Status = trace.Status,
                 Error = trace.Error,
             })
-            .ToListAsync(cancellationToken);
-
-        return new PagedResult<AgentflowTraceDto>
-        {
-            Items = items,
+            .ToList(),
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize,
         };
+    }
+
+    private static bool IsDateTimeOffsetQueryTranslationException(Exception exception)
+    {
+        return exception is NotSupportedException
+                && exception.Message.Contains(
+                    "SQLite does not support expressions of type 'DateTimeOffset'",
+                    StringComparison.Ordinal)
+            || exception is InvalidOperationException
+                && exception.Message.Contains("StartTimeUtc", StringComparison.Ordinal)
+                && exception.Message.Contains("could not be translated", StringComparison.Ordinal);
     }
 
     private static void ValidateQuery(AgentflowTraceQuery query)

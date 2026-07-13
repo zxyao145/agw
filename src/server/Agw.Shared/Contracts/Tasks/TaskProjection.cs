@@ -19,9 +19,9 @@ public sealed class TaskProjection
 
     public string? ErrorMessage { get; init; }
 
-    public DateTime CreateTime { get; init; }
+    public DateTimeOffset CreateTime { get; init; }
 
-    public DateTime? UpdateTime { get; init; }
+    public DateTimeOffset? UpdateTime { get; init; }
 
-    public DateTime? FinishedTime { get; init; }
+    public DateTimeOffset? FinishedTime { get; init; }
 }

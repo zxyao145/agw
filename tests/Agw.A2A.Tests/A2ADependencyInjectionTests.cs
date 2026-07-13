@@ -48,6 +48,7 @@ public class A2ADependencyInjectionTests
         [
             new Agent { Id = agentId, Name = "alpha", SystemPrompt = "Alpha prompt" }
         ]));
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IAgentExecutionBridge, A2AAgentExecutionBridge>();
 
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions

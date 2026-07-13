@@ -59,7 +59,7 @@ public class AgentflowTraceTests
         Assert.Contains("hello", trace.Input, StringComparison.Ordinal);
         Assert.Equal(AgentflowNodeExecutionStatus.Succeeded, trace.Status);
         Assert.Null(trace.Error);
-        Assert.True(trace.StartTimeUtc > DateTime.UnixEpoch);
+        Assert.True(trace.StartTimeUtc > DateTimeOffset.UnixEpoch);
         Assert.True(trace.DurationMilliseconds >= 0);
 
         await collector.StopAsync(TestContext.Current.CancellationToken);

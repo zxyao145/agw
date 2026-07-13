@@ -39,13 +39,13 @@ public class JobRowVersionTests
                 Name = "Nightly sync",
                 TriggerType = TriggerType.Once,
                 TriggerValue = "2026-03-28T13:00:00Z",
-                NextRunTime = DateTimeOffset.UtcNow,
+                NextRunTime = TimeProvider.System.GetUtcNow(),
                 Status = JobStatus.Pending,
                 IsEnabled = true,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow,
+                CreateTime = TimeProvider.System.GetUtcNow(),
                 UpdateBy = "tester",
-                UpdateTime = DateTime.UtcNow
+                UpdateTime = TimeProvider.System.GetUtcNow()
             };
 
             createContext.Jobs.Add(job);
@@ -63,7 +63,7 @@ public class JobRowVersionTests
 
             job.Name = "Nightly sync updated";
             job.UpdateBy = "tester-2";
-            job.UpdateTime = DateTime.UtcNow;
+            job.UpdateTime = TimeProvider.System.GetUtcNow();
 
             await updateContext.SaveChangesAsync(cancellationToken);
 

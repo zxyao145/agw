@@ -9,6 +9,12 @@ public partial class SkillDomainService
 {
     private const int MaxNameLength = 64;
     private const int MaxDescriptionLength = 1024;
+    private readonly TimeProvider _timeProvider;
+
+    public SkillDomainService(TimeProvider timeProvider)
+    {
+        _timeProvider = timeProvider;
+    }
 
     [GeneratedRegex("^[a-z0-9]+(?:-[a-z0-9]+)*$")]
     private static partial Regex SkillNameRegex();
@@ -20,7 +26,7 @@ public partial class SkillDomainService
         Validate(skill.Name, skill.Description);
         skill.Id = skill.Id == Guid.Empty ? Guid.NewGuid() : skill.Id;
         skill.CreateBy = user;
-        skill.CreateTime = DateTime.UtcNow;
+        skill.CreateTime = _timeProvider.GetUtcNow();
         skill.ContentPath = BuildContentPath(skill.Name);
     }
 
@@ -33,7 +39,7 @@ public partial class SkillDomainService
         skill.Description = description.Trim();
         skill.ContentPath = BuildContentPath(skill.Name);
         skill.UpdateBy = user;
-        skill.UpdateTime = DateTime.UtcNow;
+        skill.UpdateTime = _timeProvider.GetUtcNow();
     }
 
     public IReadOnlyList<Guid> NormalizeAgentIds(IEnumerable<Guid>? agentIds)

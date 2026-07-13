@@ -11,10 +11,10 @@ public record TaskExecutionSummary(
     TaskExecutionStatus Status,
     string Title,
     string? ErrorMessage,
-    DateTime CreateTime,
-    DateTime? UpdateTime,
-    DateTime? FinishedTime,
-    DateTime? StartedTime);
+    DateTimeOffset CreateTime,
+    DateTimeOffset? UpdateTime,
+    DateTimeOffset? FinishedTime,
+    DateTimeOffset? StartedTime);
 
 public record TaskExecutionSnapshot(
     Guid TaskId,
@@ -25,9 +25,9 @@ public record TaskExecutionSnapshot(
     string Title,
     string Input,
     string? ErrorMessage,
-    DateTime CreateTime,
-    DateTime? UpdateTime,
-    DateTime? StartedTime,
-    DateTime? FinishedTime,
+    DateTimeOffset CreateTime,
+    DateTimeOffset? UpdateTime,
+    DateTimeOffset? StartedTime,
+    DateTimeOffset? FinishedTime,
     int MessageCount,
     IReadOnlyList<AgwMessage>? Messages);

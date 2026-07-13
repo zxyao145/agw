@@ -69,7 +69,7 @@ public class IntegrationsControllerTests
     public async Task ListAppInstancesAsync_WhenCalled_ReturnsAuthorizationState()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var now = DateTimeOffset.UtcNow;
+        var now = TimeProvider.System.GetUtcNow();
         var expiredInstanceId = Guid.NewGuid();
         var activeInstanceId = Guid.NewGuid();
 
@@ -86,7 +86,7 @@ public class IntegrationsControllerTests
                         ClientId = "expired-client",
                         ClientSecret = "expired-secret",
                         CreateBy = "tester",
-                        CreateTime = now.UtcDateTime.AddMinutes(-10)
+                        CreateTime = now.AddMinutes(-10)
                     },
                     new AppInstance
                     {
@@ -96,7 +96,7 @@ public class IntegrationsControllerTests
                         ClientId = "active-client",
                         ClientSecret = "active-secret",
                         CreateBy = "tester",
-                        CreateTime = now.UtcDateTime
+                        CreateTime = now
                     });
 
                 dbContext.OAuthAuthorizationTokens.AddRange(
@@ -158,7 +158,7 @@ public class IntegrationsControllerTests
                     ClientId = "client-id",
                     ClientSecret = "client-secret",
                     CreateBy = "tester",
-                    CreateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow()
                 });
 
                 dbContext.OAuthAuthorizationTokens.Add(new OAuthAuthorizationToken
@@ -290,13 +290,14 @@ public class IntegrationsControllerTests
                 [
                     typeof(IRepository<AppDefinition>),
                     typeof(IRepository<AppInstance>),
-                    typeof(IUnitOfWork)
+                    typeof(IUnitOfWork),
+                    typeof(TimeProvider)
                 ],
                 modifiers: null);
 
             if (constructor != null)
             {
-                return constructor.Invoke([appDefinitionRepository, appInstanceRepository, unitOfWork]);
+                return constructor.Invoke([appDefinitionRepository, appInstanceRepository, unitOfWork, TimeProvider.System]);
             }
 
             return Activator.CreateInstance(controllerType, nonPublic: true)

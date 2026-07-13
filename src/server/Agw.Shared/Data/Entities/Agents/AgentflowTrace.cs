@@ -9,7 +9,7 @@ public class AgentflowTrace
 {
     public Guid Id { get; set; }
 
-    public DateTime StartTimeUtc { get; set; }
+    public DateTimeOffset StartTimeUtc { get; set; }
 
     public Guid ProjectId { get; set; }
 

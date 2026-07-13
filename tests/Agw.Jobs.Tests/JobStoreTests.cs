@@ -3,6 +3,7 @@ using System.Reflection;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Domain.Entities;
+using Agw.Testing;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -31,12 +32,13 @@ public class JobStoreTests
 
         var jobId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
-        var startTime = DateTimeOffset.UtcNow;
+        var utcNow = new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero);
+        var startTime = utcNow;
         var endTime = startTime.AddMinutes(1);
 
         await using (var dbContext = new AgwDbContext(options))
         {
-            var store = new JobRepo(dbContext);
+            var store = new JobRepo(dbContext, new TestTimeProvider(utcNow));
             var method = typeof(JobRepo).GetMethod(nameof(JobRepo.AddExecutionLogAsync));
 
             Assert.NotNull(method);
@@ -61,5 +63,7 @@ public class JobStoreTests
         Assert.NotNull(taskIdProperty);
         Assert.Equal(jobId, log.JobId);
         Assert.Equal(taskId, Assert.IsType<Guid>(taskIdProperty!.GetValue(log)));
+        Assert.Equal(utcNow, log.CreateTime);
+        Assert.Equal(utcNow, log.UpdateTime);
     }
 }

@@ -22,7 +22,7 @@ public class TaskRecord
 
     public TaskExecutionStatus Status { get; set; } = TaskExecutionStatus.Pending;
 
-    public DateTime? FinishedTime { get; set; }
+    public DateTimeOffset? FinishedTime { get; set; }
 
     public string? TaskErrorMessage { get; set; }
 
@@ -41,6 +41,6 @@ public class TaskRecord
 
     public string? Error { get; set; }
 
-    public DateTime CreateTime { get; set; }
-    public DateTime? UpdateTime { get; set; }
+    public DateTimeOffset CreateTime { get; set; }
+    public DateTimeOffset? UpdateTime { get; set; }
 }

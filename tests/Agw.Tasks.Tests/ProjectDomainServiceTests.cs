@@ -1,11 +1,13 @@
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Tasks.Domain.Services;
+using Agw.Testing;
 
 namespace Agw.Tasks.Tests;
 
 public class ProjectDomainServiceTests
 {
-    private readonly ProjectDomainService _service = new();
+    private static readonly DateTimeOffset UtcNow = new(2026, 7, 13, 10, 0, 0, TimeSpan.Zero);
+    private readonly ProjectDomainService _service = new(new TestTimeProvider(UtcNow));
 
     [Fact]
     public void TryPrepareForCreate_BlankName_ReturnsFalse()
@@ -22,7 +24,6 @@ public class ProjectDomainServiceTests
     [Fact]
     public void TryPrepareForCreate_ValidProject_AssignsMetadata()
     {
-        var before = DateTime.UtcNow;
         var project = new Project { Name = "Project A" };
 
         var result = _service.TryPrepareForCreate(project, "tester");
@@ -30,7 +31,7 @@ public class ProjectDomainServiceTests
         Assert.True(result);
         Assert.NotEqual(Guid.Empty, project.Id);
         Assert.Equal("tester", project.CreateBy);
-        Assert.InRange(project.CreateTime, before, DateTime.UtcNow);
+        Assert.Equal(UtcNow, project.CreateTime);
     }
 
     [Fact]
@@ -93,7 +94,6 @@ public class ProjectDomainServiceTests
     [Fact]
     public void TryApplyUpdate_ValidUpdate_SetsMetadata()
     {
-        var before = DateTime.UtcNow;
         var project = new Project { Id = Guid.NewGuid(), Name = "Project A" };
 
         var result = _service.TryApplyUpdate(project, current => current.Description = "Updated", "tester");
@@ -101,6 +101,6 @@ public class ProjectDomainServiceTests
         Assert.True(result);
         Assert.Equal("Updated", project.Description);
         Assert.Equal("tester", project.UpdateBy);
-        Assert.InRange(project.UpdateTime!.Value, before, DateTime.UtcNow);
+        Assert.Equal(UtcNow, project.UpdateTime);
     }
 }

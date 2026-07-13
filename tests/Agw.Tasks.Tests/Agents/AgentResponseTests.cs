@@ -26,9 +26,9 @@ public class AgentResponseTests
             Type = AgentType.System,
             Extra = """{"mode":"draft"}""",
             CreateBy = "tester",
-            CreateTime = new DateTime(2026, 4, 11, 0, 0, 0, DateTimeKind.Utc),
+            CreateTime = new DateTimeOffset(2026, 4, 11, 0, 0, 0, TimeSpan.Zero),
             UpdateBy = "updater",
-            UpdateTime = new DateTime(2026, 4, 11, 1, 0, 0, DateTimeKind.Utc),
+            UpdateTime = new DateTimeOffset(2026, 4, 11, 1, 0, 0, TimeSpan.Zero),
             AgentMcpToolServers =
             [
                 new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = mcpToolServerId }

@@ -20,15 +20,18 @@ public class TaskStore : ITaskStore
     private readonly IRepository<ProjectContext> _contextRepository;
     private readonly IRepository<TaskRecord> _recordRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly TimeProvider _timeProvider;
 
     public TaskStore(
         IRepository<ProjectContext> contextRepository,
         IRepository<TaskRecord> recordRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        TimeProvider timeProvider)
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
         _unitOfWork = unitOfWork;
+        _timeProvider = timeProvider;
     }
 
     public async Task DeleteTaskAsync(string taskId, CancellationToken cancellationToken = default)
@@ -135,8 +138,8 @@ public class TaskStore : ITaskStore
             throw new AgwException(ErrorCodes.TaskIdMismatch);
         }
 
-        var now = DateTime.UtcNow;
-        var statusTimestampUtc = task.Status?.Timestamp?.UtcDateTime ?? now;
+        var now = _timeProvider.GetUtcNow();
+        var statusTimestampUtc = task.Status?.Timestamp ?? now;
         var records = await _recordRepository.ListAsync(record => record.TaskId == taskGuid);
         var existingContext = records.Count == 0 ? null : await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
         var existingTask = existingContext == null || records.Count == 0

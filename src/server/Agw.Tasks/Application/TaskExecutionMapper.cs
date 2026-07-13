@@ -90,7 +90,7 @@ public static class TaskExecutionMapper
     private static int CountMessages(TaskRecord record) =>
         record.ToChatMessage() == null ? 0 : 1;
 
-    private static DateTime? GetStartedTime(TaskProjection task) =>
+    private static DateTimeOffset? GetStartedTime(TaskProjection task) =>
         task.Status == TaskExecutionStatus.Pending ? null : task.CreateTime;
 
     private static string GetInputText(TaskRecord? record)

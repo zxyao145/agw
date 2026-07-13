@@ -11,7 +11,7 @@ public class FileItem
     public string Path { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty; // "file" or "directory"
     public long? Size { get; set; }
-    public DateTime? ModifiedTime { get; set; }
+    public DateTimeOffset? ModifiedTime { get; set; }
     public string? GitStatus { get; set; } // "added", "modified", "deleted", "untracked", or null
 }
 

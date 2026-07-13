@@ -61,13 +61,19 @@ public class AgentAppService
         _agentDomainService = agentDomainService;
     }
 
-    public Task<IReadOnlyList<Agent>> ListAgentsAsync() =>
-        _agentRepository.ListAsync(
+    public async Task<IReadOnlyList<Agent>> ListAgentsAsync()
+    {
+        var agents = await _agentRepository.ListAsync(
             null,
-            e => e.OrderBy(x => x.Name).ThenByDescending(x => x.CreateTime),
+            null,
             x => x.AgentMcpToolServers,
             x => x.AgentSkillRelations,
             x => x.AgentAppRelations);
+        return agents
+            .OrderBy(x => x.Name)
+            .ThenByDescending(x => x.CreateTime)
+            .ToList();
+    }
 
     public async Task<Agent?> GetAgentAsync(Guid id)
     {

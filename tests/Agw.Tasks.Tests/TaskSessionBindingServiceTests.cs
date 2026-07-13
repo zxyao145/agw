@@ -41,7 +41,7 @@ public class TaskSessionBindingServiceTests
                 Type = ProjectType.UserDefined,
                 Enable = true,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             seedContext.ProjectContexts.Add(new ProjectContext
             {
@@ -50,7 +50,7 @@ public class TaskSessionBindingServiceTests
                 ContextId = "context-1",
                 Title = "Binding Context",
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -59,7 +59,8 @@ public class TaskSessionBindingServiceTests
         var service = new TaskSessionBindingService(
             new EfRepository<TaskSessionBinding>(dbContext),
             new EfRepository<ProjectContext>(dbContext),
-            new UnitOfWork(dbContext));
+            new UnitOfWork(dbContext),
+            TimeProvider.System);
 
         await service.UpsertAsync(
             projectId,
@@ -118,7 +119,7 @@ public class TaskSessionBindingServiceTests
                 Type = ProjectType.UserDefined,
                 Enable = true,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             seedContext.ProjectContexts.Add(new ProjectContext
             {
@@ -127,7 +128,7 @@ public class TaskSessionBindingServiceTests
                 ContextId = "context-1",
                 Title = "Binding Context",
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -136,7 +137,8 @@ public class TaskSessionBindingServiceTests
         var service = new TaskSessionBindingService(
             new EfRepository<TaskSessionBinding>(dbContext),
             new EfRepository<ProjectContext>(dbContext),
-            new UnitOfWork(dbContext));
+            new UnitOfWork(dbContext),
+            TimeProvider.System);
 
         await service.UpsertAsync(
             projectId,
@@ -184,7 +186,7 @@ public class TaskSessionBindingServiceTests
                     Type = ProjectType.UserDefined,
                     Enable = true,
                     CreateBy = "tester",
-                    CreateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow()
                 });
                 seedContext.ProjectContexts.Add(new ProjectContext
                 {
@@ -193,7 +195,7 @@ public class TaskSessionBindingServiceTests
                     ContextId = "context-1",
                     Title = "Binding Context",
                     CreateBy = "tester",
-                    CreateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow()
                 });
                 await seedContext.SaveChangesAsync(cancellationToken);
             }
@@ -207,7 +209,8 @@ public class TaskSessionBindingServiceTests
                     var service = new TaskSessionBindingService(
                         new EfRepository<TaskSessionBinding>(dbContext),
                         new EfRepository<ProjectContext>(dbContext),
-                        new UnitOfWork(dbContext));
+                        new UnitOfWork(dbContext),
+                        TimeProvider.System);
 
                     return await service.UpsertAsync(
                         projectId,

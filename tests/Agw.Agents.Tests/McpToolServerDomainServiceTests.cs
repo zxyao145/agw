@@ -1,15 +1,16 @@
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Testing;
 
 namespace Agw.Agents.Tests;
 
 public class McpToolServerDomainServiceTests
 {
-    private readonly McpToolServerDomainService _service = new();
+    private static readonly DateTimeOffset UtcNow = new(2026, 7, 13, 9, 0, 0, TimeSpan.Zero);
+    private readonly McpToolServerDomainService _service = new(new TestTimeProvider(UtcNow));
 
     [Fact]
     public void PrepareForCreate_InitializesOptionalCollectionsAndCreateMetadata()
     {
-        var before = DateTime.UtcNow;
         var server = new McpServer
         {
             Name = "stdio-server",
@@ -25,7 +26,7 @@ public class McpToolServerDomainServiceTests
         Assert.Empty(server.EnvironmentVariables);
         Assert.Empty(server.Headers);
         Assert.Equal("tester", server.CreateBy);
-        Assert.InRange(server.CreateTime, before, DateTime.UtcNow);
+        Assert.Equal(UtcNow, server.CreateTime);
     }
 
     [Fact]
@@ -39,8 +40,6 @@ public class McpToolServerDomainServiceTests
             EnvironmentVariables = new Dictionary<string, string> { ["A"] = "1" },
             Headers = new Dictionary<string, string> { ["H"] = "v" },
         };
-        var before = DateTime.UtcNow;
-
         _service.ApplyUpdate(
             server,
             current =>
@@ -57,7 +56,7 @@ public class McpToolServerDomainServiceTests
         Assert.Empty(server.EnvironmentVariables);
         Assert.Empty(server.Headers);
         Assert.Equal("updater", server.UpdateBy);
-        Assert.InRange(server.UpdateTime!.Value, before, DateTime.UtcNow);
+        Assert.Equal(UtcNow, server.UpdateTime);
     }
 
     [Fact]

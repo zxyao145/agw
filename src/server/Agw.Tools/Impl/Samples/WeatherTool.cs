@@ -26,10 +26,11 @@ public static class WeatherTools
 
         var forecasts = new List<string>();
         var conditions = new[] { "Sunny", "Cloudy", "Rainy", "Partly cloudy", "Clear" };
+        var today = TimeProvider.System.GetUtcNow();
 
         for (var i = 0; i < days; i++)
         {
-            var date = DateTime.UtcNow.AddDays(i).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var date = today.AddDays(i).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var condition = conditions[Random.Shared.Next(conditions.Length)];
             var temp = 15 + Random.Shared.Next(-5, 6);
             forecasts.Add($"{date}: {condition}, High of {temp.ToString(CultureInfo.InvariantCulture)}°C");

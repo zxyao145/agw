@@ -119,7 +119,7 @@ public class ProjectTraceCleanupTests
             Type = ProjectType.UserDefined,
             Enable = true,
             CreateBy = "tester",
-            CreateTime = DateTime.UtcNow,
+            CreateTime = TimeProvider.System.GetUtcNow(),
         });
         dbContext.ProjectContexts.AddRange(
             CreateProjectContext(projectId, $"{contextPrefix}context-1"),
@@ -137,13 +137,13 @@ public class ProjectTraceCleanupTests
         ContextId = contextId,
         Title = contextId,
         CreateBy = "tester",
-        CreateTime = DateTime.UtcNow,
+        CreateTime = TimeProvider.System.GetUtcNow(),
     };
 
     private static AgentflowTrace CreateTrace(Guid projectId, string contextId) => new()
     {
         Id = Guid.CreateVersion7(),
-        StartTimeUtc = DateTime.UtcNow,
+        StartTimeUtc = TimeProvider.System.GetUtcNow(),
         ProjectId = projectId,
         ContextId = contextId,
         TaskId = Guid.NewGuid(),
@@ -167,7 +167,9 @@ public class ProjectTraceCleanupTests
             new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
                 new EfRepository<ProjectContext>(dbContext),
-                new UnitOfWork(dbContext)));
+                new UnitOfWork(dbContext),
+                TimeProvider.System),
+            TimeProvider.System);
     }
 
     private static ProjectAppService CreateProjectService(AgwDbContext dbContext)
@@ -177,7 +179,7 @@ public class ProjectTraceCleanupTests
             projectRepository,
             new EfRepository<AgentflowTrace>(dbContext),
             new UnitOfWork(dbContext),
-            new ProjectDomainService(),
+            new ProjectDomainService(TimeProvider.System),
             new ProjectResolver(projectRepository));
     }
 }

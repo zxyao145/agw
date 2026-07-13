@@ -42,7 +42,7 @@ public class AgwDbContextIntegrationTests
                 SystemPrompt = "prompt",
                 Type = AgentType.System,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             seedContext.AppInstances.Add(new AppInstance
             {
@@ -51,7 +51,7 @@ public class AgwDbContextIntegrationTests
                 ClientId = "client-1",
                 ClientSecret = "secret-1",
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             seedContext.Set<AgentAppRelation>().Add(new AgentAppRelation
             {
@@ -104,7 +104,7 @@ public class AgwDbContextIntegrationTests
                 SystemPrompt = "prompt",
                 Type = AgentType.System,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             seedContext.AppInstances.Add(new AppInstance
             {
@@ -113,7 +113,7 @@ public class AgwDbContextIntegrationTests
                 ClientId = "client-1",
                 ClientSecret = "secret-1",
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             seedContext.Set<AgentAppRelation>().Add(new AgentAppRelation
             {
@@ -163,7 +163,7 @@ public class AgwDbContextIntegrationTests
                     ClientId = "client-1",
                     ClientSecret = "secret-1",
                     CreateBy = "tester",
-                    CreateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow()
                 },
                 new AppInstance
                 {
@@ -172,7 +172,7 @@ public class AgwDbContextIntegrationTests
                     ClientId = "client-2",
                     ClientSecret = "secret-2",
                     CreateBy = "tester",
-                    CreateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow()
                 });
 
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -214,7 +214,7 @@ public class AgwDbContextIntegrationTests
                 ClientId = sharedClientId,
                 ClientSecret = "secret-1",
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             },
             new AppInstance
             {
@@ -223,7 +223,7 @@ public class AgwDbContextIntegrationTests
                 ClientId = sharedClientId,
                 ClientSecret = "secret-2",
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
 
         await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync(cancellationToken));
@@ -257,7 +257,7 @@ public class AgwDbContextIntegrationTests
                 ClientId = "client-1",
                 ClientSecret = "secret-1",
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
 
             seedContext.OAuthAuthorizationTokens.Add(new OAuthAuthorizationToken

@@ -1,17 +1,18 @@
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Testing;
 
 namespace Agw.Skills.Tests;
 
 public class SkillDomainServiceTests
 {
-    private readonly SkillDomainService _service = new();
+    private static readonly DateTimeOffset UtcNow = new(2026, 7, 13, 8, 0, 0, TimeSpan.Zero);
+    private readonly SkillDomainService _service = new(new TestTimeProvider(UtcNow));
 
     [Fact]
     public void PrepareForCreate_AssignsMetadataAndContentPath()
     {
-        var before = DateTime.UtcNow;
         var skill = new Skill
         {
             Name = "expense-report",
@@ -23,7 +24,7 @@ public class SkillDomainServiceTests
         Assert.NotEqual(Guid.Empty, skill.Id);
         Assert.Equal("skills/expense-report", skill.ContentPath);
         Assert.Equal("tester", skill.CreateBy);
-        Assert.InRange(skill.CreateTime, before, DateTime.UtcNow);
+        Assert.Equal(UtcNow, skill.CreateTime);
     }
 
     [Theory]

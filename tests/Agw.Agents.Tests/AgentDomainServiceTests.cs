@@ -1,17 +1,18 @@
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
+using Agw.Testing;
 
 namespace Agw.Agents.Tests;
 
 public class AgentDomainServiceTests
 {
-    private readonly AgentDomainService _service = new();
+    private static readonly DateTimeOffset UtcNow = new(2026, 7, 13, 9, 0, 0, TimeSpan.Zero);
+    private readonly AgentDomainService _service = new(new TestTimeProvider(UtcNow));
 
     [Fact]
     public void PrepareForCreate_AssignsIdDefaultNameAndCreateMetadata()
     {
-        var before = DateTime.UtcNow;
         var agent = new Agent
         {
             Type = AgentType.System,
@@ -24,7 +25,7 @@ public class AgentDomainServiceTests
         Assert.NotEqual(Guid.Empty, agent.Id);
         Assert.Equal(agent.Id.ToString(), agent.Name);
         Assert.Equal("tester", agent.CreateBy);
-        Assert.InRange(agent.CreateTime, before, DateTime.UtcNow);
+        Assert.Equal(UtcNow, agent.CreateTime);
     }
 
     [Fact]
@@ -61,7 +62,7 @@ public class AgentDomainServiceTests
     public void ApplyUpdate_ExternalAgent_PreservesImmutableFieldsWhileUpdatingMetadata()
     {
         var originalId = Guid.NewGuid();
-        var originalCreateTime = DateTime.UtcNow.AddDays(-1);
+        var originalCreateTime = UtcNow.AddDays(-1);
         var agent = new Agent
         {
             Id = originalId,
@@ -97,7 +98,7 @@ public class AgentDomainServiceTests
         Assert.Equal("After", agent.DisplayName);
         Assert.Equal(updatedModelProviderId, agent.ModelProviderId);
         Assert.Equal("updater", agent.UpdateBy);
-        Assert.True(agent.UpdateTime >= originalCreateTime);
+        Assert.Equal(UtcNow, agent.UpdateTime);
     }
 
     [Fact]

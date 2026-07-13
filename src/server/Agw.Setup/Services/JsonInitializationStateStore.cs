@@ -13,13 +13,15 @@ namespace Agw.Setup.Services;
 public sealed class JsonInitializationStateStore : IInitializationStateStore, IServerInitializationState
 {
     private readonly AgwDataPaths _paths;
+    private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly JsonSerializerOptions _serializerOptions = CreateSerializerOptions();
     private volatile ServerState _state;
 
-    public JsonInitializationStateStore(AgwDataPaths paths)
+    public JsonInitializationStateStore(AgwDataPaths paths, TimeProvider timeProvider)
     {
         _paths = paths;
+        _timeProvider = timeProvider;
         _state = Load(paths.StateFile);
     }
 
@@ -83,7 +85,7 @@ public sealed class JsonInitializationStateStore : IInitializationStateStore, IS
                 Name = normalizedName,
                 Prefix = token[..Math.Min(token.Length, 12)],
                 SecretHash = Hash(token),
-                CreatedAt = DateTimeOffset.UtcNow
+                CreatedAt = _timeProvider.GetUtcNow()
             };
             var nextState = Copy(currentState);
             nextState.Tokens.Add(record);

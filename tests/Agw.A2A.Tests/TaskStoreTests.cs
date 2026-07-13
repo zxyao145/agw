@@ -197,7 +197,7 @@ public class TaskStoreTests
             Type = ProjectType.UserDefined,
             Enable = true,
             CreateBy = "tester",
-            CreateTime = DateTime.UtcNow
+            CreateTime = TimeProvider.System.GetUtcNow()
         });
 
         await seedContext.SaveChangesAsync(cancellationToken);
@@ -207,7 +207,8 @@ public class TaskStoreTests
         new(
             new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
-            new UnitOfWork(dbContext));
+            new UnitOfWork(dbContext),
+            TimeProvider.System);
 
     private static AgentTask CreateTask(
         string taskId,

@@ -4,9 +4,16 @@ namespace Agw.Providers.Domain.Services;
 
 public class ProviderDomainService
 {
+    private readonly TimeProvider _timeProvider;
+
+    public ProviderDomainService(TimeProvider timeProvider)
+    {
+        _timeProvider = timeProvider;
+    }
+
     public void PrepareForCreate(Provider provider, string user)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         provider.Id = provider.Id == Guid.Empty ? Guid.NewGuid() : provider.Id;
         provider.CreateBy = user;
         provider.CreateTime = now;
@@ -18,7 +25,7 @@ public class ProviderDomainService
     {
         updateAction(provider);
 
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         provider.UpdateBy = user;
         provider.UpdateTime = now;
         NormalizeAuthConfigs(provider.AuthConfigs, provider.Id, user, now);
@@ -28,7 +35,7 @@ public class ProviderDomainService
         ICollection<ProviderAuthConfig>? authConfigs,
         Guid providerId,
         string user,
-        DateTime now)
+        DateTimeOffset now)
     {
         if (authConfigs == null)
         {

@@ -70,11 +70,13 @@ public class DbSeeder
 
     private readonly AgwDbContext _context;
     private readonly ILogger<DbSeeder> _logger;
+    private readonly TimeProvider _timeProvider;
 
-    public DbSeeder(AgwDbContext context, ILogger<DbSeeder> logger)
+    public DbSeeder(AgwDbContext context, ILogger<DbSeeder> logger, TimeProvider timeProvider)
     {
         _context = context;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <summary>
@@ -121,13 +123,13 @@ public class DbSeeder
             //existingProject.Type = definition.Type;
             //existingProject.Description = definition.Description;
             //existingProject.Enable = true;
-            //existingProject.UpdateTime = DateTime.UtcNow;
+            //existingProject.UpdateTime = _timeProvider.GetUtcNow();
         }
     }
 
-    private static Project CreateBuiltInProject(Project definition)
+    private Project CreateBuiltInProject(Project definition)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var workspace = string.IsNullOrWhiteSpace(definition.Workspace)
             ? "~/.agw/" + definition.Name
             : definition.Workspace;
@@ -167,9 +169,9 @@ public class DbSeeder
         }
     }
 
-    private static Agent CreateBuiltInAgent(Agent definition)
+    private Agent CreateBuiltInAgent(Agent definition)
     {
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         return new Agent
         {
             Id = definition.Id,
@@ -188,6 +190,7 @@ public class DbSeeder
 
     private async Task SeedProvidersAsync()
     {
+        var now = _timeProvider.GetUtcNow();
         List<Provider> providers = new List<Provider>()
         {
             new Provider
@@ -199,9 +202,9 @@ public class DbSeeder
                 Description = "DeepSeek OpenAI Compatible",
 
                 CreateBy = "system",
-                CreateTime = DateTime.UtcNow,
+                CreateTime = now,
                 UpdateBy = "system",
-                UpdateTime = DateTime.UtcNow
+                UpdateTime = now
             },
             new Provider
             {
@@ -212,9 +215,9 @@ public class DbSeeder
                 Description = "DeepSeek Anthropic Compatible",
 
                 CreateBy = "system",
-                CreateTime = DateTime.UtcNow,
+                CreateTime = now,
                 UpdateBy = "system",
-                UpdateTime = DateTime.UtcNow
+                UpdateTime = now
             },
             new Provider
             {
@@ -225,9 +228,9 @@ public class DbSeeder
                 Description = "Z AI OpenAI Compatible",
 
                 CreateBy = "system",
-                CreateTime = DateTime.UtcNow,
+                CreateTime = now,
                 UpdateBy = "system",
-                UpdateTime = DateTime.UtcNow
+                UpdateTime = now
             },
             new Provider
             {
@@ -238,9 +241,9 @@ public class DbSeeder
                 Description = "Z AI Anthropic Compatible",
 
                 CreateBy = "system",
-                CreateTime = DateTime.UtcNow,
+                CreateTime = now,
                 UpdateBy = "system",
-                UpdateTime = DateTime.UtcNow
+                UpdateTime = now
             }
         };
 

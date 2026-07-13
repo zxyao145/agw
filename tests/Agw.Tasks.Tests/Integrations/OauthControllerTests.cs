@@ -36,7 +36,7 @@ public class OauthControllerTests
                     ClientSecret = "client-secret",
                     UsePkce = true,
                     CreateBy = "tester",
-                    CreateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow()
                 });
             });
 
@@ -91,7 +91,7 @@ public class OauthControllerTests
                     ClientSecret = "client-secret",
                     UsePkce = true,
                     CreateBy = "tester",
-                    CreateTime = DateTime.UtcNow
+                    CreateTime = TimeProvider.System.GetUtcNow()
                 });
             },
             new StubHttpMessageHandler(_ =>
@@ -162,7 +162,7 @@ public class OauthControllerTests
     {
         var payload =
             $$"""
-              {"appInstanceId":"{{appInstanceId}}","integrationId":"{{integrationId}}","state":"{{state}}","verifier":"{{verifier}}","uiCallbackUrl":"{{uiCallbackUrl}}","createdAt":"{{DateTime.UtcNow:O}}"}
+              {"appInstanceId":"{{appInstanceId}}","integrationId":"{{integrationId}}","state":"{{state}}","verifier":"{{verifier}}","uiCallbackUrl":"{{uiCallbackUrl}}","createdAt":"{{TimeProvider.System.GetUtcNow():O}}"}
               """;
 
         return Uri.EscapeDataString(payload);
@@ -223,7 +223,8 @@ public class OauthControllerTests
             var controller = new IntegrationsController(
                 new AppDefinitionRepo(),
                 new EfRepository<AppInstance>(dbContext),
-                new UnitOfWork(dbContext));
+                new UnitOfWork(dbContext),
+                TimeProvider.System);
 
             controller.ControllerContext = new ControllerContext
             {
@@ -243,7 +244,8 @@ public class OauthControllerTests
                 new EfRepository<AppInstance>(dbContext),
                 new EfRepository<OAuthAuthorizationToken>(dbContext),
                 new UnitOfWork(dbContext),
-                NullLogger<OAuthController>.Instance);
+                NullLogger<OAuthController>.Instance,
+                TimeProvider.System);
 
             controller.ControllerContext = new ControllerContext
             {

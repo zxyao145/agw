@@ -103,7 +103,7 @@ public class ProjectContextsControllerTests
                 Type = ProjectType.UserDefined,
                 Enable = true,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -136,7 +136,7 @@ public class ProjectContextsControllerTests
                 Type = ProjectType.UserDefined,
                 Enable = true,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -169,7 +169,7 @@ public class ProjectContextsControllerTests
                 Type = ProjectType.UserDefined,
                 Enable = true,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -202,7 +202,7 @@ public class ProjectContextsControllerTests
                 Type = ProjectType.UserDefined,
                 Enable = true,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -238,7 +238,7 @@ public class ProjectContextsControllerTests
                 Type = ProjectType.UserDefined,
                 Enable = true,
                 CreateBy = "tester",
-                CreateTime = DateTime.UtcNow
+                CreateTime = TimeProvider.System.GetUtcNow()
             });
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -342,6 +342,8 @@ public class ProjectContextsControllerTests
             new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
                 new EfRepository<ProjectContext>(dbContext),
-                new UnitOfWork(dbContext)));
+                new UnitOfWork(dbContext),
+                TimeProvider.System),
+            TimeProvider.System);
     }
 }

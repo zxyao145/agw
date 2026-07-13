@@ -18,18 +18,21 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IA
     private readonly LocalFileSystemFactory _localFactory;
     private readonly SftpFileSystemFactory _sftpFactory;
     private readonly ILogger<ProjectScopedFileSystemResolver> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<Guid, CachedEntry> _cache = new();
 
     public ProjectScopedFileSystemResolver(
         IServiceScopeFactory scopeFactory,
         LocalFileSystemFactory localFactory,
         SftpFileSystemFactory sftpFactory,
-        ILogger<ProjectScopedFileSystemResolver> logger)
+        ILogger<ProjectScopedFileSystemResolver> logger,
+        TimeProvider timeProvider)
     {
         _scopeFactory = scopeFactory;
         _localFactory = localFactory;
         _sftpFactory = sftpFactory;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     public async Task<IAgwFileSystem> ResolveAsync(Guid projectId, CancellationToken ct)
@@ -46,7 +49,7 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IA
 
         var fs = await CreateForProjectAsync(projectId, ct);
 
-        _cache[projectId] = new CachedEntry(fs, DateTimeOffset.UtcNow);
+        _cache[projectId] = new CachedEntry(fs, _timeProvider.GetUtcNow());
         return fs;
     }
 

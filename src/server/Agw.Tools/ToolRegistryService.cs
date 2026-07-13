@@ -421,7 +421,6 @@ public class ToolRegistryService
         if (type == typeof(float)) return "float";
         if (type == typeof(decimal)) return "decimal";
         if (type == typeof(bool)) return "bool";
-        if (type == typeof(DateTime)) return "DateTime";
         if (type == typeof(DateTimeOffset)) return "DateTimeOffset";
         if (type == typeof(Guid)) return "Guid";
 

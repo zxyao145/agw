@@ -23,8 +23,8 @@ public class AgentflowTraceAppServiceTests
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, new[]
         {
-            BuildTrace(projectId, startTimeUtc: new DateTime(2026, 7, 13, 0, 0, 0, DateTimeKind.Utc)),
-            BuildTrace(otherProjectId, startTimeUtc: new DateTime(2026, 7, 13, 0, 0, 0, DateTimeKind.Utc)),
+            BuildTrace(projectId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
+            BuildTrace(otherProjectId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
         }, cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
@@ -46,8 +46,8 @@ public class AgentflowTraceAppServiceTests
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, new[]
         {
-            BuildTrace(projectId: Guid.NewGuid(), contextId: "ctx-a", startTimeUtc: new DateTime(2026, 7, 13, 0, 0, 0, DateTimeKind.Utc)),
-            BuildTrace(projectId: Guid.NewGuid(), contextId: "ctx-b", startTimeUtc: new DateTime(2026, 7, 13, 0, 0, 0, DateTimeKind.Utc)),
+            BuildTrace(projectId: Guid.NewGuid(), contextId: "ctx-a", startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.NewGuid(), contextId: "ctx-b", startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
         }, cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
@@ -70,8 +70,8 @@ public class AgentflowTraceAppServiceTests
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, new[]
         {
-            BuildTrace(projectId: Guid.NewGuid(), agentflowId: agentflowId, startTimeUtc: new DateTime(2026, 7, 13, 0, 0, 0, DateTimeKind.Utc)),
-            BuildTrace(projectId: Guid.NewGuid(), agentflowId: Guid.NewGuid(), startTimeUtc: new DateTime(2026, 7, 13, 0, 0, 0, DateTimeKind.Utc)),
+            BuildTrace(projectId: Guid.NewGuid(), agentflowId: agentflowId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.NewGuid(), agentflowId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
         }, cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
@@ -90,17 +90,17 @@ public class AgentflowTraceAppServiceTests
     public async Task ListAsync_ByTimeRange_IncludesBothEndpoints()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var fromUtc = new DateTime(2026, 7, 13, 10, 0, 0, DateTimeKind.Utc);
-        var toUtc = new DateTime(2026, 7, 13, 12, 0, 0, DateTimeKind.Utc);
+        var fromUtc = new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero);
+        var toUtc = new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero);
 
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, new[]
         {
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTime(2026, 7, 13, 9, 59, 59, DateTimeKind.Utc)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTime(2026, 7, 13, 10, 0, 0, DateTimeKind.Utc)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTime(2026, 7, 13, 11, 30, 0, DateTimeKind.Utc)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTime(2026, 7, 13, 12, 0, 0, DateTimeKind.Utc)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTime(2026, 7, 13, 12, 0, 1, DateTimeKind.Utc)),
+            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 9, 59, 59, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 11, 30, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 12, 0, 1, TimeSpan.Zero)),
         }, cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
@@ -123,9 +123,9 @@ public class AgentflowTraceAppServiceTests
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, new[]
         {
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTime(2026, 7, 13, 8, 0, 0, DateTimeKind.Utc)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTime(2026, 7, 13, 10, 0, 0, DateTimeKind.Utc)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTime(2026, 7, 13, 9, 0, 0, DateTimeKind.Utc)),
+            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 8, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 9, 0, 0, TimeSpan.Zero)),
         }, cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
@@ -146,7 +146,7 @@ public class AgentflowTraceAppServiceTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var projectId = Guid.NewGuid();
         var traces = Enumerable.Range(0, 25)
-            .Select(i => BuildTrace(projectId, startTimeUtc: new DateTime(2026, 7, 13, 0, i, 0, DateTimeKind.Utc)))
+            .Select(i => BuildTrace(projectId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, i, 0, TimeSpan.Zero)))
             .ToArray();
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, traces, cancellationToken);
@@ -184,7 +184,7 @@ public class AgentflowTraceAppServiceTests
             durationMilliseconds: 1234L,
             status: AgentflowNodeExecutionStatus.Succeeded,
             error: null,
-            startTimeUtc: new DateTime(2026, 7, 13, 0, 0, 0, DateTimeKind.Utc));
+            startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero));
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, [trace], cancellationToken);
 
@@ -244,8 +244,8 @@ public class AgentflowTraceAppServiceTests
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             service.ListAsync(new AgentflowTraceQuery
             {
-                FromUtc = new DateTime(2026, 7, 13, 12, 0, 0, DateTimeKind.Utc),
-                ToUtc = new DateTime(2026, 7, 13, 10, 0, 0, DateTimeKind.Utc),
+                FromUtc = new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero),
+                ToUtc = new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero),
                 PageIndex = 1,
                 PageSize = 10,
             }, cancellationToken));
@@ -287,12 +287,12 @@ public class AgentflowTraceAppServiceTests
         long durationMilliseconds = 100L,
         AgentflowNodeExecutionStatus status = AgentflowNodeExecutionStatus.Succeeded,
         string? error = null,
-        DateTime? startTimeUtc = null)
+        DateTimeOffset? startTimeUtc = null)
     {
         return new AgentflowTrace
         {
             Id = Guid.CreateVersion7(),
-            StartTimeUtc = startTimeUtc ?? DateTime.UtcNow,
+            StartTimeUtc = startTimeUtc ?? TimeProvider.System.GetUtcNow(),
             ProjectId = projectId,
             ContextId = contextId,
             TaskId = Guid.NewGuid(),

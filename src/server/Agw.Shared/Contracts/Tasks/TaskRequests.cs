@@ -19,8 +19,8 @@ public record ProjectContextSummaryResponse(
     TaskExecutionStatus? LatestStatus,
     int ExecutionCount,
     int MessageCount,
-    DateTime CreateTime,
-    DateTime? UpdateTime,
+    DateTimeOffset CreateTime,
+    DateTimeOffset? UpdateTime,
     string? ErrorMessage);
 
 public record ProjectContextResponse(
@@ -30,8 +30,8 @@ public record ProjectContextResponse(
     TaskExecutionStatus? LatestStatus,
     int ExecutionCount,
     int MessageCount,
-    DateTime CreateTime,
-    DateTime? UpdateTime,
+    DateTimeOffset CreateTime,
+    DateTimeOffset? UpdateTime,
     string? ErrorMessage,
     ProjectContextUsage Usage,
     IReadOnlyList<AgwMessage>? Messages);

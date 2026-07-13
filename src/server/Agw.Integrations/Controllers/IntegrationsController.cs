@@ -23,15 +23,18 @@ public class IntegrationsController : ControllerBase
     private readonly IRepository<AppDefinition> _appDefinitionRepository;
     private readonly IRepository<AppInstance> _appInstanceRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly TimeProvider _timeProvider;
 
     public IntegrationsController(
         IRepository<AppDefinition> appDefinitionRepository,
         IRepository<AppInstance> appInstanceRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        TimeProvider timeProvider)
     {
         _appDefinitionRepository = appDefinitionRepository;
         _appInstanceRepository = appInstanceRepository;
         _unitOfWork = unitOfWork;
+        _timeProvider = timeProvider;
     }
 
     [HttpGet("app-definitions")]
@@ -54,15 +57,17 @@ public class IntegrationsController : ControllerBase
             StringComparer.OrdinalIgnoreCase);
 
         var appInstances = await _appInstanceRepository.ListAsync(
-            orderBy: query => query.OrderByDescending(instance => instance.CreateTime).ThenBy(instance => instance.AppName),
             includes: instance => instance.AuthorizationToken!);
 
-        var now = DateTimeOffset.UtcNow;
-        var response = appInstances.Select(instance =>
-        {
-            definitionsByName.TryGetValue(instance.AppName, out var definition);
-            return Map(instance, definition, now);
-        });
+        var now = _timeProvider.GetUtcNow();
+        var response = appInstances
+            .OrderByDescending(instance => instance.CreateTime)
+            .ThenBy(instance => instance.AppName)
+            .Select(instance =>
+            {
+                definitionsByName.TryGetValue(instance.AppName, out var definition);
+                return Map(instance, definition, now);
+            });
 
         return AgwApiResult.Ok(response);
     }
@@ -84,7 +89,7 @@ public class IntegrationsController : ControllerBase
             return AgwApiResult.BadRequest("Invalid app instance request.");
         }
 
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var entity = new AppInstance
         {
             Id = Guid.NewGuid(),
@@ -93,7 +98,7 @@ public class IntegrationsController : ControllerBase
             ClientSecret = request.ClientSecret.Trim(),
             UsePkce = request.UsePkce,
             CreateBy = User?.Identity?.Name ?? "system",
-            CreateTime = now.UtcDateTime
+            CreateTime = now
         };
 
         await _appInstanceRepository.AddAsync(entity);
@@ -246,7 +251,7 @@ public class IntegrationsController : ControllerBase
                 IntegrationId = integrationId,
                 UiCallbackUrl = BuildUiCallbackUrl(),
                 Verifier = verifier,
-                CreatedAt = DateTimeOffset.UtcNow.ToString("O")
+                CreatedAt = _timeProvider.GetUtcNow().ToString("O")
             },
             JsonSerializerOptions);
 

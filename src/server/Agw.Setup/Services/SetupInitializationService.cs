@@ -16,17 +16,20 @@ public class SetupInitializationService : ISetupInitializationService
     private readonly ILoggerFactory _loggerFactory;
     private readonly IPasswordHasher<object> _passwordHasher;
     private readonly AgwDataPaths _paths;
+    private readonly TimeProvider _timeProvider;
 
     public SetupInitializationService(
         IInitializationStateStore stateStore,
         ILoggerFactory loggerFactory,
         IPasswordHasher<object> passwordHasher,
-        AgwDataPaths paths)
+        AgwDataPaths paths,
+        TimeProvider timeProvider)
     {
         _stateStore = stateStore;
         _loggerFactory = loggerFactory;
         _passwordHasher = passwordHasher;
         _paths = paths;
+        _timeProvider = timeProvider;
     }
 
     public async Task InitializeAsync(SetupRequest request, CancellationToken cancellationToken = default)
@@ -45,7 +48,7 @@ public class SetupInitializationService : ISetupInitializationService
         ConfigureDatabaseProvider(dbOptions, resolvedRequest);
 
         await using var context = new AgwDbContext(dbOptions.Options);
-        var seeder = new DbSeeder(context, _loggerFactory.CreateLogger<DbSeeder>());
+        var seeder = new DbSeeder(context, _loggerFactory.CreateLogger<DbSeeder>(), _timeProvider);
         await seeder.SeedAsync();
 
         var passwordHash = _passwordHasher.HashPassword(new object(), request.AdminPassword);

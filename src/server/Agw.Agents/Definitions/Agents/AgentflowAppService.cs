@@ -12,6 +12,7 @@ public class AgentflowAppService
     private readonly IRepository<Agent> _agentRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly AgentflowDomainService _agentflowDomainService;
+    private readonly TimeProvider _timeProvider;
 
     public AgentflowAppService(
         IRepository<Agentflow> agentflowRepository,
@@ -19,7 +20,8 @@ public class AgentflowAppService
         IRepository<AgentflowEdge> agentflowEdgeRepository,
         IRepository<Agent> agentRepository,
         IUnitOfWork unitOfWork,
-        AgentflowDomainService agentflowDomainService)
+        AgentflowDomainService agentflowDomainService,
+        TimeProvider timeProvider)
     {
         _agentflowRepository = agentflowRepository;
         _agentflowNodeRepository = agentflowNodeRepository;
@@ -27,6 +29,7 @@ public class AgentflowAppService
         _agentRepository = agentRepository;
         _unitOfWork = unitOfWork;
         _agentflowDomainService = agentflowDomainService;
+        _timeProvider = timeProvider;
     }
 
     public Task<IReadOnlyList<Agentflow>> ListAsync() => _agentflowRepository.ListAsync();
@@ -123,21 +126,22 @@ public class AgentflowAppService
                 _agentflowEdgeRepository.Remove(item);
             }
 
+            var now = _timeProvider.GetUtcNow();
             foreach (var node in normalizedNodes)
             {
                 node.CreateBy ??= existing.CreateBy;
-                node.CreateTime = existing.CreateTime == default ? DateTime.UtcNow : existing.CreateTime;
+                node.CreateTime = existing.CreateTime == default ? now : existing.CreateTime;
                 node.UpdateBy = user;
-                node.UpdateTime = DateTime.UtcNow;
+                node.UpdateTime = now;
                 await _agentflowNodeRepository.AddAsync(node);
             }
 
             foreach (var edge in normalizedEdges)
             {
                 edge.CreateBy ??= existing.CreateBy;
-                edge.CreateTime = existing.CreateTime == default ? DateTime.UtcNow : existing.CreateTime;
+                edge.CreateTime = existing.CreateTime == default ? now : existing.CreateTime;
                 edge.UpdateBy = user;
-                edge.UpdateTime = DateTime.UtcNow;
+                edge.UpdateTime = now;
                 await _agentflowEdgeRepository.AddAsync(edge);
             }
         }

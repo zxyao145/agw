@@ -12,4 +12,7 @@
         <!-- sync using .editorconfig-->
         <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="$(MSBuildThisFileDirectory)TestTimeProvider.cs" Link="TestTimeProvider.cs" />
+    </ItemGroup>
 </Project>

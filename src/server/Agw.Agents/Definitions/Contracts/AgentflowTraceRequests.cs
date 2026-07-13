@@ -8,9 +8,9 @@ public sealed record AgentflowTraceQuery
 
     public Guid? AgentflowId { get; init; }
 
-    public DateTime? FromUtc { get; init; }
+    public DateTimeOffset? FromUtc { get; init; }
 
-    public DateTime? ToUtc { get; init; }
+    public DateTimeOffset? ToUtc { get; init; }
 
     public int PageIndex { get; init; } = 1;
 

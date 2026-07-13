@@ -115,7 +115,7 @@ public sealed class SftpFileSystem : IAgwFileSystem, IAsyncDisposable
 
             if (stat == null)
             {
-                return new FileEntry(Path: path, IsDirectory: false, Size: 0, LastModifiedUtc: DateTimeOffset.UtcNow);
+                return new FileEntry(Path: path, IsDirectory: false, Size: 0, LastModifiedUtc: TimeProvider.System.GetUtcNow());
             }
 
             return new FileEntry(
