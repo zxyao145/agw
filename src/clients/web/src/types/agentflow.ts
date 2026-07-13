@@ -16,6 +16,7 @@ export interface AgentDto extends BaseDto {
   tools?: string | null;
   type: number; // 0 = System, 1 = External
   extra?: string | null;
+  environmentVariables: Record<string, string>;
   agentMcpToolServers?: Array<{
     agentId: string;
     mcpToolServerId: string;

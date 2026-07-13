@@ -15,3 +15,17 @@ test("agents page loads integration app instances and passes app selection state
   assert.match(source, /selectedAppInstanceIds=\{editSelectedAppInstanceIds\}/);
   assert.match(source, /setEditModelProviderId\(agent\.modelProviderId \?\? ""\)/);
 });
+
+test("agents page owns Create and Edit environment-variable state", async () => {
+  const source = await readFile(PAGE_URL, "utf8");
+
+  assert.match(source, /const \[environmentVariables, setEnvironmentVariables\]/);
+  assert.match(source, /const \[editEnvironmentVariables, setEditEnvironmentVariables\]/);
+  assert.match(
+    source,
+    /setEditEnvironmentVariables\(toAgentEnvironmentVariableEntries\(agent\.environmentVariables\)\)/,
+  );
+  assert.match(source, /environmentVariables=\{environmentVariables\}/);
+  assert.match(source, /environmentVariables=\{editEnvironmentVariables\}/);
+  assert.match(source, /setEnvironmentVariables\(\[\]\)/);
+});

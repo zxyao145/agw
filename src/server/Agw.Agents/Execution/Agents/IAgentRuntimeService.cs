@@ -18,6 +18,13 @@ public interface IAgentRuntimeService
         bool resume,
         CancellationToken cancellationToken = default);
 
+    Task<AIAgent?> CreateAiAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        bool resume,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        CancellationToken cancellationToken = default);
+
     Task<AgentRuntime?> CreateRuntimeAsync(
         Guid agentId,
         TaskProjection task,

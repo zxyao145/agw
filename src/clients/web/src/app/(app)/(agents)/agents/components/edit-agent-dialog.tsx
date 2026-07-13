@@ -1,25 +1,33 @@
 import * as React from "react";
 import { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
+
+import { applyDialogOpenChange } from "@/components/definition-capabilities";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+import { getAgentExtraSettingsError, normalizeAgentExtraSettings } from "./agent-extra-settings";
+import {
+  getAgentEnvironmentVariablesError,
+  normalizeAgentEnvironmentVariables,
+  type AgentEnvironmentVariableEntry,
+} from "./agent-environment-variables";
 import { AgentFormFields } from "./agent-form-fields";
+import type { AppInstanceOption } from "./app-selector";
 import type {
   AgentDto,
   AgentUpdateRequest,
-  ToolInfo,
-  ModelProviderDto,
   McpToolServerDto,
+  ModelProviderDto,
   SkillDto,
+  ToolInfo,
 } from "./types";
-import type { AppInstanceOption } from "./app-selector";
 
 interface EditAgentDialogProps {
   open: boolean;
@@ -35,10 +43,10 @@ interface EditAgentDialogProps {
   setSystemPrompt: (value: string) => void;
   modelProviderId: string;
   setModelProviderId: (value: string) => void;
-  agentType: string;
-  setAgentType: (value: string) => void;
   extra: string;
   setExtra: (value: string) => void;
+  environmentVariables: AgentEnvironmentVariableEntry[];
+  setEnvironmentVariables: (entries: AgentEnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
   appOptions: AppInstanceOption[];
   selectedAppInstanceIds: string[];
@@ -46,18 +54,11 @@ interface EditAgentDialogProps {
   setAppSearchTerm: (value: string) => void;
   filteredAppOptions: AppInstanceOption[];
   selectedTools: string[];
-  setSelectedTools: React.Dispatch<React.SetStateAction<string[]>>;
-  toolSearchTerm: string;
-  setToolSearchTerm: (value: string) => void;
-  filteredTools: ToolInfo[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
-  mcpToolServerSearchTerm: string;
-  setMcpToolServerSearchTerm: (value: string) => void;
-  filteredMcpToolServers: McpToolServerDto[];
   updateAgentMutation: UseMutationResult<
     unknown,
     Error,
@@ -84,10 +85,10 @@ export function EditAgentDialog({
   setSystemPrompt,
   modelProviderId,
   setModelProviderId,
-  agentType,
-  setAgentType,
   extra,
   setExtra,
+  environmentVariables,
+  setEnvironmentVariables,
   selectedSkillIds,
   appOptions,
   selectedAppInstanceIds,
@@ -95,135 +96,140 @@ export function EditAgentDialog({
   setAppSearchTerm,
   filteredAppOptions,
   selectedTools,
-  setSelectedTools,
-  toolSearchTerm,
-  setToolSearchTerm,
-  filteredTools,
   modelProvidersQuery,
   skillsQuery,
   toolsQuery,
   mcpToolServersQuery,
   selectedMcpToolServerIds,
-  mcpToolServerSearchTerm,
-  setMcpToolServerSearchTerm,
-  filteredMcpToolServers,
   updateAgentMutation,
   toggleSkill,
   toggleAppInstance,
   toggleTool,
   toggleMcpToolServer,
 }: EditAgentDialogProps) {
+  const [dialogPortalContainer, setDialogPortalContainer] = React.useState<HTMLDivElement | null>(
+    null,
+  );
+  const isExternalAgent = editingAgent?.type === 1;
+  const extraError = isExternalAgent ? getAgentExtraSettingsError(extra) : null;
+  const environmentVariablesError = getAgentEnvironmentVariablesError(environmentVariables);
+
+  const handleUpdate = () => {
+    if (!editingAgent) {
+      return;
+    }
+
+    updateAgentMutation.mutate({
+      id: editingAgent.id,
+      body: {
+        displayName,
+        description,
+        systemPrompt,
+        modelProviderId,
+        tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
+        skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
+        mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
+        appInstanceIds: selectedAppInstanceIds.length > 0 ? selectedAppInstanceIds : null,
+        extra: isExternalAgent ? normalizeAgentExtraSettings(extra) : null,
+        environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
+      },
+    });
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent size="xl" className="max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Edit agent</DialogTitle>
-          <DialogDescription>Update the agent configuration</DialogDescription>
-        </DialogHeader>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) =>
+        applyDialogOpenChange({
+          isPending: updateAgentMutation.isPending,
+          nextOpen,
+          setOpen,
+        })
+      }
+    >
+      <DialogContent
+        ref={setDialogPortalContainer}
+        className="fixed inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 p-0 sm:max-w-none"
+        onInteractOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
+        showCloseButton={false}
+      >
+        <div className="flex min-h-0 flex-col">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <DialogTitle>Edit agent</DialogTitle>
+                <DialogDescription className="mt-1">
+                  Update the agent metadata, instructions, and available capabilities.
+                </DialogDescription>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <DialogClose asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={updateAgentMutation.isPending}
+                  >
+                    Cancel
+                  </Button>
+                </DialogClose>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleUpdate}
+                  disabled={
+                    !editingAgent ||
+                    !displayName.trim() ||
+                    (!isExternalAgent && !modelProviderId.trim()) ||
+                    Boolean(extraError) ||
+                    Boolean(environmentVariablesError) ||
+                    updateAgentMutation.isPending
+                  }
+                >
+                  {updateAgentMutation.isPending ? "Updating..." : "Update"}
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
 
-        <AgentFormFields
-          displayName={displayName}
-          setDisplayName={setDisplayName}
-          name={name}
-          setName={setName}
-          description={description}
-          setDescription={setDescription}
-          systemPrompt={systemPrompt}
-          setSystemPrompt={setSystemPrompt}
-          modelProviderId={modelProviderId}
-          setModelProviderId={setModelProviderId}
-          agentType={agentType}
-          setAgentType={setAgentType}
-          extra={extra}
-          setExtra={setExtra}
-          selectedSkillIds={selectedSkillIds}
-          appOptions={appOptions}
-          selectedAppInstanceIds={selectedAppInstanceIds}
-          appSearchTerm={appSearchTerm}
-          setAppSearchTerm={setAppSearchTerm}
-          filteredAppOptions={filteredAppOptions}
-          toggleAppInstance={toggleAppInstance}
-          selectedTools={selectedTools}
-          setSelectedTools={setSelectedTools}
-          toolSearchTerm={toolSearchTerm}
-          setToolSearchTerm={setToolSearchTerm}
-          filteredTools={filteredTools}
-          modelProvidersQuery={modelProvidersQuery}
-          skillsQuery={skillsQuery}
-          toolsQuery={toolsQuery}
-          mcpToolServersQuery={mcpToolServersQuery}
-          toggleSkill={toggleSkill}
-          toggleTool={toggleTool}
-          selectedMcpToolServerIds={selectedMcpToolServerIds}
-          mcpToolServerSearchTerm={mcpToolServerSearchTerm}
-          setMcpToolServerSearchTerm={setMcpToolServerSearchTerm}
-          filteredMcpToolServers={filteredMcpToolServers}
-          toggleMcpToolServer={toggleMcpToolServer}
-          idPrefix="edit-"
-          disabledFields={
-            agentType === "1"
-              ? {
-                  name: true,
-                  systemPrompt: true,
-                  agentType: true,
-                  skills: true,
-                  tools: true,
-                }
-              : {
-                  name: true,
-                }
-          }
-          hiddenFields={
-            agentType === "1"
-              ? {
-                  name: true,
-                  systemPrompt: true,
-                  agentType: true,
-                  skills: true,
-                  tools: true,
-                }
-              : {
-                  name: true,
-                }
-          }
-        />
-
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              Cancel
-            </Button>
-          </DialogClose>
-          <Button
-            type="button"
-            onClick={() => {
-              if (editingAgent) {
-                updateAgentMutation.mutate({
-                  id: editingAgent.id,
-                  body: {
-                    displayName,
-                    description,
-                    systemPrompt,
-                    modelProviderId,
-                    tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
-                    skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
-                    mcpToolServerIds:
-                      selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
-                    appInstanceIds:
-                      selectedAppInstanceIds.length > 0 ? selectedAppInstanceIds : null,
-                  },
-                });
-              }
-            }}
-            disabled={
-              !displayName.trim() ||
-              (agentType === "0" && !modelProviderId?.trim()) ||
-              updateAgentMutation.isPending
-            }
-          >
-            {updateAgentMutation.isPending ? "Updating..." : "Update"}
-          </Button>
-        </DialogFooter>
+          <AgentFormFields
+            mode="edit"
+            dialogPortalContainer={dialogPortalContainer}
+            displayName={displayName}
+            setDisplayName={setDisplayName}
+            name={name}
+            setName={setName}
+            description={description}
+            setDescription={setDescription}
+            systemPrompt={systemPrompt}
+            setSystemPrompt={setSystemPrompt}
+            modelProviderId={modelProviderId}
+            setModelProviderId={setModelProviderId}
+            agentType={editingAgent?.type.toString() ?? "0"}
+            extra={extra}
+            setExtra={setExtra}
+            environmentVariables={environmentVariables}
+            setEnvironmentVariables={setEnvironmentVariables}
+            selectedSkillIds={selectedSkillIds}
+            appOptions={appOptions}
+            selectedAppInstanceIds={selectedAppInstanceIds}
+            appSearchTerm={appSearchTerm}
+            setAppSearchTerm={setAppSearchTerm}
+            filteredAppOptions={filteredAppOptions}
+            toggleAppInstance={toggleAppInstance}
+            selectedTools={selectedTools}
+            modelProvidersQuery={modelProvidersQuery}
+            skillsQuery={skillsQuery}
+            toolsQuery={toolsQuery}
+            mcpToolServersQuery={mcpToolServersQuery}
+            toggleSkill={toggleSkill}
+            toggleTool={toggleTool}
+            selectedMcpToolServerIds={selectedMcpToolServerIds}
+            toggleMcpToolServer={toggleMcpToolServer}
+            idPrefix="edit-"
+          />
+        </div>
       </DialogContent>
     </Dialog>
   );

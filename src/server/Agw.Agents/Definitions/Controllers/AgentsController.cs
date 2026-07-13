@@ -46,7 +46,8 @@ public class AgentsController : ControllerBase
             Description = request.Description,
             SystemPrompt = request.SystemPrompt,
             ModelProviderId = request.ModelProviderId,
-            Tools = request.Tools
+            Tools = request.Tools,
+            EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>()
         };
 
         var created = await _agentAppService.CreateAgentAsync(
@@ -74,6 +75,8 @@ public class AgentsController : ControllerBase
                 agent.SystemPrompt = request.SystemPrompt;
                 agent.ModelProviderId = request.ModelProviderId;
                 agent.Tools = request.Tools;
+                agent.Extra = request.Extra;
+                agent.EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>();
             },
             request.McpToolServerIds,
             request.SkillIds,

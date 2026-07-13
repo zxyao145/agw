@@ -16,9 +16,15 @@ public class Project : BaseEntity, IAggregateRoot
     public bool Enable { get; set; } = true;
 
     public string? ExtraSetting { get; set; }
+    public string? Tools { get; set; }
+    public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
 
     [JsonIgnore]
     public ICollection<ProjectContext> Contexts { get; set; } = new List<ProjectContext>();
+
+    public ICollection<ProjectSkillRelation> ProjectSkillRelations { get; set; } = new List<ProjectSkillRelation>();
+    public ICollection<ProjectMcpServerRelation> ProjectMcpToolServers { get; set; } = new List<ProjectMcpServerRelation>();
+    public ICollection<ProjectAppRelation> ProjectAppRelations { get; set; } = new List<ProjectAppRelation>();
 
     public string GetMustWorkspace()
     {

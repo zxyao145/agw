@@ -2,72 +2,47 @@
 
 import * as React from "react";
 import Link from "next/link";
-import Editor from "@monaco-editor/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
-import type { components } from "@/api/openapi";
+import { getApiErrorMessage } from "@/api/utils";
+import {
+  filterAppOptions,
+  toEnvironmentVariableEntries,
+  type AppInstanceOption,
+  type EnvironmentVariableEntry,
+  type McpToolServerDto,
+  type SkillDto,
+  type ToolInfo,
+} from "@/components/definition-capabilities";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription as UiDialogDescription,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle as UiDialogTitle,
-  DialogTrigger,
+  DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { formatLocalDateTime } from "@/lib/date-time";
 
-import {
-  formatProjectFolderName,
-  resolveCreateProjectWorkspace,
-  syncDefaultProjectWorkspace,
-} from "./project-form";
-import { getApiErrorMessage } from "@/api/utils";
+import { CreateProjectDialog } from "./components/create-project-dialog";
+import { EditProjectDialog } from "./components/edit-project-dialog";
+import type {
+  ProjectCreateRequest,
+  ProjectResponse,
+  ProjectUpdateMutationVariables,
+} from "./components/types";
+import { syncDefaultProjectWorkspace, toProjectCapabilityFormState } from "./project-form";
 
-type ProjectCreateRequest = components["schemas"]["ProjectCreateRequest"] & {
-  workspace?: string | null;
-  extraSetting?: string | null;
-};
-type ProjectUpdateRequest = components["schemas"]["ProjectUpdateRequest"] & {
-  workspace?: string | null;
-  extraSetting?: string | null;
-};
-
-type ProjectDto = {
-  id: string;
-  name: string;
-  description: string | null;
-  workspace?: string | null;
-  type: number;
-  enable: boolean;
-  extraSetting?: string | null;
-  createBy?: string | null;
-  createTime?: string | null;
-  updateBy?: string | null;
-  updateTime?: string | null;
-};
-
-function isValidJsonPayload(value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed.length) return true;
-  try {
-    JSON.parse(trimmed);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function normalizeJsonPayload(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
+function toggleSelection(setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) {
+  setter((current) =>
+    current.includes(value)
+      ? current.filter((candidate) => candidate !== value)
+      : [...current, value],
+  );
 }
 
 export default function ProjectsPage() {
@@ -75,19 +50,40 @@ export default function ProjectsPage() {
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
-    queryFn: async () => {
-      // Backend returns entity JSON but OpenAPI doesn't declare response schemas yet.
-      return (await apiGet("/api/projects")) as unknown as ProjectDto[];
-    },
+    queryFn: async () => (await apiGet("/api/projects")) as unknown as ProjectResponse[],
+  });
+  const toolsQuery = useQuery({
+    queryKey: ["tools"],
+    queryFn: async () => (await apiGet("/api/tools")) as unknown as ToolInfo[],
+  });
+  const mcpToolServersQuery = useQuery({
+    queryKey: ["mcpToolServers"],
+    queryFn: async () => (await apiGet("/api/mcp-tool-servers")) as unknown as McpToolServerDto[],
+  });
+  const skillsQuery = useQuery({
+    queryKey: ["skills"],
+    queryFn: async () => (await apiGet("/api/skills")) as unknown as SkillDto[],
+  });
+  const appInstancesQuery = useQuery({
+    queryKey: ["appInstances"],
+    queryFn: async () =>
+      (await apiGet("/api/integrations/app-instances")) as unknown as AppInstanceOption[],
   });
 
   const [createOpen, setCreateOpen] = React.useState(false);
   const [name, setName] = React.useState("");
-  const [description, setDescription] = React.useState<string>("");
-  const [workspace, setWorkspace] = React.useState<string>("");
+  const [description, setDescription] = React.useState("");
+  const [workspace, setWorkspace] = React.useState("");
   const [enable, setEnable] = React.useState(true);
   const [extraSetting, setExtraSetting] = React.useState("{\n  \n}");
-  const createProjectName = formatProjectFolderName(name);
+  const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
+  const [selectedAppInstanceIds, setSelectedAppInstanceIds] = React.useState<string[]>([]);
+  const [appSearchTerm, setAppSearchTerm] = React.useState("");
+  const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
+  const [selectedMcpToolServerIds, setSelectedMcpToolServerIds] = React.useState<string[]>([]);
+  const [environmentVariables, setEnvironmentVariables] = React.useState<
+    EnvironmentVariableEntry[]
+  >([]);
 
   const handleCreateNameChange = React.useCallback(
     (nextName: string) => {
@@ -105,8 +101,7 @@ export default function ProjectsPage() {
 
   const createProjectMutation = useMutation({
     mutationFn: async (body: ProjectCreateRequest) => {
-      // Backend returns 201 Created with body, OpenAPI marks only 200. We treat it as unknown.
-      return await apiPost("/api/projects", { body });
+      return await apiPost("/api/projects", { body } as never);
     },
     onSuccess: async () => {
       toast.success("Project created");
@@ -116,6 +111,12 @@ export default function ProjectsPage() {
       setWorkspace("");
       setEnable(true);
       setExtraSetting("{\n  \n}");
+      setSelectedTools([]);
+      setSelectedSkillIds([]);
+      setSelectedMcpToolServerIds([]);
+      setSelectedAppInstanceIds([]);
+      setAppSearchTerm("");
+      setEnvironmentVariables([]);
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (error) => {
@@ -124,38 +125,38 @@ export default function ProjectsPage() {
   });
 
   const [editOpen, setEditOpen] = React.useState(false);
-  const [editProjectId, setEditProjectId] = React.useState<string | null>(null);
-  const [editProjectType, setEditProjectType] = React.useState<number>(0);
+  const [editingProject, setEditingProject] = React.useState<ProjectResponse | null>(null);
   const [editName, setEditName] = React.useState("");
-  const [editDescription, setEditDescription] = React.useState<string>("");
-  const [editWorkspace, setEditWorkspace] = React.useState<string>("");
+  const [editDescription, setEditDescription] = React.useState("");
+  const [editWorkspace, setEditWorkspace] = React.useState("");
   const [editEnable, setEditEnable] = React.useState(true);
-  const [editExtraSetting, setEditExtraSetting] = React.useState("{\n  \n}");
-
-  const isEditingSystemProject = editProjectType !== 0;
-
-  const openEdit = React.useCallback((project: ProjectDto) => {
-    setEditProjectId(project.id);
-    setEditProjectType(project.type ?? 0);
-    setEditName(project.name ?? "");
-    setEditDescription(project.description ?? "");
-    setEditWorkspace(project.workspace ?? "");
-    setEditEnable(Boolean(project.enable));
-    setEditExtraSetting(project.extraSetting ?? "{\n  \n}");
-    setEditOpen(true);
-  }, []);
+  const [editExtraSetting, setEditExtraSetting] = React.useState("");
+  const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
+  const [editSelectedAppInstanceIds, setEditSelectedAppInstanceIds] = React.useState<string[]>([]);
+  const [editAppSearchTerm, setEditAppSearchTerm] = React.useState("");
+  const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>([]);
+  const [editSelectedMcpToolServerIds, setEditSelectedMcpToolServerIds] = React.useState<string[]>(
+    [],
+  );
+  const [editEnvironmentVariables, setEditEnvironmentVariables] = React.useState<
+    EnvironmentVariableEntry[]
+  >([]);
 
   const updateProjectMutation = useMutation({
-    mutationFn: async (args: { id: string; body: ProjectUpdateRequest }) => {
+    mutationFn: async ({ project, body }: ProjectUpdateMutationVariables) => {
+      if (project.type !== 0) {
+        throw new Error("Built-in projects cannot be edited.");
+      }
+
       return await apiPut("/api/projects/{id}", {
-        params: { path: { id: args.id } },
-        body: args.body,
-      });
+        params: { path: { id: project.id } },
+        body,
+      } as never);
     },
     onSuccess: async () => {
       toast.success("Project updated");
       setEditOpen(false);
-      setEditProjectId(null);
+      setEditingProject(null);
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (error) => {
@@ -163,10 +164,43 @@ export default function ProjectsPage() {
     },
   });
 
-  const [deleteOpen, setDeleteOpen] = React.useState(false);
-  const [deleteProject, setDeleteProject] = React.useState<ProjectDto | null>(null);
+  const openEdit = React.useCallback(
+    (project: ProjectResponse) => {
+      if (updateProjectMutation.isPending) {
+        return;
+      }
 
-  const openDelete = React.useCallback((project: ProjectDto) => {
+      if (project.type !== 0) {
+        return;
+      }
+
+      const capabilityState = toProjectCapabilityFormState(project);
+      setEditingProject(project);
+      setEditName(project.name ?? "");
+      setEditDescription(project.description ?? "");
+      setEditWorkspace(project.workspace ?? "");
+      setEditEnable(Boolean(project.enable));
+      setEditExtraSetting(project.extraSetting ?? "");
+      setEditSelectedTools(capabilityState.selectedTools);
+      setEditSelectedSkillIds(capabilityState.selectedSkillIds);
+      setEditSelectedMcpToolServerIds(capabilityState.selectedMcpToolServerIds);
+      setEditSelectedAppInstanceIds(capabilityState.selectedAppInstanceIds);
+      setEditEnvironmentVariables(
+        toEnvironmentVariableEntries(capabilityState.environmentVariables),
+      );
+      setEditAppSearchTerm("");
+      setEditOpen(true);
+    },
+    [updateProjectMutation.isPending],
+  );
+
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleteProject, setDeleteProject] = React.useState<ProjectResponse | null>(null);
+
+  const openDelete = React.useCallback((project: ProjectResponse) => {
+    if (project.type !== 0) {
+      return;
+    }
     setDeleteProject(project);
     setDeleteOpen(true);
   }, []);
@@ -188,6 +222,14 @@ export default function ProjectsPage() {
     },
   });
 
+  const filteredAppOptions = React.useMemo(
+    () => filterAppOptions(appInstancesQuery.data ?? [], appSearchTerm),
+    [appInstancesQuery.data, appSearchTerm],
+  );
+  const filteredEditAppOptions = React.useMemo(
+    () => filterAppOptions(appInstancesQuery.data ?? [], editAppSearchTerm),
+    [appInstancesQuery.data, editAppSearchTerm],
+  );
   const projects = projectsQuery.data ?? [];
 
   return (
@@ -206,114 +248,40 @@ export default function ProjectsPage() {
           >
             Refresh
           </Button>
-
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>Create project</Button>
-            </DialogTrigger>
-
-            <DialogContent size="lg">
-              <DialogHeader>
-                <UiDialogTitle>Create project</UiDialogTitle>
-                <UiDialogDescription>Create a project to group ordered tasks.</UiDialogDescription>
-              </DialogHeader>
-
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => handleCreateNameChange(e.target.value)}
-                    placeholder="demo-project"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="A project groups ordered tasks."
-                    rows={4}
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="workspace">Workspace (optional)</Label>
-                  <Input
-                    id="workspace"
-                    value={workspace}
-                    onChange={(e) => setWorkspace(e.target.value)}
-                    placeholder="~/.agw/demo-project"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label>Extra Settings (JSON)</Label>
-                  <div className="overflow-hidden rounded-md border">
-                    <Editor
-                      height="200px"
-                      language="json"
-                      path="project-settings-create.json"
-                      value={extraSetting}
-                      onChange={(value) => setExtraSetting(value ?? "")}
-                      options={{
-                        minimap: { enabled: false },
-                        scrollBeyondLastLine: false,
-                        fontSize: 13,
-                        automaticLayout: true,
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Optional JSON settings stored with the project.
-                  </p>
-                </div>
-
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={enable}
-                    onChange={(e) => setEnable(e.target.checked)}
-                  />
-                  Enable
-                </label>
-              </div>
-
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="outline">
-                    Cancel
-                  </Button>
-                </DialogClose>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    if (!isValidJsonPayload(extraSetting)) {
-                      toast.error("Settings must be valid JSON.");
-                      return;
-                    }
-                    if (!createProjectName) {
-                      toast.error("Project name must produce a valid folder name.");
-                      return;
-                    }
-                    createProjectMutation.mutate({
-                      name: createProjectName,
-                      description: description.length ? description : null,
-                      workspace: resolveCreateProjectWorkspace(createProjectName, workspace),
-                      enable,
-                      extraSetting: normalizeJsonPayload(extraSetting),
-                    });
-                  }}
-                  disabled={!createProjectName || createProjectMutation.isPending}
-                >
-                  {createProjectMutation.isPending ? "Creating..." : "Create"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <CreateProjectDialog
+            open={createOpen}
+            setOpen={setCreateOpen}
+            name={name}
+            setName={handleCreateNameChange}
+            description={description}
+            setDescription={setDescription}
+            workspace={workspace}
+            setWorkspace={setWorkspace}
+            enable={enable}
+            setEnable={setEnable}
+            extraSetting={extraSetting}
+            setExtraSetting={setExtraSetting}
+            environmentVariables={environmentVariables}
+            setEnvironmentVariables={setEnvironmentVariables}
+            selectedSkillIds={selectedSkillIds}
+            appOptions={appInstancesQuery.data ?? []}
+            selectedAppInstanceIds={selectedAppInstanceIds}
+            appSearchTerm={appSearchTerm}
+            setAppSearchTerm={setAppSearchTerm}
+            filteredAppOptions={filteredAppOptions}
+            selectedTools={selectedTools}
+            skillsQuery={skillsQuery}
+            toolsQuery={toolsQuery}
+            mcpToolServersQuery={mcpToolServersQuery}
+            selectedMcpToolServerIds={selectedMcpToolServerIds}
+            createProjectMutation={createProjectMutation}
+            toggleSkill={(skillId) => toggleSelection(setSelectedSkillIds, skillId)}
+            toggleAppInstance={(appId) => toggleSelection(setSelectedAppInstanceIds, appId)}
+            toggleTool={(toolName) => toggleSelection(setSelectedTools, toolName)}
+            toggleMcpToolServer={(serverId) =>
+              toggleSelection(setSelectedMcpToolServerIds, serverId)
+            }
+          />
         </div>
       </div>
 
@@ -327,67 +295,65 @@ export default function ProjectsPage() {
         <div className="text-sm text-muted-foreground">No projects.</div>
       ) : (
         <div className="space-y-3">
-          {projects.map((p) => (
+          {projects.map((project) => (
             <div
-              key={p.id}
+              key={project.id}
               className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:justify-between"
             >
               <div className="min-w-0 space-y-1">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Link
-                    href={`/projects/details/?projectId=${encodeURIComponent(p.id)}`}
+                    href={`/projects/details/?projectId=${encodeURIComponent(project.id)}`}
                     className="truncate font-medium underline-offset-4 hover:underline"
                   >
-                    {p.name}
+                    {project.name}
                   </Link>
-                  {p.type !== 0 && (
+                  {project.type !== 0 ? (
                     <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
                       BuiltIn
                     </span>
-                  )}
+                  ) : null}
                   <span
                     className={
-                      p.enable
+                      project.enable
                         ? "rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300"
                         : "rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
                     }
                   >
-                    {p.enable ? "Enabled" : "Disabled"}
+                    {project.enable ? "Enabled" : "Disabled"}
                   </span>
                 </div>
-
-                {p.description ? (
-                  <div className="text-sm text-muted-foreground">{p.description}</div>
+                {project.description ? (
+                  <div className="text-sm text-muted-foreground">{project.description}</div>
                 ) : null}
-
                 <div className="text-xs text-muted-foreground">
-                  <span className="font-mono">{p.id}</span>
+                  <span className="font-mono">{project.id}</span>
                   <span className="mx-2">·</span>
-                  Updated: {formatLocalDateTime(p.updateTime ?? p.createTime)}
+                  Updated: {formatLocalDateTime(project.updateTime ?? project.createTime)}
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2 sm:justify-end">
                 <Button asChild variant="outline" size="sm">
-                  <Link href={`/projects/details/?projectId=${encodeURIComponent(p.id)}`}>
+                  <Link href={`/projects/details/?projectId=${encodeURIComponent(project.id)}`}>
                     View
                   </Link>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => openEdit(p)}
-                  disabled={p.type !== 0}
-                  title={p.type !== 0 ? "System projects cannot be edited" : undefined}
+                  onClick={() => openEdit(project)}
+                  disabled={project.type !== 0}
+                  title={project.type !== 0 ? "Built-in projects cannot be edited" : undefined}
                 >
                   Edit
                 </Button>
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => openDelete(p)}
-                  disabled={p.type !== 0 || deleteProjectMutation.isPending}
-                  title={p.type !== 0 ? "System projects cannot be deleted" : undefined}
+                  onClick={() => openDelete(project)}
+                  disabled={project.type !== 0 || deleteProjectMutation.isPending}
+                  title={project.type !== 0 ? "Built-in projects cannot be deleted" : undefined}
                 >
                   Delete
                 </Button>
@@ -397,138 +363,56 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent size="lg">
-          <DialogHeader>
-            <UiDialogTitle>
-              Edit project
-              {isEditingSystemProject && (
-                <span className="ml-2 rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-normal text-amber-700 dark:text-amber-300">
-                  System
-                </span>
-              )}
-            </UiDialogTitle>
-            <UiDialogDescription>
-              {isEditingSystemProject
-                ? "System projects have restricted editing. Only the enable toggle is available."
-                : "Update project settings."}
-            </UiDialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-name">Name</Label>
-              <Input
-                id="edit-name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                disabled={isEditingSystemProject}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="edit-description">Description</Label>
-              <Textarea
-                id="edit-description"
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                rows={4}
-                disabled={isEditingSystemProject}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="edit-workspace">Workspace (optional)</Label>
-              <Input
-                id="edit-workspace"
-                value={editWorkspace}
-                onChange={(e) => setEditWorkspace(e.target.value)}
-                disabled={isEditingSystemProject}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Settings (JSON)</Label>
-              <div className="overflow-hidden rounded-md border">
-                <Editor
-                  height="200px"
-                  language="json"
-                  path="project-settings-edit.json"
-                  value={editExtraSetting}
-                  onChange={(value) => setEditExtraSetting(value ?? "")}
-                  options={{
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    fontSize: 13,
-                    automaticLayout: true,
-                    readOnly: isEditingSystemProject,
-                  }}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Optional JSON settings stored with the project.
-              </p>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={editEnable}
-                onChange={(e) => setEditEnable(e.target.checked)}
-              />
-              Enable
-            </label>
-          </div>
-
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline">
-                Cancel
-              </Button>
-            </DialogClose>
-            <Button
-              type="button"
-              onClick={() => {
-                if (!editProjectId) return;
-                if (!isValidJsonPayload(editExtraSetting)) {
-                  toast.error("Settings must be valid JSON.");
-                  return;
-                }
-                updateProjectMutation.mutate({
-                  id: editProjectId,
-                  body: {
-                    name: editName,
-                    description: editDescription.length ? editDescription : null,
-                    workspace: editWorkspace.trim().length ? editWorkspace.trim() : null,
-                    enable: editEnable,
-                    extraSetting: normalizeJsonPayload(editExtraSetting),
-                  },
-                });
-              }}
-              disabled={!editProjectId || !editName.trim() || updateProjectMutation.isPending}
-            >
-              {updateProjectMutation.isPending ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditProjectDialog
+        open={editOpen}
+        setOpen={setEditOpen}
+        editingProject={editingProject}
+        name={editName}
+        setName={setEditName}
+        description={editDescription}
+        setDescription={setEditDescription}
+        workspace={editWorkspace}
+        setWorkspace={setEditWorkspace}
+        enable={editEnable}
+        setEnable={setEditEnable}
+        extraSetting={editExtraSetting}
+        setExtraSetting={setEditExtraSetting}
+        environmentVariables={editEnvironmentVariables}
+        setEnvironmentVariables={setEditEnvironmentVariables}
+        selectedSkillIds={editSelectedSkillIds}
+        appOptions={appInstancesQuery.data ?? []}
+        selectedAppInstanceIds={editSelectedAppInstanceIds}
+        appSearchTerm={editAppSearchTerm}
+        setAppSearchTerm={setEditAppSearchTerm}
+        filteredAppOptions={filteredEditAppOptions}
+        selectedTools={editSelectedTools}
+        skillsQuery={skillsQuery}
+        toolsQuery={toolsQuery}
+        mcpToolServersQuery={mcpToolServersQuery}
+        selectedMcpToolServerIds={editSelectedMcpToolServerIds}
+        updateProjectMutation={updateProjectMutation}
+        toggleSkill={(skillId) => toggleSelection(setEditSelectedSkillIds, skillId)}
+        toggleAppInstance={(appId) => toggleSelection(setEditSelectedAppInstanceIds, appId)}
+        toggleTool={(toolName) => toggleSelection(setEditSelectedTools, toolName)}
+        toggleMcpToolServer={(serverId) =>
+          toggleSelection(setEditSelectedMcpToolServerIds, serverId)
+        }
+      />
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent size="lg">
           <DialogHeader>
-            <UiDialogTitle>Delete project</UiDialogTitle>
-            <UiDialogDescription>
+            <DialogTitle>Delete project</DialogTitle>
+            <DialogDescription>
               This will permanently delete the project and its tasks (cascade delete).
-            </UiDialogDescription>
+            </DialogDescription>
           </DialogHeader>
-
           <div className="text-sm">
             <div className="font-medium">{deleteProject?.name ?? "-"}</div>
             <div className="mt-1 text-xs text-muted-foreground font-mono">
               {deleteProject?.id ?? ""}
             </div>
           </div>
-
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">
@@ -539,10 +423,13 @@ export default function ProjectsPage() {
               type="button"
               variant="destructive"
               onClick={() => {
-                if (!deleteProject) return;
-                deleteProjectMutation.mutate(deleteProject.id);
+                if (deleteProject?.type === 0) {
+                  deleteProjectMutation.mutate(deleteProject.id);
+                }
               }}
-              disabled={!deleteProject || deleteProjectMutation.isPending}
+              disabled={
+                !deleteProject || deleteProject.type !== 0 || deleteProjectMutation.isPending
+              }
             >
               {deleteProjectMutation.isPending ? "Deleting..." : "Delete"}
             </Button>

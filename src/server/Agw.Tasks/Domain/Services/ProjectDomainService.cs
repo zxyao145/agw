@@ -1,4 +1,5 @@
 using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Exceptions;
 
 namespace Agw.Tasks.Domain.Services;
 
@@ -49,6 +50,7 @@ public class ProjectDomainService
         project.Workspace = string.IsNullOrWhiteSpace(project.Workspace)
             ? GetDefaultWorkspace(projectName)
             : project.Workspace.Trim();
+        NormalizeEnvironmentVariables(project);
         project.Id = project.Id == Guid.Empty ? Guid.NewGuid() : project.Id;
         project.CreateBy = user;
         project.CreateTime = _timeProvider.GetUtcNow();
@@ -64,12 +66,31 @@ public class ProjectDomainService
             return false;
         }
 
+        NormalizeEnvironmentVariables(project);
         project.UpdateBy = user;
         project.UpdateTime = _timeProvider.GetUtcNow();
         return true;
     }
 
     private static string GetDefaultWorkspace(string projectName) => $"~/.agw/{projectName}";
+
+    private static void NormalizeEnvironmentVariables(Project project)
+    {
+        var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (name, value) in project.EnvironmentVariables ?? [])
+        {
+            var normalizedName = name.Trim();
+            if (string.IsNullOrEmpty(normalizedName)
+                || normalizedName.Contains('=')
+                || normalizedName.Contains('\0')
+                || !normalized.TryAdd(normalizedName, value ?? string.Empty))
+            {
+                throw new AgwException(ErrorCodes.InvalidProjectEnvironmentVariableName);
+            }
+        }
+
+        project.EnvironmentVariables = normalized;
+    }
 
     private static bool TryFormatFolderName(string? value, out string folderName)
     {

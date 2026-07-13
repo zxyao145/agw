@@ -23,6 +23,77 @@ namespace Agw.Agents.Tests;
 public class AgentflowRuntimeServiceTests
 {
     [Fact]
+    public async Task AgentflowRuntime_ExecuteStreamingAsync_ForwardsSessionEnvironmentVariables()
+    {
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "environment-flow", Enable = true };
+        var agentId = Guid.NewGuid();
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Worker",
+                RelateId = agentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "agent-output",
+                SourceNodeId = "agent",
+                TargetNodeId = "output",
+            },
+        };
+        var agentRuntimeService = new StubAgentRuntimeService(agentId);
+        var runtimeService = new AgentflowRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new AgentflowDomainService(TimeProvider.System),
+            agentRuntimeService,
+            new StubProviderSessionState());
+        var projectId = Guid.NewGuid();
+        var task = new TaskProjection
+        {
+            ProjectId = projectId,
+            ContextId = "environment-context",
+            TaskId = Guid.NewGuid(),
+        };
+        var settings = new SettingCommand(
+            projectId,
+            new Dictionary<string, string> { ["SESSION_ONLY"] = "session" },
+            task.ContextId);
+        var runtime = new AgentflowRuntime(agentflow.Id, task, settings, runtimeService);
+        var command = new ExecCommand(
+            AgentRuntimeType.Agentflow,
+            new AgwUserInput
+            {
+                Contents = [new AgwTextContent { Content = "run" }],
+            });
+
+        await foreach (var _ in runtime.ExecuteStreamingAsync(
+                           command,
+                           new DelayedApprovalHandler(),
+                           TestContext.Current.CancellationToken))
+        {
+        }
+
+        Assert.NotNull(agentRuntimeService.LastEnvironmentVariables);
+        Assert.Equal("session", agentRuntimeService.LastEnvironmentVariables["SESSION_ONLY"]);
+    }
+
+    [Fact]
     public async Task ExecuteStreamingAsync_HumanGateApproved_PersistsWaitDurationAndInput()
     {
         var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "approval-flow", Enable = true };
@@ -258,6 +329,8 @@ public class AgentflowRuntimeServiceTests
     {
         private readonly Guid _agentId;
 
+        public IReadOnlyDictionary<string, string>? LastEnvironmentVariables { get; private set; }
+
         public StubAgentRuntimeService(Guid agentId)
         {
             _agentId = agentId;
@@ -272,6 +345,22 @@ public class AgentflowRuntimeServiceTests
             bool resume,
             CancellationToken cancellationToken = default)
         {
+            return CreateAiAgentAsync(
+                agentId,
+                projectId,
+                resume,
+                environmentVariables: null,
+                cancellationToken);
+        }
+
+        public Task<AIAgent?> CreateAiAgentAsync(
+            Guid agentId,
+            Guid? projectId,
+            bool resume,
+            IReadOnlyDictionary<string, string>? environmentVariables,
+            CancellationToken cancellationToken = default)
+        {
+            LastEnvironmentVariables = environmentVariables;
             AIAgent? agent = agentId == _agentId
                 ? new ChatClientAgent(
                     new StubChatClient(),

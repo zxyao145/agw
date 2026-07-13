@@ -205,6 +205,11 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("display_name");
 
+                    b.Property<string>("EnvironmentVariables")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("environment_variables");
+
                     b.Property<string>("Extra")
                         .HasColumnType("TEXT")
                         .HasColumnName("extra");
@@ -1059,6 +1064,11 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("enable");
 
+                    b.Property<string>("EnvironmentVariables")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("environment_variables");
+
                     b.Property<string>("ExtraSetting")
                         .HasMaxLength(16000)
                         .HasColumnType("TEXT")
@@ -1069,6 +1079,11 @@ namespace Agw.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
+
+                    b.Property<string>("Tools")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tools");
 
                     b.Property<int>("Type")
                         .HasColumnType("INTEGER")
@@ -1095,6 +1110,25 @@ namespace Agw.Infrastructure.Migrations
                         .HasDatabaseName("ix_project_name");
 
                     b.ToTable("project", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectAppRelation", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("AppInstanceId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("app_instance_id");
+
+                    b.HasKey("ProjectId", "AppInstanceId")
+                        .HasName("pk_project_app_relation");
+
+                    b.HasIndex("AppInstanceId")
+                        .HasDatabaseName("ix_project_app_relation_app_instance_id");
+
+                    b.ToTable("project_app_relation", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectContext", b =>
@@ -1194,6 +1228,44 @@ namespace Agw.Infrastructure.Migrations
                         .HasDatabaseName("ix_project_context_project_id_context_id");
 
                     b.ToTable("project_context", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectMcpServerRelation", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("McpToolServerId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("mcp_tool_server_id");
+
+                    b.HasKey("ProjectId", "McpToolServerId")
+                        .HasName("pk_project_mcp_server_relation");
+
+                    b.HasIndex("McpToolServerId")
+                        .HasDatabaseName("ix_project_mcp_server_relation_mcp_tool_server_id");
+
+                    b.ToTable("project_mcp_server_relation", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectSkillRelation", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("SkillId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("skill_id");
+
+                    b.HasKey("ProjectId", "SkillId")
+                        .HasName("pk_project_skill_relation");
+
+                    b.HasIndex("SkillId")
+                        .HasDatabaseName("ix_project_skill_relation_skill_id");
+
+                    b.ToTable("project_skill_relation", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.TaskRecord", b =>
@@ -1483,6 +1555,27 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("Provider");
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectAppRelation", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Integrations.AppInstance", "AppInstance")
+                        .WithMany()
+                        .HasForeignKey("AppInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_app_relation_app_instance_app_instance_id");
+
+                    b.HasOne("Agw.Shared.Data.Entities.Tasks.Project", "Project")
+                        .WithMany("ProjectAppRelations")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_app_relation_project_project_id");
+
+                    b.Navigation("AppInstance");
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectContext", b =>
                 {
                     b.HasOne("Agw.Shared.Data.Entities.Tasks.Project", "Project")
@@ -1493,6 +1586,48 @@ namespace Agw.Infrastructure.Migrations
                         .HasConstraintName("fk_project_context_project_project_id");
 
                     b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectMcpServerRelation", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Agents.McpServer", "McpToolServer")
+                        .WithMany()
+                        .HasForeignKey("McpToolServerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_mcp_server_relation_mcp_server_mcp_tool_server_id");
+
+                    b.HasOne("Agw.Shared.Data.Entities.Tasks.Project", "Project")
+                        .WithMany("ProjectMcpToolServers")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_mcp_server_relation_project_project_id");
+
+                    b.Navigation("McpToolServer");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectSkillRelation", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Tasks.Project", "Project")
+                        .WithMany("ProjectSkillRelations")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_skill_relation_project_project_id");
+
+                    b.HasOne("Agw.Shared.Data.Entities.Skills.Skill", "Skill")
+                        .WithMany()
+                        .HasForeignKey("SkillId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_skill_relation_skill_skill_id");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("Skill");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.TaskRecord", b =>
@@ -1567,6 +1702,12 @@ namespace Agw.Infrastructure.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.Project", b =>
                 {
                     b.Navigation("Contexts");
+
+                    b.Navigation("ProjectAppRelations");
+
+                    b.Navigation("ProjectMcpToolServers");
+
+                    b.Navigation("ProjectSkillRelations");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectContext", b =>

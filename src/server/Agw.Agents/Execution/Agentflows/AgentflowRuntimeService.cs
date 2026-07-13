@@ -93,7 +93,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         Guid? projectId = null,
         string? contextId = null,
         Guid? taskId = null,
-        IHumanGateApprovalHandler? humanGateApprovalHandler = null)
+        IHumanGateApprovalHandler? humanGateApprovalHandler = null,
+        IReadOnlyDictionary<string, string>? environmentVariables = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
@@ -113,7 +114,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             agentflow,
             cancellationToken,
             sessionScope,
-            executionTraceContext);
+            executionTraceContext,
+            environmentVariables);
         if (workflow == null)
         {
             yield break;
@@ -348,7 +350,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         Guid agentflowId,
         CancellationToken cancellationToken,
         AgentflowAgentSessionScope? sessionScope,
-        AgentflowExecutionTraceContext? executionTraceContext = null)
+        AgentflowExecutionTraceContext? executionTraceContext = null,
+        IReadOnlyDictionary<string, string>? environmentVariables = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
@@ -356,7 +359,12 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             return null;
         }
 
-        return await CreateAiWorkflow(agentflow, cancellationToken, sessionScope, executionTraceContext);
+        return await CreateAiWorkflow(
+            agentflow,
+            cancellationToken,
+            sessionScope,
+            executionTraceContext,
+            environmentVariables);
     }
 
     private async Task<AgentflowExecutionResult?> ExecuteAsync(
@@ -456,7 +464,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         Agentflow agentflow,
         CancellationToken cancellationToken,
         AgentflowAgentSessionScope? sessionScope = null,
-        AgentflowExecutionTraceContext? executionTraceContext = null)
+        AgentflowExecutionTraceContext? executionTraceContext = null,
+        IReadOnlyDictionary<string, string>? environmentVariables = null)
     {
         var agentflowNodes = await _agentflowNodeRepository.ListAsync(x => x.AgentflowId == agentflow.Id);
         var agentflowEdges = await _agentflowEdgeRepository.ListAsync(x => x.AgentflowId == agentflow.Id);
@@ -477,6 +486,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                     node.RelateId.Value,
                     sessionScope?.ProjectId,
                     resume: false,
+                    environmentVariables,
                     cancellationToken: cancellationToken);
             }
             else if (node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
@@ -485,7 +495,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                     node.RelateId.Value,
                     cancellationToken,
                     sessionScope,
-                    executionTraceContext);
+                    executionTraceContext,
+                    environmentVariables);
                 aiAgent = flowNode?.AsAIAgent();
             }
             else

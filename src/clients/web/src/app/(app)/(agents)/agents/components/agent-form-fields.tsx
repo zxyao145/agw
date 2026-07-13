@@ -1,19 +1,20 @@
 import * as React from "react";
 import { UseQueryResult } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
+
+import {
+  AppsPanel,
+  EnvironmentVariablesPanel,
+  McpToolServersPanel,
+  SkillsPanel,
+  ToolsPanel,
+  type AppInstanceOption,
+  type EnvironmentVariableEntry,
+  type McpToolServerDto,
+  type SkillDto,
+  type ToolInfo,
+} from "@/components/definition-capabilities";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -23,14 +24,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  buildAppOptionLabel,
-  getAppAuthorizationState,
-  type AppInstanceOption,
-} from "./app-selector";
-import type { ToolInfo, ModelProviderDto, McpToolServerDto, SkillDto } from "./types";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+
+import { getAgentExtraSettingsError } from "./agent-extra-settings";
+import type { ModelProviderDto } from "./types";
+
+type AgentFormMode = "create" | "edit";
 
 interface AgentFormFieldsProps {
+  mode: AgentFormMode;
+  dialogPortalContainer: HTMLElement | null;
   displayName: string;
   setDisplayName: (value: string) => void;
   name: string;
@@ -42,9 +46,10 @@ interface AgentFormFieldsProps {
   modelProviderId: string;
   setModelProviderId: (value: string) => void;
   agentType: string;
-  setAgentType: (value: string) => void;
   extra: string;
-  setExtra: (value: string) => void;
+  setExtra?: (value: string) => void;
+  environmentVariables: EnvironmentVariableEntry[];
+  setEnvironmentVariables: (entries: EnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
   appOptions: AppInstanceOption[];
   selectedAppInstanceIds: string[];
@@ -53,10 +58,6 @@ interface AgentFormFieldsProps {
   filteredAppOptions: AppInstanceOption[];
   toggleAppInstance: (appInstanceId: string) => void;
   selectedTools: string[];
-  setSelectedTools: React.Dispatch<React.SetStateAction<string[]>>;
-  toolSearchTerm: string;
-  setToolSearchTerm: (value: string) => void;
-  filteredTools: ToolInfo[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
@@ -64,40 +65,21 @@ interface AgentFormFieldsProps {
   toggleSkill: (skillId: string) => void;
   toggleTool: (toolName: string) => void;
   selectedMcpToolServerIds: string[];
-  mcpToolServerSearchTerm: string;
-  setMcpToolServerSearchTerm: (value: string) => void;
-  filteredMcpToolServers: McpToolServerDto[];
   toggleMcpToolServer: (mcpToolServerId: string) => void;
   idPrefix?: string;
-  disabledFields?: {
-    displayName?: boolean;
-    name?: boolean;
-    description?: boolean;
-    systemPrompt?: boolean;
-    apps?: boolean;
-    modelProviderId?: boolean;
-    agentType?: boolean;
-    extra?: boolean;
-    skills?: boolean;
-    tools?: boolean;
-    mcpToolServers?: boolean;
-  };
-  hiddenFields?: {
-    displayName?: boolean;
-    name?: boolean;
-    description?: boolean;
-    systemPrompt?: boolean;
-    apps?: boolean;
-    modelProviderId?: boolean;
-    agentType?: boolean;
-    extra?: boolean;
-    skills?: boolean;
-    tools?: boolean;
-    mcpToolServers?: boolean;
-  };
+}
+
+function ExternalAgentNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+      {children}
+    </div>
+  );
 }
 
 export function AgentFormFields({
+  mode,
+  dialogPortalContainer,
   displayName,
   setDisplayName,
   name,
@@ -109,9 +91,10 @@ export function AgentFormFields({
   modelProviderId,
   setModelProviderId,
   agentType,
-  setAgentType,
   extra,
   setExtra,
+  environmentVariables,
+  setEnvironmentVariables,
   selectedSkillIds,
   appOptions,
   selectedAppInstanceIds,
@@ -129,453 +112,241 @@ export function AgentFormFields({
   selectedMcpToolServerIds,
   toggleMcpToolServer,
   idPrefix = "",
-  disabledFields = {},
-  hiddenFields = {},
 }: AgentFormFieldsProps) {
-  const [appPopoverOpen, setAppPopoverOpen] = React.useState(false);
-  const selectedSkills = skillsQuery.data?.filter((skill) => selectedSkillIds.includes(skill.id));
-  const selectedApps = appOptions.filter((app) => selectedAppInstanceIds.includes(app.id));
-  const groupedTools = React.useMemo(() => {
-    if (!toolsQuery.data) {
-      return [];
-    }
-
-    const groups = new Map<string, ToolInfo[]>();
-
-    for (const tool of toolsQuery.data) {
-      const category = tool.category.trim() || "Uncategorized";
-      const existing = groups.get(category);
-
-      if (existing) {
-        existing.push(tool);
-        continue;
-      }
-
-      groups.set(category, [tool]);
-    }
-
-    return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
-  }, [toolsQuery.data]);
-  const selectedSkillCount = selectedSkillIds.length;
-  const selectedToolCount = selectedTools.length;
-  const selectedMcpToolServerCount = selectedMcpToolServerIds.length;
+  const isExternalAgent = agentType === "1";
+  const canEditExtra = mode === "edit" && isExternalAgent;
+  const extraError = canEditExtra ? getAgentExtraSettingsError(extra) : null;
 
   return (
-    <div className="grid gap-4 overflow-y-auto pr-2 -mr-2">
-      {!hiddenFields.displayName && (
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}displayName`}>Display Name</Label>
-          <Input
-            id={`${idPrefix}displayName`}
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Agent display name"
-            disabled={disabledFields.displayName}
-          />
-        </div>
-      )}
+    <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden border-t lg:grid-cols-[400px_minmax(0,1fr)] lg:grid-rows-1">
+      <div className="overflow-y-auto border-b bg-muted/20 p-6 lg:border-r lg:border-b-0">
+        <div className="grid gap-5">
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}displayName`}>Display Name</Label>
+            <Input
+              id={`${idPrefix}displayName`}
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Agent display name"
+            />
+          </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}name`}>Name (Optional)</Label>
-        <Input
-          id={`${idPrefix}name`}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="agent id"
-          disabled={disabledFields.name}
-        />
-      </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}name`}>Name (Optional)</Label>
+            <Input
+              id={`${idPrefix}name`}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="agent id"
+              readOnly={mode === "edit"}
+              className={mode === "edit" ? "bg-muted/50" : undefined}
+            />
+            {mode === "edit" ? (
+              <p className="text-xs text-muted-foreground">
+                The agent name is a stable identifier.
+              </p>
+            ) : null}
+          </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}description`}>Description</Label>
-        <Input
-          id={`${idPrefix}description`}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Agent description..."
-          disabled={disabledFields.description}
-        />
-      </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}description`}>Description</Label>
+            <Input
+              id={`${idPrefix}description`}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Agent description..."
+            />
+          </div>
 
-      {!hiddenFields.agentType && (
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}agentType`}>Agent Type</Label>
-          <Select
-            value={agentType}
-            onValueChange={setAgentType}
-            disabled={disabledFields.agentType}
-          >
-            <SelectTrigger
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}agentType`}>Agent Type</Label>
+            <Input
               id={`${idPrefix}agentType`}
-              className="w-full"
-              disabled={disabledFields.agentType}
-            >
-              <SelectValue placeholder="Select agent type..." />
-            </SelectTrigger>
-            <SelectContent position="popper" sideOffset={4}>
-              <SelectGroup>
-                <SelectLabel>Agent Type</SelectLabel>
-                <SelectItem value="0">System</SelectItem>
-                <SelectItem value="1">External</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+              value={isExternalAgent ? "External" : "System"}
+              readOnly
+              className="bg-muted/50"
+            />
+          </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}modelProviderId`}>
-          Model Provider
-          {agentType === "1" && (
-            <span className="text-xs text-muted-foreground ml-2">(Optional)</span>
-          )}
-        </Label>
-        <Select
-          value={modelProviderId}
-          onValueChange={setModelProviderId}
-          disabled={disabledFields.modelProviderId}
-        >
-          <SelectTrigger
-            id={`${idPrefix}modelProviderId`}
-            className="w-full"
-            disabled={disabledFields.modelProviderId}
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}modelProviderId`}>
+              Model Provider
+              {isExternalAgent ? (
+                <span className="ml-2 text-xs text-muted-foreground">(Optional)</span>
+              ) : null}
+            </Label>
+            <Select value={modelProviderId} onValueChange={setModelProviderId}>
+              <SelectTrigger id={`${idPrefix}modelProviderId`} className="w-full">
+                <SelectValue
+                  placeholder={
+                    isExternalAgent
+                      ? "Optional: Select a model provider..."
+                      : "Select a model provider..."
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent
+                position="popper"
+                sideOffset={4}
+                portalContainer={dialogPortalContainer}
+              >
+                <SelectGroup>
+                  <SelectLabel>Available Model Providers</SelectLabel>
+                  {modelProvidersQuery.isLoading ? (
+                    <SelectItem value="loading" disabled>
+                      Loading...
+                    </SelectItem>
+                  ) : modelProvidersQuery.data && modelProvidersQuery.data.length > 0 ? (
+                    modelProvidersQuery.data.map((modelProvider) => (
+                      <SelectItem key={modelProvider.id} value={modelProvider.id}>
+                        {modelProvider.modelName} ({modelProvider.providerName}-
+                        {modelProvider.providerType})
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-providers" disabled>
+                      No model providers available
+                    </SelectItem>
+                  )}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}extra`}>Extra Settings (JSON)</Label>
+            <Textarea
+              id={`${idPrefix}extra`}
+              value={extra}
+              onChange={(event) => setExtra?.(event.target.value)}
+              placeholder="{}"
+              rows={7}
+              readOnly={!canEditExtra}
+              aria-invalid={Boolean(extraError)}
+              className={!canEditExtra ? "bg-muted/50 font-mono text-xs" : "font-mono text-xs"}
+            />
+            {extraError ? (
+              <p className="text-xs text-destructive">{extraError}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {canEditExtra
+                  ? "Optional JSON object stored with this external agent definition."
+                  : "Extra Settings can be edited only for external agents."}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="min-h-0 overflow-hidden bg-background">
+        <Tabs defaultValue="system-prompt" className="flex h-full min-h-0 flex-col">
+          <div className="shrink-0 overflow-x-auto border-b px-6 py-3">
+            <TabsList className="h-auto w-max">
+              <TabsTrigger value="system-prompt">System Prompt</TabsTrigger>
+              <TabsTrigger value="skills">Skills</TabsTrigger>
+              <TabsTrigger value="tools">Tools</TabsTrigger>
+              <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
+              <TabsTrigger value="apps">Apps</TabsTrigger>
+              <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent
+            value="system-prompt"
+            className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
           >
-            <SelectValue
-              placeholder={
-                agentType === "1"
-                  ? "Optional: Select a model provider..."
-                  : "Select a model provider..."
+            <div>
+              <h3 className="font-medium">System Prompt</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Define the instructions and operating context for this agent.
+              </p>
+            </div>
+            {isExternalAgent ? (
+              <ExternalAgentNotice>
+                External agents do not support system prompt configuration.
+              </ExternalAgentNotice>
+            ) : null}
+            <Textarea
+              id={`${idPrefix}systemPrompt`}
+              value={systemPrompt}
+              onChange={(event) => setSystemPrompt(event.target.value)}
+              readOnly={isExternalAgent}
+              className="min-h-80 flex-1 resize-none font-mono text-sm"
+            />
+          </TabsContent>
+
+          <TabsContent value="skills" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+            <SkillsPanel
+              dialogPortalContainer={dialogPortalContainer}
+              idPrefix={idPrefix}
+              skillsQuery={skillsQuery}
+              selectedSkillIds={selectedSkillIds}
+              toggleSkill={toggleSkill}
+              disabled={isExternalAgent}
+              notice={
+                isExternalAgent ? (
+                  <ExternalAgentNotice>
+                    External agents do not support skill configuration.
+                  </ExternalAgentNotice>
+                ) : null
               }
             />
-          </SelectTrigger>
-          <SelectContent position="popper" sideOffset={4}>
-            <SelectGroup>
-              <SelectLabel>Available Model Providers</SelectLabel>
-              {modelProvidersQuery.isLoading ? (
-                <SelectItem value="loading" disabled>
-                  Loading...
-                </SelectItem>
-              ) : modelProvidersQuery.data && modelProvidersQuery.data.length > 0 ? (
-                modelProvidersQuery.data.map((mp) => (
-                  <SelectItem key={mp.id} value={mp.id}>
-                    {mp.modelName} ({mp.providerName}-{mp.providerType})
-                  </SelectItem>
-                ))
-              ) : (
-                <SelectItem value="no-providers" disabled>
-                  No model providers available
-                </SelectItem>
-              )}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+          </TabsContent>
+
+          <TabsContent value="tools" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+            <ToolsPanel
+              dialogPortalContainer={dialogPortalContainer}
+              idPrefix={idPrefix}
+              toolsQuery={toolsQuery}
+              selectedTools={selectedTools}
+              toggleTool={toggleTool}
+              disabled={isExternalAgent}
+              notice={
+                isExternalAgent ? (
+                  <ExternalAgentNotice>
+                    External agents do not support tool configuration.
+                  </ExternalAgentNotice>
+                ) : null
+              }
+            />
+          </TabsContent>
+
+          <TabsContent value="mcp-tool-servers" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+            <McpToolServersPanel
+              dialogPortalContainer={dialogPortalContainer}
+              idPrefix={idPrefix}
+              mcpToolServersQuery={mcpToolServersQuery}
+              selectedMcpToolServerIds={selectedMcpToolServerIds}
+              toggleMcpToolServer={toggleMcpToolServer}
+            />
+          </TabsContent>
+
+          <TabsContent value="apps" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+            <AppsPanel
+              dialogPortalContainer={dialogPortalContainer}
+              idPrefix={idPrefix}
+              appOptions={appOptions}
+              selectedAppInstanceIds={selectedAppInstanceIds}
+              appSearchTerm={appSearchTerm}
+              setAppSearchTerm={setAppSearchTerm}
+              filteredAppOptions={filteredAppOptions}
+              toggleAppInstance={toggleAppInstance}
+            />
+          </TabsContent>
+
+          <TabsContent
+            value="environment-variables"
+            className="m-0 min-h-0 flex-1 overflow-y-auto p-6"
+          >
+            <EnvironmentVariablesPanel
+              entries={environmentVariables}
+              setEntries={setEnvironmentVariables}
+              idPrefix={idPrefix}
+              ownerLabel="agent"
+            />
+          </TabsContent>
+        </Tabs>
       </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}extra`}>Extra Settings (JSON)</Label>
-        <Textarea
-          id={`${idPrefix}extra`}
-          value={extra}
-          onChange={(e) => setExtra(e.target.value)}
-          placeholder='{"env": {"VAR_NAME": "value"}}'
-          rows={3}
-          disabled={disabledFields.extra}
-        />
-        <p className="text-xs text-muted-foreground">
-          JSON object for additional data (e.g., environment variables)
-        </p>
-      </div>
-
-      {!hiddenFields.systemPrompt && (
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}systemPrompt`}>System prompt</Label>
-          <Textarea
-            id={`${idPrefix}systemPrompt`}
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            rows={4}
-            disabled={disabledFields.systemPrompt}
-          />
-        </div>
-      )}
-
-      {!hiddenFields.skills && (
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}skills`}>Skills</Label>
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                id={`${idPrefix}skills`}
-                type="button"
-                variant="outline"
-                className="w-full justify-between font-normal"
-                disabled={disabledFields.skills}
-              >
-                <span className="truncate">
-                  {selectedSkillCount > 0
-                    ? `${selectedSkillCount} skill${selectedSkillCount === 1 ? "" : "s"} selected`
-                    : "Select skills..."}
-                </span>
-                <ChevronDown className="size-4 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-72"
-            >
-              <DropdownMenuLabel>Available Skills</DropdownMenuLabel>
-              {skillsQuery.isLoading ? (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading skills...</div>
-              ) : skillsQuery.data && skillsQuery.data.length > 0 ? (
-                skillsQuery.data.map((skill) => (
-                  <DropdownMenuCheckboxItem
-                    key={skill.id}
-                    checked={selectedSkillIds.includes(skill.id)}
-                    className="items-start"
-                    onCheckedChange={() => toggleSkill(skill.id)}
-                    onSelect={(event) => event.preventDefault()}
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{skill.name}</div>
-                      {skill.description ? (
-                        <div className="text-xs text-muted-foreground whitespace-normal break-words">
-                          {skill.description}
-                        </div>
-                      ) : null}
-                    </div>
-                  </DropdownMenuCheckboxItem>
-                ))
-              ) : (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">No skills found</div>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="flex flex-wrap gap-2">
-            {selectedSkills && selectedSkills.length > 0 ? (
-              selectedSkills.map((skill) => (
-                <Badge key={skill.id} variant="secondary">
-                  {skill.name}
-                </Badge>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground">No skills selected</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {!hiddenFields.apps && (
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}appInstances`}>App</Label>
-          <Popover open={appPopoverOpen} onOpenChange={setAppPopoverOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                id={`${idPrefix}appInstances`}
-                type="button"
-                variant="outline"
-                className="w-full justify-between font-normal"
-                disabled={disabledFields.apps || appOptions.length === 0}
-              >
-                <span className="truncate">
-                  {selectedAppInstanceIds.length > 0
-                    ? `${selectedAppInstanceIds.length} app${selectedAppInstanceIds.length === 1 ? "" : "s"} selected`
-                    : "Select apps..."}
-                </span>
-                <ChevronDown className="size-4 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-              <div className="border-b p-2">
-                <Input
-                  value={appSearchTerm}
-                  onChange={(event) => setAppSearchTerm(event.target.value)}
-                  placeholder="Search apps..."
-                />
-              </div>
-              <div className="max-h-72 overflow-y-auto p-1">
-                {filteredAppOptions.length > 0 ? (
-                  filteredAppOptions.map((app) => (
-                    <button
-                      key={app.id}
-                      type="button"
-                      className="flex w-full items-start justify-between rounded-md px-2 py-2 text-left hover:bg-muted"
-                      onClick={() => toggleAppInstance(app.id)}
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{buildAppOptionLabel(app)}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {app.provider} · {getAppAuthorizationState(app)}
-                        </div>
-                      </div>
-                      <input
-                        tabIndex={-1}
-                        type="checkbox"
-                        checked={selectedAppInstanceIds.includes(app.id)}
-                        readOnly
-                      />
-                    </button>
-                  ))
-                ) : (
-                  <div className="px-2 py-3 text-sm text-muted-foreground">No apps found</div>
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
-          <div className="flex flex-wrap gap-2">
-            {selectedApps.length > 0 ? (
-              selectedApps.map((app) => (
-                <Badge key={app.id} variant="secondary">
-                  {buildAppOptionLabel(app)}
-                </Badge>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground">No apps selected</p>
-            )}
-          </div>
-          {appOptions.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              No app connections found. Create one on the integrations page first.
-            </p>
-          ) : null}
-        </div>
-      )}
-
-      {!hiddenFields.tools && (
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}tools`}>Tools</Label>
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                id={`${idPrefix}tools`}
-                type="button"
-                variant="outline"
-                className="w-full justify-between font-normal"
-                disabled={disabledFields.tools}
-              >
-                <span className="truncate">
-                  {selectedToolCount > 0
-                    ? `${selectedToolCount} tool${selectedToolCount === 1 ? "" : "s"} selected`
-                    : "Select tools..."}
-                </span>
-                <ChevronDown className="size-4 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-72"
-            >
-              <DropdownMenuLabel>Available Tools</DropdownMenuLabel>
-              {toolsQuery.isLoading ? (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading tools...</div>
-              ) : groupedTools.length > 0 ? (
-                groupedTools.map(([category, tools]) => (
-                  <SelectGroup key={category}>
-                    <SelectLabel>{category}</SelectLabel>
-                    {tools.map((tool) => (
-                      <DropdownMenuCheckboxItem
-                        key={tool.name}
-                        checked={selectedTools.includes(tool.name)}
-                        className="items-start"
-                        onCheckedChange={() => toggleTool(tool.name)}
-                        onSelect={(event) => event.preventDefault()}
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{tool.name}</div>
-                          {tool.description ? (
-                            <div className="text-xs text-muted-foreground whitespace-normal break-words">
-                              {tool.description}
-                            </div>
-                          ) : null}
-                        </div>
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </SelectGroup>
-                ))
-              ) : (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">No tools found</div>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="flex flex-wrap gap-2">
-            {selectedTools.length > 0 ? (
-              selectedTools.map((toolName) => (
-                <Badge key={toolName} variant="secondary">
-                  {toolName}
-                </Badge>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground">No tools selected</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {!hiddenFields.mcpToolServers && (
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}mcpToolServers`}>MCP Tool Servers</Label>
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                id={`${idPrefix}mcpToolServers`}
-                type="button"
-                variant="outline"
-                className="w-full justify-between font-normal"
-                disabled={disabledFields.mcpToolServers}
-              >
-                <span className="truncate">
-                  {selectedMcpToolServerCount > 0
-                    ? `${selectedMcpToolServerCount} server${selectedMcpToolServerCount === 1 ? "" : "s"} selected`
-                    : "Select MCP tool servers..."}
-                </span>
-                <ChevronDown className="size-4 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-72"
-            >
-              <DropdownMenuLabel>Available MCP Tool Servers</DropdownMenuLabel>
-              {mcpToolServersQuery.isLoading ? (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                  Loading MCP tool servers...
-                </div>
-              ) : mcpToolServersQuery.data && mcpToolServersQuery.data.length > 0 ? (
-                mcpToolServersQuery.data.map((server) => (
-                  <DropdownMenuCheckboxItem
-                    key={server.id}
-                    checked={selectedMcpToolServerIds.includes(server.id)}
-                    onCheckedChange={() => toggleMcpToolServer(server.id)}
-                    onSelect={(event) => event.preventDefault()}
-                  >
-                    {server.name}
-                  </DropdownMenuCheckboxItem>
-                ))
-              ) : (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                  No MCP tool servers found
-                </div>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="flex flex-wrap gap-2">
-            {selectedMcpToolServerIds.length > 0 ? (
-              selectedMcpToolServerIds.map((selectedId) => {
-                const selectedServer = mcpToolServersQuery.data?.find(
-                  (server) => server.id === selectedId,
-                );
-
-                return (
-                  <Badge key={selectedId} variant="secondary">
-                    {selectedServer?.name ?? selectedId}
-                  </Badge>
-                );
-              })
-            ) : (
-              <p className="text-xs text-muted-foreground">No MCP tool servers selected</p>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

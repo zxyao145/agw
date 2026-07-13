@@ -18,6 +18,7 @@ public class AgentDomainServiceTests
             Type = AgentType.System,
             Name = "   ",
             ModelProviderId = Guid.NewGuid(),
+            EnvironmentVariables = null!,
         };
 
         _service.PrepareForCreate(agent, "tester");
@@ -26,6 +27,65 @@ public class AgentDomainServiceTests
         Assert.Equal(agent.Id.ToString(), agent.Name);
         Assert.Equal("tester", agent.CreateBy);
         Assert.Equal(UtcNow, agent.CreateTime);
+        Assert.Empty(agent.EnvironmentVariables);
+    }
+
+    [Fact]
+    public void PrepareForCreate_WithEnvironmentVariables_NormalizesNamesAndPreservesEmptyValues()
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.System,
+            ModelProviderId = Guid.NewGuid(),
+            EnvironmentVariables = new Dictionary<string, string>
+            {
+                ["  AGW_TOKEN  "] = "secret",
+                ["EMPTY_VALUE"] = "",
+            },
+        };
+
+        _service.PrepareForCreate(agent, "tester");
+
+        Assert.Equal("secret", agent.EnvironmentVariables["AGW_TOKEN"]);
+        Assert.Equal("", agent.EnvironmentVariables["EMPTY_VALUE"]);
+    }
+
+    [Fact]
+    public void PrepareForCreate_WithDuplicateEnvironmentVariableNamesAfterTrim_ThrowsAgwException()
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.System,
+            ModelProviderId = Guid.NewGuid(),
+            EnvironmentVariables = new Dictionary<string, string>
+            {
+                ["AGW_TOKEN"] = "first",
+                [" AGW_TOKEN "] = "second",
+            },
+        };
+
+        var exception = Assert.Throws<AgwException>(() => _service.PrepareForCreate(agent, "tester"));
+
+        Assert.Equal(ErrorCodes.InvalidAgentEnvironmentVariableName.Code, exception.Code);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("INVALID=NAME")]
+    [InlineData("INVALID\0NAME")]
+    public void PrepareForCreate_WithInvalidEnvironmentVariableName_ThrowsAgwException(string name)
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.System,
+            ModelProviderId = Guid.NewGuid(),
+            EnvironmentVariables = new Dictionary<string, string> { [name] = "value" },
+        };
+
+        var exception = Assert.Throws<AgwException>(() => _service.PrepareForCreate(agent, "tester"));
+
+        Assert.Equal(ErrorCodes.InvalidAgentEnvironmentVariableName.Code, exception.Code);
     }
 
     [Fact]
@@ -99,6 +159,107 @@ public class AgentDomainServiceTests
         Assert.Equal(updatedModelProviderId, agent.ModelProviderId);
         Assert.Equal("updater", agent.UpdateBy);
         Assert.Equal(UtcNow, agent.UpdateTime);
+    }
+
+    [Fact]
+    public void ApplyUpdate_ExternalAgentWithValidExtra_UpdatesNormalizedExtra()
+    {
+        var agent = new Agent
+        {
+            Id = Guid.NewGuid(),
+            Name = "external-agent",
+            Type = AgentType.External,
+            Extra = "{\"before\":true}",
+        };
+
+        _service.ApplyUpdate(
+            agent,
+            current => current.Extra = "  {\"sandbox\":false}  ",
+            "updater");
+
+        Assert.Equal("{\"sandbox\":false}", agent.Extra);
+    }
+
+    [Fact]
+    public void ApplyUpdate_ExternalAgentWithBlankExtra_ClearsExtra()
+    {
+        var agent = new Agent
+        {
+            Id = Guid.NewGuid(),
+            Name = "external-agent",
+            Type = AgentType.External,
+            Extra = "{\"before\":true}",
+        };
+
+        _service.ApplyUpdate(agent, current => current.Extra = "   ", "updater");
+
+        Assert.Null(agent.Extra);
+    }
+
+    [Theory]
+    [InlineData("not-json")]
+    [InlineData("[]")]
+    [InlineData("\"text\"")]
+    [InlineData("42")]
+    [InlineData("true")]
+    [InlineData("null")]
+    public void ApplyUpdate_ExternalAgentWithInvalidExtra_ThrowsAgwException(string extra)
+    {
+        var agent = new Agent
+        {
+            Id = Guid.NewGuid(),
+            Name = "external-agent",
+            Type = AgentType.External,
+        };
+
+        var exception = Assert.Throws<AgwException>(() =>
+            _service.ApplyUpdate(agent, current => current.Extra = extra, "updater"));
+
+        Assert.Equal(ErrorCodes.InvalidAgentExtraSettings.Code, exception.Code);
+    }
+
+    [Fact]
+    public void ApplyUpdate_SystemAgent_PreservesExtra()
+    {
+        var agent = new Agent
+        {
+            Id = Guid.NewGuid(),
+            Name = "system-agent",
+            Type = AgentType.System,
+            ModelProviderId = Guid.NewGuid(),
+            Extra = "{\"managed\":true}",
+        };
+
+        _service.ApplyUpdate(
+            agent,
+            current => current.Extra = "{\"managed\":false}",
+            "updater");
+
+        Assert.Equal("{\"managed\":true}", agent.Extra);
+    }
+
+    [Fact]
+    public void ApplyUpdate_SystemAgent_UpdatesEnvironmentVariables()
+    {
+        var agent = new Agent
+        {
+            Id = Guid.NewGuid(),
+            Name = "system-agent",
+            Type = AgentType.System,
+            ModelProviderId = Guid.NewGuid(),
+            EnvironmentVariables = new Dictionary<string, string> { ["BEFORE"] = "value" },
+        };
+
+        _service.ApplyUpdate(
+            agent,
+            current => current.EnvironmentVariables = new Dictionary<string, string>
+            {
+                ["AFTER"] = "",
+            },
+            "updater");
+
+        Assert.Single(agent.EnvironmentVariables);
+        Assert.Equal("", agent.EnvironmentVariables["AFTER"]);
     }
 
     [Fact]

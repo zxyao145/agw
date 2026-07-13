@@ -3,6 +3,8 @@ using Agw.Infrastructure.Repositories;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Integrations;
+using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Tasks.Application;
 using Agw.Tasks.Domain.Services;
@@ -177,6 +179,12 @@ public class ProjectTraceCleanupTests
         var projectRepository = new EfRepository<Project>(dbContext);
         return new ProjectAppService(
             projectRepository,
+            new EfRepository<ProjectMcpServerRelation>(dbContext),
+            new EfRepository<McpServer>(dbContext),
+            new EfRepository<ProjectSkillRelation>(dbContext),
+            new EfRepository<Skill>(dbContext),
+            new EfRepository<ProjectAppRelation>(dbContext),
+            new EfRepository<AppInstance>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
             new UnitOfWork(dbContext),
             new ProjectDomainService(TimeProvider.System),

@@ -18,23 +18,25 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesApiResult(typeof(Project[]))]
+    [ProducesApiResult(typeof(ProjectResponse[]))]
     public async Task<IActionResult> ListAsync()
     {
         var projects = await _projectAppService.ListAsync();
-        return AgwApiResult.Ok(projects);
+        return AgwApiResult.Ok(projects.Select(ProjectResponse.FromDomain).ToArray());
     }
 
     [HttpGet("{id:guid}")]
-    [ProducesApiResult(typeof(Project))]
+    [ProducesApiResult(typeof(ProjectResponse))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var project = await _projectAppService.GetAsync(id);
-        return project == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(project);
+        return project == null
+            ? AgwApiResult.NotFound()
+            : AgwApiResult.Ok(ProjectResponse.FromDomain(project));
     }
 
     [HttpPost]
-    [ProducesApiResult(typeof(Project))]
+    [ProducesApiResult(typeof(ProjectResponse))]
     public async Task<IActionResult> CreateAsync([FromBody] ProjectCreateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
@@ -44,34 +46,57 @@ public class ProjectsController : ControllerBase
             Description = request.Description,
             Workspace = request.Workspace,
             Enable = request.Enable,
-            ExtraSetting = request.ExtraSetting
+            ExtraSetting = request.ExtraSetting,
+            Tools = request.Tools,
+            EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>()
         };
 
-        var created = await _projectAppService.CreateAsync(project, user);
+        var created = await _projectAppService.CreateAsync(
+            project,
+            request.McpToolServerIds,
+            request.SkillIds,
+            request.AppInstanceIds,
+            user);
         if (created == null)
         {
             return AgwApiResult.BadRequest("Failed to create project.");
         }
 
-        return AgwApiResult.Ok(created);
+        return AgwApiResult.Ok(ProjectResponse.FromDomain(created));
     }
 
     [HttpPut("{id:guid}")]
-    [ProducesApiResult(typeof(Project))]
+    [ProducesApiResult(typeof(ProjectResponse))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ProjectUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? "system";
 
-        var updated = await _projectAppService.UpdateAsync(id, project =>
-        {
-            project.Name = request.Name;
-            project.Description = request.Description;
-            project.Workspace = request.Workspace;
-            project.Enable = request.Enable;
-            project.ExtraSetting = request.ExtraSetting;
-        }, user);
+        var updated = await _projectAppService.UpdateAsync(
+            id,
+            project =>
+            {
+                project.Name = request.Name;
+                project.Description = request.Description;
+                project.Workspace = request.Workspace;
+                project.Enable = request.Enable;
+                project.ExtraSetting = request.ExtraSetting;
+                if (request.Tools != null)
+                {
+                    project.Tools = request.Tools;
+                }
+                if (request.EnvironmentVariables != null)
+                {
+                    project.EnvironmentVariables = request.EnvironmentVariables;
+                }
+            },
+            request.McpToolServerIds,
+            request.SkillIds,
+            request.AppInstanceIds,
+            user);
 
-        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(updated);
+        return updated == null
+            ? AgwApiResult.NotFound()
+            : AgwApiResult.Ok(ProjectResponse.FromDomain(updated));
     }
 
     [HttpDelete("{id:guid}")]

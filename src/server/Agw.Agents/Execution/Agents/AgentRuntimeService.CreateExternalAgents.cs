@@ -24,6 +24,7 @@ public partial class AgentRuntimeService
     private bool TryCreateExternalAgent(
         CreateAiAgentRequest request,
         Project project,
+        IReadOnlyDictionary<string, string> environmentVariables,
         [NotNullWhen(true)] out AIAgent? aiAgent)
     {
         aiAgent = null;
@@ -38,12 +39,12 @@ public partial class AgentRuntimeService
                 project,
                 request.ProviderSessionId,
                 request.Resume,
-                request.EnvironmentVariables),
+                environmentVariables),
             AgentNames.Codex => CreateCodexAgent(
                 project,
                 request.ProviderSessionId,
                 request.Resume,
-                request.EnvironmentVariables,
+                environmentVariables,
                 request.OnExternalSessionStartedAsync),
             _ => null
         };

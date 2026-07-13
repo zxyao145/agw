@@ -1,4 +1,6 @@
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tasks;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
@@ -7,9 +9,12 @@ namespace Agw.Agents.Execution.Agents;
 
 public partial class AgentRuntimeService
 {
-    private async Task<AIContextProvider?> CreateSkillsProviderAsync(Guid agentId)
+    private async Task<AIContextProvider?> CreateSkillsProviderAsync(Agent agent, Project project)
     {
-        var skills = await _agentAppService.ListSkillsByAgentAsync(agentId);
+        var skillIds = agent.AgentSkillRelations
+            .Select(relation => relation.SkillId)
+            .Concat(project.ProjectSkillRelations.Select(relation => relation.SkillId));
+        var skills = await _agentAppService.ListSkillsAsync(skillIds);
         var skillPaths = skills
             .Select(GetSkillAbsolutePath)
             .Where(Directory.Exists)
@@ -20,7 +25,7 @@ public partial class AgentRuntimeService
         {
             _logger.LogWarning(
                 "Agent {AgentId} has skill relations configured but no extracted skill directories were found.",
-                agentId);
+                agent.Id);
             return null;
         }
 

@@ -893,51 +893,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/traces": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: {
-                    projectId?: string;
-                    contextId?: string;
-                    agentflowId?: string;
-                    fromUtc?: string;
-                    toUtc?: string;
-                    pageIndex?: number;
-                    pageSize?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
-                        "application/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
-                        "text/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/agents": {
         parameters: {
             query?: never;
@@ -1285,6 +1240,51 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/traces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    projectId?: string;
+                    contextId?: string;
+                    agentflowId?: string;
+                    fromUtc?: string;
+                    toUtc?: string;
+                    pageIndex?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
+                        "application/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
+                        "text/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2936,9 +2936,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ApiResultOfProject[]"];
-                        "application/json": components["schemas"]["ApiResultOfProject[]"];
-                        "text/json": components["schemas"]["ApiResultOfProject[]"];
+                        "text/plain": components["schemas"]["ApiResultOfProjectResponse[]"];
+                        "application/json": components["schemas"]["ApiResultOfProjectResponse[]"];
+                        "text/json": components["schemas"]["ApiResultOfProjectResponse[]"];
                     };
                 };
             };
@@ -2965,9 +2965,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ApiResultOfProject"];
-                        "application/json": components["schemas"]["ApiResultOfProject"];
-                        "text/json": components["schemas"]["ApiResultOfProject"];
+                        "text/plain": components["schemas"]["ApiResultOfProjectResponse"];
+                        "application/json": components["schemas"]["ApiResultOfProjectResponse"];
+                        "text/json": components["schemas"]["ApiResultOfProjectResponse"];
                     };
                 };
             };
@@ -3002,9 +3002,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ApiResultOfProject"];
-                        "application/json": components["schemas"]["ApiResultOfProject"];
-                        "text/json": components["schemas"]["ApiResultOfProject"];
+                        "text/plain": components["schemas"]["ApiResultOfProjectResponse"];
+                        "application/json": components["schemas"]["ApiResultOfProjectResponse"];
+                        "text/json": components["schemas"]["ApiResultOfProjectResponse"];
                     };
                 };
             };
@@ -3032,9 +3032,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["ApiResultOfProject"];
-                        "application/json": components["schemas"]["ApiResultOfProject"];
-                        "text/json": components["schemas"]["ApiResultOfProject"];
+                        "text/plain": components["schemas"]["ApiResultOfProjectResponse"];
+                        "application/json": components["schemas"]["ApiResultOfProjectResponse"];
+                        "text/json": components["schemas"]["ApiResultOfProjectResponse"];
                     };
                 };
             };
@@ -3202,14 +3202,17 @@ export interface components {
              * @description Model Provider ID. Required for System agents, optional for External agents.
              */
             modelProviderId?: null | string;
-            tools: null | string;
             type: components["schemas"]["AgentType"];
-            /** @description JSON object for additional data (e.g., environment variables). */
+            /** @description JSON object for additional external agent settings. */
             extra: null | string;
+            tools: null | string;
+            environmentVariables?: {
+                [key: string]: string;
+            };
             modelProvider?: null | components["schemas"]["ModelProviderRelation"];
-            agentAppRelations?: components["schemas"]["AgentAppRelation"][];
-            agentMcpToolServers?: components["schemas"]["AgentMcpServerRelation"][];
             agentSkillRelations?: components["schemas"]["AgentSkillRelation"][];
+            agentMcpToolServers?: components["schemas"]["AgentMcpServerRelation"][];
+            agentAppRelations?: components["schemas"]["AgentAppRelation"][];
             /** Format: date-time */
             createTime: string;
             createBy: null | string;
@@ -3242,6 +3245,9 @@ export interface components {
             mcpToolServerIds?: null | string[];
             skillIds?: null | string[];
             appInstanceIds?: null | string[];
+            environmentVariables?: null | {
+                [key: string]: string;
+            };
         };
         Agentflow: {
             /** Format: uuid */
@@ -3384,6 +3390,9 @@ export interface components {
             tools: null | string;
             type: components["schemas"]["AgentType"];
             extra: null | string;
+            environmentVariables: {
+                [key: string]: string;
+            };
             agentMcpToolServers: components["schemas"]["AgentMcpToolServerRelationResponse"][];
             agentSkillRelations: components["schemas"]["AgentSkillRelationResponse"][];
             agentAppRelations: components["schemas"]["AgentAppRelationResponse"][];
@@ -3420,6 +3429,10 @@ export interface components {
             mcpToolServerIds?: null | string[];
             skillIds?: null | string[];
             appInstanceIds?: null | string[];
+            extra: null | string;
+            environmentVariables?: null | {
+                [key: string]: string;
+            };
         };
         AgwContent: components["schemas"]["AgwContentAgwTextContent"] | components["schemas"]["AgwContentAgwTextReasoningContent"] | components["schemas"]["AgwContentAgwFunctionCallContent"] | components["schemas"]["AgwContentAgwFunctionResultContent"] | components["schemas"]["AgwContentAgwErrorContent"] | components["schemas"]["AgwContentAgwUsageContent"] | components["schemas"]["AgwContentAgwUriContent"] | components["schemas"]["AgwContentAgwDataContent"];
         AgwContentAgwDataContent: {
@@ -3666,20 +3679,6 @@ export interface components {
             title: string;
             detail: null | string;
         };
-        ApiResultOfProject: {
-            data?: null | components["schemas"]["Project"];
-            /** Format: int32 */
-            code: number;
-            title: string;
-            detail: null | string;
-        };
-        "ApiResultOfProject[]": {
-            data?: null | components["schemas"]["Project"][];
-            /** Format: int32 */
-            code: number;
-            title: string;
-            detail: null | string;
-        };
         ApiResultOfProjectContextResponse: {
             data?: null | components["schemas"]["ProjectContextResponse"];
             /** Format: int32 */
@@ -3689,6 +3688,20 @@ export interface components {
         };
         "ApiResultOfProjectContextSummaryResponse[]": {
             data?: null | components["schemas"]["ProjectContextSummaryResponse"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfProjectResponse: {
+            data?: null | components["schemas"]["ProjectResponse"];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        "ApiResultOfProjectResponse[]": {
+            data?: null | components["schemas"]["ProjectResponse"][];
             /** Format: int32 */
             code: number;
             title: string;
@@ -3823,6 +3836,12 @@ export interface components {
             agentCount: number;
             /** Format: int32 */
             agentflowCount: number;
+            /** Format: int64 */
+            usageInputTokenCount: number | string;
+            /** Format: int64 */
+            usageOutputTokenCount: number | string;
+            /** Format: int64 */
+            usageTotalTokenCount: number | string;
         };
         FileItem: {
             name: string;
@@ -4139,21 +4158,11 @@ export interface components {
             detail: null | string;
             instance: null | string;
         };
-        Project: {
+        ProjectAppRelationResponse: {
             /** Format: uuid */
-            id: string;
-            name: string;
-            type: components["schemas"]["ProjectType"];
-            description: null | string;
-            workspace: null | string;
-            enable: boolean;
-            extraSetting: null | string;
-            /** Format: date-time */
-            createTime: string;
-            createBy: null | string;
-            /** Format: date-time */
-            updateTime?: null | string;
-            updateBy: null | string;
+            projectId: string;
+            /** Format: uuid */
+            appInstanceId: string;
         };
         ProjectContextResponse: {
             projectId: string;
@@ -4211,6 +4220,48 @@ export interface components {
             workspace: null | string;
             enable: boolean;
             extraSetting: null | string;
+            tools: null | string;
+            mcpToolServerIds?: null | string[];
+            skillIds?: null | string[];
+            appInstanceIds?: null | string[];
+            environmentVariables?: null | {
+                [key: string]: string;
+            };
+        };
+        ProjectMcpToolServerRelationResponse: {
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            mcpToolServerId: string;
+        };
+        ProjectResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            type: components["schemas"]["ProjectType"];
+            description: null | string;
+            workspace: null | string;
+            enable: boolean;
+            extraSetting: null | string;
+            tools: null | string;
+            environmentVariables: {
+                [key: string]: string;
+            };
+            projectMcpToolServers: components["schemas"]["ProjectMcpToolServerRelationResponse"][];
+            projectSkillRelations: components["schemas"]["ProjectSkillRelationResponse"][];
+            projectAppRelations: components["schemas"]["ProjectAppRelationResponse"][];
+            /** Format: date-time */
+            createTime: string;
+            createBy: null | string;
+            /** Format: date-time */
+            updateTime: null | string;
+            updateBy: null | string;
+        };
+        ProjectSkillRelationResponse: {
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            skillId: string;
         };
         ProjectType: number;
         ProjectUpdateRequest: {
@@ -4219,6 +4270,13 @@ export interface components {
             workspace: null | string;
             enable: boolean;
             extraSetting: null | string;
+            tools: null | string;
+            mcpToolServerIds?: null | string[];
+            skillIds?: null | string[];
+            appInstanceIds?: null | string[];
+            environmentVariables?: null | {
+                [key: string]: string;
+            };
         };
         Provider: {
             /** Format: uuid */

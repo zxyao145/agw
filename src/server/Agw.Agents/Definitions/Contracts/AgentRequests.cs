@@ -12,7 +12,8 @@ public record AgentCreateRequest(
     string? Tools = null,  // JSON array of tool names
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
-    List<Guid>? AppInstanceIds = null);
+    List<Guid>? AppInstanceIds = null,
+    Dictionary<string, string>? EnvironmentVariables = null);
 
 public record AgentUpdateRequest(
     string DisplayName,
@@ -22,7 +23,9 @@ public record AgentUpdateRequest(
     string? Tools = null,  // JSON array of tool names
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
-    List<Guid>? AppInstanceIds = null);
+    List<Guid>? AppInstanceIds = null,
+    string? Extra = null,
+    Dictionary<string, string>? EnvironmentVariables = null);
 
 public sealed record AgentMcpToolServerRelationResponse(
     Guid AgentId,
@@ -58,6 +61,7 @@ public sealed record AgentResponse(
     string? Tools,
     AgentType Type,
     string? Extra,
+    IReadOnlyDictionary<string, string> EnvironmentVariables,
     IReadOnlyList<AgentMcpToolServerRelationResponse> AgentMcpToolServers,
     IReadOnlyList<AgentSkillRelationResponse> AgentSkillRelations,
     IReadOnlyList<AgentAppRelationResponse> AgentAppRelations,
@@ -77,6 +81,7 @@ public sealed record AgentResponse(
             agent.Tools,
             agent.Type,
             agent.Extra,
+            agent.EnvironmentVariables,
             [.. agent.AgentMcpToolServers.Select(AgentMcpToolServerRelationResponse.FromDomain)],
             [.. agent.AgentSkillRelations.Select(AgentSkillRelationResponse.FromDomain)],
             [.. agent.AgentAppRelations.Select(AgentAppRelationResponse.FromDomain)],

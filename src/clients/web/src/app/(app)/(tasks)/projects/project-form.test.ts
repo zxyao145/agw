@@ -60,3 +60,72 @@ test("resolveCreateProjectWorkspace uses the default when workspace is blank", a
 
   assert.equal(resolveCreateProjectWorkspace("Demo Project", "  "), "~/.agw/Demo_Project");
 });
+
+test("Project Extra Settings accepts blank, arrays, and scalars but rejects malformed JSON", async () => {
+  const { getProjectExtraSettingsError, normalizeProjectExtraSettings } =
+    await importProjectFormModule();
+
+  assert.equal(getProjectExtraSettingsError("  "), null);
+  assert.equal(getProjectExtraSettingsError("[1, 2]"), null);
+  assert.equal(getProjectExtraSettingsError('"value"'), null);
+  assert.equal(getProjectExtraSettingsError("42"), null);
+  assert.equal(getProjectExtraSettingsError("{"), "Settings must be valid JSON.");
+  assert.equal(normalizeProjectExtraSettings(" [1, 2] "), "[1, 2]");
+  assert.equal(normalizeProjectExtraSettings("  "), null);
+});
+
+test("serializeProjectCapabilities always sends explicit empty capability values", async () => {
+  const { serializeProjectCapabilities } = await importProjectFormModule();
+
+  assert.deepEqual(
+    serializeProjectCapabilities({
+      selectedTools: [],
+      selectedSkillIds: [],
+      selectedMcpToolServerIds: [],
+      selectedAppInstanceIds: [],
+      environmentVariables: {},
+    }),
+    {
+      tools: "[]",
+      skillIds: [],
+      mcpToolServerIds: [],
+      appInstanceIds: [],
+      environmentVariables: {},
+    },
+  );
+});
+
+test("toProjectCapabilityFormState backfills all five capabilities", async () => {
+  const { toProjectCapabilityFormState } = await importProjectFormModule();
+
+  assert.deepEqual(
+    toProjectCapabilityFormState({
+      tools: '["tool-a"]',
+      projectSkillRelations: [{ projectId: "project", skillId: "skill" }],
+      projectMcpToolServers: [{ projectId: "project", mcpToolServerId: "mcp" }],
+      projectAppRelations: [{ projectId: "project", appInstanceId: "app" }],
+      environmentVariables: { API_TOKEN: "secret" },
+    }),
+    {
+      selectedTools: ["tool-a"],
+      selectedSkillIds: ["skill"],
+      selectedMcpToolServerIds: ["mcp"],
+      selectedAppInstanceIds: ["app"],
+      environmentVariables: { API_TOKEN: "secret" },
+    },
+  );
+});
+
+test("toProjectCapabilityFormState treats malformed tools JSON as an empty selection", async () => {
+  const { toProjectCapabilityFormState } = await importProjectFormModule();
+
+  const state = toProjectCapabilityFormState({
+    tools: "not-json",
+    projectSkillRelations: [],
+    projectMcpToolServers: [],
+    projectAppRelations: [],
+    environmentVariables: {},
+  });
+
+  assert.deepEqual(state.selectedTools, []);
+});
