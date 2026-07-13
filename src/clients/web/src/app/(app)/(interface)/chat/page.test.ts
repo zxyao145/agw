@@ -52,6 +52,14 @@ test("conversation list ignores stale refresh responses", async () => {
   assert.match(conversationListSource, /requestId !== refreshRequestIdRef\.current/);
 });
 
+test("chat contexts display older timestamps in exact local format", async () => {
+  const conversationListSource = await readFile(CONVERSATION_LIST_URL, "utf8");
+
+  assert.match(conversationListSource, /formatLocalDateTimeExact/);
+  assert.match(conversationListSource, /return formatLocalDateTimeExact\(date\);/);
+  assert.doesNotMatch(conversationListSource, /date\.toLocaleDateString/);
+});
+
 test("chat context list filters empty conversation placeholders", async () => {
   const taskClientSource = await readFile(TASK_CLIENT_URL, "utf8");
 

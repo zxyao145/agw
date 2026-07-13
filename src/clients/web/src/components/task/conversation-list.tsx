@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { formatLocalDateTimeExact, parseApiDateTime } from "@/lib/date-time";
 import { cn } from "@/lib/utils";
 
 interface ConversationListProps {
@@ -211,7 +212,9 @@ export function ConversationList({
   };
 
   const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp);
+    const date = parseApiDateTime(timestamp);
+    if (!date) return timestamp;
+
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -221,10 +224,7 @@ export function ConversationList({
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
 
-    return date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
+    return formatLocalDateTimeExact(date);
   };
 
   return (
@@ -280,19 +280,26 @@ export function ConversationList({
                 onClick={() => onContextSelect(context)}
                 className={cn(
                   "group p-3 rounded-md cursor-pointer transition-colors border",
-                  isActive ? "bg-blue-50" : "bg-card hover:bg-accent/50 border-transparent",
+                  isActive
+                    ? "bg-blue-50"
+                    : "bg-card hover:bg-accent/50 border-transparent",
                 )}
               >
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{context.title || "Untitled"}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {formatDate(context.updateTime ?? context.createTime)}
+                    <div className="font-medium text-sm truncate">
+                      {context.title || "Untitled"}
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
+                    <div className="text-xs text-muted-foreground">
                       {context.executionCount}{" "}
-                      {context.executionCount === 1 ? "execution" : "executions"} ·{" "}
-                      {context.messageCount} {context.messageCount === 1 ? "message" : "messages"}
+                      {context.executionCount === 1
+                        ? "execution"
+                        : "executions"}{" "}
+                      · {context.messageCount}{" "}
+                      {context.messageCount === 1 ? "message" : "messages"}
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      {formatDate(context.updateTime ?? context.createTime)}
                     </div>
                   </div>
                   <div className="flex opacity-0 group-hover:opacity-100">

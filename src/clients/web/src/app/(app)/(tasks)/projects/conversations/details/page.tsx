@@ -9,19 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getApiErrorMessage } from "@/api/utils";
-
-function formatDate(value?: string | null): string {
-  if (!value) {
-    return "-";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString();
-}
+import { formatLocalDateTime } from "@/lib/date-time";
 
 function statusLabel(status: number): string {
   switch (status) {
@@ -164,11 +152,11 @@ export default function ConversationDetailsPage() {
               </div>
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">Created</div>
-                <div>{formatDate(conversation.createTime)}</div>
+                <div>{formatLocalDateTime(conversation.createTime)}</div>
               </div>
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">Updated</div>
-                <div>{formatDate(conversation.updateTime)}</div>
+                <div>{formatLocalDateTime(conversation.updateTime)}</div>
               </div>
             </CardContent>
           </Card>

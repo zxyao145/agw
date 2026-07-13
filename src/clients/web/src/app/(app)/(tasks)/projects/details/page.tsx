@@ -10,6 +10,7 @@ import type { ContextSummary } from "@/api/task-client";
 import { getProjectContexts } from "@/api/task-client";
 import { ApiError, apiGet, apiPost } from "@/api/client";
 import { buildChatTargetOptions } from "@/lib/chat-target-options";
+import { formatLocalDateTime } from "@/lib/date-time";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,19 +42,6 @@ type AgentflowDto = {
   name: string;
   enable?: boolean;
 };
-
-function formatDate(value?: string | null): string {
-  if (!value) {
-    return "-";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString();
-}
 
 function getApiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -231,7 +219,7 @@ export default function ProjectDetailsPage() {
             <div className="text-xs text-muted-foreground">
               <span className="font-mono">{project.id}</span>
               <span className="mx-2">·</span>
-              Updated: {formatDate(project.updateTime ?? project.createTime)}
+              Updated: {formatLocalDateTime(project.updateTime ?? project.createTime)}
             </div>
           ) : null}
         </div>
@@ -296,8 +284,8 @@ export default function ProjectDetailsPage() {
                           {conversation.messageCount}
                         </div>
                         <div>
-                          Created: {formatDate(conversation.createTime)} · Updated:{" "}
-                          {formatDate(conversation.updateTime)}
+                          Created: {formatLocalDateTime(conversation.createTime)} · Updated:{" "}
+                          {formatLocalDateTime(conversation.updateTime)}
                         </div>
                       </div>
 

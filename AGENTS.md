@@ -1,35 +1,59 @@
-# AGENTS.md
+# Repository Instructions
 
-This file gives coding agents the minimum repo context needed to work safely in this repository.
+This document gives coding agents the repository context and mandatory constraints needed to work safely in Agw. `AGENTS.md` and `CLAUDE.md` must remain identical copies of this document.
 
 ## Project Overview
 
-Agw is a modular ASP.NET Core backend plus a Next.js frontend for managing agents, agentflows, providers, tools, skills, projects/tasks, jobs, integrations, and external-agent/chat execution. The backend targets `.NET 10.0`, uses EF Core for persistence, and wires modules together from `src/server/Agw.Host/Program.cs`.
+Agw is an AaaS (Agent as a Service) platform and agent gateway. It lets users create agents, integrate external agents such as Claude Code and Codex, run agent sessions, schedule jobs, orchestrate multi-agent workflows, and manage providers, tools, skills, projects, tasks, integrations, and chat execution.
+
+The repository is a modular monolith with an ASP.NET Core and EF Core backend plus Next.js and Expo clients. The backend targets `.NET 10.0`, is built around Microsoft.Agents.AI/MAF, MCP tool servers, A2A endpoints, and external-agent SDK integrations, and is composed from `src/server/Agw.Host/Program.cs`.
 
 ## Repository Map
 
 ### Backend (`src/server/`)
 
 ```text
-Agw.Host/            # ASP.NET Core entry point, OpenAPI, static files, websockets, DI, DB seeding
-Agw.Files/           # File-management APIs, path security, file request validation, error mapping
-Agw.A2A/             # A2A protocol types and route builders
-Agw.Agents/          # Agents, agentflows, runtime execution services
-Agw.Infrastructure/  # EF Core DbContext, repositories, migrations, seeding
-Agw.Integrations/    # OAuth integrations, app definitions/instances, integration tools
-Agw.Jobs/            # Scheduled jobs, execution logs, hosted scheduler
-Agw.Providers/       # Models, providers, model-provider links, auth configs
-Agw.Shared/          # Shared entities, contracts, exceptions, repository abstractions, utilities
+Agw.Host/            # ASP.NET Core entry point, composition root, middleware, OpenAPI, static files, websockets, and DB seeding
+Agw.Infrastructure/  # EF Core DbContext, repositories, migrations, and seeding
+Agw.Shared/          # Shared entities, contracts, exceptions, repository abstractions, results, and utilities
+Agw.A2A/             # A2A protocol types, discovery, communication endpoints, and route builders
+Agw.Agents/          # Agent definitions, agentflows, MCP tools, and runtime execution services
+Agw.Files/           # File and workspace APIs, path security, request validation, and error mapping
+Agw.Integrations/    # OAuth integrations, app definitions and instances, and integration tools
+Agw.Jobs/            # Scheduled jobs, project leases, execution logs, and hosted scheduling
+Agw.Providers/       # LLM models, providers, model-provider links, and auth configuration
+Agw.Setup/           # First-run setup, initialization state, and API-key guard middleware
 Agw.Skills/          # Skill archive validation, storage, and agent-skill relations
-Agw.Tasks/           # Projects, project tasks, task records, and task APIs
-Agw.Tools/           # Tool discovery, metadata, and AI tool factory/registry
+Agw.Tasks/           # Projects, project tasks, task records, contexts, and task APIs
+Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registry
 ```
 
-Notes:
+`Agw.slnx` is the root solution and includes the backend projects and tests. `src/server/server.sln` includes backend projects only. The root solution includes test projects for A2A, Agents, Files, Host, Jobs, Setup, Shared, Skills, Tasks, and Tools.
 
-- `Agw.slnx` includes all backend projects above plus the A2A, Agents, Files, Host, Jobs, Setup, Shared, Skills, Tasks, and Tools test projects.
+### Module Layering
+
+Each backend module follows lightweight Clean Architecture layering:
+
+```text
+Api → Application → Domain ← Infrastructure
+```
+
+- `Api`: controllers, DTOs, routing, and validation.
+- `Application`: use cases, workflows, and service coordination.
+- `Domain`: entities and value objects only.
+- `Infrastructure`: repositories, EF Core access, and external API implementations.
+
+Dependencies must point inward. Domain objects are intentionally anemic and contain only data; put business behavior in Application-layer services such as AppServices, RuntimeServices, or DomainServices. Domain must not depend on other layers.
+
+A typical backend flow is:
+
+```text
+Controller → AppService / RuntimeService → DomainService → IRepository / IUnitOfWork → EF Core
+```
 
 ### Web Client (`src/clients/web/`)
+
+The web client uses Next.js 16 App Router, React 19, Tailwind CSS 4, Radix UI/Shadcn components, React Query, and generated `openapi-fetch` types.
 
 ```text
 src/app/(app)/
@@ -54,43 +78,50 @@ src/lib/                     # Shared frontend utilities
 src/types/                   # Shared frontend types
 ```
 
+`src/clients/web/next.config.ts` proxies `/api/*` and `/openapi/*` to the backend unless `NEXT_OUTPUT_MODE=export`.
+
+### Mobile Client (`src/clients/mobile/`)
+
+The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients/mobile/AGENTS.md`, run mobile npm commands from `shared/`, and do not hand-maintain generated native projects.
+
 ### Other Top-Level Paths
 
 - `docs/` contains project documentation.
-- `src/clients/mobile/` contains the Expo mobile client.
-- `tests/` contains xUnit projects.
+- `tests/` contains xUnit test projects.
 - Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated artifacts.
 
-## Key Runtime Entry Points
+## Key Runtime Components
 
-- `src/server/Agw.Host/Program.cs`: bootstraps logging, OpenTelemetry, DI modules, OpenAPI/Scalar, websockets, static files, and DB seeding.
+### Runtime Entry Points and Services
+
+- `src/server/Agw.Host/Program.cs`: bootstraps logging, OpenTelemetry, dependency injection, OpenAPI/Scalar, websockets, static files, module registration, and database seeding.
 - `src/server/Agw.Agents/Execution/README.md`: documents the SignalR command boundary, reusable runtimes, turn lifecycle, message flow, and command extension model.
-- `src/server/Agw.Agents/Execution/Agents/AgentRuntimeService.cs`: builds runtime agents from persisted agent, provider, skill, and tool configuration.
-- `src/server/Agw.Agents/Execution/Agentflows/AgentflowRuntimeService.cs`: executes multi-agent workflows for the supported orchestration patterns.
-- `src/server/Agw.Jobs/HostedService/JobHostedService.cs`: in-memory scheduler backed by persistent job state and execution logs.
-- `src/server/Agw.Integrations/Controllers/OauthController.cs`: OAuth authorization start/callback endpoints for integration connections.
-- `src/server/Agw.Integrations/Tools/GitHub/GitHubTools.cs`: integration-backed GitHub tool implementations exposed to runtime agents.
-- `src/server/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and manages extracted skill content under `wwwroot/skills/`.
-- `src/server/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations and exposes them as runtime AI tools.
+- `src/server/Agw.Agents/Execution/Agents/AgentRuntimeService.cs`: builds `AIAgent` instances from persisted agents, hydrates provider configuration, selects enabled auth configuration, attaches registered and MCP tools, and supports OpenAI, Anthropic, Claude Code, and Codex-backed execution through Microsoft.Agents.AI integrations.
+- `src/server/Agw.Agents/Execution/Agentflows/AgentflowRuntimeService.cs`: executes Concurrent, Sequential, GroupChat, and Handoff workflows. Magentic scaffolding exists, but runtime execution currently returns `MagenticNotSupported`.
+- `src/server/Agw.Jobs/HostedService/JobHostedService.cs`: prefetches persistent jobs into an in-memory priority queue, serializes execution per project, and coordinates execution through `IProjectExecutionLock`.
+- `src/server/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations, caches metadata, and creates `AITool` instances through `AgwToolFactory`.
+- `src/server/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and stores extracted skills under `wwwroot/skills/{skillName}/`.
 - `src/server/Agw.Tasks/Application/TaskAppService.cs`: resolves logical tasks from project contexts and task records for execution and history queries.
-- `src/server/Agw.Shared/Exceptions/ErrorCodes.cs`: central catalog for backend `AgwException` error codes and HTTP status mapping.
+- `src/server/Agw.Integrations/Controllers/OauthController.cs`: handles OAuth authorization start and callback endpoints for integration connections.
+- `src/server/Agw.Integrations/Tools/GitHub/GitHubTools.cs`: provides integration-backed GitHub tools to runtime agents.
+- `src/server/Agw.Shared/Exceptions/ErrorCodes.cs`: is the central catalog for backend `AgwException` error codes and HTTP status mapping.
 
-## Important Domain Concepts
+### Important Domain Concepts
 
 - `Agent`: persisted AI agent configuration with prompt, runtime type, model-provider linkage, tool bindings, and optional skill assignments.
-- `Agentflow`: multi-agent workflow graph with nodes, edges, and orchestration pattern.
+- `Agentflow`: multi-agent workflow graph with nodes, edges, and an orchestration pattern.
 - `McpToolServer`: MCP server configuration for stdio, HTTP, or SSE transport.
-- `LlmModel`, `Provider`, `ModelProvider`, `ProviderAuthConfig`: provider/model catalog and authentication setup.
-- `Skill`: uploaded skill archive with validated `SKILL.md` metadata plus agent-skill relations.
-- `Project`, `ProjectContext`, `TaskRecord`, `TaskProjection`: workspace configuration, conversation grouping, persisted execution records, and the logical task view reconstructed from those records.
+- `LlmModel`, `Provider`, `ModelProvider`, `ProviderAuthConfig`: provider and model catalog plus authentication configuration.
+- `Skill`: uploaded skill archive with validated `SKILL.md` metadata and agent-skill relations.
+- `Project`, `ProjectContext`, `TaskRecord`, `TaskProjection`: workspace configuration, conversation grouping, persisted execution records, and logical task views reconstructed from those records.
 - `Job`, `JobLog`: scheduled background execution and per-run logging.
-- `AppDefinition`, `AppInstance`, `OAuthAuthorizationToken`: integration catalog, authorized app connections, and OAuth authorization state/token persistence.
+- `AppDefinition`, `AppInstance`, `OAuthAuthorizationToken`: integration catalog, authorized app connections, and OAuth authorization state and token persistence.
 
-## Build, Run, And Test
+## Build, Run, and Test
 
 ### Backend
 
-Run from the repo root:
+Run backend commands from the repository root:
 
 ```bash
 dotnet restore Agw.slnx
@@ -98,13 +129,27 @@ dotnet build Agw.slnx
 dotnet run --project src/server/Agw.Host
 dotnet watch --project src/server/Agw.Host
 dotnet test Agw.slnx
-dotnet format
+dotnet format Agw.slnx
 ```
 
-Notes:
+The development backend listens on `http://localhost:5015` by default through `src/server/Agw.Host/Properties/launchSettings.json`.
 
-- The development host runs on `http://localhost:5015` by default via `src/server/Agw.Host/Properties/launchSettings.json`.
-- Do not add or apply EF Core migrations automatically. When needed, use:
+Run a specific test project or filtered test when needed:
+
+```bash
+dotnet test tests/Agw.Agents.Tests
+dotnet test tests/Agw.Tasks.Tests
+dotnet test tests/Agw.Skills.Tests
+dotnet test tests/Agw.A2A.Tests
+dotnet test tests/Agw.Files.Tests
+dotnet test tests/Agw.Setup.Tests
+dotnet test tests/Agw.Shared.Tests
+dotnet test tests/Agw.Tools.Tests
+dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj
+dotnet test <project-or-solution> --filter "FullyQualifiedName~MethodName"
+```
+
+Do not add or apply EF Core migrations automatically. When the user explicitly requests a migration, use:
 
 ```bash
 dotnet ef migrations add <MigrationName> \
@@ -118,7 +163,7 @@ dotnet ef database update \
 
 ### Frontend
 
-Run from `src/clients/web`:
+Run from `src/clients/web/`:
 
 ```bash
 pnpm install
@@ -132,37 +177,32 @@ pnpm format:check
 pnpm gen:openapi
 ```
 
-Notes:
+The Next.js development server listens on `http://localhost:3000`. Linting and formatting use `oxlint` and `oxfmt`, not ESLint or Prettier.
 
-- The Next.js dev server runs on `http://localhost:3000` by default.
-- Linting and formatting use `oxlint` and `oxfmt`, not ESLint/Prettier.
-- `src/clients/web/next.config.ts` rewrites `/api/*` and `/openapi/*` to `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015` unless static export mode is enabled.
-- Regenerate `src/clients/web/src/api/openapi.d.ts` after backend contract changes.
+The frontend proxy target is resolved in this order: `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015`.
 
-### Tests
+Regenerate `src/clients/web/src/api/openapi.d.ts` after backend contract changes.
+
+### Git Hooks
+
+After the first clone, configure repository hooks:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+### Test Conventions
 
 - Backend tests use xUnit.
-- Run `dotnet test Agw.slnx` for the normal repo-wide backend test pass.
-- Prefer test namespaces that mirror production namespaces and method names like `Method_Condition_ExpectedResult`.
+- Run `dotnet test Agw.slnx` for the normal repository-wide backend test pass.
+- Prefer namespaces that mirror production namespaces.
+- Prefer method names such as `Method_Condition_ExpectedResult`.
 
-## Rules
+## Local Setup and Configuration
 
-Read [`docs/rules.md`](docs/rules.md) to obtain mandatory constraint rules for all coding, and strictly adhere to each item
+On the first backend run, open `http://localhost:5015/setup` to choose the database provider, connection string, and administrator password. Setup seeds the database and writes `server-state.json` below the Agw data directory.
 
-## Commit Conventions
-
-Follow Conventional Commits:
-
-- `feat:` new features
-- `fix:` bug fixes
-- `refactor:` code restructuring
-- `chore:` maintenance tasks
-- `docs:` documentation
-- `test:` tests
-  
-   
-
-## Configuration
+Remote web access uses the administrator session cookie. Desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API tokens. The legacy `X-API-Key` setting is not supported.
 
 Primary backend settings live in `src/server/Agw.Host/appsettings.json`:
 
@@ -184,50 +224,105 @@ Primary backend settings live in `src/server/Agw.Host/appsettings.json`:
 }
 ```
 
-Guidance:
+Configuration guidance:
 
-- Supported database providers are `sqlite` and `postgres`.
-- `DistributedLock:Provider` supports `inmemory` and `postgres`. A null or missing value follows the database provider; an empty PostgreSQL lock connection string reuses `Database:ConnectionString`.
-- Keep secrets out of `appsettings*.json` and frontend env files; prefer environment-variable overrides.
-- Register new backend services in the relevant module `DependencyInjection.cs` and wire the module into `src/server/Agw.Host/Program.cs`.
+- `Database:Provider` supports `sqlite` and `postgres`.
+- `Database:ConnectionString` defaults to `Data Source=agw.db`.
+- `DistributedLock:Provider` supports `inmemory` and `postgres`; null or missing follows `Database:Provider`.
+- When `DistributedLock:ConnectionString` is empty, a PostgreSQL lock reuses `Database:ConnectionString`.
+- `OpenTelemetry:OtlpEndpoint` defaults to `http://localhost:4317`.
+- `SystemInitialization` controls first-run initialization and API-token state.
+- Keep secrets out of `appsettings*.json` and frontend environment files; prefer environment-variable overrides.
+- All backend projects target `.NET 10.0` and use nullable reference types, implicit usings, central package management, and code-style enforcement during builds.
 
-## Frontend Integration Notes
+## Mandatory Repository Rules
+
+Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
+
+### Backend API Responses and Exceptions
+
+- All non-WebSocket JSON API endpoints in `Agw.Agents`, `Agw.Providers`, `Agw.Tasks`, `Agw.Jobs`, `Agw.Integrations`, `Agw.Skills`, and `Agw.Tools` must return Bens.Results envelopes through `Agw.Shared.Results.AgwApiResult`, `ApiResult` helpers, or the configured boundary mapping.
+- Return helpers such as `AgwApiResult.Ok()`, `AgwApiResult.Ok<T>(data)`, and `AgwApiResult.BadRequest(...)`; let `AgwApiExceptionMiddleware` map `AgwException` automatically.
+- Do not return raw `Ok(...)`, `BadRequest(...)`, `NotFound(...)`, `NoContent()`, or other bare MVC responses from those controllers.
+- WebSocket handlers, OAuth redirect callbacks, A2A protocol endpoints, and static file endpoints may keep protocol-specific response formats.
+- Do not use path parameters in API routes unless specifically justified; pass identifiers and filters through query parameters or request bodies.
+- Expected backend application failures must throw `Agw.Shared.Exceptions.AgwException` with an `ErrorCodes` entry.
+- Reuse existing error codes before adding new ones, and never renumber existing codes.
+- New `ErrorCode.Code` values contain seven digits: the first three match the HTTP status code and the final four increment within that status group, for example `400_0001`, `404_0003`, or `500_0001`.
+- Keep catalog messages stable and reusable. Use `new AgwException(ErrorCodes.SomeCode)` when the catalog message is sufficient; pass an override message when runtime context such as an ID, path, provider, or validation value is required.
+- Do not introduce new explicit `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, `HttpRequestException`, or protocol-specific exceptions for expected backend application failures.
+- Preserve boundary-specific behavior by translating `AgwException` at the boundary. For example, A2A internals throw `AgwException`, while `AgwA2AJsonRpcProcessor` maps it to A2A JSON-RPC errors.
+
+### HTTP Clients
+
+- Do not instantiate `HttpClient` directly in backend code.
+- Use `IHttpClientFactory`, typically through constructor injection or `IocUtil.GetSingletonRequiredService<IHttpClientFactory>()` where that repository pattern already applies.
+- Create short-lived clients with `httpClientFactory.CreateClient()`.
+- Do not hold a directly constructed `HttpClient` as a singleton field.
+
+### Service Registration and Boundaries
+
+- Register new backend services in the relevant module `DependencyInjection.cs` or extension method and ensure `Agw.Host/Program.cs` composes the module.
+- `Agw.Integrations` treats `IntegrationConstants.AppList` as the single source of truth for `AppDefinition`; do not add `DbSet<AppDefinition>` or migrations for it.
+- Persist integration configuration in `AppInstance` and `OAuthAuthorizationToken`.
+
+### A2A
+
+- `Agw.A2A` includes `src/server/Agw.A2A/Extensions/A2ARoutesBuilderExtensions.cs`.
+- `Agw.Host/Program.cs` registers A2A through `.AddA2A(builder.Configuration)` and maps it through `app.MapAgwA2A(a2AServerOptions.Prefix)`.
+- A2A routes require authentication at the host boundary.
+
+## Frontend Integration
 
 - Prefer the typed helpers in `src/clients/web/src/api/client.ts` for REST calls.
-- `src/clients/web/src/api/client.ts` unwraps Bens.Results response envelopes before data reaches pages; update that central helper when the backend result wrapper contract changes.
-- Use `src/clients/web/src/api/task-client.ts` for project task/context history helpers.
+- `src/clients/web/src/api/client.ts` unwraps Bens.Results response envelopes before data reaches pages; update this central helper when the backend envelope contract changes.
+- Use `src/clients/web/src/api/task-client.ts` for project task, context, and history helpers.
 - Use `src/clients/web/src/api/execution-hub.ts` for SignalR execution flows.
 - Use `src/clients/web/src/api/files.ts` for backend file-management endpoints used by the UI.
 - Keep route-specific UI inside the matching `src/app/(app)/...` segment and shared UI in `src/components/`.
 
-## A2A Status
-
-- The `Agw.A2A` module is present in the codebase, including `src/server/Agw.A2A/Extensions/A2ARoutesBuilderExtensions.cs`.
-- `src/server/Agw.Host/Program.cs` currently registers A2A with `.AddA2A(...)` and maps it with `app.MapAgwA2A(...)`.
-- A2A routes require authentication at the host boundary.
-
 ## Coding Conventions
 
-- Use 4-space indentation and normal C# naming: `PascalCase` for types/members and `camelCase` for locals/parameters.
-- Use the `I` prefix for interfaces.
-- Keep request/response DTOs in `Contracts/` folders inside the owning module when adding new API contracts.
-- Controllers should end with `Controller`.
-- Do not use path parameters in API routes unless specifically justified; pass identifiers and filters via query parameters or request body instead.
-- Prefer async methods for I/O and constructor injection for dependencies.
-- Do not use `DateTime` in backend code; use `DateTimeOffset` instead.
+### Backend
+
+- Use 4-space indentation.
+- Use `PascalCase` for types and members, `camelCase` for locals and parameters, and the `I` prefix for interfaces.
+- Prefer async methods for I/O and explicit constructor injection for dependencies.
+- Do not use C# primary constructors. Declare explicit constructors and backing fields or properties.
+- Keep request and response DTOs in `Contracts/` folders inside the owning module.
+- Controller class names must end with `Controller`.
+
+### Date and Time
+
+- Store backend date and time values in one consistent time zone. Prefer UTC; the server's local time zone is also allowed, but a deployment must choose one and use it consistently.
+- Do not use `DateTime` in backend code; use `DateTimeOffset`.
 - Use `TimeProvider` whenever it is applicable.
-- Do not use C# primary constructors. Declare explicit constructors and backing fields/properties; dependency-injected services must use explicit constructor injection.
-- For intentional backend errors, throw `Agw.Shared.Exceptions.AgwException` with an `ErrorCodes` entry. Do not add new `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, or protocol-specific exceptions in `src/server`.
-- Add reusable errors to `src/server/Agw.Shared/Exceptions/ErrorCodes.cs`. `ErrorCode.Code` is 7 digits: first 3 digits match the HTTP status code, and the last 4 digits increment within that status group, for example `400_0001` or `404_0003`. Reuse existing codes before adding new ones and do not renumber existing codes.
-- Use `new AgwException(ErrorCodes.SomeCode)` when the catalog message is sufficient. Use `new AgwException(ErrorCodes.SomeCode, $"...")` when the message needs runtime context such as an id, file path, provider name, or validation value.
-- Preserve boundary-specific behavior by translating `AgwException` at the boundary instead of throwing protocol exceptions internally. For example, A2A implementation code throws `AgwException`, while `AgwA2AJsonRpcProcessor` maps it to A2A JSON-RPC errors.
-- Non-WebSocket JSON API endpoints in `Agw.Tools`, `Agw.Tasks`, `Agw.Skills`, `Agw.Providers`, `Agw.Jobs`, `Agw.Integrations`, and `Agw.Agents` must return Bens.Results envelopes through `Agw.Shared.Results.AgwApiResult` or the configured Bens.Results boundary mapping. Do not return raw `Ok(...)`, `BadRequest(...)`, `NotFound(...)`, or `NoContent()` from those controllers. Protocol endpoints such as WebSocket handlers and OAuth redirect callbacks keep their protocol-specific responses.
-- Frontend code should use TypeScript, React function components, and kebab-case filenames.
-- Do not edit generated artifacts unless the task is explicitly about generated output.
+- Serialize API date and time values as RFC 3339 strings with a time-zone designator or offset (`Z` or `+/-HH:mm`). Do not return offset-free local date-time strings.
+- Do not localize date and time values on the server. Clients are responsible for converting and formatting them according to the user's local time zone and locale.
+
+### Frontend
+
+- Use TypeScript and React function components.
+- Follow App Router conventions.
+- Use kebab-case filenames.
+
+### Generated Artifacts
+
+Do not edit generated artifacts unless the task explicitly concerns generated output.
 
 ## Workflow Expectations
 
-- Follow Conventional Commits such as `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, and `test:`.
-- Keep pull requests focused and include summary, linked issue, testing notes, and migration impact when applicable.
-- Include screenshots for UI changes and sample payloads or endpoint notes for API changes.
 - Preserve unrelated local changes in a dirty worktree; do not revert or rewrite them unless explicitly asked.
+- Keep pull requests focused and include a summary, linked issue, testing notes, and migration impact when applicable.
+- Include screenshots for UI changes and sample payloads or endpoint notes for API changes.
+
+## Commit Conventions
+
+Follow Conventional Commits:
+
+- `feat:` new features
+- `fix:` bug fixes
+- `refactor:` code restructuring
+- `chore:` maintenance tasks
+- `docs:` documentation
+- `test:` tests

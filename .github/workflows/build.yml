@@ -1,0 +1,22 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+
+  workflow_dispatch:
+    
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    environment: prod
+    
+    steps:
+    - uses: actions/checkout@v7
+      
+    - name: build and test
+      run: ｜
+        dotnet build ./Agw.slnx -c Release
+        dotnet test ./Agw.slnx -c Release --no-build
+
