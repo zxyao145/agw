@@ -20,6 +20,11 @@ public class AgentDomainService
     {
         ArgumentNullException.ThrowIfNull(agent);
 
+        if (agent.Type == AgentType.External)
+        {
+            agent.EnableSummary = false;
+        }
+
         EnsureModelProviderIsPresentWhenRequired(agent);
         NormalizeEnvironmentVariables(agent);
         agent.Id = agent.Id == Guid.Empty ? Guid.NewGuid() : agent.Id;
@@ -42,6 +47,7 @@ public class AgentDomainService
             var originalSystemPrompt = existing.SystemPrompt;
             var originalTools = existing.Tools;
             var originalType = existing.Type;
+            var originalEnableSummary = existing.EnableSummary;
 
             updateAction(existing);
 
@@ -51,6 +57,7 @@ public class AgentDomainService
             existing.Tools = originalTools;
             existing.Type = originalType;
             existing.Extra = NormalizeExtraSettings(existing.Extra);
+            existing.EnableSummary = originalEnableSummary;
         }
         else
         {

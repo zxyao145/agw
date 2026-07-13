@@ -354,7 +354,8 @@ public class AgentAppServiceCapabilityTests
             new UsageTrackingMiddleware(
                 providerSessionState: null!,
                 usageRecorder: null!,
-                NullLogger<UsageTrackingMiddleware>.Instance));
+                NullLogger<UsageTrackingMiddleware>.Instance),
+            summaryService: null!);
     }
 
     private static ToolRegistryService CreateToolRegistry(params string[] toolNames)

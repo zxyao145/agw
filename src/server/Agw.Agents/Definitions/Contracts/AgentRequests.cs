@@ -13,7 +13,8 @@ public record AgentCreateRequest(
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
     List<Guid>? AppInstanceIds = null,
-    Dictionary<string, string>? EnvironmentVariables = null);
+    Dictionary<string, string>? EnvironmentVariables = null,
+    bool EnableSummary = false);
 
 public record AgentUpdateRequest(
     string DisplayName,
@@ -25,7 +26,8 @@ public record AgentUpdateRequest(
     List<Guid>? SkillIds = null,
     List<Guid>? AppInstanceIds = null,
     string? Extra = null,
-    Dictionary<string, string>? EnvironmentVariables = null);
+    Dictionary<string, string>? EnvironmentVariables = null,
+    bool EnableSummary = false);
 
 public sealed record AgentMcpToolServerRelationResponse(
     Guid AgentId,
@@ -58,6 +60,7 @@ public sealed record AgentResponse(
     string Description,
     string SystemPrompt,
     Guid? ModelProviderId,
+    bool EnableSummary,
     string? Tools,
     AgentType Type,
     string? Extra,
@@ -78,6 +81,7 @@ public sealed record AgentResponse(
             agent.Description,
             agent.SystemPrompt,
             agent.ModelProviderId,
+            agent.EnableSummary,
             agent.Tools,
             agent.Type,
             agent.Extra,

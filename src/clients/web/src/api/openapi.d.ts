@@ -3202,6 +3202,7 @@ export interface components {
              * @description Model Provider ID. Required for System agents, optional for External agents.
              */
             modelProviderId?: null | string;
+            enableSummary: boolean;
             type: components["schemas"]["AgentType"];
             /** @description JSON object for additional external agent settings. */
             extra: null | string;
@@ -3248,6 +3249,8 @@ export interface components {
             environmentVariables?: null | {
                 [key: string]: string;
             };
+            /** @default false */
+            enableSummary: boolean;
         };
         Agentflow: {
             /** Format: uuid */
@@ -3256,6 +3259,8 @@ export interface components {
             description: null | string;
             systemPrompt: string;
             enable: boolean;
+            /** Format: uuid */
+            summaryModelProviderId?: null | string;
             nodes?: components["schemas"]["AgentflowNode"][];
             edges?: components["schemas"]["AgentflowEdge"][];
             /** Format: date-time */
@@ -3271,6 +3276,8 @@ export interface components {
             enable: boolean;
             nodes: components["schemas"]["AgentflowNodeRequest"][];
             edges: components["schemas"]["AgentflowEdgeRequest"][];
+            /** Format: uuid */
+            summaryModelProviderId?: null | string;
         };
         AgentflowEdge: {
             /** Format: uuid */
@@ -3363,6 +3370,8 @@ export interface components {
             enable: boolean;
             nodes: components["schemas"]["AgentflowNodeRequest"][];
             edges: components["schemas"]["AgentflowEdgeRequest"][];
+            /** Format: uuid */
+            summaryModelProviderId?: null | string;
         };
         AgentMcpServerRelation: {
             /** Format: uuid */
@@ -3387,6 +3396,7 @@ export interface components {
             systemPrompt: string;
             /** Format: uuid */
             modelProviderId: null | string;
+            enableSummary: boolean;
             tools: null | string;
             type: components["schemas"]["AgentType"];
             extra: null | string;
@@ -3433,6 +3443,8 @@ export interface components {
             environmentVariables?: null | {
                 [key: string]: string;
             };
+            /** @default false */
+            enableSummary: boolean;
         };
         AgwContent: components["schemas"]["AgwContentAgwTextContent"] | components["schemas"]["AgwContentAgwTextReasoningContent"] | components["schemas"]["AgwContentAgwFunctionCallContent"] | components["schemas"]["AgwContentAgwFunctionResultContent"] | components["schemas"]["AgwContentAgwErrorContent"] | components["schemas"]["AgwContentAgwUsageContent"] | components["schemas"]["AgwContentAgwUriContent"] | components["schemas"]["AgwContentAgwDataContent"];
         AgwContentAgwDataContent: {

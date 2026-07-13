@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Summaries;
 using Agw.Domain.Services;
 using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tasks;
@@ -26,6 +27,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly AgentSessionStateStore _sessionStateStore;
     private readonly ObservabilityMiddleware _observabilityMiddleware;
     private readonly UsageTrackingMiddleware _usageTrackingMiddleware;
+    private readonly IAgentTurnSummaryService _summaryService;
     private readonly Func<
         McpServer,
         IReadOnlyDictionary<string, string>,
@@ -44,7 +46,8 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         AgentSessionStateStore sessionStateStore,
         ILogger<AgentRuntimeService> logger,
         ObservabilityMiddleware observabilityMiddleware,
-        UsageTrackingMiddleware usageTrackingMiddleware)
+        UsageTrackingMiddleware usageTrackingMiddleware,
+        IAgentTurnSummaryService summaryService)
         : this(
             agentAppService,
             projectAppService,
@@ -58,6 +61,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
             logger,
             observabilityMiddleware,
             usageTrackingMiddleware,
+            summaryService,
             ListMcpToolsAsync)
     {
     }
@@ -75,6 +79,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         ILogger<AgentRuntimeService> logger,
         ObservabilityMiddleware observabilityMiddleware,
         UsageTrackingMiddleware usageTrackingMiddleware,
+        IAgentTurnSummaryService summaryService,
         Func<
             McpServer,
             IReadOnlyDictionary<string, string>,
@@ -93,6 +98,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _logger = logger;
         _observabilityMiddleware = observabilityMiddleware;
         _usageTrackingMiddleware = usageTrackingMiddleware;
+        _summaryService = summaryService;
         _mcpToolLister = mcpToolLister;
     }
 }

@@ -311,6 +311,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 providerSessionState: null!,
                 usageRecorder: null!,
                 NullLogger<UsageTrackingMiddleware>.Instance),
+            summaryService: null!,
             mcpToolLister);
     }
 

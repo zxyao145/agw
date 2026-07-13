@@ -25,11 +25,13 @@ public record AgentflowCreateRequest(
     string? Description,
     bool Enable,
     IReadOnlyList<AgentflowNodeRequest> Nodes,
-    IReadOnlyList<AgentflowEdgeRequest> Edges);
+    IReadOnlyList<AgentflowEdgeRequest> Edges,
+    Guid? SummaryModelProviderId = null);
 
 public record AgentflowUpdateRequest(
     string Name,
     string? Description,
     bool Enable,
     IReadOnlyList<AgentflowNodeRequest> Nodes,
-    IReadOnlyList<AgentflowEdgeRequest> Edges);
+    IReadOnlyList<AgentflowEdgeRequest> Edges,
+    Guid? SummaryModelProviderId = null);

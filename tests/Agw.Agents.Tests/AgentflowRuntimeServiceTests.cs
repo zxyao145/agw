@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Summaries;
 using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
@@ -62,7 +63,8 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
             new AgentflowDomainService(TimeProvider.System),
             agentRuntimeService,
-            new StubProviderSessionState());
+            new StubProviderSessionState(),
+            new RecordingSummaryService());
         var projectId = Guid.NewGuid();
         var task = new TaskProjection
         {
@@ -151,7 +153,8 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
             new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
-            new StubProviderSessionState());
+            new StubProviderSessionState(),
+            new RecordingSummaryService());
         var projectId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
 
@@ -181,6 +184,81 @@ public class AgentflowRuntimeServiceTests
         Assert.True(trace.DurationMilliseconds >= 10);
 
         await collector.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ExecuteStreamingAsync_SummaryEnabledOutput_EmitsOneResult()
+    {
+        var agentId = Guid.NewGuid();
+        var modelProviderId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
+        var agentflow = new Agentflow
+        {
+            Id = Guid.NewGuid(),
+            Name = "summary-flow",
+            Enable = true,
+            SummaryModelProviderId = modelProviderId,
+        };
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                RelateId = agentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+                Instructions = "Keep it short.",
+                ConfigJson = """{"enableSummary":true}""",
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "agent-output",
+                SourceNodeId = "agent",
+                TargetNodeId = "output",
+            },
+        };
+        var summaryService = new RecordingSummaryService();
+        var service = new AgentflowRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new AgentflowDomainService(TimeProvider.System),
+            new StubAgentRuntimeService(agentId),
+            new StubProviderSessionState(),
+            summaryService);
+        var messages = new List<AgwMessage>();
+
+        await foreach (var message in service.ExecuteStreamingAsync(
+            agentflow.Id,
+            "workflow input",
+            TestContext.Current.CancellationToken,
+            projectId,
+            "context-1",
+            Guid.NewGuid()))
+        {
+            messages.Add(message);
+        }
+
+        Assert.Single(messages, message =>
+            message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
+            string.Equals(type?.ToString(), "result", StringComparison.Ordinal));
+        var call = Assert.Single(summaryService.Calls);
+        Assert.Equal(modelProviderId, call.ModelProviderId);
+        Assert.Equal(projectId, call.ProjectId);
+        Assert.Equal("context-1", call.ContextId);
+        Assert.Equal("Keep it short.", call.CustomInstructions);
+        Assert.Equal(["done"], call.Messages.Select(message => message.Text));
     }
 
     [Fact]
@@ -433,4 +511,33 @@ public class AgentflowRuntimeServiceTests
             return false;
         }
     }
+
+    private sealed class RecordingSummaryService : IAgentTurnSummaryService
+    {
+        public List<SummaryCall> Calls { get; } = [];
+
+        public Task<ChatMessage> CreateResultAsync(
+            Guid modelProviderId,
+            IReadOnlyList<ChatMessage> sourceMessages,
+            Guid projectId,
+            string contextId,
+            string? customInstructions,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(new SummaryCall(
+                modelProviderId,
+                sourceMessages,
+                projectId,
+                contextId,
+                customInstructions));
+            return Task.FromResult(AgentTurnSummaryService.CreateResultMessage("summary"));
+        }
+    }
+
+    private sealed record SummaryCall(
+        Guid ModelProviderId,
+        IReadOnlyList<ChatMessage> Messages,
+        Guid ProjectId,
+        string ContextId,
+        string? CustomInstructions);
 }

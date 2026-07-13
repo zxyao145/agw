@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Extensions;
@@ -63,7 +64,10 @@ public partial class AgentRuntimeService
             agentSession,
             projectId: projectId,
             contextId: resolvedContextId,
-            sessionKey: sessionKey);
+            sessionKey: sessionKey,
+            enableSummary: agent.Type == AgentType.System && agent.EnableSummary,
+            summaryModelProviderId: agent.ModelProviderId,
+            summaryService: _summaryService);
     }
 
     private async Task<Guid?> GetCodexProviderSessionIdAsync(

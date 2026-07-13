@@ -102,6 +102,20 @@ public class AgentDomainServiceTests
     }
 
     [Fact]
+    public void PrepareForCreate_ExternalAgentWithSummaryEnabled_DisablesSummary()
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            EnableSummary = true,
+        };
+
+        _service.PrepareForCreate(agent, "tester");
+
+        Assert.False(agent.EnableSummary);
+    }
+
+    [Fact]
     public void ApplyUpdate_SystemAgentWithoutModelProviderAfterUpdate_ThrowsAgwException()
     {
         var agent = new Agent
@@ -129,6 +143,7 @@ public class AgentDomainServiceTests
             Name = "original-name",
             SystemPrompt = "original-prompt",
             Tools = "[\"tool-a\"]",
+            EnableSummary = false,
             Type = AgentType.External,
             DisplayName = "Before",
             CreateBy = "creator",
@@ -144,6 +159,7 @@ public class AgentDomainServiceTests
                 current.Name = "updated-name";
                 current.SystemPrompt = "updated-prompt";
                 current.Tools = "[\"tool-b\"]";
+                current.EnableSummary = true;
                 current.Type = AgentType.System;
                 current.DisplayName = "After";
                 current.ModelProviderId = updatedModelProviderId;
@@ -154,6 +170,7 @@ public class AgentDomainServiceTests
         Assert.Equal("original-name", agent.Name);
         Assert.Equal("original-prompt", agent.SystemPrompt);
         Assert.Equal("[\"tool-a\"]", agent.Tools);
+        Assert.False(agent.EnableSummary);
         Assert.Equal(AgentType.External, agent.Type);
         Assert.Equal("After", agent.DisplayName);
         Assert.Equal(updatedModelProviderId, agent.ModelProviderId);

@@ -5,6 +5,7 @@ using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Agents.Execution.Agentflows.Observability;
+using Agw.Agents.Execution.Summaries;
 
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -28,6 +29,12 @@ internal sealed record AgentflowAgentSessionScope(
             ProjectId);
     }
 }
+
+internal sealed record AgentflowSummaryContext(
+    IAgentTurnSummaryService SummaryService,
+    Guid ModelProviderId,
+    Guid ProjectId,
+    string ContextId);
 
 public sealed class AgentflowWorkflowCompiler
 {
@@ -60,7 +67,8 @@ public sealed class AgentflowWorkflowCompiler
             edges,
             nodeIdToAgent,
             sessionScope: null,
-            executionTraceContext: null);
+            executionTraceContext: null,
+            summaryContext: null);
     }
 
     internal Workflow? Compile(
@@ -69,7 +77,8 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyList<AgentflowEdge> edges,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
         AgentflowAgentSessionScope? sessionScope,
-        AgentflowExecutionTraceContext? executionTraceContext = null)
+        AgentflowExecutionTraceContext? executionTraceContext = null,
+        AgentflowSummaryContext? summaryContext = null)
     {
         if (orderedNodes.Count == 0)
         {
@@ -97,7 +106,8 @@ public sealed class AgentflowWorkflowCompiler
                 orderedNodes,
                 nodeIdToAgent,
                 sessionScope,
-                executionTraceContext);
+                executionTraceContext,
+                summaryContext);
             if (binding != null)
             {
                 bindings[node.NodeId] = binding;
@@ -152,7 +162,8 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyList<AgentflowNode> orderedNodes,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
         AgentflowAgentSessionScope? sessionScope,
-        AgentflowExecutionTraceContext? executionTraceContext)
+        AgentflowExecutionTraceContext? executionTraceContext,
+        AgentflowSummaryContext? summaryContext)
     {
         return node.Kind switch
         {
@@ -208,9 +219,42 @@ public sealed class AgentflowWorkflowCompiler
                         .BindAsExecutor(AgentHostOptions)
                     : null,
             AgentflowNodeKind.Output =>
-                BindChatTransform(node.NodeId, messages => messages),
+                CreateOutputBinding(node, summaryContext),
             _ => null,
         };
+    }
+
+    private static ExecutorBinding CreateOutputBinding(
+        AgentflowNode node,
+        AgentflowSummaryContext? summaryContext)
+    {
+        if (summaryContext == null ||
+            !AgentflowDomainService.TryReadOutputSummaryEnabled(node.ConfigJson, out var summaryEnabled) ||
+            !summaryEnabled)
+        {
+            return BindChatTransform(node.NodeId, messages => messages);
+        }
+
+        Func<List<ChatMessage>, CancellationToken, ValueTask<List<ChatMessage>>> summarizeAsync =
+            async (messages, cancellationToken) =>
+            {
+                var result = await summaryContext.SummaryService.CreateResultAsync(
+                    summaryContext.ModelProviderId,
+                    messages,
+                    summaryContext.ProjectId,
+                    summaryContext.ContextId,
+                    node.Instructions,
+                    cancellationToken)
+                    .ConfigureAwait(false);
+                var output = messages.ToList();
+                output.Add(result);
+                return output;
+            };
+
+        return summarizeAsync.BindAsExecutor<List<ChatMessage>, List<ChatMessage>>(
+            node.NodeId,
+            ChatExecutorOptions,
+            threadsafe: true);
     }
 
     private static ExecutorBinding? CreateConcurrentBlockBinding(

@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Agents.Execution.Turns;
 using Agw.Agents.Definitions.Agents;
@@ -28,6 +29,8 @@ public static class DependencyInjection
         services.AddScoped<McpToolServerAppService>();
         services.AddScoped<AgentSessionStateStore>();
         services.AddScoped<IAgentRuntimeService, AgentRuntimeService>();
+        services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();
+        services.AddScoped<IAgentTurnSummaryService, AgentTurnSummaryService>();
         services.AddScoped<IRuntimeFactory, RuntimeFactory>();
         services.AddScoped<IExecutionCommandHandler, SettingCommandHandler>();
         services.AddScoped<IExecutionCommandHandler, ExecCommandHandler>();

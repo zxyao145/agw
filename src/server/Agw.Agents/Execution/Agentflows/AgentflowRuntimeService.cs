@@ -4,6 +4,7 @@ using System.Text.Json;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.Execution.Agentflows.Observability;
+using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
@@ -47,6 +48,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private readonly AgentflowDomainService _agentflowDomainService;
     private readonly IAgentRuntimeService _agentRuntimeService;
     private readonly IProviderSessionState _providerSessionState;
+    private readonly IAgentTurnSummaryService _summaryService;
     private readonly AgentflowWorkflowCompiler _workflowCompiler = new();
 
     public AgentflowRuntimeService(
@@ -56,7 +58,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IRepository<AgentflowEdge> agentflowEdgeRepository,
         AgentflowDomainService agentflowDomainService,
         IAgentRuntimeService agentRuntimeService,
-        IProviderSessionState providerSessionState)
+        IProviderSessionState providerSessionState,
+        IAgentTurnSummaryService summaryService)
     {
         _logger = logger;
         _agentflowRepository = agentflowRepository;
@@ -65,6 +68,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         _agentflowDomainService = agentflowDomainService;
         _agentRuntimeService = agentRuntimeService;
         _providerSessionState = providerSessionState;
+        _summaryService = summaryService;
     }
 
     public async Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default)
@@ -109,7 +113,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             resolvedProjectId,
             resolvedContextId,
             resolvedTaskId);
-        var sessionScope = CreateSessionScope(resolvedProjectId, contextId, taskId);
+        var sessionScope = CreateSessionScope(resolvedProjectId, resolvedContextId, resolvedTaskId);
         var workflow = await CreateAiWorkflow(
             agentflow,
             cancellationToken,
@@ -130,11 +134,11 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
         var messages = CreateWorkflowInputMessages(input);
 
-        var run = await InProcessExecution.RunStreamingAsync(workflow, messages);
+        var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: cancellationToken);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         var executorsWithUpdates = new HashSet<string>(StringComparer.Ordinal);
 
-        await foreach (var evt in run.WatchStreamAsync().ConfigureAwait(false))
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
         {
             _logger.LogInformation("WorkflowEvent Type {Type}", evt.GetType().Name);
             switch (evt)
@@ -329,16 +333,11 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         return await CreateAiWorkflow(agentflow, cancellationToken);
     }
 
-    private AgentflowAgentSessionScope? CreateSessionScope(
+    private AgentflowAgentSessionScope CreateSessionScope(
         Guid projectId,
-        string? contextId,
+        string contextId,
         Guid? taskId)
     {
-        if (string.IsNullOrWhiteSpace(contextId))
-        {
-            return null;
-        }
-
         return new AgentflowAgentSessionScope(
             _providerSessionState,
             projectId,
@@ -391,7 +390,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             projectId,
             resolvedContextId,
             taskId.Value);
-        var sessionScope = CreateSessionScope(projectId, contextId, taskId);
+        var sessionScope = CreateSessionScope(projectId, resolvedContextId, taskId);
         var workflow = await CreateAiWorkflow(
             agentflow,
             cancellationToken,
@@ -402,11 +401,11 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             return null;
         }
 
-        var run = await InProcessExecution.RunStreamingAsync(workflow, messages);
+        var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: cancellationToken);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var outputs = new List<AgwMessage>();
-        await foreach (var evt in run.WatchStreamAsync().ConfigureAwait(false))
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
         {
             if (evt is AgentResponseUpdateEvent updateEvt)
             {
@@ -517,13 +516,21 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             return null;
         }
 
+        var summaryContext = sessionScope != null && agentflow.SummaryModelProviderId.HasValue
+            ? new AgentflowSummaryContext(
+                _summaryService,
+                agentflow.SummaryModelProviderId.Value,
+                sessionScope.ProjectId,
+                sessionScope.ContextId)
+            : null;
         return _workflowCompiler.Compile(
             agentflow,
             orderedNodes,
             agentflowEdges,
             nodeIdToAgent,
             sessionScope,
-            executionTraceContext);
+            executionTraceContext,
+            summaryContext);
     }
 
     private static HumanGateApprovalRequest CreateHumanGateApprovalRequest(

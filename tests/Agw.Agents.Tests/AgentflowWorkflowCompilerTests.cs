@@ -4,6 +4,8 @@ using System.Diagnostics;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Summaries;
+using Agw.Shared;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
@@ -646,6 +648,122 @@ public class AgentflowWorkflowCompilerTests
             call.ContextId == "context-1");
     }
 
+    [Fact]
+    public async Task Compile_SummaryEnabledOutput_AppendsResultFromIncomingMessages()
+    {
+        var projectId = Guid.NewGuid();
+        var modelProviderId = Guid.NewGuid();
+        var summaryService = new RecordingSummaryService();
+        var agentflow = new Agentflow
+        {
+            Id = Guid.NewGuid(),
+            Name = "summary-flow",
+            SummaryModelProviderId = modelProviderId,
+        };
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Agent" },
+            new AgentflowNode
+            {
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+                Instructions = "Mention the verification result.",
+                ConfigJson = """{"enableSummary":true}""",
+            },
+        };
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            [Edge("agent-output", "agent", "output")],
+            new Dictionary<string, AIAgent>
+            {
+                ["agent"] = CreateAgent("agent", "Agent", new StubChatClient()),
+            },
+            sessionScope: null,
+            executionTraceContext: null,
+            new AgentflowSummaryContext(
+                summaryService,
+                modelProviderId,
+                projectId,
+                "context-1"));
+
+        Assert.NotNull(workflow);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "workflow input") },
+            cancellationToken: cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        List<ChatMessage>? output = null;
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            if (evt is WorkflowOutputEvent { Data: List<ChatMessage> messages })
+            {
+                output = messages;
+            }
+        }
+
+        Assert.NotNull(output);
+        Assert.Equal(2, output.Count);
+        Assert.Equal("ok", output[0].Text);
+        Assert.Equal("summary", output[1].Text);
+        Assert.Equal(ChatRole.System, output[1].Role);
+        Assert.Equal(Constants.DefaultAgentAuthor, output[1].AuthorName);
+        Assert.Equal("result", output[1].AdditionalProperties!["type"]);
+
+        var call = Assert.Single(summaryService.Calls);
+        Assert.Equal(modelProviderId, call.ModelProviderId);
+        Assert.Equal(projectId, call.ProjectId);
+        Assert.Equal("context-1", call.ContextId);
+        Assert.Equal("Mention the verification result.", call.CustomInstructions);
+        Assert.Equal(["ok"], call.Messages.Select(message => message.Text));
+    }
+
+    [Fact]
+    public async Task Compile_SummaryDisabledOutput_DoesNotCallSummaryService()
+    {
+        var summaryService = new RecordingSummaryService();
+        var modelProviderId = Guid.NewGuid();
+        var workflow = _compiler.Compile(
+            new Agentflow
+            {
+                Id = Guid.NewGuid(),
+                Name = "plain-flow",
+                SummaryModelProviderId = modelProviderId,
+            },
+            [
+                new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent },
+                new AgentflowNode
+                {
+                    NodeId = "output",
+                    Kind = AgentflowNodeKind.Output,
+                    ConfigJson = """{"enableSummary":false}""",
+                },
+            ],
+            [Edge("agent-output", "agent", "output")],
+            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent") },
+            sessionScope: null,
+            executionTraceContext: null,
+            new AgentflowSummaryContext(
+                summaryService,
+                modelProviderId,
+                Guid.NewGuid(),
+                "context-1"));
+
+        Assert.NotNull(workflow);
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "input") },
+            cancellationToken: TestContext.Current.CancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        Assert.Empty(summaryService.Calls);
+    }
+
     private static AgentflowEdge Edge(
         string id,
         string source,
@@ -847,4 +965,33 @@ public class AgentflowWorkflowCompilerTests
             }
         }
     }
+
+    private sealed class RecordingSummaryService : IAgentTurnSummaryService
+    {
+        public List<SummaryCall> Calls { get; } = [];
+
+        public Task<ChatMessage> CreateResultAsync(
+            Guid modelProviderId,
+            IReadOnlyList<ChatMessage> sourceMessages,
+            Guid projectId,
+            string contextId,
+            string? customInstructions,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(new SummaryCall(
+                modelProviderId,
+                sourceMessages,
+                projectId,
+                contextId,
+                customInstructions));
+            return Task.FromResult(AgentTurnSummaryService.CreateResultMessage("summary"));
+        }
+    }
+
+    private sealed record SummaryCall(
+        Guid ModelProviderId,
+        IReadOnlyList<ChatMessage> Messages,
+        Guid ProjectId,
+        string ContextId,
+        string? CustomInstructions);
 }

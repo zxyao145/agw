@@ -1,5 +1,6 @@
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Repositories;
 
 namespace Agw.Agents.Definitions.Agents;
@@ -10,6 +11,7 @@ public class AgentflowAppService
     private readonly IRepository<AgentflowNode> _agentflowNodeRepository;
     private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
     private readonly IRepository<Agent> _agentRepository;
+    private readonly IRepository<ModelProviderRelation> _modelProviderRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly AgentflowDomainService _agentflowDomainService;
     private readonly TimeProvider _timeProvider;
@@ -19,6 +21,7 @@ public class AgentflowAppService
         IRepository<AgentflowNode> agentflowNodeRepository,
         IRepository<AgentflowEdge> agentflowEdgeRepository,
         IRepository<Agent> agentRepository,
+        IRepository<ModelProviderRelation> modelProviderRepository,
         IUnitOfWork unitOfWork,
         AgentflowDomainService agentflowDomainService,
         TimeProvider timeProvider)
@@ -27,6 +30,7 @@ public class AgentflowAppService
         _agentflowNodeRepository = agentflowNodeRepository;
         _agentflowEdgeRepository = agentflowEdgeRepository;
         _agentRepository = agentRepository;
+        _modelProviderRepository = modelProviderRepository;
         _unitOfWork = unitOfWork;
         _agentflowDomainService = agentflowDomainService;
         _timeProvider = timeProvider;
@@ -54,11 +58,14 @@ public class AgentflowAppService
         }
 
         var existingAgentIds = await ListExistingAgentIdsAsync(nodes);
+        var existingModelProviderIds = await ListExistingModelProviderIdsAsync(agentflow.SummaryModelProviderId);
         var (normalizedNodes, normalizedEdges) = _agentflowDomainService.ValidateAndNormalizeGraph(
             nodes,
             edges,
             agentflow.Id,
-            existingAgentIds);
+            existingAgentIds,
+            agentflow.SummaryModelProviderId,
+            existingModelProviderIds);
         if (normalizedNodes == null || normalizedEdges == null)
         {
             return null;
@@ -104,11 +111,14 @@ public class AgentflowAppService
         if (nodes != null && edges != null)
         {
             var existingAgentIds = await ListExistingAgentIdsAsync(nodes);
+            var existingModelProviderIds = await ListExistingModelProviderIdsAsync(existing.SummaryModelProviderId);
             var (normalizedNodes, normalizedEdges) = _agentflowDomainService.ValidateAndNormalizeGraph(
                 nodes,
                 edges,
                 existing.Id,
-                existingAgentIds);
+                existingAgentIds,
+                existing.SummaryModelProviderId,
+                existingModelProviderIds);
             if (normalizedNodes == null || normalizedEdges == null)
             {
                 return null;
@@ -192,5 +202,16 @@ public class AgentflowAppService
 
         var existingAgents = await _agentRepository.ListAsync(x => agentIds.Contains(x.Id));
         return existingAgents.Select(x => x.Id).ToList();
+    }
+
+    private async Task<IReadOnlyCollection<Guid>> ListExistingModelProviderIdsAsync(Guid? modelProviderId)
+    {
+        if (!modelProviderId.HasValue)
+        {
+            return Array.Empty<Guid>();
+        }
+
+        var existing = await _modelProviderRepository.GetByIdAsync(modelProviderId.Value);
+        return existing == null ? Array.Empty<Guid>() : [existing.Id];
     }
 }

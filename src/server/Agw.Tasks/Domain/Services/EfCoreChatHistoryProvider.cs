@@ -24,7 +24,7 @@ internal partial class ChatHistoryProviderStateJsonContext : JsonSerializerConte
 /// <summary>
 /// Persists agent chat history in EF Core while keeping the conversation key in session state.
 /// </summary>
-public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSessionState
+public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSessionState, IConversationHistoryWriter
 {
     private static readonly JsonSerializerOptions DefaultJsonSerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -145,6 +145,11 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 continue;
             }
 
+            if (IsResult(message))
+            {
+                continue;
+            }
+
             messages.Add(message);
         }
 
@@ -172,14 +177,35 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         }
 
         var state = _state.GetOrInitializeState(context.Session);
+        await AppendAsync(
+            state.ProjectId,
+            state.ContextId,
+            newMessages,
+            cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task AppendAsync(
+        Guid projectId,
+        string contextId,
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(contextId);
+        ArgumentNullException.ThrowIfNull(messages);
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
         var now = _timeProvider.GetUtcNow();
-        var firstUserText = ExtractFirstText(newMessages.FirstOrDefault(message => message.Role == ChatRole.User));
+        var firstUserText = ExtractFirstText(messages.FirstOrDefault(message => message.Role == ChatRole.User));
         var projectContext = await dbContext.Set<ProjectContext>()
             .SingleOrDefaultAsync(
-                x => x.ProjectId == state.ProjectId && x.ContextId == state.ContextId,
+                x => x.ProjectId == projectId && x.ContextId == contextId,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -188,8 +214,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             projectContext = new ProjectContext
             {
                 Id = Guid.NewGuid(),
-                ProjectId = state.ProjectId,
-                ContextId = state.ContextId,
+                ProjectId = projectId,
+                ContextId = contextId,
                 Title = TaskTitleFactory.Create(firstUserText),
                 CreateBy = DefaultUser,
                 CreateTime = now,
@@ -220,7 +246,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .MaxAsync(cancellationToken)
             .ConfigureAwait(false) ?? -1;
 
-        foreach (ChatMessage message in newMessages)
+        foreach (ChatMessage message in messages)
         {
             // user input
             nextSequence++;
@@ -242,6 +268,10 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    private static bool IsResult(ChatMessage message) =>
+        message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
+        string.Equals(type?.ToString(), "result", StringComparison.Ordinal);
 
     private static Task<Project?> ResolveProjectAsync(DbContext dbContext, string projectId, CancellationToken cancellationToken)
     {

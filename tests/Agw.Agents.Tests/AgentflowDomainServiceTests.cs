@@ -436,6 +436,91 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
+    public void ValidateAndNormalizeGraph_SummaryEnabledWithoutModelProvider_ReturnsNullCollections()
+    {
+        var nodes = CreateSummaryOutputNodes(outputCount: 1);
+        var edges = CreateSummaryOutputEdges(outputCount: 1);
+
+        var result = _service.ValidateAndNormalizeGraph(
+            nodes,
+            edges,
+            Guid.NewGuid(),
+            [],
+            summaryModelProviderId: null);
+
+        Assert.Null(result.Nodes);
+        Assert.Null(result.Edges);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_SummaryEnabledWithMultipleOutputs_ReturnsNullCollections()
+    {
+        var nodes = CreateSummaryOutputNodes(outputCount: 2);
+        var edges = CreateSummaryOutputEdges(outputCount: 2);
+
+        var result = _service.ValidateAndNormalizeGraph(
+            nodes,
+            edges,
+            Guid.NewGuid(),
+            [],
+            summaryModelProviderId: Guid.NewGuid());
+
+        Assert.Null(result.Nodes);
+        Assert.Null(result.Edges);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_SummaryEnabledWithSingleOutputAndModelProvider_ReturnsGraph()
+    {
+        var summaryModelProviderId = Guid.NewGuid();
+        var nodes = CreateSummaryOutputNodes(outputCount: 1);
+        var edges = CreateSummaryOutputEdges(outputCount: 1);
+
+        var result = _service.ValidateAndNormalizeGraph(
+            nodes,
+            edges,
+            Guid.NewGuid(),
+            [],
+            summaryModelProviderId,
+            existingModelProviderIds: [summaryModelProviderId]);
+
+        Assert.NotNull(result.Nodes);
+        Assert.NotNull(result.Edges);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_SummaryEnabledWithMissingModelProvider_ReturnsNullCollections()
+    {
+        var result = _service.ValidateAndNormalizeGraph(
+            CreateSummaryOutputNodes(outputCount: 1),
+            CreateSummaryOutputEdges(outputCount: 1),
+            Guid.NewGuid(),
+            [],
+            summaryModelProviderId: Guid.NewGuid(),
+            existingModelProviderIds: []);
+
+        Assert.Null(result.Nodes);
+        Assert.Null(result.Edges);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_OutputWithInvalidSummaryConfig_ReturnsNullCollections()
+    {
+        var nodes = CreateSummaryOutputNodes(outputCount: 1).ToArray();
+        nodes[1].ConfigJson = """{"enableSummary":"yes"}""";
+
+        var result = _service.ValidateAndNormalizeGraph(
+            nodes,
+            CreateSummaryOutputEdges(outputCount: 1),
+            Guid.NewGuid(),
+            [],
+            summaryModelProviderId: Guid.NewGuid());
+
+        Assert.Null(result.Nodes);
+        Assert.Null(result.Edges);
+    }
+
+    [Fact]
     public void OrderNodesByEdges_AcyclicDag_ReturnsTopologicallySortedNodes()
     {
         var first = new AgentflowNode { NodeId = "node-1" };
@@ -451,4 +536,30 @@ public class AgentflowDomainServiceTests
 
         Assert.Equal(["node-1", "node-2", "node-3"], result.Select(node => node.NodeId));
     }
+
+    private static IReadOnlyList<AgentflowNode> CreateSummaryOutputNodes(int outputCount)
+    {
+        var nodes = new List<AgentflowNode>
+        {
+            new() { NodeId = "input", Kind = AgentflowNodeKind.Input }
+        };
+        nodes.AddRange(Enumerable.Range(1, outputCount).Select(index => new AgentflowNode
+        {
+            NodeId = $"output-{index}",
+            Kind = AgentflowNodeKind.Output,
+            ConfigJson = index == 1 ? """{"enableSummary":true}""" : null,
+        }));
+        return nodes;
+    }
+
+    private static IReadOnlyList<AgentflowEdge> CreateSummaryOutputEdges(int outputCount) =>
+        Enumerable.Range(1, outputCount)
+            .Select(index => new AgentflowEdge
+            {
+                EdgeId = $"edge-{index}",
+                SourceNodeId = "input",
+                TargetNodeId = $"output-{index}",
+                Kind = AgentflowEdgeKind.FanOut,
+            })
+            .ToList();
 }

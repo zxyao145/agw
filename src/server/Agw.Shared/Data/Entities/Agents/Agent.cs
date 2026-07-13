@@ -23,6 +23,8 @@ public class Agent : BaseEntity, IAggregateRoot
     /// </summary>
     public Guid? ModelProviderId { get; set; }
 
+    public bool EnableSummary { get; set; }
+
     public AgentType Type { get; set; } = AgentType.System;
 
     /// <summary>

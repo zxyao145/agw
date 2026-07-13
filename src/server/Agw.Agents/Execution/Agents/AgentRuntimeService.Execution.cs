@@ -5,6 +5,7 @@ using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
@@ -118,7 +119,16 @@ public partial class AgentRuntimeService
                 resolvedContextId,
                 ProjectDefaults.GetDefaultProjectIdentifier(projectId));
 
-            var messages = await CollectStreamingMessagesAsync(aiAgent, chatMsg, session).ConfigureAwait(false);
+            var messages = await CollectStreamingMessagesAsync(aiAgent, chatMsg, session, cancellationToken)
+                .ConfigureAwait(false);
+            messages = await AppendDefinitionSummaryAsync(
+                agent,
+                chatMsg,
+                messages,
+                projectId.Value,
+                resolvedContextId,
+                cancellationToken)
+                .ConfigureAwait(false);
 
             return new AgentExecutionResult(taskIdValue, resolvedContextId, messages);
         }
@@ -135,12 +145,70 @@ public partial class AgentRuntimeService
         }
     }
 
+    internal async Task<List<AgwMessage>> AppendDefinitionSummaryAsync(
+        Agent agent,
+        IReadOnlyList<ChatMessage> inputMessages,
+        IReadOnlyList<AgwMessage> outputMessages,
+        Guid projectId,
+        string contextId,
+        CancellationToken cancellationToken)
+    {
+        if (agent.Type != AgentType.System ||
+            !agent.EnableSummary ||
+            !agent.ModelProviderId.HasValue)
+        {
+            return outputMessages.ToList();
+        }
+
+        var sourceMessages = new List<ChatMessage>();
+        var userText = string.Concat(
+                inputMessages
+                    .Where(message => message.Role == Microsoft.Extensions.AI.ChatRole.User)
+                    .SelectMany(message => message.Contents)
+                    .OfType<Microsoft.Extensions.AI.TextContent>()
+                    .Select(content => content.Text))
+            .Trim();
+        if (!string.IsNullOrWhiteSpace(userText))
+        {
+            sourceMessages.Add(new ChatMessage(Microsoft.Extensions.AI.ChatRole.User, userText));
+        }
+
+        var assistantText = string.Concat(
+                outputMessages
+                    .SelectMany(message => message.Contents)
+                    .OfType<AgwTextContent>()
+                    .Select(content => content.Content))
+            .Trim();
+        if (!string.IsNullOrWhiteSpace(assistantText))
+        {
+            sourceMessages.Add(new ChatMessage(Microsoft.Extensions.AI.ChatRole.Assistant, assistantText));
+        }
+
+        var result = await _summaryService.CreateResultAsync(
+            agent.ModelProviderId.Value,
+            sourceMessages,
+            projectId,
+            contextId,
+            customInstructions: null,
+            cancellationToken)
+            .ConfigureAwait(false);
+        var messages = outputMessages.ToList();
+        var resultMessage = result.ToAiMessage();
+        if (resultMessage != null)
+        {
+            messages.Add(resultMessage);
+        }
+
+        return messages;
+    }
+
     private static async Task<List<AgwMessage>> CollectStreamingMessagesAsync(
         AIAgent aiAgent,
         IReadOnlyList<ChatMessage> chatMessages,
-        AgentSession session)
+        AgentSession session,
+        CancellationToken cancellationToken)
     {
-        var stream = aiAgent.RunStreamingAsync(chatMessages, session);
+        var stream = aiAgent.RunStreamingAsync(chatMessages, session, cancellationToken: cancellationToken);
         var messages = new List<AgwMessage>();
         await foreach (var update in stream)
         {

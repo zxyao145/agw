@@ -4,6 +4,7 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
+using Agw.Agents.Execution.Summaries;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -20,6 +21,9 @@ public sealed class AgentRuntime : RuntimeBase
     public CancellationToken CancellationToken => _cancellationTokenSource.Token;
 
     private readonly ILogger _logger;
+    private readonly bool _enableSummary;
+    private readonly Guid? _summaryModelProviderId;
+    private readonly IAgentTurnSummaryService? _summaryService;
     public readonly string SessionKey;
     public readonly Guid _projectId;
     public readonly string _contextId;
@@ -30,7 +34,10 @@ public sealed class AgentRuntime : RuntimeBase
         AgentSession thread,
         Guid projectId,
         string contextId,
-        string? sessionKey)
+        string? sessionKey,
+        bool enableSummary = false,
+        Guid? summaryModelProviderId = null,
+        IAgentTurnSummaryService? summaryService = null)
     {
         Agent = agent ?? throw new AgwException(ErrorCodes.InvalidParam, "agent cannot be null.");
         Session = thread ?? throw new AgwException(ErrorCodes.InvalidParam, "thread cannot be null.");
@@ -38,6 +45,9 @@ public sealed class AgentRuntime : RuntimeBase
         _contextId = contextId;
         SessionKey = string.IsNullOrWhiteSpace(sessionKey) ? _contextId : sessionKey;
         _logger = logger ?? throw new AgwException(ErrorCodes.InvalidParam, "logger cannot be null.");
+        _enableSummary = enableSummary;
+        _summaryModelProviderId = summaryModelProviderId;
+        _summaryService = summaryService;
     }
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
@@ -70,10 +80,17 @@ public sealed class AgentRuntime : RuntimeBase
             AuthorName = string.IsNullOrWhiteSpace(input.Author) ? Constants.DefaultInputAuthor : input.Author,
         };
         var response = await Agent.RunAsync(message, Session, cancellationToken: cancellationToken);
-        return response.Messages
+        var messages = response.Messages
             .Select(item => item.ToAiMessage())
             .OfType<AgwMessage>()
-            .ToArray();
+            .ToList();
+        var result = await CreateSummaryAsync(input, response.Messages.ToList(), cancellationToken).ConfigureAwait(false);
+        if (result != null)
+        {
+            messages.Add(result);
+        }
+
+        return messages;
     }
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
@@ -89,13 +106,28 @@ public sealed class AgentRuntime : RuntimeBase
             AuthorName = string.IsNullOrWhiteSpace(author) ? Constants.DefaultInputAuthor : author
         };
 
+        var assistantText = new List<string>();
         await foreach (var update in Agent.RunStreamingAsync(message, Session, cancellationToken: cancellationToken))
         {
+            assistantText.AddRange(
+                update.Contents
+                    .OfType<TextContent>()
+                    .Select(content => content.Text));
             var aiMessage = update.ToAiMessage();
             if (aiMessage != null)
             {
                 yield return aiMessage;
             }
+        }
+
+        var result = await CreateSummaryAsync(
+            input: new AgwUserInput { MessageId = message.MessageId!, Author = message.AuthorName, Contents = contents },
+            assistantMessages: [new ChatMessage(ChatRole.Assistant, string.Concat(assistantText))],
+            cancellationToken)
+            .ConfigureAwait(false);
+        if (result != null)
+        {
+            yield return result;
         }
 
         _logger.LogDebug("Saved thread state for context: {ContextId}", _contextId);
@@ -181,4 +213,48 @@ public sealed class AgentRuntime : RuntimeBase
         additionalProperties == null
             ? null
             : new AdditionalPropertiesDictionary(additionalProperties);
+
+    private async Task<AgwMessage?> CreateSummaryAsync(
+        AgwUserInput input,
+        IReadOnlyList<ChatMessage> assistantMessages,
+        CancellationToken cancellationToken)
+    {
+        if (!_enableSummary || !_summaryModelProviderId.HasValue || _summaryService == null)
+        {
+            return null;
+        }
+
+        var userText = string.Concat(
+                input.Contents
+                    .OfType<AgwTextContent>()
+                    .Select(content => content.Content))
+            .Trim();
+        var sourceMessages = new List<ChatMessage>();
+        if (!string.IsNullOrWhiteSpace(userText))
+        {
+            sourceMessages.Add(new ChatMessage(ChatRole.User, userText));
+        }
+
+        var assistantText = string.Concat(
+                assistantMessages
+                    .Where(message => message.Role == ChatRole.Assistant)
+                    .SelectMany(message => message.Contents)
+                    .OfType<TextContent>()
+                    .Select(content => content.Text))
+            .Trim();
+        if (!string.IsNullOrWhiteSpace(assistantText))
+        {
+            sourceMessages.Add(new ChatMessage(ChatRole.Assistant, assistantText));
+        }
+
+        var result = await _summaryService.CreateResultAsync(
+            _summaryModelProviderId.Value,
+            sourceMessages,
+            _projectId,
+            _contextId,
+            customInstructions: null,
+            cancellationToken)
+            .ConfigureAwait(false);
+        return result.ToAiMessage();
+    }
 }

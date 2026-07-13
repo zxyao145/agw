@@ -49,7 +49,9 @@ public class AgentflowDomainService
         IReadOnlyList<AgentflowNode>? nodes,
         IReadOnlyList<AgentflowEdge>? edges,
         Guid agentflowId,
-        IReadOnlyCollection<Guid> existingAgentIds)
+        IReadOnlyCollection<Guid> existingAgentIds,
+        Guid? summaryModelProviderId = null,
+        IReadOnlyCollection<Guid>? existingModelProviderIds = null)
     {
         if (nodes == null || edges == null)
         {
@@ -81,6 +83,27 @@ public class AgentflowDomainService
             .Distinct()
             .ToList();
         if (relatedAgentIds.Any(id => !agentIdSet.Contains(id)))
+        {
+            return (null, null);
+        }
+
+        var outputNodes = nodes.Where(node => node.Kind == AgentflowNodeKind.Output).ToList();
+        var summaryEnabled = false;
+        foreach (var outputNode in outputNodes)
+        {
+            if (!TryReadOutputSummaryEnabled(outputNode.ConfigJson, out var nodeSummaryEnabled))
+            {
+                return (null, null);
+            }
+
+            summaryEnabled |= nodeSummaryEnabled;
+        }
+
+        if (summaryEnabled &&
+            (outputNodes.Count != 1 ||
+             !summaryModelProviderId.HasValue ||
+             existingModelProviderIds == null ||
+             !existingModelProviderIds.Contains(summaryModelProviderId.Value)))
         {
             return (null, null);
         }
@@ -384,6 +407,41 @@ public class AgentflowDomainService
             }
 
             return hasKnownCondition;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool TryReadOutputSummaryEnabled(string? configJson, out bool enabled)
+    {
+        enabled = false;
+        if (string.IsNullOrWhiteSpace(configJson))
+        {
+            return true;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(configJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            if (!document.RootElement.TryGetProperty("enableSummary", out var property))
+            {
+                return true;
+            }
+
+            if (property.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+            {
+                return false;
+            }
+
+            enabled = property.GetBoolean();
+            return true;
         }
         catch (JsonException)
         {

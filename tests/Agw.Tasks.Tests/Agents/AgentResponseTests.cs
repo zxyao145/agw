@@ -22,6 +22,7 @@ public class AgentResponseTests
             Description = "Writes content",
             SystemPrompt = "Write clearly",
             ModelProviderId = Guid.NewGuid(),
+            EnableSummary = true,
             Tools = """["read_file"]""",
             Type = AgentType.System,
             Extra = """{"mode":"draft"}""",
@@ -51,6 +52,7 @@ public class AgentResponseTests
         Assert.Equal("Writes content", response.Description);
         Assert.Equal("Write clearly", response.SystemPrompt);
         Assert.Equal(agent.ModelProviderId, response.ModelProviderId);
+        Assert.True(response.EnableSummary);
         Assert.Equal(agent.Tools, response.Tools);
         Assert.Equal(AgentType.System, response.Type);
         Assert.Equal(agent.Extra, response.Extra);

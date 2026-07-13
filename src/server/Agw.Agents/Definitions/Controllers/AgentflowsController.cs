@@ -84,7 +84,8 @@ public class AgentflowsController : ControllerBase
         {
             Name = request.Name,
             Description = request.Description,
-            Enable = request.Enable
+            Enable = request.Enable,
+            SummaryModelProviderId = request.SummaryModelProviderId
         };
 
         var nodes = request.Nodes
@@ -155,6 +156,7 @@ public class AgentflowsController : ControllerBase
                 agentflow.Name = request.Name;
                 agentflow.Description = request.Description;
                 agentflow.Enable = request.Enable;
+                agentflow.SummaryModelProviderId = request.SummaryModelProviderId;
             },
             nodes,
             edges,

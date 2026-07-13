@@ -44,6 +44,11 @@ Execution/
 │   ├── RuntimeFactory.cs
 │   ├── AgentRuntime.cs
 │   └── AgentflowRuntime.cs
+├── Summaries/
+│   ├── AgentTurnSummaryService.cs
+│   ├── IAgentTurnSummaryService.cs
+│   ├── ISummaryChatClientFactory.cs
+│   └── SummaryChatClientFactory.cs
 ├── Transport/SignalR/
 │   ├── ExecutionHub.cs
 │   ├── ExecutionConnectionRegistry.cs
@@ -223,6 +228,23 @@ sequenceDiagram
 9. turn 结束后，runtime 清理 `ActiveTurn`；runtime 本身仍留在 connection 上，供下一轮复用。
 
 Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。外部 Codex Agent 还会通过 task-session binding 记录 provider session id，以支持后续恢复。
+
+### Result Summary
+
+Definition 创建的 System Agent 可通过 `EnableSummary` 在一次主执行成功后追加本轮总结。总结复用该 Agent 的 `ModelProviderId`，以一次性 `IChatClient` 调用执行；输入只包含本轮用户文字和本轮 Assistant 的 `TextContent`，不加载历史、工具或技能。External Agent 不支持该开关。
+
+Agentflow 不读取内部 Agent 节点的 `EnableSummary`。流程总结只发生在显式 Output 节点：`ConfigJson.enableSummary` 为 `true` 时，流程必须只有一个 Output，并配置有效的 `SummaryModelProviderId`。传入总结模型的是流入 Output 的消息，Output 的 `Instructions` 会作为额外总结要求。
+
+两种路径都保留原始输出并在末尾追加一条 `result`：
+
+- `role = system`；
+- `author = $agw-server`；
+- 顶层 `additionalProperties.type = result`；
+- `contents` 只有一个 `TextContent`。
+
+总结文字可在有助于可读性时使用 Markdown（如标题、列表、强调或代码块），也可以保持纯文本；服务端除去首尾空白外不会改写模型返回的 Markdown。
+
+总结为空或模型调用失败时仍返回 `Summary generation failed.`，不会使已成功的主执行失败；取消则继续向上传播。Summary 的 token usage 会累计到当前 project/context。`result` 会持久化供历史展示，但 `EfCoreChatHistoryProvider` 在构造下一轮模型历史时会过滤它。
 
 ### Interrupt 与 HumanGate
 

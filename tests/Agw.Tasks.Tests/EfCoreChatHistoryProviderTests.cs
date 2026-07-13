@@ -4,6 +4,7 @@ using System.Text.Json;
 
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
+using Agw.Shared;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 
@@ -116,6 +117,100 @@ public class EfCoreChatHistoryProviderTests
             cancellationToken);
 
         Assert.Equal(["first", "second"], messages.Select(message => message.Text));
+    }
+
+    [Fact]
+    public async Task ProvideChatHistoryAsync_WhenContextContainsResult_ExcludesResultFromModelHistory()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.NewGuid();
+        var projectContextId = Guid.NewGuid();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
+            seedContext.TaskRecords.AddRange(
+                CreateRecord(projectContextId, Guid.NewGuid(), 0, "normal", jsonOptions),
+                CreateRecord(projectContextId, Guid.NewGuid(), 1, CreateResultMessage("summary"), jsonOptions));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
+            jsonOptions);
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+
+        var messages = await InvokeProvideChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokingContext(new FakeAgent(), session, []),
+            cancellationToken);
+
+        Assert.Equal(["normal"], messages.Select(message => message.Text));
+    }
+
+    [Fact]
+    public async Task AppendAsync_ResultMessage_PersistsItForConversationHistory()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
+
+        await writer.AppendAsync(
+            projectId,
+            "context-1",
+            [CreateResultMessage("summary")],
+            cancellationToken);
+
+        await using var verifyContext = new AgwDbContext(options);
+        var record = await verifyContext.TaskRecords.SingleAsync(cancellationToken);
+        Assert.Contains("summary", record.ConversationPayload);
+        var persisted = JsonSerializer.Deserialize<ChatMessage>(
+            record.ConversationPayload!,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(persisted);
+        Assert.Equal("summary", Assert.IsType<TextContent>(Assert.Single(persisted.Contents)).Text);
+        Assert.Equal("result", persisted.AdditionalProperties!["type"]?.ToString());
     }
 
     [Fact]
@@ -358,6 +453,34 @@ public class EfCoreChatHistoryProviderTests
             ConversationPayload = JsonSerializer.Serialize(new ChatMessage(ChatRole.User, text), jsonOptions),
             CreateTime = TimeProvider.System.GetUtcNow(),
             UpdateTime = TimeProvider.System.GetUtcNow()
+        };
+
+    private static TaskRecord CreateRecord(
+        Guid projectContextId,
+        Guid taskId,
+        long sequence,
+        ChatMessage message,
+        JsonSerializerOptions jsonOptions) => new()
+        {
+            Id = Guid.NewGuid(),
+            ProjectContextId = projectContextId,
+            TaskId = taskId,
+            Status = TaskExecutionStatus.Succeeded,
+            ConversationSequence = sequence,
+            ConversationPayload = JsonSerializer.Serialize(message, jsonOptions),
+            CreateTime = TimeProvider.System.GetUtcNow(),
+            UpdateTime = TimeProvider.System.GetUtcNow()
+        };
+
+    private static ChatMessage CreateResultMessage(string text) =>
+        new(ChatRole.System, text)
+        {
+            MessageId = Guid.NewGuid().ToString(),
+            AuthorName = Constants.DefaultAgentAuthor,
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["type"] = "result"
+            }
         };
 
     private static async Task<IEnumerable<ChatMessage>> InvokeProvideChatHistoryAsync(

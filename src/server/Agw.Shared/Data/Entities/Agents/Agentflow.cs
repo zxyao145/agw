@@ -10,6 +10,7 @@ public class Agentflow : BaseEntity, IAggregateRoot
     public string? Description { get; set; }
     public string SystemPrompt { get; set; } = string.Empty;
     public bool Enable { get; set; } = true;
+    public Guid? SummaryModelProviderId { get; set; }
 
     public ICollection<AgentflowNode> Nodes { get; set; } = new List<AgentflowNode>();
     public ICollection<AgentflowEdge> Edges { get; set; } = new List<AgentflowEdge>();

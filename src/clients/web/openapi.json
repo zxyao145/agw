@@ -3809,6 +3809,7 @@
           "name",
           "description",
           "systemPrompt",
+          "enableSummary",
           "type",
           "extra",
           "tools",
@@ -3842,6 +3843,9 @@
             ],
             "description": "Model Provider ID. Required for System agents, optional for External agents.",
             "format": "uuid"
+          },
+          "enableSummary": {
+            "type": "boolean"
           },
           "type": {
             "$ref": "#/components/schemas/AgentType"
@@ -3965,7 +3969,8 @@
           "description",
           "systemPrompt",
           "modelProviderId",
-          "tools"
+          "tools",
+          "enableSummary"
         ],
         "type": "object",
         "properties": {
@@ -4032,6 +4037,10 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "enableSummary": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -4066,6 +4075,13 @@
           },
           "enable": {
             "type": "boolean"
+          },
+          "summaryModelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           },
           "nodes": {
             "type": "array",
@@ -4137,6 +4153,13 @@
             "items": {
               "$ref": "#/components/schemas/AgentflowEdgeRequest"
             }
+          },
+          "summaryModelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -4540,6 +4563,13 @@
             "items": {
               "$ref": "#/components/schemas/AgentflowEdgeRequest"
             }
+          },
+          "summaryModelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -4591,6 +4621,7 @@
           "description",
           "systemPrompt",
           "modelProviderId",
+          "enableSummary",
           "tools",
           "type",
           "extra",
@@ -4627,6 +4658,9 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "enableSummary": {
+            "type": "boolean"
           },
           "tools": {
             "type": [
@@ -4750,7 +4784,8 @@
           "systemPrompt",
           "modelProviderId",
           "tools",
-          "extra"
+          "extra",
+          "enableSummary"
         ],
         "type": "object",
         "properties": {
@@ -4820,6 +4855,10 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "enableSummary": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
