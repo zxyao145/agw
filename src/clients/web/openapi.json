@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:5016/"
+      "url": "http://localhost:5015/"
     }
   ],
   "paths": {
@@ -828,6 +828,94 @@
         }
       }
     },
+    "/api/traces": {
+      "get": {
+        "tags": [
+          "AgentflowTraces"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "contextId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentflowId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "fromUtc",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "toUtc",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "pageIndex",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowTraceDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowTraceDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPagedResultOfAgentflowTraceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents": {
       "get": {
         "tags": [
@@ -1492,13 +1580,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": { }
+                "schema": {}
               },
               "application/json": {
-                "schema": { }
+                "schema": {}
               },
               "text/json": {
-                "schema": { }
+                "schema": {}
               }
             }
           },
@@ -1564,13 +1652,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": { }
+                "schema": {}
               },
               "application/json": {
-                "schema": { }
+                "schema": {}
               },
               "text/json": {
-                "schema": { }
+                "schema": {}
               }
             }
           },
@@ -1636,13 +1724,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": { }
+                "schema": {}
               },
               "application/json": {
-                "schema": { }
+                "schema": {}
               },
               "text/json": {
-                "schema": { }
+                "schema": {}
               }
             }
           },
@@ -4258,6 +4346,9 @@
           }
         }
       },
+      "AgentflowNodeExecutionStatus": {
+        "type": "integer"
+      },
       "AgentflowNodeKind": {
         "type": "integer"
       },
@@ -4305,6 +4396,95 @@
             ]
           },
           "configJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AgentflowTraceDto": {
+        "required": [
+          "id",
+          "startTimeUtc",
+          "projectId",
+          "contextId",
+          "taskId",
+          "agentflowId",
+          "nodeId",
+          "nodeName",
+          "nodeKind",
+          "agentName",
+          "input",
+          "durationMilliseconds",
+          "status",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startTimeUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contextId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agentflowId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "nodeName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nodeKind": {
+            "$ref": "#/components/schemas/AgentflowNodeKind"
+          },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "agentName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "input": {
+            "type": "string"
+          },
+          "durationMilliseconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentflowNodeExecutionStatus"
+          },
+          "error": {
             "type": [
               "null",
               "string"
@@ -5705,6 +5885,40 @@
             "type": [
               "null",
               "array"
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfAgentflowTraceDto": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfAgentflowTraceDto"
+              }
             ]
           },
           "code": {
@@ -7486,6 +7700,39 @@
         },
         "description": "Persists provider-issued OAuth tokens for a specific authenticated subject."
       },
+      "PagedResultOfAgentflowTraceDto": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentflowTraceDto"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "ProblemDetails": {
         "required": [
           "type",
@@ -7607,6 +7854,7 @@
           "createTime",
           "updateTime",
           "errorMessage",
+          "usage",
           "messages"
         ],
         "type": "object",
@@ -7658,6 +7906,9 @@
               "null",
               "string"
             ]
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ProjectContextUsage"
           },
           "messages": {
             "type": [
@@ -7746,6 +7997,58 @@
         "properties": {
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "ProjectContextUsage": {
+        "required": [
+          "inputTokenCount",
+          "outputTokenCount",
+          "totalTokenCount",
+          "cachedInputTokenCount",
+          "reasoningTokenCount"
+        ],
+        "type": "object",
+        "properties": {
+          "inputTokenCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "outputTokenCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "totalTokenCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "cachedInputTokenCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "reasoningTokenCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -8376,6 +8679,9 @@
     },
     {
       "name": "Agentflows"
+    },
+    {
+      "name": "AgentflowTraces"
     },
     {
       "name": "Agents"

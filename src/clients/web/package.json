@@ -12,7 +12,7 @@
     "format:check": "oxfmt --check ./src",
     "fmt": "oxfmt ./src",
     "fmt:check": "oxfmt --check ./src",
-    "gen:openapi": "openapi-typescript ./openapi.json -o src/api/openapi.d.ts"
+    "gen:api": "openapi-typescript ./openapi.json -o src/api/openapi.d.ts"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",

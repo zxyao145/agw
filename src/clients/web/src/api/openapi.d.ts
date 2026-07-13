@@ -893,6 +893,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/traces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    projectId?: string;
+                    contextId?: string;
+                    agentflowId?: string;
+                    fromUtc?: string;
+                    toUtc?: string;
+                    pageIndex?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
+                        "application/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
+                        "text/json": components["schemas"]["ApiResultOfPagedResultOfAgentflowTraceDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents": {
         parameters: {
             query?: never;
@@ -3270,6 +3315,7 @@ export interface components {
             updateTime?: null | string;
             updateBy: null | string;
         };
+        AgentflowNodeExecutionStatus: number;
         AgentflowNodeKind: number;
         AgentflowNodeRequest: {
             nodeId: string;
@@ -3280,6 +3326,30 @@ export interface components {
             positionJson: null | string;
             instructions: null | string;
             configJson: null | string;
+        };
+        AgentflowTraceDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            startTimeUtc: string;
+            /** Format: uuid */
+            projectId: string;
+            contextId: string;
+            /** Format: uuid */
+            taskId: string;
+            /** Format: uuid */
+            agentflowId: string;
+            nodeId: string;
+            nodeName: null | string;
+            nodeKind: components["schemas"]["AgentflowNodeKind"];
+            /** Format: uuid */
+            agentId?: null | string;
+            agentName: null | string;
+            input: string;
+            /** Format: int64 */
+            durationMilliseconds: number | string;
+            status: components["schemas"]["AgentflowNodeExecutionStatus"];
+            error: null | string;
         };
         AgentflowUpdateRequest: {
             name: string;
@@ -3584,6 +3654,13 @@ export interface components {
         };
         "ApiResultOfObject[]": {
             data?: null | unknown[];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfPagedResultOfAgentflowTraceDto: {
+            data?: null | components["schemas"]["PagedResultOfAgentflowTraceDto"];
             /** Format: int32 */
             code: number;
             title: string;
@@ -4045,6 +4122,15 @@ export interface components {
              */
             expiresAtUtc?: null | string;
         };
+        PagedResultOfAgentflowTraceDto: {
+            items: components["schemas"]["AgentflowTraceDto"][];
+            /** Format: int64 */
+            total: number | string;
+            /** Format: int32 */
+            pageIndex: number;
+            /** Format: int32 */
+            pageSize: number;
+        };
         ProblemDetails: {
             type: null | string;
             title: null | string;
@@ -4084,6 +4170,7 @@ export interface components {
             /** Format: date-time */
             updateTime: null | string;
             errorMessage: null | string;
+            usage: components["schemas"]["ProjectContextUsage"];
             messages: null | components["schemas"]["AgwMessage"][];
         };
         ProjectContextSummaryResponse: {
@@ -4105,6 +4192,18 @@ export interface components {
         };
         ProjectContextTitleUpdateRequest: {
             title: string;
+        };
+        ProjectContextUsage: {
+            /** Format: int64 */
+            inputTokenCount: number | string;
+            /** Format: int64 */
+            outputTokenCount: number | string;
+            /** Format: int64 */
+            totalTokenCount: number | string;
+            /** Format: int64 */
+            cachedInputTokenCount: number | string;
+            /** Format: int64 */
+            reasoningTokenCount: number | string;
         };
         ProjectCreateRequest: {
             name: string;

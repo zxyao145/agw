@@ -8,12 +8,12 @@ using Microsoft.AspNetCore.Mvc;
 namespace Agw.Agents.Definitions.Controllers;
 
 [ApiController]
-[Route("api/agentflow-traces")]
-public class AgentflowTracesController : ControllerBase
+[Route("api/traces")]
+public class TracesController : ControllerBase
 {
     private readonly AgentflowTraceAppService _appService;
 
-    public AgentflowTracesController(AgentflowTraceAppService appService)
+    public TracesController(AgentflowTraceAppService appService)
     {
         _appService = appService;
     }
