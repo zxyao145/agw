@@ -1,4 +1,8 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+
 using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
@@ -6,6 +10,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging.Abstractions;
 
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
@@ -14,6 +19,63 @@ namespace Agw.Agents.Tests;
 public class AgentflowWorkflowCompilerTests
 {
     private readonly AgentflowWorkflowCompiler _compiler = new();
+
+    [Fact]
+    public async Task Compile_AgentNode_EmitsWorkflowTelemetryWithoutSensitiveData()
+    {
+        var activities = new ConcurrentQueue<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == "Microsoft.Agents.AI.Workflows",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activities.Enqueue,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "observable-flow" };
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "agent-node", Kind = AgentflowNodeKind.Agent, Name = "Node Alias" },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[] { Edge("agent-output", "agent-node", "output") };
+        var loggingMiddleware = new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance);
+        var agent = CreateAgent("agent-id", "persisted-agent")
+            .AsBuilder()
+            .Use(
+                runFunc: loggingMiddleware.LogRunMiddleware,
+                runStreamingFunc: loggingMiddleware.LogStreamingMiddleware)
+            .Build();
+
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent> { ["agent-node"] = agent });
+
+        Assert.NotNull(workflow);
+        await using (var run = await InProcessExecution.RunStreamingAsync(
+                         workflow!,
+                         new List<ChatMessage> { new(ChatRole.User, "sensitive input") },
+                         cancellationToken: TestContext.Current.CancellationToken))
+        {
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
+            {
+            }
+        }
+
+        Assert.Contains(activities, activity => activity.OperationName == "workflow.build");
+        Assert.Contains(activities, activity => activity.OperationName == "workflow.session");
+        Assert.Contains(activities, activity => activity.OperationName == "workflow_invoke");
+        Assert.Contains(activities, activity => activity.OperationName.StartsWith("executor.process", StringComparison.Ordinal));
+        Assert.Contains(activities, activity => activity.OperationName == "edge_group.process");
+        Assert.Contains(activities, activity => activity.OperationName == "message.send");
+        Assert.Contains(activities, activity =>
+            Equals(activity.GetTagItem("gen_ai.agent.name"), "persisted-agent"));
+        Assert.DoesNotContain(activities.SelectMany(activity => activity.TagObjects), tag =>
+            tag.Key is "executor.input" or "executor.output" or "message.content");
+    }
 
     [Fact]
     public void Compile_DirectDagWithHumanAndCheckpoint_ReturnsWorkflow()
@@ -273,6 +335,55 @@ public class AgentflowWorkflowCompilerTests
             evt is ExecutorCompletedEvent completed &&
             completed.ExecutorId.Contains("Agent", StringComparison.Ordinal));
         Assert.Contains(chatClient.Messages, message => message.Text == "Hello from Input");
+    }
+
+    [Fact]
+    public async Task Compile_SequentialAgents_PreservesOnlyUpstreamAgentResponse()
+    {
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "sequential-flow" };
+        var firstChatClient = new CapturingChatClient("first agent output");
+        var secondChatClient = new CapturingChatClient("second agent output");
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "agent-a", Kind = AgentflowNodeKind.Agent, Name = "Agent A" },
+            new AgentflowNode { NodeId = "agent-b", Kind = AgentflowNodeKind.Agent, Name = "Agent B" },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            Edge("agent-a-to-agent-b", "agent-a", "agent-b"),
+            Edge("agent-b-to-output", "agent-b", "output"),
+        };
+
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent>
+            {
+                ["agent-a"] = CreateAgent("agent-a", "Agent A", firstChatClient),
+                ["agent-b"] = CreateAgent("agent-b", "Agent B", secondChatClient),
+            });
+
+        Assert.NotNull(workflow);
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "initial user input") },
+            cancellationToken: cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        var events = new List<WorkflowEvent>();
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            events.Add(evt);
+        }
+
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+        var upstreamResponse = Assert.Single(secondChatClient.Messages);
+        Assert.Equal(ChatRole.Assistant, upstreamResponse.Role);
+        Assert.Equal("first agent output", upstreamResponse.Text);
     }
 
     [Fact]

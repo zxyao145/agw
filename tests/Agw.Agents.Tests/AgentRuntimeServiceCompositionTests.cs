@@ -34,7 +34,7 @@ public class AgentRuntimeServiceCompositionTests
     {
         var instructions = AgentRuntimeServiceUtil.BuildInstructions("   ", null);
 
-        Assert.Equal("You are an AI agent.", instructions);
+        Assert.Equal("You are a helpful agent.", instructions);
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void BuildCodexAIAgentOptions_WhenWorkspaceProvided_SetsThreadWorkingDirectory()
     {
-        var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
+        var options = BuildCodexAIAgentOptions(
             """
             {"threadOptions":{"model":"gpt-5-codex","skipGitRepoCheck":true}}
             """,
@@ -76,7 +76,7 @@ public class AgentRuntimeServiceCompositionTests
     {
         var threadId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-        var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
+        var options = BuildCodexAIAgentOptions(
             "{}",
             workspace: null,
             threadId,
@@ -95,7 +95,7 @@ public class AgentRuntimeServiceCompositionTests
 
         Func<string, CancellationToken, ValueTask> callback = OnThreadStartedAsync;
 
-        var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
+        var options = BuildCodexAIAgentOptions(
             "{}",
             workspace: null,
             threadId: null,
@@ -115,7 +115,7 @@ public class AgentRuntimeServiceCompositionTests
 
         try
         {
-            var options = AgentRuntimeServiceUtil.BuildCodexAIAgentOptions(
+            var options = BuildCodexAIAgentOptions(
                 JsonUtil.Serialize(new CodexAIAgentOptions()),
                 workspace: null,
                 threadId: null,
@@ -140,7 +140,7 @@ public class AgentRuntimeServiceCompositionTests
     public void ExecutionContextIdResolver_WhenContextMissing_GeneratesContextIdInsteadOfUsingTaskId()
     {
         var resolverType = typeof(AgentRuntimeService).Assembly.GetType(
-            "Agw.Agents.Execution.Agents.ExecutionContextIdResolver");
+            "Agw.Agents.Execution.Agents.Utils.ExecutionContextIdResolver");
         Assert.NotNull(resolverType);
         var method = resolverType!.GetMethod(
             "Resolve",
@@ -297,7 +297,24 @@ public class AgentRuntimeServiceCompositionTests
             fileSystemResolver: null!,
             sessionStateStore: null!,
             logger: NullLogger<AgentRuntimeService>.Instance,
-            loggingMiddleware: new LoggingMiddleware(NullLogger<LoggingMiddleware>.Instance));
+            observabilityMiddleware: new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance));
+    }
+
+    private static CodexAIAgentOptions? BuildCodexAIAgentOptions(
+        string extra,
+        string? workspace,
+        Guid? threadId,
+        bool resume,
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
+        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null)
+    {
+        var method = typeof(AgentRuntimeService).GetMethod(
+            "BuildCodexAIAgentOptions",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        return Assert.IsType<CodexAIAgentOptions>(method.Invoke(null,
+            [extra, workspace, threadId, resume, environmentVariables, onThreadStartedAsync]));
     }
 
     private static T GetPrivateField<T>(object instance, string fieldName)

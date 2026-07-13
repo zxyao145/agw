@@ -22,7 +22,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly AgwDataPaths _dataPaths;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly AgentSessionStateStore _sessionStateStore;
-    private readonly LoggingMiddleware _loggingMiddleware;
+    private readonly ObservabilityMiddleware _observabilityMiddleware;
 
     public AgentRuntimeService(
         AgentAppService agentAppService,
@@ -35,7 +35,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         IAgwFileSystemResolver fileSystemResolver,
         AgentSessionStateStore sessionStateStore,
         ILogger<AgentRuntimeService> logger,
-        LoggingMiddleware loggingMiddleware)
+        ObservabilityMiddleware observabilityMiddleware)
     {
         _agentAppService = agentAppService;
         _projectAppService = projectAppService;
@@ -47,6 +47,6 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _fileSystemResolver = fileSystemResolver;
         _sessionStateStore = sessionStateStore;
         _logger = logger;
-        _loggingMiddleware = loggingMiddleware;
+        _observabilityMiddleware = observabilityMiddleware;
     }
 }
