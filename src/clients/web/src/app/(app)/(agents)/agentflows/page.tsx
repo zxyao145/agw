@@ -21,6 +21,7 @@ import {
   AgentflowDto,
   AgentflowDetailDto,
   AgentflowSaveRequest,
+  ModelProviderDto,
 } from "@/types/agentflow";
 import { AgentflowsTable, ExecuteAgentflowDrawer, fetchAgentflowDetails } from "./components";
 import { Copy, X } from "lucide-react";
@@ -47,6 +48,13 @@ export default function AgentflowsPage() {
     queryFn: async () => {
       // OpenAPI currently doesn't declare response schemas.
       return (await apiGet("/api/agents")) as unknown as AgentDto[];
+    },
+  });
+
+  const modelProvidersQuery = useQuery({
+    queryKey: ["modelProviders"],
+    queryFn: async () => {
+      return (await apiGet("/api/model-providers")) as unknown as ModelProviderDto[];
     },
   });
 
@@ -197,6 +205,7 @@ export default function AgentflowsPage() {
             name: agentflow.name,
             description: agentflow.description,
             enable: !agentflow.enable,
+            summaryModelProviderId: agentflow.summaryModelProviderId,
             nodes: details.nodes.map((node) => ({
               nodeId: node.nodeId,
               kind: node.kind,
@@ -417,6 +426,7 @@ export default function AgentflowsPage() {
             onOpenChange={handleVisualDialogClose}
             agents={agentsQuery.data || []}
             agentflows={agentflowsQuery.data || []}
+            modelProviders={modelProvidersQuery.data || []}
             editingAgentflow={editingAgentflow}
             onAgentflowCreated={handleAgentflowCreated}
           />

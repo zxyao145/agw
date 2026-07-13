@@ -80,6 +80,7 @@ export default function AgentsPage() {
   const [description, setDescription] = React.useState("");
   const [systemPrompt, setSystemPrompt] = React.useState("");
   const [modelProviderId, setModelProviderId] = React.useState("");
+  const [enableSummary, setEnableSummary] = React.useState(false);
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedAppInstanceIds, setSelectedAppInstanceIds] = React.useState<string[]>([]);
   const [appSearchTerm, setAppSearchTerm] = React.useState("");
@@ -97,6 +98,7 @@ export default function AgentsPage() {
   const [editDescription, setEditDescription] = React.useState("");
   const [editSystemPrompt, setEditSystemPrompt] = React.useState("");
   const [editModelProviderId, setEditModelProviderId] = React.useState("");
+  const [editEnableSummary, setEditEnableSummary] = React.useState(false);
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
   const [editSelectedAppInstanceIds, setEditSelectedAppInstanceIds] = React.useState<string[]>([]);
   const [editAppSearchTerm, setEditAppSearchTerm] = React.useState("");
@@ -129,6 +131,7 @@ export default function AgentsPage() {
       setDescription("");
       setSystemPrompt("");
       setModelProviderId("");
+      setEnableSummary(false);
       setSelectedSkillIds([]);
       setSelectedAppInstanceIds([]);
       setAppSearchTerm("");
@@ -153,6 +156,7 @@ export default function AgentsPage() {
       toast.success("Agent updated");
       setEditOpen(false);
       setEditingAgent(null);
+      setEditEnableSummary(false);
       setEditSelectedSkillIds([]);
       setEditSelectedAppInstanceIds([]);
       setEditAppSearchTerm("");
@@ -192,6 +196,7 @@ export default function AgentsPage() {
     setEditDescription(agent.description);
     setEditSystemPrompt(agent.systemPrompt);
     setEditModelProviderId(agent.modelProviderId ?? "");
+    setEditEnableSummary(agent.enableSummary);
     setEditExtra(agent.extra || "");
     setEditEnvironmentVariables(toAgentEnvironmentVariableEntries(agent.environmentVariables));
     setEditSelectedSkillIds(agent.agentSkillRelations?.map((relation) => relation.skillId) ?? []);
@@ -318,6 +323,8 @@ export default function AgentsPage() {
             setSystemPrompt={setSystemPrompt}
             modelProviderId={modelProviderId}
             setModelProviderId={setModelProviderId}
+            enableSummary={enableSummary}
+            setEnableSummary={setEnableSummary}
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}
@@ -362,6 +369,8 @@ export default function AgentsPage() {
         setSystemPrompt={setEditSystemPrompt}
         modelProviderId={editModelProviderId}
         setModelProviderId={setEditModelProviderId}
+        enableSummary={editEnableSummary}
+        setEnableSummary={setEditEnableSummary}
         extra={editExtra}
         setExtra={setEditExtra}
         environmentVariables={editEnvironmentVariables}

@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -45,6 +46,8 @@ interface AgentFormFieldsProps {
   setSystemPrompt: (value: string) => void;
   modelProviderId: string;
   setModelProviderId: (value: string) => void;
+  enableSummary: boolean;
+  setEnableSummary: (value: boolean) => void;
   agentType: string;
   extra: string;
   setExtra?: (value: string) => void;
@@ -90,6 +93,8 @@ export function AgentFormFields({
   setSystemPrompt,
   modelProviderId,
   setModelProviderId,
+  enableSummary,
+  setEnableSummary,
   agentType,
   extra,
   setExtra,
@@ -212,6 +217,24 @@ export function AgentFormFields({
               </SelectContent>
             </Select>
           </div>
+
+          {!isExternalAgent ? (
+            <div className="flex items-start justify-between gap-4 rounded-lg border bg-background px-4 py-3">
+              <div className="space-y-1">
+                <Label htmlFor={`${idPrefix}enableSummary`} className="cursor-pointer">
+                  Generate Turn Summary
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Append a Markdown summary after each successful turn.
+                </p>
+              </div>
+              <Switch
+                id={`${idPrefix}enableSummary`}
+                checked={enableSummary}
+                onCheckedChange={setEnableSummary}
+              />
+            </div>
+          ) : null}
 
           <div className="grid gap-2">
             <Label htmlFor={`${idPrefix}extra`}>Extra Settings (JSON)</Label>

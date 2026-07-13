@@ -90,6 +90,22 @@ test("Create and Edit Agent dialogs send normalized environment variables", asyn
   }
 });
 
+test("System Agent forms expose and submit the optional turn summary setting", async () => {
+  const [createSource, editSource, formSource] = await Promise.all([
+    readFile(CREATE_DIALOG_URL, "utf8"),
+    readFile(EDIT_DIALOG_URL, "utf8"),
+    readFile(FORM_FIELDS_URL, "utf8"),
+  ]);
+
+  assert.match(formSource, /enableSummary: boolean/);
+  assert.match(formSource, /setEnableSummary: \(value: boolean\) => void/);
+  assert.match(formSource, /!isExternalAgent[\s\S]*Generate Turn Summary/);
+  assert.match(formSource, /checked=\{enableSummary\}/);
+  assert.match(formSource, /onCheckedChange=\{setEnableSummary\}/);
+  assert.match(createSource, /enableSummary,/);
+  assert.match(editSource, /enableSummary: !isExternalAgent && enableSummary/);
+});
+
 test("Agent Model Provider Select portals inside the current dialog so wheel scrolling is preserved", async () => {
   const [createSource, editSource, formSource, selectSource] = await Promise.all([
     readFile(CREATE_DIALOG_URL, "utf8"),

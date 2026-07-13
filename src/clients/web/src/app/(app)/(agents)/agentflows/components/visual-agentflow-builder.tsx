@@ -53,6 +53,7 @@ import {
   AgentflowNodeDto,
   AgentflowNodeKind,
   AgentflowSaveRequest,
+  ModelProviderDto,
 } from "@/types/agentflow";
 import {
   ArrowLeft,
@@ -114,6 +115,7 @@ type DagEdgeData = {
 type VisualAgentflowBuilderProps = {
   agents: AgentDto[];
   agentflows?: AgentflowDto[];
+  modelProviders: ModelProviderDto[];
   editingAgentflow?: AgentflowDetailDto | null;
   onAgentflowCreated?: () => void;
   onActionStateChange?: (state: AgentflowBuilderActionState | null) => void;
@@ -443,6 +445,7 @@ function FlowControls({ onAutoLayout }: { onAutoLayout: () => void }) {
 export function VisualAgentflowBuilder({
   agents,
   agentflows = [],
+  modelProviders,
   editingAgentflow,
   onAgentflowCreated,
   onActionStateChange,
@@ -460,6 +463,7 @@ export function VisualAgentflowBuilder({
   const [agentflowName, setAgentflowName] = React.useState("");
   const [agentflowDescription, setAgentflowDescription] = React.useState("");
   const [agentflowEnabled, setAgentflowEnabled] = React.useState(true);
+  const [summaryModelProviderId, setSummaryModelProviderId] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
 
   const availableAgentflows = React.useMemo(() => {
@@ -662,6 +666,7 @@ export function VisualAgentflowBuilder({
       setAgentflowName("");
       setAgentflowDescription("");
       setAgentflowEnabled(true);
+      setSummaryModelProviderId("");
       setNodes([createInputNode<DagNodeData>()]);
       setEdges([]);
       setCanvasScope({ kind: "root" });
@@ -674,6 +679,7 @@ export function VisualAgentflowBuilder({
     setAgentflowName(editingAgentflow.name);
     setAgentflowDescription(editingAgentflow.description || "");
     setAgentflowEnabled(editingAgentflow.enable);
+    setSummaryModelProviderId(editingAgentflow.summaryModelProviderId ?? "");
 
     const loadedNodes = editingAgentflow.nodes.map((node, index) => {
       const position = parsePosition(node.positionJson, index);
@@ -926,7 +932,27 @@ export function VisualAgentflowBuilder({
     );
   }, [canvasEdges, canvasNodes, setNodes]);
 
-  const graphValidation = React.useMemo(() => validateDag(nodes, edges), [nodes, edges]);
+  const graphValidation = React.useMemo(() => {
+    const validation = validateDag(nodes, edges);
+    if (!validation.ok) return validation;
+
+    const outputNodes = nodes.filter((node) => node.data.kind === AgentflowNodeKind.Output);
+    const summaryEnabled = outputNodes.some((node) => {
+      const config = readConfigJson(node.data.configJson);
+      return config !== null && readBoolean(config.enableSummary);
+    });
+    if (!summaryEnabled) return validation;
+
+    if (outputNodes.length !== 1) {
+      return { ok: false, message: "Summary requires exactly one Output node" };
+    }
+
+    if (!summaryModelProviderId) {
+      return { ok: false, message: "Select a Summary Model Provider" };
+    }
+
+    return validation;
+  }, [edges, nodes, summaryModelProviderId]);
 
   const handleBuild = React.useCallback(async () => {
     if (!agentflowName.trim()) {
@@ -948,6 +974,7 @@ export function VisualAgentflowBuilder({
       name: agentflowName,
       description: agentflowDescription || null,
       enable: agentflowEnabled,
+      summaryModelProviderId: summaryModelProviderId || null,
       nodes: nodes.map((node) => ({
         nodeId: node.id,
         kind: node.data.kind,
@@ -987,6 +1014,7 @@ export function VisualAgentflowBuilder({
       setAgentflowName("");
       setAgentflowDescription("");
       setAgentflowEnabled(true);
+      setSummaryModelProviderId("");
       setNodes([createInputNode<DagNodeData>()]);
       setEdges([]);
       setCanvasScope({ kind: "root" });
@@ -1010,6 +1038,7 @@ export function VisualAgentflowBuilder({
     onAgentflowCreated,
     setEdges,
     setNodes,
+    summaryModelProviderId,
   ]);
 
   const actionState = React.useMemo<AgentflowBuilderActionState>(
@@ -1153,10 +1182,13 @@ export function VisualAgentflowBuilder({
               agentflows={availableAgentflows}
               agentSelectOptions={agentSelectOptions}
               agentflowSelectOptions={agentflowSelectOptions}
+              modelProviders={modelProviders}
+              summaryModelProviderId={summaryModelProviderId}
               blockMembership={blockMembership}
               canvasScope={canvasScope}
               activeBlockNode={activeBlockNode}
               onChange={updateNodeData}
+              onSummaryModelProviderIdChange={setSummaryModelProviderId}
               onAddBlockParticipant={addBlockParticipant}
               onRemoveBlockParticipant={removeBlockParticipant}
               onOpenBlock={openBlockScope}
@@ -1467,10 +1499,13 @@ function NodeInspector({
   agentflows,
   agentSelectOptions,
   agentflowSelectOptions,
+  modelProviders,
+  summaryModelProviderId,
   blockMembership,
   canvasScope,
   activeBlockNode,
   onChange,
+  onSummaryModelProviderIdChange,
   onAddBlockParticipant,
   onRemoveBlockParticipant,
   onOpenBlock,
@@ -1482,10 +1517,13 @@ function NodeInspector({
   agentflows: AgentflowDto[];
   agentSelectOptions: SearchableSelectOption[];
   agentflowSelectOptions: SearchableSelectOption[];
+  modelProviders: ModelProviderDto[];
+  summaryModelProviderId: string;
   blockMembership: BlockMembership;
   canvasScope: CanvasScope;
   activeBlockNode: Node<DagNodeData> | null;
   onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onSummaryModelProviderIdChange: (value: string) => void;
   onAddBlockParticipant: (
     blockId: string,
     kind: AgentflowNodeKind,
@@ -1587,6 +1625,16 @@ function NodeInspector({
         <CheckpointConfigInspector node={node} onChange={onChange} />
       ) : null}
 
+      {node.data.kind === AgentflowNodeKind.Output ? (
+        <OutputSummaryConfigInspector
+          node={node}
+          modelProviders={modelProviders}
+          summaryModelProviderId={summaryModelProviderId}
+          onChange={onChange}
+          onSummaryModelProviderIdChange={onSummaryModelProviderIdChange}
+        />
+      ) : null}
+
       <div className="space-y-2">
         <Label>Advanced Config JSON</Label>
         <Textarea
@@ -1596,6 +1644,71 @@ function NodeInspector({
           className="min-h-24 font-mono text-xs"
         />
       </div>
+    </div>
+  );
+}
+
+function OutputSummaryConfigInspector({
+  node,
+  modelProviders,
+  summaryModelProviderId,
+  onChange,
+  onSummaryModelProviderIdChange,
+}: {
+  node: Node<DagNodeData>;
+  modelProviders: ModelProviderDto[];
+  summaryModelProviderId: string;
+  onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onSummaryModelProviderIdChange: (value: string) => void;
+}) {
+  const config = readConfigJson(node.data.configJson) ?? {};
+  const summaryEnabled = readBoolean(config.enableSummary);
+  const setConfig = (update: Record<string, unknown>) => {
+    onChange(node.id, { configJson: updateConfigJson(node.data.configJson, update) });
+  };
+
+  return (
+    <div className="space-y-3 rounded-md border bg-background p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <Label htmlFor={`output-summary-${node.id}`} className="cursor-pointer">
+            Generate Summary
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Append a Markdown summary from the messages entering this Output node.
+          </p>
+        </div>
+        <Switch
+          id={`output-summary-${node.id}`}
+          checked={summaryEnabled}
+          onCheckedChange={(enabled) => setConfig({ enableSummary: enabled })}
+        />
+      </div>
+
+      {summaryEnabled ? (
+        <div className="space-y-2">
+          <Label>Summary Model Provider</Label>
+          <Select value={summaryModelProviderId} onValueChange={onSummaryModelProviderIdChange}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select a model provider..." />
+            </SelectTrigger>
+            <SelectContent>
+              {modelProviders.length > 0 ? (
+                modelProviders.map((modelProvider) => (
+                  <SelectItem key={modelProvider.id} value={modelProvider.id}>
+                    {modelProvider.modelName} ({modelProvider.providerName}-
+                    {modelProvider.providerType})
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="no-providers" disabled>
+                  No model providers available
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
     </div>
   );
 }

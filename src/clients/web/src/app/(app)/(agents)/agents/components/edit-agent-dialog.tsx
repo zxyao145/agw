@@ -43,6 +43,8 @@ interface EditAgentDialogProps {
   setSystemPrompt: (value: string) => void;
   modelProviderId: string;
   setModelProviderId: (value: string) => void;
+  enableSummary: boolean;
+  setEnableSummary: (value: boolean) => void;
   extra: string;
   setExtra: (value: string) => void;
   environmentVariables: AgentEnvironmentVariableEntry[];
@@ -85,6 +87,8 @@ export function EditAgentDialog({
   setSystemPrompt,
   modelProviderId,
   setModelProviderId,
+  enableSummary,
+  setEnableSummary,
   extra,
   setExtra,
   environmentVariables,
@@ -126,6 +130,7 @@ export function EditAgentDialog({
         description,
         systemPrompt,
         modelProviderId,
+        enableSummary: !isExternalAgent && enableSummary,
         tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
         skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
         mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
@@ -206,6 +211,8 @@ export function EditAgentDialog({
             setSystemPrompt={setSystemPrompt}
             modelProviderId={modelProviderId}
             setModelProviderId={setModelProviderId}
+            enableSummary={enableSummary}
+            setEnableSummary={setEnableSummary}
             agentType={editingAgent?.type.toString() ?? "0"}
             extra={extra}
             setExtra={setExtra}

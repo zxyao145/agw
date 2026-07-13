@@ -1,5 +1,6 @@
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Turns;
@@ -215,9 +216,8 @@ public sealed class RuntimeFactory : IRuntimeFactory
         string resolvedContextId)
     {
         if (session == null) return false;
-        var contextId = string.IsNullOrWhiteSpace(settings.ContextId)
-            ? resolvedContextId
-            : settings.ContextId.Trim();
+        var contextId = ExecutionContextIdResolver.Resolve(
+            string.IsNullOrWhiteSpace(settings.ContextId) ? resolvedContextId : settings.ContextId);
         return string.Equals(session._contextId, contextId, StringComparison.Ordinal)
                && session._projectId == ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);
     }

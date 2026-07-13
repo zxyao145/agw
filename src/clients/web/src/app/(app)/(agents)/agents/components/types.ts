@@ -6,6 +6,7 @@ export interface AgentCreateRequest {
   description: string;
   systemPrompt: string;
   modelProviderId: string | null;
+  enableSummary: boolean;
   tools: string | null;
   mcpToolServerIds?: string[] | null;
   skillIds?: string[] | null;
@@ -18,6 +19,7 @@ export interface AgentUpdateRequest {
   description: string;
   systemPrompt: string;
   modelProviderId: string | null;
+  enableSummary: boolean;
   tools: string | null;
   mcpToolServerIds?: string[] | null;
   skillIds?: string[] | null;
@@ -26,13 +28,5 @@ export interface AgentUpdateRequest {
   environmentVariables: Record<string, string>;
 }
 
-export type ModelProviderDto = {
-  id: string;
-  modelId: string;
-  providerId: string;
-  providerName: string;
-  providerType: string;
-  modelName: string;
-};
-
 export type { McpToolServerDto, SkillDto, ToolInfo } from "@/components/definition-capabilities";
+export type { ModelProviderDto } from "@/types/agentflow";

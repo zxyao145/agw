@@ -11,6 +11,7 @@ export interface AgentDto extends BaseDto {
   name: string;
   systemPrompt: string;
   modelProviderId: string | null;
+  enableSummary: boolean;
 
   description: string;
   tools?: string | null;
@@ -29,6 +30,15 @@ export interface AgentDto extends BaseDto {
     agentId: string;
     appInstanceId: string;
   }> | null;
+}
+
+export interface ModelProviderDto {
+  id: string;
+  modelId: string;
+  providerId: string;
+  providerName: string;
+  providerType: string;
+  modelName: string;
 }
 
 export const AgentflowNodeKind = {
@@ -103,6 +113,7 @@ export interface AgentflowSaveRequest {
   enable: boolean;
   nodes: AgentflowNodeRequest[];
   edges: AgentflowEdgeRequest[];
+  summaryModelProviderId: string | null;
 }
 
 export interface AgentflowDto extends BaseDto {
@@ -111,6 +122,7 @@ export interface AgentflowDto extends BaseDto {
   description: string | null;
   systemPrompt: string;
   enable: boolean;
+  summaryModelProviderId: string | null;
 }
 
 export interface AgentflowDetailDto extends AgentflowDto {

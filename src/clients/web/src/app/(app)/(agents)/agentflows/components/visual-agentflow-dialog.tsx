@@ -15,13 +15,14 @@ import {
   VisualAgentflowBuilder,
 } from "./visual-agentflow-builder";
 import { X } from "lucide-react";
-import { AgentDto, AgentflowDetailDto, AgentflowDto } from "@/types/agentflow";
+import { AgentDto, AgentflowDetailDto, AgentflowDto, ModelProviderDto } from "@/types/agentflow";
 
 type VisualAgentflowDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   agents: AgentDto[];
   agentflows: AgentflowDto[];
+  modelProviders: ModelProviderDto[];
   editingAgentflow?: AgentflowDetailDto | null;
   onAgentflowCreated?: () => void;
 };
@@ -31,6 +32,7 @@ export function VisualAgentflowDialog({
   onOpenChange,
   agents,
   agentflows,
+  modelProviders,
   editingAgentflow,
   onAgentflowCreated,
 }: VisualAgentflowDialogProps) {
@@ -89,6 +91,7 @@ export function VisualAgentflowDialog({
           <VisualAgentflowBuilder
             agents={agents}
             agentflows={agentflows}
+            modelProviders={modelProviders}
             editingAgentflow={editingAgentflow}
             onAgentflowCreated={handleAgentflowCreated}
             onActionStateChange={setBuilderActionState}
