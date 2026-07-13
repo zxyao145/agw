@@ -32,7 +32,7 @@ Agw.Files/             File/workspace APIs and endpoint exception mapping
 Agw.Setup/             First-run setup, initialization state, API-key guard middleware
 ```
 
-`Agw.slnx` is the root solution and includes backend projects plus tests. `src/server/backend.sln` includes backend projects only.
+`Agw.slnx` is the root solution and includes backend projects plus tests. `src/server/server.sln` includes backend projects only.
 
 `Agw.slnx` includes test projects for A2A, Agents, Files, Host, Jobs, Setup, Shared, Skills, Tasks, and Tools.
 

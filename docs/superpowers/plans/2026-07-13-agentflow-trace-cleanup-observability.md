@@ -171,7 +171,7 @@ dotnet test tests/Agw.Host.Tests/Agw.Host.Tests.csproj --no-restore
 dotnet build src/server/Agw.Tasks/Agw.Tasks.csproj --no-restore
 ```
 
-Expected: both test projects pass and Tasks builds with zero errors. Record the pre-existing `Agw.Tasks.Tests` broken `src/backend` project references as a verification limitation rather than changing them.
+Expected: both test projects pass and Tasks builds with zero errors. (Note: the `Agw.Tasks.Tests` project references were broken against the old `src/backend` path before the `src/backend` -> `src/server` rename; that limitation no longer applies.)
 
 - [ ] **Step 3: Review final diff**
 
