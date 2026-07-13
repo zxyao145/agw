@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import { ApiError, apiGet } from "@/api/client";
 
+import { TraceTable } from "./components/trace-table";
+
 type DashboardStatsResponse = {
   jobCount: number;
   projectCount: number;
@@ -11,6 +13,9 @@ type DashboardStatsResponse = {
   taskRecordCount: number;
   agentCount: number;
   agentflowCount: number;
+  usageInputTokenCount: number;
+  usageOutputTokenCount: number;
+  usageTotalTokenCount: number;
 };
 
 function getApiErrorMessage(error: unknown): string {
@@ -54,6 +59,14 @@ function getApiErrorMessage(error: unknown): string {
   return "Unknown error";
 }
 
+function formatStat(value: number | undefined, hasData: boolean): string {
+  if (!hasData || value === undefined) {
+    return "—";
+  }
+
+  return value.toLocaleString();
+}
+
 function SummaryCards({
   loading,
   stats,
@@ -64,33 +77,49 @@ function SummaryCards({
   hasData: boolean;
 }) {
   const cards = [
+
     {
-      label: "Project 数量",
+      label: "Total Input Token",
+      value: formatStat(stats?.usageInputTokenCount, hasData),
+      color: "text-cyan-300",
+    },
+    {
+      label: "Total Output Token",
+      value: formatStat(stats?.usageOutputTokenCount, hasData),
+      color: "text-orange-300",
+    },
+    {
+      label: "Total Token",
+      value: formatStat(stats?.usageTotalTokenCount, hasData),
+      color: "text-emerald-300",
+    },
+    {
+      label: "Project",
       value: hasData ? stats?.projectCount : "—",
       color: "text-sage",
     },
     {
-      label: "Project Context 数量",
+      label: "Context / Conversation / Session",
       value: hasData ? stats?.projectContextCount : "—",
       color: "text-blue-400",
     },
     {
-      label: "Task Record 数量",
+      label: "Task Record",
       value: hasData ? stats?.taskRecordCount : "—",
       color: "text-violet-400",
     },
     {
-      label: "Job 数量",
+      label: "Job",
       value: hasData ? stats?.jobCount : "—",
       color: "text-light",
     },
     {
-      label: "Agent 数量",
+      label: "Agent",
       value: hasData ? stats?.agentCount : "—",
       color: "text-amber-300",
     },
     {
-      label: "Agentflow 数量",
+      label: "Agentflow",
       value: hasData ? stats?.agentflowCount : "—",
       color: "text-rose",
     },
@@ -135,6 +164,8 @@ export default function Page() {
           统计信息加载失败：{getApiErrorMessage(statsQuery.error)}
         </div>
       ) : null}
+
+      <TraceTable />
     </div>
   );
 }

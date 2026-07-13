@@ -40,6 +40,12 @@ The table shows the following trace information:
 
 Long identifiers and text values remain readable through monospace styling, truncation, and native title text. Status uses a restrained badge treatment consistent with the existing dashboard rather than introducing a new visual system.
 
+The Input column parses the persisted JSON message array and reads only non-empty string values at `contents[*].text`. When more than one text value exists, the component joins them with newline characters in message and content order. Invalid JSON, an unexpected structure, or input without text content displays `—`; the raw JSON is never used as a fallback.
+
+The Start time column parses `startTimeUtc` as an instant and formats it in the browser's local time zone as `yyyy-MM-dd HH:mm:ss`. A value without `Z` or a numeric time-zone offset is treated as UTC; a value with `Z` or an explicit offset keeps that supplied time-zone meaning. Formatting uses local `Date` getters with explicit zero-padding so output does not vary with browser locale. Invalid timestamps display `—`.
+
+The Error column keeps a truncated summary in the table. When an error exists, its cell uses the shadcn Tooltip installed with `pnpm dlx shadcn@latest add tooltip`; mouse hover or keyboard focus reveals the complete error. The root layout wraps the application in the generated `TooltipProvider`, as required by the current shadcn component. Tooltip content preserves line breaks, breaks long tokens, stays within the viewport, and allows scrolling when the error is taller than its maximum height. A trace without an error displays `—` without a tooltip.
+
 The component renders dedicated loading, request-error, and empty-result states. Pagination displays the current item range and total count, with previous and next buttons disabled at the boundaries.
 
 ## Data Contract
@@ -71,6 +77,9 @@ Request errors are converted to a user-facing message using the same `ApiError` 
 ## Testing and Verification
 
 - Add tests first for query construction, applying/resetting filters, and pagination boundaries using the repository's existing frontend test conventions.
+- Add a focused parser test for one text value, ordered multi-value joining, ignored non-text content, malformed JSON, and missing text content.
+- Add a focused date-format test that fixes the runtime to a non-UTC time zone and verifies exact local `yyyy-MM-dd HH:mm:ss` output plus the invalid-timestamp fallback.
+- Add a focused source integration test that verifies the Error cell uses shadcn `Tooltip`, `TooltipTrigger`, and `TooltipContent`, keeps the full error in Tooltip content, and does not rely on the native `title` attribute.
 - Run the focused tests and confirm the expected red-green cycle.
 - Run the frontend lint, formatting check, and production build.
 - If the local app can be started with its dependencies, inspect the dashboard in the browser to verify layout, filtering, loading, empty/error states, and pagination behavior.

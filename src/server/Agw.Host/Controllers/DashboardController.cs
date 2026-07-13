@@ -46,7 +46,10 @@ public class DashboardController : ControllerBase
             await _projectContextRepository.Queryable.CountAsync(),
             await _taskRecordRepository.Queryable.CountAsync(),
             await _agentRepository.Queryable.CountAsync(),
-            await _agentflowRepository.Queryable.CountAsync());
+            await _agentflowRepository.Queryable.CountAsync(),
+            await _projectContextRepository.Queryable.SumAsync(context => context.Usage.InputTokenCount),
+            await _projectContextRepository.Queryable.SumAsync(context => context.Usage.OutputTokenCount),
+            await _projectContextRepository.Queryable.SumAsync(context => context.Usage.TotalTokenCount));
 
         return AgwApiResult.Ok(stats);
     }
@@ -58,4 +61,7 @@ public record DashboardStatsResponse(
     int ProjectContextCount,
     int TaskRecordCount,
     int AgentCount,
-    int AgentflowCount);
+    int AgentflowCount,
+    long UsageInputTokenCount,
+    long UsageOutputTokenCount,
+    long UsageTotalTokenCount);

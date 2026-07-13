@@ -41,7 +41,7 @@ const navItems: SidebarMenuGroupProps[] = [
     menus: [
       {
         url: "/dashboard",
-        title: "Dashboard (beta)",
+        title: "Dashboard",
         isActive: true,
         icon: <Gauge />,
       },
