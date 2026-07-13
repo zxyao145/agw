@@ -1,6 +1,7 @@
 import * as React from "react";
 import { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
 
+import { applyDialogOpenChange } from "@/components/definition-capabilities";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -115,7 +116,16 @@ export function CreateAgentDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) =>
+        applyDialogOpenChange({
+          isPending: createAgentMutation.isPending,
+          nextOpen,
+          setOpen,
+        })
+      }
+    >
       <DialogTrigger asChild>
         <Button>Create</Button>
       </DialogTrigger>
@@ -138,7 +148,12 @@ export function CreateAgentDialog({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <DialogClose asChild>
-                  <Button type="button" variant="outline" size="sm">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={createAgentMutation.isPending}
+                  >
                     Cancel
                   </Button>
                 </DialogClose>

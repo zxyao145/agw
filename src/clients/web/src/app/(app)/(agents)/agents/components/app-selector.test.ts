@@ -4,7 +4,7 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const { buildAppOptionLabel, filterAppOptions, getAppAuthorizationState } =
-  require("./app-selector.ts") as typeof import("./app-selector");
+  require("../../../../../components/definition-capabilities/app-selector.ts") as typeof import("../../../../../components/definition-capabilities/app-selector");
 
 const options = [
   {

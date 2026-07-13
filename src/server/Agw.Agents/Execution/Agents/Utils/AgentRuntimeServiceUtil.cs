@@ -5,21 +5,17 @@ namespace Agw.Agents.Execution.Agents.Utils;
 public static class AgentRuntimeServiceUtil
 {
     public static IReadOnlyDictionary<string, string> MergeEnvironmentVariables(
-        IReadOnlyDictionary<string, string>? agentVariables,
-        IReadOnlyDictionary<string, string>? executionVariables)
+        params IReadOnlyDictionary<string, string>?[] variableLayers)
     {
         var merged = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (agentVariables != null)
+        foreach (var variables in variableLayers)
         {
-            foreach (var (key, value) in agentVariables)
+            if (variables == null)
             {
-                merged[key] = value;
+                continue;
             }
-        }
 
-        if (executionVariables != null)
-        {
-            foreach (var (key, value) in executionVariables)
+            foreach (var (key, value) in variables)
             {
                 merged[key] = value;
             }

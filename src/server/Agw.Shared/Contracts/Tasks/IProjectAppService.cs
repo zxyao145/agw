@@ -14,9 +14,24 @@ public interface IProjectAppService
 
     Task<Project?> CreateAsync(Project project, string user);
 
+    Task<Project?> CreateAsync(
+        Project project,
+        IEnumerable<Guid>? mcpToolServerIds,
+        IEnumerable<Guid>? skillIds,
+        IEnumerable<Guid>? appInstanceIds,
+        string user) => CreateAsync(project, user);
+
     Task<bool> DeleteAsync(Guid id);
 
     Task<Project?> GetAsync(Guid id);
 
     Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user);
+
+    Task<Project?> UpdateAsync(
+        Guid id,
+        Action<Project> updateAction,
+        IEnumerable<Guid>? mcpToolServerIds,
+        IEnumerable<Guid>? skillIds,
+        IEnumerable<Guid>? appInstanceIds,
+        string user) => UpdateAsync(id, updateAction, user);
 }

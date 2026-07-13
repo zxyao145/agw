@@ -20,14 +20,14 @@ public class AgwDbContext : DbContext
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        PruneDeletedAgentAppRelations();
+        PruneDeletedRelations();
         StampJobRowVersions();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        PruneDeletedAgentAppRelations();
+        PruneDeletedRelations();
         StampJobRowVersions();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
@@ -53,6 +53,9 @@ public class AgwDbContext : DbContext
     public DbSet<AgentflowTrace> AgentflowNodeExecutionTraces => Set<AgentflowTrace>();
 
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectSkillRelation> ProjectSkillRelations => Set<ProjectSkillRelation>();
+    public DbSet<ProjectMcpServerRelation> ProjectMcpToolServers => Set<ProjectMcpServerRelation>();
+    public DbSet<ProjectAppRelation> ProjectAppRelations => Set<ProjectAppRelation>();
     public DbSet<ProjectContext> ProjectContexts => Set<ProjectContext>();
     public DbSet<TaskSessionBinding> TaskSessionBindings => Set<TaskSessionBinding>();
     public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
@@ -295,6 +298,64 @@ public class AgwDbContext : DbContext
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.Workspace).HasMaxLength(1000);
             entity.Property(e => e.ExtraSetting).HasMaxLength(16000);
+            entity.Property(e => e.Tools).HasMaxLength(4000);
+            entity.Property(e => e.EnvironmentVariables).HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? new Dictionary<string, string>()
+                    : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, (System.Text.Json.JsonSerializerOptions?)null)
+                    ?? new Dictionary<string, string>());
+        });
+
+        modelBuilder.Entity<ProjectSkillRelation>(entity =>
+        {
+            entity.HasKey(e => new { e.ProjectId, e.SkillId });
+
+            entity.HasOne(e => e.Project)
+                .WithMany(project => project.ProjectSkillRelations)
+                .HasForeignKey(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Skill)
+                .WithMany()
+                .HasForeignKey(e => e.SkillId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.SkillId);
+        });
+
+        modelBuilder.Entity<ProjectMcpServerRelation>(entity =>
+        {
+            entity.HasKey(e => new { e.ProjectId, e.McpToolServerId });
+
+            entity.HasOne(e => e.Project)
+                .WithMany(project => project.ProjectMcpToolServers)
+                .HasForeignKey(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.McpToolServer)
+                .WithMany()
+                .HasForeignKey(e => e.McpToolServerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.McpToolServerId);
+        });
+
+        modelBuilder.Entity<ProjectAppRelation>(entity =>
+        {
+            entity.HasKey(e => new { e.ProjectId, e.AppInstanceId });
+
+            entity.HasOne(e => e.Project)
+                .WithMany(project => project.ProjectAppRelations)
+                .HasForeignKey(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.AppInstance)
+                .WithMany()
+                .HasForeignKey(e => e.AppInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.AppInstanceId);
         });
 
         modelBuilder.Entity<ProjectContext>(entity =>
@@ -445,9 +506,21 @@ public class AgwDbContext : DbContext
         }
     }
 
-    private void PruneDeletedAgentAppRelations()
+    private void PruneDeletedRelations()
     {
         var deletedAgentIds = ChangeTracker.Entries<Agent>()
+            .Where(entry => entry.State == EntityState.Deleted)
+            .Select(entry => entry.Entity.Id)
+            .ToHashSet();
+        var deletedProjectIds = ChangeTracker.Entries<Project>()
+            .Where(entry => entry.State == EntityState.Deleted)
+            .Select(entry => entry.Entity.Id)
+            .ToHashSet();
+        var deletedSkillIds = ChangeTracker.Entries<Skill>()
+            .Where(entry => entry.State == EntityState.Deleted)
+            .Select(entry => entry.Entity.Id)
+            .ToHashSet();
+        var deletedMcpToolServerIds = ChangeTracker.Entries<McpServer>()
             .Where(entry => entry.State == EntityState.Deleted)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
@@ -456,20 +529,60 @@ public class AgwDbContext : DbContext
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
 
-        if (deletedAgentIds.Count == 0 && deletedAppInstanceIds.Count == 0)
+        if (deletedAgentIds.Count > 0 || deletedAppInstanceIds.Count > 0)
         {
-            return;
+            var agentAppRelationsToRemove = AgentAppRelations
+                .Where(relation =>
+                    deletedAgentIds.Contains(relation.AgentId)
+                    || deletedAppInstanceIds.Contains(relation.AppInstanceId))
+                .ToList();
+
+            if (agentAppRelationsToRemove.Count > 0)
+            {
+                AgentAppRelations.RemoveRange(agentAppRelationsToRemove);
+            }
         }
 
-        var relationsToRemove = AgentAppRelations
-            .Where(relation =>
-                deletedAgentIds.Contains(relation.AgentId)
-                || deletedAppInstanceIds.Contains(relation.AppInstanceId))
-            .ToList();
-
-        if (relationsToRemove.Count > 0)
+        if (deletedProjectIds.Count > 0 || deletedSkillIds.Count > 0)
         {
-            AgentAppRelations.RemoveRange(relationsToRemove);
+            var projectSkillRelationsToRemove = ProjectSkillRelations
+                .Where(relation =>
+                    deletedProjectIds.Contains(relation.ProjectId)
+                    || deletedSkillIds.Contains(relation.SkillId))
+                .ToList();
+
+            if (projectSkillRelationsToRemove.Count > 0)
+            {
+                ProjectSkillRelations.RemoveRange(projectSkillRelationsToRemove);
+            }
+        }
+
+        if (deletedProjectIds.Count > 0 || deletedMcpToolServerIds.Count > 0)
+        {
+            var projectMcpRelationsToRemove = ProjectMcpToolServers
+                .Where(relation =>
+                    deletedProjectIds.Contains(relation.ProjectId)
+                    || deletedMcpToolServerIds.Contains(relation.McpToolServerId))
+                .ToList();
+
+            if (projectMcpRelationsToRemove.Count > 0)
+            {
+                ProjectMcpToolServers.RemoveRange(projectMcpRelationsToRemove);
+            }
+        }
+
+        if (deletedProjectIds.Count > 0 || deletedAppInstanceIds.Count > 0)
+        {
+            var projectAppRelationsToRemove = ProjectAppRelations
+                .Where(relation =>
+                    deletedProjectIds.Contains(relation.ProjectId)
+                    || deletedAppInstanceIds.Contains(relation.AppInstanceId))
+                .ToList();
+
+            if (projectAppRelationsToRemove.Count > 0)
+            {
+                ProjectAppRelations.RemoveRange(projectAppRelationsToRemove);
+            }
         }
     }
 }

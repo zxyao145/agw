@@ -5,6 +5,11 @@ import test from "node:test";
 const CREATE_DIALOG_URL = new URL("./create-agent-dialog.tsx", import.meta.url);
 const EDIT_DIALOG_URL = new URL("./edit-agent-dialog.tsx", import.meta.url);
 const FORM_FIELDS_URL = new URL("./agent-form-fields.tsx", import.meta.url);
+const PAGE_URL = new URL("../page.tsx", import.meta.url);
+const CAPABILITY_PANELS_URL = new URL(
+  "../../../../../components/definition-capabilities/capability-panels.tsx",
+  import.meta.url,
+);
 const DROPDOWN_MENU_URL = new URL(
   "../../../../../components/ui/dropdown-menu.tsx",
   import.meta.url,
@@ -24,6 +29,29 @@ test("Create and Edit Agent dialogs use the full-screen Agentflow shell with hea
   }
 });
 
+test("Agent dialogs cannot close or reopen through Dialog while their mutation is pending", async () => {
+  for (const [fileUrl, mutationName] of [
+    [CREATE_DIALOG_URL, "createAgentMutation"],
+    [EDIT_DIALOG_URL, "updateAgentMutation"],
+  ] as const) {
+    const source = await readFile(fileUrl, "utf8");
+
+    assert.match(source, /onOpenChange=\{\(nextOpen\) =>/);
+    assert.match(source, new RegExp(`isPending: ${mutationName}\\.isPending`));
+    assert.match(
+      source,
+      new RegExp(
+        `type="button"[\\s\\S]*variant="outline"[\\s\\S]*size="sm"[\\s\\S]*disabled=\\{${mutationName}\\.isPending\\}[\\s\\S]*>\\s*Cancel`,
+      ),
+    );
+  }
+
+  const pageSource = await readFile(PAGE_URL, "utf8");
+  assert.match(pageSource, /setCreateOpen\(false\)/);
+  assert.match(pageSource, /setEditOpen\(false\)/);
+  assert.match(pageSource, /if \(updateAgentMutation\.isPending\) \{\s*return;\s*\}/);
+});
+
 test("Agent form uses a responsive 400px metadata column and six configuration tabs", async () => {
   const source = await readFile(FORM_FIELDS_URL, "utf8");
 
@@ -37,11 +65,11 @@ test("Agent form uses a responsive 400px metadata column and six configuration t
     source,
     /<TabsTrigger value="environment-variables">Environment Variables<\/TabsTrigger>/,
   );
-  assert.match(source, /<AgentEnvironmentVariablesEditor/);
+  assert.match(source, /<EnvironmentVariablesPanel/);
   assert.match(source, /External agents do not support system prompt configuration/);
   assert.match(source, /External agents do not support skill configuration/);
   assert.match(source, /External agents do not support tool configuration/);
-  assert.match(source, /SelectedItemsList/);
+  assert.match(source, /<SkillsPanel/);
 });
 
 test("Edit Agent only sends editable Extra Settings for External Agent updates", async () => {
@@ -82,13 +110,15 @@ test("Agent Model Provider Select portals inside the current dialog so wheel scr
 });
 
 test("Agent capability selectors portal inside the current dialog so wheel scrolling is preserved", async () => {
-  const [formSource, dropdownMenuSource, popoverSource] = await Promise.all([
+  const [formSource, panelsSource, dropdownMenuSource, popoverSource] = await Promise.all([
     readFile(FORM_FIELDS_URL, "utf8"),
+    readFile(CAPABILITY_PANELS_URL, "utf8"),
     readFile(DROPDOWN_MENU_URL, "utf8"),
     readFile(POPOVER_URL, "utf8"),
   ]);
 
-  assert.equal(formSource.match(/portalContainer=\{dialogPortalContainer\}/g)?.length, 5);
+  assert.equal(formSource.match(/portalContainer=\{dialogPortalContainer\}/g)?.length, 1);
+  assert.equal(panelsSource.match(/portalContainer=\{dialogPortalContainer\}/g)?.length, 4);
   assert.match(dropdownMenuSource, /portalContainer\?: HTMLElement \| null/);
   assert.match(dropdownMenuSource, /<DropdownMenuPrimitive\.Portal container=\{portalContainer\}>/);
   assert.match(popoverSource, /portalContainer\?: HTMLElement \| null/);

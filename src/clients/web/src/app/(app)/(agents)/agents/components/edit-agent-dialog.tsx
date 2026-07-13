@@ -1,6 +1,7 @@
 import * as React from "react";
 import { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
 
+import { applyDialogOpenChange } from "@/components/definition-capabilities";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -136,7 +137,16 @@ export function EditAgentDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) =>
+        applyDialogOpenChange({
+          isPending: updateAgentMutation.isPending,
+          nextOpen,
+          setOpen,
+        })
+      }
+    >
       <DialogContent
         ref={setDialogPortalContainer}
         className="fixed inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 p-0 sm:max-w-none"
@@ -155,7 +165,12 @@ export function EditAgentDialog({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <DialogClose asChild>
-                  <Button type="button" variant="outline" size="sm">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={updateAgentMutation.isPending}
+                  >
                     Cancel
                   </Button>
                 </DialogClose>

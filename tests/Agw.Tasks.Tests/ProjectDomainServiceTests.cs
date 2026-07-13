@@ -1,4 +1,5 @@
 using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Exceptions;
 using Agw.Tasks.Domain.Services;
 using Agw.Testing;
 
@@ -102,5 +103,100 @@ public class ProjectDomainServiceTests
         Assert.Equal("Updated", project.Description);
         Assert.Equal("tester", project.UpdateBy);
         Assert.Equal(UtcNow, project.UpdateTime);
+    }
+
+    [Fact]
+    public void TryPrepareForCreate_NullEnvironmentVariables_NormalizesToEmptyDictionary()
+    {
+        var project = new Project { Name = "Project A", EnvironmentVariables = null! };
+
+        var result = _service.TryPrepareForCreate(project, "tester");
+
+        Assert.True(result);
+        Assert.Empty(project.EnvironmentVariables);
+    }
+
+    [Fact]
+    public void TryPrepareForCreate_EmptyEnvironmentVariableValue_PreservesValue()
+    {
+        var project = new Project
+        {
+            Name = "Project A",
+            EnvironmentVariables = new Dictionary<string, string> { ["EMPTY"] = string.Empty }
+        };
+
+        var result = _service.TryPrepareForCreate(project, "tester");
+
+        Assert.True(result);
+        Assert.Equal(string.Empty, project.EnvironmentVariables["EMPTY"]);
+    }
+
+    [Fact]
+    public void TryPrepareForCreate_EnvironmentVariableNameWithWhitespace_TrimsName()
+    {
+        var project = new Project
+        {
+            Name = "Project A",
+            EnvironmentVariables = new Dictionary<string, string> { ["  API_KEY  "] = "secret" }
+        };
+
+        var result = _service.TryPrepareForCreate(project, "tester");
+
+        Assert.True(result);
+        var environmentVariables = project.EnvironmentVariables;
+        Assert.Equal("secret", Assert.Single(environmentVariables).Value);
+        Assert.True(environmentVariables.ContainsKey("API_KEY"));
+    }
+
+    [Theory]
+    [InlineData("   ")]
+    [InlineData("BAD=NAME")]
+    [InlineData("BAD\0NAME")]
+    public void TryPrepareForCreate_InvalidEnvironmentVariableName_Throws(string name)
+    {
+        var project = new Project
+        {
+            Name = "Project A",
+            EnvironmentVariables = new Dictionary<string, string> { [name] = "value" }
+        };
+
+        var exception = Assert.Throws<AgwException>(() => _service.TryPrepareForCreate(project, "tester"));
+
+        Assert.Equal(ErrorCodes.InvalidProjectEnvironmentVariableName.Code, exception.Code);
+    }
+
+    [Fact]
+    public void TryPrepareForCreate_DuplicateEnvironmentVariableNamesAfterTrim_Throws()
+    {
+        var project = new Project
+        {
+            Name = "Project A",
+            EnvironmentVariables = new Dictionary<string, string>
+            {
+                ["API_KEY"] = "first",
+                [" API_KEY "] = "second"
+            }
+        };
+
+        var exception = Assert.Throws<AgwException>(() => _service.TryPrepareForCreate(project, "tester"));
+
+        Assert.Equal(ErrorCodes.InvalidProjectEnvironmentVariableName.Code, exception.Code);
+    }
+
+    [Fact]
+    public void TryApplyUpdate_EnvironmentVariables_NormalizesNames()
+    {
+        var project = new Project { Id = Guid.NewGuid(), Name = "Project A" };
+
+        var result = _service.TryApplyUpdate(
+            project,
+            current => current.EnvironmentVariables = new Dictionary<string, string>
+            {
+                ["  API_KEY  "] = "updated"
+            },
+            "tester");
+
+        Assert.True(result);
+        Assert.Equal("updated", project.EnvironmentVariables["API_KEY"]);
     }
 }

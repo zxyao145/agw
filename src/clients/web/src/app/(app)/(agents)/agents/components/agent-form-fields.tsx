@@ -1,26 +1,20 @@
 import * as React from "react";
 import { UseQueryResult } from "@tanstack/react-query";
-import { ChevronDown, X } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  AppsPanel,
+  EnvironmentVariablesPanel,
+  McpToolServersPanel,
+  SkillsPanel,
+  ToolsPanel,
+  type AppInstanceOption,
+  type EnvironmentVariableEntry,
+  type McpToolServerDto,
+  type SkillDto,
+  type ToolInfo,
+} from "@/components/definition-capabilities";
 import { Input } from "@/components/ui/input";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemTitle,
-} from "@/components/ui/item";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -33,15 +27,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
-import { AgentEnvironmentVariablesEditor } from "./agent-environment-variables-editor";
-import type { AgentEnvironmentVariableEntry } from "./agent-environment-variables";
 import { getAgentExtraSettingsError } from "./agent-extra-settings";
-import {
-  buildAppOptionLabel,
-  getAppAuthorizationState,
-  type AppInstanceOption,
-} from "./app-selector";
-import type { McpToolServerDto, ModelProviderDto, SkillDto, ToolInfo } from "./types";
+import type { ModelProviderDto } from "./types";
 
 type AgentFormMode = "create" | "edit";
 
@@ -61,8 +48,8 @@ interface AgentFormFieldsProps {
   agentType: string;
   extra: string;
   setExtra?: (value: string) => void;
-  environmentVariables: AgentEnvironmentVariableEntry[];
-  setEnvironmentVariables: (entries: AgentEnvironmentVariableEntry[]) => void;
+  environmentVariables: EnvironmentVariableEntry[];
+  setEnvironmentVariables: (entries: EnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
   appOptions: AppInstanceOption[];
   selectedAppInstanceIds: string[];
@@ -80,62 +67,6 @@ interface AgentFormFieldsProps {
   selectedMcpToolServerIds: string[];
   toggleMcpToolServer: (mcpToolServerId: string) => void;
   idPrefix?: string;
-}
-
-type SelectedItem = {
-  id: string;
-  title: string;
-  description?: string;
-};
-
-interface SelectedItemsListProps {
-  items: SelectedItem[];
-  emptyLabel: string;
-  onRemove: (id: string) => void;
-  readOnly?: boolean;
-}
-
-function SelectedItemsList({
-  items,
-  emptyLabel,
-  onRemove,
-  readOnly = false,
-}: SelectedItemsListProps) {
-  if (items.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-        {emptyLabel}
-      </div>
-    );
-  }
-
-  return (
-    <ItemGroup className="gap-2">
-      {items.map((item) => (
-        <Item key={item.id} variant="outline" size="sm" className="bg-background/70">
-          <ItemContent className="min-w-0">
-            <ItemTitle className="max-w-full truncate">{item.title}</ItemTitle>
-            {item.description ? (
-              <ItemDescription className="line-clamp-2 text-xs">{item.description}</ItemDescription>
-            ) : null}
-          </ItemContent>
-          {!readOnly ? (
-            <ItemActions>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Remove ${item.title}`}
-                onClick={() => onRemove(item.id)}
-              >
-                <X />
-              </Button>
-            </ItemActions>
-          ) : null}
-        </Item>
-      ))}
-    </ItemGroup>
-  );
 }
 
 function ExternalAgentNotice({ children }: { children: React.ReactNode }) {
@@ -182,47 +113,9 @@ export function AgentFormFields({
   toggleMcpToolServer,
   idPrefix = "",
 }: AgentFormFieldsProps) {
-  const [appPopoverOpen, setAppPopoverOpen] = React.useState(false);
   const isExternalAgent = agentType === "1";
   const canEditExtra = mode === "edit" && isExternalAgent;
   const extraError = canEditExtra ? getAgentExtraSettingsError(extra) : null;
-
-  const selectedSkills =
-    skillsQuery.data?.filter((skill) => selectedSkillIds.includes(skill.id)) ?? [];
-  const selectedApps = appOptions.filter((app) => selectedAppInstanceIds.includes(app.id));
-  const selectedToolItems = selectedTools.map((toolName) => {
-    const tool = toolsQuery.data?.find((candidate) => candidate.name === toolName);
-    return {
-      id: toolName,
-      title: toolName,
-      description: tool ? [tool.category, tool.description].filter(Boolean).join(" · ") : undefined,
-    };
-  });
-  const selectedMcpToolServers = selectedMcpToolServerIds.map((selectedId) => {
-    const server = mcpToolServersQuery.data?.find((candidate) => candidate.id === selectedId);
-    return {
-      id: selectedId,
-      title: server?.name ?? selectedId,
-    };
-  });
-  const groupedTools = React.useMemo(() => {
-    if (!toolsQuery.data) {
-      return [];
-    }
-
-    const groups = new Map<string, ToolInfo[]>();
-    for (const tool of toolsQuery.data) {
-      const category = tool.category.trim() || "Uncategorized";
-      const existing = groups.get(category);
-      if (existing) {
-        existing.push(tool);
-      } else {
-        groups.set(category, [tool]);
-      }
-    }
-
-    return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
-  }, [toolsQuery.data]);
 
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden border-t lg:grid-cols-[400px_minmax(0,1fr)] lg:grid-rows-1">
@@ -383,311 +276,73 @@ export function AgentFormFields({
           </TabsContent>
 
           <TabsContent value="skills" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-medium">Skills</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Attach reusable instruction packages to the agent.
-                </p>
-              </div>
-              {isExternalAgent ? (
-                <ExternalAgentNotice>
-                  External agents do not support skill configuration.
-                </ExternalAgentNotice>
-              ) : null}
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    id={`${idPrefix}skills`}
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-between font-normal"
-                    disabled={isExternalAgent}
-                  >
-                    <span>
-                      {selectedSkillIds.length > 0
-                        ? `${selectedSkillIds.length} skill${selectedSkillIds.length === 1 ? "" : "s"} selected`
-                        : "Select skills..."}
-                    </span>
-                    <ChevronDown className="size-4 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="max-h-72 w-[var(--radix-dropdown-menu-trigger-width)]"
-                  portalContainer={dialogPortalContainer}
-                >
-                  <DropdownMenuLabel>Available Skills</DropdownMenuLabel>
-                  {skillsQuery.isLoading ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      Loading skills...
-                    </div>
-                  ) : skillsQuery.data && skillsQuery.data.length > 0 ? (
-                    skillsQuery.data.map((skill) => (
-                      <DropdownMenuCheckboxItem
-                        key={skill.id}
-                        checked={selectedSkillIds.includes(skill.id)}
-                        className="items-start"
-                        onCheckedChange={() => toggleSkill(skill.id)}
-                        onSelect={(event) => event.preventDefault()}
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{skill.name}</div>
-                          {skill.description ? (
-                            <div className="whitespace-normal break-words text-xs text-muted-foreground">
-                              {skill.description}
-                            </div>
-                          ) : null}
-                        </div>
-                      </DropdownMenuCheckboxItem>
-                    ))
-                  ) : (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">No skills found</div>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <SelectedItemsList
-                items={selectedSkills.map((skill) => ({
-                  id: skill.id,
-                  title: skill.name,
-                  description: skill.description,
-                }))}
-                emptyLabel="No skills selected"
-                onRemove={toggleSkill}
-                readOnly={isExternalAgent}
-              />
-            </div>
+            <SkillsPanel
+              dialogPortalContainer={dialogPortalContainer}
+              idPrefix={idPrefix}
+              skillsQuery={skillsQuery}
+              selectedSkillIds={selectedSkillIds}
+              toggleSkill={toggleSkill}
+              disabled={isExternalAgent}
+              notice={
+                isExternalAgent ? (
+                  <ExternalAgentNotice>
+                    External agents do not support skill configuration.
+                  </ExternalAgentNotice>
+                ) : null
+              }
+            />
           </TabsContent>
 
           <TabsContent value="tools" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-medium">Tools</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Give the agent access to registered application tools.
-                </p>
-              </div>
-              {isExternalAgent ? (
-                <ExternalAgentNotice>
-                  External agents do not support tool configuration.
-                </ExternalAgentNotice>
-              ) : null}
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    id={`${idPrefix}tools`}
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-between font-normal"
-                    disabled={isExternalAgent}
-                  >
-                    <span>
-                      {selectedTools.length > 0
-                        ? `${selectedTools.length} tool${selectedTools.length === 1 ? "" : "s"} selected`
-                        : "Select tools..."}
-                    </span>
-                    <ChevronDown className="size-4 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="max-h-72 w-[var(--radix-dropdown-menu-trigger-width)]"
-                  portalContainer={dialogPortalContainer}
-                >
-                  <DropdownMenuLabel>Available Tools</DropdownMenuLabel>
-                  {toolsQuery.isLoading ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      Loading tools...
-                    </div>
-                  ) : groupedTools.length > 0 ? (
-                    groupedTools.map(([category, tools]) => (
-                      <React.Fragment key={category}>
-                        <DropdownMenuLabel>{category}</DropdownMenuLabel>
-                        {tools.map((tool) => (
-                          <DropdownMenuCheckboxItem
-                            key={tool.name}
-                            checked={selectedTools.includes(tool.name)}
-                            className="items-start"
-                            onCheckedChange={() => toggleTool(tool.name)}
-                            onSelect={(event) => event.preventDefault()}
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate font-medium">{tool.name}</div>
-                              {tool.description ? (
-                                <div className="whitespace-normal break-words text-xs text-muted-foreground">
-                                  {tool.description}
-                                </div>
-                              ) : null}
-                            </div>
-                          </DropdownMenuCheckboxItem>
-                        ))}
-                      </React.Fragment>
-                    ))
-                  ) : (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">No tools found</div>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <SelectedItemsList
-                items={selectedToolItems}
-                emptyLabel="No tools selected"
-                onRemove={toggleTool}
-                readOnly={isExternalAgent}
-              />
-            </div>
+            <ToolsPanel
+              dialogPortalContainer={dialogPortalContainer}
+              idPrefix={idPrefix}
+              toolsQuery={toolsQuery}
+              selectedTools={selectedTools}
+              toggleTool={toggleTool}
+              disabled={isExternalAgent}
+              notice={
+                isExternalAgent ? (
+                  <ExternalAgentNotice>
+                    External agents do not support tool configuration.
+                  </ExternalAgentNotice>
+                ) : null
+              }
+            />
           </TabsContent>
 
           <TabsContent value="mcp-tool-servers" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-medium">MCP Tool Server</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Connect the agent to configured Model Context Protocol servers.
-                </p>
-              </div>
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    id={`${idPrefix}mcpToolServers`}
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-between font-normal"
-                  >
-                    <span>
-                      {selectedMcpToolServerIds.length > 0
-                        ? `${selectedMcpToolServerIds.length} server${selectedMcpToolServerIds.length === 1 ? "" : "s"} selected`
-                        : "Select MCP tool servers..."}
-                    </span>
-                    <ChevronDown className="size-4 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="max-h-72 w-[var(--radix-dropdown-menu-trigger-width)]"
-                  portalContainer={dialogPortalContainer}
-                >
-                  <DropdownMenuLabel>Available MCP Tool Servers</DropdownMenuLabel>
-                  {mcpToolServersQuery.isLoading ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      Loading MCP tool servers...
-                    </div>
-                  ) : mcpToolServersQuery.data && mcpToolServersQuery.data.length > 0 ? (
-                    mcpToolServersQuery.data.map((server) => (
-                      <DropdownMenuCheckboxItem
-                        key={server.id}
-                        checked={selectedMcpToolServerIds.includes(server.id)}
-                        onCheckedChange={() => toggleMcpToolServer(server.id)}
-                        onSelect={(event) => event.preventDefault()}
-                      >
-                        {server.name}
-                      </DropdownMenuCheckboxItem>
-                    ))
-                  ) : (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      No MCP tool servers found
-                    </div>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <SelectedItemsList
-                items={selectedMcpToolServers}
-                emptyLabel="No MCP tool servers selected"
-                onRemove={toggleMcpToolServer}
-              />
-            </div>
+            <McpToolServersPanel
+              dialogPortalContainer={dialogPortalContainer}
+              idPrefix={idPrefix}
+              mcpToolServersQuery={mcpToolServersQuery}
+              selectedMcpToolServerIds={selectedMcpToolServerIds}
+              toggleMcpToolServer={toggleMcpToolServer}
+            />
           </TabsContent>
 
           <TabsContent value="apps" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-medium">Apps</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Attach authorized integration connections to this agent.
-                </p>
-              </div>
-              <Popover open={appPopoverOpen} onOpenChange={setAppPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    id={`${idPrefix}appInstances`}
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-between font-normal"
-                    disabled={appOptions.length === 0}
-                  >
-                    <span>
-                      {selectedAppInstanceIds.length > 0
-                        ? `${selectedAppInstanceIds.length} app${selectedAppInstanceIds.length === 1 ? "" : "s"} selected`
-                        : "Select apps..."}
-                    </span>
-                    <ChevronDown className="size-4 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="w-[var(--radix-popover-trigger-width)] p-0"
-                  align="start"
-                  portalContainer={dialogPortalContainer}
-                >
-                  <div className="border-b p-2">
-                    <Input
-                      value={appSearchTerm}
-                      onChange={(event) => setAppSearchTerm(event.target.value)}
-                      placeholder="Search apps..."
-                    />
-                  </div>
-                  <div className="max-h-72 overflow-y-auto p-1">
-                    {filteredAppOptions.length > 0 ? (
-                      filteredAppOptions.map((app) => (
-                        <button
-                          key={app.id}
-                          type="button"
-                          className="flex w-full items-start justify-between rounded-md px-2 py-2 text-left hover:bg-muted"
-                          onClick={() => toggleAppInstance(app.id)}
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">{buildAppOptionLabel(app)}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {app.provider} · {getAppAuthorizationState(app)}
-                            </div>
-                          </div>
-                          <input
-                            tabIndex={-1}
-                            type="checkbox"
-                            checked={selectedAppInstanceIds.includes(app.id)}
-                            readOnly
-                          />
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-2 py-3 text-sm text-muted-foreground">No apps found</div>
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <SelectedItemsList
-                items={selectedApps.map((app) => ({
-                  id: app.id,
-                  title: buildAppOptionLabel(app),
-                  description: `${app.provider} · ${getAppAuthorizationState(app)}`,
-                }))}
-                emptyLabel="No apps selected"
-                onRemove={toggleAppInstance}
-              />
-              {appOptions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No app connections found. Create one on the integrations page first.
-                </p>
-              ) : null}
-            </div>
+            <AppsPanel
+              dialogPortalContainer={dialogPortalContainer}
+              idPrefix={idPrefix}
+              appOptions={appOptions}
+              selectedAppInstanceIds={selectedAppInstanceIds}
+              appSearchTerm={appSearchTerm}
+              setAppSearchTerm={setAppSearchTerm}
+              filteredAppOptions={filteredAppOptions}
+              toggleAppInstance={toggleAppInstance}
+            />
           </TabsContent>
 
           <TabsContent
             value="environment-variables"
             className="m-0 min-h-0 flex-1 overflow-y-auto p-6"
           >
-            <AgentEnvironmentVariablesEditor
+            <EnvironmentVariablesPanel
               entries={environmentVariables}
               setEntries={setEnvironmentVariables}
               idPrefix={idPrefix}
+              ownerLabel="agent"
             />
           </TabsContent>
         </Tabs>

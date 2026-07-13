@@ -61,6 +61,39 @@ public class AgentRuntimeServiceCompositionTests
     }
 
     [Fact]
+    public void MergeEnvironmentVariables_ProjectAndExecutionValuesOverrideEarlierLayers()
+    {
+        var agentVariables = new Dictionary<string, string>
+        {
+            ["SHARED"] = "agent",
+            ["PROJECT_SHARED"] = "agent",
+            ["AGENT_ONLY"] = "agent",
+        };
+        var projectVariables = new Dictionary<string, string>
+        {
+            ["SHARED"] = "project",
+            ["PROJECT_SHARED"] = "project",
+            ["PROJECT_ONLY"] = "project",
+        };
+        var executionVariables = new Dictionary<string, string>
+        {
+            ["SHARED"] = "session",
+            ["SESSION_ONLY"] = "session",
+        };
+
+        var result = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
+            agentVariables,
+            projectVariables,
+            executionVariables);
+
+        Assert.Equal("session", result["SHARED"]);
+        Assert.Equal("project", result["PROJECT_SHARED"]);
+        Assert.Equal("agent", result["AGENT_ONLY"]);
+        Assert.Equal("project", result["PROJECT_ONLY"]);
+        Assert.Equal("session", result["SESSION_ONLY"]);
+    }
+
+    [Fact]
     public void ExternalAgentNames_Codex_HasDefaultCodexOptions()
     {
         var codexAgent = Assert.Single(

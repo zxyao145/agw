@@ -4,41 +4,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import {
-  getAgentEnvironmentVariablesError,
-  type AgentEnvironmentVariableEntry,
-} from "./agent-environment-variables";
+  getEnvironmentVariablesError,
+  type EnvironmentVariableEntry,
+} from "./environment-variables";
 
-interface AgentEnvironmentVariablesEditorProps {
-  entries: AgentEnvironmentVariableEntry[];
-  setEntries: (entries: AgentEnvironmentVariableEntry[]) => void;
+interface EnvironmentVariablesEditorProps {
+  entries: EnvironmentVariableEntry[];
+  setEntries: (entries: EnvironmentVariableEntry[]) => void;
   idPrefix?: string;
+  scopeLabel?: string;
 }
 
-export function AgentEnvironmentVariablesEditor({
+export function EnvironmentVariablesEditor({
   entries,
   setEntries,
   idPrefix = "",
-}: AgentEnvironmentVariablesEditorProps) {
-  const error = getAgentEnvironmentVariablesError(entries);
+  scopeLabel = "agent",
+}: EnvironmentVariablesEditorProps) {
+  const error = getEnvironmentVariablesError(entries);
 
-  const addEntry = () => {
-    setEntries([...entries, { key: "", value: "" }]);
-  };
-
-  const updateEntry = (
-    index: number,
-    field: keyof AgentEnvironmentVariableEntry,
-    value: string,
-  ) => {
+  const updateEntry = (index: number, field: keyof EnvironmentVariableEntry, value: string) => {
     setEntries(
       entries.map((entry, entryIndex) =>
         entryIndex === index ? { ...entry, [field]: value } : entry,
       ),
     );
-  };
-
-  const removeEntry = (index: number) => {
-    setEntries(entries.filter((_, entryIndex) => entryIndex !== index));
   };
 
   return (
@@ -47,10 +37,15 @@ export function AgentEnvironmentVariablesEditor({
         <div>
           <h3 className="font-medium">Environment Variables</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Configure variables scoped to this agent and the processes it starts.
+            Configure variables scoped to this {scopeLabel} and the processes it starts.
           </p>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={addEntry}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setEntries([...entries, { key: "", value: "" }])}
+        >
           <Plus />
           Add Variable
         </Button>
@@ -94,7 +89,7 @@ export function AgentEnvironmentVariablesEditor({
                 variant="ghost"
                 size="icon"
                 aria-label={`Remove environment variable ${index + 1}`}
-                onClick={() => removeEntry(index)}
+                onClick={() => setEntries(entries.filter((_, entryIndex) => entryIndex !== index))}
               >
                 <Trash2 />
               </Button>

@@ -105,13 +105,28 @@ public class AgentAppService
 
     public async Task<string[]> CollectNamedToolNamesAsync(Guid agentId, string? rawAgentTools)
     {
+        var appRelations = await _agentAppRelationRepository.ListAsync(x => x.AgentId == agentId);
+        return await CollectNamedToolNamesAsync(
+            [rawAgentTools],
+            appRelations.Select(x => x.AppInstanceId));
+    }
+
+    public async Task<string[]> CollectNamedToolNamesAsync(
+        IEnumerable<string?>? rawToolSources,
+        IEnumerable<Guid>? appInstanceIds)
+    {
         var mergedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (!string.IsNullOrWhiteSpace(rawAgentTools))
+        foreach (var rawTools in rawToolSources ?? [])
         {
+            if (string.IsNullOrWhiteSpace(rawTools))
+            {
+                continue;
+            }
+
             try
             {
-                var directTools = JsonSerializer.Deserialize<string[]>(rawAgentTools) ?? [];
+                var directTools = JsonSerializer.Deserialize<string[]>(rawTools) ?? [];
                 foreach (var toolName in directTools.Where(static name => !string.IsNullOrWhiteSpace(name)))
                 {
                     mergedNames.Add(toolName);
@@ -122,14 +137,16 @@ public class AgentAppService
             }
         }
 
-        var appRelations = await _agentAppRelationRepository.ListAsync(x => x.AgentId == agentId);
-        var appInstanceIds = appRelations.Select(x => x.AppInstanceId).Distinct().ToList();
-        if (appInstanceIds.Count == 0)
+        var requestedAppInstanceIds = (appInstanceIds ?? [])
+            .Where(static id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (requestedAppInstanceIds.Count == 0)
         {
             return [.. mergedNames.OrderBy(x => x, StringComparer.OrdinalIgnoreCase)];
         }
 
-        var appInstances = await _appInstanceRepository.ListAsync(x => appInstanceIds.Contains(x.Id));
+        var appInstances = await _appInstanceRepository.ListAsync(x => requestedAppInstanceIds.Contains(x.Id));
         var appNames = appInstances.Select(x => x.AppName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (appNames.Count == 0)
         {
@@ -158,7 +175,16 @@ public class AgentAppService
     public async Task<IReadOnlyList<McpServer>> ListEnabledMcpToolServersByAgentAsync(Guid agentId)
     {
         var links = await _agentMcpToolServerRepository.ListAsync(x => x.AgentId == agentId);
-        var serverIds = links.Select(x => x.McpToolServerId).Distinct().ToList();
+        return await ListEnabledMcpToolServersAsync(links.Select(x => x.McpToolServerId));
+    }
+
+    public async Task<IReadOnlyList<McpServer>> ListEnabledMcpToolServersAsync(
+        IEnumerable<Guid>? mcpToolServerIds)
+    {
+        var serverIds = (mcpToolServerIds ?? [])
+            .Where(static id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
         if (serverIds.Count == 0)
         {
             return [];
@@ -170,13 +196,21 @@ public class AgentAppService
     public async Task<IReadOnlyList<Skill>> ListSkillsByAgentAsync(Guid agentId)
     {
         var relations = await _agentSkillRelationRepository.ListAsync(x => x.AgentId == agentId);
-        if (relations.Count == 0)
+        return await ListSkillsAsync(relations.Select(x => x.SkillId));
+    }
+
+    public async Task<IReadOnlyList<Skill>> ListSkillsAsync(IEnumerable<Guid>? skillIds)
+    {
+        var requestedSkillIds = (skillIds ?? [])
+            .Where(static id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (requestedSkillIds.Count == 0)
         {
             return [];
         }
 
-        var skillIds = relations.Select(x => x.SkillId).Distinct().ToList();
-        return await _skillRepository.ListAsync(x => skillIds.Contains(x.Id));
+        return await _skillRepository.ListAsync(x => requestedSkillIds.Contains(x.Id));
     }
 
     public async Task<Agent?> CreateAgentAsync(

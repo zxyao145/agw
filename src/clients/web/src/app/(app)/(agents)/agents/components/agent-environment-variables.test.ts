@@ -4,10 +4,10 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const {
-  getAgentEnvironmentVariablesError,
-  normalizeAgentEnvironmentVariables,
-  toAgentEnvironmentVariableEntries,
-} = require("./agent-environment-variables.ts") as typeof import("./agent-environment-variables");
+  getEnvironmentVariablesError: getAgentEnvironmentVariablesError,
+  normalizeEnvironmentVariables: normalizeAgentEnvironmentVariables,
+  toEnvironmentVariableEntries: toAgentEnvironmentVariableEntries,
+} = require("../../../../../components/definition-capabilities/environment-variables.ts") as typeof import("../../../../../components/definition-capabilities/environment-variables");
 
 test("normalizeAgentEnvironmentVariables trims keys and preserves empty values", () => {
   const result = normalizeAgentEnvironmentVariables([

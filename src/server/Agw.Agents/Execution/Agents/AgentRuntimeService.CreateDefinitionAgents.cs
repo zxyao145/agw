@@ -49,9 +49,9 @@ public partial class AgentRuntimeService
 
         var authConfig = authConfigs[Random.Shared.Next(authConfigs.Count)];
         IList<AITool>? tools =
-            await CreateAgentTools(agentDefinition, project.Id, environmentVariables, cancellationToken)
+            await CreateAgentTools(agentDefinition, project, environmentVariables, cancellationToken)
                 .ConfigureAwait(false);
-        var skillsProvider = await CreateSkillsProviderAsync(agentDefinition.Id).ConfigureAwait(false);
+        var skillsProvider = await CreateSkillsProviderAsync(agentDefinition, project).ConfigureAwait(false);
 
         string workspace = project.GetMustWorkspace();
         AIAgent aiAgent = provider.ProviderType switch

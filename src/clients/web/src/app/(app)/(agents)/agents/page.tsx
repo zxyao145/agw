@@ -182,6 +182,10 @@ export default function AgentsPage() {
   });
 
   const handleEdit = (agent: AgentDto) => {
+    if (updateAgentMutation.isPending) {
+      return;
+    }
+
     setEditingAgent(agent);
     setEditDisplayName(agent.displayName);
     setEditName(agent.name);

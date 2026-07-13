@@ -32,6 +32,21 @@ public partial class AgentRuntimeService
         bool resume,
         CancellationToken cancellationToken = default)
     {
+        return await CreateAiAgentAsync(
+            agentId,
+            projectId,
+            resume,
+            environmentVariables: null,
+            cancellationToken);
+    }
+
+    public async Task<AIAgent?> CreateAiAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        bool resume,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        CancellationToken cancellationToken = default)
+    {
         var agent = await _agentAppService.GetAgentAsync(agentId);
         if (agent == null)
         {
@@ -41,6 +56,7 @@ public partial class AgentRuntimeService
         return await CreateAiAgentAsync(new CreateAiAgentRequest
         {
             Agent = agent,
+            EnvironmentVariables = environmentVariables,
             ProjectId = projectId,
             Resume = resume,
         }, cancellationToken);
@@ -57,6 +73,7 @@ public partial class AgentRuntimeService
         ArgumentNullException.ThrowIfNull(project);
         var environmentVariables = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
             request.Agent.EnvironmentVariables,
+            project.EnvironmentVariables,
             request.EnvironmentVariables);
 
         if (request.Agent.Type == AgentType.External)

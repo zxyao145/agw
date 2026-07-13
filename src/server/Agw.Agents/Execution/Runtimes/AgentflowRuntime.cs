@@ -36,5 +36,6 @@ public sealed class AgentflowRuntime : RuntimeBase
             ProjectDefaults.GetDefaultProjectIdentifier(_settings.ProjectId),
             _task.ContextId,
             _task.TaskId,
-            humanGateApprovalHandler);
+            humanGateApprovalHandler,
+            _settings.EnvironmentVariables);
 }

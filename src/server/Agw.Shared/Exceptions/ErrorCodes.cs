@@ -60,6 +60,7 @@ public static class ErrorCodes
     public static readonly ErrorCode UnsupportedDistributedLockProvider = new(400_0054, "Distributed lock provider is not supported.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode InvalidAgentExtraSettings = new(400_0055, "Agent extra settings must be a JSON object.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode InvalidAgentEnvironmentVariableName = new(400_0056, "Agent environment variable names must be unique after trimming, non-empty, and cannot contain '=' or null characters.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode InvalidProjectEnvironmentVariableName = new(400_0057, "Project environment variable names must be unique after trimming, non-empty, and cannot contain '=' or null characters.", HttpStatusCode.BadRequest);
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode SftpAuthenticationFailed = new(401_0002, "SFTP authentication failed.", HttpStatusCode.Unauthorized);

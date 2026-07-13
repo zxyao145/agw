@@ -26,19 +26,6 @@ export interface AgentUpdateRequest {
   environmentVariables: Record<string, string>;
 }
 
-export type ToolInfo = {
-  name: string;
-  description: string;
-  category: string;
-  typeName: string;
-  parameters: Array<{
-    name: string;
-    type: string;
-    description?: string;
-    isOptional: boolean;
-  }>;
-};
-
 export type ModelProviderDto = {
   id: string;
   modelId: string;
@@ -48,14 +35,4 @@ export type ModelProviderDto = {
   modelName: string;
 };
 
-export type McpToolServerDto = {
-  id: string;
-  name: string;
-};
-
-export type SkillDto = {
-  id: string;
-  name: string;
-  description: string;
-  agentIds: string[];
-};
+export type { McpToolServerDto, SkillDto, ToolInfo } from "@/components/definition-capabilities";
