@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 import {
   formatProjectFolderName,
@@ -52,13 +53,6 @@ type ProjectDto = {
   updateBy?: string | null;
   updateTime?: string | null;
 };
-
-function formatDate(value?: string | null): string {
-  if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString();
-}
 
 function isValidJsonPayload(value: string): boolean {
   const trimmed = value.trim();
@@ -369,7 +363,7 @@ export default function ProjectsPage() {
                 <div className="text-xs text-muted-foreground">
                   <span className="font-mono">{p.id}</span>
                   <span className="mx-2">·</span>
-                  Updated: {formatDate(p.updateTime ?? p.createTime)}
+                  Updated: {formatLocalDateTime(p.updateTime ?? p.createTime)}
                 </div>
               </div>
 

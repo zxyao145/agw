@@ -8,6 +8,7 @@ import { AlertCircle, ArrowLeft, CheckCircle2, ShieldAlert } from "lucide-react"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 function findMatchingAuthRequest(state: string | null) {
   if (!state || typeof window === "undefined") {
@@ -138,7 +139,9 @@ export default function IntegrationsCallbackPage() {
             <div>
               <dt className="font-medium">Started at</dt>
               <dd className="mt-1 text-muted-foreground">
-                {matchingRequest?.createdAt ?? "Unknown"}
+                {matchingRequest?.createdAt
+                  ? formatLocalDateTime(matchingRequest.createdAt)
+                  : "Unknown"}
               </dd>
             </div>
             <div>

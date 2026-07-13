@@ -14,6 +14,7 @@ import type { ProviderDto } from "./types";
 import { getApiErrorMessage } from "@/api/utils";
 import { StaticTable } from "@/components/static-table";
 import { Empty } from "@/components/ui/empty";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 interface ProvidersTableProps {
   providers?: ProviderDto[];
@@ -89,7 +90,7 @@ export function ProvidersTable({ providers, isLoading, isError, error }: Provide
             </TableCell>
             <TableCell>{provider.authConfigs?.length ?? 0}</TableCell>
             <TableCell className="text-xs text-muted-foreground">
-              {provider.createTime ? new Date(provider.createTime).toLocaleString() : "-"}
+              {formatLocalDateTime(provider.createTime)}
             </TableCell>
             <TableCell className="text-right">
               <div className="flex justify-end gap-2">

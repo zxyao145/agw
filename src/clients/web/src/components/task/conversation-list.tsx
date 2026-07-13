@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { formatLocalDateTimeExact, parseApiDateTime } from "@/lib/date-time";
+import { formatFriendlyLocalDateTime } from "@/lib/date-time";
 import { cn } from "@/lib/utils";
 
 interface ConversationListProps {
@@ -211,22 +211,6 @@ export function ConversationList({
     }
   };
 
-  const formatDate = (timestamp: string) => {
-    const date = parseApiDateTime(timestamp);
-    if (!date) return timestamp;
-
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-
-    return formatLocalDateTimeExact(date);
-  };
-
   return (
     <div className="flex flex-col bg-muted/30 w-full h-full min-h-0">
       <div className="p-4 border-b flex items-center justify-between">
@@ -299,7 +283,7 @@ export function ConversationList({
                       {context.messageCount === 1 ? "message" : "messages"}
                     </div>
                     <div className="mt-2 text-xs text-muted-foreground">
-                      {formatDate(context.updateTime ?? context.createTime)}
+                      {formatFriendlyLocalDateTime(context.updateTime ?? context.createTime)}
                     </div>
                   </div>
                   <div className="flex opacity-0 group-hover:opacity-100">

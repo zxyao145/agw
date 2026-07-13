@@ -12,6 +12,7 @@ import type { ModelDto } from "./types";
 import { getApiErrorMessage } from "@/api/utils";
 import { StaticTable } from "@/components/static-table";
 import { Empty } from "@/components/ui/empty";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 interface ModelsTableProps {
   models: ModelDto[] | undefined;
@@ -69,7 +70,7 @@ export function ModelsTable({ models, isLoading, isError, error }: ModelsTablePr
               <TableCell className="max-w-xs truncate">{model.description || "-"}</TableCell>
               <TableCell className="text-right">{model.maxTokens.toLocaleString()}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {model.createTime ? new Date(model.createTime).toLocaleString() : "-"}
+                {formatLocalDateTime(model.createTime)}
               </TableCell>
               <TableCell className="text-right">
                 <Button

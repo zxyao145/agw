@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty } from "@/components/ui/empty";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 type JobDto = {
   id: string;
@@ -30,22 +31,6 @@ type JobLogDto = {
   attempt: number;
   errorMessage: string | null;
 };
-
-function formatDateTime(value?: string | null): string {
-  if (!value) {
-    return "-";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
 
 export default function JobLogsPage() {
   const searchParams = useSearchParams();
@@ -155,8 +140,8 @@ export default function JobLogsPage() {
                 <TableCell className="font-medium">#{log.attempt}</TableCell>
                 <TableCell className="font-mono text-xs break-all">{log.jobId}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {formatDateTime(log.startTime)}
-                  {log.endTime ? ` -> ${formatDateTime(log.endTime)}` : ""}
+                  {formatLocalDateTime(log.startTime)}
+                  {log.endTime ? ` -> ${formatLocalDateTime(log.endTime)}` : ""}
                 </TableCell>
                 <TableCell className="max-w-90 text-sm text-muted-foreground">
                   <div className="line-clamp-2 wrap-break-word">{log.errorMessage ?? "-"}</div>

@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { getApiErrorMessage } from "@/api/utils";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 type SkillDto = {
   id: string;
@@ -74,18 +75,6 @@ function createEditFormState(skill: SkillDto): SkillFormState {
     description: skill.description,
     archive: null,
   };
-}
-
-function formatDateTime(value?: string | null): string {
-  if (!value) return "-";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
 }
 
 function buildDefaultSkillNameFromFileName(fileName: string): string {
@@ -349,7 +338,7 @@ export default function SkillsPage() {
                 <TableCell className="min-w-44">
                   <div className="font-medium">{skill.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    Created {formatDateTime(skill.createTime)}
+                    Created {formatLocalDateTime(skill.createTime)}
                   </div>
                 </TableCell>
                 <TableCell className="max-w-md">
@@ -361,7 +350,7 @@ export default function SkillsPage() {
                   {skill.contentPath}
                 </TableCell>
                 <TableCell className="min-w-40 text-sm text-muted-foreground">
-                  {formatDateTime(skill.updateTime ?? skill.createTime)}
+                  {formatLocalDateTime(skill.updateTime ?? skill.createTime)}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">

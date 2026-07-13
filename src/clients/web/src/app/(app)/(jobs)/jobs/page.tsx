@@ -37,6 +37,7 @@ import { Switch } from "@/components/ui/switch";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { getApiErrorMessage } from "@/api/utils";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 type JobDto = {
   id: string;
@@ -270,18 +271,6 @@ function resolveTriggerValue(form: JobFormState): string {
     default:
       return form.triggerValue.trim();
   }
-}
-
-function formatDateTime(value?: string | null): string {
-  if (!value) return "-";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
 }
 
 function toLocalInput(dateTime?: string | null): string {
@@ -632,11 +621,13 @@ export default function JobsPage() {
                 <TableCell className="min-w-52">
                   <div className="font-medium">{getTriggerTypeLabel(job.triggerType)}</div>
                   <div className="font-mono text-xs break-all text-muted-foreground">
-                    {job.triggerValue}
+                    {job.triggerType === TRIGGER_TYPE_ONCE
+                      ? formatLocalDateTime(job.triggerValue)
+                      : job.triggerValue}
                   </div>
                 </TableCell>
                 <TableCell className="min-w-44 text-sm text-muted-foreground">
-                  <div>{formatDateTime(job.nextRunTime)}</div>
+                  <div>{formatLocalDateTime(job.nextRunTime)}</div>
                 </TableCell>
                 <TableCell className="min-w-52">
                   <div className="flex flex-col items-start gap-2">
@@ -1197,8 +1188,16 @@ function JobDetailsDialog({
                 <DetailField label="Agent Type" value={getAgentTypeLabel(job.agentType)} />
                 <DetailField label="Agent ID" value={job.agentId ?? "-"} mono />
                 <DetailField label="Trigger Type" value={getTriggerTypeLabel(job.triggerType)} />
-                <DetailField label="Trigger Value" value={job.triggerValue} mono />
-                <DetailField label="Next Run" value={formatDateTime(job.nextRunTime)} />
+                <DetailField
+                  label="Trigger Value"
+                  value={
+                    job.triggerType === TRIGGER_TYPE_ONCE
+                      ? formatLocalDateTime(job.triggerValue)
+                      : job.triggerValue
+                  }
+                  mono
+                />
+                <DetailField label="Next Run" value={formatLocalDateTime(job.nextRunTime)} />
                 <DetailField label="Status" value={getStatusLabel(job.status)} />
                 <DetailField
                   label="Execution"
@@ -1248,8 +1247,8 @@ function JobDetailsDialog({
                             <span className="text-sm font-medium">Attempt {log.attempt}</span>
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {formatDateTime(log.startTime)}
-                            {log.endTime ? ` -> ${formatDateTime(log.endTime)}` : ""}
+                            {formatLocalDateTime(log.startTime)}
+                            {log.endTime ? ` -> ${formatLocalDateTime(log.endTime)}` : ""}
                           </div>
                         </div>
                         {log.errorMessage ? (

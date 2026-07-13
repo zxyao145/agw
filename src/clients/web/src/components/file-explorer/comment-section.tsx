@@ -1,6 +1,7 @@
 import { Trash2 } from "lucide-react";
 import React from "react";
 import { Textarea } from "@/components/ui/textarea";
+import { formatLocalDateTimeExact } from "@/lib/date-time";
 import { CommentSide, CommentSideLabel, LineComment } from "./types";
 
 interface CommentInputProps {
@@ -114,7 +115,7 @@ export function CommentSection({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                 <span className="text-xs text-muted-foreground font-medium">
-                  {comment.timestamp.toLocaleTimeString()}
+                  {formatLocalDateTimeExact(comment.timestamp)}
                 </span>
               </div>
               {editingCommentId === comment.id ? (

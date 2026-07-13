@@ -13,6 +13,7 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import { Pencil, Trash2, Play, Waypoints } from "lucide-react";
 import type { AgentflowDto, AgentflowSaveRequest } from "@/types/agentflow";
 import { getApiErrorMessage } from "@/api/utils";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 interface AgentflowsTableProps {
   agentflows: AgentflowDto[];
@@ -81,7 +82,7 @@ export function AgentflowsTable({
               <TableCell className="max-w-xs truncate">{agentflow.description || "-"}</TableCell>
               <TableCell>DAG</TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {agentflow.createTime ? new Date(agentflow.createTime).toLocaleString() : "-"}
+                {formatLocalDateTime(agentflow.createTime)}
               </TableCell>
               <TableCell className="text-center">
                 <label className="relative inline-flex items-center cursor-pointer">

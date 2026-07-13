@@ -1,3 +1,5 @@
+import { formatLocalDateTime } from "@/lib/date-time";
+
 export type IntegrationCategory = number | null;
 
 export type AppDefinitionItem = {
@@ -85,19 +87,7 @@ export function formatIntegrationCategory(category: IntegrationCategory): string
 }
 
 export function formatDateTime(value: string | null | undefined): string {
-  if (!value) {
-    return "Not available";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(parsed);
+  return value ? formatLocalDateTime(value) : "Not available";
 }
 
 export function getAuthorizationState(instance: AppInstanceItem): {

@@ -52,12 +52,15 @@ test("conversation list ignores stale refresh responses", async () => {
   assert.match(conversationListSource, /requestId !== refreshRequestIdRef\.current/);
 });
 
-test("chat contexts display older timestamps in exact local format", async () => {
+test("chat contexts use the shared friendly local date-time formatter", async () => {
   const conversationListSource = await readFile(CONVERSATION_LIST_URL, "utf8");
 
-  assert.match(conversationListSource, /formatLocalDateTimeExact/);
-  assert.match(conversationListSource, /return formatLocalDateTimeExact\(date\);/);
-  assert.doesNotMatch(conversationListSource, /date\.toLocaleDateString/);
+  assert.match(conversationListSource, /formatFriendlyLocalDateTime/);
+  assert.match(
+    conversationListSource,
+    /formatFriendlyLocalDateTime\(context\.updateTime \?\? context\.createTime\)/,
+  );
+  assert.doesNotMatch(conversationListSource, /const formatDate =/);
 });
 
 test("chat context list filters empty conversation placeholders", async () => {

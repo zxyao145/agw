@@ -7,6 +7,7 @@ import type { AgentDto } from "./types";
 import { getApiErrorMessage } from "@/api/utils";
 import { StaticTable } from "@/components/static-table";
 import { Empty } from "@/components/ui/empty";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 interface AgentsTableProps {
   agentsQuery: UseQueryResult<AgentDto[], Error>;
@@ -86,7 +87,7 @@ export function AgentsTable({ agentsQuery, onEdit, onDelete, onExecute }: Agents
                 )}
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {agent.createTime ? new Date(agent.createTime).toLocaleString() : "-"}
+                {formatLocalDateTime(agent.createTime)}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">

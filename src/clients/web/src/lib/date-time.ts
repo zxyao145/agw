@@ -25,5 +25,24 @@ export function formatLocalDateTime(value?: string | null): string {
   }
 
   const date = parseApiDateTime(value);
-  return date ? date.toLocaleString() : value;
+  return date ? formatLocalDateTimeExact(date) : value;
+}
+
+export function formatFriendlyLocalDateTime(value: string, now = new Date()): string {
+  const date = parseApiDateTime(value);
+  if (!date) {
+    return value;
+  }
+
+  const diffMs = now.getTime() - date.getTime();
+  if (diffMs >= 0) {
+    const diffMinutes = Math.floor(diffMs / 60_000);
+    if (diffMinutes < 1) return "Just now";
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+    const diffHours = Math.floor(diffMs / 3_600_000);
+    if (diffHours < 24) return `${diffHours}h ago`;
+  }
+
+  return formatLocalDateTimeExact(date);
 }

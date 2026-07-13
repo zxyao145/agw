@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatLocalDateTime } from "@/lib/date-time";
 
 function encodeMobileConfig(token: string): string {
   const bytes = new TextEncoder().encode(
@@ -152,7 +153,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="font-medium">{token.name}</p>
                     <p className="font-mono text-xs text-muted-foreground">
-                      {token.prefix}… · {new Date(token.createdAt).toLocaleString()}
+                      {token.prefix}… · {formatLocalDateTime(token.createdAt)}
                     </p>
                   </div>
                   <Button
