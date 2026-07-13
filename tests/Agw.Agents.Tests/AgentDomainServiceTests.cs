@@ -102,17 +102,54 @@ public class AgentDomainServiceTests
     }
 
     [Fact]
-    public void PrepareForCreate_ExternalAgentWithSummaryEnabled_DisablesSummary()
+    public void PrepareForCreate_ExternalAgentWithSummaryEnabledAndSummaryModelProvider_PreservesSummary()
+    {
+        var summaryModelProviderId = Guid.NewGuid();
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            EnableSummary = true,
+            ModelProviderId = null,
+            SummaryModelProviderId = summaryModelProviderId,
+        };
+
+        _service.PrepareForCreate(agent, "tester");
+
+        Assert.True(agent.EnableSummary);
+        Assert.Equal(summaryModelProviderId, agent.SummaryModelProviderId);
+    }
+
+    [Fact]
+    public void PrepareForCreate_ExternalAgentWithSummaryEnabledWithoutModelProvider_ThrowsAgwException()
     {
         var agent = new Agent
         {
             Type = AgentType.External,
             EnableSummary = true,
+            ModelProviderId = null,
+            SummaryModelProviderId = null,
+        };
+
+        var exception = Assert.Throws<AgwException>(() => _service.PrepareForCreate(agent, "tester"));
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Fact]
+    public void PrepareForCreate_SystemAgentWithSummaryEnabled_DefaultsToAgentModelProvider()
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.System,
+            EnableSummary = true,
+            ModelProviderId = Guid.NewGuid(),
+            SummaryModelProviderId = null,
         };
 
         _service.PrepareForCreate(agent, "tester");
 
-        Assert.False(agent.EnableSummary);
+        Assert.True(agent.EnableSummary);
+        Assert.Null(agent.SummaryModelProviderId);
     }
 
     [Fact]
@@ -150,6 +187,7 @@ public class AgentDomainServiceTests
             CreateTime = originalCreateTime,
         };
         var updatedModelProviderId = Guid.NewGuid();
+        var updatedSummaryModelProviderId = Guid.NewGuid();
 
         _service.ApplyUpdate(
             agent,
@@ -163,6 +201,7 @@ public class AgentDomainServiceTests
                 current.Type = AgentType.System;
                 current.DisplayName = "After";
                 current.ModelProviderId = updatedModelProviderId;
+                current.SummaryModelProviderId = updatedSummaryModelProviderId;
             },
             "updater");
 
@@ -170,10 +209,11 @@ public class AgentDomainServiceTests
         Assert.Equal("original-name", agent.Name);
         Assert.Equal("original-prompt", agent.SystemPrompt);
         Assert.Equal("[\"tool-a\"]", agent.Tools);
-        Assert.False(agent.EnableSummary);
+        Assert.True(agent.EnableSummary);
         Assert.Equal(AgentType.External, agent.Type);
         Assert.Equal("After", agent.DisplayName);
         Assert.Equal(updatedModelProviderId, agent.ModelProviderId);
+        Assert.Equal(updatedSummaryModelProviderId, agent.SummaryModelProviderId);
         Assert.Equal("updater", agent.UpdateBy);
         Assert.Equal(UtcNow, agent.UpdateTime);
     }

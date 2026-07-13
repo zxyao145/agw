@@ -46,6 +46,8 @@ interface AgentFormFieldsProps {
   setSystemPrompt: (value: string) => void;
   modelProviderId: string;
   setModelProviderId: (value: string) => void;
+  summaryModelProviderId: string;
+  setSummaryModelProviderId: (value: string) => void;
   enableSummary: boolean;
   setEnableSummary: (value: boolean) => void;
   agentType: string;
@@ -93,6 +95,8 @@ export function AgentFormFields({
   setSystemPrompt,
   modelProviderId,
   setModelProviderId,
+  summaryModelProviderId,
+  setSummaryModelProviderId,
   enableSummary,
   setEnableSummary,
   agentType,
@@ -119,6 +123,9 @@ export function AgentFormFields({
   idPrefix = "",
 }: AgentFormFieldsProps) {
   const isExternalAgent = agentType === "1";
+  const effectiveSummaryModelProviderId = isExternalAgent
+    ? summaryModelProviderId
+    : summaryModelProviderId || modelProviderId;
   const canEditExtra = mode === "edit" && isExternalAgent;
   const extraError = canEditExtra ? getAgentExtraSettingsError(extra) : null;
 
@@ -218,21 +225,66 @@ export function AgentFormFields({
             </Select>
           </div>
 
-          {!isExternalAgent ? (
-            <div className="flex items-start justify-between gap-4 rounded-lg border bg-background px-4 py-3">
-              <div className="space-y-1">
-                <Label htmlFor={`${idPrefix}enableSummary`} className="cursor-pointer">
-                  Generate Turn Summary
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Append a Markdown summary after each successful turn.
-                </p>
-              </div>
-              <Switch
-                id={`${idPrefix}enableSummary`}
-                checked={enableSummary}
-                onCheckedChange={setEnableSummary}
-              />
+          <div className="flex items-start justify-between gap-4 rounded-lg border bg-background px-4 py-3">
+            <div className="space-y-1">
+              <Label htmlFor={`${idPrefix}enableSummary`} className="cursor-pointer">
+                Generate Turn Summary
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Append a Markdown summary after each successful turn using the selected Summary
+                Model Provider.
+              </p>
+            </div>
+            <Switch
+              id={`${idPrefix}enableSummary`}
+              checked={enableSummary}
+              onCheckedChange={setEnableSummary}
+            />
+          </div>
+
+          {enableSummary ? (
+            <div className="grid gap-2">
+              <Label htmlFor={`${idPrefix}summaryModelProviderId`}>
+                Summary Model Provider
+                {!isExternalAgent && !summaryModelProviderId ? (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (Defaults to Agent Model Provider)
+                  </span>
+                ) : null}
+              </Label>
+              <Select
+                value={effectiveSummaryModelProviderId}
+                onValueChange={setSummaryModelProviderId}
+              >
+                <SelectTrigger id={`${idPrefix}summaryModelProviderId`} className="w-full">
+                  <SelectValue placeholder="Select a summary model provider..." />
+                </SelectTrigger>
+                <SelectContent
+                  position="popper"
+                  sideOffset={4}
+                  portalContainer={dialogPortalContainer}
+                >
+                  <SelectGroup>
+                    <SelectLabel>Available Model Providers</SelectLabel>
+                    {modelProvidersQuery.isLoading ? (
+                      <SelectItem value="loading" disabled>
+                        Loading...
+                      </SelectItem>
+                    ) : modelProvidersQuery.data && modelProvidersQuery.data.length > 0 ? (
+                      modelProvidersQuery.data.map((modelProvider) => (
+                        <SelectItem key={modelProvider.id} value={modelProvider.id}>
+                          {modelProvider.modelName} ({modelProvider.providerName}-
+                          {modelProvider.providerType})
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-providers" disabled>
+                        No model providers available
+                      </SelectItem>
+                    )}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
           ) : null}
 

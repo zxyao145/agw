@@ -2,7 +2,6 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Runtimes;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Extensions;
@@ -58,6 +57,7 @@ public partial class AgentRuntimeService
         var agentSession = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, sessionKey, cancellationToken);
         _providerSessionState.InitializeSessionState(agentSession, resolvedContextId,
             ProjectDefaults.GetDefaultProjectIdentifier(projectId));
+        var summaryModelProviderId = ResolveSummaryModelProviderId(agent);
         return new AgentRuntime(
             logger: _logger,
             aiAgent,
@@ -65,8 +65,8 @@ public partial class AgentRuntimeService
             projectId: projectId,
             contextId: resolvedContextId,
             sessionKey: sessionKey,
-            enableSummary: agent.Type == AgentType.System && agent.EnableSummary,
-            summaryModelProviderId: agent.ModelProviderId,
+            enableSummary: agent.EnableSummary && summaryModelProviderId.HasValue,
+            summaryModelProviderId: summaryModelProviderId,
             summaryService: _summaryService);
     }
 

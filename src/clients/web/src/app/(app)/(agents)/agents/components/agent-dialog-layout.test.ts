@@ -90,7 +90,7 @@ test("Create and Edit Agent dialogs send normalized environment variables", asyn
   }
 });
 
-test("System Agent forms expose and submit the optional turn summary setting", async () => {
+test("All Agent forms expose and submit the optional turn summary setting", async () => {
   const [createSource, editSource, formSource] = await Promise.all([
     readFile(CREATE_DIALOG_URL, "utf8"),
     readFile(EDIT_DIALOG_URL, "utf8"),
@@ -99,14 +99,24 @@ test("System Agent forms expose and submit the optional turn summary setting", a
 
   assert.match(formSource, /enableSummary: boolean/);
   assert.match(formSource, /setEnableSummary: \(value: boolean\) => void/);
-  assert.match(formSource, /!isExternalAgent[\s\S]*Generate Turn Summary/);
+  assert.match(formSource, /summaryModelProviderId: string/);
+  assert.match(formSource, /setSummaryModelProviderId: \(value: string\) => void/);
+  assert.match(formSource, /Summary Model Provider/);
+  assert.match(
+    formSource,
+    /isExternalAgent\s*\?\s*summaryModelProviderId\s*:\s*summaryModelProviderId \|\| modelProviderId/,
+  );
+  assert.doesNotMatch(formSource, /\{!isExternalAgent \? \([\s\S]*Generate Turn Summary/);
   assert.match(formSource, /checked=\{enableSummary\}/);
   assert.match(formSource, /onCheckedChange=\{setEnableSummary\}/);
   assert.match(createSource, /enableSummary,/);
-  assert.match(editSource, /enableSummary: !isExternalAgent && enableSummary/);
+  assert.match(createSource, /summaryModelProviderId: summaryModelProviderId \|\| null/);
+  assert.doesNotMatch(editSource, /enableSummary: !isExternalAgent && enableSummary/);
+  assert.match(editSource, /summaryModelProviderId: summaryModelProviderId \|\| null/);
+  assert.match(editSource, /enableSummary && !effectiveSummaryModelProviderId/);
 });
 
-test("Agent Model Provider Select portals inside the current dialog so wheel scrolling is preserved", async () => {
+test("Agent Model Provider Selects portal inside the current dialog so wheel scrolling is preserved", async () => {
   const [createSource, editSource, formSource, selectSource] = await Promise.all([
     readFile(CREATE_DIALOG_URL, "utf8"),
     readFile(EDIT_DIALOG_URL, "utf8"),
@@ -133,7 +143,7 @@ test("Agent capability selectors portal inside the current dialog so wheel scrol
     readFile(POPOVER_URL, "utf8"),
   ]);
 
-  assert.equal(formSource.match(/portalContainer=\{dialogPortalContainer\}/g)?.length, 1);
+  assert.equal(formSource.match(/portalContainer=\{dialogPortalContainer\}/g)?.length, 2);
   assert.equal(panelsSource.match(/portalContainer=\{dialogPortalContainer\}/g)?.length, 4);
   assert.match(dropdownMenuSource, /portalContainer\?: HTMLElement \| null/);
   assert.match(dropdownMenuSource, /<DropdownMenuPrimitive\.Portal container=\{portalContainer\}>/);

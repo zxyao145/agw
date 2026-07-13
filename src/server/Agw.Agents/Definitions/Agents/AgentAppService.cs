@@ -220,7 +220,8 @@ public class AgentAppService
         IEnumerable<Guid>? appInstanceIds,
         string user)
     {
-        if (await HasInvalidModelProviderAsync(agent.ModelProviderId))
+        if (await HasInvalidModelProviderAsync(agent.ModelProviderId) ||
+            await HasInvalidModelProviderAsync(agent.SummaryModelProviderId))
         {
             return null;
         }
@@ -249,7 +250,8 @@ public class AgentAppService
         }
 
         _agentDomainService.ApplyUpdate(existing, updateAction, user);
-        if (await HasInvalidModelProviderAsync(existing.ModelProviderId))
+        if (await HasInvalidModelProviderAsync(existing.ModelProviderId) ||
+            await HasInvalidModelProviderAsync(existing.SummaryModelProviderId))
         {
             return null;
         }

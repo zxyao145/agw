@@ -12,18 +12,22 @@ namespace Agw.Agents.Tests;
 
 public class AgentRuntimeServiceSummaryTests
 {
-    [Fact]
-    public async Task AppendDefinitionSummaryAsync_EnabledSystemAgent_AppendsResult()
+    [Theory]
+    [InlineData(AgentType.System)]
+    [InlineData(AgentType.External)]
+    public async Task AppendDefinitionSummaryAsync_EnabledAgent_AppendsResult(AgentType agentType)
     {
         var projectId = Guid.NewGuid();
-        var modelProviderId = Guid.NewGuid();
+        var agentModelProviderId = Guid.NewGuid();
+        var summaryModelProviderId = Guid.NewGuid();
         var summaryService = new RecordingSummaryService();
         var service = CreateService(summaryService);
         var agent = new Agent
         {
-            Type = AgentType.System,
+            Type = agentType,
             EnableSummary = true,
-            ModelProviderId = modelProviderId,
+            ModelProviderId = agentModelProviderId,
+            SummaryModelProviderId = summaryModelProviderId,
         };
         var outputs = new List<AgwMessage>
         {
@@ -41,14 +45,38 @@ public class AgentRuntimeServiceSummaryTests
         Assert.Equal(2, result.Count);
         Assert.Equal("result", result[1].AdditionalProperties!["type"]);
         var call = Assert.Single(summaryService.Calls);
-        Assert.Equal(modelProviderId, call.ModelProviderId);
+        Assert.Equal(summaryModelProviderId, call.ModelProviderId);
         Assert.Equal(["request", "done"], call.Messages.Select(message => message.Text));
+    }
+
+    [Fact]
+    public async Task AppendDefinitionSummaryAsync_SystemAgentWithoutSummaryModelProvider_UsesAgentModelProvider()
+    {
+        var agentModelProviderId = Guid.NewGuid();
+        var summaryService = new RecordingSummaryService();
+        var service = CreateService(summaryService);
+
+        await service.AppendDefinitionSummaryAsync(
+            new Agent
+            {
+                Type = AgentType.System,
+                EnableSummary = true,
+                ModelProviderId = agentModelProviderId,
+                SummaryModelProviderId = null,
+            },
+            [new ChatMessage(ChatRole.User, "request")],
+            [new AgwMessage("assistant-1", "agent", AiRole.Assistant, [])],
+            Guid.NewGuid(),
+            "context-1",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(agentModelProviderId, Assert.Single(summaryService.Calls).ModelProviderId);
     }
 
     [Theory]
     [InlineData(AgentType.System, false)]
-    [InlineData(AgentType.External, true)]
-    public async Task AppendDefinitionSummaryAsync_NotEnabledSystemAgent_ReturnsOriginalMessages(
+    [InlineData(AgentType.External, false)]
+    public async Task AppendDefinitionSummaryAsync_SummaryDisabled_ReturnsOriginalMessages(
         AgentType agentType,
         bool enableSummary)
     {

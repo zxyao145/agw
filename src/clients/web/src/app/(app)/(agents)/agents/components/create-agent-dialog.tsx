@@ -41,6 +41,8 @@ interface CreateAgentDialogProps {
   setSystemPrompt: (value: string) => void;
   modelProviderId: string;
   setModelProviderId: (value: string) => void;
+  summaryModelProviderId: string;
+  setSummaryModelProviderId: (value: string) => void;
   enableSummary: boolean;
   setEnableSummary: (value: boolean) => void;
   environmentVariables: AgentEnvironmentVariableEntry[];
@@ -77,6 +79,8 @@ export function CreateAgentDialog({
   setSystemPrompt,
   modelProviderId,
   setModelProviderId,
+  summaryModelProviderId,
+  setSummaryModelProviderId,
   enableSummary,
   setEnableSummary,
   environmentVariables,
@@ -111,6 +115,7 @@ export function CreateAgentDialog({
       description,
       systemPrompt,
       modelProviderId,
+      summaryModelProviderId: summaryModelProviderId || null,
       enableSummary,
       tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
       skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
@@ -192,6 +197,8 @@ export function CreateAgentDialog({
             setSystemPrompt={setSystemPrompt}
             modelProviderId={modelProviderId}
             setModelProviderId={setModelProviderId}
+            summaryModelProviderId={summaryModelProviderId}
+            setSummaryModelProviderId={setSummaryModelProviderId}
             enableSummary={enableSummary}
             setEnableSummary={setEnableSummary}
             agentType="0"

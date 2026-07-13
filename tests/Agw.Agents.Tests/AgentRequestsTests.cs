@@ -62,4 +62,31 @@ public class AgentRequestsTests
 
         Assert.Equal("secret", response.EnvironmentVariables["AGW_TOKEN"]);
     }
+
+    [Fact]
+    public void AgentSummaryModelProviderId_RoundTripsThroughRequestsAndResponse()
+    {
+        var summaryModelProviderId = Guid.NewGuid();
+        var createRequest = new AgentCreateRequest(
+            "Agent",
+            "agent",
+            "Description",
+            "Prompt",
+            Guid.NewGuid(),
+            SummaryModelProviderId: summaryModelProviderId);
+        var updateRequest = new AgentUpdateRequest(
+            "Agent",
+            "Description",
+            "Prompt",
+            Guid.NewGuid(),
+            SummaryModelProviderId: summaryModelProviderId);
+        var response = AgentResponse.FromDomain(new Agent
+        {
+            SummaryModelProviderId = summaryModelProviderId,
+        });
+
+        Assert.Equal(summaryModelProviderId, createRequest.SummaryModelProviderId);
+        Assert.Equal(summaryModelProviderId, updateRequest.SummaryModelProviderId);
+        Assert.Equal(summaryModelProviderId, response.SummaryModelProviderId);
+    }
 }

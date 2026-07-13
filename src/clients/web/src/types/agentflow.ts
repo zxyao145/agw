@@ -11,6 +11,7 @@ export interface AgentDto extends BaseDto {
   name: string;
   systemPrompt: string;
   modelProviderId: string | null;
+  summaryModelProviderId: string | null;
   enableSummary: boolean;
 
   description: string;

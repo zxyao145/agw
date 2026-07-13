@@ -3993,6 +3993,13 @@
             ],
             "format": "uuid"
           },
+          "summaryModelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "tools": {
             "type": [
               "null",
@@ -4621,6 +4628,7 @@
           "description",
           "systemPrompt",
           "modelProviderId",
+          "summaryModelProviderId",
           "enableSummary",
           "tools",
           "type",
@@ -4653,6 +4661,13 @@
             "type": "string"
           },
           "modelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "summaryModelProviderId": {
             "type": [
               "null",
               "string"
@@ -4799,6 +4814,13 @@
             "type": "string"
           },
           "modelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "summaryModelProviderId": {
             "type": [
               "null",
               "string"

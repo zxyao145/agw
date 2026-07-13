@@ -43,6 +43,8 @@ interface EditAgentDialogProps {
   setSystemPrompt: (value: string) => void;
   modelProviderId: string;
   setModelProviderId: (value: string) => void;
+  summaryModelProviderId: string;
+  setSummaryModelProviderId: (value: string) => void;
   enableSummary: boolean;
   setEnableSummary: (value: boolean) => void;
   extra: string;
@@ -87,6 +89,8 @@ export function EditAgentDialog({
   setSystemPrompt,
   modelProviderId,
   setModelProviderId,
+  summaryModelProviderId,
+  setSummaryModelProviderId,
   enableSummary,
   setEnableSummary,
   extra,
@@ -115,6 +119,9 @@ export function EditAgentDialog({
     null,
   );
   const isExternalAgent = editingAgent?.type === 1;
+  const effectiveSummaryModelProviderId = isExternalAgent
+    ? summaryModelProviderId
+    : summaryModelProviderId || modelProviderId;
   const extraError = isExternalAgent ? getAgentExtraSettingsError(extra) : null;
   const environmentVariablesError = getAgentEnvironmentVariablesError(environmentVariables);
 
@@ -130,7 +137,8 @@ export function EditAgentDialog({
         description,
         systemPrompt,
         modelProviderId,
-        enableSummary: !isExternalAgent && enableSummary,
+        summaryModelProviderId: summaryModelProviderId || null,
+        enableSummary,
         tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
         skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
         mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
@@ -187,6 +195,7 @@ export function EditAgentDialog({
                     !editingAgent ||
                     !displayName.trim() ||
                     (!isExternalAgent && !modelProviderId.trim()) ||
+                    (enableSummary && !effectiveSummaryModelProviderId) ||
                     Boolean(extraError) ||
                     Boolean(environmentVariablesError) ||
                     updateAgentMutation.isPending
@@ -211,6 +220,8 @@ export function EditAgentDialog({
             setSystemPrompt={setSystemPrompt}
             modelProviderId={modelProviderId}
             setModelProviderId={setModelProviderId}
+            summaryModelProviderId={summaryModelProviderId}
+            setSummaryModelProviderId={setSummaryModelProviderId}
             enableSummary={enableSummary}
             setEnableSummary={setEnableSummary}
             agentType={editingAgent?.type.toString() ?? "0"}

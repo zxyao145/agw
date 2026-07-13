@@ -153,9 +153,9 @@ public partial class AgentRuntimeService
         string contextId,
         CancellationToken cancellationToken)
     {
-        if (agent.Type != AgentType.System ||
-            !agent.EnableSummary ||
-            !agent.ModelProviderId.HasValue)
+        var summaryModelProviderId = ResolveSummaryModelProviderId(agent);
+        if (!agent.EnableSummary ||
+            !summaryModelProviderId.HasValue)
         {
             return outputMessages.ToList();
         }
@@ -185,7 +185,7 @@ public partial class AgentRuntimeService
         }
 
         var result = await _summaryService.CreateResultAsync(
-            agent.ModelProviderId.Value,
+            summaryModelProviderId.Value,
             sourceMessages,
             projectId,
             contextId,
@@ -201,6 +201,10 @@ public partial class AgentRuntimeService
 
         return messages;
     }
+
+    private static Guid? ResolveSummaryModelProviderId(Agent agent) =>
+        agent.SummaryModelProviderId ??
+        (agent.Type == AgentType.System ? agent.ModelProviderId : null);
 
     private static async Task<List<AgwMessage>> CollectStreamingMessagesAsync(
         AIAgent aiAgent,

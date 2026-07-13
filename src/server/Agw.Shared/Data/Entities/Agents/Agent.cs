@@ -25,6 +25,8 @@ public class Agent : BaseEntity, IAggregateRoot
 
     public bool EnableSummary { get; set; }
 
+    public Guid? SummaryModelProviderId { get; set; }
+
     public AgentType Type { get; set; } = AgentType.System;
 
     /// <summary>

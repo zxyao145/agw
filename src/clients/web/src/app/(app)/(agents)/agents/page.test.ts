@@ -39,7 +39,19 @@ test("agents page owns and initializes Create and Edit summary state", async () 
     /const \[editEnableSummary, setEditEnableSummary\] = React\.useState\(false\)/,
   );
   assert.match(source, /setEditEnableSummary\(agent\.enableSummary\)/);
+  assert.match(
+    source,
+    /const \[summaryModelProviderId, setSummaryModelProviderId\] = React\.useState\(""\)/,
+  );
+  assert.match(
+    source,
+    /const \[editSummaryModelProviderId, setEditSummaryModelProviderId\] = React\.useState\(""\)/,
+  );
+  assert.match(source, /setEditSummaryModelProviderId\(agent\.summaryModelProviderId \?\? ""\)/);
   assert.match(source, /enableSummary=\{enableSummary\}/);
   assert.match(source, /enableSummary=\{editEnableSummary\}/);
+  assert.match(source, /summaryModelProviderId=\{summaryModelProviderId\}/);
+  assert.match(source, /summaryModelProviderId=\{editSummaryModelProviderId\}/);
   assert.match(source, /setEnableSummary\(false\)/);
+  assert.match(source, /setSummaryModelProviderId\(""\)/);
 });

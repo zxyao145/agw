@@ -3242,6 +3242,8 @@ export interface components {
             systemPrompt: string;
             /** Format: uuid */
             modelProviderId: null | string;
+            /** Format: uuid */
+            summaryModelProviderId?: null | string;
             tools: null | string;
             mcpToolServerIds?: null | string[];
             skillIds?: null | string[];
@@ -3396,6 +3398,8 @@ export interface components {
             systemPrompt: string;
             /** Format: uuid */
             modelProviderId: null | string;
+            /** Format: uuid */
+            summaryModelProviderId: null | string;
             enableSummary: boolean;
             tools: null | string;
             type: components["schemas"]["AgentType"];
@@ -3435,6 +3439,8 @@ export interface components {
             systemPrompt: string;
             /** Format: uuid */
             modelProviderId: null | string;
+            /** Format: uuid */
+            summaryModelProviderId?: null | string;
             tools: null | string;
             mcpToolServerIds?: null | string[];
             skillIds?: null | string[];

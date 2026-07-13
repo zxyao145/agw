@@ -46,6 +46,7 @@ public class AgentsController : ControllerBase
             Description = request.Description,
             SystemPrompt = request.SystemPrompt,
             ModelProviderId = request.ModelProviderId,
+            SummaryModelProviderId = request.SummaryModelProviderId,
             EnableSummary = request.EnableSummary,
             Tools = request.Tools,
             EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>()
@@ -75,6 +76,7 @@ public class AgentsController : ControllerBase
                 agent.Description = request.Description;
                 agent.SystemPrompt = request.SystemPrompt;
                 agent.ModelProviderId = request.ModelProviderId;
+                agent.SummaryModelProviderId = request.SummaryModelProviderId;
                 agent.EnableSummary = request.EnableSummary;
                 agent.Tools = request.Tools;
                 agent.Extra = request.Extra;

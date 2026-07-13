@@ -80,6 +80,7 @@ export default function AgentsPage() {
   const [description, setDescription] = React.useState("");
   const [systemPrompt, setSystemPrompt] = React.useState("");
   const [modelProviderId, setModelProviderId] = React.useState("");
+  const [summaryModelProviderId, setSummaryModelProviderId] = React.useState("");
   const [enableSummary, setEnableSummary] = React.useState(false);
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedAppInstanceIds, setSelectedAppInstanceIds] = React.useState<string[]>([]);
@@ -98,6 +99,7 @@ export default function AgentsPage() {
   const [editDescription, setEditDescription] = React.useState("");
   const [editSystemPrompt, setEditSystemPrompt] = React.useState("");
   const [editModelProviderId, setEditModelProviderId] = React.useState("");
+  const [editSummaryModelProviderId, setEditSummaryModelProviderId] = React.useState("");
   const [editEnableSummary, setEditEnableSummary] = React.useState(false);
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
   const [editSelectedAppInstanceIds, setEditSelectedAppInstanceIds] = React.useState<string[]>([]);
@@ -131,6 +133,7 @@ export default function AgentsPage() {
       setDescription("");
       setSystemPrompt("");
       setModelProviderId("");
+      setSummaryModelProviderId("");
       setEnableSummary(false);
       setSelectedSkillIds([]);
       setSelectedAppInstanceIds([]);
@@ -156,6 +159,7 @@ export default function AgentsPage() {
       toast.success("Agent updated");
       setEditOpen(false);
       setEditingAgent(null);
+      setEditSummaryModelProviderId("");
       setEditEnableSummary(false);
       setEditSelectedSkillIds([]);
       setEditSelectedAppInstanceIds([]);
@@ -196,6 +200,7 @@ export default function AgentsPage() {
     setEditDescription(agent.description);
     setEditSystemPrompt(agent.systemPrompt);
     setEditModelProviderId(agent.modelProviderId ?? "");
+    setEditSummaryModelProviderId(agent.summaryModelProviderId ?? "");
     setEditEnableSummary(agent.enableSummary);
     setEditExtra(agent.extra || "");
     setEditEnvironmentVariables(toAgentEnvironmentVariableEntries(agent.environmentVariables));
@@ -323,6 +328,8 @@ export default function AgentsPage() {
             setSystemPrompt={setSystemPrompt}
             modelProviderId={modelProviderId}
             setModelProviderId={setModelProviderId}
+            summaryModelProviderId={summaryModelProviderId}
+            setSummaryModelProviderId={setSummaryModelProviderId}
             enableSummary={enableSummary}
             setEnableSummary={setEnableSummary}
             environmentVariables={environmentVariables}
@@ -369,6 +376,8 @@ export default function AgentsPage() {
         setSystemPrompt={setEditSystemPrompt}
         modelProviderId={editModelProviderId}
         setModelProviderId={setEditModelProviderId}
+        summaryModelProviderId={editSummaryModelProviderId}
+        setSummaryModelProviderId={setEditSummaryModelProviderId}
         enableSummary={editEnableSummary}
         setEnableSummary={setEditEnableSummary}
         extra={editExtra}

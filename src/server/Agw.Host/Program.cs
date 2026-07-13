@@ -314,6 +314,7 @@ try
             diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
         };
     });
+    app.UseMiddleware<ClientClosedRequestMiddleware>();
 
     app.UseMiddleware<InitializationGuardMiddleware>();
     app.UseAuthentication();
