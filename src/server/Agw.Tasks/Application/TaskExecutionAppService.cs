@@ -232,7 +232,10 @@ public class TaskExecutionAppService
 
     private async Task<TaskProjection?> MarkTaskAsync(Guid id, TaskExecutionStatus status, string? errorMessage, string user)
     {
-        var records = await GetOrderedRecordsByTaskIdAsync(id);
+        var records = _taskRecordDomainService.Order(
+            await _recordRepository.Queryable
+                .Where(record => record.TaskId == id)
+                .ToListAsync());
         if (records.Count == 0)
         {
             return null;
@@ -257,7 +260,6 @@ public class TaskExecutionAppService
             record.TaskErrorMessage = status == TaskExecutionStatus.Succeeded ? null : errorMessage;
             record.FinishedTime = now;
             record.UpdateTime = now;
-            _recordRepository.Update(record);
         }
 
         context.UpdateBy = user;

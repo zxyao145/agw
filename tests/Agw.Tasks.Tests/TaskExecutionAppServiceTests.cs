@@ -82,6 +82,44 @@ public class TaskExecutionAppServiceTests
     }
 
     [Fact]
+    public async Task MarkSucceededAsync_AfterCreateRunningAsync_UpdatesTaskRecord()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Jobs Project"));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        var createResult = await service.CreateRunningAsync(
+            projectId,
+            new TaskCreateRequest(
+                JobId: Guid.NewGuid(),
+                Input: "Run scheduled sync",
+                Title: "Nightly sync",
+                ContextId: "context-1"),
+            "job-executor");
+        var createdTask = Assert.IsType<TaskExecutionSnapshot>(createResult.Value);
+
+        var result = await service.MarkSucceededAsync(createdTask.TaskId, "job-executor");
+
+        Assert.NotNull(result);
+        Assert.Equal(TaskExecutionStatus.Succeeded, result.Status);
+        var record = await dbContext.TaskRecords.SingleAsync(cancellationToken);
+        Assert.Equal(TaskExecutionStatus.Succeeded, record.Status);
+        Assert.NotNull(record.FinishedTime);
+    }
+
+    [Fact]
     public async Task CreateForExecutionAsync_WhenContextIdMissing_DoesNotUseTaskIdAsContextId()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
