@@ -165,7 +165,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
           className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}
         >
           <span
-            className={`${isResult ? " text-lg opacity-100 font-semibold" : "text-xs opacity-40"}`}
+            className={`${isResult ? " text-lg opacity-100 font-semibold pb-4" : "text-xs opacity-40"}`}
           >
             {title}
           </span>
