@@ -10,7 +10,7 @@
     }
   ],
   "paths": {
-    "/health/live": {
+    "/api/health/live": {
       "get": {
         "tags": [
           "agw-server"
@@ -22,7 +22,7 @@
         }
       }
     },
-    "/health/ready": {
+    "/api/health/ready": {
       "get": {
         "tags": [
           "agw-server"

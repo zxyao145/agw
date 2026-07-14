@@ -337,8 +337,8 @@ try
     {
         options.Transports = HttpTransportType.WebSockets;
     }).RequireAuthorization();
-    app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
-    app.MapGet("/health/ready", async (IInitializationStateStore stateStore, AgwDbContext dbContext) =>
+    app.MapGet("/api/health/live", () => Results.Ok(new { status = "live" }));
+    app.MapGet("/api/health/ready", async (IInitializationStateStore stateStore, AgwDbContext dbContext) =>
     {
         if (!stateStore.GetSnapshot().IsInitialized || !await dbContext.Database.CanConnectAsync())
         {

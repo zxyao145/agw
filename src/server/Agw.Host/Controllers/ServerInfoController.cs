@@ -9,6 +9,7 @@ namespace Agw.Host.Controllers;
 
 [ApiController]
 [Route("api/server-info")]
+[Tags("agw-server")]
 public sealed class ServerInfoController : ControllerBase
 {
     private readonly IInitializationStateStore _stateStore;
