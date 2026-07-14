@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.Json;
 
 using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agentflows.Builders;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Summaries;
@@ -748,17 +750,151 @@ public class AgentflowWorkflowCompilerTests
     }
 
     [Fact]
+    public async Task Compile_SequentialAgents_ForwardsOnlyPortableUpstreamContent()
+    {
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "portable-handoff-flow" };
+        var secondChatClient = new CapturingChatClient("second agent output");
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "agent-a", Kind = AgentflowNodeKind.Agent, Name = "Agent A" },
+            new AgentflowNode { NodeId = "agent-b", Kind = AgentflowNodeKind.Agent, Name = "Agent B" },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            Edge("agent-a-to-agent-b", "agent-a", "agent-b"),
+            Edge("agent-b-to-output", "agent-b", "output"),
+        };
+
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent>
+            {
+                ["agent-a"] = CreateAgent("agent-a", "Agent A", new ToolTranscriptChatClient()),
+                ["agent-b"] = CreateAgent("agent-b", "Agent B", secondChatClient),
+            });
+
+        Assert.NotNull(workflow);
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "initial user input") },
+            cancellationToken: cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        var events = new List<WorkflowEvent>();
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            events.Add(evt);
+        }
+
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+        var handoff = Assert.Single(secondChatClient.Messages);
+        Assert.Equal(ChatRole.User, handoff.Role);
+        Assert.Equal("portable result", handoff.Text);
+        Assert.All(handoff.Contents, content =>
+            Assert.True(content is TextContent or DataContent or UriContent));
+    }
+
+    [Fact]
+    public async Task Compile_ExternalFunctionResult_ContinuesSameAgentWithToolMessage()
+    {
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "external-tool-flow" };
+        var agent = new ExternalFunctionCallAgent();
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Agent" },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            [Edge("agent-to-output", "agent", "output")],
+            new Dictionary<string, AIAgent>
+            {
+                ["agent"] = agent,
+            });
+
+        Assert.NotNull(workflow);
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "use external tool") },
+            cancellationToken: cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        var events = new List<WorkflowEvent>();
+        var responded = false;
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            events.Add(evt);
+            if (evt is RequestInfoEvent request &&
+                request.Request.TryGetDataAs<FunctionCallContent>(out var functionCall))
+            {
+                responded = true;
+                await run.SendResponseAsync(request.Request.CreateResponse(
+                    new FunctionResultContent(functionCall.CallId, "external result")));
+            }
+        }
+
+        Assert.True(responded);
+        Assert.True(agent.ReceivedFunctionResult);
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+    }
+
+    [Fact]
+    public async Task CreateParticipant_UsesPersistedNodeIdForHistoryScope()
+    {
+        var providerSessionState = new CapturingProviderSessionState();
+        var agentflowId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
+        var participantNode = new AgentflowNode
+        {
+            NodeId = "participant",
+            Kind = AgentflowNodeKind.Agent,
+            Name = "Participant",
+        };
+        var context = new AgentflowBlockBuildContext(
+            agentflowId,
+            new AgentflowNode { NodeId = "group", Kind = AgentflowNodeKind.GroupChatBlock },
+            new Dictionary<string, AgentflowNode> { [participantNode.NodeId] = participantNode },
+            new Dictionary<string, AIAgent>
+            {
+                [participantNode.NodeId] = CreateAgent("participant", "Participant"),
+            },
+            new AgentflowAgentSessionScope(providerSessionState, projectId, "context-1", null),
+            executionTraceContext: null,
+            new AIAgentHostOptions());
+        var participant = AgentflowBlockBuildSupport.CreateParticipant(
+            context,
+            participantNode.NodeId,
+            "group.participant");
+
+        Assert.NotNull(participant);
+
+        await participant!.RunAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains(providerSessionState.Calls, call =>
+            call.HistoryScope == $"agentflow:{agentflowId:N}:node:participant");
+    }
+
+    [Fact]
     public async Task Compile_WithSessionScope_InitializesInnerAgentSession()
     {
         var providerSessionState = new CapturingProviderSessionState();
         var projectId = Guid.NewGuid();
         var taskId = Guid.NewGuid();
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "scoped-flow" };
         var sessionScope = new AgentflowAgentSessionScope(
             providerSessionState,
             projectId,
             "context-1",
             taskId);
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "scoped-flow" };
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Scoped Agent" },
@@ -789,7 +925,8 @@ public class AgentflowWorkflowCompilerTests
 
         Assert.Contains(providerSessionState.Calls, call =>
             call.ProjectId == projectId &&
-            call.ContextId == "context-1");
+            call.ContextId == "context-1" &&
+            call.HistoryScope == $"agentflow:{agentflow.Id:N}:node:agent");
     }
 
     [Fact]
@@ -1032,16 +1169,144 @@ public class AgentflowWorkflowCompilerTests
         }
     }
 
+    private sealed class ToolTranscriptChatClient : IChatClient
+    {
+        public void Dispose()
+        {
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) =>
+            serviceType.IsInstanceOfType(this) ? this : null;
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ChatResponse(CreateMessages()));
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            foreach (var message in CreateMessages())
+            {
+                yield return new ChatResponseUpdate
+                {
+                    Role = message.Role,
+                    Contents = message.Contents,
+                };
+            }
+        }
+
+        private static List<ChatMessage> CreateMessages() =>
+        [
+            new ChatMessage(
+                ChatRole.Assistant,
+                [
+                    new FunctionCallContent(
+                        "call-1",
+                        "read_file",
+                        new Dictionary<string, object?>())
+                    {
+                        InformationalOnly = true,
+                    },
+                ]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "tool result")]),
+            new ChatMessage(ChatRole.Assistant, "portable result"),
+        ];
+    }
+
+    private sealed class ExternalFunctionCallAgent : AIAgent
+    {
+        private int _callCount;
+
+        public bool ReceivedFunctionResult { get; private set; }
+
+        protected override string? IdCore => "external-function-agent";
+
+        public override string? Name => "Agent";
+
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new ExternalFunctionCallSession());
+
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            JsonElement sessionState,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new ExternalFunctionCallSession());
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            if (Interlocked.Increment(ref _callCount) == 1)
+            {
+                yield return new AgentResponseUpdate
+                {
+                    Role = ChatRole.Assistant,
+                    Contents =
+                    [
+                        new FunctionCallContent(
+                            "external-call",
+                            "external_tool",
+                            new Dictionary<string, object?>()),
+                    ],
+                };
+                yield break;
+            }
+
+            ReceivedFunctionResult = messages
+                .SelectMany(message => message.Contents)
+                .OfType<FunctionResultContent>()
+                .Any(content => content.CallId == "external-call");
+            if (!ReceivedFunctionResult)
+            {
+                throw new InvalidOperationException("The external function result was not returned to the same agent.");
+            }
+
+            yield return new AgentResponseUpdate(ChatRole.Assistant, "completed");
+        }
+
+        private sealed class ExternalFunctionCallSession : AgentSession;
+    }
+
     private sealed class CapturingProviderSessionState : IProviderSessionState
     {
-        public List<(Guid ProjectId, string ContextId)> Calls { get; } = [];
+        public List<(Guid ProjectId, string ContextId, string? HistoryScope)> Calls { get; } = [];
 
         public void InitializeSessionState(
             AgentSession session,
             string contextId,
             Guid projectId)
         {
-            Calls.Add((projectId, contextId));
+            Calls.Add((projectId, contextId, null));
+        }
+
+        public void InitializeSessionState(
+            AgentSession session,
+            string contextId,
+            Guid projectId,
+            string historyScope)
+        {
+            Calls.Add((projectId, contextId, historyScope));
         }
 
         public bool TryGetProjectContext(AgentSession session, out Guid projectId, out string contextId)

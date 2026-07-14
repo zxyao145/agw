@@ -506,6 +506,14 @@ public class AgentflowRuntimeServiceTests
         {
         }
 
+        public void InitializeSessionState(
+            AgentSession session,
+            string contextId,
+            Guid projectId,
+            string historyScope)
+        {
+        }
+
         public bool TryGetProjectContext(AgentSession session, out Guid projectId, out string contextId)
         {
             projectId = default;

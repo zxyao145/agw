@@ -33,6 +33,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     };
 
     private const string DefaultUser = "system";
+    private const string HistoryScopeMetadataKey = "historyScope";
 
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger<EfCoreChatHistoryProvider> _logger;
@@ -75,6 +76,20 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         var state = new State(
             ContextIdUtil.NormalizeContextId(contextId),
             projectId);
+        _state.SaveState(session, state);
+    }
+
+    public void InitializeSessionState(
+        AgentSession session,
+        string contextId,
+        Guid projectId,
+        string historyScope)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var state = new State(
+            ContextIdUtil.NormalizeContextId(contextId),
+            projectId,
+            historyScope.Trim());
         _state.SaveState(session, state);
     }
 
@@ -128,6 +143,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var payloads = records
+            .Where(record => HasHistoryScope(record, state.HistoryScope))
             .OrderBy(record => record.ConversationSequence ?? long.MinValue)
             .ThenBy(record => record.CreateTime)
             .ThenBy(record => record.Id)
@@ -163,10 +179,11 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .Select(content => content.CallId)
             .ToHashSet(StringComparer.Ordinal);
 
-        return messages
+        var filteredMessages = messages
             .Select(message => RemoveUnansweredToolApprovalRequests(message, approvalResponseCallIds))
             .OfType<ChatMessage>()
             .ToList();
+        return RemoveOrphanedFunctionResults(filteredMessages);
     }
 
     /// <summary>
@@ -194,6 +211,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             state.ProjectId,
             state.ContextId,
             newMessages,
+            state.HistoryScope,
             cancellationToken)
             .ConfigureAwait(false);
     }
@@ -206,6 +224,21 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         string contextId,
         IReadOnlyList<ChatMessage> messages,
         CancellationToken cancellationToken = default)
+    {
+        await AppendAsync(
+            projectId,
+            contextId,
+            messages,
+            historyScope: null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task AppendAsync(
+        Guid projectId,
+        string contextId,
+        IReadOnlyList<ChatMessage> messages,
+        string? historyScope,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(messages);
         if (messages.Count == 0)
@@ -288,7 +321,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 AgentName = message.AuthorName,
                 ConversationSequence = nextSequence,
                 ConversationPayload = JsonSerializer.Serialize(message, _jsonSerializerOptions),
-                Metadata = TaskRecordMetadataFactory.FromMessage(message),
+                Metadata = CreateMetadata(message, historyScope),
                 CreateTime = now,
                 UpdateTime = now
             });
@@ -300,6 +333,80 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     private static bool IsResult(ChatMessage message) =>
         message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
         string.Equals(type?.ToString(), "result", StringComparison.Ordinal);
+
+    private static bool HasHistoryScope(TaskRecord record, string? historyScope)
+    {
+        string? recordScope = null;
+        if (record.Metadata?.TryGetValue(HistoryScopeMetadataKey, out var scopeElement) == true &&
+            scopeElement.ValueKind == JsonValueKind.String)
+        {
+            recordScope = scopeElement.GetString();
+        }
+
+        return string.Equals(recordScope, historyScope, StringComparison.Ordinal);
+    }
+
+    private static Dictionary<string, JsonElement>? CreateMetadata(
+        ChatMessage message,
+        string? historyScope)
+    {
+        var metadata = TaskRecordMetadataFactory.FromMessage(message);
+        if (historyScope == null)
+        {
+            return metadata;
+        }
+
+        metadata ??= [];
+        metadata[HistoryScopeMetadataKey] = JsonSerializer.SerializeToElement(historyScope);
+        return metadata;
+    }
+
+    private static List<ChatMessage> RemoveOrphanedFunctionResults(IReadOnlyList<ChatMessage> messages)
+    {
+        var result = new List<ChatMessage>(messages.Count);
+        var pendingCallIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var message in messages)
+        {
+            if (message.Role == ChatRole.Assistant)
+            {
+                pendingCallIds.Clear();
+                pendingCallIds.UnionWith(message.Contents
+                    .OfType<FunctionCallContent>()
+                    .Select(content => content.CallId));
+                result.Add(message);
+                continue;
+            }
+
+            if (message.Role != ChatRole.Tool)
+            {
+                pendingCallIds.Clear();
+                result.Add(message);
+                continue;
+            }
+
+            var contents = message.Contents
+                .Where(content =>
+                    content is not FunctionResultContent functionResult ||
+                    pendingCallIds.Remove(functionResult.CallId))
+                .ToList();
+            if (contents.Count == 0)
+            {
+                continue;
+            }
+
+            if (contents.Count == message.Contents.Count)
+            {
+                result.Add(message);
+                continue;
+            }
+
+            var filteredMessage = message.Clone();
+            filteredMessage.Contents = contents;
+            result.Add(filteredMessage);
+        }
+
+        return result;
+    }
 
     private static ChatMessage? RemoveUnansweredToolApprovalRequests(
         ChatMessage message,
@@ -358,10 +465,13 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         public Guid ProjectId { get; init; }
 
-        public State(string contextId, Guid projectId)
+        public string? HistoryScope { get; init; }
+
+        public State(string contextId, Guid projectId, string? historyScope = null)
         {
             ContextId = contextId;
             ProjectId = projectId;
+            HistoryScope = historyScope;
         }
     }
 }

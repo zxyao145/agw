@@ -219,6 +219,14 @@ public class UsageTrackingMiddlewareTests
         {
         }
 
+        public void InitializeSessionState(
+            AgentSession session,
+            string contextId,
+            Guid projectId,
+            string historyScope)
+        {
+        }
+
         public bool TryGetProjectContext(AgentSession session, out Guid projectId, out string contextId)
         {
             projectId = Guid.Parse("11111111-1111-1111-1111-111111111111");

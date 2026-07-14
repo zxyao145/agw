@@ -228,6 +228,236 @@ public class EfCoreChatHistoryProviderTests
     }
 
     [Fact]
+    public async Task ProvideChatHistoryAsync_WhenFunctionResultIsOrphaned_ExcludesItAndPreservesMatchedPair()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.NewGuid();
+        var projectContextId = Guid.NewGuid();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
+            seedContext.TaskRecords.AddRange(
+                CreateRecord(
+                    projectContextId,
+                    Guid.NewGuid(),
+                    0,
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        [new FunctionCallContent(
+                            "matched-call",
+                            "read_file",
+                            new Dictionary<string, object?>())]),
+                    jsonOptions),
+                CreateRecord(
+                    projectContextId,
+                    Guid.NewGuid(),
+                    1,
+                    new ChatMessage(
+                        ChatRole.Tool,
+                        [new FunctionResultContent("matched-call", "matched result")]),
+                    jsonOptions),
+                CreateRecord(
+                    projectContextId,
+                    Guid.NewGuid(),
+                    2,
+                    new ChatMessage(ChatRole.Assistant, "completed"),
+                    jsonOptions),
+                CreateRecord(
+                    projectContextId,
+                    Guid.NewGuid(),
+                    3,
+                    new ChatMessage(ChatRole.Tool, [new FunctionResultContent("orphaned-call", "orphaned result")]),
+                    jsonOptions),
+                CreateRecord(
+                    projectContextId,
+                    Guid.NewGuid(),
+                    4,
+                    new ChatMessage(ChatRole.User, "continue"),
+                    jsonOptions));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
+            jsonOptions);
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+
+        var messages = (await InvokeProvideChatHistoryAsync(
+                provider,
+                new ChatHistoryProvider.InvokingContext(new FakeAgent(), session, []),
+                cancellationToken))
+            .ToList();
+
+        Assert.Collection(
+            messages,
+            message => Assert.Equal("matched-call", Assert.IsType<FunctionCallContent>(Assert.Single(message.Contents)).CallId),
+            message => Assert.Equal("matched-call", Assert.IsType<FunctionResultContent>(Assert.Single(message.Contents)).CallId),
+            message => Assert.Equal("completed", message.Text),
+            message => Assert.Equal("continue", message.Text));
+        Assert.DoesNotContain(messages.SelectMany(message => message.Contents), content =>
+            content is FunctionResultContent { CallId: "orphaned-call" });
+    }
+
+    [Fact]
+    public async Task ProvideChatHistoryAsync_WhenToolMessageHasPortableContent_PreservesIt()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.NewGuid();
+        var projectContextId = Guid.NewGuid();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
+            seedContext.TaskRecords.Add(CreateRecord(
+                projectContextId,
+                Guid.NewGuid(),
+                0,
+                new ChatMessage(ChatRole.Tool, "portable tool content"),
+                jsonOptions));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
+            jsonOptions);
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+
+        var messages = await InvokeProvideChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokingContext(new FakeAgent(), session, []),
+            cancellationToken);
+
+        var message = Assert.Single(messages);
+        Assert.Equal(ChatRole.Tool, message.Role);
+        Assert.Equal("portable tool content", message.Text);
+    }
+
+    [Fact]
+    public async Task ScopedSessions_ShareProjectContextButLoadOnlyOwnHistory()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+            setupContext.Projects.Add(CreateProject(Guid.Parse("11111111-1111-1111-1111-111111111111")));
+            await setupContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var projectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
+        var firstSession = new FakeAgentSession();
+        var secondSession = new FakeAgentSession();
+        var unscopedSession = new FakeAgentSession();
+        provider.InitializeSessionState(firstSession, "context-1", projectId, "agentflow:flow:node-a");
+        provider.InitializeSessionState(secondSession, "context-1", projectId, "agentflow:flow:node-b");
+        provider.InitializeSessionState(unscopedSession, "context-1", projectId);
+
+        await InvokeStoreChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokedContext(
+                new FakeAgent(),
+                firstSession,
+                [new ChatMessage(ChatRole.User, "first private history")],
+                []),
+            cancellationToken);
+        await InvokeStoreChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokedContext(
+                new FakeAgent(),
+                unscopedSession,
+                [new ChatMessage(ChatRole.User, "unscoped history")],
+                []),
+            cancellationToken);
+        await InvokeStoreChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokedContext(
+                new FakeAgent(),
+                secondSession,
+                [new ChatMessage(ChatRole.User, "second private history")],
+                []),
+            cancellationToken);
+
+        var firstHistory = await InvokeProvideChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokingContext(new FakeAgent(), firstSession, []),
+            cancellationToken);
+        var secondHistory = await InvokeProvideChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokingContext(new FakeAgent(), secondSession, []),
+            cancellationToken);
+        var unscopedHistory = await InvokeProvideChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokingContext(new FakeAgent(), unscopedSession, []),
+            cancellationToken);
+
+        Assert.Equal(["first private history"], firstHistory.Select(message => message.Text));
+        Assert.Equal(["second private history"], secondHistory.Select(message => message.Text));
+        Assert.Equal(["unscoped history"], unscopedHistory.Select(message => message.Text));
+
+        await using var verifyContext = new AgwDbContext(options);
+        Assert.Single(await verifyContext.ProjectContexts.ToListAsync(cancellationToken));
+        var records = await verifyContext.TaskRecords
+            .OrderBy(record => record.ConversationSequence)
+            .ToListAsync(cancellationToken);
+        var scopes = records
+            .Select(record =>
+                record.Metadata?.TryGetValue("historyScope", out var historyScope) == true
+                    ? historyScope.GetString()
+                    : null)
+            .ToList();
+        Assert.Equal(["agentflow:flow:node-a", null, "agentflow:flow:node-b"], scopes);
+    }
+
+    [Fact]
     public async Task AppendAsync_ResultMessage_PersistsItForConversationHistory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

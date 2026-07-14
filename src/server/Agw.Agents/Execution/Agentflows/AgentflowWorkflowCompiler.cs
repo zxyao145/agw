@@ -22,12 +22,23 @@ internal sealed record AgentflowAgentSessionScope(
     string ContextId,
     Guid? TaskId)
 {
-    public void Initialize(AgentSession session)
+    public void Initialize(AgentSession session, Guid? agentflowId, string nodeId)
     {
-        ProviderSessionState.InitializeSessionState(
-            session,
-            ContextId,
-            ProjectId);
+        if (agentflowId.HasValue)
+        {
+            ProviderSessionState.InitializeSessionState(
+                session,
+                ContextId,
+                ProjectId,
+                $"agentflow:{agentflowId.Value:N}:node:{nodeId}");
+        }
+        else
+        {
+            ProviderSessionState.InitializeSessionState(
+                session,
+                ContextId,
+                ProjectId);
+        }
     }
 }
 
@@ -206,7 +217,8 @@ public sealed class AgentflowWorkflowCompiler
                             node.NodeId,
                             node.Name,
                             node.Instructions,
-                            sessionScope)
+                            sessionScope,
+                            agentflowId: agentflowId)
                         .BindAsExecutor(AgentHostOptions)
                     : null,
             AgentflowNodeKind.PromptAdapter =>

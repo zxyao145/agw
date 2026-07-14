@@ -7,6 +7,64 @@ namespace Agw.Agents.Execution.Agentflows;
 internal static class AgentflowMessageTransforms
 {
     /// <summary>
+    /// 将工作流上游 Agent 的输出转换为下游 Agent 可安全消费的输入。
+    /// </summary>
+    internal static List<ChatMessage> CreatePortableAgentInput(
+        IReadOnlyList<ChatMessage> messages,
+        IReadOnlySet<string> pendingFunctionCallIds)
+    {
+        var result = new List<ChatMessage>(messages.Count);
+        foreach (var message in messages)
+        {
+            if (message.Role != ChatRole.Assistant && message.Role != ChatRole.Tool)
+            {
+                result.Add(message);
+                continue;
+            }
+
+            // 外部工具结果会回到同一个 workflow executor；只允许当前会话正在等待的调用继续保留协议角色。
+            if (message.Role == ChatRole.Tool)
+            {
+                var continuationContents = message.Contents
+                    .Where(content =>
+                        content is not FunctionResultContent functionResult ||
+                        pendingFunctionCallIds.Contains(functionResult.CallId))
+                    .ToList();
+                if (continuationContents.OfType<FunctionResultContent>().Any())
+                {
+                    if (continuationContents.Count == message.Contents.Count)
+                    {
+                        result.Add(message);
+                    }
+                    else
+                    {
+                        var continuationMessage = message.Clone();
+                        continuationMessage.Contents = continuationContents;
+                        result.Add(continuationMessage);
+                    }
+
+                    continue;
+                }
+            }
+
+            var contents = message.Contents
+                .Where(content => content is TextContent or DataContent or UriContent)
+                .ToList();
+            if (contents.Count == 0)
+            {
+                continue;
+            }
+
+            var portableMessage = message.Clone();
+            portableMessage.Role = ChatRole.User;
+            portableMessage.Contents = contents;
+            result.Add(portableMessage);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// 将节点指令作为平台生成的 system 消息添加到现有消息列表之前。
     /// </summary>
     internal static List<ChatMessage> ApplyInstructions(
