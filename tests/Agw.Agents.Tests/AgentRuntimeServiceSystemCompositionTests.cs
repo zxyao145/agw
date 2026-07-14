@@ -256,6 +256,22 @@ public class AgentRuntimeServiceSystemCompositionTests
             var providerStrings = CollectStringsInObjectGraph(skillsProvider);
             Assert.Contains(Path.Combine(root, "agent-skill"), providerStrings);
             Assert.Contains(Path.Combine(root, "project-skill"), providerStrings);
+            Assert.Contains(".py", providerStrings);
+            Assert.Contains(".js", providerStrings);
+            Assert.Contains(".cs", providerStrings);
+            Assert.DoesNotContain(".csx", providerStrings);
+            Assert.DoesNotContain(".sh", providerStrings);
+            Assert.DoesNotContain(".ps1", providerStrings);
+
+            var approvalAgent = FindInObjectGraph<ToolApprovalAgent>(aiAgent!);
+            var rulesField = typeof(ToolApprovalAgent).GetField(
+                "_autoApprovalRules",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(rulesField);
+            var approvalRules = Assert.IsAssignableFrom<
+                IReadOnlyList<Func<FunctionCallContent, ValueTask<bool>>>>(rulesField.GetValue(approvalAgent));
+            Assert.Same(AgentSkillsProvider.AllToolsAutoApprovalRule, Assert.Single(approvalRules));
+            Assert.DoesNotContain(ToolApprovalAgent.AllToolsAutoApprovalRule, approvalRules);
         }
         finally
         {

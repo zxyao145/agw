@@ -65,6 +65,10 @@ public partial class AgentRuntimeService
         };
 
         aiAgent = aiAgent.AsBuilder()
+            .UseToolApproval(new ToolApprovalAgentOptions
+            {
+                AutoApprovalRules = [AgentSkillsProvider.AllToolsAutoApprovalRule],
+            })
             .Use(
                 runFunc: _observabilityMiddleware.LogRunMiddleware,
                 runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware)

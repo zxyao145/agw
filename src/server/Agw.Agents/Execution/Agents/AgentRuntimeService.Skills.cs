@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Projects;
@@ -29,7 +30,13 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        return new AgentSkillsProvider(skillPaths: skillPaths);
+        return new AgentSkillsProvider(
+            skillPaths: skillPaths,
+            scriptRunner: LocalSkillScriptRunner.RunAsync,
+            fileOptions: new AgentFileSkillsSourceOptions
+            {
+                AllowedScriptExtensions = [.. LocalSkillScriptRunner.SupportedScriptExtensions],
+            });
     }
 
     private string GetSkillAbsolutePath(Skill skill)
