@@ -1,5 +1,5 @@
 using Agw.Infrastructure.Data;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 
 using Microsoft.EntityFrameworkCore;
 

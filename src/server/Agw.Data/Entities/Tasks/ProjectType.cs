@@ -1,7 +1,0 @@
-namespace Agw.Shared.Data.Entities.Tasks;
-
-public enum ProjectType
-{
-    UserDefined = 0,
-    DefaultBuiltIn = 1,
-}

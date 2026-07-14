@@ -2,7 +2,7 @@ using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Contracts;
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Contracts.Projects;
 
 namespace Agw.Agents.Execution.Runtimes;
 

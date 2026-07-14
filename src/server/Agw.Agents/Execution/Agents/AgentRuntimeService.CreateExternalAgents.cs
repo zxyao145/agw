@@ -4,7 +4,7 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 

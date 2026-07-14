@@ -26,8 +26,8 @@ using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Agw.Skills;
 using Agw.Skills.Controllers;
-using Agw.Tasks;
-using Agw.Tasks.Controllers;
+using Agw.Projects;
+using Agw.Projects.Controllers;
 using Agw.Tools;
 
 using Bens.Results;
@@ -274,7 +274,7 @@ try
         .AddJobs(builder.Configuration)
         .AddProviders(builder.Configuration)
         .AddSkills(builder.Configuration)
-        .AddTasks(builder.Configuration)
+        .AddProjects(builder.Configuration)
         .AddTools(builder.Configuration)
         .AddSetup(builder.Configuration)
         .AddIntegrations(builder.Configuration)

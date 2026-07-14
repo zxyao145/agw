@@ -24,7 +24,7 @@ Agw.Jobs/            # Scheduled jobs, project leases, execution logs, and hoste
 Agw.Providers/       # LLM models, providers, model-provider links, and auth configuration
 Agw.Setup/           # First-run setup, initialization state, and API-key guard middleware
 Agw.Skills/          # Skill archive validation, storage, and agent-skill relations
-Agw.Tasks/           # Projects, project tasks, task records, contexts, and task APIs
+Agw.Projects/           # Projects, project tasks, task records, contexts, and task APIs
 Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registry
 ```
 
@@ -101,7 +101,7 @@ The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients
 - `src/server/Agw.Jobs/HostedService/JobHostedService.cs`: prefetches persistent jobs into an in-memory priority queue, serializes execution per project, and coordinates execution through `IProjectExecutionLock`.
 - `src/server/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations, caches metadata, and creates `AITool` instances through `AgwToolFactory`.
 - `src/server/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and stores extracted skills under `wwwroot/skills/{skillName}/`.
-- `src/server/Agw.Tasks/Application/TaskAppService.cs`: resolves logical tasks from project contexts and task records for execution and history queries.
+- `src/server/Agw.Projects/Application/TaskAppService.cs`: resolves logical tasks from project contexts and task records for execution and history queries.
 - `src/server/Agw.Integrations/Controllers/OauthController.cs`: handles OAuth authorization start and callback endpoints for integration connections.
 - `src/server/Agw.Integrations/Tools/GitHub/GitHubTools.cs`: provides integration-backed GitHub tools to runtime agents.
 - `src/server/Agw.Shared/Exceptions/ErrorCodes.cs`: is the central catalog for backend `AgwException` error codes and HTTP status mapping.
@@ -138,7 +138,7 @@ Run a specific test project or filtered test when needed:
 
 ```bash
 dotnet test tests/Agw.Agents.Tests
-dotnet test tests/Agw.Tasks.Tests
+dotnet test tests/Agw.Projects.Tests
 dotnet test tests/Agw.Skills.Tests
 dotnet test tests/Agw.A2A.Tests
 dotnet test tests/Agw.Files.Tests
@@ -241,30 +241,10 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 
 ### Backend API Responses and Exceptions
 
-- All non-WebSocket JSON API endpoints in `Agw.Agents`, `Agw.Providers`, `Agw.Tasks`, `Agw.Jobs`, `Agw.Integrations`, `Agw.Skills`, and `Agw.Tools` must return Bens.Results envelopes through `Agw.Shared.Results.AgwApiResult`, `ApiResult` helpers, or the configured boundary mapping.
+- All non-WebSocket JSON API endpoints in `Agw.Agents`, `Agw.Providers`, `Agw.Projects`, `Agw.Jobs`, `Agw.Integrations`, `Agw.Skills`, and `Agw.Tools` must return Bens.Results envelopes through `Agw.Shared.Results.AgwApiResult`, `ApiResult` helpers, or the configured boundary mapping.
 - Return helpers such as `AgwApiResult.Ok()`, `AgwApiResult.Ok<T>(data)`, and `AgwApiResult.BadRequest(...)`; let `AgwApiExceptionMiddleware` map `AgwException` automatically.
 - Do not return raw `Ok(...)`, `BadRequest(...)`, `NotFound(...)`, `NoContent()`, or other bare MVC responses from those controllers.
 - WebSocket handlers, OAuth redirect callbacks, A2A protocol endpoints, and static file endpoints may keep protocol-specific response formats.
-- Do not use path parameters in API routes unless specifically justified; pass identifiers and filters through query parameters or request bodies.
-- Expected backend application failures must throw `Agw.Shared.Exceptions.AgwException` with an `ErrorCodes` entry.
-- Reuse existing error codes before adding new ones, and never renumber existing codes.
-- New `ErrorCode.Code` values contain seven digits: the first three match the HTTP status code and the final four increment within that status group, for example `400_0001`, `404_0003`, or `500_0001`.
-- Keep catalog messages stable and reusable. Use `new AgwException(ErrorCodes.SomeCode)` when the catalog message is sufficient; pass an override message when runtime context such as an ID, path, provider, or validation value is required.
-- Do not introduce new explicit `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, `HttpRequestException`, or protocol-specific exceptions for expected backend application failures.
-- Preserve boundary-specific behavior by translating `AgwException` at the boundary. For example, A2A internals throw `AgwException`, while `AgwA2AJsonRpcProcessor` maps it to A2A JSON-RPC errors.
-
-### HTTP Clients
-
-- Do not instantiate `HttpClient` directly in backend code.
-- Use `IHttpClientFactory`, typically through constructor injection or `IocUtil.GetSingletonRequiredService<IHttpClientFactory>()` where that repository pattern already applies.
-- Create short-lived clients with `httpClientFactory.CreateClient()`.
-- Do not hold a directly constructed `HttpClient` as a singleton field.
-
-### Service Registration and Boundaries
-
-- Register new backend services in the relevant module `DependencyInjection.cs` or extension method and ensure `Agw.Host/Program.cs` composes the module.
-- `Agw.Integrations` treats `IntegrationConstants.AppList` as the single source of truth for `AppDefinition`; do not add `DbSet<AppDefinition>` or migrations for it.
-- Persist integration configuration in `AppInstance` and `OAuthAuthorizationToken`.
 
 ### A2A
 

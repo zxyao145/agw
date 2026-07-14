@@ -1,6 +1,6 @@
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;

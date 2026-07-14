@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using Agw.Files.Application.Storage.Local;
 using Agw.Files.Application.Storage.Sftp;
 using Agw.Shared.Contracts.Storage;
-using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 

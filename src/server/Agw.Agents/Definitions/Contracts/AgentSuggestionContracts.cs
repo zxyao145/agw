@@ -18,10 +18,10 @@ public enum AgentSuggestionMode
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum AgentSuggestionKind
 {
-    [JsonStringEnumMemberName("Skill")]
+    [JsonStringEnumMemberName("skill")]
     Skill,
 
-    [JsonStringEnumMemberName("Tool")]
+    [JsonStringEnumMemberName("tool")]
     Tool,
 }
 

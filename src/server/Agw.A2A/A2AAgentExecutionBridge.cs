@@ -10,7 +10,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
-using AgwTaskProjection = Agw.Shared.Contracts.Tasks.TaskProjection;
+using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
 
 namespace Agw.A2A;
 

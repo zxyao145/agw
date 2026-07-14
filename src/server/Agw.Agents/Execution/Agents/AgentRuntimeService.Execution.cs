@@ -6,7 +6,7 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;

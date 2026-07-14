@@ -24,7 +24,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agw.Shared", "Agw.Shared\Ag
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agw.Skills", "Agw.Skills\Agw.Skills.csproj", "{960D0829-0199-B7BF-3C49-CE3EB61DC2DD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agw.Tasks", "Agw.Tasks\Agw.Tasks.csproj", "{36C93915-D560-BF5D-2944-D7841FA7F2C8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agw.Projects", "Agw.Projects\Agw.Projects.csproj", "{36C93915-D560-BF5D-2944-D7841FA7F2C8}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agw.Tools", "Agw.Tools\Agw.Tools.csproj", "{D046D41E-3D6E-31B5-EF19-3293A74A4F07}"
 EndProject

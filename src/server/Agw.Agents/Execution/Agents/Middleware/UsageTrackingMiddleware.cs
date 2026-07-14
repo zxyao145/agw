@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 
-using Agw.Shared.Contracts.Tasks;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data.Entities.Projects;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;

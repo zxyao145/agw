@@ -4,8 +4,8 @@ using A2A;
 
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Shared.Contracts.Tasks;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data.Entities.Projects;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;

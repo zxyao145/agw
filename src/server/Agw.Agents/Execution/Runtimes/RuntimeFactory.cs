@@ -7,7 +7,7 @@ using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Storage;
-using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Utils;
 

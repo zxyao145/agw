@@ -882,7 +882,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("skill", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.Project", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -944,7 +944,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("project", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectTask", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectTask", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1018,7 +1018,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("project_task", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.TaskRecord", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1197,9 +1197,9 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("Provider");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectTask", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectTask", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Tasks.Project", "Project")
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.Project", "Project")
                         .WithMany("Tasks")
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1249,7 +1249,7 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("Models");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.Project", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>
                 {
                     b.Navigation("Tasks");
                 });

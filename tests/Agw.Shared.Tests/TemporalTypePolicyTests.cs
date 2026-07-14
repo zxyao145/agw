@@ -1,9 +1,9 @@
 using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 
 namespace Agw.Shared.Tests;
 

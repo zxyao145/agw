@@ -10,7 +10,7 @@ using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;

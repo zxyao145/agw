@@ -120,7 +120,7 @@ flowchart BT
         Agw.Skills
         Agw.Tools
         Agw.Integrations
-        Agw.Tasks
+        Agw.Projects
 
         %% Relationships
         Agw.Agents --> Agw.Jobs
@@ -133,9 +133,9 @@ flowchart BT
         Agw.Integrations --> Agw.Agents
 
 
-        Agw.Tasks --> Agw.Agents
-        Agw.Tasks --> Agw.Jobs
-        Agw.Tasks --> Agw.A2A
+        Agw.Projects --> Agw.Agents
+        Agw.Projects --> Agw.Jobs
+        Agw.Projects --> Agw.A2A
 
     end
 
@@ -173,7 +173,7 @@ flowchart BT
 - Agw.Integrations  
   外部 App 集成模块。
 
-- Agw.Tasks  
+- Agw.Projects  
   Agent 对话历史与 Session 管理模块。在 Agw 中，一个 Session 对应一个 Task，而每个 Task 都关联一个 Project。
 
 - Agw.Jobs  

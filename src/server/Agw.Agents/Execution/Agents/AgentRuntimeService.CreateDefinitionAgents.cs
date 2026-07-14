@@ -3,7 +3,7 @@ using System.ClientModel;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 
 using Anthropic;

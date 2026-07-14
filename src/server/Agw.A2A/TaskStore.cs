@@ -4,9 +4,9 @@ using System.Text.Json;
 using A2A;
 
 using Agw.Shared.Exceptions;
-using Agw.Tasks.Application;
+using Agw.Projects.Application;
 
-using AgwTaskProjection = Agw.Shared.Contracts.Tasks.TaskProjection;
+using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
 
 namespace Agw.A2A;
 

@@ -122,7 +122,7 @@ flowchart BT
         Agw.Skills
         Agw.Tools
         Agw.Integrations
-        Agw.Tasks
+        Agw.Projects
 
         %% Relationships
         Agw.Agents --> Agw.Jobs
@@ -135,9 +135,9 @@ flowchart BT
         Agw.Integrations --> Agw.Agents
 
 
-        Agw.Tasks --> Agw.Agents
-        Agw.Tasks --> Agw.Jobs
-        Agw.Tasks --> Agw.A2A
+        Agw.Projects --> Agw.Agents
+        Agw.Projects --> Agw.Jobs
+        Agw.Projects --> Agw.A2A
 
     end
 
@@ -176,7 +176,7 @@ flowchart BT
 - [x] Agw.Integrations  
   External App Integration Module.
 
-- [x] Agw.Tasks  
+- [x] Agw.Projects  
   Agent Conversation and Session Management Module. 
   In AGW, each session corresponds to a task, and each task is associated with a project.
 

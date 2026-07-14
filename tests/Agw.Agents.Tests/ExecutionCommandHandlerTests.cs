@@ -5,8 +5,8 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Tasks;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Utils;
 
 using System.Linq.Expressions;

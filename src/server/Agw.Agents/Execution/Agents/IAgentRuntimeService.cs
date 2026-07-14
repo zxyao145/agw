@@ -2,7 +2,7 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Contracts.Projects;
 
 using Microsoft.Agents.AI;
 

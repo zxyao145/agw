@@ -1043,7 +1043,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("skill", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.Project", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1105,7 +1105,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("project", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectContext", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectContext", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1150,7 +1150,7 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
-                    b.ComplexProperty(typeof(Dictionary<string, object>), "Usage", "Agw.Shared.Data.Entities.Tasks.ProjectContext.Usage#ProjectContextUsage", b1 =>
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Usage", "Agw.Shared.Data.Entities.Projects.ProjectContext.Usage#ProjectContextUsage", b1 =>
                         {
                             b1.IsRequired();
 
@@ -1204,7 +1204,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("project_context", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.TaskRecord", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1283,7 +1283,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("project_task_record", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.TaskSessionBinding", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskSessionBinding", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1491,9 +1491,9 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("Provider");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectContext", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectContext", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Tasks.Project", "Project")
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.Project", "Project")
                         .WithMany("Contexts")
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1503,9 +1503,9 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("Project");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.TaskRecord", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskRecord", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Tasks.ProjectContext", "ProjectContext")
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectContext", "ProjectContext")
                         .WithMany("Records")
                         .HasForeignKey("ProjectContextId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1515,9 +1515,9 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("ProjectContext");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.TaskSessionBinding", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskSessionBinding", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Tasks.ProjectContext", "ProjectContext")
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectContext", "ProjectContext")
                         .WithMany()
                         .HasForeignKey("ProjectContextId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1572,12 +1572,12 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("Models");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.Project", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>
                 {
                     b.Navigation("Contexts");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Tasks.ProjectContext", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectContext", b =>
                 {
                     b.Navigation("Records");
                 });

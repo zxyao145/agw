@@ -6,7 +6,7 @@ using Agw.Domain.Services;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 
@@ -81,7 +81,7 @@ public class AgentSuggestionAppService
                 .Where(skill => !string.IsNullOrWhiteSpace(skill.Name))
                 .Select(skill => new AgentSuggestionResponse(
                     ToCommandText(skill.Name),
-                    JoinDescription(skill.Description),
+                    JoinDescription("Skill", skill.Description),
                     AgentSuggestionKind.Skill)));
         }
 
@@ -95,7 +95,7 @@ public class AgentSuggestionAppService
 
             suggestions.Add(new AgentSuggestionResponse(
                 ToCommandText(tool.Name),
-                JoinDescription(tool.Category, tool.Description),
+                JoinDescription("Tool", tool.Category, tool.Description),
                 AgentSuggestionKind.Tool));
         }
 

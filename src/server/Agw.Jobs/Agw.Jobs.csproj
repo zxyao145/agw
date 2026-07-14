@@ -5,6 +5,6 @@
         <PackageReference Include="Microsoft.Agents.AI" />
         <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
         <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
-        <ProjectReference Include="..\Agw.Tasks\Agw.Tasks.csproj" />
+        <ProjectReference Include="..\Agw.Projects\Agw.Projects.csproj" />
     </ItemGroup>
 </Project>

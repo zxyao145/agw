@@ -88,10 +88,10 @@ public sealed class PathSecurityService : IPathSecurityService
                 ? Path.GetFullPath(expandedPath)
                 : Path.GetFullPath(Path.Combine(RootPath, expandedPath));
 
-            //if (!IsUnderAllowedRoot(candidatePath))
-            //{
-            //    return false;
-            //}
+            if (!IsUnderAllowedRoot(candidatePath))
+            {
+                return false;
+            }
 
             resolvedPath = candidatePath;
             return true;

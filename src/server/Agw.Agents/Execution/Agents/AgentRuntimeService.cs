@@ -3,7 +3,7 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Summaries;
 using Agw.Domain.Services;
 using Agw.Shared.Contracts.Storage;
-using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Runtime;
 

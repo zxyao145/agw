@@ -10,14 +10,14 @@ using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-using AgwTaskProjection = Agw.Shared.Contracts.Tasks.TaskProjection;
+using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
 
 namespace Agw.A2A.Tests;
 

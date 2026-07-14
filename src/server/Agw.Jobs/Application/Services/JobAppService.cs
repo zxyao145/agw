@@ -1,7 +1,7 @@
 using Agw.Jobs.Contracts;
 using Agw.Jobs.Domain.Events;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 
 using Microsoft.EntityFrameworkCore;

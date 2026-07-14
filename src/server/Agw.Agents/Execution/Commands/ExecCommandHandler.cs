@@ -2,7 +2,7 @@ using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 

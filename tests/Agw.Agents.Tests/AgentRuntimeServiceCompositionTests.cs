@@ -2,7 +2,7 @@ using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.ExternalAgents;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 

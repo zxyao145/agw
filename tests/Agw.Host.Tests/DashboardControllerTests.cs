@@ -4,7 +4,7 @@ using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Data.Entities.Projects;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;

@@ -26,7 +26,7 @@
     <Project Path="src/server/Agw.Jobs/Agw.Jobs.csproj" />
     <Project Path="src/server/Agw.Providers/Agw.Providers.csproj" />
     <Project Path="src/server/Agw.Skills/Agw.Skills.csproj" />
-    <Project Path="src/server/Agw.Tasks/Agw.Tasks.csproj" />
+    <Project Path="src/server/Agw.Projects/Agw.Projects.csproj" />
     <Project Path="src/server/Agw.Tools/Agw.Tools.csproj" Id="ba592b35-3c77-47d7-b977-396f0fa9acba" />
   </Folder>
   <Folder Name="/5.Shared/">
@@ -47,7 +47,7 @@
     <Project Path="tests/Agw.Shared.Tests/Agw.Shared.Tests.csproj" />
     <Project Path="tests/Agw.Setup.Tests/Agw.Setup.Tests.csproj" />
     <Project Path="tests/Agw.Skills.Tests/Agw.Skills.Tests.csproj" />
-    <Project Path="tests/Agw.Tasks.Tests/Agw.Tasks.Tests.csproj" />
+    <Project Path="tests/Agw.Projects.Tests/Agw.Projects.Tests.csproj" />
     <Project Path="tests/Agw.Tools.Tests/Agw.Tools.Tests.csproj" />
   </Folder>
 </Solution>
