@@ -261,7 +261,7 @@ export function Conversation({
                 data-msg-id={item.message.messageId}
               >
                 {agentMeta ? (
-                  <div className="mb-1 flex max-w-[80%] items-center gap-1.5 px-1 text-xs text-muted-foreground">
+                  <div className="mb-1 flex max-w-[80%] items-center gap-1.5 text-xs text-muted-foreground">
                     {agentMeta.name ? (
                       <span className="min-w-0 truncate font-medium text-foreground/70">
                         {agentMeta.name}
