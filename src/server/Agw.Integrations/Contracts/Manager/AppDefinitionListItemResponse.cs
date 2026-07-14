@@ -1,4 +1,4 @@
-using Agw.Shared.Contracts.Integrations;
+using Agw.Shared.Data.Entities.Integrations;
 
 namespace Agw.Integrations.Contracts.Manager;
 

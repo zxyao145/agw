@@ -1,5 +1,6 @@
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Tasks;
 
 namespace Agw.Tasks.Application;
 

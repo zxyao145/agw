@@ -1,6 +1,7 @@
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 

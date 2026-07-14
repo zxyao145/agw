@@ -1,7 +1,7 @@
 using System.Reflection;
 
 using Agw.Jobs.Contracts;
-using Agw.Jobs.Domain.Entities;
+using Agw.Shared.Data.Entities.Jobs;
 
 namespace Agw.Jobs.Tests;
 

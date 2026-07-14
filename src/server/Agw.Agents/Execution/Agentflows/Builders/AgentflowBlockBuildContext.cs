@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Agentflows.Observability;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 
 using Microsoft.Agents.AI;

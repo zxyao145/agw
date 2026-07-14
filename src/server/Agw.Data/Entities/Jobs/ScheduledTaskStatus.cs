@@ -1,4 +1,4 @@
-namespace Agw.Jobs.Domain.Enums;
+namespace Agw.Shared.Data.Entities.Jobs;
 
 public enum JobStatus
 {

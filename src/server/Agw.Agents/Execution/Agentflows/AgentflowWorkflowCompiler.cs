@@ -6,6 +6,7 @@ using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 
 using Microsoft.Agents.AI;

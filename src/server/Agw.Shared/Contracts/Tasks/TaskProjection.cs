@@ -1,3 +1,5 @@
+using Agw.Shared.Data.Entities.Tasks;
+
 namespace Agw.Shared.Contracts.Tasks;
 
 /// <summary>

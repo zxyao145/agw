@@ -1,4 +1,4 @@
-using Agw.Jobs.Domain.Entities;
+using Agw.Shared.Data.Entities.Jobs;
 
 namespace Agw.Jobs.Application.Services;
 

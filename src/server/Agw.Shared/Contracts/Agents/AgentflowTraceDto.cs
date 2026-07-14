@@ -1,3 +1,6 @@
+using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Agents;
+
 namespace Agw.Shared.Contracts.Agents;
 
 public sealed class AgentflowTraceDto

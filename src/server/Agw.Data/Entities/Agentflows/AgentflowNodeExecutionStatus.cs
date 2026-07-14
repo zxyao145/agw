@@ -1,4 +1,4 @@
-namespace Agw.Shared.Contracts.Agents;
+namespace Agw.Shared.Data.Entities.Agentflows;
 
 public enum AgentflowNodeExecutionStatus
 {

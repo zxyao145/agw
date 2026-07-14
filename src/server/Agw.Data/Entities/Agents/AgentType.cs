@@ -1,4 +1,4 @@
-namespace Agw.Shared.Contracts.Agents;
+namespace Agw.Shared.Data.Entities.Agents;
 
 /// <summary>
 /// Agent Definition Type

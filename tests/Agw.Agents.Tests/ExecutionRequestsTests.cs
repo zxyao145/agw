@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Contracts;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Data;
 using Agw.Shared.Utils;
 
 namespace Agw.Agents.Tests;

@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

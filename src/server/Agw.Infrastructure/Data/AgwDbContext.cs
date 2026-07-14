@@ -1,8 +1,9 @@
 using System.Text.Json;
 
-using Agw.Jobs.Domain.Entities;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
+using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tasks;

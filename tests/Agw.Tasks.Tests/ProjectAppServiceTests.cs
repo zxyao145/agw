@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Skills;

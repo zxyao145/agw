@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 
 using Agw.Jobs.Application.Services;
-using Agw.Jobs.Domain.Entities;
 using Agw.Jobs.Domain.Events;
 using Agw.Jobs.Dtos;
 using Agw.Jobs.External;
+using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 
@@ -124,12 +124,12 @@ public class JobHostedService : BackgroundService
 
         var job = createdEvent.Job;
         var now = _timeProvider.GetUtcNow();
-        if (job.TriggerType != Agw.Jobs.Domain.Enums.TriggerType.Once)
+        if (job.TriggerType != TriggerType.Once)
         {
             return Task.CompletedTask;
         }
 
-        if (!job.IsEnabled || job.Status != Agw.Jobs.Domain.Enums.JobStatus.Pending)
+        if (!job.IsEnabled || job.Status != JobStatus.Pending)
         {
             return Task.CompletedTask;
         }

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Agw.Shared.Data.Entities.Agents;
+namespace Agw.Shared.Data.Entities.Agentflows;
 
 [Table("agentflow")]
 public class Agentflow : BaseEntity, IAggregateRoot

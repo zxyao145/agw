@@ -16,9 +16,12 @@
   <Folder Name="/2.Api/">
     <Project Path="src/server/Agw.A2A/Agw.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
   </Folder>
-  <Folder Name="/3.Core/">
-    <Project Path="src/server/Agw.Agents/Agw.Agents.csproj" />
+  <Folder Name="/3.Infrastructure/">
     <Project Path="src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/4.Modules/">
+    <Project Path="src/server/Agw.Agents/Agw.Agents.csproj" />
+    <Project Path="src/server/Agw.Files/Agw.Files.csproj" />
     <Project Path="src/server/Agw.Integrations/Agw.Integrations.csproj" />
     <Project Path="src/server/Agw.Jobs/Agw.Jobs.csproj" />
     <Project Path="src/server/Agw.Providers/Agw.Providers.csproj" />
@@ -26,11 +29,11 @@
     <Project Path="src/server/Agw.Tasks/Agw.Tasks.csproj" />
     <Project Path="src/server/Agw.Tools/Agw.Tools.csproj" Id="ba592b35-3c77-47d7-b977-396f0fa9acba" />
   </Folder>
-  <Folder Name="/4.Shared/">
+  <Folder Name="/5.Shared/">
+    <Project Path="src/server/Agw.Data/Agw.Data.csproj" />
     <Project Path="src/server/Agw.Shared/Agw.Shared.csproj" />
   </Folder>
-  <Folder Name="/5.Support/">
-    <Project Path="src/server/Agw.Files/Agw.Files.csproj" />
+  <Folder Name="/Support/">
     <Project Path="src/server/Agw.Setup/Agw.Setup.csproj" />
   </Folder>
   <Folder Name="/Tests/">

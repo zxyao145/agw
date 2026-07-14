@@ -1,0 +1,6 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <RootNamespace>Agw.Shared.Data</RootNamespace>
+    </PropertyGroup>
+</Project>

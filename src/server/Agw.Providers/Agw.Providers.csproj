@@ -4,7 +4,4 @@
     <PackageReference Include="Microsoft.Agents.AI" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Domain\Entities\" />
-  </ItemGroup>
 </Project>

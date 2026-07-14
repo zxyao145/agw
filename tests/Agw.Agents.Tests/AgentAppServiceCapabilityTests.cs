@@ -8,7 +8,6 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.ExternalAgents;
 using Agw.Domain.Services;
 using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Integrations;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Data.Entities.Agents;

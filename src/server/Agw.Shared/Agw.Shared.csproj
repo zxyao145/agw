@@ -15,4 +15,12 @@
 		<PackageReference Include="Microsoft.Agents.AI.Workflows" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" />
 	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Contracts\Integrations\" />
+	</ItemGroup>
 </Project>

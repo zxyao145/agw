@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 
 using Microsoft.Agents.AI;

@@ -1,8 +1,9 @@
 using Agw.Host.Controllers;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Jobs.Domain.Entities;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Tasks;
 
 using Microsoft.AspNetCore.Mvc;

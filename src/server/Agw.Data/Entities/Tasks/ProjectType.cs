@@ -1,4 +1,4 @@
-namespace Agw.Shared.Contracts.Tasks;
+namespace Agw.Shared.Data.Entities.Tasks;
 
 public enum ProjectType
 {

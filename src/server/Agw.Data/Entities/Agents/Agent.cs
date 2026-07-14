@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Providers;
 
 namespace Agw.Shared.Data.Entities.Agents;

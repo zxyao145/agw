@@ -1,4 +1,4 @@
-namespace Agw.Shared.Contracts.Integrations;
+namespace Agw.Shared.Data.Entities.Integrations;
 
 public enum CategoryType
 {

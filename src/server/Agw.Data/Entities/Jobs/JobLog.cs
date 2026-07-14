@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Shared.Data;
-
-namespace Agw.Jobs.Domain.Entities;
+namespace Agw.Shared.Data.Entities.Jobs;
 
 [Table("job_log")]
 public class JobLog : BaseEntity

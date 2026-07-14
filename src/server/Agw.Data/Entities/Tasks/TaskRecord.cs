@@ -2,8 +2,6 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-using Agw.Shared.Contracts.Tasks;
-
 namespace Agw.Shared.Data.Entities.Tasks;
 
 [Table("project_task_record")]

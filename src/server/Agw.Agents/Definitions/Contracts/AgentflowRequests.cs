@@ -1,4 +1,6 @@
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Agents;
 
 namespace Agw.Agents.Definitions.Contracts;
 

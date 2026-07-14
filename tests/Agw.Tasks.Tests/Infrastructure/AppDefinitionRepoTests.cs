@@ -33,7 +33,7 @@ public class AppDefinitionRepoTests
         {
             Name = "custom-app",
             DisplayName = "Custom App",
-            Category = Shared.Contracts.Integrations.CategoryType.Other,
+            Category = CategoryType.Other,
             Provider = "Custom",
             Description = "Test",
             AuthUrl = "https://example.test/oauth",

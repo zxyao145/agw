@@ -1,9 +1,10 @@
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Jobs.Domain.Entities;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data;
+using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using Agw.Tasks.Application;

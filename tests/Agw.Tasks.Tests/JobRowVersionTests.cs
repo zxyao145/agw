@@ -1,6 +1,5 @@
 using Agw.Infrastructure.Data;
-using Agw.Jobs.Domain.Entities;
-using Agw.Jobs.Domain.Enums;
+using Agw.Shared.Data.Entities.Jobs;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;

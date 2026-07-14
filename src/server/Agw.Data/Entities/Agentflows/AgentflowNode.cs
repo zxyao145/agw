@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-using Agw.Shared.Contracts.Agents;
-
-namespace Agw.Shared.Data.Entities.Agents;
+namespace Agw.Shared.Data.Entities.Agentflows;
 
 [Table("agentflow_node")]
 public class AgentflowNode : BaseEntity
