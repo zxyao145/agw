@@ -220,6 +220,7 @@ export function Conversation({
         )}
 
         {processMessages(messages).map((item, index) => {
+          // function call / tool use
           if (item.type === "accordion") {
             return (
               <div className="mx-4 max-w-[80%]" key={index}>
