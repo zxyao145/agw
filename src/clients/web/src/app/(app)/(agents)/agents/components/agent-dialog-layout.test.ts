@@ -56,7 +56,7 @@ test("Agent form uses a responsive 400px metadata column and six configuration t
   const source = await readFile(FORM_FIELDS_URL, "utf8");
 
   assert.match(source, /lg:grid-cols-\[400px_minmax\(0,1fr\)\]/);
-  assert.match(source, /<TabsTrigger value="system-prompt">System Prompt<\/TabsTrigger>/);
+  assert.match(source, /<TabsTrigger value="system-prompt">Instructions<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="skills">Skills<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="tools">Tools<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="mcp-tool-servers">MCP Tool Server<\/TabsTrigger>/);
@@ -66,7 +66,7 @@ test("Agent form uses a responsive 400px metadata column and six configuration t
     /<TabsTrigger value="environment-variables">Environment Variables<\/TabsTrigger>/,
   );
   assert.match(source, /<EnvironmentVariablesPanel/);
-  assert.match(source, /External agents do not support system prompt configuration/);
+  assert.match(source, /External agents do not support instructions configuration/);
   assert.match(source, /External agents do not support skill configuration/);
   assert.match(source, /External agents do not support tool configuration/);
   assert.match(source, /<SkillsPanel/);

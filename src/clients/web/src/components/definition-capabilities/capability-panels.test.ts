@@ -34,8 +34,8 @@ test("Agent form consumes all five shared panels while retaining Agent-only tabs
   assert.match(source, /<McpToolServersPanel/);
   assert.match(source, /<AppsPanel/);
   assert.match(source, /<EnvironmentVariablesPanel/);
-  assert.match(source, /<TabsTrigger value="system-prompt">System Prompt<\/TabsTrigger>/);
-  assert.match(source, /External agents do not support system prompt configuration/);
+  assert.match(source, /<TabsTrigger value="system-prompt">Instructions<\/TabsTrigger>/);
+  assert.match(source, /External agents do not support Instructions configuration/);
   assert.match(source, /External agents do not support skill configuration/);
   assert.match(source, /External agents do not support tool configuration/);
 });

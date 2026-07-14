@@ -44,7 +44,7 @@ export function AgentsTable({ agentsQuery, onEdit, onDelete, onExecute }: Agents
           <TableHead className="min-w-40">Display Name</TableHead>
           <TableHead>Type</TableHead>
           <TableHead>Description</TableHead>
-          <TableHead>System Prompt</TableHead>
+          <TableHead>Instructions</TableHead>
           <TableHead>Tools</TableHead>
           <TableHead>Created</TableHead>
           <TableHead className="text-right">Actions</TableHead>

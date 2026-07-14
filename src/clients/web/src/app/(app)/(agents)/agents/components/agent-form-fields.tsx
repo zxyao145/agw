@@ -317,7 +317,7 @@ export function AgentFormFields({
         <Tabs defaultValue="system-prompt" className="flex h-full min-h-0 flex-col">
           <div className="shrink-0 overflow-x-auto border-b px-6 py-3">
             <TabsList className="h-auto w-max">
-              <TabsTrigger value="system-prompt">System Prompt</TabsTrigger>
+              <TabsTrigger value="system-prompt">Instructions</TabsTrigger>
               <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="tools">Tools</TabsTrigger>
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
@@ -331,14 +331,14 @@ export function AgentFormFields({
             className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
           >
             <div>
-              <h3 className="font-medium">System Prompt</h3>
+              <h3 className="font-medium">Instructions</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 Define the instructions and operating context for this agent.
               </p>
             </div>
             {isExternalAgent ? (
               <ExternalAgentNotice>
-                External agents do not support system prompt configuration.
+                External agents do not support instructions configuration.
               </ExternalAgentNotice>
             ) : null}
             <Textarea
