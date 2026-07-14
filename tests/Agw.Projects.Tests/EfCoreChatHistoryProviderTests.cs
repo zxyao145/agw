@@ -168,6 +168,66 @@ public class EfCoreChatHistoryProviderTests
     }
 
     [Fact]
+    public async Task ProvideChatHistoryAsync_WhenToolApprovalRequestHasNoResponse_DoesNotBreakNextTurn()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.NewGuid();
+        var projectContextId = Guid.NewGuid();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var approvalRequest = new ToolApprovalRequestContent(
+            "approval-1",
+            new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?>()));
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
+            seedContext.TaskRecords.Add(CreateRecord(
+                projectContextId,
+                Guid.NewGuid(),
+                0,
+                new ChatMessage(ChatRole.Assistant, [approvalRequest]),
+                jsonOptions));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
+            jsonOptions);
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+
+        var messages = (await InvokeProvideChatHistoryAsync(
+                provider,
+                new ChatHistoryProvider.InvokingContext(new FakeAgent(), session, []),
+                cancellationToken))
+            .Append(new ChatMessage(ChatRole.User, "continue"));
+        var innerClient = new RecordingChatClient();
+        using var client = new FunctionInvokingChatClient(innerClient);
+
+        await foreach (var _ in client.GetStreamingResponseAsync(messages, cancellationToken: cancellationToken))
+        {
+        }
+
+        Assert.Equal(1, innerClient.StreamingCallCount);
+    }
+
+    [Fact]
     public async Task AppendAsync_ResultMessage_PersistsItForConversationHistory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -600,4 +660,36 @@ public class EfCoreChatHistoryProviderTests
     }
 
     private sealed class FakeAgentSession : AgentSession;
+
+    private sealed class RecordingChatClient : IChatClient
+    {
+        public int StreamingCallCount { get; private set; }
+
+        public void Dispose()
+        {
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) =>
+            serviceType.IsInstanceOfType(this) ? this : null;
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            StreamingCallCount++;
+            yield return new ChatResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents = [new TextContent("ok")]
+            };
+            await Task.CompletedTask;
+        }
+    }
 }

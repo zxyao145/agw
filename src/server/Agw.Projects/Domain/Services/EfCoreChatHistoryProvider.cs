@@ -152,7 +152,21 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             messages.Add(message);
         }
 
-        return messages;
+        // 旧会话可能残留没有对应响应的工具审批请求，FunctionInvokingChatClient 会在下一轮重放历史时直接抛错。
+        // 响应也可能随本轮输入提交，因此合并检查后只过滤仍未答复的请求。
+        var approvalResponseCallIds = messages
+            .Concat(context.RequestMessages)
+            .SelectMany(message => message.Contents)
+            .OfType<ToolApprovalResponseContent>()
+            .Select(content => content.ToolCall)
+            .OfType<FunctionCallContent>()
+            .Select(content => content.CallId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return messages
+            .Select(message => RemoveUnansweredToolApprovalRequests(message, approvalResponseCallIds))
+            .OfType<ChatMessage>()
+            .ToList();
     }
 
     /// <summary>
@@ -286,6 +300,33 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     private static bool IsResult(ChatMessage message) =>
         message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
         string.Equals(type?.ToString(), "result", StringComparison.Ordinal);
+
+    private static ChatMessage? RemoveUnansweredToolApprovalRequests(
+        ChatMessage message,
+        IReadOnlySet<string> approvalResponseCallIds)
+    {
+        var contents = message.Contents
+            .Where(content =>
+                content is not ToolApprovalRequestContent
+                {
+                    ToolCall: FunctionCallContent { InformationalOnly: false } functionCall
+                }
+                || approvalResponseCallIds.Contains(functionCall.CallId))
+            .ToList();
+        if (contents.Count == message.Contents.Count)
+        {
+            return message;
+        }
+
+        if (contents.Count == 0)
+        {
+            return null;
+        }
+
+        var filteredMessage = message.Clone();
+        filteredMessage.Contents = contents;
+        return filteredMessage;
+    }
 
     private static Task<Project?> ResolveProjectAsync(DbContext dbContext, string projectId, CancellationToken cancellationToken)
     {
