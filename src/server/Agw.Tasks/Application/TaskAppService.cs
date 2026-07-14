@@ -2,6 +2,7 @@ using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Results;
+using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
 
 using Microsoft.EntityFrameworkCore;
@@ -156,12 +157,15 @@ public class TaskAppService : ITaskAppService
         return new ExecutionTaskResolutionResult(task, null);
     }
 
+    /// <summary>
+    /// 根据项目和规范化 context ID 查找该上下文中最新的任务投影。
+    /// </summary>
     private async Task<TaskProjection?> GetLatestTaskByContextAsync(
         Guid projectId,
         string contextId,
         CancellationToken cancellationToken)
     {
-        var normalizedContextId = contextId.Trim();
+        var normalizedContextId = ContextIdUtil.NormalizeContextId(contextId);
         var context = await _contextRepository.SingleOrDefaultAsync(
             item => item.ProjectId == projectId && item.ContextId == normalizedContextId);
         if (context == null)

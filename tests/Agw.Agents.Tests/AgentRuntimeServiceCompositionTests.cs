@@ -195,16 +195,8 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void ExecutionContextIdResolver_WhenContextMissing_GeneratesNormalizedContextId()
     {
-        var resolverType = typeof(AgentRuntimeService).Assembly.GetType(
-            "Agw.Agents.Execution.Agents.Utils.ExecutionContextIdResolver");
-        Assert.NotNull(resolverType);
-        var method = resolverType!.GetMethod(
-            "Resolve",
-            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-        Assert.NotNull(method);
-
-        var generatedContextId = Assert.IsType<string>(method!.Invoke(null, [null]));
-        var suppliedContextId = Assert.IsType<string>(method.Invoke(null, [" context-1 "]));
+        var generatedContextId = ContextIdUtil.ResolveContextId(null);
+        var suppliedContextId = ContextIdUtil.ResolveContextId(" context-1 ");
 
         Assert.False(string.IsNullOrWhiteSpace(generatedContextId));
         Assert.Equal(Guid.Parse(generatedContextId).Normalize(), generatedContextId);

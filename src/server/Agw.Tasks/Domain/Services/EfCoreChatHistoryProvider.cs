@@ -4,7 +4,6 @@ using System.Text.Json.Serialization.Metadata;
 
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
-using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
 
@@ -41,6 +40,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     private readonly JsonSerializerOptions _jsonSerializerOptions;
     private readonly ProviderSessionState<State> _state;
 
+    /// <summary>
+    /// 创建 EF Core 聊天历史提供器，并配置默认的规范化 context 会话状态。
+    /// </summary>
     public EfCoreChatHistoryProvider(
         IServiceScopeFactory serviceScopeFactory,
         ILogger<EfCoreChatHistoryProvider> logger,
@@ -54,27 +56,24 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         _state = new ProviderSessionState<State>(
             _ =>
             {
-                var contextId = TaskUtil.GenContextId();
+                var contextId = ContextIdUtil.ResolveContextId(null);
                 return new State(contextId, ProjectDefaults.DefaultBuiltInId);
             },
             nameof(EfCoreChatHistoryProvider),
             _jsonSerializerOptions);
     }
 
+    /// <summary>
+    /// 使用规范化 context ID 和项目标识初始化 Agent 会话状态。
+    /// </summary>
     public void InitializeSessionState(
         AgentSession session,
         string contextId,
         Guid projectId)
     {
         ArgumentNullException.ThrowIfNull(session);
-        ArgumentException.ThrowIfNullOrWhiteSpace(contextId);
-        if (Guid.TryParse(contextId, out var guidContextId))
-        {
-            contextId = guidContextId.Normalize();
-        }
-
         var state = new State(
-            contextId.Trim(),
+            ContextIdUtil.NormalizeContextId(contextId),
             projectId);
         _state.SaveState(session, state);
     }
@@ -185,18 +184,22 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// 将消息追加到规范化 context，并复用及修正 SQLite 中 GUID 大小写不同的旧上下文记录。
+    /// </summary>
     public async Task AppendAsync(
         Guid projectId,
         string contextId,
         IReadOnlyList<ChatMessage> messages,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(contextId);
         ArgumentNullException.ThrowIfNull(messages);
         if (messages.Count == 0)
         {
             return;
         }
+
+        contextId = ContextIdUtil.NormalizeContextId(contextId);
 
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
@@ -208,6 +211,17 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 x => x.ProjectId == projectId && x.ContextId == contextId,
                 cancellationToken)
             .ConfigureAwait(false);
+        if (projectContext == null && Guid.TryParse(contextId, out _))
+        {
+            projectContext = await dbContext.Set<ProjectContext>()
+                .Where(x => x.ProjectId == projectId && x.ContextId.ToLower() == contextId)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (projectContext != null)
+            {
+                projectContext.ContextId = contextId;
+            }
+        }
 
         if (projectContext == null)
         {

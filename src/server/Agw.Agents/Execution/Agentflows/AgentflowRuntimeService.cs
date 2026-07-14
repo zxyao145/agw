@@ -12,6 +12,7 @@ using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Extensions;
+using Agw.Shared.Utils;
 
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -90,6 +91,9 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         return mermaidString;
     }
 
+    /// <summary>
+    /// 为指定 Agentflow 创建或恢复 context，并以流式消息执行工作流和处理人工审批。
+    /// </summary>
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         Guid agentflowId,
         string input,
@@ -107,7 +111,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         }
 
         var resolvedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
-        var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId);
+        var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);;
         var resolvedTaskId = taskId ?? Guid.NewGuid();
         var executionTraceContext = new AgentflowExecutionTraceContext(
             resolvedProjectId,
@@ -366,6 +370,9 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             environmentVariables);
     }
 
+    /// <summary>
+    /// 使用已转换的聊天消息执行 Agentflow，并返回归一化 context 下的完整执行结果。
+    /// </summary>
     private async Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
         Guid projectId,
@@ -385,7 +392,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             taskId = Guid.NewGuid();
         }
 
-        var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId);
+        var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);
         var executionTraceContext = new AgentflowExecutionTraceContext(
             projectId,
             resolvedContextId,

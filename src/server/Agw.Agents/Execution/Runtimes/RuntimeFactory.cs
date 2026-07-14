@@ -8,6 +8,7 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Utils;
 
 
 namespace Agw.Agents.Execution.Runtimes;
@@ -210,13 +211,16 @@ public sealed class RuntimeFactory : IRuntimeFactory
         }
     }
 
+    /// <summary>
+    /// 判断现有 Agent 运行时是否属于相同项目和归一化 context，从而允许复用会话。
+    /// </summary>
     private static bool CanReuseAgentSession(
         AgentRuntime? session,
         SettingCommand settings,
         string resolvedContextId)
     {
         if (session == null) return false;
-        var contextId = ExecutionContextIdResolver.Resolve(
+        var contextId = ContextIdUtil.ResolveContextId(
             string.IsNullOrWhiteSpace(settings.ContextId) ? resolvedContextId : settings.ContextId);
         return string.Equals(session._contextId, contextId, StringComparison.Ordinal)
                && session._projectId == ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);

@@ -156,6 +156,95 @@ public class TaskExecutionAppServiceTests
     }
 
     [Fact]
+    public async Task CreateForExecutionAsync_GuidContextIdWithDifferentCasing_ReusesCanonicalContext()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Context Project"));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        var contextGuid = Guid.NewGuid();
+
+        var uppercaseResult = await service.CreateForExecutionAsync(
+            projectId,
+            taskId: null,
+            new TaskCreateRequest(
+                JobId: null,
+                Input: "First task",
+                ContextId: contextGuid.ToString("D").ToUpperInvariant()),
+            "tester");
+        var lowercaseResult = await service.CreateForExecutionAsync(
+            projectId,
+            taskId: null,
+            new TaskCreateRequest(
+                JobId: null,
+                Input: "Second task",
+                ContextId: contextGuid.Normalize()),
+            "tester");
+
+        Assert.Equal(ApplicationResultType.Success, uppercaseResult.Type);
+        Assert.Equal(ApplicationResultType.Success, lowercaseResult.Type);
+        var context = Assert.Single(await dbContext.ProjectContexts.ToListAsync(cancellationToken));
+        Assert.Equal(contextGuid.Normalize(), context.ContextId);
+        Assert.Equal(2, await dbContext.TaskRecords.CountAsync(cancellationToken));
+        Assert.All(await dbContext.TaskRecords.ToListAsync(cancellationToken),
+            record => Assert.Equal(context.Id, record.ProjectContextId));
+    }
+
+    [Fact]
+    public async Task CreateForExecutionAsync_WithLegacyUppercaseGuidContext_ReusesAndNormalizesContext()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        var contextGuid = Guid.NewGuid();
+        var context = CreateContext(
+            Guid.NewGuid(),
+            projectId,
+            contextGuid.ToString("D").ToUpperInvariant(),
+            "Legacy context");
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Context Project"));
+            seedContext.ProjectContexts.Add(context);
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var result = await service.CreateForExecutionAsync(
+            projectId,
+            taskId: null,
+            new TaskCreateRequest(
+                JobId: null,
+                Input: "Continue task",
+                ContextId: contextGuid.Normalize()),
+            "tester");
+
+        Assert.Equal(ApplicationResultType.Success, result.Type);
+        var persistedContext = Assert.Single(await dbContext.ProjectContexts.ToListAsync(cancellationToken));
+        Assert.Equal(context.Id, persistedContext.Id);
+        Assert.Equal(contextGuid.Normalize(), persistedContext.ContextId);
+    }
+
+    [Fact]
     public async Task ClearRecordsAsync_WhenTaskBelongsToProject_RemovesOnlyTaskRecords()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

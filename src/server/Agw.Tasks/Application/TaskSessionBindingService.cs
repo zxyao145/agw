@@ -2,6 +2,7 @@ using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -159,6 +160,9 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         await _unitOfWork.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// 将可用的 context ID 转换为规范格式，并将空白输入保留为空字符串。
+    /// </summary>
     private static string NormalizeContextId(string contextId)
     {
         if (string.IsNullOrWhiteSpace(contextId))
@@ -166,7 +170,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             return string.Empty;
         }
 
-        return contextId.Trim();
+        return ContextIdUtil.NormalizeContextId(contextId);
     }
 
     private static string NormalizeExternalAgentName(string externalAgentName)

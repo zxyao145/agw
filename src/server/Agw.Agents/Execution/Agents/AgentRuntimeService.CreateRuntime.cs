@@ -5,6 +5,7 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Extensions;
+using Agw.Shared.Utils;
 
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,9 @@ namespace Agw.Agents.Execution.Agents;
 
 public partial class AgentRuntimeService
 {
+    /// <summary>
+    /// 根据任务、Agent 配置和归一化 context 创建可恢复的 Agent 运行时。
+    /// </summary>
     public async Task<AgentRuntime?> CreateRuntimeAsync(
         Guid agentId,
         TaskProjection task,
@@ -25,7 +29,7 @@ public partial class AgentRuntimeService
         }
 
         Guid projectId = task.ProjectId;
-        var resolvedContextId = ExecutionContextIdResolver.Resolve(task.ContextId);
+        var resolvedContextId = ContextIdUtil.ResolveContextId(task.ContextId);
         var sessionKey = CreateSessionKey(projectId, resolvedContextId);
         var providerSessionId =
             await GetCodexProviderSessionIdAsync(agent, projectId, resolvedContextId, cancellationToken);

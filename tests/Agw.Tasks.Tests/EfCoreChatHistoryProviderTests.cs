@@ -7,6 +7,7 @@ using Agw.Infrastructure.Data;
 using Agw.Shared;
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Extensions;
 
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
@@ -211,6 +212,57 @@ public class EfCoreChatHistoryProviderTests
         Assert.NotNull(persisted);
         Assert.Equal("summary", Assert.IsType<TextContent>(Assert.Single(persisted.Contents)).Text);
         Assert.Equal("result", persisted.AdditionalProperties!["type"]?.ToString());
+    }
+
+    [Fact]
+    public async Task AppendAsync_WithLegacyUppercaseGuidContext_ReusesAndNormalizesContext()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.NewGuid();
+        var contextGuid = Guid.NewGuid();
+        var projectContextId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectContexts.Add(CreateContext(
+                projectContextId,
+                projectId,
+                contextGuid.ToString("D").ToUpperInvariant()));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
+
+        await writer.AppendAsync(
+            projectId,
+            contextGuid.Normalize(),
+            [new ChatMessage(ChatRole.User, "continue")],
+            cancellationToken);
+
+        await using var verifyContext = new AgwDbContext(options);
+        var persistedContext = Assert.Single(await verifyContext.ProjectContexts.ToListAsync(cancellationToken));
+        Assert.Equal(projectContextId, persistedContext.Id);
+        Assert.Equal(contextGuid.Normalize(), persistedContext.ContextId);
+        Assert.Equal(
+            projectContextId,
+            (await verifyContext.TaskRecords.SingleAsync(cancellationToken)).ProjectContextId);
     }
 
     [Fact]

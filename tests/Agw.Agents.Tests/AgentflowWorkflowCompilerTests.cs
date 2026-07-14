@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Reflection;
 
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Observability;
@@ -23,6 +24,45 @@ namespace Agw.Agents.Tests;
 public class AgentflowWorkflowCompilerTests
 {
     private readonly AgentflowWorkflowCompiler _compiler = new();
+
+    [Fact]
+    public void BlockBuilders_AreDedicatedInternalStaticTypes()
+    {
+        var assembly = typeof(AgentflowWorkflowCompiler).Assembly;
+        var builderTypeNames = new[]
+        {
+            "Agw.Agents.Execution.Agentflows.Builders.ConcurrentBlockBuilder",
+            "Agw.Agents.Execution.Agentflows.Builders.GroupChatBlockBuilder",
+            "Agw.Agents.Execution.Agentflows.Builders.HandoffBlockBuilder",
+            "Agw.Agents.Execution.Agentflows.Builders.MagenticBlockBuilder",
+        };
+
+        foreach (var builderTypeName in builderTypeNames)
+        {
+            var builderType = assembly.GetType(builderTypeName);
+
+            Assert.NotNull(builderType);
+            Assert.True(builderType.IsAbstract);
+            Assert.True(builderType.IsSealed);
+            Assert.False(builderType.IsPublic);
+
+            var buildMethod = builderType.GetMethod(
+                "Build",
+                BindingFlags.Static | BindingFlags.NonPublic);
+
+            Assert.NotNull(buildMethod);
+            Assert.Equal(typeof(ExecutorBinding), buildMethod.ReturnType);
+        }
+    }
+
+    [Fact]
+    public void ApplyInstructions_WithInstructions_UsesDefaultInputAuthor()
+    {
+        var result = AgentflowMessageTransforms.ApplyInstructions([], "Follow the workflow instructions.");
+
+        var instruction = Assert.Single(result);
+        Assert.Equal(Constants.DefaultInputAuthor, instruction.AuthorName);
+    }
 
     [Fact]
     public async Task Compile_AgentNode_EmitsWorkflowTelemetryWithoutSensitiveData()
@@ -207,8 +247,12 @@ public class AgentflowWorkflowCompilerTests
         Assert.Contains("join", mermaid);
     }
 
-    [Fact]
-    public void Compile_BlockNodeWithParticipants_ReturnsWorkflow()
+    [Theory]
+    [InlineData(AgentflowNodeKind.ConcurrentBlock)]
+    [InlineData(AgentflowNodeKind.GroupChatBlock)]
+    [InlineData(AgentflowNodeKind.HandoffBlock)]
+    [InlineData(AgentflowNodeKind.MagenticBlock)]
+    public void Compile_BlockNodeWithParticipants_ReturnsWorkflow(AgentflowNodeKind blockKind)
     {
         var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "block-flow" };
         var nodes = new[]
@@ -218,7 +262,7 @@ public class AgentflowWorkflowCompilerTests
             new AgentflowNode
             {
                 NodeId = "group",
-                Kind = AgentflowNodeKind.GroupChatBlock,
+                Kind = blockKind,
                 Name = "GroupChat Room",
                 ConfigJson = """{"participantNodeIds":["agent-a","agent-b"],"maxRounds":2}""",
             },
@@ -511,6 +555,57 @@ public class AgentflowWorkflowCompilerTests
     }
 
     [Fact]
+    public async Task Compile_ConcurrentBlock_ReassignsUpstreamAgentResponseAsUser()
+    {
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "concurrent-role-flow" };
+        var upstreamClient = new CapturingChatClient("Hello World!");
+        var participantClient = new CapturingChatClient("translated output");
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "upstream", Kind = AgentflowNodeKind.Agent, Name = "Upstream" },
+            new AgentflowNode { NodeId = "participant", Kind = AgentflowNodeKind.Agent, Name = "Participant" },
+            new AgentflowNode
+            {
+                NodeId = "parallel",
+                Kind = AgentflowNodeKind.ConcurrentBlock,
+                Name = "Concurrent Block",
+                ConfigJson = """{"participantNodeIds":["participant"]}""",
+            },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            Edge("upstream-to-parallel", "upstream", "parallel"),
+            Edge("parallel-to-output", "parallel", "output"),
+        };
+
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent>
+            {
+                ["upstream"] = CreateAgent("upstream", "Upstream", upstreamClient),
+                ["participant"] = CreateAgent("participant", "Participant", participantClient),
+            });
+
+        Assert.NotNull(workflow);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "initial input") },
+            cancellationToken: cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        await foreach (var _ in run.WatchStreamAsync(cancellationToken))
+        {
+        }
+
+        var participantInput = Assert.Single(participantClient.Messages);
+        Assert.Equal(ChatRole.User, participantInput.Role);
+        Assert.Equal("Hello World!", participantInput.Text);
+    }
+
+    [Fact]
     public async Task Compile_InputBeforeAgent_PassesInitialMessagesDownstream()
     {
         var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "input-agent-flow" };
@@ -555,7 +650,7 @@ public class AgentflowWorkflowCompilerTests
     }
 
     [Fact]
-    public async Task Compile_SequentialAgents_PreservesOnlyUpstreamAgentResponse()
+    public async Task Compile_SequentialAgents_ReassignsOnlyUpstreamAgentResponseAsUser()
     {
         var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "sequential-flow" };
         var firstChatClient = new CapturingChatClient("first agent output");
@@ -599,7 +694,7 @@ public class AgentflowWorkflowCompilerTests
 
         Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
         var upstreamResponse = Assert.Single(secondChatClient.Messages);
-        Assert.Equal(ChatRole.Assistant, upstreamResponse.Role);
+        Assert.Equal(ChatRole.User, upstreamResponse.Role);
         Assert.Equal("first agent output", upstreamResponse.Text);
     }
 

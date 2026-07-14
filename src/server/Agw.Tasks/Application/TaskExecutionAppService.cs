@@ -119,6 +119,9 @@ public class TaskExecutionAppService
         return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending, taskId);
     }
 
+    /// <summary>
+    /// 创建任务上下文和初始记录，并统一解析请求中的 context ID。
+    /// </summary>
     private async Task<ApplicationResult<TaskExecutionSnapshot>> CreateAsync(
         Guid projectId,
         TaskCreateRequest request,
@@ -137,9 +140,7 @@ public class TaskExecutionAppService
         var taskId = taskIdOverride.HasValue && taskIdOverride.Value != Guid.Empty
             ? taskIdOverride.Value
             : Guid.NewGuid();
-        var contextId = string.IsNullOrWhiteSpace(request.ContextId)
-            ? TaskUtil.GenContextId()
-            : request.ContextId.Trim();
+        var contextId = ContextIdUtil.ResolveContextId(request.ContextId);
         var title = string.IsNullOrWhiteSpace(request.Title)
             ? TaskTitleFactory.Create(request.Input)
             : request.Title.Trim();
@@ -273,6 +274,9 @@ public class TaskExecutionAppService
         return TaskExecutionMapper.ToTask(context, records);
     }
 
+    /// <summary>
+    /// 获取或创建项目上下文，并复用及规范化 SQLite 中仅 GUID 大小写不同的旧记录。
+    /// </summary>
     private async Task<ProjectContext> GetOrCreateContextAsync(
         Guid projectId,
         string contextId,
@@ -283,6 +287,19 @@ public class TaskExecutionAppService
     {
         var context = await _contextRepository.SingleOrDefaultAsync(
             item => item.ProjectId == projectId && item.ContextId == contextId);
+        if (context == null && Guid.TryParse(contextId, out _))
+        {
+            var legacyContexts = await _contextRepository.ListAsync(
+                item => item.ProjectId == projectId && item.ContextId.ToLower() == contextId);
+            context = legacyContexts
+                .OrderBy(item => item.CreateTime)
+                .FirstOrDefault();
+            if (context != null)
+            {
+                context.ContextId = contextId;
+            }
+        }
+
         if (context != null)
         {
             if (!string.IsNullOrWhiteSpace(title) && string.Equals(context.Title, "Untitled", StringComparison.Ordinal))

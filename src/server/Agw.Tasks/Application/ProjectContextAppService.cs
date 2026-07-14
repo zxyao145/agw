@@ -3,6 +3,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Extensions;
+using Agw.Shared.Utils;
 using Agw.Tasks.Domain.Services;
 
 using Microsoft.EntityFrameworkCore;
@@ -67,6 +68,9 @@ public class ProjectContextAppService
             .ToList();
     }
 
+    /// <summary>
+    /// 使用规范化 context ID 查询项目上下文并转换为响应模型。
+    /// </summary>
     public async Task<ProjectContextResponse?> GetResponseAsync(Guid projectId, string contextId)
     {
         if (string.IsNullOrWhiteSpace(contextId))
@@ -80,7 +84,7 @@ public class ProjectContextAppService
             return null;
         }
 
-        var normalizedContextId = contextId.Trim();
+        var normalizedContextId = ContextIdUtil.NormalizeContextId(contextId);
         var context = await _contextRepository.SingleOrDefaultAsync(item =>
             item.ProjectId == project.Id && item.ContextId == normalizedContextId);
 
@@ -232,6 +236,9 @@ public class ProjectContextAppService
             latestTask?.ErrorMessage);
     }
 
+    /// <summary>
+    /// 在解析项目标识后，使用规范化 context ID 查询持久化项目上下文。
+    /// </summary>
     private async Task<ProjectContext?> GetProjectContextAsync(Guid projectId, string contextId)
     {
         if (string.IsNullOrWhiteSpace(contextId))
@@ -245,7 +252,7 @@ public class ProjectContextAppService
             return null;
         }
 
-        var normalizedContextId = contextId.Trim();
+        var normalizedContextId = ContextIdUtil.NormalizeContextId(contextId);
         return await _contextRepository.SingleOrDefaultAsync(context =>
             context.ProjectId == project.Id && context.ContextId == normalizedContextId);
     }

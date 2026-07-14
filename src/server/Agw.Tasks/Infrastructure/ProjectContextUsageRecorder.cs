@@ -1,5 +1,6 @@
 using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Tasks;
+using Agw.Shared.Utils;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,12 +16,17 @@ public sealed class ProjectContextUsageRecorder : IProjectContextUsageRecorder
         _serviceScopeFactory = serviceScopeFactory;
     }
 
+    /// <summary>
+    /// 使用规范化 context ID 将本次 Token 用量累加到对应项目上下文。
+    /// </summary>
     public async Task AddAsync(
         Guid projectId,
         string contextId,
         ProjectContextUsage usage,
         CancellationToken cancellationToken = default)
     {
+        contextId = ContextIdUtil.NormalizeContextId(contextId);
+
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 

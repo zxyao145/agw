@@ -19,7 +19,7 @@ public class AgentExecutor(
     private const string JobExecutorUser = "job-executor";
 
     /// <summary>
-    /// return task ID
+    /// 为定时任务创建独立 context，执行目标 Agent 或 Agentflow，并返回任务标识。
     /// </summary>
     /// <param name="job"></param>
     /// <param name="cancellationToken"></param>
@@ -34,7 +34,7 @@ public class AgentExecutor(
 
         var (prompt, title) = BuildPromptAndTitle(job);
 
-        var contextId = TaskUtil.GenContextId();
+        var contextId = ContextIdUtil.GenContextId();
 
         var createResult = await taskExecutionAppService.CreateRunningAsync(
             job.ProjectId,

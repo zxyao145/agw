@@ -1,15 +1,15 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-using Agw.Shared.Contracts.Tasks;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Data.Entities.Agents;
+using Agw.Agents.Execution.Agentflows.Builders;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Summaries;
+using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Contracts.Tasks;
+using Agw.Shared.Data.Entities.Agents;
 
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
-using Microsoft.Extensions.AI;
 
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
@@ -50,7 +50,7 @@ public sealed class AgentflowWorkflowCompiler
         EmitAgentUpdateEvents = true,
         // 避免转发前面所有节点的输出
         ForwardIncomingMessages = false,
-        ReassignOtherAgentsAsUsers = false,
+        ReassignOtherAgentsAsUsers = true,
     };
 
     private static readonly ExecutorOptions ChatExecutorOptions = ExecutorOptions.Default;
@@ -71,6 +71,9 @@ public sealed class AgentflowWorkflowCompiler
             summaryContext: null);
     }
 
+    /// <summary>
+    /// 将持久化的 Agentflow 节点与边编译为可执行 Workflow，并注入会话、跟踪和摘要上下文。
+    /// </summary>
     internal Workflow? Compile(
         Agentflow agentflow,
         IReadOnlyList<AgentflowNode> orderedNodes,
@@ -103,7 +106,7 @@ public sealed class AgentflowWorkflowCompiler
             var binding = CreateBinding(
                 agentflow.Id,
                 node,
-                orderedNodes,
+                nodeMap,
                 nodeIdToAgent,
                 sessionScope,
                 executionTraceContext,
@@ -156,20 +159,34 @@ public sealed class AgentflowWorkflowCompiler
         return builder.Build(validateOrphans: false);
     }
 
+    /// <summary>
+    /// 根据节点类型创建对应的 Agent、适配器、人工门、Block 或输出执行器绑定。
+    /// </summary>
     private static ExecutorBinding? CreateBinding(
         Guid agentflowId,
         AgentflowNode node,
-        IReadOnlyList<AgentflowNode> orderedNodes,
+        IReadOnlyDictionary<string, AgentflowNode> nodeMap,
         IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
         AgentflowAgentSessionScope? sessionScope,
         AgentflowExecutionTraceContext? executionTraceContext,
         AgentflowSummaryContext? summaryContext)
     {
+        var blockBuildContext = IsBlockNode(node.Kind)
+            ? new AgentflowBlockBuildContext(
+                agentflowId,
+                node,
+                nodeMap,
+                nodeIdToAgent,
+                sessionScope,
+                executionTraceContext,
+                AgentHostOptions)
+            : null;
+
         return node.Kind switch
         {
             AgentflowNodeKind.Agent =>
                 nodeIdToAgent.TryGetValue(node.NodeId, out var agent)
-                    ? new NodeScopedAgent(
+                    ? new AgentflowNodeScopedAgent(
                             agent,
                             node.NodeId,
                             node.Name,
@@ -183,7 +200,7 @@ public sealed class AgentflowWorkflowCompiler
                     : null,
             AgentflowNodeKind.WorkflowAsAgent =>
                 nodeIdToAgent.TryGetValue(node.NodeId, out var workflowAgent)
-                    ? new NodeScopedAgent(
+                    ? new AgentflowNodeScopedAgent(
                             workflowAgent,
                             node.NodeId,
                             node.Name,
@@ -192,7 +209,9 @@ public sealed class AgentflowWorkflowCompiler
                         .BindAsExecutor(AgentHostOptions)
                     : null,
             AgentflowNodeKind.PromptAdapter =>
-                BindChatTransform(node.NodeId, messages => ApplyInstructions(messages, node.Instructions)),
+                BindChatTransform(
+                    node.NodeId,
+                    messages => AgentflowMessageTransforms.ApplyInstructions(messages, node.Instructions)),
             AgentflowNodeKind.CheckpointMarker =>
                 BindChatTransform(node.NodeId, messages => messages),
             AgentflowNodeKind.Input =>
@@ -200,24 +219,13 @@ public sealed class AgentflowWorkflowCompiler
             AgentflowNodeKind.HumanGate =>
                 RequestPort.Create<List<ChatMessage>, List<ChatMessage>>(node.NodeId).BindAsExecutor(),
             AgentflowNodeKind.ConcurrentBlock =>
-                CreateConcurrentBlockBinding(
-                    agentflowId,
-                    node,
-                    orderedNodes,
-                    nodeIdToAgent,
-                    sessionScope,
-                    executionTraceContext),
-            AgentflowNodeKind.HandoffBlock or AgentflowNodeKind.GroupChatBlock or AgentflowNodeKind.MagenticBlock =>
-                CreateBlockAgent(
-                    agentflowId,
-                    node,
-                    orderedNodes,
-                    nodeIdToAgent,
-                    sessionScope,
-                    executionTraceContext) is { } blockAgent
-                    ? new NodeScopedAgent(blockAgent, node.NodeId, node.Name, node.Instructions, sessionScope)
-                        .BindAsExecutor(AgentHostOptions)
-                    : null,
+                ConcurrentBlockBuilder.Build(blockBuildContext!),
+            AgentflowNodeKind.GroupChatBlock =>
+                GroupChatBlockBuilder.Build(blockBuildContext!),
+            AgentflowNodeKind.HandoffBlock =>
+                HandoffBlockBuilder.Build(blockBuildContext!),
+            AgentflowNodeKind.MagenticBlock =>
+                MagenticBlockBuilder.Build(blockBuildContext!),
             AgentflowNodeKind.Output =>
                 CreateOutputBinding(node, summaryContext),
             _ => null,
@@ -255,258 +263,6 @@ public sealed class AgentflowWorkflowCompiler
             node.NodeId,
             ChatExecutorOptions,
             threadsafe: true);
-    }
-
-    private static ExecutorBinding? CreateConcurrentBlockBinding(
-        Guid agentflowId,
-        AgentflowNode blockNode,
-        IReadOnlyList<AgentflowNode> orderedNodes,
-        IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
-        AgentflowAgentSessionScope? sessionScope,
-        AgentflowExecutionTraceContext? executionTraceContext)
-    {
-        var nodeMap = orderedNodes.ToDictionary(node => node.NodeId, StringComparer.Ordinal);
-        var config = ReadBlockConfig(blockNode);
-        var participantIds = config.ParticipantNodeIds?
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.Ordinal)
-            .ToList() ?? [];
-        if (participantIds.Count == 0)
-        {
-            return null;
-        }
-
-        var participants = new List<AIAgent>();
-        foreach (var participantId in participantIds)
-        {
-            if (!nodeMap.TryGetValue(participantId, out var participantNode) ||
-                !nodeIdToAgent.TryGetValue(participantId, out var participantAgent))
-            {
-                return null;
-            }
-
-            participants.Add(CreateBlockParticipantAgent(
-                participantAgent,
-                agentflowId,
-                $"{blockNode.NodeId}.{participantNode.NodeId}",
-                participantNode,
-                sessionScope,
-                executionTraceContext));
-        }
-
-        Func<List<ChatMessage>, CancellationToken, ValueTask<List<ChatMessage>>> runConcurrentAsync =
-            async (messages, cancellationToken) =>
-            {
-                var input = ApplyInstructions(messages, blockNode.Instructions);
-                var tasks = participants
-                    .Select(agent => agent.RunAsync(input, cancellationToken: cancellationToken))
-                    .ToArray();
-                var responses = await Task.WhenAll(tasks).ConfigureAwait(false);
-                return responses.SelectMany(response => response.Messages).ToList();
-            };
-
-        return runConcurrentAsync.BindAsExecutor<List<ChatMessage>, List<ChatMessage>>(
-            blockNode.NodeId,
-            ChatExecutorOptions,
-            threadsafe: true);
-    }
-
-    private static AIAgent? CreateBlockAgent(
-        Guid agentflowId,
-        AgentflowNode blockNode,
-        IReadOnlyList<AgentflowNode> orderedNodes,
-        IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
-        AgentflowAgentSessionScope? sessionScope,
-        AgentflowExecutionTraceContext? executionTraceContext)
-    {
-        var nodeMap = orderedNodes.ToDictionary(node => node.NodeId, StringComparer.Ordinal);
-        var config = ReadBlockConfig(blockNode);
-        var participantIds = config.ParticipantNodeIds?
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.Ordinal)
-            .ToList() ?? [];
-        if (participantIds.Count == 0)
-        {
-            return null;
-        }
-
-        var participants = new List<(string NodeId, AIAgent Agent)>();
-        foreach (var participantId in participantIds)
-        {
-            if (!nodeMap.TryGetValue(participantId, out var participantNode) ||
-                !nodeIdToAgent.TryGetValue(participantId, out var participantAgent))
-            {
-                return null;
-            }
-
-            participants.Add((participantId, CreateBlockParticipantAgent(
-                participantAgent,
-                agentflowId,
-                $"{blockNode.NodeId}.{participantNode.NodeId}",
-                participantNode,
-                sessionScope,
-                executionTraceContext)));
-        }
-
-        return blockNode.Kind switch
-        {
-            AgentflowNodeKind.HandoffBlock =>
-                BuildHandoffBlock(blockNode, participants.Select(x => x.Agent).ToList(), config),
-            AgentflowNodeKind.GroupChatBlock =>
-                BuildGroupChatBlock(blockNode, participants.Select(x => x.Agent).ToList(), config),
-            AgentflowNodeKind.MagenticBlock =>
-                BuildMagenticBlock(
-                    agentflowId,
-                    blockNode,
-                    participants,
-                    config,
-                    nodeMap,
-                    nodeIdToAgent,
-                    sessionScope,
-                    executionTraceContext),
-            _ => null,
-        };
-    }
-
-    private static AIAgent BuildHandoffBlock(
-        AgentflowNode blockNode,
-        IReadOnlyList<AIAgent> participants,
-        AgentflowBlockConfig config)
-    {
-        var builder = AgentWorkflowBuilder.CreateHandoffBuilderWith(participants[0])
-            .AddParticipants(participants.Skip(1));
-        if (!string.IsNullOrWhiteSpace(config.HandoffInstructions))
-        {
-            builder = builder.WithHandoffInstructions(config.HandoffInstructions);
-        }
-
-        if (config.EnableReturnToPrevious == true)
-        {
-            builder = builder.EnableReturnToPrevious();
-        }
-
-        if (config.Autonomous == true)
-        {
-            builder = builder.WithAutonomousMode(
-                config.AutonomousTurnLimit,
-                config.ContinuationPrompt,
-                participants,
-                null!,
-                null!);
-        }
-
-        return CreateBlockWorkflowAgent(builder.Build(), blockNode);
-    }
-
-    private static AIAgent BuildGroupChatBlock(
-        AgentflowNode blockNode,
-        IReadOnlyList<AIAgent> participants,
-        AgentflowBlockConfig config)
-    {
-        var maxRounds = Math.Max(1, config.MaxRounds ?? 10);
-        var workflow = AgentWorkflowBuilder
-            .CreateGroupChatBuilderWith(agents =>
-            {
-                var manager = new RoundRobinGroupChatManager(
-                    agents,
-                    (roundRobinManager, _, _) =>
-                        new ValueTask<bool>(roundRobinManager.IterationCount >= maxRounds));
-                manager.MaximumIterationCount = maxRounds;
-                return manager;
-            })
-            .AddParticipants(participants)
-            .Build();
-        return CreateBlockWorkflowAgent(workflow, blockNode);
-    }
-
-    private static AIAgent? BuildMagenticBlock(
-        Guid agentflowId,
-        AgentflowNode blockNode,
-        IReadOnlyList<(string NodeId, AIAgent Agent)> participants,
-        AgentflowBlockConfig config,
-        IReadOnlyDictionary<string, AgentflowNode> nodeMap,
-        IReadOnlyDictionary<string, AIAgent> nodeIdToAgent,
-        AgentflowAgentSessionScope? sessionScope,
-        AgentflowExecutionTraceContext? executionTraceContext)
-    {
-        var managerNodeId = participants[0].NodeId;
-        var manager = participants[0].Agent;
-        var team = participants.Skip(1).Select(x => x.Agent).ToList();
-        if (!string.IsNullOrWhiteSpace(config.ManagerNodeId))
-        {
-            if (!nodeMap.TryGetValue(config.ManagerNodeId, out var managerNode) ||
-                !nodeIdToAgent.TryGetValue(config.ManagerNodeId, out var managerAgent))
-            {
-                return null;
-            }
-
-            manager = CreateBlockParticipantAgent(
-                managerAgent,
-                agentflowId,
-                $"{blockNode.NodeId}.{managerNode.NodeId}.manager",
-                managerNode,
-                sessionScope,
-                executionTraceContext);
-            managerNodeId = config.ManagerNodeId;
-            team = participants
-                .Where(participant => !string.Equals(participant.NodeId, managerNodeId, StringComparison.Ordinal))
-                .Select(participant => participant.Agent)
-                .ToList();
-        }
-
-        var builder = AgentWorkflowBuilder.CreateMagenticBuilderWith(manager)
-            .AddParticipants(team);
-        if (config.MaxRounds.HasValue)
-        {
-            builder = builder.WithMaxRounds(config.MaxRounds);
-        }
-
-        if (config.MaxStalls.HasValue)
-        {
-            builder = builder.WithMaxStalls(config.MaxStalls.Value);
-        }
-
-        if (config.MaxResets.HasValue)
-        {
-            builder = builder.WithMaxResets(config.MaxResets);
-        }
-
-        if (config.RequirePlanSignoff.HasValue)
-        {
-            builder = builder.RequirePlanSignoff(config.RequirePlanSignoff.Value);
-        }
-
-        return CreateBlockWorkflowAgent(builder.Build(), blockNode);
-    }
-
-    private static AIAgent CreateBlockParticipantAgent(
-        AIAgent participantAgent,
-        Guid agentflowId,
-        string runtimeNodeId,
-        AgentflowNode participantNode,
-        AgentflowAgentSessionScope? sessionScope,
-        AgentflowExecutionTraceContext? executionTraceContext)
-    {
-        var shouldTrace = participantNode.Kind == AgentflowNodeKind.Agent;
-        return new NodeScopedAgent(
-            participantAgent,
-            runtimeNodeId,
-            participantNode.Name,
-            participantNode.Instructions,
-            sessionScope,
-            shouldTrace ? executionTraceContext : null,
-            shouldTrace ? agentflowId : null,
-            shouldTrace ? participantNode.NodeId : null,
-            shouldTrace ? participantNode.RelateId : null);
-    }
-
-    private static AIAgent CreateBlockWorkflowAgent(Workflow workflow, AgentflowNode blockNode)
-    {
-        return workflow.AsAIAgent(
-            id: blockNode.NodeId,
-            name: blockNode.Name ?? blockNode.NodeId,
-            description: string.Empty,
-            includeWorkflowOutputsInResponse: true);
     }
 
     private static void AddRuntimeEdges(
@@ -693,32 +449,15 @@ public sealed class AgentflowWorkflowCompiler
             threadsafe: true);
     }
 
-    private static List<ChatMessage> ApplyInstructions(
-        IReadOnlyList<ChatMessage> messages,
-        string? instructions)
-    {
-        if (string.IsNullOrWhiteSpace(instructions))
-        {
-            return messages.ToList();
-        }
-
-        var result = new List<ChatMessage>
-        {
-            new(ChatRole.System, instructions)
-            {
-                AuthorName = "agw",
-            },
-        };
-        result.AddRange(messages);
-        return result;
-    }
-
+    /// <summary>
+    /// 收集所有 Block 配置引用的参与节点与管理节点标识。
+    /// </summary>
     private static HashSet<string> GetBlockParticipantNodeIds(IReadOnlyList<AgentflowNode> nodes)
     {
         var participantNodeIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var node in nodes.Where(node => IsBlockNode(node.Kind)))
         {
-            var config = ReadBlockConfig(node);
+            var config = AgentflowBlockBuildSupport.ReadConfig(node);
             foreach (var participantId in config.ParticipantNodeIds ?? [])
             {
                 participantNodeIds.Add(participantId);
@@ -737,39 +476,6 @@ public sealed class AgentflowWorkflowCompiler
     {
         return kind is AgentflowNodeKind.ConcurrentBlock or AgentflowNodeKind.HandoffBlock or
             AgentflowNodeKind.GroupChatBlock or AgentflowNodeKind.MagenticBlock;
-    }
-
-    private static AgentflowBlockConfig ReadBlockConfig(AgentflowNode node)
-    {
-        if (string.IsNullOrWhiteSpace(node.ConfigJson))
-        {
-            return new AgentflowBlockConfig();
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<AgentflowBlockConfig>(node.ConfigJson, JsonOptions) ??
-                   new AgentflowBlockConfig();
-        }
-        catch (JsonException)
-        {
-            return new AgentflowBlockConfig();
-        }
-    }
-
-    private sealed record AgentflowBlockConfig
-    {
-        public string[]? ParticipantNodeIds { get; init; }
-        public string? ManagerNodeId { get; init; }
-        public int? MaxRounds { get; init; }
-        public int? MaxStalls { get; init; }
-        public int? MaxResets { get; init; }
-        public bool? RequirePlanSignoff { get; init; }
-        public string? HandoffInstructions { get; init; }
-        public bool? EnableReturnToPrevious { get; init; }
-        public bool? Autonomous { get; init; }
-        public int? AutonomousTurnLimit { get; init; }
-        public string? ContinuationPrompt { get; init; }
     }
 
     private sealed record AgentflowConditionConfig
@@ -848,141 +554,4 @@ public sealed class AgentflowWorkflowCompiler
     }
 
     private sealed class InputPassthroughSession : AgentSession;
-
-    private sealed class NodeScopedAgent : DelegatingAIAgent
-    {
-        private readonly string _nodeId;
-        private readonly string? _name;
-        private readonly string? _instructions;
-        private readonly AgentflowAgentSessionScope? _sessionScope;
-        private readonly AgentflowExecutionTraceContext? _executionTraceContext;
-        private readonly Guid? _agentflowId;
-        private readonly string? _traceNodeId;
-        private readonly Guid? _agentId;
-
-        public NodeScopedAgent(
-            AIAgent innerAgent,
-            string nodeId,
-            string? name,
-            string? instructions,
-            AgentflowAgentSessionScope? sessionScope,
-            AgentflowExecutionTraceContext? executionTraceContext = null,
-            Guid? agentflowId = null,
-            string? traceNodeId = null,
-            Guid? agentId = null) : base(innerAgent)
-        {
-            _nodeId = nodeId;
-            _name = name;
-            _instructions = instructions;
-            _sessionScope = sessionScope;
-            _executionTraceContext = executionTraceContext;
-            _agentflowId = agentflowId;
-            _traceNodeId = traceNodeId;
-            _agentId = agentId;
-        }
-
-        protected override string? IdCore => _nodeId;
-
-        public override string? Name => _name ?? InnerAgent.Name ?? _nodeId;
-
-        public override string? Description => InnerAgent.Description;
-
-        protected override async Task<AgentResponse> RunCoreAsync(
-            IEnumerable<ChatMessage> messages,
-            AgentSession? session = null,
-            AgentRunOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
-            var input = ApplyInstructions(messages.ToList(), _instructions);
-            using var activity = StartExecutionActivity(input);
-            try
-            {
-                var response = await InnerAgent
-                    .RunAsync(input, scopedSession, options, cancellationToken)
-                    .ConfigureAwait(false);
-                activity?.Complete();
-                return response;
-            }
-            catch (OperationCanceledException)
-            {
-                activity?.Cancel();
-                throw;
-            }
-            catch (Exception exception)
-            {
-                activity?.Fail(exception);
-                throw;
-            }
-        }
-
-        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
-            IEnumerable<ChatMessage> messages,
-            AgentSession? session = null,
-            AgentRunOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation]
-            CancellationToken cancellationToken = default)
-        {
-            var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
-            var input = ApplyInstructions(messages.ToList(), _instructions);
-            using var activity = StartExecutionActivity(input);
-            await using var enumerator = InnerAgent
-                .RunStreamingAsync(input, scopedSession, options, cancellationToken)
-                .GetAsyncEnumerator(cancellationToken);
-            while (true)
-            {
-                AgentResponseUpdate update;
-                try
-                {
-                    if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
-                    {
-                        break;
-                    }
-
-                    update = enumerator.Current;
-                }
-                catch (OperationCanceledException)
-                {
-                    activity?.Cancel();
-                    throw;
-                }
-                catch (Exception exception)
-                {
-                    activity?.Fail(exception);
-                    throw;
-                }
-
-                yield return update;
-            }
-
-            activity?.Complete();
-        }
-
-        private AgentflowNodeExecutionActivityScope? StartExecutionActivity(IReadOnlyList<ChatMessage> input)
-        {
-            if (_executionTraceContext == null || !_agentflowId.HasValue || string.IsNullOrWhiteSpace(_traceNodeId))
-            {
-                return null;
-            }
-
-            return AgentflowNodeExecutionActivity.StartAgent(
-                _executionTraceContext,
-                _agentflowId.Value,
-                _traceNodeId,
-                _name,
-                _agentId,
-                InnerAgent.Name,
-                input);
-        }
-
-        private async Task<AgentSession?> PrepareSessionAsync(
-            AgentSession? session,
-            CancellationToken cancellationToken)
-        {
-            AgentSession scopedSession =
-                session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
-            _sessionScope?.Initialize(scopedSession);
-            return scopedSession;
-        }
-    }
 }

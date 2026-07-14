@@ -10,6 +10,7 @@ using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
+using Agw.Shared.Utils;
 
 using Microsoft.Agents.AI;
 
@@ -84,6 +85,9 @@ public partial class AgentRuntimeService
         return await ExecuteAsync(req, cancellationToken);
     }
 
+    /// <summary>
+    /// 解析执行上下文、恢复 Agent 会话并执行请求，同时持久化会话和可选摘要。
+    /// </summary>
     private async Task<AgentExecutionResult?> ExecuteAsync(
         AgentExecuteRequest request,
         CancellationToken cancellationToken = default)
@@ -109,7 +113,7 @@ public partial class AgentRuntimeService
         {
             taskId ??= Guid.NewGuid();
             string taskIdValue = taskId.Value.Normalize();
-            var resolvedContextId = ExecutionContextIdResolver.Resolve(contextId);
+            var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);
             var sessionKey = CreateSessionKey(projectId.Value, resolvedContextId);
             var session = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, sessionKey, cancellationToken)
                 .ConfigureAwait(false);
