@@ -18,7 +18,7 @@ public class BashToolParams
 
     [Description(
         """
-        Optional timeout in milliseconds (max 600000ms / 10 minutes). By default, your command will timeout after 120000ms (2 minutes).
+        Optional timeout in milliseconds (max 600000ms / 10 minutes). By default, your command will timeout after 20000ms (20 seconds).
         """
     )]
     public int? Timeout { get; set; }
@@ -100,7 +100,7 @@ internal class BashTool : IAgwTool
             throw new AgwException(ErrorCodes.CommandExecutionFailed, $"Failed to start process: {ex.Message}");
         }
 
-        var timeoutMs = toolParams.Timeout ?? 120000;
+        var timeoutMs = toolParams.Timeout ?? 20000;
         var completed = process.WaitForExit(timeoutMs);
 
         if (!completed)
