@@ -12,7 +12,7 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
   const preview = useMemo(() => {
     console.debug("preview containerRef", containerRef);
     if (!containerRef || !containerRef.current) {
-      return "...";
+      return "thinking";
     }
     {
       const lines = node.content.split("\n");
@@ -54,7 +54,7 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
             className="w-[22] h-[22]"
             onClick={() => setExpanded(!expanded)}
           >
-            {expanded ? <ChevronDown size={4} /> : <ChevronUp size={4} />}
+            {expanded ? <ChevronUp size={4} /> : <ChevronDown size={4} />}
           </Button>
         </div>
 

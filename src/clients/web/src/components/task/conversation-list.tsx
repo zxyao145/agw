@@ -403,7 +403,7 @@ export function ConversationList({
         <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Delete conversation</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="whitespace-normal wrap-break-word break-all">
               This will permanently delete "{contextToDelete?.title || "Untitled"}" and all executions in this
               conversation.
             </DialogDescription>

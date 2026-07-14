@@ -21,7 +21,7 @@ export interface ChatSessionProps {
   processMessages?: (msgs: AiMessage[]) => ProcessedMessageItem[];
 }
 
-type AgentMessageMeta = {
+type MessageMeta = {
   name: string | null;
   author: string | null;
 };
@@ -41,13 +41,17 @@ function readStringProperty(message: AiMessage, keys: string[]): string | null {
   return null;
 }
 
-function getAgentMessageMeta(message: AiMessage): AgentMessageMeta | null {
-  if (message.role === "user" || isResultMessage(message)) {
+function getMessageMeta(message: AiMessage): MessageMeta | null {
+  if (isResultMessage(message)) {
     return null;
   }
 
-  const agentName = readStringProperty(message, AGENT_NAME_KEYS);
   const agentAuthor = message.author?.trim() || null;
+  if (message.role === "user") {
+    return agentAuthor ? { name: null, author: agentAuthor } : null;
+  }
+
+  const agentName = readStringProperty(message, AGENT_NAME_KEYS);
   const displayName = agentName && agentName !== agentAuthor ? agentName : null;
 
   if (!displayName && !agentAuthor) {
@@ -116,16 +120,6 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
       });
       continue;
     }
-
-    // const isReasoning = currentMsg.contents[0].type === MessageContentType.TextReasoningContent;
-    // if (isReasoning) {
-    //   items.push({
-    //     type: "accordion",
-    //     messages: [currentMsg],
-    //     toolName: "Thinking",
-    //   });
-    //   continue;
-    // }
 
     // Normal message (user, assistant, etc.)
     items.push({
@@ -231,7 +225,7 @@ export function Conversation({
               <div className="mx-4 max-w-[80%]" key={index}>
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="item-1">
-                    <MessageTrigger className="py-0">
+                    <MessageTrigger className="py-0 cursor-pointer">
                       <div className="flex flex-2 items-center gap-2">
                         <Badge variant="secondary" className="text-xs">
                           {item.toolName}
@@ -251,28 +245,37 @@ export function Conversation({
             );
           } else {
             const isResult = isResultMessage(item.message);
-            const agentMeta = getAgentMessageMeta(item.message);
+            const isUserMessage = item.message.role === "user";
+            const messageMeta = getMessageMeta(item.message);
 
             console.debug("isResult", isResult, "message", item.message);
             return (
               <div
-                className={cn("mx-4 max-w-full", isResult ? "border-t border-dashed pt-4 mt-8" : "")}
+                className={cn(
+                  "mx-4 max-w-full",
+                  isResult ? "border-t border-dashed pt-4 mt-8" : "",
+                )}
                 key={index}
                 data-msg-id={item.message.messageId}
               >
-                {agentMeta ? (
-                  <div className="mb-1 flex max-w-[80%] items-center gap-1.5 text-xs text-muted-foreground">
-                    {agentMeta.name ? (
+                {messageMeta ? (
+                  <div
+                    className={cn(
+                      "mb-1 flex max-w-[80%] items-center gap-1.5 text-xs text-muted-foreground",
+                      isUserMessage ? "ml-auto justify-end" : "",
+                    )}
+                  >
+                    {messageMeta.name ? (
                       <span className="min-w-0 truncate font-medium text-foreground/70">
-                        {agentMeta.name}
+                        {messageMeta.name}
                       </span>
                     ) : null}
-                    {agentMeta.name && agentMeta.author ? (
+                    {messageMeta.name && messageMeta.author ? (
                       <span className="shrink-0 text-muted-foreground/60">/</span>
                     ) : null}
-                    {agentMeta.author ? (
+                    {messageMeta.author ? (
                       <span className="min-w-0 truncate font-mono text-[11px]">
-                        {agentMeta.author}
+                        {messageMeta.author}
                       </span>
                     ) : null}
                   </div>
