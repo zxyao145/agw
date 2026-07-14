@@ -16,13 +16,18 @@ async function readSource(url: URL, label: string) {
   }
 }
 
-test("shared capability panels keep dialog portals and wheel-safe scroll regions", async () => {
+test("shared capability panels use SearchableSelect multi-selects for every capability", async () => {
   const source = await readSource(PANELS_URL, "shared capability panels");
 
-  assert.equal(source.match(/<DropdownMenu modal=\{false\}>/g)?.length, 3);
-  assert.equal(source.match(/portalContainer=\{dialogPortalContainer\}/g)?.length, 4);
-  assert.equal(source.match(/max-h-72 overflow-y-auto/g)?.length, 4);
-  assert.match(source, /<Popover[^>]*modal=\{false\}/);
+  assert.match(source, /SearchableSelect,[\s\S]*type SearchableSelectOption/);
+  assert.equal(source.match(/<SearchableSelect\s/g)?.length, 4);
+  assert.equal(source.match(/multiple/g)?.length, 4);
+  assert.match(source, /searchPlaceholder="Search skills\.\.\."/);
+  assert.match(source, /searchPlaceholder="Search tools\.\.\."/);
+  assert.match(source, /searchPlaceholder="Search MCP tool servers\.\.\."/);
+  assert.match(source, /searchPlaceholder="Search apps\.\.\."/);
+  assert.doesNotMatch(source, /<DropdownMenu/);
+  assert.doesNotMatch(source, /<Popover/);
 });
 
 test("Agent form consumes all five shared panels while retaining Agent-only tabs and notices", async () => {
@@ -40,12 +45,12 @@ test("Agent form consumes all five shared panels while retaining Agent-only tabs
   assert.match(source, /External agents do not support tool configuration/);
 });
 
-test("App options use button selection semantics without nested interactive controls", async () => {
+test("App options expose searchable labels and authorization metadata", async () => {
   const source = await readSource(PANELS_URL, "shared capability panels");
 
-  assert.doesNotMatch(source, /<input[\s\S]*type="checkbox"/);
-  assert.match(source, /aria-pressed=\{selectedAppInstanceIds\.includes\(app\.id\)\}/);
-  assert.match(source, /<Check[^>]*aria-hidden/);
+  assert.match(source, /title: buildAppOptionLabel\(app\)/);
+  assert.match(source, /getAppAuthorizationState\(app\)/);
+  assert.match(source, /authorizationSubject/);
 });
 
 test("Skills and Apps selected lists are built from selected IDs with removable fallbacks", async () => {

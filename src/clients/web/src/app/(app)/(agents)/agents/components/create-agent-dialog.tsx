@@ -1,4 +1,3 @@
-import * as React from "react";
 import { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
 
 import { applyDialogOpenChange } from "@/components/definition-capabilities";
@@ -50,9 +49,6 @@ interface CreateAgentDialogProps {
   selectedSkillIds: string[];
   appOptions: AppInstanceOption[];
   selectedAppInstanceIds: string[];
-  appSearchTerm: string;
-  setAppSearchTerm: (value: string) => void;
-  filteredAppOptions: AppInstanceOption[];
   selectedTools: string[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
@@ -88,9 +84,6 @@ export function CreateAgentDialog({
   selectedSkillIds,
   appOptions,
   selectedAppInstanceIds,
-  appSearchTerm,
-  setAppSearchTerm,
-  filteredAppOptions,
   selectedTools,
   modelProvidersQuery,
   skillsQuery,
@@ -103,9 +96,6 @@ export function CreateAgentDialog({
   toggleTool,
   toggleMcpToolServer,
 }: CreateAgentDialogProps) {
-  const [dialogPortalContainer, setDialogPortalContainer] = React.useState<HTMLDivElement | null>(
-    null,
-  );
   const environmentVariablesError = getAgentEnvironmentVariablesError(environmentVariables);
 
   const handleCreate = () => {
@@ -141,7 +131,6 @@ export function CreateAgentDialog({
       </DialogTrigger>
 
       <DialogContent
-        ref={setDialogPortalContainer}
         className="fixed inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 p-0 sm:max-w-none"
         onInteractOutside={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
@@ -186,7 +175,6 @@ export function CreateAgentDialog({
 
           <AgentFormFields
             mode="create"
-            dialogPortalContainer={dialogPortalContainer}
             displayName={displayName}
             setDisplayName={setDisplayName}
             name={name}
@@ -208,9 +196,6 @@ export function CreateAgentDialog({
             selectedSkillIds={selectedSkillIds}
             appOptions={appOptions}
             selectedAppInstanceIds={selectedAppInstanceIds}
-            appSearchTerm={appSearchTerm}
-            setAppSearchTerm={setAppSearchTerm}
-            filteredAppOptions={filteredAppOptions}
             toggleAppInstance={toggleAppInstance}
             selectedTools={selectedTools}
             modelProvidersQuery={modelProvidersQuery}

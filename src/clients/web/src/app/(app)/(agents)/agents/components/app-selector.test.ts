@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { buildAppOptionLabel, filterAppOptions, getAppAuthorizationState } =
+const { buildAppOptionLabel, getAppAuthorizationState } =
   require("../../../../../components/definition-capabilities/app-selector.ts") as typeof import("../../../../../components/definition-capabilities/app-selector");
 
 const options = [
@@ -28,12 +28,6 @@ const options = [
     authorizationSubject: null,
   },
 ] as const;
-
-test("filterAppOptions matches display name, provider, client id, and subject", () => {
-  assert.equal(filterAppOptions(options, "octocat").length, 1);
-  assert.equal(filterAppOptions(options, "google").length, 1);
-  assert.equal(filterAppOptions(options, "client").length, 2);
-});
 
 test("getAppAuthorizationState prioritizes expired over authorized", () => {
   assert.equal(

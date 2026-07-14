@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import { getApiErrorMessage } from "@/api/utils";
 import {
-  filterAppOptions,
   toEnvironmentVariableEntries,
   type AppInstanceOption,
   type EnvironmentVariableEntry,
@@ -78,7 +77,6 @@ export default function ProjectsPage() {
   const [extraSetting, setExtraSetting] = React.useState("{\n  \n}");
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedAppInstanceIds, setSelectedAppInstanceIds] = React.useState<string[]>([]);
-  const [appSearchTerm, setAppSearchTerm] = React.useState("");
   const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
   const [selectedMcpToolServerIds, setSelectedMcpToolServerIds] = React.useState<string[]>([]);
   const [environmentVariables, setEnvironmentVariables] = React.useState<
@@ -115,7 +113,6 @@ export default function ProjectsPage() {
       setSelectedSkillIds([]);
       setSelectedMcpToolServerIds([]);
       setSelectedAppInstanceIds([]);
-      setAppSearchTerm("");
       setEnvironmentVariables([]);
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
@@ -133,7 +130,6 @@ export default function ProjectsPage() {
   const [editExtraSetting, setEditExtraSetting] = React.useState("");
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
   const [editSelectedAppInstanceIds, setEditSelectedAppInstanceIds] = React.useState<string[]>([]);
-  const [editAppSearchTerm, setEditAppSearchTerm] = React.useState("");
   const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>([]);
   const [editSelectedMcpToolServerIds, setEditSelectedMcpToolServerIds] = React.useState<string[]>(
     [],
@@ -188,7 +184,6 @@ export default function ProjectsPage() {
       setEditEnvironmentVariables(
         toEnvironmentVariableEntries(capabilityState.environmentVariables),
       );
-      setEditAppSearchTerm("");
       setEditOpen(true);
     },
     [updateProjectMutation.isPending],
@@ -222,14 +217,6 @@ export default function ProjectsPage() {
     },
   });
 
-  const filteredAppOptions = React.useMemo(
-    () => filterAppOptions(appInstancesQuery.data ?? [], appSearchTerm),
-    [appInstancesQuery.data, appSearchTerm],
-  );
-  const filteredEditAppOptions = React.useMemo(
-    () => filterAppOptions(appInstancesQuery.data ?? [], editAppSearchTerm),
-    [appInstancesQuery.data, editAppSearchTerm],
-  );
   const projects = projectsQuery.data ?? [];
 
   return (
@@ -266,9 +253,6 @@ export default function ProjectsPage() {
             selectedSkillIds={selectedSkillIds}
             appOptions={appInstancesQuery.data ?? []}
             selectedAppInstanceIds={selectedAppInstanceIds}
-            appSearchTerm={appSearchTerm}
-            setAppSearchTerm={setAppSearchTerm}
-            filteredAppOptions={filteredAppOptions}
             selectedTools={selectedTools}
             skillsQuery={skillsQuery}
             toolsQuery={toolsQuery}
@@ -382,9 +366,6 @@ export default function ProjectsPage() {
         selectedSkillIds={editSelectedSkillIds}
         appOptions={appInstancesQuery.data ?? []}
         selectedAppInstanceIds={editSelectedAppInstanceIds}
-        appSearchTerm={editAppSearchTerm}
-        setAppSearchTerm={setEditAppSearchTerm}
-        filteredAppOptions={filteredEditAppOptions}
         selectedTools={editSelectedTools}
         skillsQuery={skillsQuery}
         toolsQuery={toolsQuery}

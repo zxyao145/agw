@@ -6,16 +6,6 @@ const CREATE_DIALOG_URL = new URL("./create-agent-dialog.tsx", import.meta.url);
 const EDIT_DIALOG_URL = new URL("./edit-agent-dialog.tsx", import.meta.url);
 const FORM_FIELDS_URL = new URL("./agent-form-fields.tsx", import.meta.url);
 const PAGE_URL = new URL("../page.tsx", import.meta.url);
-const CAPABILITY_PANELS_URL = new URL(
-  "../../../../../components/definition-capabilities/capability-panels.tsx",
-  import.meta.url,
-);
-const DROPDOWN_MENU_URL = new URL(
-  "../../../../../components/ui/dropdown-menu.tsx",
-  import.meta.url,
-);
-const POPOVER_URL = new URL("../../../../../components/ui/popover.tsx", import.meta.url);
-const SELECT_URL = new URL("../../../../../components/ui/select.tsx", import.meta.url);
 
 test("Create and Edit Agent dialogs use the full-screen Agentflow shell with header actions", async () => {
   for (const fileUrl of [CREATE_DIALOG_URL, EDIT_DIALOG_URL]) {
@@ -72,6 +62,21 @@ test("Agent form uses a responsive 400px metadata column and six configuration t
   assert.match(source, /<SkillsPanel/);
 });
 
+test("Agent form explains project-level capability merging below the tabs", async () => {
+  const source = await readFile(FORM_FIELDS_URL, "utf8");
+  const normalizedSource = source.replace(/\s+/g, " ");
+  const tabsListEnd = normalizedSource.indexOf("</TabsList>");
+  const description = normalizedSource.indexOf(
+    "Agw recommends configuring Skills, Tools, MCP Tool Servers, Apps, and Environment Variables in the Project.",
+  );
+
+  assert.ok(description > tabsListEnd);
+  assert.match(
+    normalizedSource,
+    /When the agent runs, it merges the configurations from both the agent and the project\./,
+  );
+});
+
 test("Edit Agent only sends editable Extra Settings for External Agent updates", async () => {
   const source = await readFile(EDIT_DIALOG_URL, "utf8");
 
@@ -116,37 +121,27 @@ test("All Agent forms expose and submit the optional turn summary setting", asyn
   assert.match(editSource, /enableSummary && !effectiveSummaryModelProviderId/);
 });
 
-test("Agent Model Provider Selects portal inside the current dialog so wheel scrolling is preserved", async () => {
-  const [createSource, editSource, formSource, selectSource] = await Promise.all([
+test("Agent forms use SearchableSelect for both model provider fields", async () => {
+  const source = await readFile(FORM_FIELDS_URL, "utf8");
+
+  assert.match(source, /SearchableSelect,[\s\S]*type SearchableSelectOption/);
+  assert.match(source, /const modelProviderOptions = React\.useMemo<SearchableSelectOption\[]>/);
+  assert.equal(source.match(/<SearchableSelect\s/g)?.length, 2);
+  assert.equal(source.match(/options=\{modelProviderOptions\}/g)?.length, 2);
+  assert.doesNotMatch(source, /<Select(?:\s|>)/);
+});
+
+test("Agent dialogs use inline searchable selectors without portal wiring", async () => {
+  const [createSource, editSource, formSource] = await Promise.all([
     readFile(CREATE_DIALOG_URL, "utf8"),
     readFile(EDIT_DIALOG_URL, "utf8"),
     readFile(FORM_FIELDS_URL, "utf8"),
-    readFile(SELECT_URL, "utf8"),
   ]);
 
   for (const source of [createSource, editSource]) {
-    assert.match(source, /ref=\{setDialogPortalContainer\}/);
-    assert.match(source, /dialogPortalContainer=\{dialogPortalContainer\}/);
+    assert.doesNotMatch(source, /setDialogPortalContainer/);
+    assert.doesNotMatch(source, /dialogPortalContainer=\{dialogPortalContainer\}/);
   }
 
-  assert.match(formSource, /dialogPortalContainer: HTMLElement \| null/);
-  assert.match(formSource, /portalContainer=\{dialogPortalContainer\}/);
-  assert.match(selectSource, /portalContainer\?: HTMLElement \| null/);
-  assert.match(selectSource, /<SelectPrimitive\.Portal container=\{portalContainer\}>/);
-});
-
-test("Agent capability selectors portal inside the current dialog so wheel scrolling is preserved", async () => {
-  const [formSource, panelsSource, dropdownMenuSource, popoverSource] = await Promise.all([
-    readFile(FORM_FIELDS_URL, "utf8"),
-    readFile(CAPABILITY_PANELS_URL, "utf8"),
-    readFile(DROPDOWN_MENU_URL, "utf8"),
-    readFile(POPOVER_URL, "utf8"),
-  ]);
-
-  assert.equal(formSource.match(/portalContainer=\{dialogPortalContainer\}/g)?.length, 2);
-  assert.equal(panelsSource.match(/portalContainer=\{dialogPortalContainer\}/g)?.length, 4);
-  assert.match(dropdownMenuSource, /portalContainer\?: HTMLElement \| null/);
-  assert.match(dropdownMenuSource, /<DropdownMenuPrimitive\.Portal container=\{portalContainer\}>/);
-  assert.match(popoverSource, /portalContainer\?: HTMLElement \| null/);
-  assert.match(popoverSource, /<PopoverPrimitive\.Portal container=\{portalContainer\}>/);
+  assert.doesNotMatch(formSource, /dialogPortalContainer/);
 });

@@ -1,17 +1,10 @@
 import * as React from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { Check, ChevronDown } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/SearchableSelect/searchable-select";
 
 import {
   buildAppOptionLabel,
@@ -25,9 +18,22 @@ import { SelectedItemsList } from "./selected-items-list";
 import type { AppInstanceOption, McpToolServerDto, SkillDto, ToolInfo } from "./types";
 
 interface SharedPanelProps {
-  dialogPortalContainer: HTMLElement | null;
   idPrefix?: string;
   ownerLabel?: string;
+}
+
+function applySelectionChange(
+  currentValues: string[],
+  nextValues: string[],
+  toggleValue: (value: string) => void,
+) {
+  const changedValue =
+    nextValues.find((value) => !currentValues.includes(value)) ??
+    currentValues.find((value) => !nextValues.includes(value));
+
+  if (changedValue) {
+    toggleValue(changedValue);
+  }
 }
 
 interface SkillsPanelProps extends SharedPanelProps {
@@ -39,7 +45,6 @@ interface SkillsPanelProps extends SharedPanelProps {
 }
 
 export function SkillsPanel({
-  dialogPortalContainer,
   idPrefix = "",
   ownerLabel = "agent",
   skillsQuery,
@@ -49,6 +54,16 @@ export function SkillsPanel({
   notice,
 }: SkillsPanelProps) {
   const selectedSkills = buildSelectedSkillItems(selectedSkillIds, skillsQuery.data ?? []);
+  const skillOptions = React.useMemo<SearchableSelectOption[]>(
+    () =>
+      (skillsQuery.data ?? []).map((skill) => ({
+        value: skill.id,
+        title: skill.name,
+        subtitle: skill.description,
+        group: "Available Skills",
+      })),
+    [skillsQuery.data],
+  );
 
   return (
     <div className="space-y-6">
@@ -59,55 +74,24 @@ export function SkillsPanel({
         </p>
       </div>
       {notice}
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            id={`${idPrefix}skills`}
-            type="button"
-            variant="outline"
-            className="w-full justify-between font-normal"
-            disabled={disabled}
-          >
-            <span>
-              {selectedSkillIds.length > 0
-                ? `${selectedSkillIds.length} skill${selectedSkillIds.length === 1 ? "" : "s"} selected`
-                : "Select skills..."}
-            </span>
-            <ChevronDown className="size-4 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="max-h-72 overflow-y-auto w-[var(--radix-dropdown-menu-trigger-width)]"
-          portalContainer={dialogPortalContainer}
-        >
-          <DropdownMenuLabel>Available Skills</DropdownMenuLabel>
-          {skillsQuery.isLoading ? (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading skills...</div>
-          ) : skillsQuery.data && skillsQuery.data.length > 0 ? (
-            skillsQuery.data.map((skill) => (
-              <DropdownMenuCheckboxItem
-                key={skill.id}
-                checked={selectedSkillIds.includes(skill.id)}
-                className="items-start"
-                onCheckedChange={() => toggleSkill(skill.id)}
-                onSelect={(event) => event.preventDefault()}
-              >
-                <div className="min-w-0">
-                  <div className="truncate font-medium">{skill.name}</div>
-                  {skill.description ? (
-                    <div className="whitespace-normal break-words text-xs text-muted-foreground">
-                      {skill.description}
-                    </div>
-                  ) : null}
-                </div>
-              </DropdownMenuCheckboxItem>
-            ))
-          ) : (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">No skills found</div>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <SearchableSelect
+        multiple
+        id={`${idPrefix}skills`}
+        ariaLabel="Skills"
+        value={selectedSkillIds}
+        onValueChange={(values) => applySelectionChange(selectedSkillIds, values, toggleSkill)}
+        options={skillOptions}
+        placeholder="Select skills..."
+        selectionText={
+          selectedSkillIds.length > 0
+            ? `${selectedSkillIds.length} skill${selectedSkillIds.length === 1 ? "" : "s"} selected`
+            : undefined
+        }
+        searchPlaceholder="Search skills..."
+        disabled={disabled}
+        isLoading={skillsQuery.isLoading}
+        clearable={false}
+      />
       <SelectedItemsList
         items={selectedSkills}
         emptyLabel="No skills selected"
@@ -127,7 +111,6 @@ interface ToolsPanelProps extends SharedPanelProps {
 }
 
 export function ToolsPanel({
-  dialogPortalContainer,
   idPrefix = "",
   ownerLabel = "agent",
   toolsQuery,
@@ -136,15 +119,18 @@ export function ToolsPanel({
   disabled = false,
   notice,
 }: ToolsPanelProps) {
-  const groupedTools = React.useMemo(() => {
-    const groups = new Map<string, ToolInfo[]>();
-    for (const tool of toolsQuery.data ?? []) {
-      const category = tool.category.trim() || "Uncategorized";
-      groups.set(category, [...(groups.get(category) ?? []), tool]);
-    }
-
-    return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
-  }, [toolsQuery.data]);
+  const toolOptions = React.useMemo<SearchableSelectOption[]>(
+    () =>
+      (toolsQuery.data ?? [])
+        .map((tool) => ({
+          value: tool.name,
+          title: tool.name,
+          subtitle: tool.description,
+          group: tool.category.trim() || "Uncategorized",
+        }))
+        .sort((left, right) => (left.group ?? "").localeCompare(right.group ?? "")),
+    [toolsQuery.data],
+  );
   const selectedToolItems = selectedTools.map((toolName) => {
     const tool = toolsQuery.data?.find((candidate) => candidate.name === toolName);
     return {
@@ -163,60 +149,24 @@ export function ToolsPanel({
         </p>
       </div>
       {notice}
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            id={`${idPrefix}tools`}
-            type="button"
-            variant="outline"
-            className="w-full justify-between font-normal"
-            disabled={disabled}
-          >
-            <span>
-              {selectedTools.length > 0
-                ? `${selectedTools.length} tool${selectedTools.length === 1 ? "" : "s"} selected`
-                : "Select tools..."}
-            </span>
-            <ChevronDown className="size-4 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="max-h-72 overflow-y-auto w-[var(--radix-dropdown-menu-trigger-width)]"
-          portalContainer={dialogPortalContainer}
-        >
-          <DropdownMenuLabel>Available Tools</DropdownMenuLabel>
-          {toolsQuery.isLoading ? (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading tools...</div>
-          ) : groupedTools.length > 0 ? (
-            groupedTools.map(([category, tools]) => (
-              <React.Fragment key={category}>
-                <DropdownMenuLabel>{category}</DropdownMenuLabel>
-                {tools.map((tool) => (
-                  <DropdownMenuCheckboxItem
-                    key={tool.name}
-                    checked={selectedTools.includes(tool.name)}
-                    className="items-start"
-                    onCheckedChange={() => toggleTool(tool.name)}
-                    onSelect={(event) => event.preventDefault()}
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{tool.name}</div>
-                      {tool.description ? (
-                        <div className="whitespace-normal break-words text-xs text-muted-foreground">
-                          {tool.description}
-                        </div>
-                      ) : null}
-                    </div>
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </React.Fragment>
-            ))
-          ) : (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">No tools found</div>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <SearchableSelect
+        multiple
+        id={`${idPrefix}tools`}
+        ariaLabel="Tools"
+        value={selectedTools}
+        onValueChange={(values) => applySelectionChange(selectedTools, values, toggleTool)}
+        options={toolOptions}
+        placeholder="Select tools..."
+        selectionText={
+          selectedTools.length > 0
+            ? `${selectedTools.length} tool${selectedTools.length === 1 ? "" : "s"} selected`
+            : undefined
+        }
+        searchPlaceholder="Search tools..."
+        disabled={disabled}
+        isLoading={toolsQuery.isLoading}
+        clearable={false}
+      />
       <SelectedItemsList
         items={selectedToolItems}
         emptyLabel="No tools selected"
@@ -234,13 +184,21 @@ interface McpToolServersPanelProps extends SharedPanelProps {
 }
 
 export function McpToolServersPanel({
-  dialogPortalContainer,
   idPrefix = "",
   ownerLabel = "agent",
   mcpToolServersQuery,
   selectedMcpToolServerIds,
   toggleMcpToolServer,
 }: McpToolServersPanelProps) {
+  const serverOptions = React.useMemo<SearchableSelectOption[]>(
+    () =>
+      (mcpToolServersQuery.data ?? []).map((server) => ({
+        value: server.id,
+        title: server.name,
+        group: "Available MCP Tool Servers",
+      })),
+    [mcpToolServersQuery.data],
+  );
   const selectedServers = selectedMcpToolServerIds.map((selectedId) => ({
     id: selectedId,
     title:
@@ -256,50 +214,25 @@ export function McpToolServersPanel({
           Connect the {ownerLabel} to configured Model Context Protocol servers.
         </p>
       </div>
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            id={`${idPrefix}mcpToolServers`}
-            type="button"
-            variant="outline"
-            className="w-full justify-between font-normal"
-          >
-            <span>
-              {selectedMcpToolServerIds.length > 0
-                ? `${selectedMcpToolServerIds.length} server${selectedMcpToolServerIds.length === 1 ? "" : "s"} selected`
-                : "Select MCP tool servers..."}
-            </span>
-            <ChevronDown className="size-4 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="max-h-72 overflow-y-auto w-[var(--radix-dropdown-menu-trigger-width)]"
-          portalContainer={dialogPortalContainer}
-        >
-          <DropdownMenuLabel>Available MCP Tool Servers</DropdownMenuLabel>
-          {mcpToolServersQuery.isLoading ? (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">
-              Loading MCP tool servers...
-            </div>
-          ) : mcpToolServersQuery.data && mcpToolServersQuery.data.length > 0 ? (
-            mcpToolServersQuery.data.map((server) => (
-              <DropdownMenuCheckboxItem
-                key={server.id}
-                checked={selectedMcpToolServerIds.includes(server.id)}
-                onCheckedChange={() => toggleMcpToolServer(server.id)}
-                onSelect={(event) => event.preventDefault()}
-              >
-                {server.name}
-              </DropdownMenuCheckboxItem>
-            ))
-          ) : (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">
-              No MCP tool servers found
-            </div>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <SearchableSelect
+        multiple
+        id={`${idPrefix}mcpToolServers`}
+        ariaLabel="MCP Tool Servers"
+        value={selectedMcpToolServerIds}
+        onValueChange={(values) =>
+          applySelectionChange(selectedMcpToolServerIds, values, toggleMcpToolServer)
+        }
+        options={serverOptions}
+        placeholder="Select MCP tool servers..."
+        selectionText={
+          selectedMcpToolServerIds.length > 0
+            ? `${selectedMcpToolServerIds.length} server${selectedMcpToolServerIds.length === 1 ? "" : "s"} selected`
+            : undefined
+        }
+        searchPlaceholder="Search MCP tool servers..."
+        isLoading={mcpToolServersQuery.isLoading}
+        clearable={false}
+      />
       <SelectedItemsList
         items={selectedServers}
         emptyLabel="No MCP tool servers selected"
@@ -312,24 +245,28 @@ export function McpToolServersPanel({
 interface AppsPanelProps extends SharedPanelProps {
   appOptions: AppInstanceOption[];
   selectedAppInstanceIds: string[];
-  appSearchTerm: string;
-  setAppSearchTerm: (value: string) => void;
-  filteredAppOptions: AppInstanceOption[];
   toggleAppInstance: (appInstanceId: string) => void;
 }
 
 export function AppsPanel({
-  dialogPortalContainer,
   idPrefix = "",
   ownerLabel = "agent",
   appOptions,
   selectedAppInstanceIds,
-  appSearchTerm,
-  setAppSearchTerm,
-  filteredAppOptions,
   toggleAppInstance,
 }: AppsPanelProps) {
-  const [appPopoverOpen, setAppPopoverOpen] = React.useState(false);
+  const appSelectOptions = React.useMemo<SearchableSelectOption[]>(
+    () =>
+      appOptions.map((app) => ({
+        value: app.id,
+        title: buildAppOptionLabel(app),
+        subtitle: [app.provider, getAppAuthorizationState(app), app.authorizationSubject]
+          .filter(Boolean)
+          .join(" · "),
+        group: "Available Apps",
+      })),
+    [appOptions],
+  );
   const selectedApps = buildSelectedAppItems(selectedAppInstanceIds, appOptions);
 
   return (
@@ -340,67 +277,25 @@ export function AppsPanel({
           Attach authorized integration connections to this {ownerLabel}.
         </p>
       </div>
-      <Popover modal={false} open={appPopoverOpen} onOpenChange={setAppPopoverOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            id={`${idPrefix}appInstances`}
-            type="button"
-            variant="outline"
-            className="w-full justify-between font-normal"
-            disabled={appOptions.length === 0}
-          >
-            <span>
-              {selectedAppInstanceIds.length > 0
-                ? `${selectedAppInstanceIds.length} app${selectedAppInstanceIds.length === 1 ? "" : "s"} selected`
-                : "Select apps..."}
-            </span>
-            <ChevronDown className="size-4 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          className="w-[var(--radix-popover-trigger-width)] p-0"
-          align="start"
-          portalContainer={dialogPortalContainer}
-        >
-          <div className="border-b p-2">
-            <Input
-              value={appSearchTerm}
-              onChange={(event) => setAppSearchTerm(event.target.value)}
-              placeholder="Search apps..."
-            />
-          </div>
-          <div className="max-h-72 overflow-y-auto p-1">
-            {filteredAppOptions.length > 0 ? (
-              filteredAppOptions.map((app) => (
-                <button
-                  key={app.id}
-                  type="button"
-                  className="flex w-full items-start justify-between rounded-md px-2 py-2 text-left hover:bg-muted"
-                  onClick={() => toggleAppInstance(app.id)}
-                  aria-pressed={selectedAppInstanceIds.includes(app.id)}
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{buildAppOptionLabel(app)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {app.provider} · {getAppAuthorizationState(app)}
-                    </div>
-                  </div>
-                  <span
-                    aria-hidden="true"
-                    className="ml-3 flex size-4 shrink-0 items-center justify-center"
-                  >
-                    {selectedAppInstanceIds.includes(app.id) ? (
-                      <Check aria-hidden="true" className="size-4" />
-                    ) : null}
-                  </span>
-                </button>
-              ))
-            ) : (
-              <div className="px-2 py-3 text-sm text-muted-foreground">No apps found</div>
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
+      <SearchableSelect
+        multiple
+        id={`${idPrefix}appInstances`}
+        ariaLabel="Apps"
+        value={selectedAppInstanceIds}
+        onValueChange={(values) =>
+          applySelectionChange(selectedAppInstanceIds, values, toggleAppInstance)
+        }
+        options={appSelectOptions}
+        placeholder="Select apps..."
+        selectionText={
+          selectedAppInstanceIds.length > 0
+            ? `${selectedAppInstanceIds.length} app${selectedAppInstanceIds.length === 1 ? "" : "s"} selected`
+            : undefined
+        }
+        searchPlaceholder="Search apps..."
+        disabled={appOptions.length === 0}
+        clearable={false}
+      />
       <SelectedItemsList
         items={selectedApps}
         emptyLabel="No apps selected"

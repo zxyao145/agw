@@ -1,4 +1,3 @@
-import * as React from "react";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 import {
@@ -26,7 +25,7 @@ import type { ProjectResponse, ProjectUpdateMutationVariables } from "./types";
 
 interface EditProjectDialogProps extends Omit<
   ProjectFormFieldsProps,
-  "dialogPortalContainer" | "extraSettingError" | "idPrefix"
+  "extraSettingError" | "idPrefix"
 > {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -51,9 +50,6 @@ export function EditProjectDialog({
   selectedAppInstanceIds,
   ...formProps
 }: EditProjectDialogProps) {
-  const [dialogPortalContainer, setDialogPortalContainer] = React.useState<HTMLDivElement | null>(
-    null,
-  );
   const extraSettingError = getProjectExtraSettingsError(extraSetting);
   const environmentVariablesError = getEnvironmentVariablesError(environmentVariables);
 
@@ -105,7 +101,6 @@ export function EditProjectDialog({
       }}
     >
       <DialogContent
-        ref={setDialogPortalContainer}
         className="fixed inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 p-0 sm:max-w-none"
         onInteractOutside={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
@@ -152,7 +147,6 @@ export function EditProjectDialog({
 
           <ProjectFormFields
             {...formProps}
-            dialogPortalContainer={dialogPortalContainer}
             idPrefix="edit-"
             name={name}
             description={description}

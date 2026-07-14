@@ -30,8 +30,8 @@ test("Create and Edit Project are separate full-screen dialogs with upper-right 
       source,
       new RegExp(`DialogHeader[\\s\\S]*Cancel[\\s\\S]*${action}[\\s\\S]*ProjectFormFields`),
     );
-    assert.match(source, /ref=\{setDialogPortalContainer\}/);
-    assert.match(source, /dialogPortalContainer=\{dialogPortalContainer\}/);
+    assert.doesNotMatch(source, /setDialogPortalContainer/);
+    assert.doesNotMatch(source, /dialogPortalContainer=\{dialogPortalContainer\}/);
   }
 });
 
@@ -75,7 +75,7 @@ test("Project form has the 400px metadata column and exactly five shared capabil
   assert.match(source, /Project Type/);
   assert.match(source, /value="User Defined"/);
   assert.match(source, /readOnly/);
-  assert.equal(source.match(/dialogPortalContainer=\{dialogPortalContainer\}/g)?.length, 4);
+  assert.doesNotMatch(source, /dialogPortalContainer/);
 });
 
 test("Project dialogs serialize all five capabilities into Create and Update payloads", async () => {
@@ -99,7 +99,6 @@ test("Projects page backfills Edit capabilities and resets every Create capabili
   assert.match(source, /setSelectedSkillIds\(\[\]\)/);
   assert.match(source, /setSelectedMcpToolServerIds\(\[\]\)/);
   assert.match(source, /setSelectedAppInstanceIds\(\[\]\)/);
-  assert.match(source, /setAppSearchTerm\(""\)/);
   assert.match(source, /setEnvironmentVariables\(\[\]\)/);
   assert.match(source, /<CreateProjectDialog/);
   assert.match(source, /<EditProjectDialog/);

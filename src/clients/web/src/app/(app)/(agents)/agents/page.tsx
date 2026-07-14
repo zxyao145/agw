@@ -17,7 +17,7 @@ import type {
   SkillDto,
 } from "./components/types";
 import { getApiErrorMessage } from "@/api/utils";
-import { filterAppOptions, type AppInstanceOption } from "./components/app-selector";
+import type { AppInstanceOption } from "./components/app-selector";
 import {
   toAgentEnvironmentVariableEntries,
   type AgentEnvironmentVariableEntry,
@@ -84,7 +84,6 @@ export default function AgentsPage() {
   const [enableSummary, setEnableSummary] = React.useState(false);
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedAppInstanceIds, setSelectedAppInstanceIds] = React.useState<string[]>([]);
-  const [appSearchTerm, setAppSearchTerm] = React.useState("");
   const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
   const [selectedMcpToolServerIds, setSelectedMcpToolServerIds] = React.useState<string[]>([]);
   const [environmentVariables, setEnvironmentVariables] = React.useState<
@@ -103,7 +102,6 @@ export default function AgentsPage() {
   const [editEnableSummary, setEditEnableSummary] = React.useState(false);
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
   const [editSelectedAppInstanceIds, setEditSelectedAppInstanceIds] = React.useState<string[]>([]);
-  const [editAppSearchTerm, setEditAppSearchTerm] = React.useState("");
   const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>([]);
   const [editSelectedMcpToolServerIds, setEditSelectedMcpToolServerIds] = React.useState<string[]>(
     [],
@@ -137,7 +135,6 @@ export default function AgentsPage() {
       setEnableSummary(false);
       setSelectedSkillIds([]);
       setSelectedAppInstanceIds([]);
-      setAppSearchTerm("");
       setSelectedTools([]);
       setSelectedMcpToolServerIds([]);
       setEnvironmentVariables([]);
@@ -163,7 +160,6 @@ export default function AgentsPage() {
       setEditEnableSummary(false);
       setEditSelectedSkillIds([]);
       setEditSelectedAppInstanceIds([]);
-      setEditAppSearchTerm("");
       setEditEnvironmentVariables([]);
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
@@ -215,7 +211,6 @@ export default function AgentsPage() {
       setEditSelectedTools([]);
     }
     setEditSelectedMcpToolServerIds(agent.agentMcpToolServers?.map((x) => x.mcpToolServerId) ?? []);
-    setEditAppSearchTerm("");
     setEditOpen(true);
   };
 
@@ -288,14 +283,6 @@ export default function AgentsPage() {
     );
   };
 
-  const filteredAppOptions = React.useMemo(() => {
-    return filterAppOptions(appInstancesQuery.data ?? [], appSearchTerm);
-  }, [appInstancesQuery.data, appSearchTerm]);
-
-  const filteredEditAppOptions = React.useMemo(() => {
-    return filterAppOptions(appInstancesQuery.data ?? [], editAppSearchTerm);
-  }, [appInstancesQuery.data, editAppSearchTerm]);
-
   return (
     <div className="space-y-6 w-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -337,9 +324,6 @@ export default function AgentsPage() {
             selectedSkillIds={selectedSkillIds}
             appOptions={appInstancesQuery.data ?? []}
             selectedAppInstanceIds={selectedAppInstanceIds}
-            appSearchTerm={appSearchTerm}
-            setAppSearchTerm={setAppSearchTerm}
-            filteredAppOptions={filteredAppOptions}
             selectedTools={selectedTools}
             modelProvidersQuery={modelProvidersQuery}
             skillsQuery={skillsQuery}
@@ -387,9 +371,6 @@ export default function AgentsPage() {
         selectedSkillIds={editSelectedSkillIds}
         appOptions={appInstancesQuery.data ?? []}
         selectedAppInstanceIds={editSelectedAppInstanceIds}
-        appSearchTerm={editAppSearchTerm}
-        setAppSearchTerm={setEditAppSearchTerm}
-        filteredAppOptions={filteredEditAppOptions}
         selectedTools={editSelectedTools}
         modelProvidersQuery={modelProvidersQuery}
         skillsQuery={skillsQuery}

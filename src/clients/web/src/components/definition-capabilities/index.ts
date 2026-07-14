@@ -9,7 +9,6 @@ export {
   buildAppOptionLabel,
   buildSelectedAppItems,
   buildSelectedSkillItems,
-  filterAppOptions,
   getAppAuthorizationState,
 } from "./app-selector";
 export { applyDialogOpenChange } from "./dialog-lifecycle";

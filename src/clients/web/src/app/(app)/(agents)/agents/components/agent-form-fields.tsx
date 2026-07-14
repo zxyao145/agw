@@ -13,17 +13,12 @@ import {
   type SkillDto,
   type ToolInfo,
 } from "@/components/definition-capabilities";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/SearchableSelect/searchable-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,7 +30,6 @@ type AgentFormMode = "create" | "edit";
 
 interface AgentFormFieldsProps {
   mode: AgentFormMode;
-  dialogPortalContainer: HTMLElement | null;
   displayName: string;
   setDisplayName: (value: string) => void;
   name: string;
@@ -58,9 +52,6 @@ interface AgentFormFieldsProps {
   selectedSkillIds: string[];
   appOptions: AppInstanceOption[];
   selectedAppInstanceIds: string[];
-  appSearchTerm: string;
-  setAppSearchTerm: (value: string) => void;
-  filteredAppOptions: AppInstanceOption[];
   toggleAppInstance: (appInstanceId: string) => void;
   selectedTools: string[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
@@ -84,7 +75,6 @@ function ExternalAgentNotice({ children }: { children: React.ReactNode }) {
 
 export function AgentFormFields({
   mode,
-  dialogPortalContainer,
   displayName,
   setDisplayName,
   name,
@@ -107,9 +97,6 @@ export function AgentFormFields({
   selectedSkillIds,
   appOptions,
   selectedAppInstanceIds,
-  appSearchTerm,
-  setAppSearchTerm,
-  filteredAppOptions,
   toggleAppInstance,
   selectedTools,
   modelProvidersQuery,
@@ -128,6 +115,15 @@ export function AgentFormFields({
     : summaryModelProviderId || modelProviderId;
   const canEditExtra = mode === "edit" && isExternalAgent;
   const extraError = canEditExtra ? getAgentExtraSettingsError(extra) : null;
+  const modelProviderOptions = React.useMemo<SearchableSelectOption[]>(
+    () =>
+      (modelProvidersQuery.data ?? []).map((modelProvider) => ({
+        value: modelProvider.id,
+        title: `${modelProvider.modelName} (${modelProvider.providerName}-${modelProvider.providerType})`,
+        group: "Available Model Providers",
+      })),
+    [modelProvidersQuery.data],
+  );
 
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden border-t lg:grid-cols-[400px_minmax(0,1fr)] lg:grid-rows-1">
@@ -187,42 +183,21 @@ export function AgentFormFields({
                 <span className="ml-2 text-xs text-muted-foreground">(Optional)</span>
               ) : null}
             </Label>
-            <Select value={modelProviderId} onValueChange={setModelProviderId}>
-              <SelectTrigger id={`${idPrefix}modelProviderId`} className="w-full">
-                <SelectValue
-                  placeholder={
-                    isExternalAgent
-                      ? "Optional: Select a model provider..."
-                      : "Select a model provider..."
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent
-                position="popper"
-                sideOffset={4}
-                portalContainer={dialogPortalContainer}
-              >
-                <SelectGroup>
-                  <SelectLabel>Available Model Providers</SelectLabel>
-                  {modelProvidersQuery.isLoading ? (
-                    <SelectItem value="loading" disabled>
-                      Loading...
-                    </SelectItem>
-                  ) : modelProvidersQuery.data && modelProvidersQuery.data.length > 0 ? (
-                    modelProvidersQuery.data.map((modelProvider) => (
-                      <SelectItem key={modelProvider.id} value={modelProvider.id}>
-                        {modelProvider.modelName} ({modelProvider.providerName}-
-                        {modelProvider.providerType})
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-providers" disabled>
-                      No model providers available
-                    </SelectItem>
-                  )}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              id={`${idPrefix}modelProviderId`}
+              ariaLabel="Model Provider"
+              value={modelProviderId}
+              onValueChange={setModelProviderId}
+              options={modelProviderOptions}
+              placeholder={
+                isExternalAgent
+                  ? "Optional: Select a model provider..."
+                  : "Select a model provider..."
+              }
+              searchPlaceholder="Search model providers..."
+              isLoading={modelProvidersQuery.isLoading}
+              clearable={isExternalAgent}
+            />
           </div>
 
           <div className="flex items-start justify-between gap-4 rounded-lg border bg-background px-4 py-3">
@@ -252,39 +227,17 @@ export function AgentFormFields({
                   </span>
                 ) : null}
               </Label>
-              <Select
+              <SearchableSelect
+                id={`${idPrefix}summaryModelProviderId`}
+                ariaLabel="Summary Model Provider"
                 value={effectiveSummaryModelProviderId}
                 onValueChange={setSummaryModelProviderId}
-              >
-                <SelectTrigger id={`${idPrefix}summaryModelProviderId`} className="w-full">
-                  <SelectValue placeholder="Select a summary model provider..." />
-                </SelectTrigger>
-                <SelectContent
-                  position="popper"
-                  sideOffset={4}
-                  portalContainer={dialogPortalContainer}
-                >
-                  <SelectGroup>
-                    <SelectLabel>Available Model Providers</SelectLabel>
-                    {modelProvidersQuery.isLoading ? (
-                      <SelectItem value="loading" disabled>
-                        Loading...
-                      </SelectItem>
-                    ) : modelProvidersQuery.data && modelProvidersQuery.data.length > 0 ? (
-                      modelProvidersQuery.data.map((modelProvider) => (
-                        <SelectItem key={modelProvider.id} value={modelProvider.id}>
-                          {modelProvider.modelName} ({modelProvider.providerName}-
-                          {modelProvider.providerType})
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-providers" disabled>
-                        No model providers available
-                      </SelectItem>
-                    )}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+                options={modelProviderOptions}
+                placeholder="Select a summary model provider..."
+                searchPlaceholder="Search model providers..."
+                isLoading={modelProvidersQuery.isLoading}
+                clearable={Boolean(summaryModelProviderId)}
+              />
             </div>
           ) : null}
 
@@ -324,6 +277,11 @@ export function AgentFormFields({
               <TabsTrigger value="apps">Apps</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
             </TabsList>
+            <p className="mt-2 max-w-4xl text-xs text-muted-foreground">
+              Agw recommends configuring Skills, Tools, MCP Tool Servers, Apps, and Environment
+              Variables in the Project. When the agent runs, it merges the configurations from both
+              the agent and the project.
+            </p>
           </div>
 
           <TabsContent
@@ -352,7 +310,6 @@ export function AgentFormFields({
 
           <TabsContent value="skills" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
             <SkillsPanel
-              dialogPortalContainer={dialogPortalContainer}
               idPrefix={idPrefix}
               skillsQuery={skillsQuery}
               selectedSkillIds={selectedSkillIds}
@@ -370,7 +327,6 @@ export function AgentFormFields({
 
           <TabsContent value="tools" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
             <ToolsPanel
-              dialogPortalContainer={dialogPortalContainer}
               idPrefix={idPrefix}
               toolsQuery={toolsQuery}
               selectedTools={selectedTools}
@@ -388,7 +344,6 @@ export function AgentFormFields({
 
           <TabsContent value="mcp-tool-servers" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
             <McpToolServersPanel
-              dialogPortalContainer={dialogPortalContainer}
               idPrefix={idPrefix}
               mcpToolServersQuery={mcpToolServersQuery}
               selectedMcpToolServerIds={selectedMcpToolServerIds}
@@ -398,13 +353,9 @@ export function AgentFormFields({
 
           <TabsContent value="apps" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
             <AppsPanel
-              dialogPortalContainer={dialogPortalContainer}
               idPrefix={idPrefix}
               appOptions={appOptions}
               selectedAppInstanceIds={selectedAppInstanceIds}
-              appSearchTerm={appSearchTerm}
-              setAppSearchTerm={setAppSearchTerm}
-              filteredAppOptions={filteredAppOptions}
               toggleAppInstance={toggleAppInstance}
             />
           </TabsContent>

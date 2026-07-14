@@ -1,4 +1,3 @@
-import * as React from "react";
 import { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
 
 import { applyDialogOpenChange } from "@/components/definition-capabilities";
@@ -54,9 +53,6 @@ interface EditAgentDialogProps {
   selectedSkillIds: string[];
   appOptions: AppInstanceOption[];
   selectedAppInstanceIds: string[];
-  appSearchTerm: string;
-  setAppSearchTerm: (value: string) => void;
-  filteredAppOptions: AppInstanceOption[];
   selectedTools: string[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
@@ -100,9 +96,6 @@ export function EditAgentDialog({
   selectedSkillIds,
   appOptions,
   selectedAppInstanceIds,
-  appSearchTerm,
-  setAppSearchTerm,
-  filteredAppOptions,
   selectedTools,
   modelProvidersQuery,
   skillsQuery,
@@ -115,9 +108,6 @@ export function EditAgentDialog({
   toggleTool,
   toggleMcpToolServer,
 }: EditAgentDialogProps) {
-  const [dialogPortalContainer, setDialogPortalContainer] = React.useState<HTMLDivElement | null>(
-    null,
-  );
   const isExternalAgent = editingAgent?.type === 1;
   const effectiveSummaryModelProviderId = isExternalAgent
     ? summaryModelProviderId
@@ -161,7 +151,6 @@ export function EditAgentDialog({
       }
     >
       <DialogContent
-        ref={setDialogPortalContainer}
         className="fixed inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 p-0 sm:max-w-none"
         onInteractOutside={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
@@ -209,7 +198,6 @@ export function EditAgentDialog({
 
           <AgentFormFields
             mode="edit"
-            dialogPortalContainer={dialogPortalContainer}
             displayName={displayName}
             setDisplayName={setDisplayName}
             name={name}
@@ -232,9 +220,6 @@ export function EditAgentDialog({
             selectedSkillIds={selectedSkillIds}
             appOptions={appOptions}
             selectedAppInstanceIds={selectedAppInstanceIds}
-            appSearchTerm={appSearchTerm}
-            setAppSearchTerm={setAppSearchTerm}
-            filteredAppOptions={filteredAppOptions}
             toggleAppInstance={toggleAppInstance}
             selectedTools={selectedTools}
             modelProvidersQuery={modelProvidersQuery}

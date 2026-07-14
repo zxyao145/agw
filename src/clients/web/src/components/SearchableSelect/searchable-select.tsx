@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,12 +14,10 @@ export type SearchableSelectOption = {
   group?: string;
 };
 
-type SearchableSelectProps = {
+type SearchableSelectBaseProps = {
   id: string;
   label?: string;
   ariaLabel?: string;
-  value: string;
-  onValueChange: (value: string) => void;
   options: SearchableSelectOption[];
   placeholder: string;
   searchPlaceholder: string;
@@ -29,20 +27,35 @@ type SearchableSelectProps = {
   clearable?: boolean;
 };
 
-export function SearchableSelect({
-  id,
-  label,
-  ariaLabel,
-  value,
-  onValueChange,
-  options,
-  placeholder,
-  searchPlaceholder,
-  disabled,
-  isLoading,
-  errorMessage,
-  clearable = true,
-}: SearchableSelectProps) {
+type SearchableSelectSingleProps = {
+  multiple?: false;
+  value: string;
+  onValueChange: (value: string) => void;
+};
+
+type SearchableSelectMultipleProps = {
+  multiple: true;
+  value: string[];
+  onValueChange: (value: string[]) => void;
+  selectionText?: string;
+};
+
+type SearchableSelectProps = SearchableSelectBaseProps &
+  (SearchableSelectSingleProps | SearchableSelectMultipleProps);
+
+export function SearchableSelect(props: SearchableSelectProps) {
+  const {
+    id,
+    label,
+    ariaLabel,
+    options,
+    placeholder,
+    searchPlaceholder,
+    disabled,
+    isLoading,
+    errorMessage,
+    clearable = true,
+  } = props;
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const rootRef = React.useRef<HTMLDivElement | null>(null);
@@ -72,16 +85,21 @@ export function SearchableSelect({
     };
   }, [open]);
 
-  const selected = React.useMemo(
-    () => options.find((x) => x.value === value) ?? null,
-    [options, value],
+  const selectedValues = React.useMemo(
+    () => (props.multiple ? props.value : props.value ? [props.value] : []),
+    [props.multiple, props.value],
+  );
+  const selectedOptions = React.useMemo(
+    () => options.filter((option) => selectedValues.includes(option.value)),
+    [options, selectedValues],
   );
 
   const filteredOptions = React.useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q.length) return options;
     return options.filter((opt) => {
-      const haystack = `${opt.title} ${opt.subtitle ?? ""} ${opt.group ?? ""} ${opt.value}`.toLowerCase();
+      const haystack =
+        `${opt.title} ${opt.subtitle ?? ""} ${opt.group ?? ""} ${opt.value}`.toLowerCase();
       return haystack.includes(q);
     });
   }, [options, search]);
@@ -102,7 +120,39 @@ export function SearchableSelect({
     return groups;
   }, [filteredOptions]);
 
-  const triggerText = selected ? selected.title : placeholder;
+  const triggerText = props.multiple
+    ? (props.selectionText ??
+      (selectedValues.length > 0 ? `${selectedValues.length} selected` : placeholder))
+    : (selectedOptions[0]?.title ?? placeholder);
+  const hasSelection = selectedValues.length > 0;
+
+  const handleClear = () => {
+    if (props.multiple) {
+      props.onValueChange([]);
+      return;
+    }
+
+    props.onValueChange("");
+    setOpen(false);
+    setSearch("");
+  };
+
+  const handleOptionSelect = (optionValue: string) => {
+    if (props.multiple) {
+      props.onValueChange(
+        props.value.includes(optionValue)
+          ? props.value.filter((value) => value !== optionValue)
+          : [...props.value, optionValue],
+      );
+      return;
+    }
+
+    props.onValueChange(optionValue);
+    if (!props.multiple) {
+      setOpen(false);
+      setSearch("");
+    }
+  };
 
   const itemClassName =
     "flex w-full cursor-pointer select-none items-start gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground";
@@ -123,7 +173,7 @@ export function SearchableSelect({
           aria-label={ariaLabel ?? label}
           onClick={() => setOpen((x) => !x)}
         >
-          <span className={selected ? "truncate" : "truncate text-muted-foreground"}>
+          <span className={hasSelection ? "truncate" : "truncate text-muted-foreground"}>
             {triggerText}
           </span>
           <ChevronDownIcon className="size-4 opacity-50" />
@@ -134,6 +184,7 @@ export function SearchableSelect({
             className="bg-popover text-popover-foreground absolute left-0 top-full z-50 mt-1 w-full rounded-md border p-2 shadow-md"
             role="listbox"
             aria-label={ariaLabel ?? label}
+            aria-multiselectable={props.multiple || undefined}
           >
             <div className="pb-2">
               <Input
@@ -157,15 +208,11 @@ export function SearchableSelect({
               <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading...</div>
             ) : (
               <div className="max-h-64 overflow-auto">
-                {clearable && value.trim().length > 0 && (
+                {clearable && hasSelection && (
                   <button
                     type="button"
                     className={`${itemClassName} text-muted-foreground`}
-                    onClick={() => {
-                      onValueChange("");
-                      setOpen(false);
-                      setSearch("");
-                    }}
+                    onClick={handleClear}
                   >
                     Clear selection
                   </button>
@@ -181,27 +228,32 @@ export function SearchableSelect({
                           {group.label}
                         </div>
                       ) : null}
-                      {group.options.map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          className={itemClassName}
-                          onClick={() => {
-                            onValueChange(opt.value);
-                            setOpen(false);
-                            setSearch("");
-                          }}
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate text-sm">{opt.title}</div>
-                            {opt.subtitle ? (
-                              <div className="truncate font-mono text-xs text-muted-foreground">
-                                {opt.subtitle}
-                              </div>
-                            ) : null}
-                          </div>
-                        </button>
-                      ))}
+                      {group.options.map((opt) => {
+                        const isSelected = selectedValues.includes(opt.value);
+
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            className={itemClassName}
+                            onClick={() => handleOptionSelect(opt.value)}
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate text-sm">{opt.title}</div>
+                              {opt.subtitle ? (
+                                <div className="truncate font-mono text-xs text-muted-foreground">
+                                  {opt.subtitle}
+                                </div>
+                              ) : null}
+                            </div>
+                            <span className="ml-auto flex size-4 shrink-0 items-center justify-center">
+                              {isSelected ? <CheckIcon className="size-4" /> : null}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </React.Fragment>
                   ))
                 )}

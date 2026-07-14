@@ -34,14 +34,6 @@ const options = [
   },
 ] as const;
 
-test("shared App filtering matches display, provider, client, and authorization subject", async () => {
-  const { filterAppOptions } = await importAppSelectorModule();
-
-  assert.equal(filterAppOptions(options, "octocat").length, 1);
-  assert.equal(filterAppOptions(options, "google").length, 1);
-  assert.equal(filterAppOptions(options, "client").length, 2);
-});
-
 test("shared App labels and authorization states match the Agent language", async () => {
   const { buildAppOptionLabel, getAppAuthorizationState } = await importAppSelectorModule();
 

@@ -26,22 +26,6 @@ export function buildAppOptionLabel(
   return `${app.displayName} · ${app.clientId}`;
 }
 
-export function filterAppOptions(
-  options: readonly AppInstanceOption[],
-  term: string,
-): AppInstanceOption[] {
-  const normalized = term.trim().toLowerCase();
-  if (!normalized) {
-    return [...options];
-  }
-
-  return options.filter((option) =>
-    [option.displayName, option.provider, option.clientId, option.authorizationSubject ?? ""].some(
-      (value) => value.toLowerCase().includes(normalized),
-    ),
-  );
-}
-
 export function buildSelectedSkillItems(
   selectedSkillIds: readonly string[],
   skills: readonly { id: string; name: string; description?: string }[],

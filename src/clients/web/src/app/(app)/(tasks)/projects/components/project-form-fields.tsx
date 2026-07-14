@@ -19,7 +19,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 export interface ProjectFormFieldsProps {
-  dialogPortalContainer: HTMLElement | null;
   name: string;
   setName: (value: string) => void;
   description: string;
@@ -36,9 +35,6 @@ export interface ProjectFormFieldsProps {
   selectedSkillIds: string[];
   appOptions: AppInstanceOption[];
   selectedAppInstanceIds: string[];
-  appSearchTerm: string;
-  setAppSearchTerm: (value: string) => void;
-  filteredAppOptions: AppInstanceOption[];
   selectedTools: string[];
   skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
@@ -52,7 +48,6 @@ export interface ProjectFormFieldsProps {
 }
 
 export function ProjectFormFields({
-  dialogPortalContainer,
   name,
   setName,
   description,
@@ -69,9 +64,6 @@ export function ProjectFormFields({
   selectedSkillIds,
   appOptions,
   selectedAppInstanceIds,
-  appSearchTerm,
-  setAppSearchTerm,
-  filteredAppOptions,
   selectedTools,
   skillsQuery,
   toolsQuery,
@@ -169,7 +161,6 @@ export function ProjectFormFields({
 
           <TabsContent value="skills" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
             <SkillsPanel
-              dialogPortalContainer={dialogPortalContainer}
               idPrefix={idPrefix}
               ownerLabel="project"
               skillsQuery={skillsQuery}
@@ -180,7 +171,6 @@ export function ProjectFormFields({
 
           <TabsContent value="tools" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
             <ToolsPanel
-              dialogPortalContainer={dialogPortalContainer}
               idPrefix={idPrefix}
               ownerLabel="project"
               toolsQuery={toolsQuery}
@@ -191,7 +181,6 @@ export function ProjectFormFields({
 
           <TabsContent value="mcp-tool-servers" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
             <McpToolServersPanel
-              dialogPortalContainer={dialogPortalContainer}
               idPrefix={idPrefix}
               ownerLabel="project"
               mcpToolServersQuery={mcpToolServersQuery}
@@ -202,14 +191,10 @@ export function ProjectFormFields({
 
           <TabsContent value="apps" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
             <AppsPanel
-              dialogPortalContainer={dialogPortalContainer}
               idPrefix={idPrefix}
               ownerLabel="project"
               appOptions={appOptions}
               selectedAppInstanceIds={selectedAppInstanceIds}
-              appSearchTerm={appSearchTerm}
-              setAppSearchTerm={setAppSearchTerm}
-              filteredAppOptions={filteredAppOptions}
               toggleAppInstance={toggleAppInstance}
             />
           </TabsContent>

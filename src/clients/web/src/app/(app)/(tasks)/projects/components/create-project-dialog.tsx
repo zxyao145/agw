@@ -1,4 +1,3 @@
-import * as React from "react";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 import {
@@ -29,7 +28,7 @@ import type { ProjectCreateRequest } from "./types";
 
 interface CreateProjectDialogProps extends Omit<
   ProjectFormFieldsProps,
-  "dialogPortalContainer" | "extraSettingError" | "idPrefix"
+  "extraSettingError" | "idPrefix"
 > {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -52,9 +51,6 @@ export function CreateProjectDialog({
   selectedAppInstanceIds,
   ...formProps
 }: CreateProjectDialogProps) {
-  const [dialogPortalContainer, setDialogPortalContainer] = React.useState<HTMLDivElement | null>(
-    null,
-  );
   const normalizedName = formatProjectFolderName(name);
   const extraSettingError = getProjectExtraSettingsError(extraSetting);
   const environmentVariablesError = getEnvironmentVariablesError(environmentVariables);
@@ -98,7 +94,6 @@ export function CreateProjectDialog({
       </DialogTrigger>
 
       <DialogContent
-        ref={setDialogPortalContainer}
         className="fixed inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 p-0 sm:max-w-none"
         onInteractOutside={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
@@ -143,7 +138,6 @@ export function CreateProjectDialog({
 
           <ProjectFormFields
             {...formProps}
-            dialogPortalContainer={dialogPortalContainer}
             name={name}
             description={description}
             workspace={workspace}
