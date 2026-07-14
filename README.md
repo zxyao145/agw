@@ -2,13 +2,66 @@
 
 [中文文档](README.zh-CN.md) | [Documentation](README.md)
 
+Agw is a self-hosted backend engineering agent hub for individuals and small R&D teams, as well as an AssS (Agent as a Service) platform and agent gateway. It lets users work with multiple agents from a single UI:
 
+- Create custom agents
+- Integrate external agents, such as Claude Code and Codex
 
-Agw is an AssS (Agent as a Service) platform and agent gateway that allows users to create custom agents and integrate existing external agents (such as Claude Code and Codex).
+Agw also provides Jobs and Agent Workflow (Agentflow) capabilities for creating scheduled and recurring tasks and orchestrating agents.
 
-In addition, Agw offers Cron Job and Agent Workflow capabilities, which can be used to create scheduled tasks, recurring tasks, and orchestrate Agents (currently, only simple orchestration is supported).
+This project is primarily built on [MAF](https://github.com/microsoft/agent-framework).
 
-This project is primarily based on [MAF](https://github.com/microsoft/agent-framework).
+## Use Cases
+
+### Multi-Agent Collaboration Workflows (Agentflows)
+
+Agentflows are suitable for relatively well-defined, decomposable knowledge work, such as:
+
+```
+Research Agent
+        ↓
+Analysis Agent
+        ↓
+Content Generation Agent
+        ↓
+Human Approval
+        ↓
+Publishing/Archiving Agent
+```
+
+> [!NOTE]
+> The current orchestration capabilities are still fairly basic. They work best for sequential, parallel, handoff, and human-approval workflows, and are less suitable for highly dynamic groups of agents that require deep autonomous planning.
+
+### Human-Agent Collaboration Platform
+
+The Jobs capability can support workflows such as:
+
+```
+Human: Creates a task
+        ↓
+Agent: Claims the task
+        ↓
+Agent: Executes the task
+        ↓
+Human: Reviews the task
+```
+
+### Task Automation Platform
+
+With Jobs, Integrations, and project context, Agw can automate:
+
+- Daily operational data summaries
+- GitHub issue and pull request classification and summaries
+- Periodic checks for dependencies, security issues, or documentation drift
+- Customer service record organization
+- Weekly reports, daily reports, and release notes
+- Scheduled information retrieval and updates to internal systems
+
+Jobs combine agent reasoning, tool permissions, context, and persistent execution records, making them more valuable than ordinary Cron jobs.
+
+### Cloud Desktop Environments
+
+Agw can serve as an agent control plane for Cloud Desktop environments, allowing AI to continuously and securely perform development and automation tasks in isolated cloud workspaces while centrally managing models, tools, scheduling, approvals, and execution records.
 
 ## Tech Stack
 
@@ -25,7 +78,7 @@ Frontend:
 - Next.js 16 App Router
 - React 19
 - Tailwind CSS 4
-- Shadcn 4 （Radix UI）
+- Shadcn 4 (Radix UI)
 
 ## Usage
 
@@ -36,7 +89,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Host
 ```
 
-The development backend listens on `http://localhost:5015`. On the first run, open `http://localhost:5015/setup` to choose the database provider, connection string, and administrator password. Runtime data is stored in the current user's `agw` directory. Remote setup additionally requires the one-time code printed by the Server.
+The development backend listens on `http://localhost:5015` by default. On the first run, open `http://localhost:5015/setup` to choose the database provider, connection string, and administrator password. All runtime data is stored in an `agw` directory under the current user's home directory. Setup through a domain name also requires the one-time setup code printed in the server startup logs.
 
 Start the frontend in another terminal:
 
@@ -46,21 +99,21 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3000` after both services are running. The Next.js dev server proxies `/api/*` and `/openapi/*` to the backend, using `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015`.
+After both services are running, open `http://localhost:3000`. The Next.js development server proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:5015`.
 
-Production packages use a single ASP.NET Core process with the exported Web UI embedded. See the deployment guide below.
+Production packages embed the static Web UI in ASP.NET Core and serve it from a single server process. See the deployment guide below for details.
 
-Typical local workflow:
+A typical local workflow is:
 
-1. Complete the first-run setup page if the backend redirects to `/setup`.
+1. If the backend redirects to `/setup`, complete the first-run setup.
 2. Configure providers, models, and model-provider links under `Providers`, `Models`, and `Model Providers`.
-3. Create agents under `Agents`, then attach MCP tool servers, tools, skills, or integration-backed apps as needed.
-4. Use `Chat` or `Projects` to run agent sessions and review persisted task history.
-5. Use `Agentflows` for multi-agent orchestration and `Jobs` for scheduled or recurring task execution.
+3. Create an agent under `Agents`, then attach MCP tool servers, tools, skills, or integrated apps as needed.
+4. Use `Chat` or `Projects` to run agent sessions and review the persisted task history.
+5. Use `Agentflows` for multi-agent orchestration and `Jobs` for scheduled or recurring tasks.
 
 ## Screenshots
 
-Below are screenshots of the main Agw UI pages:
+The following screenshots show the main Agw interfaces:
 
 ### Providers
 ![Providers](medias/provider.png)
@@ -68,7 +121,7 @@ Below are screenshots of the main Agw UI pages:
 ### Agents
 ![Agents](medias/agents.png)
 
-![Agents Detail](medias/agents2.png)
+![Agent Details](medias/agents2.png)
 
 ### Tools & MCP
 ![MCP](medias/mcp.png)
@@ -79,7 +132,7 @@ Below are screenshots of the main Agw UI pages:
 ### Integrations
 ![Integrations](medias/integrations.png)
 
-### Chat Conversation
+### Chat
 ![Chat](medias/chat-conversation.png)
 
 ### Chat Workspace Files
@@ -98,7 +151,7 @@ Below are screenshots of the main Agw UI pages:
 
 ## Architecture
 
-Agw uses a domain-based, modular monolithic architecture. `src/server/Agw.Host` serves as the entry point for the ASP.NET Core application and is responsible for assembling the various modules; the Web client is located in `src/clients/web`, and the Expo mobile client is in `src/clients/mobile`.
+Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the ASP.NET Core application entry point and assembles the modules. The Web client is located in `src/clients/web`, and the Expo mobile client is in `src/clients/mobile`.
 
 A typical backend flow is:
 
@@ -106,7 +159,7 @@ A typical backend flow is:
 Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUnitOfWork -> EF Core
 ```
 
-Module Overview:
+Module overview:
 
 ```mermaid
 flowchart BT
@@ -160,55 +213,53 @@ flowchart BT
     style Support fill:none,stroke:#333,stroke-dasharray: 5 5
 ```
 
-- [x] Agw.Providers  
-  Used to manage models and their providers.
+- Agw.Providers
+  Manages models and their providers.
 
-- [x] Agw.Agents  
-  Integrate external agents (such as Claude Code and Codex) and manage custom agents. 
-  Custom agents can support the integration of tools, MCPs, and skills.
+- Agw.Agents
+  Integrates external agents, such as Claude Code and Codex, and manages custom agents. Custom agents can integrate tools, MCP, and skills.
 
-- [x] Agw.Tools  
-  Includes built-in Tool and MCP Tool management modules.
+- Agw.Tools
+  Manages built-in tools and MCP tools.
 
-- [x] Agw.Skills  
-  Skill Management Module.
+- Agw.Skills
+  Manages skills.
 
-- [x] Agw.Integrations  
-  External App Integration Module.
+- Agw.Integrations
+  Manages external app integrations.
 
-- [x] Agw.Projects  
-  Agent Conversation and Session Management Module. 
-  In AGW, each session corresponds to a task, and each task is associated with a project.
+- Agw.Projects
+  Manages agent conversation history and sessions. In Agw, a session corresponds to a task, and every task is associated with a project.
 
-- [x] Agw.Jobs  
-  Provides the ability to schedule recurring, periodic, and one-time tasks, with support for Cron expressions.
-  
-  - One-time task: Once created, it will be disabled after being executed once.
-  
-  - Scheduled task: Runs at a specified time and is disabled after execution.
-  
-  - Scheduled tasks: Tasks that are repeated at specified times on a regular basis.
+- Agw.Jobs
+  Provides scheduled, recurring, and one-time tasks, with support for Cron expressions.
 
-- [x] Agw.A2A
+- One-time tasks: Run once after they are created and are then disabled.
 
-Provides an interface for the A2A protocol to external systems.
+- Scheduled tasks: Run at a specified time and are disabled after that execution.
+
+- Recurring tasks: Run repeatedly on a fixed schedule at specified times.
+
+- Agw.A2A
+
+Exposes the system through the A2A protocol.
 
 ## Documentation
 
-- [Deployment](docs/4.Deployment.md): single-process Server packages, Docker, domain proxying, data directories, and upgrades.
+- [Deployment Guide](docs/4.Deployment.md): Single-process server, local packages, Docker, domain proxying, data directories, and upgrades.
 
-The detailed project docs live under [`docs/`](docs/):
+Detailed project documentation is available under [`docs/`](docs/):
 
-- [Development Guide](docs/1.Development.md): local setup, build/test/lint/format commands, and git hook configuration.
-- [Architecture](docs/2.Architecture.md): system overview, backend/frontend structure, and core domain concepts.
-- [Module Organization](docs/3.Module%20Organization.md): layering principles used inside modules.
-- [Chat Suggestions Design](docs/5.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure handling.
-- [Agent Execution Flow](docs/ws-flow.md): SignalR commands, turn messages, runtime lifecycle, and disconnect behavior.
-- [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): detailed directory responsibilities, data flow, and command extension guidance.
+- [Development Guide](docs/1.Development.md): Local environment setup, build/test/lint/format commands, and Git hook configuration.
+- [Architecture](docs/2.Architecture.md): System overview, backend and frontend architecture, and core domain concepts.
+- [Module Organization](docs/3.Module%20Organization.md): Layering principles used within modules.
+- [Chat Suggestions Design](docs/5.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure fallback behavior.
+- [Agent Execution Flow](docs/ws-flow.md): SignalR commands, turn messages, runtime lifecycle, and disconnection behavior.
+- [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): Directory responsibilities, data flow, and command extension methods.
 
 ## Configuration
 
-Primary backend settings are in [`src/server/Agw.Host/appsettings.json`](src/server/Agw.Host/appsettings.json):
+Primary backend settings are located in [`src/server/Agw.Host/appsettings.json`](src/server/Agw.Host/appsettings.json):
 
 ```json
 {
@@ -229,6 +280,9 @@ Primary backend settings are in [`src/server/Agw.Host/appsettings.json`](src/ser
 ```
 
 - Supported database providers are `sqlite` and `postgres`.
-- Distributed-lock providers are `inmemory` and `postgres`. When `DistributedLock:Provider` is null or absent, SQLite uses the in-memory lock and PostgreSQL uses PostgreSQL advisory locks. An empty PostgreSQL lock connection string reuses `Database:ConnectionString`.
-- Keep secrets out of committed config files; prefer environment-variable overrides.
-- After backend contract changes, regenerate `src/clients/web/src/api/openapi.d.ts` with `pnpm gen:openapi`.
+- Supported distributed execution lock providers are `inmemory` and `postgres`. When `DistributedLock:Provider` is `null` or absent, SQLite uses an in-process lock, while PostgreSQL uses an advisory lock. If the PostgreSQL lock connection string is empty, it reuses `Database:ConnectionString`.
+- Do not store secrets in static configuration files; prefer environment variable overrides.
+
+## License
+
+Additional restrictions have been added on top of the Apache License 2.0. Personal use and internal enterprise use are unrestricted. See [LICENSE](LICENSE) for details.

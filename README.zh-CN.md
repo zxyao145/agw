@@ -2,11 +2,69 @@
 
 [中文文档](README.zh-CN.md) | [Documentation](README.md)
 
-Agw 是一个 AssS (Agent as a Service) 平台和 Agent Gateway，可以自定义创建 Agent 和集成外部已有的 Agent（例如 Claude Code、Codex）。
+Agw 是一个面向个人用户和小型研发团队的、自托管的后台工程 Agent 中心，也是一个 AssS (Agent as a Service) 平台和 Agent Gateway。用户可以在一个 UI 中，同时操作多个 Agent：
+- 自定义创建 Agent
+- 集成外部的 Agent（例如 Claude Code、Codex）。
 
-除此之外，Agw 还具备 Job 和 Agent Workflow 能力，可以用于创建定时任务、周期任务、对 Agent 进行编排（目前仅能实现简单的编排）。
+除此之外，Agw 还具备 Job 和 Agent Workflow（Agentflow）能力，可以用于创建定时任务、周期任务、对 Agent 进行编排。
 
 本项目主要基于 [MAF](https://github.com/microsoft/agent-framework) 开发。
+
+
+## 使用场景
+
+
+### 多 Agent 协作流程（Agentflow）
+
+适合相对明确、可拆分的知识工作，例如：
+
+```
+资料收集 Agent
+        ↓
+分析 Agent
+        ↓
+内容生成 Agent
+        ↓
+人工审批
+        ↓
+发布/归档 Agent
+```
+
+> [!NOTE]
+> 当前编排能力还偏基础，比较适合顺序、并行、交接和人工审批流程；不太适合高度动态、自主规划很深的 Agent 群体。
+
+### 人-Agent 协作平台
+
+基于 Job 能力，可以实现如下工作流：
+
+```
+人：发布任务
+        ↓
+Agent：领取任务
+        ↓
+Agent：执行任务
+        ↓
+人：审核任务
+```
+
+### 自动化任务平台
+
+利用 Jobs、Integrations 和项目上下文，可以：
+
+- 每日经营数据汇总
+- GitHub Issue/PR 分类与总结
+- 定期检查依赖、安全问题或文档漂移
+- 客服记录整理
+- 周报、日报、发布说明生成
+- 定时抓取信息并写入内部系统
+
+Job 有 Agent 推理能力、工具权限、上下文和持久化执行记录，比普通 Cron 更有价值。
+
+
+
+### Cloud Desktop 环境
+
+Agw 可作为 Cloud Desktop 的 Agent 控制平面，让 AI 在隔离的云端工作区中持续、安全地执行开发与自动化任务，并统一管理模型、工具、调度、审批和执行记录。
 
 ## 技术栈
 
@@ -227,3 +285,7 @@ flowchart BT
 - 数据库 Provider 支持：`sqlite` 和 `postgres`。
 - 分布式执行锁 Provider 支持 `inmemory` 和 `postgres`。`DistributedLock:Provider` 为 `null` 或不存在时，SQLite 使用进程内锁，PostgreSQL 使用 advisory lock；PostgreSQL 锁连接串为空时复用 `Database:ConnectionString`。
 - 请勿将机密信息写入固定配置文件；建议优先使用环境变量进行覆盖。
+
+## 协议
+
+在 Apache 2.0 协议之上进行添加了条款限制，个人用户和企业内部使用无任何限制，详见 [LICENSE](LICENSE)。
