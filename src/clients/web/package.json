@@ -60,6 +60,7 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
+    "@code-inspector/core": "1.4.5",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
