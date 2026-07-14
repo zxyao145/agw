@@ -651,6 +651,54 @@ public class AgentflowWorkflowCompilerTests
     }
 
     [Fact]
+    public async Task Compile_PromptAdapterBeforeAgent_ContinuesTurnIntoAgent()
+    {
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "adapter-agent-flow" };
+        var chatClient = new CapturingChatClient("agent output");
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input, Name = "Input" },
+            new AgentflowNode
+            {
+                NodeId = "adapter",
+                Kind = AgentflowNodeKind.PromptAdapter,
+                Instructions = "Extract the URL before continuing.",
+            },
+            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Agent" },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            Edge("input-adapter", "input", "adapter", AgentflowEdgeKind.FanOut),
+            Edge("adapter-agent", "adapter", "agent"),
+            Edge("agent-output", "agent", "output"),
+        };
+
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", chatClient) });
+
+        Assert.NotNull(workflow);
+
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "Visit https://example.com") },
+            cancellationToken: TestContext.Current.CancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        var events = new List<WorkflowEvent>();
+        await foreach (var evt in run.WatchStreamAsync(TestContext.Current.CancellationToken))
+        {
+            events.Add(evt);
+        }
+
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+        Assert.Contains(chatClient.Messages, message => message.Text == "Extract the URL before continuing.");
+        Assert.Contains(chatClient.Messages, message => message.Text == "Visit https://example.com");
+    }
+
+    [Fact]
     public async Task Compile_SequentialAgents_ReassignsOnlyUpstreamAgentResponseAsUser()
     {
         var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "sequential-flow" };

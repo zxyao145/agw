@@ -210,7 +210,7 @@ public sealed class AgentflowWorkflowCompiler
                         .BindAsExecutor(AgentHostOptions)
                     : null,
             AgentflowNodeKind.PromptAdapter =>
-                BindChatTransform(
+                BindChatProtocolTransform(
                     node.NodeId,
                     messages => AgentflowMessageTransforms.ApplyInstructions(messages, node.Instructions)),
             AgentflowNodeKind.CheckpointMarker =>
@@ -450,6 +450,13 @@ public sealed class AgentflowWorkflowCompiler
             threadsafe: true);
     }
 
+    private static ExecutorBinding BindChatProtocolTransform(
+        string id,
+        Func<List<ChatMessage>, List<ChatMessage>> transform)
+    {
+        return new ChatTransformExecutor(id, transform);
+    }
+
     /// <summary>
     /// 收集所有 Block 配置引用的参与节点与管理节点标识。
     /// </summary>
@@ -488,6 +495,31 @@ public sealed class AgentflowWorkflowCompiler
         public string? Author { get; init; }
         public string? Role { get; init; }
         public int? MinMessages { get; init; }
+    }
+
+    private sealed class ChatTransformExecutor : ChatProtocolExecutor
+    {
+        private readonly Func<List<ChatMessage>, List<ChatMessage>> _transform;
+
+        public ChatTransformExecutor(
+            string id,
+            Func<List<ChatMessage>, List<ChatMessage>> transform)
+            : base(
+                id,
+                new ChatProtocolExecutorOptions { AutoSendTurnToken = true },
+                declareCrossRunShareable: true)
+        {
+            _transform = transform;
+        }
+
+        protected override ValueTask TakeTurnAsync(
+            List<ChatMessage> messages,
+            IWorkflowContext context,
+            bool? emitEvents,
+            CancellationToken cancellationToken = default)
+        {
+            return context.SendMessageAsync(_transform(messages), cancellationToken);
+        }
     }
 
     private sealed class InputPassthroughAgent(string nodeId, string? name) : AIAgent

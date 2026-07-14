@@ -14,6 +14,11 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
     if (!containerRef || !containerRef.current) {
       return "...";
     }
+    {
+      const lines = node.content.split("\n");
+      const firstLine = lines[0];
+      return firstLine;
+    }
     const el = containerRef.current;
     const rect = el.getBoundingClientRect();
     const style = getComputedStyle(el);
