@@ -10,6 +10,25 @@ namespace Agw.Agents.Execution.Agents;
 
 public partial class AgentRuntimeService
 {
+    private const string SkillsInstructionPrompt =
+        """
+        # Skills
+
+        The following skills are available:
+
+        {skills}
+
+        Skill usage rules:
+
+        - Use `load_skill` to load a skill's complete instructions.
+        - Skill files are stored outside the project workspace.
+        - Never use bash, glob, ls, or project file tools to locate skill files.
+        - Use `read_skill_resource` to read a skill resource.
+        - Use `run_skill_script` to execute a skill script.
+        - Pass the exact skill and script names advertised by the skill provider.
+        - If a skill or script is not found, report the error. Do not search the project workspace.
+        """;
+
     private async Task<AIContextProvider?> CreateSkillsProviderAsync(Agent agent, Project project)
     {
         var skillIds = agent.AgentSkillRelations
@@ -36,6 +55,10 @@ public partial class AgentRuntimeService
             fileOptions: new AgentFileSkillsSourceOptions
             {
                 AllowedScriptExtensions = [.. LocalSkillScriptRunner.SupportedScriptExtensions],
+            },
+            options: new AgentSkillsProviderOptions
+            {
+                SkillsInstructionPrompt = SkillsInstructionPrompt,
             });
     }
 

@@ -256,6 +256,23 @@ public class AgentRuntimeServiceSystemCompositionTests
             var providerStrings = CollectStringsInObjectGraph(skillsProvider);
             Assert.Contains(Path.Combine(root, "agent-skill"), providerStrings);
             Assert.Contains(Path.Combine(root, "project-skill"), providerStrings);
+            var skillsInstructionPrompt = Assert.Single(
+                providerStrings,
+                value => value.Contains(
+                    "Skill files are stored outside the project workspace.",
+                    StringComparison.Ordinal));
+            Assert.Contains("{skills}", skillsInstructionPrompt, StringComparison.Ordinal);
+            Assert.Contains(AgentSkillsProvider.LoadSkillToolName, skillsInstructionPrompt, StringComparison.Ordinal);
+            Assert.Contains(AgentSkillsProvider.ReadSkillResourceToolName, skillsInstructionPrompt, StringComparison.Ordinal);
+            Assert.Contains(AgentSkillsProvider.RunSkillScriptToolName, skillsInstructionPrompt, StringComparison.Ordinal);
+            Assert.Contains(
+                "Never use bash, glob, ls, or project file tools to locate skill files.",
+                skillsInstructionPrompt,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Do not search the project workspace.",
+                skillsInstructionPrompt,
+                StringComparison.Ordinal);
             Assert.Contains(".py", providerStrings);
             Assert.Contains(".js", providerStrings);
             Assert.Contains(".cs", providerStrings);
