@@ -139,7 +139,7 @@ export interface SearchFilesResponse {
 /**
  * Search for files and directories by keyword
  * @param path - Root directory to search in
- * @param keyword - Search keyword (matches file/folder names)
+ * @param keyword - Search keyword (matches flattened relative paths)
  * @param recursive - If true, search subdirectories (default: true)
  */
 export async function searchFiles(

@@ -202,6 +202,7 @@ The detailed project docs live under [`docs/`](docs/):
 - [Development Guide](docs/1.Development.md): local setup, build/test/lint/format commands, and git hook configuration.
 - [Architecture](docs/2.Architecture.md): system overview, backend/frontend structure, and core domain concepts.
 - [Module Organization](docs/3.Module%20Organization.md): layering principles used inside modules.
+- [Chat Suggestions Design](docs/5.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure handling.
 - [Agent Execution Flow](docs/ws-flow.md): SignalR commands, turn messages, runtime lifecycle, and disconnect behavior.
 - [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): detailed directory responsibilities, data flow, and command extension guidance.
 

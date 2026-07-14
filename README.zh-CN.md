@@ -198,6 +198,7 @@ flowchart BT
 - [Development Guide](docs/1.Development.md): 本地环境配置、构建/测试/代码检查/格式化命令，以及 Git 钩子配置。
 - [Architecture](docs/2.Architecture.md): 系统概述、后端/前端架构以及核心领域概念。
 - [Module Organization](docs/3.Module%20Organization.md): 模块内部采用的分层原则。
+- [Chat Suggestions 设计](docs/5.Chat%20Suggestions.md)：Agent 感知的 slash commands、Claude init commands、文件建议与失败降级。
 - [Agent 执行流程](docs/ws-flow.md)：SignalR 命令、turn 消息、runtime 生命周期与断线行为。
 - [Execution 子系统](src/server/Agw.Agents/Execution/README.md)：目录职责、数据流与 command 扩展方式。
 

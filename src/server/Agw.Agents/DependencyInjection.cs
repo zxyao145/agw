@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<McpToolServerDomainService>();
         services.AddScoped<AgentDomainService>();
         services.AddScoped<AgentAppService>();
+        services.AddScoped<AgentSuggestionAppService>();
         services.AddScoped<McpToolServerAppService>();
         services.AddScoped<AgentSessionStateStore>();
         services.AddScoped<IAgentRuntimeService, AgentRuntimeService>();

@@ -1,7 +1,16 @@
 // https://github.com/slopus/happy/blob/main/expo-app/sources/sync/suggestionCommands.ts
 
-import { SuggestionItem } from "@/components/message/user-input";
+import type { SuggestionItem } from "@/components/message/user-input";
 import Fuse from "fuse.js";
+
+export type AgentCommandSuggestion = SuggestionItem & {
+  kind: "skill" | "tool";
+};
+
+export type CommandSource =
+  | { mode: "system"; suggestions: AgentCommandSuggestion[] }
+  | { mode: "claudeCode"; slashCommands: string[] }
+  | { mode: "unsupported" };
 
 // Commands to ignore/filter out
 export const IGNORED_COMMANDS = [
@@ -69,31 +78,16 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   // Add more descriptions as needed
 };
 
-export const searchCommand = (
-  keyword: string,
-  allCommands: string[],
-): Promise<SuggestionItem[]> => {
-  const commands: SuggestionItem[] = [...DEFAULT_COMMANDS];
-
-  if (!allCommands) {
-    return Promise.resolve(commands);
+export const searchCommand = (keyword: string, source: CommandSource): SuggestionItem[] => {
+  if (source.mode === "unsupported") {
+    return [];
   }
-  // Add commands from metadata.slashCommands (filter with ignore list)
-  for (const cmd of allCommands) {
-    // Skip if in ignore list
-    if (IGNORED_COMMANDS.includes(cmd)) continue;
 
-    // Check if it's already in default commands
-    if (!commands.find((c) => c.text === cmd)) {
-      commands.push({
-        text: cmd,
-        description: COMMAND_DESCRIPTIONS[cmd], // Optional description
-      });
-    }
-  }
+  const commands: SuggestionItem[] =
+    source.mode === "system" ? [...source.suggestions] : buildClaudeCommands(source.slashCommands);
 
   if (!keyword) {
-    return Promise.resolve(commands.slice(0, 5));
+    return commands.slice(0, 5);
   }
 
   // Use Fuse.js for fuzzy search
@@ -110,10 +104,33 @@ export const searchCommand = (
 
   // Search and limit results to 5
   const results = fuse.search(keyword, { limit: 5 });
-  const suggestions = results.map((result) => ({
-    text: `${result.item.text}`,
-    description: result.item.description,
-  }));
+  const suggestions = results.map((result) => result.item);
 
-  return Promise.resolve(suggestions);
+  return suggestions;
 };
+
+function buildClaudeCommands(slashCommands: string[]): SuggestionItem[] {
+  const commands: SuggestionItem[] = [...DEFAULT_COMMANDS];
+  const commandNames = new Set(commands.map((command) => command.text.toLowerCase()));
+
+  for (const rawCommand of slashCommands) {
+    const trimmedCommand = rawCommand.trim();
+    if (!trimmedCommand) {
+      continue;
+    }
+
+    const command = trimmedCommand.startsWith("/") ? trimmedCommand : `/${trimmedCommand}`;
+    const normalizedCommand = command.toLowerCase();
+    if (IGNORED_COMMANDS.includes(normalizedCommand) || commandNames.has(normalizedCommand)) {
+      continue;
+    }
+
+    commandNames.add(normalizedCommand);
+    commands.push({
+      text: command,
+      description: COMMAND_DESCRIPTIONS[normalizedCommand],
+    });
+  }
+
+  return commands;
+}

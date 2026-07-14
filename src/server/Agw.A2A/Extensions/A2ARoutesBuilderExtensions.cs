@@ -31,7 +31,7 @@ public static class A2ARoutesBuilderExtensions
         var agentHandlerFactory = endpoints.ServiceProvider.GetRequiredService<AgentHandlerFactory>();
         var agentRoute = BuildAgentRoute(agentPathPrefix);
 
-        var routeGroup = endpoints.MapGroup("");
+        var routeGroup = endpoints.MapGroup("").WithTags("A2A");
         routeGroup.MapGet("/.well-known/agents.json",
             async delegate (A2AAgentService a2aService, CancellationToken cancellationToken)
             {

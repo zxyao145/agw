@@ -12,10 +12,14 @@ namespace Agw.Agents.Definitions.Controllers;
 public class AgentsController : ControllerBase
 {
     private readonly AgentAppService _agentAppService;
+    private readonly AgentSuggestionAppService _agentSuggestionAppService;
 
-    public AgentsController(AgentAppService agentAppService)
+    public AgentsController(
+        AgentAppService agentAppService,
+        AgentSuggestionAppService agentSuggestionAppService)
     {
         _agentAppService = agentAppService;
+        _agentSuggestionAppService = agentSuggestionAppService;
     }
 
     [HttpGet]
@@ -32,6 +36,16 @@ public class AgentsController : ControllerBase
     {
         var agent = await _agentAppService.GetAgentAsync(id);
         return agent == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(AgentResponse.FromDomain(agent));
+    }
+
+    [HttpGet("suggestions")]
+    [ProducesApiResult(typeof(AgentSuggestionsResponse))]
+    public async Task<IActionResult> SuggestionsAsync(
+        [FromQuery] Guid? projectId,
+        [FromQuery] Guid agentId)
+    {
+        var suggestions = await _agentSuggestionAppService.GetSuggestionsAsync(projectId, agentId);
+        return AgwApiResult.Ok(suggestions);
     }
 
     [HttpPost]

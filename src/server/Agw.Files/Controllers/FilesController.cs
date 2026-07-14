@@ -353,6 +353,17 @@ public class FilesController : ControllerBase
         "tmpclaude*",
     };
 
+    private static string GetSearchRelativePath(string rootPath, string path, bool isDirectory)
+    {
+        var relativePath = Path.GetRelativePath(rootPath, path).Replace(Path.DirectorySeparatorChar, '/');
+        return isDirectory ? $"{relativePath.TrimEnd('/')}/" : relativePath;
+    }
+
+    private static bool MatchesSearchKeyword(string relativePath, string keyword)
+    {
+        return relativePath.Contains(keyword, StringComparison.OrdinalIgnoreCase);
+    }
+
     private void SearchFilesRecursive(
         string rootPath,
         string currentPath,
@@ -377,10 +388,44 @@ public class FilesController : ControllerBase
             return;
         }
 
+        var directories = new List<string>();
+        try
+        {
+            foreach (var dir in Directory.EnumerateDirectories(currentPath))
+            {
+                var dirName = new DirectoryInfo(dir).Name;
+                if (dirName.StartsWith(".") || IgnoreDir.Contains(dirName))
+                {
+                    continue;
+                }
+
+                directories.Add(dir);
+                var relativePath = GetSearchRelativePath(rootPath, dir, isDirectory: true);
+                if (MatchesSearchKeyword(relativePath, keyword))
+                {
+                    results.Add(new FileSearchResult
+                    {
+                        FullPath = dir,
+                        RelativePath = relativePath,
+                        Type = "directory"
+                    });
+
+                    if (results.Count >= limit)
+                    {
+                        return;
+                    }
+                }
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Skip directories we can't access
+        }
+
         // Search files in current directory
         try
         {
-            foreach (var file in Directory.EnumerateFiles(currentPath, $"*{keyword}*"))
+            foreach (var file in Directory.EnumerateFiles(currentPath))
             {
                 var fileInfo = new FileInfo(file);
                 var fileName = fileInfo.Name;
@@ -408,12 +453,23 @@ public class FilesController : ControllerBase
                     continue;
                 }
 
+                var relativePath = GetSearchRelativePath(rootPath, fileInfo.FullName, isDirectory: false);
+                if (!MatchesSearchKeyword(relativePath, keyword))
+                {
+                    continue;
+                }
+
                 results.Add(new FileSearchResult
                 {
                     FullPath = fileInfo.FullName,
-                    RelativePath = Path.GetRelativePath(rootPath, fileInfo.FullName),
+                    RelativePath = relativePath,
                     Type = "file"
                 });
+
+                if (results.Count >= limit)
+                {
+                    return;
+                }
             }
         }
         catch (UnauthorizedAccessException)
@@ -424,13 +480,9 @@ public class FilesController : ControllerBase
         // Recursively search subdirectories
         try
         {
-            foreach (var dir in Directory.EnumerateDirectories(currentPath))
+            foreach (var dir in directories)
             {
-                var dirName = new DirectoryInfo(dir).Name;
-                if (!dirName.StartsWith("."))
-                {
-                    SearchFilesRecursive(rootPath, dir, keyword, limit, results);
-                }
+                SearchFilesRecursive(rootPath, dir, keyword, limit, results);
             }
         }
         catch (UnauthorizedAccessException)
@@ -441,16 +493,56 @@ public class FilesController : ControllerBase
 
     private void SearchFilesNonRecursive(string rootPath, string keyword, int limit, List<FileSearchResult> results)
     {
+        try
+        {
+            foreach (var dir in Directory.EnumerateDirectories(rootPath))
+            {
+                var dirName = new DirectoryInfo(dir).Name;
+                if (dirName.StartsWith(".") || IgnoreDir.Contains(dirName))
+                {
+                    continue;
+                }
+
+                var relativePath = GetSearchRelativePath(rootPath, dir, isDirectory: true);
+                if (!MatchesSearchKeyword(relativePath, keyword))
+                {
+                    continue;
+                }
+
+                results.Add(new FileSearchResult
+                {
+                    FullPath = dir,
+                    RelativePath = relativePath,
+                    Type = "directory"
+                });
+
+                if (results.Count >= limit)
+                {
+                    return;
+                }
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Skip directories we can't access
+        }
+
         // Search files in current directory only
         try
         {
-            foreach (var file in Directory.EnumerateFiles(rootPath, $"*{keyword}*"))
+            foreach (var file in Directory.EnumerateFiles(rootPath))
             {
                 var fileInfo = new FileInfo(file);
+                var relativePath = GetSearchRelativePath(rootPath, fileInfo.FullName, isDirectory: false);
+                if (!MatchesSearchKeyword(relativePath, keyword))
+                {
+                    continue;
+                }
+
                 results.Add(new FileSearchResult
                 {
                     FullPath = fileInfo.FullName,
-                    RelativePath = Path.GetRelativePath(rootPath, fileInfo.FullName),
+                    RelativePath = relativePath,
                     Type = "file"
                 });
 

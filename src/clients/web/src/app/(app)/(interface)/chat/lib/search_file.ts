@@ -1,4 +1,4 @@
-import { SuggestionItem } from "@/components/message/user-input";
+import type { SuggestionItem } from "@/components/message/user-input";
 import { searchFiles } from "@/api/files";
 
 /**

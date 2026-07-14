@@ -82,6 +82,12 @@ import {
   CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME,
 } from "./lib/chat-settings";
 import {
+  getAgentSuggestionQueryParams,
+  toCommandSource,
+  type AgentSuggestionsResponse,
+} from "./lib/agent-suggestions";
+import { getClaudeInitCommands, prepareClaudeHistory } from "./lib/ai-message-handlers";
+import {
   getChatRouteSessionAction,
   getContextHydrationKey,
   getRouteHydrationKey,
@@ -408,6 +414,7 @@ export default function ChatPage() {
   const [showChatHistory, setShowChatHistory] = React.useState(true);
   const [showFileExplorer, setShowFileExplorer] = React.useState(true);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
+  const [claudeCommands, setClaudeCommands] = React.useState<string[]>([]);
   const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(EMPTY_TOKEN_USAGE);
   const [contextId, setContextId] = React.useState<string | null>(queryContextId);
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
@@ -472,6 +479,35 @@ export default function ChatPage() {
   const selectedProject = React.useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
+  );
+
+  const agentSuggestionQueryParams = React.useMemo(
+    () => getAgentSuggestionQueryParams(selectedProjectId, selectedTarget),
+    [selectedProjectId, selectedTarget],
+  );
+
+  const agentSuggestionsQuery = useQuery({
+    queryKey: [
+      "agentSuggestions",
+      agentSuggestionQueryParams?.projectId,
+      agentSuggestionQueryParams?.agentId,
+    ],
+    queryFn: async () => {
+      if (!agentSuggestionQueryParams) {
+        throw new Error("Agent suggestion query requires an agent.");
+      }
+
+      return (await apiGet("/api/agents/suggestions", {
+        params: { query: agentSuggestionQueryParams },
+      })) as AgentSuggestionsResponse;
+    },
+    enabled: agentSuggestionQueryParams !== null,
+    retry: false,
+  });
+
+  const commandSource = React.useMemo(
+    () => toCommandSource(agentSuggestionsQuery.data, claudeCommands),
+    [agentSuggestionsQuery.data, claudeCommands],
   );
 
   const resolvedWorkspace = React.useMemo(
@@ -551,6 +587,12 @@ export default function ChatPage() {
   const applyExecutionMessage = React.useCallback(
     (message: AiMessage, generation: number) => {
       if (generation !== executionGenerationRef.current) return;
+
+      const initCommands = getClaudeInitCommands(message);
+      if (initCommands !== null) {
+        setClaudeCommands(initCommands);
+        return;
+      }
 
       const messageUsage = getMessageTokenUsage(message);
       if (messageUsage) {
@@ -713,6 +755,7 @@ export default function ChatPage() {
     setIsExecuting(false);
     setPendingHumanGate(null);
     setMessages([]);
+    setClaudeCommands([]);
     setConversationUsage(EMPTY_TOKEN_USAGE);
     setContextId(null);
     userInputRef.current?.setInput("");
@@ -739,13 +782,15 @@ export default function ChatPage() {
     async (projectId: string, nextContextIdValue: string) => {
       const details = await getProjectContextDetails(projectId, nextContextIdValue);
       const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
+      const preparedHistory = prepareClaudeHistory(details.messages ?? []);
 
       detachExecution();
       hydratedContextKeyRef.current = getContextHydrationKey(projectId, details.contextId);
       setSelectedProjectId(projectId);
       setIsExecuting(false);
       setContextId(details.contextId);
-      setMessages(details.messages ?? []);
+      setMessages(preparedHistory.messages);
+      setClaudeCommands(preparedHistory.commands);
       setConversationUsage(details.usage);
       if (restoredTargetValue) {
         setSelectedTargetValue(restoredTargetValue);
@@ -932,6 +977,7 @@ export default function ChatPage() {
             routeAction.contextId,
           );
           const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
+          const preparedHistory = prepareClaudeHistory(details.messages ?? []);
           if (cancelled) {
             return;
           }
@@ -941,7 +987,8 @@ export default function ChatPage() {
           setSelectedProjectId(routeAction.projectId);
           setIsExecuting(false);
           setContextId(details.contextId);
-          setMessages(details.messages ?? []);
+          setMessages(preparedHistory.messages);
+          setClaudeCommands(preparedHistory.commands);
           setConversationUsage(details.usage);
           const nextTargetValue = routeTargetValue ?? restoredTargetValue;
           if (nextTargetValue) {
@@ -984,6 +1031,7 @@ export default function ChatPage() {
       setSelectedProjectId(nextProjectId);
       setSelectedTargetValue(null);
       setMessages([]);
+      setClaudeCommands([]);
       setContextId(null);
       syncRoute(nextProjectId, null, null);
     },
@@ -998,6 +1046,7 @@ export default function ChatPage() {
 
       detachExecution();
       setIsExecuting(false);
+      setClaudeCommands([]);
       setSelectedTargetValue(nextTargetValue);
       if (selectedProjectId) {
         chatSettingsStorage.set(selectedProjectId, { targetValue: nextTargetValue });
@@ -1160,6 +1209,7 @@ export default function ChatPage() {
       }
 
       hydratedContextKeyRef.current = getContextHydrationKey(selectedProjectId, context.contextId);
+      setClaudeCommands([]);
       setContextId(context.contextId);
       syncRoute(selectedProjectId, context.contextId);
     },
@@ -1448,6 +1498,8 @@ export default function ChatPage() {
                           onInterrupt={handleInterrupt}
                           onClearSession={resetSession}
                           onScrollToTop={handleScrollToTop}
+                          workspace={resolvedWorkspace}
+                          commandSource={commandSource}
                           userInputRef={userInputRef}
                         />
                       </div>

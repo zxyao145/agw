@@ -1040,6 +1040,53 @@
         }
       }
     },
+    "/api/agents/suggestions": {
+      "get": {
+        "tags": [
+          "Agents"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "agentId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentSuggestionsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentSuggestionsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentSuggestionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mcp-tool-servers": {
       "get": {
         "tags": [
@@ -3847,6 +3894,13 @@
           "enableSummary": {
             "type": "boolean"
           },
+          "summaryModelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "type": {
             "$ref": "#/components/schemas/AgentType"
           },
@@ -3993,13 +4047,6 @@
             ],
             "format": "uuid"
           },
-          "summaryModelProviderId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
           "tools": {
             "type": [
               "null",
@@ -4048,6 +4095,13 @@
           "enableSummary": {
             "type": "boolean",
             "default": false
+          },
+          "summaryModelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -4788,6 +4842,56 @@
           }
         }
       },
+      "AgentSuggestionKind": {
+        "enum": [
+          "skill",
+          "tool"
+        ]
+      },
+      "AgentSuggestionMode": {
+        "enum": [
+          "system",
+          "claudeCode",
+          "unsupported"
+        ]
+      },
+      "AgentSuggestionResponse": {
+        "required": [
+          "text",
+          "description",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AgentSuggestionKind"
+          }
+        }
+      },
+      "AgentSuggestionsResponse": {
+        "required": [
+          "mode",
+          "suggestions"
+        ],
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/AgentSuggestionMode"
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentSuggestionResponse"
+            }
+          }
+        }
+      },
       "AgentType": {
         "type": "integer",
         "description": "Agent Definition Type"
@@ -4814,13 +4918,6 @@
             "type": "string"
           },
           "modelProviderId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "summaryModelProviderId": {
             "type": [
               "null",
               "string"
@@ -4881,6 +4978,13 @@
           "enableSummary": {
             "type": "boolean",
             "default": false
+          },
+          "summaryModelProviderId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -5449,6 +5553,40 @@
             "items": {
               "$ref": "#/components/schemas/AgentResponse"
             }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfAgentSuggestionsResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentSuggestionsResponse"
+              }
+            ]
           },
           "code": {
             "type": "integer",

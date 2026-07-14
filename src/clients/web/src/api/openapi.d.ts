@@ -1048,6 +1048,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    projectId?: string;
+                    agentId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ApiResultOfAgentSuggestionsResponse"];
+                        "application/json": components["schemas"]["ApiResultOfAgentSuggestionsResponse"];
+                        "text/json": components["schemas"]["ApiResultOfAgentSuggestionsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mcp-tool-servers": {
         parameters: {
             query?: never;
@@ -3203,6 +3243,8 @@ export interface components {
              */
             modelProviderId?: null | string;
             enableSummary: boolean;
+            /** Format: uuid */
+            summaryModelProviderId?: null | string;
             type: components["schemas"]["AgentType"];
             /** @description JSON object for additional external agent settings. */
             extra: null | string;
@@ -3242,8 +3284,6 @@ export interface components {
             systemPrompt: string;
             /** Format: uuid */
             modelProviderId: null | string;
-            /** Format: uuid */
-            summaryModelProviderId?: null | string;
             tools: null | string;
             mcpToolServerIds?: null | string[];
             skillIds?: null | string[];
@@ -3253,6 +3293,8 @@ export interface components {
             };
             /** @default false */
             enableSummary: boolean;
+            /** Format: uuid */
+            summaryModelProviderId?: null | string;
         };
         Agentflow: {
             /** Format: uuid */
@@ -3431,6 +3473,19 @@ export interface components {
             /** Format: uuid */
             skillId: string;
         };
+        /** @enum {unknown} */
+        AgentSuggestionKind: "skill" | "tool";
+        /** @enum {unknown} */
+        AgentSuggestionMode: "system" | "claudeCode" | "unsupported";
+        AgentSuggestionResponse: {
+            text: string;
+            description: string;
+            kind: components["schemas"]["AgentSuggestionKind"];
+        };
+        AgentSuggestionsResponse: {
+            mode: components["schemas"]["AgentSuggestionMode"];
+            suggestions: components["schemas"]["AgentSuggestionResponse"][];
+        };
         /** @description Agent Definition Type */
         AgentType: number;
         AgentUpdateRequest: {
@@ -3439,8 +3494,6 @@ export interface components {
             systemPrompt: string;
             /** Format: uuid */
             modelProviderId: null | string;
-            /** Format: uuid */
-            summaryModelProviderId?: null | string;
             tools: null | string;
             mcpToolServerIds?: null | string[];
             skillIds?: null | string[];
@@ -3451,6 +3504,8 @@ export interface components {
             };
             /** @default false */
             enableSummary: boolean;
+            /** Format: uuid */
+            summaryModelProviderId?: null | string;
         };
         AgwContent: components["schemas"]["AgwContentAgwTextContent"] | components["schemas"]["AgwContentAgwTextReasoningContent"] | components["schemas"]["AgwContentAgwFunctionCallContent"] | components["schemas"]["AgwContentAgwFunctionResultContent"] | components["schemas"]["AgwContentAgwErrorContent"] | components["schemas"]["AgwContentAgwUsageContent"] | components["schemas"]["AgwContentAgwUriContent"] | components["schemas"]["AgwContentAgwDataContent"];
         AgwContentAgwDataContent: {
@@ -3571,6 +3626,13 @@ export interface components {
         };
         "ApiResultOfAgentResponse[]": {
             data?: null | components["schemas"]["AgentResponse"][];
+            /** Format: int32 */
+            code: number;
+            title: string;
+            detail: null | string;
+        };
+        ApiResultOfAgentSuggestionsResponse: {
+            data?: null | components["schemas"]["AgentSuggestionsResponse"];
             /** Format: int32 */
             code: number;
             title: string;

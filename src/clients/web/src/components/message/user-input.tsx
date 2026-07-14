@@ -13,9 +13,12 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
+import { replaceTrailingSuggestion } from "@/components/message/suggestion-trigger";
+import { Badge } from "../ui/badge";
 
 export interface SuggestionItem {
   text: string;
+  kind?: string;
   description?: string;
 }
 
@@ -182,31 +185,35 @@ function UserInputSuggestions({ suggestions, onSelect }: UserInputSuggestionsPro
   }
 
   return (
-    <div className="absolute z-99 bottom-18 left-0  right-0 pointer-events-auto mb-3 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur-sm">
+    <div className="absolute z-99 bottom-18 left-0 right-0 pointer-events-auto mb-3 py-2 px-1 rounded-md border bg-background/95 shadow-sm backdrop-blur-sm">
       <div className="flex items-center justify-between px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Suggestions
-        {/* <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-          Tab
-        </span> */}
       </div>
-      <ItemGroup className="gap-1">
+      <ItemGroup className="gap-0">
         {suggestions.map((suggestion, index) => (
           <Item
             key={`${suggestion.text}-${index}`}
             onClick={() => onSelect(suggestion)}
             variant="outline"
             size="sm"
-            className="cursor-pointer border-transparent bg-transparent px-2 py-2 text-xs text-foreground transition hover:border-border hover:bg-accent/50"
+            className="p-1  cursor-pointer border-transparent rounded-sm bg-transparent text-xs text-foreground transition hover:border-border hover:bg-accent/50"
           >
-            <ItemMedia variant="icon" className="size-7 border-border/60 bg-muted/60">
-              <Sparkles className="size-3 text-muted-foreground" />
-            </ItemMedia>
-            <ItemContent className="flex flex-row items-center justify-between">
-              <ItemTitle className="text-xs font-medium text-foreground">
-                {suggestion.text}
+            <ItemContent className="">
+              <ItemTitle className="font-medium text-foreground">
+                <h3 className="leading-none">{suggestion.text}</h3>
               </ItemTitle>
               {suggestion.description && (
-                <ItemDescription className="text-[11px]">{suggestion.description}</ItemDescription>
+                <ItemDescription>
+                  <div className="flex item-start">
+                    {suggestion.kind ? (
+                      <Badge className="px-1.5 h-fit self-start text-xs leading-none border-0 mr-2">
+                        {suggestion.kind}
+                      </Badge>
+                    ) : null}
+
+                    <p className="text-[11px]">{suggestion.description}</p>
+                  </div>
+                </ItemDescription>
               )}
             </ItemContent>
           </Item>
@@ -237,6 +244,7 @@ function UserInputContainer({
   const [suggestions, setSuggestions] = React.useState<SuggestionItem[]>([]);
   const slots = getUserInputSlots(children);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const suggestionRequestRef = useRef(0);
 
   useImperativeHandle(
     inputRef,
@@ -245,11 +253,15 @@ function UserInputContainer({
         return input;
       },
       setInput: (value: string) => {
+        suggestionRequestRef.current += 1;
         setInput(value);
+        setSuggestions([]);
       },
       insertText: (text: string) => {
         const newValue = text + " ";
+        suggestionRequestRef.current += 1;
         setInput(newValue);
+        setSuggestions([]);
         setTimeout(() => {
           const textarea = textareaRef.current;
           if (textarea) {
@@ -263,7 +275,8 @@ function UserInputContainer({
   );
 
   const handleSuggestionClick = (suggestion: SuggestionItem) => {
-    const nextValue = `${suggestion.text} `;
+    const nextValue = replaceTrailingSuggestion(input, suggestion.text);
+    suggestionRequestRef.current += 1;
     setInput(nextValue);
     setSuggestions([]);
 
@@ -278,6 +291,8 @@ function UserInputContainer({
   };
 
   const handleInputChange = (value: string) => {
+    const requestId = suggestionRequestRef.current + 1;
+    suggestionRequestRef.current = requestId;
     setInput(value);
     if (!onSuggestion) {
       if (suggestions.length > 0) {
@@ -290,7 +305,17 @@ function UserInputContainer({
     if (result instanceof Promise) {
       // Async suggestion - clear current suggestions while loading
       setSuggestions([]);
-      result.then((suggestions) => setSuggestions(suggestions)).catch(() => setSuggestions([]));
+      result
+        .then((nextSuggestions) => {
+          if (suggestionRequestRef.current === requestId) {
+            setSuggestions(nextSuggestions);
+          }
+        })
+        .catch(() => {
+          if (suggestionRequestRef.current === requestId) {
+            setSuggestions([]);
+          }
+        });
     } else {
       // Sync suggestion
       setSuggestions(result ?? []);
@@ -304,7 +329,9 @@ function UserInputContainer({
   const handleSend = () => {
     console.log("handleSend onExecute input", input);
     onExecute?.(input);
+    suggestionRequestRef.current += 1;
     setInput("");
+    setSuggestions([]);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {

@@ -1,6 +1,7 @@
 "use client";
 
 import type { UserInputRef } from "@/components/message/user-input";
+import type { CommandSource } from "./lib/search_command";
 export type { ChatTargetOption, ChatTargetType } from "@/types/chat-target";
 
 export interface EnvVar {
@@ -32,5 +33,7 @@ export interface ChatInputAreaProps {
   onInterrupt: () => void;
   onClearSession: () => void;
   onScrollToTop: () => void;
+  workspace: string;
+  commandSource: CommandSource;
   userInputRef?: React.RefObject<UserInputRef | null>;
 }

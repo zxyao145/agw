@@ -13,9 +13,15 @@ export function isResultMessage(message: AiMessage): boolean {
 
 export type AiMessageAction =
   | { type: "append"; message: AiMessage }
+  | { type: "setClaudeCommands"; commands: string[] }
   | { type: "setIsExecuting"; value: boolean };
 
 export function handleSystemMessage(message: AiMessage): AiMessageAction[] {
+  const initCommands = getClaudeInitCommands(message);
+  if (initCommands !== null) {
+    return [{ type: "setClaudeCommands", commands: initCommands }];
+  }
+
   const firstContent = message.contents[0];
   if (!firstContent) {
     return [];
@@ -57,4 +63,71 @@ export function handleAiMessage(message: AiMessage): AiMessageAction[] {
   }
 
   return [];
+}
+
+export function getClaudeInitCommands(message: AiMessage): string[] | null {
+  const result = parseClaudeInitMessage(message);
+  return result.isInit ? result.commands : null;
+}
+
+export function prepareClaudeHistory(messages: AiMessage[]): {
+  messages: AiMessage[];
+  commands: string[];
+} {
+  const visibleMessages: AiMessage[] = [];
+  let commands: string[] = [];
+  let foundValidInit = false;
+
+  for (const message of messages) {
+    const init = parseClaudeInitMessage(message);
+    if (!init.isInit) {
+      visibleMessages.push(message);
+      continue;
+    }
+
+    if (init.isValid) {
+      commands = init.commands;
+      foundValidInit = true;
+    }
+  }
+
+  return {
+    messages: visibleMessages,
+    commands: foundValidInit ? commands : [],
+  };
+}
+
+type ClaudeInitParseResult =
+  | { isInit: false }
+  | { isInit: true; isValid: boolean; commands: string[] };
+
+function parseClaudeInitMessage(message: AiMessage): ClaudeInitParseResult {
+  if (message.additionalProperties?.subtype !== "init") {
+    return { isInit: false };
+  }
+
+  const rawContent = message.contents[0]?.content;
+  let content: unknown = rawContent;
+  if (typeof rawContent === "string") {
+    try {
+      content = JSON.parse(rawContent);
+    } catch {
+      return { isInit: true, isValid: false, commands: [] };
+    }
+  }
+
+  if (typeof content !== "object" || content === null || Array.isArray(content)) {
+    return { isInit: true, isValid: false, commands: [] };
+  }
+
+  const slashCommands = (content as Record<string, unknown>).slash_commands;
+  if (!Array.isArray(slashCommands)) {
+    return { isInit: true, isValid: false, commands: [] };
+  }
+
+  return {
+    isInit: true,
+    isValid: true,
+    commands: slashCommands.filter((command): command is string => typeof command === "string"),
+  };
 }
