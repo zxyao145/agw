@@ -16,9 +16,6 @@ public class ProjectContext : BaseEntity
 
     public string Title { get; set; } = "Untitled";
 
-    public ProjectContextUsage Usage { get; set; } = new();
-    
-    
     [JsonIgnore]
     public virtual Project? Project { get; set; }
 

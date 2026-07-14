@@ -11,13 +11,15 @@ namespace Agw.Agents.Execution.Agents.Middleware;
 
 public sealed class UsageTrackingMiddleware
 {
+    private const string UnknownAgentName = "$unknown";
+
     private readonly IProviderSessionState _providerSessionState;
-    private readonly IProjectContextUsageRecorder _usageRecorder;
+    private readonly IAgentUsageRecorder _usageRecorder;
     private readonly ILogger<UsageTrackingMiddleware> _logger;
 
     public UsageTrackingMiddleware(
         IProviderSessionState providerSessionState,
-        IProjectContextUsageRecorder usageRecorder,
+        IAgentUsageRecorder usageRecorder,
         ILogger<UsageTrackingMiddleware> logger)
     {
         _providerSessionState = providerSessionState;
@@ -52,7 +54,7 @@ public sealed class UsageTrackingMiddleware
         {
             if (hasUsage)
             {
-                await RecordAsync(session, combinedUsage);
+                await RecordAsync(session, ResolveAgentName(innerAgent), combinedUsage);
             }
         }
     }
@@ -67,13 +69,13 @@ public sealed class UsageTrackingMiddleware
         var response = await innerAgent.RunAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
         if (response.Usage != null)
         {
-            await RecordAsync(session, response.Usage);
+            await RecordAsync(session, ResolveAgentName(innerAgent), response.Usage);
         }
 
         return response;
     }
 
-    private async Task RecordAsync(AgentSession? session, UsageDetails usage)
+    private async Task RecordAsync(AgentSession? session, string agentName, UsageDetails usage)
     {
         if (session == null ||
             !_providerSessionState.TryGetProjectContext(session, out var projectId, out var contextId))
@@ -86,6 +88,7 @@ public sealed class UsageTrackingMiddleware
             await _usageRecorder.AddAsync(
                 projectId,
                 contextId,
+                agentName,
                 new ProjectContextUsage
                 {
                     InputTokenCount = usage.InputTokenCount ?? 0,
@@ -105,4 +108,7 @@ public sealed class UsageTrackingMiddleware
                 contextId);
         }
     }
+
+    private static string ResolveAgentName(AIAgent agent) =>
+        string.IsNullOrWhiteSpace(agent.Name) ? UnknownAgentName : agent.Name;
 }

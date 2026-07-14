@@ -4,6 +4,11 @@ import * as React from "react";
 import { Uuid4 } from "id128";
 import Link from "next/link";
 import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Brain,
+  CircleGauge,
+  Database,
   FileText,
   PanelLeftClose,
   PanelLeftOpen,
@@ -60,6 +65,14 @@ import {
   mergeStreamingMessagesById,
   toExecutionUserInput,
 } from "@/lib/execution-stream";
+import {
+  addTokenUsage,
+  EMPTY_TOKEN_USAGE,
+  formatTokenCount,
+  getMessageTokenUsage,
+  stripUsageContents,
+  type TokenUsage,
+} from "@/lib/token-usage";
 import type { AiMessage } from "@/types";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
@@ -395,6 +408,7 @@ export default function ChatPage() {
   const [showChatHistory, setShowChatHistory] = React.useState(true);
   const [showFileExplorer, setShowFileExplorer] = React.useState(true);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
+  const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(EMPTY_TOKEN_USAGE);
   const [contextId, setContextId] = React.useState<string | null>(queryContextId);
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
   const [isExecuting, setIsExecuting] = React.useState(false);
@@ -537,6 +551,11 @@ export default function ChatPage() {
   const applyExecutionMessage = React.useCallback(
     (message: AiMessage, generation: number) => {
       if (generation !== executionGenerationRef.current) return;
+
+      const messageUsage = getMessageTokenUsage(message);
+      if (messageUsage) {
+        setConversationUsage((current) => addTokenUsage(current, messageUsage));
+      }
 
       const humanGate = getPendingHumanGate(message);
       if (humanGate) {
@@ -694,6 +713,7 @@ export default function ChatPage() {
     setIsExecuting(false);
     setPendingHumanGate(null);
     setMessages([]);
+    setConversationUsage(EMPTY_TOKEN_USAGE);
     setContextId(null);
     userInputRef.current?.setInput("");
   }, [detachExecution]);
@@ -726,6 +746,7 @@ export default function ChatPage() {
       setIsExecuting(false);
       setContextId(details.contextId);
       setMessages(details.messages ?? []);
+      setConversationUsage(details.usage);
       if (restoredTargetValue) {
         setSelectedTargetValue(restoredTargetValue);
       }
@@ -921,6 +942,7 @@ export default function ChatPage() {
           setIsExecuting(false);
           setContextId(details.contextId);
           setMessages(details.messages ?? []);
+          setConversationUsage(details.usage);
           const nextTargetValue = routeTargetValue ?? restoredTargetValue;
           if (nextTargetValue) {
             setSelectedTargetValue(nextTargetValue);
@@ -1290,6 +1312,7 @@ export default function ChatPage() {
   const isFilesTab = currentTab === "files";
   const activeSidebarVisible = isChatTab ? showChatHistory : hasWorkspace && showFileExplorer;
   const activeSidebarTitle = isChatTab ? "chat history" : "file explorer";
+  const visibleMessages = React.useMemo(() => stripUsageContents(messages), [messages]);
   const isSidebarToggleDisabled = isFilesTab && !hasWorkspace;
   const sidebarToggleTitle = isSidebarToggleDisabled
     ? "Set a workspace on the Projects page to browse files"
@@ -1300,15 +1323,11 @@ export default function ChatPage() {
         : `Show ${activeSidebarTitle}`;
 
   return (
-    <div className="flex h-[calc(100vh-58px)] w-full min-w-0 flex-col gap-4 px-2 md:px-0 md:pr-2">
-      {projectsQuery.isError ||
-      agentsQuery.isError ||
-      agentflowsQuery.isError ? (
+    <div className="flex h-[calc(100vh-58px)] w-full min-w-0 flex-col gap-4 px-2 md:px-0">
+      {projectsQuery.isError || agentsQuery.isError || agentflowsQuery.isError ? (
         <div className="text-sm text-destructive">
           Failed to load chat dependencies:{" "}
-          {getApiErrorMessage(
-            projectsQuery.error ?? agentsQuery.error ?? agentflowsQuery.error,
-          )}
+          {getApiErrorMessage(projectsQuery.error ?? agentsQuery.error ?? agentflowsQuery.error)}
         </div>
       ) : null}
 
@@ -1398,10 +1417,10 @@ export default function ChatPage() {
                 </div> */}
 
                 <div className="relative flex h-[calc(100%-57px)] min-h-0 flex-1 flex-col border-t">
-                  <div className="h-full w-full flex flex-row">
-                    <div className="h-full w-full flex flex-row min-w-225">
+                  <div className="@container flex h-full w-full justify-center">
+                    <div className="relative flex h-full min-w-0 max-w-5xl flex-1">
                       <Conversation
-                        messages={messages}
+                        messages={visibleMessages}
                         messagesStartRef={messagesStartRef}
                         messagesEndRef={messagesEndRef}
                       />
@@ -1422,7 +1441,7 @@ export default function ChatPage() {
                         ) : null}
                         <InputArea
                           isExecuting={isExecuting}
-                          hasMessages={messages.length > 0}
+                          hasMessages={visibleMessages.length > 0}
                           onExecute={(value) => {
                             void handleExecute(value);
                           }}
@@ -1433,9 +1452,58 @@ export default function ChatPage() {
                         />
                       </div>
                     </div>
-                    <div className="h-full flex flex-1">
-                      {/* asidebar */}
-                    </div>
+                    {visibleMessages.length > 0 ? (
+                      <aside
+                        className="hidden h-full w-75 shrink-0 border-border/60 bg-background py-10 @min-[64rem]:block"
+                        aria-label="Current conversation token usage"
+                      >
+                        <div className="space-y-2 border py-3 px-3 rounded-2xl border-border bg-background/50 shadow-xs">
+                          <div>
+                            <h2 className="mb-2 text-base font-medium text-muted-foreground">
+                              Token usage
+                            </h2>
+
+                            <dl className="space-y-1.5">
+                              <div className="session-aside-row">
+                                <CircleGauge className="size-4 shrink-0" aria-hidden="true" />
+                                <dt className="text-sm font-medium text-foreground">Total</dt>
+                                <dd className="ml-auto font-mono text-sm font-medium tabular-nums">
+                                  {formatTokenCount(conversationUsage.totalTokenCount)}
+                                </dd>
+                              </div>
+                              <div className="session-aside-row">
+                                <ArrowDownToLine className="size-4 shrink-0" aria-hidden="true" />
+                                <dt className="text-sm text-foreground">Input</dt>
+                                <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
+                                  {formatTokenCount(conversationUsage.inputTokenCount)}
+                                </dd>
+                              </div>
+                              <div className="session-aside-row">
+                                <ArrowUpFromLine className="size-4 shrink-0" aria-hidden="true" />
+                                <dt className="text-sm text-foreground">Output</dt>
+                                <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
+                                  {formatTokenCount(conversationUsage.outputTokenCount)}
+                                </dd>
+                              </div>
+                              <div className="session-aside-row">
+                                <Database className="size-4 shrink-0" aria-hidden="true" />
+                                <dt className="text-sm text-foreground">Cached input</dt>
+                                <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
+                                  {formatTokenCount(conversationUsage.cachedInputTokenCount)}
+                                </dd>
+                              </div>
+                              <div className="session-aside-row">
+                                <Brain className="size-4 shrink-0" aria-hidden="true" />
+                                <dt className="text-sm text-foreground">Reasoning</dt>
+                                <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
+                                  {formatTokenCount(conversationUsage.reasoningTokenCount)}
+                                </dd>
+                              </div>
+                            </dl>
+                          </div>
+                        </div>
+                      </aside>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -1482,11 +1550,7 @@ export default function ChatPage() {
         </TabsContent>
       </Tabs>
 
-      <Drawer
-        direction="left"
-        open={isDrawerOpen}
-        onOpenChange={setIsDrawerOpen}
-      >
+      <Drawer direction="left" open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
         <DrawerContent className="h-screen max-h-screen">
           <DrawerHeader>
             <DrawerTitle>

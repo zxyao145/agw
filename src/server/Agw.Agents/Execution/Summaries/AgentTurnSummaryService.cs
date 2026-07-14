@@ -9,6 +9,7 @@ namespace Agw.Agents.Execution.Summaries;
 public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
 {
     internal const string FailureText = "Summary generation failed.";
+    private const string SummaryAgentName = "$summary";
 
     private const string DefaultInstructions =
         "You summarize one completed agent turn. Use the same language as the user's input when identifiable. " +
@@ -18,13 +19,13 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
 
     private readonly ISummaryChatClientFactory _chatClientFactory;
     private readonly IConversationHistoryWriter _conversationHistoryWriter;
-    private readonly IProjectContextUsageRecorder _usageRecorder;
+    private readonly IAgentUsageRecorder _usageRecorder;
     private readonly ILogger<AgentTurnSummaryService> _logger;
 
     public AgentTurnSummaryService(
         ISummaryChatClientFactory chatClientFactory,
         IConversationHistoryWriter conversationHistoryWriter,
-        IProjectContextUsageRecorder usageRecorder,
+        IAgentUsageRecorder usageRecorder,
         ILogger<AgentTurnSummaryService> logger)
     {
         _chatClientFactory = chatClientFactory;
@@ -156,6 +157,7 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
             await _usageRecorder.AddAsync(
                 projectId,
                 contextId,
+                SummaryAgentName,
                 new ProjectContextUsage
                 {
                     InputTokenCount = usage.InputTokenCount ?? 0,

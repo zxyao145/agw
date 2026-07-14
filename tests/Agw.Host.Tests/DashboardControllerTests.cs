@@ -2,7 +2,6 @@ using Agw.Host.Controllers;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Domain.Entities;
-using Agw.Shared.Contracts.Tasks;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tasks;
 
@@ -17,16 +16,15 @@ namespace Agw.Host.Tests;
 public class DashboardControllerTests
 {
     [Fact]
-    public async Task GetStats_MultipleProjectContexts_SumsAllTokenUsage()
+    public async Task GetStats_MultipleAgentUsages_SumsAllTokenUsage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
         var projectId = Guid.NewGuid();
-        dbContext.Projects.Add(CreateProject(projectId));
-        dbContext.ProjectContexts.AddRange(
-            CreateProjectContext(projectId, "context-1", 10, 20, 30),
-            CreateProjectContext(projectId, "context-2", 5, 7, 12));
+        dbContext.AgentUsages.AddRange(
+            CreateAgentUsage(projectId, "context-1", 10, 20, 30),
+            CreateAgentUsage(projectId, "context-2", 5, 7, 12));
         await dbContext.SaveChangesAsync(cancellationToken);
         var controller = CreateController(dbContext);
 
@@ -39,7 +37,7 @@ public class DashboardControllerTests
     }
 
     [Fact]
-    public async Task GetStats_NoProjectContexts_ReturnsZeroTokenUsage()
+    public async Task GetStats_NoAgentUsages_ReturnsZeroTokenUsage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = await OpenConnectionAsync(cancellationToken);
@@ -52,6 +50,39 @@ public class DashboardControllerTests
         Assert.Equal(0L, ReadLongProperty(stats, "UsageInputTokenCount"));
         Assert.Equal(0L, ReadLongProperty(stats, "UsageOutputTokenCount"));
         Assert.Equal(0L, ReadLongProperty(stats, "UsageTotalTokenCount"));
+    }
+
+    [Fact]
+    public async Task GetStats_ProjectDeleted_IncludesRetainedUsage()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        var projectId = Guid.NewGuid();
+        dbContext.Projects.Add(new Project
+        {
+            Id = projectId,
+            Name = "Deleted project",
+            CreateTime = TimeProvider.System.GetUtcNow()
+        });
+        dbContext.ProjectContexts.Add(new ProjectContext
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            ContextId = "context-1",
+            Title = "Context",
+            CreateTime = TimeProvider.System.GetUtcNow()
+        });
+        dbContext.AgentUsages.Add(CreateAgentUsage(projectId, "context-1", 10, 20, 30));
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        dbContext.Projects.Remove(await dbContext.Projects.SingleAsync(cancellationToken));
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        Assert.Empty(await dbContext.ProjectContexts.ToListAsync(cancellationToken));
+        Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
+        var stats = ReadStats(await CreateController(dbContext).GetStats());
+        Assert.Equal(30L, ReadLongProperty(stats, "UsageTotalTokenCount"));
     }
 
     private static async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
@@ -80,22 +111,13 @@ public class DashboardControllerTests
             new EfRepository<Job>(dbContext),
             new EfRepository<Project>(dbContext),
             new EfRepository<ProjectContext>(dbContext),
+            new EfRepository<AgentUsage>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
             new EfRepository<Agent>(dbContext),
             new EfRepository<Agentflow>(dbContext));
     }
 
-    private static Project CreateProject(Guid projectId) => new()
-    {
-        Id = projectId,
-        Name = $"Project-{projectId:N}",
-        Type = ProjectType.UserDefined,
-        Enable = true,
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow(),
-    };
-
-    private static ProjectContext CreateProjectContext(
+    private static AgentUsage CreateAgentUsage(
         Guid projectId,
         string contextId,
         long inputTokenCount,
@@ -105,15 +127,11 @@ public class DashboardControllerTests
         Id = Guid.NewGuid(),
         ProjectId = projectId,
         ContextId = contextId,
-        Title = contextId,
-        Usage = new ProjectContextUsage
-        {
-            InputTokenCount = inputTokenCount,
-            OutputTokenCount = outputTokenCount,
-            TotalTokenCount = totalTokenCount,
-        },
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow(),
+        AgentName = "planner",
+        RecordedAt = TimeProvider.System.GetUtcNow(),
+        InputTokenCount = inputTokenCount,
+        OutputTokenCount = outputTokenCount,
+        TotalTokenCount = totalTokenCount
     };
 
     private static DashboardStatsResponse ReadStats(IActionResult result)

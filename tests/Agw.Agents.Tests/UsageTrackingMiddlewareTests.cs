@@ -39,6 +39,7 @@ public class UsageTrackingMiddlewareTests
 
         Assert.Equal("response", response.Text);
         var recorded = Assert.Single(recorder.Entries);
+        Assert.Equal("agent", recorded.AgentName);
         Assert.Equal(10, recorded.Usage.InputTokenCount);
         Assert.Equal(20, recorded.Usage.OutputTokenCount);
         Assert.Equal(30, recorded.Usage.TotalTokenCount);
@@ -85,6 +86,7 @@ public class UsageTrackingMiddlewareTests
         }
 
         var recorded = Assert.Single(recorder.Entries);
+        Assert.Equal("agent", recorded.AgentName);
         Assert.Equal(11, recorded.Usage.InputTokenCount);
         Assert.Equal(22, recorded.Usage.OutputTokenCount);
         Assert.Equal(33, recorded.Usage.TotalTokenCount);
@@ -158,19 +160,57 @@ public class UsageTrackingMiddlewareTests
         Assert.Empty(recorder.Entries);
     }
 
-    private static UsageTrackingMiddleware CreateMiddleware(IProjectContextUsageRecorder recorder) =>
+    [Fact]
+    public async Task TrackRunMiddleware_ResponseHasZeroUsage_RecordsUsage()
+    {
+        var recorder = new CapturingUsageRecorder();
+        var middleware = CreateMiddleware(recorder);
+        var agent = CreateAgent(new UsageChatClient { ResponseUsage = new UsageDetails() });
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        await middleware.TrackRunMiddleware(
+            [new ChatMessage(ChatRole.User, "hello")],
+            session,
+            options: null,
+            agent,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(new ProjectContextUsage(), Assert.Single(recorder.Entries).Usage);
+    }
+
+    [Fact]
+    public async Task TrackRunMiddleware_AgentHasNoName_RecordsUnknownAgentName()
+    {
+        var recorder = new CapturingUsageRecorder();
+        var middleware = CreateMiddleware(recorder);
+        var agent = CreateAgent(
+            new UsageChatClient { ResponseUsage = new UsageDetails { TotalTokenCount = 3 } },
+            name: null);
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        await middleware.TrackRunMiddleware(
+            [new ChatMessage(ChatRole.User, "hello")],
+            session,
+            options: null,
+            agent,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("$unknown", Assert.Single(recorder.Entries).AgentName);
+    }
+
+    private static UsageTrackingMiddleware CreateMiddleware(IAgentUsageRecorder recorder) =>
         new(
             new StubProviderSessionState(),
             recorder,
             NullLogger<UsageTrackingMiddleware>.Instance);
 
-    private static AIAgent CreateAgent(IChatClient chatClient) =>
+    private static AIAgent CreateAgent(IChatClient chatClient, string? name = "agent") =>
         new ChatClientAgent(
             chatClient,
             new ChatClientAgentOptions
             {
                 Id = "agent-id",
-                Name = "agent"
+                Name = name
             });
 
     private sealed class StubProviderSessionState : IProviderSessionState
@@ -187,7 +227,7 @@ public class UsageTrackingMiddlewareTests
         }
     }
 
-    private sealed class CapturingUsageRecorder : IProjectContextUsageRecorder
+    private sealed class CapturingUsageRecorder : IAgentUsageRecorder
     {
         public List<Entry> Entries { get; } = [];
 
@@ -196,6 +236,7 @@ public class UsageTrackingMiddlewareTests
         public Task AddAsync(
             Guid projectId,
             string contextId,
+            string agentName,
             ProjectContextUsage usage,
             CancellationToken cancellationToken = default)
         {
@@ -204,12 +245,16 @@ public class UsageTrackingMiddlewareTests
                 throw new InvalidOperationException("Recorder failed.");
             }
 
-            Entries.Add(new Entry(projectId, contextId, usage));
+            Entries.Add(new Entry(projectId, contextId, agentName, usage));
             return Task.CompletedTask;
         }
     }
 
-    private sealed record Entry(Guid ProjectId, string ContextId, ProjectContextUsage Usage);
+    private sealed record Entry(
+        Guid ProjectId,
+        string ContextId,
+        string AgentName,
+        ProjectContextUsage Usage);
 
     private sealed class UsageChatClient : IChatClient
     {

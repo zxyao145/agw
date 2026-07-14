@@ -16,6 +16,7 @@ public class DashboardController : ControllerBase
     private readonly IRepository<Job> _jobRepository;
     private readonly IRepository<Project> _projectRepository;
     private readonly IRepository<ProjectContext> _projectContextRepository;
+    private readonly IRepository<AgentUsage> _agentUsageRepository;
     private readonly IRepository<TaskRecord> _taskRecordRepository;
     private readonly IRepository<Agent> _agentRepository;
     private readonly IRepository<Agentflow> _agentflowRepository;
@@ -24,6 +25,7 @@ public class DashboardController : ControllerBase
         IRepository<Job> jobRepository,
         IRepository<Project> projectRepository,
         IRepository<ProjectContext> projectContextRepository,
+        IRepository<AgentUsage> agentUsageRepository,
         IRepository<TaskRecord> taskRecordRepository,
         IRepository<Agent> agentRepository,
         IRepository<Agentflow> agentflowRepository)
@@ -31,6 +33,7 @@ public class DashboardController : ControllerBase
         _jobRepository = jobRepository;
         _projectRepository = projectRepository;
         _projectContextRepository = projectContextRepository;
+        _agentUsageRepository = agentUsageRepository;
         _taskRecordRepository = taskRecordRepository;
         _agentRepository = agentRepository;
         _agentflowRepository = agentflowRepository;
@@ -47,9 +50,9 @@ public class DashboardController : ControllerBase
             await _taskRecordRepository.Queryable.CountAsync(),
             await _agentRepository.Queryable.CountAsync(),
             await _agentflowRepository.Queryable.CountAsync(),
-            await _projectContextRepository.Queryable.SumAsync(context => context.Usage.InputTokenCount),
-            await _projectContextRepository.Queryable.SumAsync(context => context.Usage.OutputTokenCount),
-            await _projectContextRepository.Queryable.SumAsync(context => context.Usage.TotalTokenCount));
+            await _agentUsageRepository.Queryable.SumAsync(usage => usage.InputTokenCount),
+            await _agentUsageRepository.Queryable.SumAsync(usage => usage.OutputTokenCount),
+            await _agentUsageRepository.Queryable.SumAsync(usage => usage.TotalTokenCount));
 
         return AgwApiResult.Ok(stats);
     }

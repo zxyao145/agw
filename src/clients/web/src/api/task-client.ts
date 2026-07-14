@@ -1,4 +1,5 @@
 import type { AiMessage } from "@/types";
+import { normalizeTokenUsage, type TokenUsage, type TokenUsageInput } from "@/lib/token-usage";
 
 import { ApiError } from "./client";
 import * as client from "./client";
@@ -18,6 +19,7 @@ export interface ContextSummary {
 
 export interface ContextDetails extends ContextSummary {
   messages: AiMessage[];
+  usage: TokenUsage;
 }
 
 export type ProjectContextSummaryResponse = {
@@ -35,6 +37,7 @@ export type ProjectContextSummaryResponse = {
 
 export type ProjectContextResponse = ProjectContextSummaryResponse & {
   messages?: AiMessage[] | null;
+  usage?: TokenUsageInput | null;
 };
 
 function toContextSummary(context: ProjectContextSummaryResponse): ContextSummary {
@@ -60,6 +63,7 @@ function toContextDetails(context: ProjectContextResponse): ContextDetails {
   return {
     ...toContextSummary(context),
     messages: context.messages ?? [],
+    usage: normalizeTokenUsage(context.usage),
   };
 }
 

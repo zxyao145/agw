@@ -153,7 +153,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
       <div
         className={cn(
           "min-w-0 ",
-          isResult? "w-full rounded-lg px-2 py-2 border bg-[##fffeff] " : "max-w-full",
+          isResult? "w-full rounded-md p-3 border border-[#e4e4e5] bg-[##fffeff] " : "max-w-full",
           IsSideRight
             ? "rounded-lg px-2 py-1 bg-primary text-primary-foreground ml-12"
             : // debug
@@ -165,7 +165,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
           className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}
         >
           <span
-            className={`${isResult ? " text-lg opacity-100 font-semibold pb-4" : "text-xs opacity-40"}`}
+            className={`${isResult ? "text-lg opacity-80 font-semibold mb-4 border-b border-dashed pr-4" : "text-xs opacity-40"}`}
           >
             {title}
           </span>

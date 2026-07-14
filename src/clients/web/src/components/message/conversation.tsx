@@ -256,7 +256,7 @@ export function Conversation({
             console.debug("isResult", isResult, "message", item.message);
             return (
               <div
-                className={cn("mx-4 max-w-full", isResult ? "border-t pt-2" : "")}
+                className={cn("mx-4 max-w-full", isResult ? "border-t border-dashed pt-4 mt-8" : "")}
                 key={index}
                 data-msg-id={item.message.messageId}
               >

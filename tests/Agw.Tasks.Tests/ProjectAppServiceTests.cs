@@ -197,7 +197,7 @@ public class ProjectAppServiceTests
     }
 
     [Fact]
-    public async Task DeleteAsync_WhenProjectHasRelations_CascadeDeletesRelations()
+    public async Task DeleteAsync_WhenProjectHasRelations_CascadeDeletesRelationsAndPreservesUsage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await ProjectAppServiceTestScope.CreateAsync(cancellationToken);
@@ -207,14 +207,28 @@ public class ProjectAppServiceTests
             [scope.FirstSkillId],
             [scope.FirstAppInstanceId],
             "tester");
+        await using (var usageContext = scope.CreateDbContext())
+        {
+            usageContext.AgentUsages.Add(new AgentUsage
+            {
+                Id = Guid.NewGuid(),
+                ProjectId = created!.Id,
+                ContextId = "context-1",
+                AgentName = "planner",
+                RecordedAt = TimeProvider.System.GetUtcNow(),
+                TotalTokenCount = 10
+            });
+            await usageContext.SaveChangesAsync(cancellationToken);
+        }
 
-        var deleted = await scope.Service.DeleteAsync(created!.Id);
+        var deleted = await scope.Service.DeleteAsync(created.Id);
 
         Assert.True(deleted);
         await using var assertContext = scope.CreateDbContext();
         Assert.False(await assertContext.ProjectMcpToolServers.AnyAsync(cancellationToken));
         Assert.False(await assertContext.ProjectSkillRelations.AnyAsync(cancellationToken));
         Assert.False(await assertContext.ProjectAppRelations.AnyAsync(cancellationToken));
+        Assert.Equal(created.Id, Assert.Single(await assertContext.AgentUsages.ToListAsync(cancellationToken)).ProjectId);
     }
 
     [Fact]

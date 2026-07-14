@@ -36,7 +36,7 @@ public static class DependencyInjection
         {
             return sp.GetRequiredService<EfCoreChatHistoryProvider>();
         });
-        services.AddSingleton<IProjectContextUsageRecorder, ProjectContextUsageRecorder>();
+        services.AddSingleton<IAgentUsageRecorder, AgentUsageRecorder>();
 
         return services;
     }

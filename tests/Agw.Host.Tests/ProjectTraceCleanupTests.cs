@@ -163,6 +163,7 @@ public class ProjectTraceCleanupTests
             new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
+            new EfRepository<AgentUsage>(dbContext),
             new UnitOfWork(dbContext),
             new ProjectResolver(projectRepository),
             new TaskRecordDomainService(),

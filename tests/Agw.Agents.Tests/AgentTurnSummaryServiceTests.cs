@@ -74,6 +74,7 @@ public class AgentTurnSummaryServiceTests
         var usage = Assert.Single(usageRecorder.Entries);
         Assert.Equal(projectId, usage.ProjectId);
         Assert.Equal("context-1", usage.ContextId);
+        Assert.Equal("$summary", usage.AgentName);
         Assert.Equal(11, usage.Usage.InputTokenCount);
         Assert.Equal(7, usage.Usage.OutputTokenCount);
         Assert.Equal(18, usage.Usage.TotalTokenCount);
@@ -226,20 +227,25 @@ public class AgentTurnSummaryServiceTests
         public sealed record Entry(Guid ProjectId, string ContextId, IReadOnlyList<ChatMessage> Messages);
     }
 
-    private sealed class RecordingUsageRecorder : IProjectContextUsageRecorder
+    private sealed class RecordingUsageRecorder : IAgentUsageRecorder
     {
         public List<Entry> Entries { get; } = [];
 
         public Task AddAsync(
             Guid projectId,
             string contextId,
+            string agentName,
             ProjectContextUsage usage,
             CancellationToken cancellationToken = default)
         {
-            Entries.Add(new Entry(projectId, contextId, usage));
+            Entries.Add(new Entry(projectId, contextId, agentName, usage));
             return Task.CompletedTask;
         }
 
-        public sealed record Entry(Guid ProjectId, string ContextId, ProjectContextUsage Usage);
+        public sealed record Entry(
+            Guid ProjectId,
+            string ContextId,
+            string AgentName,
+            ProjectContextUsage Usage);
     }
 }

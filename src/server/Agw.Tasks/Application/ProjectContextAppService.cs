@@ -15,6 +15,7 @@ public class ProjectContextAppService
     private readonly IRepository<ProjectContext> _contextRepository;
     private readonly IRepository<TaskRecord> _recordRepository;
     private readonly IRepository<AgentflowTrace> _traceRepository;
+    private readonly IRepository<AgentUsage> _usageRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectResolver _projectResolver;
     private readonly TaskRecordDomainService _taskRecordDomainService;
@@ -25,6 +26,7 @@ public class ProjectContextAppService
         IRepository<ProjectContext> contextRepository,
         IRepository<TaskRecord> recordRepository,
         IRepository<AgentflowTrace> traceRepository,
+        IRepository<AgentUsage> usageRepository,
         IUnitOfWork unitOfWork,
         ProjectResolver projectResolver,
         TaskRecordDomainService taskRecordDomainService,
@@ -34,6 +36,7 @@ public class ProjectContextAppService
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
         _traceRepository = traceRepository;
+        _usageRepository = usageRepository;
         _unitOfWork = unitOfWork;
         _projectResolver = projectResolver;
         _taskRecordDomainService = taskRecordDomainService;
@@ -108,8 +111,6 @@ public class ProjectContextAppService
 
         await _taskSessionBindingService.DeleteByContextAsync(context.Id);
 
-        context.Usage = new ProjectContextUsage();
-        _contextRepository.Update(context);
         await _unitOfWork.SaveChangesAsync();
         return ApplicationResult.Success();
     }
@@ -197,6 +198,7 @@ public class ProjectContextAppService
             .SelectMany(TaskExecutionMapper.ToAiMessages)
             .ToList();
         var latestTask = GetLatestTask(orderedTasks);
+        var usage = await GetUsageAsync(context);
 
         return new ProjectContextResponse(
             context.ProjectId.Normalize(),
@@ -208,9 +210,23 @@ public class ProjectContextAppService
             context.CreateTime,
             context.UpdateTime,
             latestTask?.ErrorMessage,
-            context.Usage,
+            usage,
             messages);
     }
+
+    private async Task<ProjectContextUsage> GetUsageAsync(ProjectContext context) =>
+        await _usageRepository.Queryable
+            .Where(usage => usage.ProjectId == context.ProjectId && usage.ContextId == context.ContextId)
+            .GroupBy(_ => 1)
+            .Select(group => new ProjectContextUsage
+            {
+                InputTokenCount = group.Sum(usage => usage.InputTokenCount),
+                OutputTokenCount = group.Sum(usage => usage.OutputTokenCount),
+                TotalTokenCount = group.Sum(usage => usage.TotalTokenCount),
+                CachedInputTokenCount = group.Sum(usage => usage.CachedInputTokenCount),
+                ReasoningTokenCount = group.Sum(usage => usage.ReasoningTokenCount)
+            })
+            .SingleOrDefaultAsync() ?? new ProjectContextUsage();
 
     private static ProjectContextSummaryResponse ToSummaryResponse(
         ProjectContext context,

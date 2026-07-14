@@ -57,6 +57,7 @@ public class AgwDbContext : DbContext
     public DbSet<ProjectMcpServerRelation> ProjectMcpToolServers => Set<ProjectMcpServerRelation>();
     public DbSet<ProjectAppRelation> ProjectAppRelations => Set<ProjectAppRelation>();
     public DbSet<ProjectContext> ProjectContexts => Set<ProjectContext>();
+    public DbSet<AgentUsage> AgentUsages => Set<AgentUsage>();
     public DbSet<TaskSessionBinding> TaskSessionBindings => Set<TaskSessionBinding>();
     public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
     public DbSet<Job> Jobs => Set<Job>();
@@ -364,24 +365,6 @@ public class AgwDbContext : DbContext
             entity.Property(e => e.JobId);
             entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue("Untitled");
-            entity.ComplexProperty(e => e.Usage, usage =>
-            {
-                usage.Property(e => e.InputTokenCount)
-                    .HasColumnName("usage_input_token_count")
-                    .HasDefaultValue(0L);
-                usage.Property(e => e.OutputTokenCount)
-                    .HasColumnName("usage_output_token_count")
-                    .HasDefaultValue(0L);
-                usage.Property(e => e.TotalTokenCount)
-                    .HasColumnName("usage_total_token_count")
-                    .HasDefaultValue(0L);
-                usage.Property(e => e.CachedInputTokenCount)
-                    .HasColumnName("usage_cached_input_token_count")
-                    .HasDefaultValue(0L);
-                usage.Property(e => e.ReasoningTokenCount)
-                    .HasColumnName("usage_reasoning_token_count")
-                    .HasDefaultValue(0L);
-            });
 
             entity.HasIndex(e => new { e.ProjectId, e.ContextId }).IsUnique();
             entity.HasIndex(e => e.ProjectId);
@@ -392,6 +375,17 @@ public class AgwDbContext : DbContext
                 .WithMany(project => project.Contexts)
                 .HasForeignKey(e => e.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AgentUsage>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.AgentName).IsRequired().HasMaxLength(200);
+
+            entity.HasIndex(e => new { e.ProjectId, e.ContextId });
+            entity.HasIndex(e => e.AgentName);
+            entity.HasIndex(e => e.RecordedAt);
         });
 
         modelBuilder.Entity<TaskSessionBinding>(entity =>
