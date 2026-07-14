@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatLocalDateTime } from "@/lib/date-time";
 
-function encodeMobileConfig(token: string): string {
+function encodeBase64Config(token: string): string {
   const bytes = new TextEncoder().encode(
     JSON.stringify({
       version: 2,
@@ -60,10 +60,10 @@ export default function SettingsPage() {
     }
   };
 
-  const copyMobileConfig = async () => {
+  const copyBase64Config = async () => {
     if (!created) return;
-    await navigator.clipboard.writeText(encodeMobileConfig(created.token));
-    toast.success("Mobile configuration copied");
+    await navigator.clipboard.writeText(encodeBase64Config(created.token));
+    toast.success("Base64 configuration copied");
   };
 
   return (
@@ -72,7 +72,8 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Server access</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Issue a separate token for each Desktop, Mobile or automation client.
+            Issue a separate token for each Desktop, Mobile or automation
+            client.
           </p>
         </div>
         <Button
@@ -94,29 +95,32 @@ export default function SettingsPage() {
             API tokens
           </CardTitle>
           <CardDescription>
-            Token secrets are shown once and stored by the Server only as hashes.
+            Token secrets are shown once and stored by the Server only as
+            hashes.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="flex gap-2">
             <div className="flex-1 space-y-2">
               <Label htmlFor="token-name">Token name</Label>
-              <Input
-                id="token-name"
-                placeholder="Ben’s MacBook"
-                maxLength={64}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="token-name"
+                  placeholder="Ben’s MacBook"
+                  maxLength={64}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+                <Button
+                  className=""
+                  disabled={busy || name.trim().length === 0}
+                  onClick={handleCreate}
+                >
+                  <Plus className="h-4 w-4" />
+                  Create
+                </Button>
+              </div>
             </div>
-            <Button
-              className="mt-7"
-              disabled={busy || name.trim().length === 0}
-              onClick={handleCreate}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Create
-            </Button>
           </div>
 
           {created ? (
@@ -136,9 +140,9 @@ export default function SettingsPage() {
                   <Copy className="mr-2 h-4 w-4" />
                   Copy token
                 </Button>
-                <Button size="sm" onClick={copyMobileConfig}>
+                <Button size="sm" onClick={copyBase64Config}>
                   <Copy className="mr-2 h-4 w-4" />
-                  Copy Mobile config
+                  Copy config
                 </Button>
               </div>
             </div>
@@ -146,10 +150,15 @@ export default function SettingsPage() {
 
           <div className="divide-y rounded-lg border">
             {tokens.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">No client tokens yet.</p>
+              <p className="p-4 text-sm text-muted-foreground">
+                No client tokens yet.
+              </p>
             ) : (
               tokens.map((token) => (
-                <div key={token.id} className="flex items-center justify-between gap-4 p-4">
+                <div
+                  key={token.id}
+                  className="flex items-center justify-between gap-4 p-4"
+                >
                   <div>
                     <p className="font-medium">{token.name}</p>
                     <p className="font-mono text-xs text-muted-foreground">
@@ -178,8 +187,8 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Administrator password</CardTitle>
           <CardDescription>
-            Changing the password invalidates every existing Web session. Locally trusted access may
-            leave the current password empty.
+            Changing the password invalidates every existing Web session.
+            Locally trusted access may leave the current password empty.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
