@@ -241,7 +241,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(messages);
-        if (messages.Count == 0)
+        var persistableMessages = messages.Where(HasContent).ToList();
+        if (persistableMessages.Count == 0)
         {
             return;
         }
@@ -252,7 +253,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
         var now = _timeProvider.GetUtcNow();
-        var firstUserText = ExtractFirstText(messages.FirstOrDefault(message => message.Role == ChatRole.User));
+        var firstUserText = ExtractFirstText(persistableMessages.FirstOrDefault(message => message.Role == ChatRole.User));
         var projectContext = await dbContext.Set<ProjectContext>()
             .SingleOrDefaultAsync(
                 x => x.ProjectId == projectId && x.ContextId == contextId,
@@ -307,7 +308,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .MaxAsync(cancellationToken)
             .ConfigureAwait(false) ?? -1;
 
-        foreach (ChatMessage message in messages)
+        foreach (ChatMessage message in persistableMessages)
         {
             // user input
             nextSequence++;
@@ -333,6 +334,11 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     private static bool IsResult(ChatMessage message) =>
         message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
         string.Equals(type?.ToString(), "result", StringComparison.Ordinal);
+
+    private static bool HasContent(ChatMessage message) =>
+        message.Contents.Any(content =>
+            content is not TextContent textContent ||
+            !string.IsNullOrWhiteSpace(textContent.Text));
 
     private static bool HasHistoryScope(TaskRecord record, string? historyScope)
     {

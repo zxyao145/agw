@@ -458,6 +458,58 @@ public class EfCoreChatHistoryProviderTests
     }
 
     [Fact]
+    public async Task AppendAsync_WhenMessagesContainBlankText_PersistsOnlyMessagesWithContent()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
+
+        await writer.AppendAsync(
+            projectId,
+            "context-1",
+            [
+                new ChatMessage(ChatRole.Assistant, string.Empty),
+                new ChatMessage(ChatRole.Assistant, "   "),
+                new ChatMessage(
+                    ChatRole.Assistant,
+                    [new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?>())])
+            ],
+            cancellationToken);
+
+        await using var verifyContext = new AgwDbContext(options);
+        var record = await verifyContext.TaskRecords.SingleAsync(cancellationToken);
+        var persisted = JsonSerializer.Deserialize<ChatMessage>(
+            record.ConversationPayload!,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(persisted);
+        var functionCall = Assert.IsType<FunctionCallContent>(Assert.Single(persisted.Contents));
+        Assert.Equal("call-1", functionCall.CallId);
+    }
+
+    [Fact]
     public async Task AppendAsync_ResultMessage_PersistsItForConversationHistory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
