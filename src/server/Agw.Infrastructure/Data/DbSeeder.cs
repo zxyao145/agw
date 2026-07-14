@@ -197,7 +197,7 @@ public class DbSeeder
             {
                 Id = Guid.CreateVersion7(),
                 Name = "DeepSeek",
-                ProviderType = ProviderType.OpenAI,
+                ProviderType = ProviderType.OpenAIChatCompletions,
                 Endpoint = "https://api.deepseek.com",
                 Description = "DeepSeek OpenAI Compatible",
 
@@ -219,32 +219,6 @@ public class DbSeeder
                 UpdateBy = "system",
                 UpdateTime = now
             },
-            new Provider
-            {
-                Id = Guid.CreateVersion7(),
-                Name = "Z AI",
-                ProviderType = ProviderType.OpenAI,
-                Endpoint = "https://open.bigmodel.cn/api/paas/v4",
-                Description = "Z AI OpenAI Compatible",
-
-                CreateBy = "system",
-                CreateTime = now,
-                UpdateBy = "system",
-                UpdateTime = now
-            },
-            new Provider
-            {
-                Id = Guid.CreateVersion7(),
-                Name = "Z AI",
-                ProviderType = ProviderType.Anthropic,
-                Endpoint = "https://open.bigmodel.cn/api/anthropic",
-                Description = "Z AI Anthropic Compatible",
-
-                CreateBy = "system",
-                CreateTime = now,
-                UpdateBy = "system",
-                UpdateTime = now
-            }
         };
 
         foreach (var provider in providers)

@@ -35,7 +35,11 @@ import type {
 } from "./types";
 import { getApiErrorMessage } from "@/api/utils";
 
-const providerTypeOptions: ProviderType[] = ["OpenAI", "Anthropic"];
+const providerTypeOptions: ProviderType[] = [
+  "OpenAIChatCompletions",
+  "OpenAIResponses",
+  "Anthropic",
+];
 
 interface EditProviderDialogProps {
   provider: ProviderDto | null;
@@ -47,7 +51,7 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
   const queryClient = useQueryClient();
 
   const [name, setName] = React.useState("");
-  const [providerType, setProviderType] = React.useState<ProviderType>("OpenAI");
+  const [providerType, setProviderType] = React.useState<ProviderType>("OpenAIChatCompletions");
   const [description, setDescription] = React.useState("");
   const [endpoint, setEndpoint] = React.useState("");
   const [authConfigs, setAuthConfigs] = React.useState<ProviderAuthConfigRequest[]>([]);
@@ -148,7 +152,7 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
               value={providerType}
               onValueChange={(value) => setProviderType(value as ProviderType)}
             >
-              <SelectTrigger id="edit-providerType">
+              <SelectTrigger id="edit-providerType" className="w-full">
                 <SelectValue placeholder="Select a provider type" />
               </SelectTrigger>
               <SelectContent>

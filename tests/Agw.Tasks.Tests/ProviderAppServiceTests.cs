@@ -37,7 +37,7 @@ public class ProviderAppServiceTests
             {
                 Id = providerId,
                 Name = "OpenAI",
-                ProviderType = ProviderType.OpenAI,
+                ProviderType = ProviderType.OpenAIChatCompletions,
                 Endpoint = "https://api.openai.com/v1",
                 CreateBy = "seed",
                 CreateTime = TimeProvider.System.GetUtcNow(),
@@ -104,7 +104,7 @@ public class ProviderAppServiceTests
             {
                 Id = providerId,
                 Name = "OpenAI",
-                ProviderType = ProviderType.OpenAI,
+                ProviderType = ProviderType.OpenAIChatCompletions,
                 Endpoint = "https://api.openai.com/v1",
                 Description = "Original description",
                 CreateBy = "seed",
@@ -135,7 +135,7 @@ public class ProviderAppServiceTests
                 providerId,
                 new ProviderUpdateRequest(
                     Name: "OpenAI",
-                    ProviderType: ProviderType.OpenAI,
+                    ProviderType: ProviderType.OpenAIChatCompletions,
                     Description: "Updated description",
                     Endpoint: "https://api.openai.com/v1",
                     AuthConfigs:

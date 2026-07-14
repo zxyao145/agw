@@ -4346,7 +4346,7 @@ export interface components {
             authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
         };
         /** @enum {unknown} */
-        ProviderType: "OpenAI" | "Anthropic";
+        ProviderType: "OpenAIChatCompletions" | "OpenAIResponses" | "Anthropic";
         ProviderUpdateRequest: {
             name: string;
             providerType: components["schemas"]["ProviderType"];

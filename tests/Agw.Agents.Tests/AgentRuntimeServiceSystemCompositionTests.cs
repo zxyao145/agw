@@ -64,7 +64,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         {
             Id = providerId,
             Name = "test-provider",
-            ProviderType = ProviderType.OpenAI,
+            ProviderType = ProviderType.OpenAIChatCompletions,
             Endpoint = "https://example.test/v1",
             AuthConfigs =
             [

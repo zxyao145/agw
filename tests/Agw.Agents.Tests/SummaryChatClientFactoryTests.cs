@@ -30,7 +30,7 @@ public class SummaryChatClientFactoryTests
         {
             Id = Guid.NewGuid(),
             Name = "OpenAI",
-            ProviderType = ProviderType.OpenAI,
+            ProviderType = ProviderType.OpenAIChatCompletions,
             Endpoint = "https://example.invalid",
             AuthConfigs =
             [

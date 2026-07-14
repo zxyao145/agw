@@ -56,7 +56,7 @@ public partial class AgentRuntimeService
         string workspace = project.GetMustWorkspace();
         AIAgent aiAgent = provider.ProviderType switch
         {
-            ProviderType.OpenAI => CreateOpenAiAgent(agentDefinition, model, provider, authConfig, tools,
+            ProviderType.OpenAIChatCompletions => CreateOpenAiAgent(agentDefinition, model, provider, authConfig, tools,
                 skillsProvider, workspace),
             ProviderType.Anthropic => CreateAnthropicAgent(agentDefinition, model, provider, authConfig, tools,
                 skillsProvider, workspace),

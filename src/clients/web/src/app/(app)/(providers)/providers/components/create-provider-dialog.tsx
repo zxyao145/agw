@@ -30,7 +30,11 @@ import type { ProviderAuthConfigRequest, ProviderCreateRequest, ProviderType } f
 import { getApiErrorMessage } from "@/api/utils";
 import { ProviderAuthConfigEditor } from "./provider-auth-config-editor";
 
-const providerTypeOptions: ProviderType[] = ["OpenAI", "Anthropic"];
+const providerTypeOptions: ProviderType[] = [
+  "OpenAIChatCompletions",
+  "OpenAIResponses",
+  "Anthropic",
+];
 
 interface CreateProviderDialogProps {
   open: boolean;
@@ -41,7 +45,7 @@ export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialo
   const queryClient = useQueryClient();
 
   const [name, setName] = React.useState("");
-  const [providerType, setProviderType] = React.useState<ProviderType>("OpenAI");
+  const [providerType, setProviderType] = React.useState<ProviderType>("OpenAIChatCompletions");
   const [description, setDescription] = React.useState<string>("");
   const [endpoint, setEndpoint] = React.useState("");
   const [authConfigs, setAuthConfigs] = React.useState<ProviderAuthConfigRequest[]>([]);
@@ -54,7 +58,7 @@ export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialo
       toast.success("Provider created");
       onOpenChange(false);
       setName("");
-      setProviderType("OpenAI");
+      setProviderType("OpenAIChatCompletions");
       setDescription("");
       setEndpoint("");
       setAuthConfigs([]);

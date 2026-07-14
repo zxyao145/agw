@@ -5,6 +5,7 @@ namespace Agw.Shared.Data.Entities.Providers;
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ProviderType
 {
-    OpenAI = 0,
-    Anthropic = 1,
+    OpenAIChatCompletions = 0,
+    OpenAIResponses = 1,
+    Anthropic = 2,
 }

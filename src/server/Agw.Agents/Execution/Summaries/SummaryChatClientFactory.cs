@@ -49,7 +49,7 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
         var authConfig = authConfigs[Random.Shared.Next(authConfigs.Count)];
         return configuration.Provider.ProviderType switch
         {
-            ProviderType.OpenAI => CreateOpenAiClient(configuration, authConfig),
+            ProviderType.OpenAIChatCompletions => CreateOpenAiClient(configuration, authConfig),
             ProviderType.Anthropic => CreateAnthropicClient(configuration, authConfig),
             _ => throw new AgwException(
                 ErrorCodes.UnsupportedProviderType,

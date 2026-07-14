@@ -8650,7 +8650,8 @@
       },
       "ProviderType": {
         "enum": [
-          "OpenAI",
+          "OpenAIChatCompletions",
+          "OpenAIResponses",
           "Anthropic"
         ]
       },
