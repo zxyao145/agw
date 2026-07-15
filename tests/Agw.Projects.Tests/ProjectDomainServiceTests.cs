@@ -1,6 +1,6 @@
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
-using Agw.Projects.Domain.Services;
 using Agw.Testing;
 
 namespace Agw.Projects.Tests;

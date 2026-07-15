@@ -4,22 +4,22 @@ using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.External;
-using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Configuration;
+using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Jobs;
+using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Services;
 using Agw.Shared.Runtime;
+using Agw.Shared.Services;
+
+using Medallion.Threading;
+using Medallion.Threading.Postgres;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-
-using Medallion.Threading;
-using Medallion.Threading.Postgres;
 
 namespace Agw.Infrastructure;
 

@@ -3,7 +3,6 @@ using System.Runtime.CompilerServices;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data.Entities.Projects;
 
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;

@@ -2,13 +2,12 @@ using System.Reflection;
 
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Projects;
 using Agw.Projects.Application;
 using Agw.Projects.Controllers;
 using Agw.Projects.Domain.Services;
+using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Projects;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;

@@ -1,17 +1,15 @@
+using System.Linq.Expressions;
+
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Utils;
-
-using System.Linq.Expressions;
-
-using Agw.Shared.Data;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;

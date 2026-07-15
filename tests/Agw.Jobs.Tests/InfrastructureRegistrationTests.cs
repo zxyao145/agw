@@ -5,11 +5,11 @@ using Agw.Jobs.External;
 using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
 
+using Medallion.Threading;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-
-using Medallion.Threading;
 
 namespace Agw.Jobs.Tests;
 

@@ -1,16 +1,13 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.Execution.Agentflows.Observability;
+using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
@@ -112,7 +109,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         }
 
         var resolvedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
-        var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);;
+        var resolvedContextId = ContextIdUtil.ResolveContextId(contextId); ;
         var resolvedTaskId = taskId ?? Guid.NewGuid();
         var executionTraceContext = new AgentflowExecutionTraceContext(
             resolvedProjectId,

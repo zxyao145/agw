@@ -1,5 +1,4 @@
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 
 namespace Agw.Projects.Application;

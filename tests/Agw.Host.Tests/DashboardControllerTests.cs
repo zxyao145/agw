@@ -124,16 +124,16 @@ public class DashboardControllerTests
         long inputTokenCount,
         long outputTokenCount,
         long totalTokenCount) => new()
-    {
-        Id = Guid.NewGuid(),
-        ProjectId = projectId,
-        ContextId = contextId,
-        AgentName = "planner",
-        RecordedAt = TimeProvider.System.GetUtcNow(),
-        InputTokenCount = inputTokenCount,
-        OutputTokenCount = outputTokenCount,
-        TotalTokenCount = totalTokenCount
-    };
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            ContextId = contextId,
+            AgentName = "planner",
+            RecordedAt = TimeProvider.System.GetUtcNow(),
+            InputTokenCount = inputTokenCount,
+            OutputTokenCount = outputTokenCount,
+            TotalTokenCount = totalTokenCount
+        };
 
     private static DashboardStatsResponse ReadStats(IActionResult result)
     {

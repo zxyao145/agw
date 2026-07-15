@@ -1,15 +1,14 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Projects.Application;
+using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
-using Agw.Projects.Application;
-using Agw.Projects.Domain.Services;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -416,17 +415,17 @@ public class ProjectContextAppServiceTests
         string contextId,
         string title,
         Guid? jobId = null) => new()
-    {
-        Id = id,
-        ProjectId = projectId,
-        ContextId = contextId,
-        JobId = jobId,
-        Title = title,
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow(),
-        UpdateBy = "tester",
-        UpdateTime = TimeProvider.System.GetUtcNow()
-    };
+        {
+            Id = id,
+            ProjectId = projectId,
+            ContextId = contextId,
+            JobId = jobId,
+            Title = title,
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+            UpdateBy = "tester",
+            UpdateTime = TimeProvider.System.GetUtcNow()
+        };
 
     private static AgentUsage CreateUsage(
         Guid projectId,
@@ -437,18 +436,18 @@ public class ProjectContextAppServiceTests
         long totalTokenCount,
         long cachedInputTokenCount,
         long reasoningTokenCount) => new()
-    {
-        Id = Guid.NewGuid(),
-        ProjectId = projectId,
-        ContextId = contextId,
-        AgentName = agentName,
-        RecordedAt = TimeProvider.System.GetUtcNow(),
-        InputTokenCount = inputTokenCount,
-        OutputTokenCount = outputTokenCount,
-        TotalTokenCount = totalTokenCount,
-        CachedInputTokenCount = cachedInputTokenCount,
-        ReasoningTokenCount = reasoningTokenCount
-    };
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            ContextId = contextId,
+            AgentName = agentName,
+            RecordedAt = TimeProvider.System.GetUtcNow(),
+            InputTokenCount = inputTokenCount,
+            OutputTokenCount = outputTokenCount,
+            TotalTokenCount = totalTokenCount,
+            CachedInputTokenCount = cachedInputTokenCount,
+            ReasoningTokenCount = reasoningTokenCount
+        };
 
     private static TaskRecord CreateRecord(
         Guid contextId,
@@ -465,20 +464,20 @@ public class ProjectContextAppServiceTests
         string text,
         TaskExecutionStatus status,
         DateTimeOffset createTime) => new()
-    {
-        Id = Guid.NewGuid(),
-        ProjectContextId = contextId,
-        TaskId = taskId,
-        Status = status,
-        ConversationSequence = sequence,
-        ConversationPayload = JsonUtil.Serialize(new ChatMessage(ChatRole.User, text)
         {
-            MessageId = Guid.NewGuid().ToString(),
-            AuthorName = Constants.DefaultInputAuthor
-        }),
-        CreateTime = createTime,
-        UpdateTime = createTime
-    };
+            Id = Guid.NewGuid(),
+            ProjectContextId = contextId,
+            TaskId = taskId,
+            Status = status,
+            ConversationSequence = sequence,
+            ConversationPayload = JsonUtil.Serialize(new ChatMessage(ChatRole.User, text)
+            {
+                MessageId = Guid.NewGuid().ToString(),
+                AuthorName = Constants.DefaultInputAuthor
+            }),
+            CreateTime = createTime,
+            UpdateTime = createTime
+        };
 
     private static string? GetMessageText(AgwMessage message) =>
         (message.Contents[0] as AgwTextContent)?.Content;

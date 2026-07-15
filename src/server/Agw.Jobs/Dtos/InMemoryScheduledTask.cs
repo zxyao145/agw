@@ -1,4 +1,3 @@
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 

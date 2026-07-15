@@ -4,9 +4,9 @@ using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.AspNetCore.Identity;
 
 namespace Agw.Setup.Services;
 

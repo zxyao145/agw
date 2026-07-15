@@ -1,13 +1,11 @@
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Data;
 using Agw.Shared.Utils;
 
@@ -71,62 +69,62 @@ public sealed class RuntimeFactory : IRuntimeFactory
         switch (request.Command.AgentType)
         {
             case AgentRuntimeType.Agent:
-            {
-                var session = request.CurrentRuntime as AgentRuntime;
-                if (!CanReuseAgentSession(session, request.TurnContext.Settings, request.Task.ContextId))
                 {
-                    await DisposeRuntimeAsync(request.CurrentRuntime);
-                    session = await _agentRuntimeService.CreateRuntimeAsync(
-                        request.AgentId,
-                        request.Task,
-                        request.TurnContext.Settings,
-                        cancellationToken);
-                }
+                    var session = request.CurrentRuntime as AgentRuntime;
+                    if (!CanReuseAgentSession(session, request.TurnContext.Settings, request.Task.ContextId))
+                    {
+                        await DisposeRuntimeAsync(request.CurrentRuntime);
+                        session = await _agentRuntimeService.CreateRuntimeAsync(
+                            request.AgentId,
+                            request.Task,
+                            request.TurnContext.Settings,
+                            cancellationToken);
+                    }
 
-                if (session == null)
-                {
-                    executionCts.Dispose();
-                    return default;
-                }
+                    if (session == null)
+                    {
+                        executionCts.Dispose();
+                        return default;
+                    }
 
-                return StartTurn(
-                    session,
-                    request.TurnContext,
-                    executionCts,
-                    session.CancelActiveRequest,
-                    ct => ExecuteAgentAsync(
+                    return StartTurn(
                         session,
-                        request.Command,
-                        request.TurnContext.MessageSink,
-                        ct));
-            }
+                        request.TurnContext,
+                        executionCts,
+                        session.CancelActiveRequest,
+                        ct => ExecuteAgentAsync(
+                            session,
+                            request.Command,
+                            request.TurnContext.MessageSink,
+                            ct));
+                }
             case AgentRuntimeType.Agentflow:
-            {
-                var session = request.CurrentRuntime as AgentflowRuntime;
-                if (session == null)
                 {
-                    await DisposeRuntimeAsync(request.CurrentRuntime);
-                    session = new AgentflowRuntime(
-                        request.AgentId,
-                        request.Task,
-                        request.TurnContext.Settings,
-                        _agentflowRuntimeService);
-                }
+                    var session = request.CurrentRuntime as AgentflowRuntime;
+                    if (session == null)
+                    {
+                        await DisposeRuntimeAsync(request.CurrentRuntime);
+                        session = new AgentflowRuntime(
+                            request.AgentId,
+                            request.Task,
+                            request.TurnContext.Settings,
+                            _agentflowRuntimeService);
+                    }
 
-                var coordinator = new HumanGateApprovalCoordinator(request.TurnContext.PendingHumanGateChanged);
-                return StartTurn(
-                    session,
-                    request.TurnContext,
-                    executionCts,
-                    coordinator.CancelAll,
-                    ct => ExecuteAgentflowAsync(
+                    var coordinator = new HumanGateApprovalCoordinator(request.TurnContext.PendingHumanGateChanged);
+                    return StartTurn(
                         session,
-                        request.Command,
-                        coordinator,
-                        request.TurnContext.MessageSink,
-                        ct),
-                    coordinator.TrySubmitAsync);
-            }
+                        request.TurnContext,
+                        executionCts,
+                        coordinator.CancelAll,
+                        ct => ExecuteAgentflowAsync(
+                            session,
+                            request.Command,
+                            coordinator,
+                            request.TurnContext.MessageSink,
+                            ct),
+                        coordinator.TrySubmitAsync);
+                }
             default:
                 executionCts.Dispose();
                 return default;

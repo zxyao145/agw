@@ -1,8 +1,8 @@
+using Agw.Projects.Domain.Services;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
-using Agw.Projects.Domain.Services;
 
 using Microsoft.Extensions.AI;
 

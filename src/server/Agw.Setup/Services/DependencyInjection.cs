@@ -1,8 +1,8 @@
+using Agw.Shared.Runtime;
+
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.Identity;
-
-using Agw.Shared.Runtime;
 
 namespace Agw.Setup.Services;
 

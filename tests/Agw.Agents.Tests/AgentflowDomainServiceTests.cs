@@ -1,7 +1,4 @@
-using Agw.Agents.Definitions.Domain;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Testing;
 
 namespace Agw.Agents.Tests;

@@ -1,5 +1,3 @@
-using Agw.Shared.Data.Entities.Projects;
-
 namespace Agw.Shared.Contracts.Projects;
 
 public interface IAgentUsageRecorder

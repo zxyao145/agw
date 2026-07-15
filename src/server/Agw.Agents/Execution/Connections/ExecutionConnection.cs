@@ -2,7 +2,6 @@ using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 

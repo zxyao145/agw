@@ -2,7 +2,6 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Domain;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;

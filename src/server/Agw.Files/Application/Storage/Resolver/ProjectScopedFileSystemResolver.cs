@@ -2,10 +2,9 @@ using System.Collections.Concurrent;
 
 using Agw.Files.Application.Storage.Local;
 using Agw.Files.Application.Storage.Sftp;
-using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Contracts.Storage;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Utils;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -86,7 +85,7 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IA
         var rootPath = !string.IsNullOrWhiteSpace(project.Workspace)
             ? project.Workspace
             : $"~/.agw/{project.Name}";
-        
+
         _logger.LogInformation("Project {ProjectId} has no fileStorage config, using local workspace: {Path}", projectId, rootPath);
         return _localFactory.Create(rootPath);
     }

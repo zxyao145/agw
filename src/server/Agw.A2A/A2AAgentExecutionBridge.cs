@@ -9,8 +9,8 @@ using Agw.Shared.Exceptions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
-using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.A2A;
 

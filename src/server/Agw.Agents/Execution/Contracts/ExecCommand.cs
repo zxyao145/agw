@@ -2,7 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data;
 
 namespace Agw.Agents.Execution.Contracts;

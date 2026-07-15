@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Threading.Channels;
 
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
 
 using Microsoft.Extensions.DependencyInjection;

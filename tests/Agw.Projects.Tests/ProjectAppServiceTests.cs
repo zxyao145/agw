@@ -1,13 +1,12 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Shared.Contracts.Projects;
+using Agw.Projects.Application;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Projects.Application;
-using Agw.Projects.Domain.Services;
+using Agw.Shared.Data.Entities.Skills;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;

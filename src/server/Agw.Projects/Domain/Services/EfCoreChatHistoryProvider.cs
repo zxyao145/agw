@@ -2,10 +2,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Utils;
-using Agw.Projects.Domain.Services;
 
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;

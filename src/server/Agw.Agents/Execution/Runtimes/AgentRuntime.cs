@@ -1,10 +1,11 @@
 using System.Runtime.CompilerServices;
 
+using Agw.Agents.Execution.Summaries;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
-using Agw.Agents.Execution.Summaries;
+
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;

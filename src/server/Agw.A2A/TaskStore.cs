@@ -3,8 +3,8 @@ using System.Text.Json;
 
 using A2A;
 
-using Agw.Shared.Exceptions;
 using Agw.Projects.Application;
+using Agw.Shared.Exceptions;
 
 using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
 

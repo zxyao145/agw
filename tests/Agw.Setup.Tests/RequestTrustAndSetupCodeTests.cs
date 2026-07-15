@@ -3,8 +3,8 @@ using System.Net.WebSockets;
 using System.Security.Claims;
 
 using Agw.Setup.Contracts;
-using Agw.Setup.Services;
 using Agw.Setup.Middleware;
+using Agw.Setup.Services;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;

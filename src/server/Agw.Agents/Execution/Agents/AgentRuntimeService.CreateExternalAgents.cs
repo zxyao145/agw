@@ -2,7 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.ExternalAgents;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
@@ -60,7 +59,7 @@ public partial class AgentRuntimeService
                     runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware)
                 .Build();
         }
-        
+
         return aiAgent != null;
     }
 
@@ -133,7 +132,7 @@ public partial class AgentRuntimeService
         return new CodexAIAgent(options, _logger);
     }
 
-    
+
 
     #region CodexAgentOptions
 
@@ -277,7 +276,7 @@ public partial class AgentRuntimeService
     }
 
     #endregion
-    
+
     private static bool IsCodexExternalAgent(Agent agent) =>
         agent.Type == AgentType.External
         && string.Equals(agent.Name, AgentNames.Codex, StringComparison.OrdinalIgnoreCase);

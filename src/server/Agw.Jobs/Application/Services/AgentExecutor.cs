@@ -1,14 +1,13 @@
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Shared.Contracts.Agents;
+using Agw.Projects.Application;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
-using Agw.Projects.Application;
-using Agw.Projects.Domain.Services;
 
 namespace Agw.Jobs.Application.Services;
 

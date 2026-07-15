@@ -56,8 +56,8 @@ internal static class AgwMessageUtil
 
         return agwMessage;
     }
-    
-    
+
+
     public static bool IsResult(AgentRuntime session, AgwMessage agwMessage)
     {
         if (session.Agent is ClaudeCodeAIAgent)
@@ -72,7 +72,7 @@ internal static class AgwMessageUtil
                 }
             }
         }
-        
+
         return false;
     }
 

@@ -62,7 +62,7 @@ public static class AgentRunResponseUpdateExtensions
             FunctionResultContent result => CreateFunctionResultContent(result, additionalProps),
             ErrorContent error => new AgwErrorContent { Content = error.Message, AdditionalProperties = content.AdditionalProperties },
             UsageContent usage => new AgwUsageContent { Content = usage.Details, AdditionalProperties = content.AdditionalProperties },
-            
+
             UriContent uriContent => new AgwUriContent(uriContent.Uri, uriContent.MediaType),
             DataContent dataContent => new AgwDataContent(dataContent.Uri, dataContent.MediaType),
             _ => null

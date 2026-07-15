@@ -51,7 +51,7 @@ public sealed class ObservabilityMiddleware
         _logger.LogDebug("Agent {AgentName} input: {@Input}", agentName, inputMessages);
 
         var response = await innerAgent.RunAsync(inputMessages, session, options, cancellationToken).ConfigureAwait(false);
-        
+
         _logger.LogInformation("Executed agent {AgentName}", agentName);
         _logger.LogDebug("Agent {AgentName} output: {@Output}", agentName, response);
         return response;

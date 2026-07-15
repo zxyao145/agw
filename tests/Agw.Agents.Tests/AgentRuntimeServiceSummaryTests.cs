@@ -2,7 +2,6 @@ using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 
 using Microsoft.Extensions.AI;

@@ -1,7 +1,7 @@
-using Microsoft.Data.Sqlite;
-
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
+
+using Microsoft.Data.Sqlite;
 
 namespace Agw.Infrastructure.Configuration;
 

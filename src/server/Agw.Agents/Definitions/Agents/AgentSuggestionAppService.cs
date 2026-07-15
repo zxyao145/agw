@@ -3,10 +3,9 @@ using System.Text.Json;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.ExternalAgents;
 using Agw.Domain.Services;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 
