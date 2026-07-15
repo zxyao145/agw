@@ -58,7 +58,7 @@ const navItems: SidebarMenuGroupProps[] = [
     menus: [
       {
         url: "/chat",
-        title: "chat",
+        title: "Chat",
         isActive: true,
         icon: <MessagesSquare />,
       },
