@@ -1,4 +1,4 @@
-namespace Agw.Shared.Data.Entities.Projects;
+namespace Agw.Shared.Contracts.Projects;
 
 public sealed record ProjectContextUsage
 {

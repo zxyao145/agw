@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Projects.Infrastructure;
+using Agw.Shared.Contracts.Projects;
 using Agw.Testing;
 
 using Microsoft.EntityFrameworkCore;
