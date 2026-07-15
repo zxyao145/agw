@@ -55,16 +55,24 @@ test("chat page hides usage messages and renders compact token usage metrics", a
 test("chat page shows the usage panel only when its container reaches the lg width", async () => {
   const pageSource = await readFile(CHAT_PAGE_URL, "utf8");
 
-  assert.match(pageSource, /<div className="@container flex h-full w-full">/);
-  assert.match(pageSource, /<div className="relative flex h-full min-w-0 flex-1">/);
+  assert.match(pageSource, /<div className="@container relative h-full w-full">/);
+  assert.match(pageSource, /<div className="h-full w-full overflow-y-auto">/);
+  assert.match(pageSource, /<div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">/);
+  assert.match(pageSource, /<Conversation[\s\S]*?scrollable=\{false\}/);
   const usageAside = pageSource.match(
     /<aside\s+className="([^"]+)"\s+aria-label="Current conversation token usage"/,
   );
   assert.ok(usageAside);
   const usageAsideClasses = usageAside[1].split(" ");
   assert.ok(usageAsideClasses.includes("hidden"));
+  assert.ok(usageAsideClasses.includes("sticky"));
+  assert.ok(usageAsideClasses.includes("top-0"));
   assert.ok(usageAsideClasses.includes("@min-[64rem]:block"));
   assert.ok(!usageAsideClasses.includes("lg:block"));
+  assert.match(
+    pageSource,
+    /<div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center">/,
+  );
 });
 
 test("chat page does not render the usage panel without visible messages", async () => {

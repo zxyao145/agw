@@ -23,3 +23,12 @@ test("conversation renders user author metadata above and aligned with user mess
   assert.match(source, /const isUserMessage = item\.message\.role === "user";/);
   assert.match(source, /isUserMessage \? "ml-auto justify-end" : ""/);
 });
+
+test("conversation can delegate scrolling while keeping messages centered", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+
+  assert.match(source, /scrollable\?: boolean;/);
+  assert.match(source, /scrollable = true,/);
+  assert.match(source, /scrollable && "overflow-y-auto"/);
+  assert.match(source, /<div className="mx-auto w-full max-w-225 space-y-4 pb-36">/);
+});

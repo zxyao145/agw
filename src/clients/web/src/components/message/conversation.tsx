@@ -19,6 +19,7 @@ export interface ChatSessionProps {
   messagesStartRef?: React.RefObject<HTMLDivElement>;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   processMessages?: (msgs: AiMessage[]) => ProcessedMessageItem[];
+  scrollable?: boolean;
 }
 
 type MessageMeta = {
@@ -192,6 +193,7 @@ export function Conversation({
   messagesStartRef,
   messagesEndRef,
   processMessages = defaultProcessMessages,
+  scrollable = true,
 }: ChatSessionProps) {
   if (!messages || messages.length == 0) {
     return (
@@ -206,8 +208,8 @@ export function Conversation({
   }
 
   return (
-    <div className="flex-1 flex min-h-full w-full max-w-225 mx-auto pb-36">
-      <div className="flex-1 overflow-y-auto space-y-4">
+    <div className={cn("min-h-full w-full flex-1", scrollable && "overflow-y-auto")}>
+      <div className="mx-auto w-full max-w-225 space-y-4 pb-36">
         {messagesStartRef ? <div ref={messagesStartRef} /> : null}
 
         {(messages?.length ?? 0) === 0 && (

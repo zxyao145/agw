@@ -1467,15 +1467,81 @@ export default function ChatPage() {
                 </div> */}
 
                 <div className="relative flex h-[calc(100%-57px)] min-h-0 flex-1 flex-col border-t">
-                  <div className="@container flex h-full w-full justify-center">
-                    <div className="relative flex h-full min-w-0 max-w-5xl flex-1">
-                      <Conversation
-                        messages={visibleMessages}
-                        messagesStartRef={messagesStartRef}
-                        messagesEndRef={messagesEndRef}
-                      />
+                  <div className="@container relative h-full w-full">
+                    <div className="h-full w-full overflow-y-auto">
+                      <div className="mx-auto flex min-h-full w-full justify-center">
+                        <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
+                          <Conversation
+                            messages={visibleMessages}
+                            messagesStartRef={messagesStartRef}
+                            messagesEndRef={messagesEndRef}
+                            scrollable={false}
+                          />
+                        </div>
 
-                      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-30 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent px-2">
+                        {visibleMessages.length > 0 ? (
+                          <aside
+                            className="sticky top-0 hidden w-75 shrink-0 self-start border-border/60 bg-background py-10 @min-[64rem]:block"
+                            aria-label="Current conversation token usage"
+                          >
+                            <div className="space-y-2 border py-3 px-3 rounded-2xl border-border bg-background/50 shadow-xs">
+                              <div>
+                                <h2 className="mb-2 text-base font-medium text-muted-foreground">
+                                  Token usage
+                                </h2>
+
+                                <dl className="space-y-1.5">
+                                  <div className="session-aside-row">
+                                    <CircleGauge className="size-4 shrink-0" aria-hidden="true" />
+                                    <dt className="text-sm font-medium text-foreground">Total</dt>
+                                    <dd className="ml-auto font-mono text-sm font-medium tabular-nums">
+                                      {formatTokenCount(conversationUsage.totalTokenCount)}
+                                    </dd>
+                                  </div>
+                                  <div className="session-aside-row">
+                                    <ArrowDownToLine
+                                      className="size-4 shrink-0"
+                                      aria-hidden="true"
+                                    />
+                                    <dt className="text-sm text-foreground">Input</dt>
+                                    <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
+                                      {formatTokenCount(conversationUsage.inputTokenCount)}
+                                    </dd>
+                                  </div>
+                                  <div className="session-aside-row">
+                                    <ArrowUpFromLine
+                                      className="size-4 shrink-0"
+                                      aria-hidden="true"
+                                    />
+                                    <dt className="text-sm text-foreground">Output</dt>
+                                    <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
+                                      {formatTokenCount(conversationUsage.outputTokenCount)}
+                                    </dd>
+                                  </div>
+                                  <div className="session-aside-row">
+                                    <Database className="size-4 shrink-0" aria-hidden="true" />
+                                    <dt className="text-sm text-foreground">Cached input</dt>
+                                    <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
+                                      {formatTokenCount(conversationUsage.cachedInputTokenCount)}
+                                    </dd>
+                                  </div>
+                                  <div className="session-aside-row">
+                                    <Brain className="size-4 shrink-0" aria-hidden="true" />
+                                    <dt className="text-sm text-foreground">Reasoning</dt>
+                                    <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
+                                      {formatTokenCount(conversationUsage.reasoningTokenCount)}
+                                    </dd>
+                                  </div>
+                                </dl>
+                              </div>
+                            </div>
+                          </aside>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center">
+                      <div className="relative h-30 min-w-0 max-w-5xl flex-1 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent px-6">
                         {pendingHumanGate ? (
                           <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
                             <HumanGateApproval
@@ -1503,59 +1569,13 @@ export default function ChatPage() {
                           userInputRef={userInputRef}
                         />
                       </div>
+                      {visibleMessages.length > 0 ? (
+                        <div
+                          className="hidden w-75 shrink-0 @min-[64rem]:block"
+                          aria-hidden="true"
+                        />
+                      ) : null}
                     </div>
-                    {visibleMessages.length > 0 ? (
-                      <aside
-                        className="hidden h-full w-75 shrink-0 border-border/60 bg-background py-10 @min-[64rem]:block"
-                        aria-label="Current conversation token usage"
-                      >
-                        <div className="space-y-2 border py-3 px-3 rounded-2xl border-border bg-background/50 shadow-xs">
-                          <div>
-                            <h2 className="mb-2 text-base font-medium text-muted-foreground">
-                              Token usage
-                            </h2>
-
-                            <dl className="space-y-1.5">
-                              <div className="session-aside-row">
-                                <CircleGauge className="size-4 shrink-0" aria-hidden="true" />
-                                <dt className="text-sm font-medium text-foreground">Total</dt>
-                                <dd className="ml-auto font-mono text-sm font-medium tabular-nums">
-                                  {formatTokenCount(conversationUsage.totalTokenCount)}
-                                </dd>
-                              </div>
-                              <div className="session-aside-row">
-                                <ArrowDownToLine className="size-4 shrink-0" aria-hidden="true" />
-                                <dt className="text-sm text-foreground">Input</dt>
-                                <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
-                                  {formatTokenCount(conversationUsage.inputTokenCount)}
-                                </dd>
-                              </div>
-                              <div className="session-aside-row">
-                                <ArrowUpFromLine className="size-4 shrink-0" aria-hidden="true" />
-                                <dt className="text-sm text-foreground">Output</dt>
-                                <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
-                                  {formatTokenCount(conversationUsage.outputTokenCount)}
-                                </dd>
-                              </div>
-                              <div className="session-aside-row">
-                                <Database className="size-4 shrink-0" aria-hidden="true" />
-                                <dt className="text-sm text-foreground">Cached input</dt>
-                                <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
-                                  {formatTokenCount(conversationUsage.cachedInputTokenCount)}
-                                </dd>
-                              </div>
-                              <div className="session-aside-row">
-                                <Brain className="size-4 shrink-0" aria-hidden="true" />
-                                <dt className="text-sm text-foreground">Reasoning</dt>
-                                <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
-                                  {formatTokenCount(conversationUsage.reasoningTokenCount)}
-                                </dd>
-                              </div>
-                            </dl>
-                          </div>
-                        </div>
-                      </aside>
-                    ) : null}
                   </div>
                 </div>
               </div>
