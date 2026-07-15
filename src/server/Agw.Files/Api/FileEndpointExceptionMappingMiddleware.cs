@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Files.Controllers;
+namespace Agw.Files.Api;
 
 public sealed class FileEndpointExceptionMappingMiddleware
 {

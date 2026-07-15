@@ -1,3 +1,4 @@
+using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application;
@@ -15,6 +16,48 @@ namespace Agw.Projects.Tests;
 
 public class ProjectAppServiceTests
 {
+    [Fact]
+    public async Task ProjectFileSystemConfigurationProvider_WhenCanceled_StopsBeforeLookup()
+    {
+        await using var scope = await ProjectAppServiceTestScope.CreateAsync(
+            TestContext.Current.CancellationToken);
+        IProjectFileSystemConfigurationProvider provider =
+            new ProjectFileSystemConfigurationProvider(scope.Service);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            provider.GetAsync(Guid.NewGuid(), new CancellationToken(canceled: true)));
+    }
+
+    [Fact]
+    public async Task ProjectFileSystemConfigurationProvider_WhenProjectExists_ReturnsFileConfiguration()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var workspace = Path.Combine(Path.GetTempPath(), "agw-project-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            await using var scope = await ProjectAppServiceTestScope.CreateAsync(cancellationToken);
+            var project = CreateProject("Project A");
+            project.Workspace = workspace;
+            project.ExtraSetting = "{\"fileStorage\":{\"type\":\"local\"}}";
+            var created = await scope.Service.CreateAsync(project, "tester");
+            IProjectFileSystemConfigurationProvider provider =
+                new ProjectFileSystemConfigurationProvider(scope.Service);
+            var configuration = await provider.GetAsync(created!.Id, cancellationToken);
+
+            Assert.NotNull(configuration);
+            Assert.Equal(project.Name, configuration.Name);
+            Assert.Equal(project.Workspace, configuration.Workspace);
+            Assert.Equal(project.ExtraSetting, configuration.ExtraSetting);
+        }
+        finally
+        {
+            if (Directory.Exists(workspace))
+            {
+                Directory.Delete(workspace, recursive: true);
+            }
+        }
+    }
+
     [Fact]
     public async Task CreateAsync_RelationIdsContainInvalidValues_PersistsOnlyDistinctExistingRelations()
     {

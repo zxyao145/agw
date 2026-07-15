@@ -9,7 +9,6 @@ using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-using Agw.Shared.Services;
 
 using Medallion.Threading;
 using Medallion.Threading.Postgres;
@@ -81,8 +80,6 @@ public static class DependencyInjection
         services.AddScoped<IRepository<Job>, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
         services.AddScoped<IJobStore, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-
-        services.AddSingleton<IGitCommandService, GitCommandService>();
 
         services.AddSingleton<InMemoryProjectExecutionLock>();
         services.AddSingleton<Func<DistributedLockProvider, string, IDistributedLockProvider>>(_ =>

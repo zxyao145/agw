@@ -1,10 +1,9 @@
 using System.Collections.Concurrent;
 
+using Agw.Files.Abstracts;
 using Agw.Files.Application.Storage.Local;
 using Agw.Files.Application.Storage.Sftp;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Contracts.Storage;
-using Agw.Shared.Exceptions;
+using Agw.Files.Exceptions;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -55,9 +54,9 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IA
     private async Task<IAgwFileSystem> CreateForProjectAsync(Guid projectId, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
-        var projectAppService = scope.ServiceProvider.GetRequiredService<IProjectAppService>();
+        var configurationProvider = scope.ServiceProvider.GetRequiredService<IProjectFileSystemConfigurationProvider>();
 
-        var project = await projectAppService.GetAsync(projectId);
+        var project = await configurationProvider.GetAsync(projectId, ct);
         if (project == null)
         {
             _logger.LogWarning("Project {ProjectId} not found, falling back to default local file system.", projectId);
@@ -94,20 +93,24 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IA
     {
         if (!config.TryGetProperty("type", out var typeProp))
         {
-            throw new AgwException(ErrorCodes.FileStorageConfigInvalid, "fileStorage config is missing 'type' field.");
+            throw new AgwFilesException(
+                FilesErrorCode.InvalidStorageConfiguration,
+                "fileStorage config is missing 'type' field.");
         }
 
         var type = typeProp.GetString();
         if (string.IsNullOrWhiteSpace(type))
         {
-            throw new AgwException(ErrorCodes.FileStorageConfigInvalid, "fileStorage 'type' must be a non-empty string.");
+            throw new AgwFilesException(
+                FilesErrorCode.InvalidStorageConfiguration,
+                "fileStorage 'type' must be a non-empty string.");
         }
 
         return type.ToLowerInvariant() switch
         {
             "local" => CreateLocalFromConfig(config),
             "sftp" => CreateSftpFromConfig(config),
-            _ => throw new AgwException(ErrorCodes.FileStorageBackendNotSupported,
+            _ => throw new AgwFilesException(FilesErrorCode.UnsupportedStorageBackend,
                 $"File storage backend '{type}' is not supported.")
         };
     }
@@ -126,7 +129,9 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IA
 
         if (string.IsNullOrWhiteSpace(localOptions.RootPath))
         {
-            throw new AgwException(ErrorCodes.FileStorageConfigInvalid, "Local file storage requires 'rootPath'.");
+            throw new AgwFilesException(
+                FilesErrorCode.InvalidStorageConfiguration,
+                "Local file storage requires 'rootPath'.");
         }
 
         return _localFactory.Create(localOptions);
@@ -138,7 +143,9 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IA
 
         if (!config.TryGetProperty("sftp", out var sftpConfig))
         {
-            throw new AgwException(ErrorCodes.FileStorageConfigInvalid, "SFTP file storage requires 'sftp' config section.");
+            throw new AgwFilesException(
+                FilesErrorCode.InvalidStorageConfiguration,
+                "SFTP file storage requires 'sftp' config section.");
         }
 
         if (sftpConfig.TryGetProperty("host", out var host))

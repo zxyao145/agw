@@ -1,7 +1,8 @@
 using System.Text.RegularExpressions;
 
-using Agw.Shared.Contracts.Storage;
-using Agw.Shared.Exceptions;
+using Agw.Files.Abstracts;
+using Agw.Files.Abstracts.Dtos;
+using Agw.Files.Exceptions;
 
 using Renci.SshNet;
 using Renci.SshNet.Sftp;
@@ -17,7 +18,9 @@ public sealed class SftpFileSystem : IAgwFileSystem, IAsyncDisposable
 
     public SftpFileSystem(SftpClient client, string rootPath)
     {
-        _client = client ?? throw new AgwException(ErrorCodes.InvalidParam, "SFTP client is required.");
+        _client = client ?? throw new AgwFilesException(
+            FilesErrorCode.InvalidParameter,
+            "SFTP client is required.");
         _rootPath = NormalizePath(rootPath);
     }
 

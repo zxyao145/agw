@@ -1,4 +1,4 @@
-namespace Agw.Shared.Contracts.Storage;
+namespace Agw.Files;
 
 public enum FileStorageType
 {

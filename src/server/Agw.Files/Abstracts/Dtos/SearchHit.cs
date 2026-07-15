@@ -1,4 +1,4 @@
-namespace Agw.Shared.Contracts.Storage;
+namespace Agw.Files.Abstracts.Dtos;
 
 public sealed record SearchHit(
     string Path,

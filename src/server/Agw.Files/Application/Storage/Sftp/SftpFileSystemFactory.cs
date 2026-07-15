@@ -1,5 +1,4 @@
-using Agw.Shared.Contracts.Storage;
-using Agw.Shared.Exceptions;
+using Agw.Files.Exceptions;
 
 using Renci.SshNet;
 
@@ -11,17 +10,17 @@ public sealed class SftpFileSystemFactory
     {
         if (options == null)
         {
-            throw new AgwException(ErrorCodes.InvalidParam, "SFTP options are required.");
+            throw new AgwFilesException(FilesErrorCode.InvalidParameter, "SFTP options are required.");
         }
 
         if (string.IsNullOrWhiteSpace(options.Host))
         {
-            throw new AgwException(ErrorCodes.FileStorageConfigInvalid, "SFTP host is required.");
+            throw new AgwFilesException(FilesErrorCode.InvalidStorageConfiguration, "SFTP host is required.");
         }
 
         if (string.IsNullOrWhiteSpace(options.Username))
         {
-            throw new AgwException(ErrorCodes.FileStorageConfigInvalid, "SFTP username is required.");
+            throw new AgwFilesException(FilesErrorCode.InvalidStorageConfiguration, "SFTP username is required.");
         }
 
         ConnectionInfo connectionInfo;
@@ -29,7 +28,9 @@ public sealed class SftpFileSystemFactory
         {
             if (string.IsNullOrWhiteSpace(options.Password))
             {
-                throw new AgwException(ErrorCodes.FileStorageConfigInvalid, "SFTP password is required for password auth.");
+                throw new AgwFilesException(
+                    FilesErrorCode.InvalidStorageConfiguration,
+                    "SFTP password is required for password auth.");
             }
 
             connectionInfo = new ConnectionInfo(options.Host, options.Port, options.Username,
@@ -39,7 +40,9 @@ public sealed class SftpFileSystemFactory
         {
             if (string.IsNullOrWhiteSpace(options.PrivateKeyPath))
             {
-                throw new AgwException(ErrorCodes.FileStorageConfigInvalid, "SFTP private key path is required for key auth.");
+                throw new AgwFilesException(
+                    FilesErrorCode.InvalidStorageConfiguration,
+                    "SFTP private key path is required for key auth.");
             }
 
             PrivateKeyFile privateKey;
@@ -57,7 +60,7 @@ public sealed class SftpFileSystemFactory
         }
         else
         {
-            throw new AgwException(ErrorCodes.FileStorageConfigInvalid,
+            throw new AgwFilesException(FilesErrorCode.InvalidStorageConfiguration,
                 $"Unsupported SFTP auth type: {options.AuthType}. Supported values: 'password', 'privateKey'.");
         }
 

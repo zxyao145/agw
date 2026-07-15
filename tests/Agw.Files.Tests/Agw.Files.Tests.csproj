@@ -18,6 +18,5 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/server/Agw.Files/Agw.Files.csproj" />
-    <ProjectReference Include="../../src/server/Agw.Shared/Agw.Shared.csproj" />
   </ItemGroup>
 </Project>

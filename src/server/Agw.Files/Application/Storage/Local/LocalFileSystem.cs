@@ -1,7 +1,8 @@
 using System.Text.RegularExpressions;
 
-using Agw.Shared.Contracts.Storage;
-using Agw.Shared.Exceptions;
+using Agw.Files.Abstracts;
+using Agw.Files.Abstracts.Dtos;
+using Agw.Files.Exceptions;
 
 namespace Agw.Files.Application.Storage.Local;
 
@@ -31,7 +32,9 @@ public sealed class LocalFileSystem : IAgwFileSystem
 
         if (!fullPath.StartsWith(_normalizedRoot, StringComparison.Ordinal))
         {
-            throw new AgwException(ErrorCodes.PathOutsideRoot, $"Path '{path}' is outside the allowed root directory.");
+            throw new AgwFilesException(
+                FilesErrorCode.PathOutsideRoot,
+                $"Path '{path}' is outside the allowed root directory.");
         }
 
         return fullPath;

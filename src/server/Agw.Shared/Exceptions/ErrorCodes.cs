@@ -7,7 +7,6 @@ public static class ErrorCodes
     public static readonly ErrorCode InvalidParam = new(400_0001, "Invalid params.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode TaskIdMismatch = new(400_0002, "Task id mismatch.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode A2ATaskIdMustBeGuid = new(400_0003, "A2A task id must be a GUID string.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode RootPathRequired = new(400_0004, "Root path is required.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode GitAddressRequired = new(400_0005, "gitAddress is required.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode UsernameRequired = new(400_0006, "username is required.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode TokenRequired = new(400_0007, "token is required.", HttpStatusCode.BadRequest);
@@ -75,7 +74,6 @@ public static class ErrorCodes
     public static readonly ErrorCode AuthenticationRequired = new(401_0003, "Authentication is required.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode InvalidAdminCredentials = new(401_0004, "Invalid administrator credentials.", HttpStatusCode.Unauthorized);
 
-    public static readonly ErrorCode PathOutsideRoot = new(403_0001, "Path is outside the allowed root directory.", HttpStatusCode.Forbidden);
     public static readonly ErrorCode InteractiveAdminRequired = new(403_0002, "An interactive administrator session is required.", HttpStatusCode.Forbidden);
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
@@ -115,7 +113,6 @@ public static class ErrorCodes
     public static readonly ErrorCode AgentExecutionFailed = new(500_0011, "Agent execution failed.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode TaskMarkSucceededFailed = new(500_0012, "Failed to mark task as succeeded.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode EnvironmentVariableNotSet = new(500_0013, "Required environment variable is not set.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode FileStorageConfigInvalid = new(500_0014, "File storage configuration is invalid.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode SftpConnectionFailed = new(500_0015, "SFTP connection failed.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode IntegrationCredentialUnavailable = new(500_0016, "Integration credential is unavailable.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode IntegrationDataInvalid = new(500_0017, "Stored integration data is invalid.", HttpStatusCode.InternalServerError);
@@ -132,7 +129,6 @@ public static class ErrorCodes
     public static readonly ErrorCode MagenticNotSupported = new(501_0005, "Magentic is not supported.", HttpStatusCode.NotImplemented);
     public static readonly ErrorCode A2APushNotificationNotSupported = new(501_0006, "Push notifications are not supported.", HttpStatusCode.NotImplemented);
     public static readonly ErrorCode A2AUnsupportedOperation = new(501_0007, "A2A operation is not supported.", HttpStatusCode.NotImplemented);
-    public static readonly ErrorCode FileStorageBackendNotSupported = new(501_0008, "File storage backend is not supported.", HttpStatusCode.NotImplemented);
 
     public static readonly ErrorCode GitHubBadResponseStatusCode = new(502_0001, "GitHub returned a bad response status code.", HttpStatusCode.BadGateway);
     public static readonly ErrorCode OAuthProviderRequestFailed = new(502_0002, "OAuth provider request failed.", HttpStatusCode.BadGateway);

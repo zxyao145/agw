@@ -1,6 +1,6 @@
+using Agw.Files.Api;
 using Agw.Files.Application.Files;
-using Agw.Files.Controllers;
-using Agw.Shared.Services;
+using Agw.Files.Services;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,7 +12,7 @@ public class FilesControllerPathSecurityTests
     [Fact]
     public async Task ReadAsync_WhenPathIsRejected_ReturnsBadRequest()
     {
-        var controller = CreateController(new RejectingPathSecurityService());
+        var controller = CreateController(new RejectingFilePathRequestValidator());
 
         var result = await controller.ReadAsync(Path.Combine("..", "outside.txt"));
 
@@ -23,7 +23,7 @@ public class FilesControllerPathSecurityTests
     [Fact]
     public async Task SearchAsync_WhenPathIsRejected_ReturnsBadRequest()
     {
-        var controller = CreateController(new RejectingPathSecurityService());
+        var controller = CreateController(new RejectingFilePathRequestValidator());
 
         var result = await controller.SearchAsync(Path.Combine("..", "outside"), "query");
 
@@ -31,22 +31,21 @@ public class FilesControllerPathSecurityTests
         Assert.Contains("Invalid path", badRequest.Value?.ToString(), StringComparison.Ordinal);
     }
 
-    private static FilesController CreateController(IPathSecurityService pathSecurityService)
+    private static FilesController CreateController(IFilePathRequestValidator pathValidator)
     {
-        return new FilesController(
-            NullLogger<FilesController>.Instance,
+        var fileAppService = new FileAppService(
             new FakeGitCommandService(),
-            new FilePathRequestValidator(pathSecurityService));
+            NullLogger<FileAppService>.Instance);
+        return new FilesController(
+            fileAppService,
+            pathValidator);
     }
 
-    private sealed class RejectingPathSecurityService : IPathSecurityService
+    private sealed class RejectingFilePathRequestValidator : IFilePathRequestValidator
     {
-        public string RootPath => Path.GetTempPath();
-
-        public bool TryResolvePath(string path, out string resolvedPath)
+        public FilePathRequestValidationResult ValidateRequiredPath(string? path)
         {
-            resolvedPath = string.Empty;
-            return false;
+            return FilePathRequestValidationResult.Error("Invalid path");
         }
     }
 

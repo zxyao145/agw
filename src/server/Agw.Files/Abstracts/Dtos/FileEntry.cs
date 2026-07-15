@@ -1,4 +1,4 @@
-namespace Agw.Shared.Contracts.Storage;
+namespace Agw.Files.Abstracts.Dtos;
 
 public sealed record FileEntry(
     string Path,

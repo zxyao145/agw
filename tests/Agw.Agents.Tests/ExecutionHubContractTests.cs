@@ -1,6 +1,11 @@
+using System.Reflection;
+
 using Agw.Agents.Execution.Contracts;
 using Agw.Agents.Execution.Transport.SignalR;
+using Agw.Files.Exceptions;
 using Agw.Shared.AgwMsgVm;
+
+using Microsoft.AspNetCore.SignalR;
 
 namespace Agw.Agents.Tests;
 
@@ -41,5 +46,23 @@ public class ExecutionHubContractTests
             .Single();
 
         Assert.Equal(typeof(AgwMessage), parameter.ParameterType);
+    }
+
+    [Fact]
+    public async Task DispatchBoundary_AgwFilesException_UsesStableHubError()
+    {
+        var invokeAsync = typeof(ExecutionHub).GetMethod(
+            "InvokeAsync",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(invokeAsync);
+        var action = new Func<Task>(() => Task.FromException(
+            new AgwFilesException(
+                FilesErrorCode.UnsupportedStorageBackend,
+                "Storage backend is not supported.")));
+        var invocation = Assert.IsAssignableFrom<Task>(invokeAsync.Invoke(null, [action]));
+
+        var exception = await Assert.ThrowsAsync<HubException>(() => invocation);
+
+        Assert.Equal("5010008: Storage backend is not supported.", exception.Message);
     }
 }

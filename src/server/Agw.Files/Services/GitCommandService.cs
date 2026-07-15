@@ -1,38 +1,34 @@
-using Agw.Shared.Utils;
+using Agw.Files.Utils;
 
 using CliWrap;
 using CliWrap.Buffered;
 
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Shared.Services;
+namespace Agw.Files.Services;
 
 public record GitChangedFiles(
-    Dictionary<string, string> FileStatuses, // path -> status ("added", "modified", "deleted", "untracked")
-    HashSet<string> DeletedFiles
-);
+    Dictionary<string, string> FileStatuses,
+    HashSet<string> DeletedFiles);
 
 public record GitDiffResult(
     bool Success,
     string Diff,
     bool Unchanged,
     string? OriginalContent,
-    string? Error
-);
+    string? Error);
 
 public record GitResetResult(
     bool Success,
     string Message,
     string? Error,
-    bool IsClientError
-);
+    bool IsClientError);
 
 public record GitCloneResult(
     bool Success,
     string? Error,
     string? Stdout,
-    string? Stderr
-);
+    string? Stderr);
 
 public class GitCommandService : IGitCommandService
 {
@@ -68,14 +64,10 @@ public class GitCommandService : IGitCommandService
             {
                 if (line.Length < 3) continue;
 
-                // Git status format: XY filename
-                // X = index status, Y = working tree status
                 var statusCode = line.Substring(0, 2);
                 var filename = line.Substring(3).Trim().Trim('"');
-
                 var fullPath = Path.GetFullPath(Path.Combine(gitDirectory, filename));
 
-                // Determine git status
                 string status;
                 if (statusCode == "??")
                 {
@@ -134,7 +126,6 @@ public class GitCommandService : IGitCommandService
 
         var gitRoot = gitRootResult.StandardOutput.Trim();
         var relativePath = Path.GetRelativePath(gitRoot, filePath).Replace("\\", "/");
-
         var showResult = await RunGitAsync(gitDirectory, ["show", $"HEAD:{relativePath}"], cancellationToken);
         if (showResult.ExitCode == 0)
         {
@@ -160,7 +151,6 @@ public class GitCommandService : IGitCommandService
 
         var gitRoot = gitRootResult.StandardOutput.Trim();
         var relativePath = Path.GetRelativePath(gitRoot, filePath).Replace("\\", "/");
-
         var statusResult = await RunGitAsync(gitDirectory, ["status", "--porcelain", relativePath], cancellationToken);
         if (statusResult.ExitCode != 0)
         {
@@ -212,15 +202,9 @@ public class GitCommandService : IGitCommandService
 
     private static string? FindGitDirectory(string filePath)
     {
-        string? directory;
-        if (Directory.Exists(filePath))
-        {
-            directory = filePath;
-        }
-        else
-        {
-            directory = Path.GetDirectoryName(filePath);
-        }
+        string? directory = Directory.Exists(filePath)
+            ? filePath
+            : Path.GetDirectoryName(filePath);
 
         while (directory != null)
         {
@@ -229,8 +213,10 @@ public class GitCommandService : IGitCommandService
             {
                 return directory;
             }
+
             directory = Directory.GetParent(directory)?.FullName;
         }
+
         return null;
     }
 }

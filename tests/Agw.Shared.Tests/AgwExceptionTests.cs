@@ -61,7 +61,7 @@ public class AgwExceptionTests
     }
 
     [Fact]
-    public void BackendSource_OnlyThrowsAgwExceptionWithThrowNew()
+    public void BackendSource_OnlyThrowsApprovedModuleExceptionsWithThrowNew()
     {
         var repoRoot = FindRepositoryRoot();
         var backendRoot = Path.Combine(repoRoot, "src", "server");
@@ -72,10 +72,12 @@ public class AgwExceptionTests
                 .Matches(File.ReadAllText(file))
                 .Select(match => new
                 {
-                    File = Path.GetRelativePath(repoRoot, file),
+                    File = Path.GetRelativePath(repoRoot, file).Replace('\\', '/'),
                     Type = match.Groups["type"].Value
                 }))
-            .Where(match => match.Type != "AgwException")
+            .Where(match => match.Type != "AgwException"
+                && !(match.File.StartsWith("src/server/Agw.Files/", StringComparison.Ordinal)
+                    && match.Type == "AgwFilesException"))
             .Select(match => $"{match.File}: {match.Type}")
             .Order()
             .ToList();
