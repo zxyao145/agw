@@ -47,6 +47,7 @@ export interface LineComment {
 }
 
 export interface FileTreeNodeProps {
+  projectId: string;
   item: FileItem;
   onFileSelect?: (path: string) => void;
   level: number;

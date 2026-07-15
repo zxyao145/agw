@@ -1,4 +1,5 @@
 using Agw.Domain.Services;
+using Agw.Files.Abstracts;
 using Agw.Projects.Application;
 using Agw.Projects.Domain.Services;
 using Agw.Projects.Infrastructure;
@@ -17,6 +18,7 @@ public static class DependencyInjection
         services.AddScoped<ProjectDomainService>();
         services.AddScoped<ITaskAppService, TaskAppService>();
         services.AddScoped<IProjectAppService, ProjectAppService>();
+        services.AddScoped<IProjectFileSystemConfigurationProvider, ProjectFileSystemConfigurationProvider>();
         services.AddScoped<ITaskSessionBindingService, TaskSessionBindingService>();
         services.AddScoped<TaskExecutionAppService>();
         services.AddScoped<ProjectContextAppService>();

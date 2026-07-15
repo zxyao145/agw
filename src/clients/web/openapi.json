@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:5099/"
+      "url": "http://localhost:5015/"
     }
   ],
   "paths": {
@@ -86,6 +86,178 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJob[]"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJob"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{id}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJob"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJob"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{id}/logs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfJobLogResponse[]"
+                }
+              }
+            }
           }
         }
       }
@@ -1443,10 +1615,20 @@
         ],
         "parameters": [
           {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "path",
             "in": "query",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "default": ""
             }
           },
           {
@@ -1537,6 +1719,15 @@
         ],
         "parameters": [
           {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "path",
             "in": "query",
             "schema": {
@@ -1615,6 +1806,15 @@
         ],
         "parameters": [
           {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "path",
             "in": "query",
             "schema": {
@@ -1627,13 +1827,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": { }
+                "schema": {}
               },
               "application/json": {
-                "schema": { }
+                "schema": {}
               },
               "text/json": {
-                "schema": { }
+                "schema": {}
               }
             }
           },
@@ -1687,6 +1887,15 @@
         ],
         "parameters": [
           {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "path",
             "in": "query",
             "schema": {
@@ -1699,13 +1908,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": { }
+                "schema": {}
               },
               "application/json": {
-                "schema": { }
+                "schema": {}
               },
               "text/json": {
-                "schema": { }
+                "schema": {}
               }
             }
           },
@@ -1759,6 +1968,15 @@
         ],
         "parameters": [
           {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "path",
             "in": "query",
             "schema": {
@@ -1771,13 +1989,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": { }
+                "schema": {}
               },
               "application/json": {
-                "schema": { }
+                "schema": {}
               },
               "text/json": {
-                "schema": { }
+                "schema": {}
               }
             }
           },
@@ -1834,10 +2052,20 @@
         ],
         "parameters": [
           {
+            "name": "projectId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "path",
             "in": "query",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "default": ""
             }
           },
           {
@@ -2329,258 +2557,6 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultOfPluginResponse[]"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/jobs": {
-      "get": {
-        "tags": [
-          "Jobs"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob[]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob[]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob[]"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Jobs"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/JobCreateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/JobCreateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/JobCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/jobs/{id}": {
-      "get": {
-        "tags": [
-          "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/JobUpdateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/JobUpdateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/JobUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/jobs/{id}/logs": {
-      "get": {
-        "tags": [
-          "Jobs"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJobLogResponse[]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJobLogResponse[]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfJobLogResponse[]"
                 }
               }
             }
@@ -9894,6 +9870,9 @@
       "name": "A2A"
     },
     {
+      "name": "jobs"
+    },
+    {
       "name": "Auth"
     },
     {
@@ -9925,9 +9904,6 @@
     },
     {
       "name": "Plugins"
-    },
-    {
-      "name": "Jobs"
     },
     {
       "name": "ProjectContexts"

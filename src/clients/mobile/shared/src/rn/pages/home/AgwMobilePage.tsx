@@ -515,7 +515,7 @@ function AgwMobilePage({
                   apiClient={apiClient}
                   dependenciesError={dependenciesError}
                   isDependenciesLoading={isDependenciesLoading}
-                  workspace={selectedProject?.workspace}
+                  projectId={selectedProjectId}
                 />
               )}
             </View>

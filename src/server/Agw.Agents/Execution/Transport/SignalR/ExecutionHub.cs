@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Contracts;
+using Agw.Files.Exceptions;
 using Agw.Shared.Exceptions;
 
 using Microsoft.AspNetCore.Authorization;
@@ -49,8 +50,15 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
         {
             throw CreateHubException(exception);
         }
+        catch (AgwFilesException exception)
+        {
+            throw CreateHubException(exception);
+        }
     }
 
     private static HubException CreateHubException(AgwException exception) =>
+        new($"{exception.Code}: {exception.Message}");
+
+    private static HubException CreateHubException(AgwFilesException exception) =>
         new($"{exception.Code}: {exception.Message}");
 }

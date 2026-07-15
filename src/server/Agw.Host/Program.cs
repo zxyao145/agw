@@ -6,7 +6,7 @@ using Agw.Agents;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Files;
-using Agw.Files.Controllers;
+using Agw.Files.Api;
 using Agw.Host.Controllers;
 using Agw.Host.Middleware;
 using Agw.Infrastructure;

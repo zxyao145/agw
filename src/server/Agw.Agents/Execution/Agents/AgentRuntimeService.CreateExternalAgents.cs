@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.ExternalAgents;
+using Agw.Files.Utils;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;

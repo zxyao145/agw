@@ -1,7 +1,9 @@
+using Agw.Files.Abstracts;
+using Agw.Files.Api;
+using Agw.Files.Api.Dtos;
 using Agw.Files.Application.Files;
-using Agw.Files.Controllers;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Services;
+using Agw.Files.Application.Storage.Local;
+using Agw.Files.Services;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,6 +12,8 @@ namespace Agw.Files.Tests;
 
 public class FilesControllerSearchTests
 {
+    private static readonly Guid ProjectId = Guid.Parse("bf532c35-3069-4cae-83dc-eb22ebd43c10");
+
     [Theory]
     [InlineData("a")]
     [InlineData("abc/")]
@@ -33,9 +37,13 @@ public class FilesControllerSearchTests
                 Path.Combine(rootPath, "demo", "x.txt"),
                 "content",
                 TestContext.Current.CancellationToken);
-            var controller = CreateController();
+            var controller = CreateController(rootPath);
 
-            var result = await controller.SearchAsync(rootPath, keyword, recursive: true);
+            var result = await controller.SearchAsync(
+                ProjectId,
+                "",
+                keyword,
+                recursive: true);
 
             var response = GetResponse(result);
             Assert.Collection(
@@ -58,9 +66,13 @@ public class FilesControllerSearchTests
         {
             Directory.CreateDirectory(Path.Combine(rootPath, "direct-target"));
             Directory.CreateDirectory(Path.Combine(rootPath, "parent", "nested-target"));
-            var controller = CreateController();
+            var controller = CreateController(rootPath);
 
-            var result = await controller.SearchAsync(rootPath, "target", recursive: false);
+            var result = await controller.SearchAsync(
+                ProjectId,
+                "",
+                "target",
+                recursive: false);
 
             var response = GetResponse(result);
             var directory = Assert.Single(response.Results);
@@ -72,12 +84,28 @@ public class FilesControllerSearchTests
         }
     }
 
-    private static FilesController CreateController()
+    private static FilesController CreateController(string rootPath)
     {
-        return new FilesController(
-            NullLogger<FilesController>.Instance,
+        var fileAppService = new FileAppService(
+            new FakeFileSystemResolver(new LocalFileSystem(rootPath)),
             new FakeGitCommandService(),
-            new FilePathRequestValidator(new AcceptingPathSecurityService()));
+            NullLogger<FileAppService>.Instance);
+        return new FilesController(fileAppService);
+    }
+
+    private sealed class FakeFileSystemResolver : IAgwFileSystemResolver
+    {
+        private readonly IAgwFileSystem _fileSystem;
+
+        public FakeFileSystemResolver(IAgwFileSystem fileSystem)
+        {
+            _fileSystem = fileSystem;
+        }
+
+        public Task<IAgwFileSystem> ResolveAsync(Guid projectId, CancellationToken ct)
+        {
+            return Task.FromResult(_fileSystem);
+        }
     }
 
     private static FileSearchResponse GetResponse(IActionResult result)
@@ -97,17 +125,6 @@ public class FilesControllerSearchTests
         var path = Path.Combine(Path.GetTempPath(), "agw-files-search-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
-    }
-
-    private sealed class AcceptingPathSecurityService : IPathSecurityService
-    {
-        public string RootPath => Directory.GetCurrentDirectory();
-
-        public bool TryResolvePath(string path, out string resolvedPath)
-        {
-            resolvedPath = Path.GetFullPath(path);
-            return true;
-        }
     }
 
     private sealed class FakeGitCommandService : IGitCommandService

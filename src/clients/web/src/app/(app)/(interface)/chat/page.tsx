@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Uuid4 } from "id128";
-import Link from "next/link";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -364,23 +363,17 @@ function ChatSettingsDialog({ selectedProjectId, getDraft, onSave }: ChatSetting
   );
 }
 
-function WorkspaceRequiredState({ projectName }: { projectName: string | null }) {
+function ProjectRequiredState() {
   return (
     <div className="flex h-full min-h-[320px] items-center justify-center px-6">
       <div className="flex max-w-md flex-col items-center gap-3 text-center">
         <FileText className="h-10 w-10 text-muted-foreground" />
         <div className="space-y-1">
-          <div className="text-sm font-medium">Workspace is not configured</div>
+          <div className="text-sm font-medium">No project selected</div>
           <p className="text-sm text-muted-foreground">
-            {projectName
-              ? `Project "${projectName}" does not have a workspace yet.`
-              : "The selected project does not have a workspace yet."}{" "}
-            Configure it on the Projects page to enable file browsing.
+            Select a project to browse its configured file system.
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/projects">Open Projects</Link>
-        </Button>
       </div>
     </div>
   );
@@ -516,7 +509,7 @@ export default function ChatPage() {
     [selectedProject],
   );
 
-  const hasWorkspace = resolvedWorkspace.length > 0;
+  const hasProjectFileSystem = selectedProjectId !== null;
 
   const activeRouteSettings = React.useMemo(
     () =>
@@ -679,12 +672,18 @@ export default function ChatPage() {
 
       try {
         if (onlyDiff) {
-          const diff = await getFileDiff(filePath);
+          if (!selectedProjectId) {
+            throw new Error("Select a project before loading files");
+          }
+          const diff = await getFileDiff(selectedProjectId, filePath);
           setDiffContentData(diff);
           setFileContent("");
           setSelectedFile(filePath);
         } else {
-          const content = await readFile(filePath);
+          if (!selectedProjectId) {
+            throw new Error("Select a project before loading files");
+          }
+          const content = await readFile(selectedProjectId, filePath);
           setFileContent(content);
           setDiffContentData(null);
           setSelectedFile(filePath);
@@ -698,7 +697,7 @@ export default function ChatPage() {
         setIsLoadingContent(false);
       }
     },
-    [onlyDiff],
+    [onlyDiff, selectedProjectId],
   );
 
   const handleOnFileDeleted = React.useCallback(
@@ -1262,7 +1261,7 @@ export default function ChatPage() {
       return;
     }
 
-    if (!hasWorkspace) {
+    if (!hasProjectFileSystem) {
       return;
     }
 
@@ -1272,7 +1271,7 @@ export default function ChatPage() {
     }
 
     setShowFileExplorer((prev) => !prev);
-  }, [currentTab, hasWorkspace, isMobile, openDrawer]);
+  }, [currentTab, hasProjectFileSystem, isMobile, openDrawer]);
 
   const handleShareCurrentUrl = React.useCallback(async () => {
     try {
@@ -1346,11 +1345,6 @@ export default function ChatPage() {
     ],
   );
 
-  const renderWorkspaceRequiredState = React.useCallback(
-    () => <WorkspaceRequiredState projectName={selectedProject?.name ?? null} />,
-    [selectedProject?.name],
-  );
-
   const projectSelectOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
       projects.map((project) => ({
@@ -1363,12 +1357,14 @@ export default function ChatPage() {
 
   const isChatTab = currentTab === "chat";
   const isFilesTab = currentTab === "files";
-  const activeSidebarVisible = isChatTab ? showChatHistory : hasWorkspace && showFileExplorer;
+  const activeSidebarVisible = isChatTab
+    ? showChatHistory
+    : hasProjectFileSystem && showFileExplorer;
   const activeSidebarTitle = isChatTab ? "chat history" : "file explorer";
   const visibleMessages = React.useMemo(() => stripUsageContents(messages), [messages]);
-  const isSidebarToggleDisabled = isFilesTab && !hasWorkspace;
+  const isSidebarToggleDisabled = isFilesTab && !hasProjectFileSystem;
   const sidebarToggleTitle = isSidebarToggleDisabled
-    ? "Set a workspace on the Projects page to browse files"
+    ? "Select a project to browse files"
     : isMobile
       ? `Open ${activeSidebarTitle}`
       : activeSidebarVisible
@@ -1574,7 +1570,7 @@ export default function ChatPage() {
                           onInterrupt={handleInterrupt}
                           onClearSession={resetSession}
                           onScrollToTop={handleScrollToTop}
-                          workspace={resolvedWorkspace}
+                          projectId={selectedProjectId}
                           commandSource={commandSource}
                           userInputRef={userInputRef}
                         />
@@ -1595,10 +1591,11 @@ export default function ChatPage() {
 
         <TabsContent value="files" className="mt-2 flex min-h-0 flex-1">
           <ColResizeSplit>
-            {!isMobile && hasWorkspace && showFileExplorer ? (
+            {!isMobile && hasProjectFileSystem && showFileExplorer ? (
               <ColResizeSplit.Left minWidth={260} maxWidth={520}>
                 <Explorer
-                  rootDirectory={resolvedWorkspace}
+                  projectId={selectedProjectId!}
+                  rootDirectory={resolvedWorkspace || "/"}
                   onlyDiff={onlyDiff}
                   recursiveMode={recursiveMode}
                   onOnlyDiffChange={setOnlyDiff}
@@ -1612,7 +1609,7 @@ export default function ChatPage() {
 
             <ColResizeSplit.Right>
               <Card className="flex min-h-[420px] flex-1 overflow-hidden">
-                {hasWorkspace ? (
+                {hasProjectFileSystem ? (
                   <FileContent
                     selectedFile={selectedFile}
                     isLoadingContent={isLoadingContent}
@@ -1624,7 +1621,7 @@ export default function ChatPage() {
                     fileContent={fileContent}
                   />
                 ) : (
-                  renderWorkspaceRequiredState()
+                  <ProjectRequiredState />
                 )}
               </Card>
             </ColResizeSplit.Right>
@@ -1641,9 +1638,10 @@ export default function ChatPage() {
           </DrawerHeader>
           <div className="h-full min-h-0 overflow-hidden px-4 pb-6">
             {drawerContent === "files" ? (
-              hasWorkspace ? (
+              hasProjectFileSystem ? (
                 <Explorer
-                  rootDirectory={resolvedWorkspace}
+                  projectId={selectedProjectId!}
+                  rootDirectory={resolvedWorkspace || "/"}
                   onlyDiff={onlyDiff}
                   recursiveMode={recursiveMode}
                   onOnlyDiffChange={setOnlyDiff}
@@ -1653,7 +1651,7 @@ export default function ChatPage() {
                   onLoadFileContent={handleOnLoadFileContent}
                 />
               ) : (
-                renderWorkspaceRequiredState()
+                <ProjectRequiredState />
               )
             ) : (
               renderConversationList()

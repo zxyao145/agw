@@ -7,49 +7,54 @@ import type {
 
 export function listFiles(
   apiClient: AgwApiClient,
+  projectId: string,
   path: string,
   diff = false,
   recursive = false
 ): Promise<AgwFileListResponse> {
   return apiClient.getJson<AgwFileListResponse>("/api/files/list", {
-    query: { diff, path, recursive },
+    query: { diff, path, projectId, recursive },
   });
 }
 
 export function readFile(
   apiClient: AgwApiClient,
+  projectId: string,
   path: string
 ): Promise<string> {
   return apiClient.getText("/api/files/read", {
-    query: { path },
+    query: { path, projectId },
   });
 }
 
 export function getFileDiff(
   apiClient: AgwApiClient,
+  projectId: string,
   path: string
 ): Promise<AgwGitDiffResponse> {
   return apiClient.getJson<AgwGitDiffResponse>("/api/files/diff", {
-    query: { path },
+    query: { path, projectId },
   });
 }
 
 export function deleteFile(
   apiClient: AgwApiClient,
+  projectId: string,
   path: string
 ): Promise<AgwFileActionResponse> {
   return apiClient.deleteJson<AgwFileActionResponse>("/api/files/delete", {
-    query: { path },
+    query: { path, projectId },
   });
 }
 
 export function resetFile(
   apiClient: AgwApiClient,
+  projectId: string,
   path: string
 ): Promise<AgwFileActionResponse> {
   return apiClient.postJson<AgwFileActionResponse>(
     "/api/files/reset",
     undefined,
-    { query: { path } }
+    { query: { path, projectId } }
   );
 }

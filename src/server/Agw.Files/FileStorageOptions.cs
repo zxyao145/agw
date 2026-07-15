@@ -1,4 +1,4 @@
-namespace Agw.Shared.Contracts.Storage;
+namespace Agw.Files;
 
 public sealed class FileStorageOptions
 {

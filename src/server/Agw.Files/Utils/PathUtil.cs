@@ -1,7 +1,6 @@
+namespace Agw.Files.Utils;
 
-namespace Agw.Shared.Utils;
-
-public class PathUtil
+public static class PathUtil
 {
     public static string ExpandTilde(string? path)
     {

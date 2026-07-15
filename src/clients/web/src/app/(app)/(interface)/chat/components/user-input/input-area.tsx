@@ -19,7 +19,7 @@ export function InputArea({
   onInterrupt,
   onClearSession,
   onScrollToTop,
-  workspace,
+  projectId,
   commandSource,
   userInputRef: externalUserInputRef,
 }: ChatInputAreaProps) {
@@ -41,9 +41,9 @@ export function InputArea({
         return searchCommand(trigger.query, commandSource);
       }
 
-      return searchFile(workspace, trigger.query);
+      return searchFile(projectId, trigger.query);
     },
-    [commandSource, workspace],
+    [commandSource, projectId],
   );
 
   return (

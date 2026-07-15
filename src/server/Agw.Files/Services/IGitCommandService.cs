@@ -1,4 +1,4 @@
-namespace Agw.Shared.Services;
+namespace Agw.Files.Services;
 
 public interface IGitCommandService
 {
