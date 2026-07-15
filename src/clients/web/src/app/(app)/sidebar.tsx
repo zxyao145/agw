@@ -23,6 +23,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 export type MenuLink = { title: string; url: string; icon?: React.ReactNode };
 
@@ -74,7 +75,11 @@ export function AppSidebar({ menus }: AppSidebarProps) {
         <SidebarContent>
           {menus.map((grpItem, index) => (
             <SidebarGroup key={index}>
-              {grpItem.groupLable && <SidebarGroupLabel>{grpItem.groupLable}</SidebarGroupLabel>}
+              {grpItem.groupLable && (
+                <SidebarGroupLabel className="uppercase tracking-wider">
+                  {grpItem.groupLable}
+                </SidebarGroupLabel>
+              )}
               <SidebarMenu>
                 {grpItem.menus.map((item) => (
                   <Collapsible
@@ -88,7 +93,12 @@ export function AppSidebar({ menus }: AppSidebarProps) {
                         <SidebarMenuButton
                           asChild
                           tooltip={item.title}
-                          className={`cursor-pointer ${isActive(pathname, item.url) ? "font-bold" : ""}`}
+                          className={cn(
+                            "cursor-pointer",
+                            isActive(pathname, item.url)
+                              ? "font-bold"
+                              : "text-black/70 hover:text-foreground", // text-muted-foreground
+                          )}
                         >
                           <Link href={item.url}>
                             {item.icon}

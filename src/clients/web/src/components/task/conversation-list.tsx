@@ -263,30 +263,36 @@ export function ConversationList({
                 key={context.contextId}
                 onClick={() => onContextSelect(context)}
                 className={cn(
-                  "group p-3 rounded-md cursor-pointer transition-colors border",
+                  "group p-2 rounded-md cursor-pointer transition-colors border",
                   isActive
                     ? "bg-blue-50"
                     : "bg-card hover:bg-accent/50 border-transparent",
                 )}
               >
-                <div className="flex items-start gap-2">
-                  <div className="flex-1 min-w-0">
+                <div className="flex items-start">
+                  <div className="flex-1 min-w-0 space-y-1">
                     <div className="font-medium text-sm truncate">
                       {context.title || "Untitled"}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {context.executionCount}{" "}
-                      {context.executionCount === 1
-                        ? "execution"
-                        : "executions"}{" "}
-                      · {context.messageCount}{" "}
-                      {context.messageCount === 1 ? "message" : "messages"}
-                    </div>
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      {formatFriendlyLocalDateTime(context.updateTime ?? context.createTime)}
+                    <div className="mt-2 text-xs text-muted-foreground flex gap-1.5">
+                      <span>
+                        {/* {context.executionCount}{" "}
+                        {context.executionCount === 1
+                          ? "execution"
+                          : "executions"}{" "}
+                        ·  */}
+                        {context.messageCount}{" "}
+                        {context.messageCount === 1 ? "message" : "messages"}
+                      </span>
+                      ·
+                      <span>
+                        {formatFriendlyLocalDateTime(
+                          context.updateTime ?? context.createTime,
+                        )}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex opacity-0 group-hover:opacity-100">
+                  <div className="hidden group-hover:flex opacity-0 group-hover:opacity-100">
                     <Button
                       size="icon"
                       variant="ghost"

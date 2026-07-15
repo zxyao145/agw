@@ -1352,7 +1352,7 @@ export default function ChatPage() {
       targetOptions.map((option) => ({
         value: getTargetValue(option),
         title: option.label,
-        subtitle: option.type,
+        // subtitle: option.type,
         group: option.type === "agent" ? "Agent" : "Agentflow",
       })),
     [targetOptions],
@@ -1401,7 +1401,7 @@ export default function ChatPage() {
               />
             </div>
 
-            <div className="w-[260px]">
+            <div className="w-65">
               <SearchableSelect
                 id="chat-target-select"
                 ariaLabel="Select target"
@@ -1417,8 +1417,8 @@ export default function ChatPage() {
           <div className="flex-1" />
 
           <TabsList className="w-fit">
-            <TabsTrigger value="chat">Chat</TabsTrigger>
-            <TabsTrigger value="files">Files</TabsTrigger>
+            <TabsTrigger value="chat" className="cursor-pointer">Chat</TabsTrigger>
+            <TabsTrigger value="files" className="cursor-pointer">Files</TabsTrigger>
           </TabsList>
           <Button
             variant="ghost"

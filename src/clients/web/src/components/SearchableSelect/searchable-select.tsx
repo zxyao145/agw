@@ -224,7 +224,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
                   groupedOptions.map((group) => (
                     <React.Fragment key={group.label ?? "ungrouped"}>
                       {group.label ? (
-                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        <div className="mt-3 px-2 py-1.5 text-xs text-muted-foreground">
                           {group.label}
                         </div>
                       ) : null}
