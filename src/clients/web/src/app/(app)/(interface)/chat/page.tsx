@@ -34,6 +34,7 @@ import {
   getProjectContextDetails,
   type ContextSummary,
 } from "@/api/task-client";
+import { AgentSelector, type AgentSelection } from "@/components/agent-selector";
 import { Explorer, FileContent } from "@/components/file-explorer";
 import type { LineComment } from "@/components/file-explorer";
 import { Conversation } from "@/components/message/conversation";
@@ -1055,6 +1056,18 @@ export default function ChatPage() {
     [detachExecution, selectedProjectId, selectedTargetValue],
   );
 
+  const handleAgentSelect = React.useCallback(
+    ({ agentType, agentId }: AgentSelection) => {
+      handleTargetChange(
+        getTargetValue({
+          id: agentId,
+          type: agentType === 0 ? "agent" : "agentflow",
+        }),
+      );
+    },
+    [handleTargetChange],
+  );
+
   const handleExecute = React.useCallback(
     async (value: string) => {
       const trimmedValue = value.trim();
@@ -1347,16 +1360,6 @@ export default function ChatPage() {
       })),
     [projects],
   );
-  const targetSelectOptions = React.useMemo<SearchableSelectOption[]>(
-    () =>
-      targetOptions.map((option) => ({
-        value: getTargetValue(option),
-        title: option.label,
-        // subtitle: option.type,
-        group: option.type === "agent" ? "Agent" : "Agentflow",
-      })),
-    [targetOptions],
-  );
 
   const isChatTab = currentTab === "chat";
   const isFilesTab = currentTab === "files";
@@ -1402,15 +1405,18 @@ export default function ChatPage() {
             </div>
 
             <div className="w-65">
-              <SearchableSelect
+              <AgentSelector
                 id="chat-target-select"
-                ariaLabel="Select target"
-                value={selectedTargetValue ?? ""}
-                onValueChange={handleTargetChange}
-                options={targetSelectOptions}
-                placeholder="Select agent or agentflow"
-                searchPlaceholder="Search agents or agentflows..."
-                clearable={false}
+                projectId={selectedProjectId}
+                value={
+                  selectedTarget
+                    ? {
+                        agentType: selectedTarget.type === "agent" ? 0 : 1,
+                        agentId: selectedTarget.id,
+                      }
+                    : null
+                }
+                onSelect={handleAgentSelect}
               />
             </div>
           </div>

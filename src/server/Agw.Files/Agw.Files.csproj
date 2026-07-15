@@ -12,4 +12,8 @@
       <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Abstracts\" />
+    </ItemGroup>
+
 </Project>

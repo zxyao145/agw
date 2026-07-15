@@ -8,6 +8,13 @@ const { formatLocalDateTime, parseApiDateTime } = dateTime;
 const { formatFriendlyLocalDateTime } = dateTime as typeof dateTime & {
   formatFriendlyLocalDateTime?: (value: string, now?: Date) => string;
 };
+const { formatLocalDateExact, formatLocalTimeExact, replaceLocalDate, replaceLocalTime } =
+  dateTime as typeof dateTime & {
+    formatLocalDateExact?: (date: Date) => string;
+    formatLocalTimeExact?: (date: Date) => string;
+    replaceLocalDate?: (dateTime: Date, selectedDate: Date) => Date;
+    replaceLocalTime?: (dateTime: Date, time: string) => Date | null;
+  };
 
 test("API timestamps use UTC semantics and display in the runtime local time zone", () => {
   const previousTimeZone = process.env.TZ;
@@ -68,7 +75,50 @@ test("recent API timestamps use friendly display text before falling back to exa
 });
 
 test("invalid and missing API timestamps use stable fallbacks", () => {
+  assert.equal(parseApiDateTime("*/1 * * * *"), null);
   assert.equal(parseApiDateTime("invalid"), null);
   assert.equal(formatLocalDateTime(null), "-");
   assert.equal(formatLocalDateTime("invalid"), "invalid");
+});
+
+test("date and time picker values use the shared local formats", () => {
+  const previousTimeZone = process.env.TZ;
+  process.env.TZ = "Asia/Singapore";
+
+  try {
+    const value = new Date("2026-07-15T04:34:56Z");
+
+    assert.equal(typeof formatLocalDateExact, "function");
+    assert.equal(typeof formatLocalTimeExact, "function");
+    assert.equal(formatLocalDateExact?.(value), "2026-07-15");
+    assert.equal(formatLocalTimeExact?.(value), "12:34:56");
+  } finally {
+    if (previousTimeZone === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = previousTimeZone;
+    }
+  }
+});
+
+test("date and time picker changes preserve the other local component", () => {
+  const previousTimeZone = process.env.TZ;
+  process.env.TZ = "Asia/Singapore";
+
+  try {
+    const value = new Date("2026-07-15T04:34:56.789Z");
+    const selectedDate = new Date("2026-07-20T00:00:00+08:00");
+
+    assert.equal(typeof replaceLocalDate, "function");
+    assert.equal(typeof replaceLocalTime, "function");
+    assert.equal(replaceLocalDate?.(value, selectedDate).toISOString(), "2026-07-20T04:34:56.789Z");
+    assert.equal(replaceLocalTime?.(value, "18:05:07")?.toISOString(), "2026-07-15T10:05:07.000Z");
+    assert.equal(replaceLocalTime?.(value, "invalid"), null);
+  } finally {
+    if (previousTimeZone === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = previousTimeZone;
+    }
+  }
 });

@@ -8,10 +8,12 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
-import { Eye, ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, ListChecks, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
+import { AgentSelector } from "@/components/agent-selector";
+import { DateTimePicker } from "@/components/date-time-picker";
 import { StaticTable } from "@/components/static-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,7 +39,7 @@ import { Switch } from "@/components/ui/switch";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { getApiErrorMessage } from "@/api/utils";
-import { formatLocalDateTime } from "@/lib/date-time";
+import { formatLocalDateTime, parseApiDateTime } from "@/lib/date-time";
 
 type JobDto = {
   id: string;
@@ -99,12 +101,6 @@ type ProjectDto = {
   name: string;
 };
 
-type AgentOption = {
-  id: string;
-  label: string;
-  type: 0 | 1;
-};
-
 type JobDialogProps = {
   mode: "create" | "edit";
   open: boolean;
@@ -112,8 +108,6 @@ type JobDialogProps = {
   form: JobFormState;
   setForm: React.Dispatch<React.SetStateAction<JobFormState>>;
   projects: ProjectDto[];
-  assignableAgents: AgentOption[];
-  areAssignableAgentsReady: boolean;
   onSubmit: () => void;
   isSubmitting: boolean;
 };
@@ -134,7 +128,7 @@ function createDefaultOnceRunTime(): string {
 function createDefaultJobFormState(): JobFormState {
   return {
     projectId: "11111111-1111-1111-1111-000000000001",
-    agentType: 0,
+    agentType: null,
     agentId: "",
     name: "",
     prompt: "",
@@ -182,10 +176,6 @@ function buildJobRequest(form: JobFormState, mode: "create" | "edit"): JobReques
     status: mode === "edit" ? form.status : undefined,
   };
 
-  if (!payload.name) {
-    throw new Error("Job name is required.");
-  }
-
   if (!payload.projectId) {
     throw new Error("Project ID is required.");
   }
@@ -220,7 +210,7 @@ function isValidDateTimeValue(value?: string | null): value is string {
     return false;
   }
 
-  return !Number.isNaN(new Date(value).getTime());
+  return parseApiDateTime(value) !== null;
 }
 
 function isPositiveIntervalValue(value?: string | null): value is string {
@@ -271,33 +261,6 @@ function resolveTriggerValue(form: JobFormState): string {
     default:
       return form.triggerValue.trim();
   }
-}
-
-function toLocalInput(dateTime?: string | null): string {
-  if (!dateTime) {
-    return "";
-  }
-
-  const date = new Date(dateTime);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 16);
-}
-
-function fromLocalInput(dateTime: string): string {
-  if (!dateTime) {
-    return "";
-  }
-
-  const parsed = new Date(dateTime);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  return parsed.toISOString();
 }
 
 function getTriggerTypeLabel(triggerType: number): string {
@@ -372,41 +335,6 @@ export default function JobsPage() {
     queryKey: ["projects"],
     queryFn: async () => (await apiGet("/api/projects")) as unknown as ProjectDto[],
   });
-
-  const agentsQuery = useQuery({
-    queryKey: ["agents"],
-    queryFn: async () =>
-      (await apiGet("/api/agents")) as unknown as Array<{
-        id: string;
-        displayName: string;
-        name: string;
-      }>,
-  });
-
-  const agentflowsQuery = useQuery({
-    queryKey: ["agentflows"],
-    queryFn: async () =>
-      (await apiGet("/api/agentflows")) as unknown as Array<{ id: string; name: string }>,
-  });
-
-  const assignableAgents = React.useMemo<AgentOption[]>(() => {
-    const agentOptions =
-      agentsQuery.data?.map((agent) => ({
-        id: agent.id,
-        label: agent.displayName?.trim() || agent.name,
-        type: 0 as const,
-      })) ?? [];
-
-    const agentflowOptions =
-      agentflowsQuery.data?.map((agentflow) => ({
-        id: agentflow.id,
-        label: agentflow.name,
-        type: 1 as const,
-      })) ?? [];
-
-    return [...agentOptions, ...agentflowOptions];
-  }, [agentsQuery.data, agentflowsQuery.data]);
-  const areAssignableAgentsReady = agentsQuery.isSuccess && agentflowsQuery.isSuccess;
 
   const viewingJobId = viewingJob?.id ?? null;
 
@@ -693,8 +621,6 @@ export default function JobsPage() {
         form={createForm}
         setForm={setCreateForm}
         projects={projectsQuery.data ?? []}
-        assignableAgents={assignableAgents}
-        areAssignableAgentsReady={areAssignableAgentsReady}
         onSubmit={submitCreate}
         isSubmitting={createMutation.isPending}
       />
@@ -706,8 +632,6 @@ export default function JobsPage() {
         form={editForm}
         setForm={setEditForm}
         projects={projectsQuery.data ?? []}
-        assignableAgents={assignableAgents}
-        areAssignableAgentsReady={areAssignableAgentsReady}
         onSubmit={submitEdit}
         isSubmitting={updateMutation.isPending}
       />
@@ -789,8 +713,6 @@ function JobDialog({
   form,
   setForm,
   projects,
-  assignableAgents,
-  areAssignableAgentsReady,
   onSubmit,
   isSubmitting,
 }: JobDialogProps) {
@@ -799,31 +721,13 @@ function JobDialog({
   const isOnceTrigger = form.triggerType === TRIGGER_TYPE_ONCE;
   const isIntervalTrigger = form.triggerType === TRIGGER_TYPE_INTERVAL;
   const isCronTrigger = form.triggerType === TRIGGER_TYPE_CRON;
-  const filteredAgents = React.useMemo(
-    () =>
-      assignableAgents.filter((agent) => form.agentType !== null && agent.type === form.agentType),
-    [assignableAgents, form.agentType],
-  );
+  const [isAdvanced, setIsAdvanced] = React.useState(false);
 
   React.useEffect(() => {
-    if (form.agentType === null) {
-      if (form.agentId) {
-        setForm((current) => ({ ...current, agentId: "" }));
-      }
-      return;
+    if (!open) {
+      setIsAdvanced(false);
     }
-
-    if (!areAssignableAgentsReady) {
-      return;
-    }
-
-    const matchesSelectedType = assignableAgents.some(
-      (agent) => agent.id === form.agentId && agent.type === form.agentType,
-    );
-    if (!matchesSelectedType && form.agentId) {
-      setForm((current) => ({ ...current, agentId: "" }));
-    }
-  }, [areAssignableAgentsReady, assignableAgents, form.agentId, form.agentType, setForm]);
+  }, [open]);
 
   React.useEffect(() => {
     setForm((current) => {
@@ -874,30 +778,19 @@ function JobDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="2xl" className="flex max-h-[90vh] flex-col overflow-hidden">
+      <DialogContent
+        size="xl"
+        className="flex max-h-[90vh] flex-col overflow-hidden"
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            Configure the project target, agent routing, and trigger schedule for this job.
+            Configure the project target, agent routing, and trigger schedule
+            for this job.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid max-h-[65vh] grid-cols-1 gap-6 overflow-y-auto pr-1 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-job-name`}>Name</Label>
-            <Input
-              id={`${mode}-job-name`}
-              value={form.name}
-              placeholder="Nightly summarizer"
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  name: event.target.value,
-                }))
-              }
-            />
-          </div>
-
           <div className="space-y-2">
             <Label htmlFor={`${mode}-project-id`}>Project ID</Label>
             <Select
@@ -923,55 +816,35 @@ function JobDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor={`${mode}-agent-type`}>Agent Type</Label>
-            <Select
-              value={form.agentType === null ? "none" : String(form.agentType)}
-              onValueChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  agentType: value === "none" ? null : Number(value),
-                }))
-              }
-            >
-              <SelectTrigger id={`${mode}-agent-type`} className="w-full">
-                <SelectValue placeholder="Select agent type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Not assigned</SelectItem>
-                <SelectItem value="0">Agent</SelectItem>
-                <SelectItem value="1">Agentflow</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor={`${mode}-agent-id`}>Agent ID</Label>
-            <Select
-              value={form.agentId || "none"}
-              onValueChange={(value) =>
+            <AgentSelector
+              id={`${mode}-agent-id`}
+              projectId={form.projectId}
+              value={
+                form.agentType !== null && form.agentId
+                  ? {
+                      agentType: form.agentType as 0 | 1,
+                      agentId: form.agentId,
+                    }
+                  : null
+              }
+              onSelect={({ agentType, agentId }) =>
                 setForm((current) => ({
                   ...current,
-                  agentId: value === "none" ? "" : value,
+                  agentType,
+                  agentId,
                 }))
               }
-              disabled={form.agentType === null}
-            >
-              <SelectTrigger id={`${mode}-agent-id`} className="w-full">
-                <SelectValue
-                  placeholder={
-                    form.agentType === null ? "Select agent type first" : "Optional agent"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Not assigned</SelectItem>
-                {filteredAgents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onClear={() =>
+                setForm((current) => ({
+                  ...current,
+                  agentType: null,
+                  agentId: "",
+                }))
+              }
+              placeholder="Not assigned"
+              clearable
+            />
           </div>
 
           <div className="space-y-2">
@@ -990,7 +863,9 @@ function JobDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={String(TRIGGER_TYPE_ONCE)}>Once</SelectItem>
-                <SelectItem value={String(TRIGGER_TYPE_INTERVAL)}>Interval</SelectItem>
+                <SelectItem value={String(TRIGGER_TYPE_INTERVAL)}>
+                  Interval
+                </SelectItem>
                 <SelectItem value={String(TRIGGER_TYPE_CRON)}>Cron</SelectItem>
               </SelectContent>
             </Select>
@@ -998,23 +873,21 @@ function JobDialog({
 
           {isOnceTrigger ? (
             <div className="space-y-2">
-              <Label htmlFor={`${mode}-next-run-time`}>Run Time</Label>
-              <Input
+              <Label htmlFor={`${mode}-next-run-time-date`}>Run Time</Label>
+              <DateTimePicker
                 id={`${mode}-next-run-time`}
-                type="datetime-local"
-                value={toLocalInput(getNextRunTimeForOnce(form))}
-                onChange={(event) => {
-                  const nextRunTime = fromLocalInput(event.target.value);
+                value={getNextRunTimeForOnce(form)}
+                onChange={(nextRunTime) =>
                   setForm((current) => ({
                     ...current,
                     nextRunTime,
                     triggerValue: nextRunTime,
-                  }));
-                }}
+                  }))
+                }
               />
               <p className="text-xs text-muted-foreground">
-                Pick the exact time to run this job once. This value will be sent as the once
-                trigger value.
+                Pick the exact time to run this job once. This value will be
+                sent as the once trigger value.
               </p>
             </div>
           ) : null}
@@ -1027,7 +900,11 @@ function JobDialog({
               <Input
                 id={`${mode}-trigger-value`}
                 value={form.triggerValue}
-                placeholder={isIntervalTrigger ? DEFAULT_INTERVAL_TRIGGER_VALUE : "*/5 * * * *"}
+                placeholder={
+                  isIntervalTrigger
+                    ? DEFAULT_INTERVAL_TRIGGER_VALUE
+                    : "*/5 * * * *"
+                }
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
@@ -1043,64 +920,64 @@ function JobDialog({
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-max-retry-count`}>Max Retry Count</Label>
-            <Input
-              id={`${mode}-max-retry-count`}
-              type="number"
-              min={0}
-              value={String(form.maxRetryCount)}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  maxRetryCount: Number(event.target.value || 0),
-                }))
-              }
-            />
-          </div>
+          {isAdvanced ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor={`${mode}-job-name`}>Job Name</Label>
+                <Input
+                  id={`${mode}-job-name`}
+                  value={form.name}
+                  placeholder="Generated automatically when blank"
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </div>
 
-          {mode === "edit" ? (
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-status`}>Status</Label>
-              <Select
-                value={String(form.status ?? 1)}
-                onValueChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    status: Number(value),
-                  }))
-                }
-              >
-                <SelectTrigger id={`${mode}-status`} className="w-full">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Pending</SelectItem>
-                  <SelectItem value="2">Running</SelectItem>
-                  <SelectItem value="3">Paused</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor={`${mode}-max-retry-count`}>
+                  Max Retry Count
+                </Label>
+                <Input
+                  id={`${mode}-max-retry-count`}
+                  type="number"
+                  min={0}
+                  value={String(form.maxRetryCount)}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      maxRetryCount: Number(event.target.value || 0),
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${mode}-enabled`}>Enabled</Label>
+                <div className="flex min-h-9 items-center rounded-md border px-3">
+                  <Switch
+                    id={`${mode}-enabled`}
+                    checked={form.isEnabled}
+                    onCheckedChange={(checked) =>
+                      setForm((current) => ({
+                        ...current,
+                        isEnabled: checked,
+                      }))
+                    }
+                  />
+                  <Label
+                    htmlFor={`${mode}-enabled`}
+                    className="ml-3 text-sm font-normal"
+                  >
+                    Allow this job to be picked up by the scheduler
+                  </Label>
+                </div>
+              </div>
+            </>
           ) : null}
-
-          <div className={`space-y-2 ${mode === "edit" ? "" : "sm:col-span-2"}`}>
-            <Label htmlFor={`${mode}-enabled`}>Enabled</Label>
-            <div className="flex min-h-9 items-center rounded-md border px-3">
-              <Switch
-                id={`${mode}-enabled`}
-                checked={form.isEnabled}
-                onCheckedChange={(checked) =>
-                  setForm((current) => ({
-                    ...current,
-                    isEnabled: checked,
-                  }))
-                }
-              />
-              <Label htmlFor={`${mode}-enabled`} className="ml-3 text-sm font-normal">
-                Allow this job to be picked up by the scheduler
-              </Label>
-            </div>
-          </div>
 
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor={`${mode}-prompt`}>Prompt</Label>
@@ -1126,12 +1003,29 @@ function JobDialog({
           <Button
             type="button"
             variant="outline"
+            size="sm"
+            onClick={() => setIsAdvanced((current) => !current)}
+            disabled={isSubmitting}
+          >
+            <Settings2 className="h-4 w-4" />
+            {isAdvanced ? "Basic" : "Advanced"}
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
           >
             Cancel
           </Button>
-          <Button type="button" onClick={onSubmit} disabled={isSubmitting}>
+          <Button
+            size="sm"
+            type="button"
+            onClick={onSubmit}
+            disabled={isSubmitting}
+          >
             {isSubmitting ? "Saving..." : submitLabel}
           </Button>
         </DialogFooter>

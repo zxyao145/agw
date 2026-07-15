@@ -1,9 +1,12 @@
 const TIME_ZONE_SUFFIX_PATTERN = /(?:z|[+-]\d{2}:?\d{2})$/i;
+const DATE_TIME_PATTERN =
+  /^\d{4}-\d{2}-\d{2}t\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:z|[+-]\d{2}:?\d{2})?$/i;
+const TIME_INPUT_PATTERN = /^(?:([01]\d|2[0-3])):([0-5]\d)(?::([0-5]\d))?$/;
 const padDateTimeComponent = (value: number) => String(value).padStart(2, "0");
 
 export function parseApiDateTime(value: string): Date | null {
   const normalizedValue = value.trim();
-  if (!normalizedValue) {
+  if (!DATE_TIME_PATTERN.test(normalizedValue)) {
     return null;
   }
 
@@ -15,8 +18,44 @@ export function parseApiDateTime(value: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+export function formatLocalDateExact(date: Date): string {
+  return `${date.getFullYear()}-${padDateTimeComponent(date.getMonth() + 1)}-${padDateTimeComponent(date.getDate())}`;
+}
+
+export function formatLocalTimeExact(date: Date): string {
+  return `${padDateTimeComponent(date.getHours())}:${padDateTimeComponent(date.getMinutes())}:${padDateTimeComponent(date.getSeconds())}`;
+}
+
 export function formatLocalDateTimeExact(date: Date): string {
-  return `${date.getFullYear()}-${padDateTimeComponent(date.getMonth() + 1)}-${padDateTimeComponent(date.getDate())} ${padDateTimeComponent(date.getHours())}:${padDateTimeComponent(date.getMinutes())}:${padDateTimeComponent(date.getSeconds())}`;
+  return `${formatLocalDateExact(date)} ${formatLocalTimeExact(date)}`;
+}
+
+export function replaceLocalDate(dateTime: Date, selectedDate: Date): Date {
+  return new Date(
+    selectedDate.getFullYear(),
+    selectedDate.getMonth(),
+    selectedDate.getDate(),
+    dateTime.getHours(),
+    dateTime.getMinutes(),
+    dateTime.getSeconds(),
+    dateTime.getMilliseconds(),
+  );
+}
+
+export function replaceLocalTime(dateTime: Date, time: string): Date | null {
+  const match = TIME_INPUT_PATTERN.exec(time);
+  if (!match) {
+    return null;
+  }
+
+  return new Date(
+    dateTime.getFullYear(),
+    dateTime.getMonth(),
+    dateTime.getDate(),
+    Number(match[1]),
+    Number(match[2]),
+    Number(match[3] ?? 0),
+  );
 }
 
 export function formatLocalDateTime(value?: string | null): string {

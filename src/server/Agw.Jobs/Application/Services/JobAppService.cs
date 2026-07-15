@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Agw.Jobs.Contracts;
 using Agw.Jobs.Domain.Events;
 using Agw.Shared.Data.Entities.Jobs;
@@ -104,7 +106,7 @@ public class JobAppService
             ProjectId = request.ProjectId,
             AgentType = request.AgentType,
             AgentId = request.AgentId,
-            Name = request.Name,
+            Name = await ResolveNameAsync(request.Name, now),
             Prompt = request.Prompt,
             TriggerType = request.TriggerType,
             TriggerValue = request.TriggerValue,
@@ -133,10 +135,11 @@ public class JobAppService
             return null;
         }
 
+        var now = _timeProvider.GetUtcNow();
         entity.ProjectId = request.ProjectId;
         entity.AgentType = request.AgentType;
         entity.AgentId = request.AgentId;
-        entity.Name = request.Name;
+        entity.Name = await ResolveNameAsync(request.Name, now);
         entity.Prompt = request.Prompt;
         entity.TriggerType = request.TriggerType;
         entity.TriggerValue = request.TriggerValue;
@@ -144,7 +147,6 @@ public class JobAppService
         entity.IsEnabled = request.IsEnabled;
         entity.Status = request.Status;
         entity.UpdateBy = user;
-        var now = _timeProvider.GetUtcNow();
         entity.UpdateTime = now;
         entity.NextRunTime = ResolveNextRunTime(entity, now);
 
@@ -164,6 +166,17 @@ public class JobAppService
         _jobTaskRepository.Remove(entity);
         await _unitOfWork.SaveChangesAsync();
         return true;
+    }
+
+    private async Task<string> ResolveNameAsync(string? requestedName, DateTimeOffset now)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedName))
+        {
+            return requestedName.Trim();
+        }
+
+        var count = await _jobTaskRepository.Queryable.CountAsync();
+        return $"job-{count + 1}-{now.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}";
     }
 
     private DateTimeOffset ResolveNextRunTime(Job entity, DateTimeOffset now)
