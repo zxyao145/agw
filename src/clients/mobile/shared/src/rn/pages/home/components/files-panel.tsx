@@ -61,12 +61,12 @@ export function FilesPanel({
   apiClient,
   dependenciesError,
   isDependenciesLoading = false,
-  workspace,
+  projectId,
 }: {
   apiClient: AgwApiClient | null;
   dependenciesError?: string | null;
   isDependenciesLoading?: boolean;
-  workspace?: string | null;
+  projectId?: string | null;
 }): React.JSX.Element {
   const [onlyDiff, setOnlyDiff] = React.useState(true);
   const [rootItems, setRootItems] = React.useState<FileItem[]>([]);
@@ -88,13 +88,12 @@ export function FilesPanel({
   const [explorerError, setExplorerError] = React.useState<string | null>(null);
   const [contentError, setContentError] = React.useState<string | null>(null);
 
-  const normalizedWorkspace = workspace?.trim() ?? "";
   const recursiveMode = true;
 
   const loadRootDirectory = React.useCallback(async () => {
-    if (!apiClient || !normalizedWorkspace) {
+    if (!apiClient || !projectId) {
       setRootItems([]);
-      setExplorerError(apiClient ? "No workspace configured" : null);
+      setExplorerError(apiClient ? "No project selected" : null);
       return;
     }
 
@@ -105,13 +104,14 @@ export function FilesPanel({
     try {
       const data = await listFiles(
         apiClient,
-        normalizedWorkspace,
+        projectId,
+        "",
         onlyDiff,
         recursiveMode
       );
       const nextItems =
         onlyDiff && recursiveMode
-          ? buildFileTree(data.items ?? [], normalizedWorkspace)
+          ? buildFileTree(data.items ?? [], "")
           : data.items ?? [];
 
       setRootItems(nextItems);
@@ -125,11 +125,11 @@ export function FilesPanel({
     } finally {
       setIsExplorerLoading(false);
     }
-  }, [apiClient, normalizedWorkspace, onlyDiff]);
+  }, [apiClient, onlyDiff, projectId]);
 
   const loadFileContent = React.useCallback(
     async (filePath: string) => {
-      if (!apiClient) {
+      if (!apiClient || !projectId) {
         return;
       }
 
@@ -140,11 +140,11 @@ export function FilesPanel({
 
       try {
         if (onlyDiff) {
-          const diff = await getFileDiff(apiClient, filePath);
+          const diff = await getFileDiff(apiClient, projectId, filePath);
           setDiffContentData(diff);
           setFileContent("");
         } else {
-          const content = await readFile(apiClient, filePath);
+          const content = await readFile(apiClient, projectId, filePath);
           setFileContent(content);
           setDiffContentData(null);
         }
@@ -156,12 +156,12 @@ export function FilesPanel({
         setIsContentLoading(false);
       }
     },
-    [apiClient, onlyDiff]
+    [apiClient, onlyDiff, projectId]
   );
 
   const loadDirectoryChildren = React.useCallback(
     async (item: FileItem) => {
-      if (!apiClient || item.type !== FILE_TYPE.Directory || childItems[item.path]) {
+      if (!apiClient || !projectId || item.type !== FILE_TYPE.Directory || childItems[item.path]) {
         return;
       }
 
@@ -171,7 +171,13 @@ export function FilesPanel({
       }));
 
       try {
-        const data = await listFiles(apiClient, item.path, onlyDiff, recursiveMode);
+        const data = await listFiles(
+          apiClient,
+          projectId,
+          item.path,
+          onlyDiff,
+          recursiveMode
+        );
         setChildItems((current) => ({
           ...current,
           [item.path]: data.items ?? [],
@@ -180,7 +186,7 @@ export function FilesPanel({
         setExplorerError(`Failed to load directory: ${getErrorMessage(error)}`);
       }
     },
-    [apiClient, childItems, onlyDiff]
+    [apiClient, childItems, onlyDiff, projectId]
   );
 
   React.useEffect(() => {
@@ -239,7 +245,7 @@ export function FilesPanel({
   );
 
   const handleDelete = React.useCallback(async () => {
-    if (!apiClient || !actionTarget) {
+    if (!apiClient || !projectId || !actionTarget) {
       return;
     }
 
@@ -248,7 +254,7 @@ export function FilesPanel({
     setStatusMessage(null);
 
     try {
-      const result = await deleteFile(apiClient, targetPath);
+      const result = await deleteFile(apiClient, projectId, targetPath);
 
       if (result.success) {
         if (selectedFile === targetPath) {
@@ -264,10 +270,10 @@ export function FilesPanel({
     } catch (error) {
       setStatusMessage(`Failed to delete: ${getErrorMessage(error)}`);
     }
-  }, [actionTarget, apiClient, loadRootDirectory, selectedFile]);
+  }, [actionTarget, apiClient, loadRootDirectory, projectId, selectedFile]);
 
   const handleReset = React.useCallback(async () => {
-    if (!apiClient || !actionTarget || actionTarget.item.type !== FILE_TYPE.File) {
+    if (!apiClient || !projectId || !actionTarget || actionTarget.item.type !== FILE_TYPE.File) {
       return;
     }
 
@@ -276,7 +282,7 @@ export function FilesPanel({
     setStatusMessage(null);
 
     try {
-      const result = await resetFile(apiClient, targetPath);
+      const result = await resetFile(apiClient, projectId, targetPath);
 
       if (result.success) {
         setStatusMessage(result.message);
@@ -290,12 +296,12 @@ export function FilesPanel({
     } catch (error) {
       setStatusMessage(`Failed to reset: ${getErrorMessage(error)}`);
     }
-  }, [actionTarget, apiClient, loadFileContent, loadRootDirectory, selectedFile]);
+  }, [actionTarget, apiClient, loadFileContent, loadRootDirectory, projectId, selectedFile]);
 
-  if (!normalizedWorkspace) {
+  if (!projectId) {
     return (
       <View style={styles.emptyPanel}>
-        <Text style={styles.emptyPanelText}>No workspace configured</Text>
+        <Text style={styles.emptyPanelText}>No project selected</Text>
       </View>
     );
   }
@@ -320,7 +326,7 @@ export function FilesPanel({
         ]}
       >
         <AccordionHeader
-          detail={normalizedWorkspace}
+          detail="/"
           expanded={!isExplorerCollapsed}
           onPress={() => {
             setIsExplorerCollapsed((current) => {

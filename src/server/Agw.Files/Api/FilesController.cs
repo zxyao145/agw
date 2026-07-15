@@ -3,6 +3,7 @@ using Agw.Files.Application.Files;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Agw.Files.Api;
 
@@ -11,14 +12,10 @@ namespace Agw.Files.Api;
 public class FilesController : ControllerBase
 {
     private readonly FileAppService _fileAppService;
-    private readonly IFilePathRequestValidator _pathValidator;
 
-    public FilesController(
-        FileAppService fileAppService,
-        IFilePathRequestValidator pathValidator)
+    public FilesController(FileAppService fileAppService)
     {
         _fileAppService = fileAppService;
-        _pathValidator = pathValidator;
     }
 
     [HttpGet("list")]
@@ -26,25 +23,21 @@ public class FilesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ListAsync(
-        [FromQuery] string? path,
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path = "",
         [FromQuery] bool diff = false,
         [FromQuery] bool recursive = false)
     {
-        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
-        {
-            return errorResult!;
-        }
-
+        TrackRequestedPath(projectId, path);
         var result = await _fileAppService.ListAsync(
-            normalizedPath,
+            projectId,
+            path,
             diff,
             recursive,
             RequestCancellationToken);
         if (result.Status != FileOperationStatus.Success)
         {
-            return result.Status == FileOperationStatus.NotFound
-                ? NotFound(new { error = result.Message })
-                : MapUnexpectedError(result);
+            return MapError(result);
         }
 
         var items = result.Value!.Items
@@ -65,49 +58,36 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ReadAsync([FromQuery] string? path)
+    public async Task<IActionResult> ReadAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path)
     {
-        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
-        {
-            return errorResult!;
-        }
-
-        var result = await _fileAppService.ReadAsync(normalizedPath, RequestCancellationToken);
-        if (result.Status != FileOperationStatus.Success)
-        {
-            return result.Status == FileOperationStatus.NotFound
-                ? NotFound(new { error = result.Message })
-                : MapUnexpectedError(result);
-        }
-
-        return Ok(result.Value);
+        TrackRequestedPath(projectId, path);
+        var result = await _fileAppService.ReadAsync(
+            projectId,
+            path,
+            RequestCancellationToken);
+        return result.Status == FileOperationStatus.Success
+            ? Ok(result.Value)
+            : MapError(result);
     }
 
     [HttpGet("diff")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DiffAsync([FromQuery] string? path)
+    public async Task<IActionResult> DiffAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path)
     {
-        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
-        {
-            return errorResult!;
-        }
-
-        var result = await _fileAppService.DiffAsync(normalizedPath, RequestCancellationToken);
-        if (result.Status == FileOperationStatus.NotFound)
-        {
-            return NotFound(new { error = result.Message });
-        }
-
-        if (result.Status == FileOperationStatus.InvalidRequest)
-        {
-            return BadRequest(new { error = result.Message, details = result.Details });
-        }
-
+        TrackRequestedPath(projectId, path);
+        var result = await _fileAppService.DiffAsync(
+            projectId,
+            path,
+            RequestCancellationToken);
         if (result.Status != FileOperationStatus.Success)
         {
-            return MapUnexpectedError(result);
+            return MapError(result);
         }
 
         if (result.Value!.Unchanged)
@@ -132,19 +112,18 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAsync([FromQuery] string? path)
+    public async Task<IActionResult> DeleteAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path)
     {
-        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
-        {
-            return errorResult!;
-        }
-
-        var result = await _fileAppService.DeleteAsync(normalizedPath, RequestCancellationToken);
+        TrackRequestedPath(projectId, path);
+        var result = await _fileAppService.DeleteAsync(
+            projectId,
+            path,
+            RequestCancellationToken);
         if (result.Status != FileOperationStatus.Success)
         {
-            return result.Status == FileOperationStatus.NotFound
-                ? NotFound(new { error = result.Message })
-                : MapUnexpectedError(result);
+            return MapError(result);
         }
 
         return Ok(new
@@ -159,34 +138,18 @@ public class FilesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> ResetAsync([FromQuery] string? path)
+    public async Task<IActionResult> ResetAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path)
     {
-        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
-        {
-            return errorResult!;
-        }
-
-        var result = await _fileAppService.ResetAsync(normalizedPath, RequestCancellationToken);
-        if (result.Status == FileOperationStatus.NotFound)
-        {
-            return NotFound(new { error = result.Message });
-        }
-
-        if (result.Status == FileOperationStatus.InvalidRequest)
-        {
-            return BadRequest(new { error = result.Message });
-        }
-
-        if (result.Status == FileOperationStatus.Failure)
-        {
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = result.Message, details = result.Details });
-        }
-
+        TrackRequestedPath(projectId, path);
+        var result = await _fileAppService.ResetAsync(
+            projectId,
+            path,
+            RequestCancellationToken);
         if (result.Status != FileOperationStatus.Success)
         {
-            return MapUnexpectedError(result);
+            return MapError(result);
         }
 
         return Ok(new
@@ -201,27 +164,23 @@ public class FilesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SearchAsync(
-        [FromQuery] string? path,
-        [FromQuery] string? keyword,
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path = "",
+        [FromQuery] string? keyword = null,
         [FromQuery] int limit = 10,
         [FromQuery] bool recursive = true)
     {
-        if (!TryResolveRequiredPath(path, out var normalizedPath, out var errorResult))
-        {
-            return errorResult!;
-        }
-
+        TrackRequestedPath(projectId, path);
         var result = await _fileAppService.SearchAsync(
-            normalizedPath,
+            projectId,
+            path,
             keyword,
             limit,
             recursive,
             RequestCancellationToken);
         if (result.Status != FileOperationStatus.Success)
         {
-            return result.Status == FileOperationStatus.NotFound
-                ? NotFound(new { error = result.Message })
-                : MapUnexpectedError(result);
+            return MapError(result);
         }
 
         var results = result.Value!.Results
@@ -238,32 +197,30 @@ public class FilesController : ControllerBase
     private CancellationToken RequestCancellationToken =>
         ControllerContext.HttpContext?.RequestAborted ?? CancellationToken.None;
 
-    private bool TryResolveRequiredPath(
-        string? path,
-        out string normalizedPath,
-        out IActionResult? errorResult)
+    private void TrackRequestedPath(Guid projectId, string? path)
     {
-        var validation = _pathValidator.ValidateRequiredPath(path);
-        normalizedPath = validation.ResolvedPath;
-        errorResult = null;
-
-        if (!validation.IsValid)
-        {
-            errorResult = BadRequest(new { error = validation.ErrorMessage });
-            return false;
-        }
-
         if (ControllerContext.HttpContext != null)
         {
             ControllerContext.HttpContext.Items[
-                FileEndpointExceptionMappingMiddleware.ResolvedPathItemKey] = normalizedPath;
+                FileEndpointExceptionMappingMiddleware.ResolvedPathItemKey] =
+                $"{projectId}:{path ?? string.Empty}";
         }
-
-        return true;
     }
 
-    private IActionResult MapUnexpectedError<T>(FileOperationResult<T> result)
+    private IActionResult MapError<T>(FileOperationResult<T> result)
     {
+        if (result.Status == FileOperationStatus.NotFound)
+        {
+            return NotFound(new { error = result.Message });
+        }
+
+        if (result.Status == FileOperationStatus.InvalidRequest)
+        {
+            return result.Details == null
+                ? BadRequest(new { error = result.Message })
+                : BadRequest(new { error = result.Message, details = result.Details });
+        }
+
         return StatusCode(
             StatusCodes.Status500InternalServerError,
             new

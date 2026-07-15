@@ -1,5 +1,7 @@
 # FilesController Service Extraction Design
 
+> Update: the file API was subsequently made project-scoped in the same branch. It now accepts `projectId` plus project-relative paths, and `FileAppService` resolves and uses `IAgwFileSystem`. References below to host paths and `IFilePathRequestValidator` describe the earlier extraction boundary and are superseded by the current implementation.
+
 ## Goal
 
 Reduce `FilesController` to an HTTP adapter by moving file-system operations, Git orchestration, search rules, and operation logging into an HTTP-independent Application module.

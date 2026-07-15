@@ -1,5 +1,7 @@
 # FilesController Service Extraction Implementation Plan
 
+> Update: after this extraction, the file API was migrated to `projectId` plus project-relative paths. `FileAppService` now uses `IAgwFileSystemResolver`/`IAgwFileSystem`, and the path-validator steps below are retained only as implementation history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extract file operations from `FilesController` into an HTTP-independent `FileAppService` while preserving all existing routes and responses.

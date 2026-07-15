@@ -15,7 +15,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddFiles(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddSingleton<IFilePathRequestValidator, FilePathRequestValidator>();
         services.AddSingleton<FileAppService>();
         services.TryAddSingleton(TimeProvider.System);
 

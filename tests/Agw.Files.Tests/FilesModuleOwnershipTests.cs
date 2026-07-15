@@ -26,10 +26,12 @@ public class FilesModuleOwnershipTests
 
         Assert.Null(assembly.GetType("Agw.Files.Application.Files.IPathSecurityService"));
         Assert.Null(assembly.GetType("Agw.Files.Application.Files.PathSecurityService"));
+        Assert.Null(assembly.GetType("Agw.Files.Application.Files.IFilePathRequestValidator"));
+        Assert.Null(assembly.GetType("Agw.Files.Application.Files.FilePathRequestValidator"));
     }
 
     [Fact]
-    public void FilesController_DependsOnlyOnApplicationServiceAndPathValidator()
+    public void FilesController_DependsOnlyOnApplicationService()
     {
         var constructor = Assert.Single(typeof(FilesController).GetConstructors());
         var parameterTypes = constructor
@@ -38,7 +40,7 @@ public class FilesModuleOwnershipTests
             .ToArray();
 
         Assert.Equal(
-            [typeof(FileAppService), typeof(IFilePathRequestValidator)],
+            [typeof(FileAppService)],
             parameterTypes);
     }
 

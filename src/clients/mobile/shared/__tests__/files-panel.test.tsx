@@ -9,6 +9,8 @@ import type { AgwApiClient } from "../src/rn/api/agw-api-client";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("FilesPanel", () => {
+  const projectId = "project-1";
+
   beforeEach(() => {
     jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
   });
@@ -20,25 +22,25 @@ describe("FilesPanel", () => {
   it("loads recursive diff files, builds a tree, and renders selected diff content", async () => {
     const client = createFilesClient({
       lists: {
-        "D:\\work\\mobile|true|true": {
+        "|true|true": {
           items: [
             {
               gitStatus: "modified",
               name: "index.ts",
-              path: "D:\\work\\mobile\\src\\index.ts",
+              path: "src/index.ts",
               type: "file",
             },
             {
               gitStatus: "added",
               name: "readme.md",
-              path: "D:\\work\\mobile\\docs\\readme.md",
+              path: "docs/readme.md",
               type: "file",
             },
           ],
         },
       },
       diffs: {
-        "D:\\work\\mobile\\src\\index.ts": {
+        "src/index.ts": {
           diff: [
             "diff --git a/src/index.ts b/src/index.ts",
             "--- a/src/index.ts",
@@ -56,7 +58,7 @@ describe("FilesPanel", () => {
 
     await act(async () => {
       tree = renderer.create(
-        <FilesPanel apiClient={client} workspace={"D:\\work\\mobile"} />
+        <FilesPanel apiClient={client} projectId={projectId} />
       );
     });
     await settleAsync();
@@ -64,21 +66,21 @@ describe("FilesPanel", () => {
     const output = collectText(tree?.toJSON());
 
     expect(output).toContain("File Explorer");
-    expect(output).toContain("D:\\work\\mobile");
     expect(output).toContain("src");
     expect(output).toContain("index.ts");
     expect(output).toContain("M");
     expect(client.getJson).toHaveBeenCalledWith("/api/files/list", {
       query: {
         diff: true,
-        path: "D:\\work\\mobile",
+        path: "",
+        projectId,
         recursive: true,
       },
     });
 
     await act(async () => {
       tree!.root
-        .findByProps({ testID: "agw-file-node-D:\\work\\mobile\\src\\index.ts" })
+        .findByProps({ testID: "agw-file-node-src/index.ts" })
         .props.onPress();
     });
     await settleAsync();
@@ -86,7 +88,7 @@ describe("FilesPanel", () => {
     const selectedOutput = collectText(tree?.toJSON());
 
     expect(client.getJson).toHaveBeenCalledWith("/api/files/diff", {
-      query: { path: "D:\\work\\mobile\\src\\index.ts" },
+      query: { path: "src/index.ts", projectId },
     });
     expect(
       (client.getJson as jest.Mock).mock.calls.filter(
@@ -102,28 +104,28 @@ describe("FilesPanel", () => {
   it("switches to full file mode, reads file text, and stores line comments", async () => {
     const client = createFilesClient({
       lists: {
-        "D:\\work\\mobile|true|true": {
+        "|true|true": {
           items: [
             {
               gitStatus: "modified",
               name: "index.ts",
-              path: "D:\\work\\mobile\\src\\index.ts",
+              path: "src/index.ts",
               type: "file",
             },
           ],
         },
-        "D:\\work\\mobile|false|true": {
+        "|false|true": {
           items: [
             {
               name: "index.ts",
-              path: "D:\\work\\mobile\\src\\index.ts",
+              path: "src/index.ts",
               type: "file",
             },
           ],
         },
       },
       reads: {
-        "D:\\work\\mobile\\src\\index.ts": "line one\nline two",
+        "src/index.ts": "line one\nline two",
       },
     });
 
@@ -131,7 +133,7 @@ describe("FilesPanel", () => {
 
     await act(async () => {
       tree = renderer.create(
-        <FilesPanel apiClient={client} workspace={"D:\\work\\mobile"} />
+        <FilesPanel apiClient={client} projectId={projectId} />
       );
     });
     await settleAsync();
@@ -143,13 +145,13 @@ describe("FilesPanel", () => {
 
     await act(async () => {
       tree!.root
-        .findByProps({ testID: "agw-file-node-D:\\work\\mobile\\src\\index.ts" })
+        .findByProps({ testID: "agw-file-node-src/index.ts" })
         .props.onPress();
     });
     await settleAsync();
 
     expect(client.getText).toHaveBeenCalledWith("/api/files/read", {
-      query: { path: "D:\\work\\mobile\\src\\index.ts" },
+      query: { path: "src/index.ts", projectId },
     });
     expect(collectText(tree?.toJSON())).toContain("line two");
 
@@ -176,12 +178,12 @@ describe("FilesPanel", () => {
     const client = createFilesClient({
       deleteResult: { message: "Deleted file", success: true },
       lists: {
-        "D:\\work\\mobile|true|true": {
+        "|true|true": {
           items: [
             {
               gitStatus: "modified",
               name: "index.ts",
-              path: "D:\\work\\mobile\\src\\index.ts",
+              path: "src/index.ts",
               type: "file",
             },
           ],
@@ -194,14 +196,14 @@ describe("FilesPanel", () => {
 
     await act(async () => {
       tree = renderer.create(
-        <FilesPanel apiClient={client} workspace={"D:\\work\\mobile"} />
+        <FilesPanel apiClient={client} projectId={projectId} />
       );
     });
     await settleAsync();
 
     await act(async () => {
       tree!.root
-        .findByProps({ testID: "agw-file-node-D:\\work\\mobile\\src\\index.ts" })
+        .findByProps({ testID: "agw-file-node-src/index.ts" })
         .props.onLongPress();
     });
 
@@ -214,12 +216,12 @@ describe("FilesPanel", () => {
     await settleAsync();
 
     expect(client.postJson).toHaveBeenCalledWith("/api/files/reset", undefined, {
-      query: { path: "D:\\work\\mobile\\src\\index.ts" },
+      query: { path: "src/index.ts", projectId },
     });
 
     await act(async () => {
       tree!.root
-        .findByProps({ testID: "agw-file-node-D:\\work\\mobile\\src\\index.ts" })
+        .findByProps({ testID: "agw-file-node-src/index.ts" })
         .props.onLongPress();
     });
     await act(async () => {
@@ -228,7 +230,7 @@ describe("FilesPanel", () => {
     await settleAsync();
 
     expect(client.deleteJson).toHaveBeenCalledWith("/api/files/delete", {
-      query: { path: "D:\\work\\mobile\\src\\index.ts" },
+      query: { path: "src/index.ts", projectId },
     });
     expect(client.getJson).toHaveBeenCalledTimes(3);
   });
@@ -236,19 +238,19 @@ describe("FilesPanel", () => {
   it("uses accordion headers to collapse explorer and preview panes", async () => {
     const client = createFilesClient({
       lists: {
-        "D:\\work\\mobile|true|true": {
+        "|true|true": {
           items: [
             {
               gitStatus: "modified",
               name: "index.ts",
-              path: "D:\\work\\mobile\\src\\index.ts",
+              path: "src/index.ts",
               type: "file",
             },
           ],
         },
       },
       diffs: {
-        "D:\\work\\mobile\\src\\index.ts": {
+        "src/index.ts": {
           diff: [
             "diff --git a/src/index.ts b/src/index.ts",
             "--- a/src/index.ts",
@@ -266,7 +268,7 @@ describe("FilesPanel", () => {
 
     await act(async () => {
       tree = renderer.create(
-        <FilesPanel apiClient={client} workspace={"D:\\work\\mobile"} />
+        <FilesPanel apiClient={client} projectId={projectId} />
       );
     });
     await settleAsync();
@@ -293,7 +295,7 @@ describe("FilesPanel", () => {
     });
     await act(async () => {
       tree!.root
-        .findByProps({ testID: "agw-file-node-D:\\work\\mobile\\src\\index.ts" })
+        .findByProps({ testID: "agw-file-node-src/index.ts" })
         .props.onPress();
     });
     await settleAsync();

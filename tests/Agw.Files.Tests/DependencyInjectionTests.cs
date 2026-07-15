@@ -9,13 +9,13 @@ namespace Agw.Files.Tests;
 public class DependencyInjectionTests
 {
     [Fact]
-    public void AddFiles_RegistersFileAppService()
+    public async Task AddFiles_RegistersFileAppService()
     {
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddFiles(new ConfigurationBuilder().Build());
 
-        using var serviceProvider = services.BuildServiceProvider();
+        await using var serviceProvider = services.BuildServiceProvider();
 
         Assert.NotNull(serviceProvider.GetService<FileAppService>());
     }

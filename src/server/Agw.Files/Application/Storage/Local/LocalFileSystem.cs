@@ -8,6 +8,11 @@ namespace Agw.Files.Application.Storage.Local;
 
 public sealed class LocalFileSystem : IAgwFileSystem
 {
+    private static readonly StringComparison PathComparison =
+        OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
     private readonly string _rootPath;
     private readonly string _normalizedRoot;
 
@@ -21,16 +26,23 @@ public sealed class LocalFileSystem : IAgwFileSystem
 
     private string ResolvePath(string path)
     {
-        var normalized = path.Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalized = path.Replace('/', Path.DirectorySeparatorChar);
 
         if (string.IsNullOrEmpty(normalized))
         {
             return Path.GetFullPath(_rootPath);
         }
 
+        if (Path.IsPathRooted(normalized))
+        {
+            throw new AgwFilesException(
+                FilesErrorCode.PathOutsideRoot,
+                $"Path '{path}' must be relative to the file system root.");
+        }
+
         var fullPath = Path.GetFullPath(Path.Combine(_rootPath, normalized));
 
-        if (!fullPath.StartsWith(_normalizedRoot, StringComparison.Ordinal))
+        if (!fullPath.StartsWith(_normalizedRoot, PathComparison))
         {
             throw new AgwFilesException(
                 FilesErrorCode.PathOutsideRoot,
@@ -38,6 +50,16 @@ public sealed class LocalFileSystem : IAgwFileSystem
         }
 
         return fullPath;
+    }
+
+    internal string ResolvePhysicalPath(string path)
+    {
+        return ResolvePath(path);
+    }
+
+    internal string GetRelativePath(string fullPath)
+    {
+        return ToRelativePath(fullPath);
     }
 
     private string ToRelativePath(string fullPath)

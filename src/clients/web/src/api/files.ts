@@ -55,13 +55,21 @@ function toFileApiError(err: unknown, fallbackMessage: string): FileApiError {
  * @param recursive - If true with onlyModified, return all changed files recursively (not just direct children)
  */
 export async function listFiles(
+  projectId: string,
   path: string,
   diff: boolean = false,
   recursive: boolean = false,
 ): Promise<ListFilesResponse> {
   try {
     return (await apiGet("/api/files/list", {
-      params: { query: { path, diff: diff || undefined, recursive: recursive || undefined } },
+      params: {
+        query: {
+          projectId,
+          path: path || undefined,
+          diff: diff || undefined,
+          recursive: recursive || undefined,
+        },
+      },
     })) as ListFilesResponse;
   } catch (err) {
     throw toFileApiError(err, "Failed to load directory");
@@ -71,9 +79,11 @@ export async function listFiles(
 /**
  * Read file content from the specified path
  */
-export async function readFile(path: string): Promise<string> {
+export async function readFile(projectId: string, path: string): Promise<string> {
   try {
-    return (await apiGet("/api/files/read", { params: { query: { path } } })) as string;
+    return (await apiGet("/api/files/read", {
+      params: { query: { projectId, path } },
+    })) as string;
   } catch (err) {
     throw toFileApiError(err, "Failed to read file");
   }
@@ -89,9 +99,11 @@ export interface GitDiffResponse {
 /**
  * Get git diff for the specified file
  */
-export async function getFileDiff(path: string): Promise<GitDiffResponse> {
+export async function getFileDiff(projectId: string, path: string): Promise<GitDiffResponse> {
   try {
-    return (await apiGet("/api/files/diff", { params: { query: { path } } })) as GitDiffResponse;
+    return (await apiGet("/api/files/diff", {
+      params: { query: { projectId, path } },
+    })) as GitDiffResponse;
   } catch (err) {
     throw toFileApiError(err, "Failed to get diff");
   }
@@ -100,10 +112,13 @@ export async function getFileDiff(path: string): Promise<GitDiffResponse> {
 /**
  * Delete a file or directory
  */
-export async function deleteFile(path: string): Promise<{ success: boolean; message: string }> {
+export async function deleteFile(
+  projectId: string,
+  path: string,
+): Promise<{ success: boolean; message: string }> {
   try {
     return (await apiDelete("/api/files/delete", {
-      params: { query: { path } },
+      params: { query: { projectId, path } },
     })) as { success: boolean; message: string };
   } catch (err) {
     throw toFileApiError(err, "Failed to delete");
@@ -113,10 +128,13 @@ export async function deleteFile(path: string): Promise<{ success: boolean; mess
 /**
  * Reset file to git HEAD (discard modifications)
  */
-export async function resetFile(path: string): Promise<{ success: boolean; message: string }> {
+export async function resetFile(
+  projectId: string,
+  path: string,
+): Promise<{ success: boolean; message: string }> {
   try {
     return (await apiPost("/api/files/reset", {
-      params: { query: { path } },
+      params: { query: { projectId, path } },
     })) as { success: boolean; message: string };
   } catch (err) {
     throw toFileApiError(err, "Failed to reset");
@@ -140,13 +158,21 @@ export interface SearchFilesResponse {
  * @param recursive - If true, search subdirectories (default: true)
  */
 export async function searchFiles(
+  projectId: string,
   path: string,
   keyword: string,
   recursive: boolean = true,
 ): Promise<SearchFilesResponse> {
   try {
     return (await apiGet("/api/files/search", {
-      params: { query: { path, keyword, recursive: recursive || undefined } },
+      params: {
+        query: {
+          projectId,
+          path: path || undefined,
+          keyword,
+          recursive: recursive || undefined,
+        },
+      },
     })) as SearchFilesResponse;
   } catch (err) {
     throw toFileApiError(err, "Failed to search files");

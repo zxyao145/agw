@@ -23,7 +23,6 @@ public sealed class AgwFilesException : Exception
     public HttpStatusCode StatusCode => ErrorCode switch
     {
         FilesErrorCode.InvalidParameter => HttpStatusCode.BadRequest,
-        FilesErrorCode.RootPathRequired => HttpStatusCode.BadRequest,
         FilesErrorCode.PathOutsideRoot => HttpStatusCode.Forbidden,
         FilesErrorCode.InvalidStorageConfiguration => HttpStatusCode.InternalServerError,
         FilesErrorCode.UnsupportedStorageBackend => HttpStatusCode.NotImplemented,

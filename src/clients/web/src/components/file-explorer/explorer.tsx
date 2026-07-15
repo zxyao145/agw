@@ -171,6 +171,7 @@ function buildFileTree(items: FileItem[], rootPath: string): FileItem[] {
 }
 
 export default function Explorer({
+  projectId,
   rootDirectory,
   onlyDiff,
   recursiveMode,
@@ -180,6 +181,7 @@ export default function Explorer({
   onFileSelected,
   onFileReseted,
 }: {
+  projectId: string;
   rootDirectory: string;
   onlyDiff: boolean;
   recursiveMode: boolean;
@@ -195,22 +197,16 @@ export default function Explorer({
   const [error, setError] = React.useState<string | null>(null);
 
   const loadRootDirectory = React.useCallback(async () => {
-    if (!rootDirectory || !rootDirectory.trim()) {
-      setRootItems([]);
-      setError("No working directory specified");
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
 
     try {
-      const data = await listFiles(rootDirectory, onlyDiff, recursiveMode);
+      const data = await listFiles(projectId, "", onlyDiff, recursiveMode);
       let items = data.items || [];
 
       // In recursive mode with diff, build a tree structure
       if (recursiveMode && onlyDiff) {
-        items = buildFileTree(items, rootDirectory);
+        items = buildFileTree(items, "");
       }
 
       setRootItems(items);
@@ -221,7 +217,7 @@ export default function Explorer({
     } finally {
       setIsLoading(false);
     }
-  }, [rootDirectory, onlyDiff, recursiveMode]);
+  }, [projectId, onlyDiff, recursiveMode]);
 
   React.useEffect(() => {
     loadRootDirectory();
@@ -276,6 +272,7 @@ export default function Explorer({
 
           {!error && rootItems.length > 0 && (
             <ExplorerFileTree
+              projectId={projectId}
               rootItems={rootItems}
               onlyDiff={onlyDiff}
               recursiveMode={recursiveMode}

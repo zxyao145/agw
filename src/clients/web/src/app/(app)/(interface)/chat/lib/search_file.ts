@@ -6,16 +6,16 @@ import { searchFiles } from "@/api/files";
  * Returns async suggestions with file paths prefixed with @
  */
 export async function searchFile(
-  rootDirectory: string,
+  projectId: string | null,
   keyword: string,
 ): Promise<SuggestionItem[]> {
-  if (!rootDirectory) {
+  if (!projectId) {
     return [];
   }
   // console.debug("searchFile", rootDirectory, keyword)
 
   try {
-    const response = await searchFiles(rootDirectory, keyword, true);
+    const response = await searchFiles(projectId, "", keyword, true);
     return response.results.map((result) => ({
       text: `@${result.relativePath}`,
       description: result.fullPath,

@@ -105,7 +105,7 @@ These are intended to reduce local magic strings and keep rendering logic consis
 
 Typical parent flow:
 
-1. Render `Explorer` with a resolved workspace root.
+1. Render `Explorer` with a project ID and an optional workspace label.
 2. When a file is selected, fetch either raw content or git diff in the parent.
 3. Pass the fetched data into `FileContent`.
 4. Keep `comments` in parent state.
@@ -129,8 +129,8 @@ This module currently depends on [`@/api/files`](../../api/files.ts) for:
 
 Because of that, it assumes:
 
-- paths are backend-resolvable workspace paths
-- git diff mode is supported by the backend
+- paths are relative to the selected project's file-system root
+- git diff mode is supported only for Local project file systems
 - file reset means reset to git `HEAD`
 
 If you need a storage-agnostic explorer later, the next refactor would be to inject a file-service interface instead of importing `@/api/files` directly.
@@ -142,7 +142,13 @@ import * as React from "react";
 import { Explorer, FileContent, type LineComment } from "@/components/file-explorer";
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
 
-export function ExampleFileExplorer({ rootDirectory }: { rootDirectory: string }) {
+export function ExampleFileExplorer({
+  projectId,
+  rootDirectory,
+}: {
+  projectId: string;
+  rootDirectory: string;
+}) {
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
   const [onlyDiff, setOnlyDiff] = React.useState(true);
   const [fileContent, setFileContent] = React.useState("");
@@ -158,11 +164,11 @@ export function ExampleFileExplorer({ rootDirectory }: { rootDirectory: string }
 
       try {
         if (onlyDiff) {
-          const diff = await getFileDiff(filePath);
+          const diff = await getFileDiff(projectId, filePath);
           setDiffContentData(diff);
           setFileContent("");
         } else {
-          const content = await readFile(filePath);
+          const content = await readFile(projectId, filePath);
           setFileContent(content);
           setDiffContentData(null);
         }
@@ -172,12 +178,13 @@ export function ExampleFileExplorer({ rootDirectory }: { rootDirectory: string }
         setIsLoadingContent(false);
       }
     },
-    [onlyDiff],
+    [onlyDiff, projectId],
   );
 
   return (
     <div className="grid grid-cols-[320px_1fr] h-full">
       <Explorer
+        projectId={projectId}
         rootDirectory={rootDirectory}
         onlyDiff={onlyDiff}
         recursiveMode={true}

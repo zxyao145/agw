@@ -33,7 +33,7 @@ export interface ChatInputAreaProps {
   onInterrupt: () => void;
   onClearSession: () => void;
   onScrollToTop: () => void;
-  workspace: string;
+  projectId: string | null;
   commandSource: CommandSource;
   userInputRef?: React.RefObject<UserInputRef | null>;
 }

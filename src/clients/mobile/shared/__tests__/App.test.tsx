@@ -148,7 +148,7 @@ describe("App", () => {
     expect(output).toContain("mobile-api.md");
     expect(output).not.toContain("Brand_Assets_Hero.png");
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:5015/api/files/list?diff=true&path=D%3A%5Cwork%5Cmobile&recursive=true",
+      "http://localhost:5015/api/files/list?diff=true&path=&projectId=project-1&recursive=true",
       expect.objectContaining({
         headers: { Authorization: "Bearer test-api-key" },
         method: "GET",
@@ -866,13 +866,13 @@ function createAgwFetchMock({
         items: [
           {
             name: "src",
-            path: "D:\\work\\mobile\\src",
+            path: "src",
             type: "directory",
             modifiedTime: "2026-05-22T08:00:00Z",
           },
           {
             name: "mobile-api.md",
-            path: "D:\\work\\mobile\\mobile-api.md",
+            path: "mobile-api.md",
             type: "file",
             size: 1024,
             modifiedTime: "2026-05-22T09:00:00Z",

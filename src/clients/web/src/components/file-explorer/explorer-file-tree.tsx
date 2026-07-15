@@ -68,6 +68,7 @@ const formatFileSize = (bytes: number): string => {
 };
 
 function FileTreeNode({
+  projectId,
   item,
   onFileSelect,
   level,
@@ -100,7 +101,7 @@ function FileTreeNode({
     setError(null);
 
     try {
-      const data = await listFiles(item.path, diffMode, recursiveMode);
+      const data = await listFiles(projectId, item.path, diffMode, recursiveMode);
       setChildren(data.items || []);
     } catch (err) {
       console.error("Error loading directory:", err);
@@ -141,7 +142,7 @@ function FileTreeNode({
     }
 
     try {
-      const result = await deleteFile(item.path);
+      const result = await deleteFile(projectId, item.path);
       if (result.success) {
         toast.success(result.message);
         onFileDeleted?.(item.path);
@@ -164,7 +165,7 @@ function FileTreeNode({
     }
 
     try {
-      const result = await resetFile(item.path);
+      const result = await resetFile(projectId, item.path);
       if (result.success) {
         toast.success(result.message);
         onFileReset?.(item.path);
@@ -273,6 +274,7 @@ function FileTreeNode({
         <div>
           {children.map((child) => (
             <FileTreeNode
+              projectId={projectId}
               key={child.path}
               item={child}
               onFileSelect={onFileSelect}
@@ -291,6 +293,7 @@ function FileTreeNode({
 }
 
 export function ExplorerFileTree({
+  projectId,
   rootItems,
   onFileSelect,
   onlyDiff,
@@ -298,6 +301,7 @@ export function ExplorerFileTree({
   onFileDeleted,
   onFileReset,
 }: {
+  projectId: string;
   rootItems: FileItem[];
   onlyDiff: boolean;
   recursiveMode: boolean;
@@ -309,6 +313,7 @@ export function ExplorerFileTree({
     <div className="file-tree">
       {rootItems.map((item: FileItem) => (
         <FileTreeNode
+          projectId={projectId}
           key={item.path}
           item={item}
           onFileSelect={onFileSelect}

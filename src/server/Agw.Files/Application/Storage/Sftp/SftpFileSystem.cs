@@ -31,13 +31,31 @@ public sealed class SftpFileSystem : IAgwFileSystem, IAsyncDisposable
 
     private string ResolvePath(string path)
     {
-        var normalized = path.Replace('\\', '/').TrimStart('/');
+        var normalized = path.Replace('\\', '/');
         if (string.IsNullOrEmpty(normalized))
         {
             return _rootPath;
         }
 
-        return $"{_rootPath}/{normalized}";
+        if (normalized.StartsWith('/'))
+        {
+            throw new AgwFilesException(
+                FilesErrorCode.PathOutsideRoot,
+                $"Path '{path}' must be relative to the file system root.");
+        }
+
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Any(segment => segment == ".."))
+        {
+            throw new AgwFilesException(
+                FilesErrorCode.PathOutsideRoot,
+                $"Path '{path}' is outside the allowed root directory.");
+        }
+
+        var relativePath = string.Join('/', segments.Where(segment => segment != "."));
+        return string.IsNullOrEmpty(relativePath)
+            ? _rootPath
+            : $"{_rootPath}/{relativePath}";
     }
 
     private async Task EnsureConnectedAsync(CancellationToken ct)
@@ -254,7 +272,10 @@ public sealed class SftpFileSystem : IAgwFileSystem, IAsyncDisposable
             // Simple glob matching for searchPattern
             if (!MatchesSftpGlob(name, searchPattern)) continue;
 
-            var relativePath = path.TrimEnd('/') + "/" + name;
+            var parentPath = path.Replace('\\', '/').Trim('/');
+            var relativePath = string.IsNullOrEmpty(parentPath)
+                ? name
+                : $"{parentPath}/{name}";
 
             yield return new FileEntry(
                 Path: relativePath,

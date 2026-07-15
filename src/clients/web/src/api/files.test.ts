@@ -18,8 +18,8 @@ test("listFiles uses same-origin cookie credentials", async (t) => {
     globalThis.fetch = originalFetch;
   });
 
-  await listFiles("/workspace", true, true);
+  await listFiles("project-1", "", true, true);
 
   assert.equal(requests[0].init?.credentials, "same-origin");
-  assert.equal(requests[0].url, "/api/files/list?path=%2Fworkspace&diff=true&recursive=true");
+  assert.equal(requests[0].url, "/api/files/list?projectId=project-1&diff=true&recursive=true");
 });
