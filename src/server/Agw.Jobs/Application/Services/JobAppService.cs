@@ -1,7 +1,8 @@
 using System.Globalization;
 
-using Agw.Jobs.Contracts;
-using Agw.Jobs.Domain.Events;
+using Agw.Jobs.Application.Contracts;
+using Agw.Jobs.Scheduling;
+using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
@@ -17,8 +18,8 @@ public class JobAppService
     private readonly IRepository<TaskRecord> _taskRecordRepository;
     private readonly IRepository<ProjectContext> _projectContextRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IJobTimeCalculator _jobTimeCalculator;
-    private readonly IJobDomainEventDispatcher _jobDomainEventDispatcher;
+    private readonly JobScheduleCalculator _jobScheduleCalculator;
+    private readonly JobSchedulerWakeSignal _schedulerWakeSignal;
     private readonly TimeProvider _timeProvider;
 
     public JobAppService(
@@ -27,8 +28,8 @@ public class JobAppService
         IRepository<TaskRecord> taskRecordRepository,
         IRepository<ProjectContext> projectContextRepository,
         IUnitOfWork unitOfWork,
-        IJobTimeCalculator jobTimeCalculator,
-        IJobDomainEventDispatcher jobDomainEventDispatcher,
+        JobScheduleCalculator jobScheduleCalculator,
+        JobSchedulerWakeSignal schedulerWakeSignal,
         TimeProvider timeProvider)
     {
         _jobTaskRepository = jobTaskRepository;
@@ -36,8 +37,8 @@ public class JobAppService
         _taskRecordRepository = taskRecordRepository;
         _projectContextRepository = projectContextRepository;
         _unitOfWork = unitOfWork;
-        _jobTimeCalculator = jobTimeCalculator;
-        _jobDomainEventDispatcher = jobDomainEventDispatcher;
+        _jobScheduleCalculator = jobScheduleCalculator;
+        _schedulerWakeSignal = schedulerWakeSignal;
         _timeProvider = timeProvider;
     }
 
@@ -123,7 +124,7 @@ public class JobAppService
 
         await _jobTaskRepository.AddAsync(entity);
         await _unitOfWork.SaveChangesAsync();
-        await _jobDomainEventDispatcher.DispatchAsync(new JobCreatedDomainEvent(entity));
+        _schedulerWakeSignal.NotifyCreated(entity);
         return entity;
     }
 
@@ -181,7 +182,7 @@ public class JobAppService
 
     private DateTimeOffset ResolveNextRunTime(Job entity, DateTimeOffset now)
     {
-        var nextRunTime = _jobTimeCalculator.GetNextRunTime(entity, now);
+        var nextRunTime = _jobScheduleCalculator.GetNextRunTime(entity, now);
         if (!nextRunTime.HasValue)
         {
             return DateTimeOffset.MaxValue;

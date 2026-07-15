@@ -1,7 +1,7 @@
 using Agw.Infrastructure;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Jobs;
-using Agw.Jobs.External;
+using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
 

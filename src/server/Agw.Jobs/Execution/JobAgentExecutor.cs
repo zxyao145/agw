@@ -9,22 +9,26 @@ using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 
-namespace Agw.Jobs.Application.Services;
+namespace Agw.Jobs.Execution;
 
-public class AgentExecutor(
-    IAgentRuntimeService agentRuntimeService,
-    IAgentflowRuntimeService agentflowRuntimeService,
-    TaskExecutionAppService taskExecutionAppService) : IAgentExecutor
+public sealed class JobAgentExecutor : IJobAgentExecutor
 {
     private const string JobExecutorUser = "job-executor";
 
-    /// <summary>
-    /// 为定时任务创建独立 context，执行目标 Agent 或 Agentflow，并返回任务标识。
-    /// </summary>
-    /// <param name="job"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    /// <exception cref="AgwException"></exception>
+    private readonly IAgentRuntimeService _agentRuntimeService;
+    private readonly IAgentflowRuntimeService _agentflowRuntimeService;
+    private readonly TaskExecutionAppService _taskExecutionAppService;
+
+    public JobAgentExecutor(
+        IAgentRuntimeService agentRuntimeService,
+        IAgentflowRuntimeService agentflowRuntimeService,
+        TaskExecutionAppService taskExecutionAppService)
+    {
+        _agentRuntimeService = agentRuntimeService;
+        _agentflowRuntimeService = agentflowRuntimeService;
+        _taskExecutionAppService = taskExecutionAppService;
+    }
+
     public async Task<Guid> ExecuteAsync(Job job, CancellationToken cancellationToken)
     {
         if (job.AgentId == null || job.AgentType == null)
@@ -33,10 +37,8 @@ public class AgentExecutor(
         }
 
         var (prompt, title) = BuildPromptAndTitle(job);
-
         var contextId = ContextIdUtil.GenContextId();
-
-        var createResult = await taskExecutionAppService.CreateRunningAsync(
+        var createResult = await _taskExecutionAppService.CreateRunningAsync(
             job.ProjectId,
             new TaskCreateRequest(
                 JobId: job.Id,
@@ -58,19 +60,19 @@ public class AgentExecutor(
         {
             object? execution = job.AgentType.Value switch
             {
-                AgentRuntimeType.Agent => await agentRuntimeService.ExecuteByIdAsync
-                (
+                AgentRuntimeType.Agent => await _agentRuntimeService.ExecuteByIdAsync(
                     new AgentExecuteByIdRequest(prompt, job.AgentId.Value, taskId, job.ProjectId, contextId),
-                    cancellationToken
-                ),
-                AgentRuntimeType.Agentflow => await agentflowRuntimeService.ExecuteAsync(
+                    cancellationToken),
+                AgentRuntimeType.Agentflow => await _agentflowRuntimeService.ExecuteAsync(
                     job.AgentId.Value,
                     taskId,
                     prompt,
                     cancellationToken,
                     job.ProjectId,
                     contextId),
-                _ => throw new AgwException(ErrorCodes.UnsupportedAgentType, $"Unsupported agent type: {job.AgentType}")
+                _ => throw new AgwException(
+                    ErrorCodes.UnsupportedAgentType,
+                    $"Unsupported agent type: {job.AgentType}")
             };
 
             if (execution == null)
@@ -81,7 +83,7 @@ public class AgentExecutor(
                     $"{targetText} execution failed (target disabled/missing or runtime unavailable).");
             }
 
-            var succeededTask = await taskExecutionAppService.MarkSucceededAsync(
+            var succeededTask = await _taskExecutionAppService.MarkSucceededAsync(
                 taskId,
                 JobExecutorUser);
             if (succeededTask == null)
@@ -90,11 +92,12 @@ public class AgentExecutor(
                     ErrorCodes.TaskMarkSucceededFailed,
                     $"Failed to mark task {taskId} as succeeded.");
             }
+
             return taskId;
         }
         catch (Exception ex)
         {
-            _ = await taskExecutionAppService.MarkFailedAsync(
+            _ = await _taskExecutionAppService.MarkFailedAsync(
                 taskId,
                 ex.Message,
                 JobExecutorUser);

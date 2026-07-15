@@ -1,9 +1,12 @@
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 
-namespace Agw.Jobs.Dtos;
+namespace Agw.Jobs.Scheduling;
 
-public sealed class InMemoryJob
+/// <summary>
+/// Immutable scheduling snapshot queued in memory. Its version lets the scheduler discard stale queue entries.
+/// </summary>
+public sealed record ScheduledJob
 {
     public Guid JobId { get; init; }
     public Guid ProjectId { get; init; }
@@ -11,13 +14,10 @@ public sealed class InMemoryJob
     public Guid? AgentId { get; init; }
     public string Name { get; init; } = string.Empty;
     public string? Prompt { get; init; }
-
     public TriggerType TriggerType { get; init; }
     public string TriggerValue { get; init; } = string.Empty;
     public DateTimeOffset NextRunTime { get; init; }
-
     public int RetryCount { get; init; }
     public int MaxRetryCount { get; init; }
-
     public long Version { get; init; }
 }
