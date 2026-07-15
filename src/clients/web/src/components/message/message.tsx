@@ -1,9 +1,8 @@
-import React, {  } from "react";
+import React from "react";
 import { AiMessage, AiMessageContent, MessageContentType } from "@/types";
 import { cn } from "@/lib/utils";
 import { MessageNode } from "./types";
 import { renderContent } from "./renders";
-
 
 export const isResultMessage = (message: AiMessage): boolean =>
   message.additionalProperties?.type === "result";
@@ -23,8 +22,6 @@ const getNodePrefix = (type: string): string =>
           : type === MessageContentType.FunctionCallContent
             ? ""
             : "";
-
-
 
 const buildContentNode = (content: AiMessageContent, message: AiMessage): string => {
   const { type, content: value } = content;
@@ -67,8 +64,8 @@ const buildContentNode = (content: AiMessageContent, message: AiMessage): string
 
 /**
  * 流式响应的时候处理数据，按照内容类型进行分组，生成一个新的数组
- * @param 
- * @returns 
+ * @param
+ * @returns
  */
 const groupContentsByType = (message: AiMessage): MessageNode[] => {
   const contents = message.contents || [];
@@ -104,7 +101,6 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
   // A more appropriate approach is to group by messageId. Why wasn't that done? already forgotten
   const groupContents = React.useMemo(() => groupContentsByType(message), [message]);
 
-
   // const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
   const isUser = message.role === "user";
   const isUserBlock = message.role === "user" && !message.additionalProperties;
@@ -123,7 +119,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
     title = "Tool result";
   } else if (isToolUse) {
     title = "Tool use";
-  } 
+  }
   // else if (isUser) {
   //   title = "You";
   // } else {
@@ -154,20 +150,16 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
         className={cn(
           "min-w-0 ",
           IsSideRight ? "msg-pos-right" : "msg-pos-left",
-          isResult
-            ? "w-full rounded-md p-3 border border-[#e4e4e5] bg-[##fffeff] "
-            : "max-w-full",
+          isResult ? "w-full rounded-md p-3 border border-[#e4e4e5] bg-[##fffeff] " : "max-w-full",
           IsSideRight
             ? "rounded-lg px-2 py-1 bg-primary text-primary-foreground ml-12"
-            // ? "rounded-lg px-2 py-1 bg-[#f3f3f4] ml-24"
-            : // debug
+            : // ? "rounded-lg px-2 py-1 bg-[#f3f3f4] ml-24"
+              // debug
               // : "bg-secondary mr-12"}`}
               "mr-12",
         )}
       >
-        <div
-          className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}
-        >
+        <div className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}>
           <span
             className={`${isResult ? "text-lg opacity-80 font-semibold mb-4 border-b border-dashed pr-4" : "text-xs opacity-40"}`}
           >

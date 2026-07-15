@@ -39,10 +39,7 @@ function toFileApiError(err: unknown, fallbackMessage: string): FileApiError {
   if (err instanceof ApiError) {
     const body = err.body;
     const message =
-      typeof body === "object" &&
-      body !== null &&
-      "error" in body &&
-      typeof body.error === "string"
+      typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
         ? body.error
         : fallbackMessage;
     return new FileApiError(message, err.status, err.statusText);

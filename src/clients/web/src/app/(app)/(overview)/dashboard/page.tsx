@@ -77,7 +77,6 @@ function SummaryCards({
   hasData: boolean;
 }) {
   const cards = [
-
     {
       label: "Total Input Token",
       value: formatStat(stats?.usageInputTokenCount, hasData),

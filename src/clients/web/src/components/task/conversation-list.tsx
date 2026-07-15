@@ -117,11 +117,7 @@ export function ConversationList({
     const refreshUntilCurrentContextAppears = async () => {
       attempts += 1;
       const latestContexts = await refreshContexts();
-      if (
-        cancelled ||
-        attempts >= 5 ||
-        latestContexts.some(matchesCurrentSession)
-      ) {
+      if (cancelled || attempts >= 5 || latestContexts.some(matchesCurrentSession)) {
         return;
       }
 
@@ -149,7 +145,11 @@ export function ConversationList({
   }, [contexts, currentContextId, matchesCurrentSession]);
 
   React.useEffect(() => {
-    if (!activeContext || !onActiveContextResolved || activeContext.contextId === currentContextId) {
+    if (
+      !activeContext ||
+      !onActiveContextResolved ||
+      activeContext.contextId === currentContextId
+    ) {
       return;
     }
 
@@ -194,7 +194,11 @@ export function ConversationList({
     }
 
     try {
-      const updated = await updateProjectContextTitle(projectId, contextToRename.contextId, renameTitle);
+      const updated = await updateProjectContextTitle(
+        projectId,
+        contextToRename.contextId,
+        renameTitle,
+      );
       if (!updated) {
         toast.error(renameTitle.trim() ? "Conversation not found" : "Title is required");
         await refreshContexts();
@@ -264,9 +268,7 @@ export function ConversationList({
                 onClick={() => onContextSelect(context)}
                 className={cn(
                   "group p-2 rounded-md cursor-pointer transition-colors border",
-                  isActive
-                    ? "bg-blue-50"
-                    : "bg-card hover:bg-accent/50 border-transparent",
+                  isActive ? "bg-blue-50" : "bg-card hover:bg-accent/50 border-transparent",
                 )}
               >
                 <div className="flex items-start">
@@ -281,14 +283,11 @@ export function ConversationList({
                           ? "execution"
                           : "executions"}{" "}
                         ·  */}
-                        {context.messageCount}{" "}
-                        {context.messageCount === 1 ? "message" : "messages"}
+                        {context.messageCount} {context.messageCount === 1 ? "message" : "messages"}
                       </span>
                       ·
                       <span>
-                        {formatFriendlyLocalDateTime(
-                          context.updateTime ?? context.createTime,
-                        )}
+                        {formatFriendlyLocalDateTime(context.updateTime ?? context.createTime)}
                       </span>
                     </div>
                   </div>
@@ -405,13 +404,16 @@ export function ConversationList({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(contextToDelete)} onOpenChange={(open) => !open && setContextToDelete(null)}>
+      <Dialog
+        open={Boolean(contextToDelete)}
+        onOpenChange={(open) => !open && setContextToDelete(null)}
+      >
         <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Delete conversation</DialogTitle>
             <DialogDescription className="whitespace-normal wrap-break-word break-all">
-              This will permanently delete "{contextToDelete?.title || "Untitled"}" and all executions in this
-              conversation.
+              This will permanently delete "{contextToDelete?.title || "Untitled"}" and all
+              executions in this conversation.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

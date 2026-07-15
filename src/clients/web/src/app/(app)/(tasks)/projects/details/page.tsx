@@ -13,13 +13,7 @@ import { buildChatTargetOptions } from "@/lib/chat-target-options";
 import { formatLocalDateTime } from "@/lib/date-time";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -63,31 +57,19 @@ function getApiErrorMessage(error: unknown): string {
         detail?: unknown;
       };
 
-      if (
-        typeof candidateBody.message === "string" &&
-        candidateBody.message.trim().length > 0
-      ) {
+      if (typeof candidateBody.message === "string" && candidateBody.message.trim().length > 0) {
         return candidateBody.message;
       }
 
-      if (
-        typeof candidateBody.error === "string" &&
-        candidateBody.error.trim().length > 0
-      ) {
+      if (typeof candidateBody.error === "string" && candidateBody.error.trim().length > 0) {
         return candidateBody.error;
       }
 
-      if (
-        typeof candidateBody.detail === "string" &&
-        candidateBody.detail.trim().length > 0
-      ) {
+      if (typeof candidateBody.detail === "string" && candidateBody.detail.trim().length > 0) {
         return candidateBody.detail;
       }
 
-      if (
-        typeof candidateBody.title === "string" &&
-        candidateBody.title.trim().length > 0
-      ) {
+      if (typeof candidateBody.title === "string" && candidateBody.title.trim().length > 0) {
         return candidateBody.title;
       }
 
@@ -168,8 +150,7 @@ export default function ProjectDetailsPage() {
 
   const agentflowsQuery = useQuery({
     queryKey: ["agentflows"],
-    queryFn: async () =>
-      (await apiGet("/api/agentflows")) as unknown as AgentflowDto[],
+    queryFn: async () => (await apiGet("/api/agentflows")) as unknown as AgentflowDto[],
   });
 
   const conversationsQuery = useQuery({
@@ -207,15 +188,11 @@ export default function ProjectDetailsPage() {
     },
   });
 
-  const conversations = [...(conversationsQuery.data ?? [])].sort(
-    (left, right) => {
-      const leftTime =
-        Date.parse(left.updateTime ?? left.createTime ?? "") || 0;
-      const rightTime =
-        Date.parse(right.updateTime ?? right.createTime ?? "") || 0;
-      return rightTime - leftTime;
-    },
-  );
+  const conversations = [...(conversationsQuery.data ?? [])].sort((left, right) => {
+    const leftTime = Date.parse(left.updateTime ?? left.createTime ?? "") || 0;
+    const rightTime = Date.parse(right.updateTime ?? right.createTime ?? "") || 0;
+    return rightTime - leftTime;
+  });
 
   return (
     <div className="space-y-6 w-full">
@@ -223,9 +200,7 @@ export default function ProjectDetailsPage() {
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-xl font-semibold">
-              {projectQuery.isLoading
-                ? "Loading project..."
-                : (project?.name ?? "Project")}
+              {projectQuery.isLoading ? "Loading project..." : (project?.name ?? "Project")}
             </h1>
             {project ? (
               <span
@@ -240,15 +215,13 @@ export default function ProjectDetailsPage() {
             ) : null}
           </div>
           <div className="text-sm text-muted-foreground">
-            {project?.description?.trim() ||
-              "Read-only conversation history for this project."}
+            {project?.description?.trim() || "Read-only conversation history for this project."}
           </div>
           {project ? (
             <div className="text-xs text-muted-foreground">
               <span className="font-mono">{project.id}</span>
               <span className="mx-2">·</span>
-              Updated:{" "}
-              {formatLocalDateTime(project.updateTime ?? project.createTime)}
+              Updated: {formatLocalDateTime(project.updateTime ?? project.createTime)}
             </div>
           ) : null}
         </div>
@@ -257,11 +230,7 @@ export default function ProjectDetailsPage() {
           <Button asChild variant="outline" size="sm">
             <Link href="/projects">Back</Link>
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setDetailsOpen(true)}
-          >
+          <Button variant="outline" size="sm" onClick={() => setDetailsOpen(true)}>
             {DETAILS_BUTTON_LABEL}
           </Button>
           <Button
@@ -283,25 +252,17 @@ export default function ProjectDetailsPage() {
         </div>
         <div>
           {conversationsQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">
-              Loading conversations...
-            </div>
+            <div className="text-sm text-muted-foreground">Loading conversations...</div>
           ) : conversationsQuery.isError ? (
             <div className="text-sm text-destructive">
-              Failed to load conversations:{" "}
-              {getApiErrorMessage(conversationsQuery.error)}
+              Failed to load conversations: {getApiErrorMessage(conversationsQuery.error)}
             </div>
           ) : conversations.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              No conversation history found.
-            </div>
+            <div className="text-sm text-muted-foreground">No conversation history found.</div>
           ) : (
             <div className="space-y-3">
               {conversations.map((conversation: ContextSummary) => (
-                <div
-                  key={conversation.contextId}
-                  className="rounded-lg border p-4"
-                >
+                <div key={conversation.contextId} className="rounded-lg border p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
@@ -318,19 +279,14 @@ export default function ProjectDetailsPage() {
 
                       <div className="grid gap-1 text-xs text-muted-foreground">
                         <div>
-                          Context ID:{" "}
-                          <span className="font-mono">
-                            {conversation.contextId}
-                          </span>
+                          Context ID: <span className="font-mono">{conversation.contextId}</span>
                         </div>
                         <div>
                           Executions: {conversation.executionCount} · Messages:{" "}
                           {conversation.messageCount}
                         </div>
                         <div>
-                          Created:{" "}
-                          {formatLocalDateTime(conversation.createTime)} ·
-                          Updated:{" "}
+                          Created: {formatLocalDateTime(conversation.createTime)} · Updated:{" "}
                           {formatLocalDateTime(conversation.updateTime)}
                         </div>
                       </div>
@@ -371,9 +327,7 @@ export default function ProjectDetailsPage() {
           </DialogHeader>
 
           {projectQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">
-              Loading project details...
-            </div>
+            <div className="text-sm text-muted-foreground">Loading project details...</div>
           ) : projectQuery.isError ? (
             <div className="text-sm text-destructive">
               Failed to load project: {getApiErrorMessage(projectQuery.error)}
@@ -385,9 +339,7 @@ export default function ProjectDetailsPage() {
                   <div className="text-xs uppercase tracking-wide text-muted-foreground">
                     {item.label}
                   </div>
-                  <div
-                    className={`break-all ${item.mono ? "font-mono text-xs" : ""}`}
-                  >
+                  <div className={`break-all ${item.mono ? "font-mono text-xs" : ""}`}>
                     {item.value}
                   </div>
                 </div>

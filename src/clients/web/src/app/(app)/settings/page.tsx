@@ -72,8 +72,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Server access</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Issue a separate token for each Desktop, Mobile or automation
-            client.
+            Issue a separate token for each Desktop, Mobile or automation client.
           </p>
         </div>
         <Button
@@ -95,8 +94,7 @@ export default function SettingsPage() {
             API tokens
           </CardTitle>
           <CardDescription>
-            Token secrets are shown once and stored by the Server only as
-            hashes.
+            Token secrets are shown once and stored by the Server only as hashes.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -150,15 +148,10 @@ export default function SettingsPage() {
 
           <div className="divide-y rounded-lg border">
             {tokens.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">
-                No client tokens yet.
-              </p>
+              <p className="p-4 text-sm text-muted-foreground">No client tokens yet.</p>
             ) : (
               tokens.map((token) => (
-                <div
-                  key={token.id}
-                  className="flex items-center justify-between gap-4 p-4"
-                >
+                <div key={token.id} className="flex items-center justify-between gap-4 p-4">
                   <div>
                     <p className="font-medium">{token.name}</p>
                     <p className="font-mono text-xs text-muted-foreground">
@@ -187,8 +180,8 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Administrator password</CardTitle>
           <CardDescription>
-            Changing the password invalidates every existing Web session.
-            Locally trusted access may leave the current password empty.
+            Changing the password invalidates every existing Web session. Locally trusted access may
+            leave the current password empty.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

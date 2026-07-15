@@ -1417,8 +1417,12 @@ export default function ChatPage() {
           <div className="flex-1" />
 
           <TabsList className="w-fit">
-            <TabsTrigger value="chat" className="cursor-pointer">Chat</TabsTrigger>
-            <TabsTrigger value="files" className="cursor-pointer">Files</TabsTrigger>
+            <TabsTrigger value="chat" className="cursor-pointer">
+              Chat
+            </TabsTrigger>
+            <TabsTrigger value="files" className="cursor-pointer">
+              Files
+            </TabsTrigger>
           </TabsList>
           <Button
             variant="ghost"

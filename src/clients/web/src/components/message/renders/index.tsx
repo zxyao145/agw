@@ -4,18 +4,17 @@ import UriContent from "./uri-content";
 import Reasoning from "./reasoning";
 import TextContent from "./text-content";
 
-
 const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
   const isTextNode = (
-      [
-        MessageContentType.TextContent,
-        MessageContentType.FunctionCallContent,
-        MessageContentType.FunctionResultContent,
+    [
+      MessageContentType.TextContent,
+      MessageContentType.FunctionCallContent,
+      MessageContentType.FunctionResultContent,
 
-        MessageContentType.DataContent,
-        MessageContentType.ErrorContent,
-      ] as string[]
-    ).includes(node.type);
+      MessageContentType.DataContent,
+      MessageContentType.ErrorContent,
+    ] as string[]
+  ).includes(node.type);
 
   if (isTextNode) {
     return <TextContent node={node} />;
@@ -31,6 +30,5 @@ const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
 
   return null;
 };
-
 
 export { renderContent };

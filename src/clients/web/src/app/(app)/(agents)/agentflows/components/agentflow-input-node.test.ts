@@ -99,13 +99,10 @@ test("ensureInputGraph connects legacy roots from input with FanOut edges", asyn
   const result = ensureInputGraph(nodes, edges);
   const inputEdges = result.edges.filter((item) => item.source === INPUT_NODE_ID);
 
-  assert.deepEqual(
-    inputEdges.map((item) => [item.target, item.data?.kind]).sort(),
-    [
-      ["adapter", AgentflowEdgeKind.FanOut],
-      ["agent", AgentflowEdgeKind.FanOut],
-    ],
-  );
+  assert.deepEqual(inputEdges.map((item) => [item.target, item.data?.kind]).sort(), [
+    ["adapter", AgentflowEdgeKind.FanOut],
+    ["agent", AgentflowEdgeKind.FanOut],
+  ]);
 });
 
 test("validateInputGraph rejects incoming edges to input", async () => {

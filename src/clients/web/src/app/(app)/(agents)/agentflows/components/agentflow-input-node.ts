@@ -109,9 +109,7 @@ export function validateInputGraph<
   const reachableNodeIds = getReachableNodeIds(INPUT_NODE_ID, edges, visibleNodeIds);
   const unreachableNode = nodes.find(
     (node) =>
-      visibleNodeIds.has(node.id) &&
-      node.id !== INPUT_NODE_ID &&
-      !reachableNodeIds.has(node.id),
+      visibleNodeIds.has(node.id) && node.id !== INPUT_NODE_ID && !reachableNodeIds.has(node.id),
   );
   if (unreachableNode) {
     return {
@@ -175,16 +173,15 @@ function getRuntimeRootNodeIds<TNodeData extends { kind: number; configJson?: st
   return nodes
     .filter(
       (node) =>
-        node.id !== INPUT_NODE_ID &&
-        visibleNodeIds.has(node.id) &&
-        !visibleTargetIds.has(node.id),
+        node.id !== INPUT_NODE_ID && visibleNodeIds.has(node.id) && !visibleTargetIds.has(node.id),
     )
     .map((node) => node.id);
 }
 
-function getRuntimeVisibleNodeIds<
-  TNodeData extends { kind: number; configJson?: string | null },
->(nodes: Node<TNodeData>[], edges: Edge[]) {
+function getRuntimeVisibleNodeIds<TNodeData extends { kind: number; configJson?: string | null }>(
+  nodes: Node<TNodeData>[],
+  edges: Edge[],
+) {
   const hiddenParticipantIds = getHiddenBlockParticipantIds(nodes, edges);
   return new Set(nodes.filter((node) => !hiddenParticipantIds.has(node.id)).map((node) => node.id));
 }
@@ -212,10 +209,7 @@ function getReachableNodeIds(startNodeId: string, edges: Edge[], visibleNodeIds:
 
 function getHiddenBlockParticipantIds<
   TNodeData extends { kind: number; configJson?: string | null },
->(
-  nodes: Node<TNodeData>[],
-  edges: Edge[],
-) {
+>(nodes: Node<TNodeData>[], edges: Edge[]) {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const edgeNodeIds = new Set<string>();
   edges.forEach((edge) => {

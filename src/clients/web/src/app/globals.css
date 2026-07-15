@@ -354,7 +354,6 @@
   @apply inline;
 }
 
-
 .session-aside-row {
   @apply flex items-center gap-3 py-0;
 }

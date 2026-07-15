@@ -6,7 +6,9 @@ export type ExecutionUserInput = Pick<AiMessage, "messageId" | "author" | "conte
 const default_user = "$agw";
 const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
 
-function isTextContent(content: AiMessageContent): content is AiMessageContent & { content: string } {
+function isTextContent(
+  content: AiMessageContent,
+): content is AiMessageContent & { content: string } {
   return TEXT_CONTENT_TYPES.has(content.type) && typeof content.content === "string";
 }
 

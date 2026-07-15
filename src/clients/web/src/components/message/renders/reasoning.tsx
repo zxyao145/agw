@@ -43,7 +43,6 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
     return result.lines[0].text;
   }, [node.content, containerRef]);
 
-
   return (
     <div className="msg-content text-muted-foreground ">
       <div className="flex justify-between items-start">
@@ -65,6 +64,5 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
     </div>
   );
 };
-
 
 export default Reasoning;

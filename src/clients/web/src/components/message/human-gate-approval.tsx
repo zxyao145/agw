@@ -14,11 +14,7 @@ type HumanGateApprovalProps = {
   onReject: (responseText?: string) => void;
 };
 
-export function HumanGateApproval({
-  request,
-  onApprove,
-  onReject,
-}: HumanGateApprovalProps) {
+export function HumanGateApproval({ request, onApprove, onReject }: HumanGateApprovalProps) {
   const [responseText, setResponseText] = React.useState("");
   const mode = request.mode.toLowerCase();
   const expectsInput = mode === "input";
@@ -35,9 +31,7 @@ export function HumanGateApproval({
         </div>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="truncate text-sm font-medium">
-              {request.nodeName || "HumanGate"}
-            </div>
+            <div className="truncate text-sm font-medium">{request.nodeName || "HumanGate"}</div>
             <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[11px]">
               {request.mode}
             </Badge>
@@ -70,11 +64,7 @@ export function HumanGateApproval({
           <X className="h-4 w-4" />
           Reject
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => onApprove(responseText.trim() || undefined)}
-        >
+        <Button type="button" size="sm" onClick={() => onApprove(responseText.trim() || undefined)}>
           <Check className="h-4 w-4" />
           Approve
         </Button>
