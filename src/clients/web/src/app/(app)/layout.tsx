@@ -165,10 +165,10 @@ function getActiveNavLabel(pathname: string): MenuItem | undefined {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeMenu = getActiveNavLabel(pathname);
-  const [sidebarOpen, setSidebarOpen] = React.useState(pathname !== "/claude-code");
+  const [sidebarOpen, setSidebarOpen] = React.useState(pathname !== "/chat");
 
   React.useEffect(() => {
-    if (pathname === "/claude-code") {
+    if (pathname === "/chat") {
       setSidebarOpen(false);
     }
   }, [pathname]);

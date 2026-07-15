@@ -5,7 +5,7 @@ echo Running dotnet format Agw.slnx check...
 dotnet format Agw.slnx --verify-no-changes 
 if errorlevel 1 exit /b 1
 
-cd src\frontend\web 2>nul
+cd src/clients/web 2>nul
 if errorlevel 1 goto skip_frontend
 
 where pnpm >nul 2>nul

@@ -92,36 +92,36 @@ function SummaryCards({
       value: formatStat(stats?.usageTotalTokenCount, hasData),
       color: "text-emerald-300",
     },
-    {
-      label: "Project",
-      value: hasData ? stats?.projectCount : "—",
-      color: "text-sage",
-    },
-    {
-      label: "Context / Conversation / Session",
-      value: hasData ? stats?.projectContextCount : "—",
-      color: "text-blue-400",
-    },
-    {
-      label: "Task Record",
-      value: hasData ? stats?.taskRecordCount : "—",
-      color: "text-violet-400",
-    },
-    {
-      label: "Job",
-      value: hasData ? stats?.jobCount : "—",
-      color: "text-light",
-    },
-    {
-      label: "Agent",
-      value: hasData ? stats?.agentCount : "—",
-      color: "text-amber-300",
-    },
-    {
-      label: "Agentflow",
-      value: hasData ? stats?.agentflowCount : "—",
-      color: "text-rose",
-    },
+    // {
+    //   label: "Project",
+    //   value: hasData ? stats?.projectCount : "—",
+    //   color: "text-sage",
+    // },
+    // {
+    //   label: "Context / Conversation / Session",
+    //   value: hasData ? stats?.projectContextCount : "—",
+    //   color: "text-blue-400",
+    // },
+    // {
+    //   label: "Task Record",
+    //   value: hasData ? stats?.taskRecordCount : "—",
+    //   color: "text-violet-400",
+    // },
+    // {
+    //   label: "Job",
+    //   value: hasData ? stats?.jobCount : "—",
+    //   color: "text-light",
+    // },
+    // {
+    //   label: "Agent",
+    //   value: hasData ? stats?.agentCount : "—",
+    //   color: "text-amber-300",
+    // },
+    // {
+    //   label: "Agentflow",
+    //   value: hasData ? stats?.agentflowCount : "—",
+    //   color: "text-rose",
+    // },
   ];
 
   return (
