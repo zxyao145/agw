@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Providers;
 
 [Table("model")]
+[EntityTypeConfiguration(typeof(LlmModelConfiguration))]
 public class LlmModel : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }

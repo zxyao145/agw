@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Integrations;
 
 [Table("app_instance")]
+[EntityTypeConfiguration(typeof(AppInstanceConfiguration))]
 public class AppInstance : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }

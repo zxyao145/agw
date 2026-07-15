@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Agents;
 
 [Table("mcp_server")]
+[EntityTypeConfiguration(typeof(McpServerConfiguration))]
 public sealed class McpServer : BaseEntity, IAggregateRoot
 {
     /// <summary>

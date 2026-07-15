@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Providers;
 
 [Table("provider")]
+[EntityTypeConfiguration(typeof(ProviderConfiguration))]
 public class Provider : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }

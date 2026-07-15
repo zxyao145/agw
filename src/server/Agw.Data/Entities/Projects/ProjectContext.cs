@@ -1,9 +1,12 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Projects;
 
 [Table("project_context")]
+[EntityTypeConfiguration(typeof(ProjectContextConfiguration))]
 public class ProjectContext : BaseEntity
 {
     public Guid Id { get; set; }

@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Projects;
 
 [Table("agent_usage")]
+[EntityTypeConfiguration(typeof(AgentUsageConfiguration))]
 public class AgentUsage
 {
     public Guid Id { get; set; }

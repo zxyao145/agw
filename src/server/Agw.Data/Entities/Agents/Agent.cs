@@ -2,9 +2,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 using Agw.Shared.Data.Entities.Providers;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Agents;
 
 [Table("agent")]
+[EntityTypeConfiguration(typeof(AgentConfiguration))]
 public class Agent : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }

@@ -1,11 +1,14 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Integrations;
 
 /// <summary>
 /// Persists provider-issued OAuth tokens for a specific authenticated subject.
 /// </summary>
 [Table("oauth_authorization")]
+[EntityTypeConfiguration(typeof(OAuthAuthorizationTokenConfiguration))]
 public class OAuthAuthorizationToken
 {
     /// <summary>

@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Agents;
 
 [Table("agent_mcp_server_relation")]
+[EntityTypeConfiguration(typeof(AgentMcpServerRelationConfiguration))]
 public class AgentMcpServerRelation : IAggregateRoot
 {
     public Guid AgentId { get; set; }

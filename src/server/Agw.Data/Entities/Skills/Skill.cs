@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Skills;
 
 [Table("skill")]
+[EntityTypeConfiguration(typeof(SkillConfiguration))]
 public class Skill : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }

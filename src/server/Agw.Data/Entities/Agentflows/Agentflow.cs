@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Agentflows;
 
 [Table("agentflow")]
+[EntityTypeConfiguration(typeof(AgentflowConfiguration))]
 public class Agentflow : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }

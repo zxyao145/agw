@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Agentflows;
 
 [Table("agentflow_trace")]
+[EntityTypeConfiguration(typeof(AgentflowTraceConfiguration))]
 public class AgentflowTrace
 {
     public Guid Id { get; set; }

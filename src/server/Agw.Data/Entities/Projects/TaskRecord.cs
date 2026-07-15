@@ -2,17 +2,18 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Projects;
 
 [Table("project_task_record")]
+[EntityTypeConfiguration(typeof(TaskRecordConfiguration))]
 public class TaskRecord
 {
     public Guid Id { get; set; }
 
     public Guid ProjectContextId { get; set; }
 
-    [JsonIgnore]
-    public ProjectContext? ProjectContext { get; set; }
 
     public Guid TaskId { get; set; }
 
@@ -41,4 +42,6 @@ public class TaskRecord
 
     public DateTimeOffset CreateTime { get; set; }
     public DateTimeOffset? UpdateTime { get; set; }
+
+    [JsonIgnore] public virtual ProjectContext? ProjectContext { get; set; }
 }

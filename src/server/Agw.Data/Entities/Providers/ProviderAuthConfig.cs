@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Providers;
 
 [Table("provider_auth_config")]
+[EntityTypeConfiguration(typeof(ProviderAuthConfigConfiguration))]
 public class ProviderAuthConfig : BaseEntity
 {
     public Guid Id { get; set; }

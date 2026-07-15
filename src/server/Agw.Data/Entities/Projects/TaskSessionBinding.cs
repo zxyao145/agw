@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Projects;
 
 [Table("task_session_binding")]
+[EntityTypeConfiguration(typeof(TaskSessionBindingConfiguration))]
 public class TaskSessionBinding : BaseEntity
 {
     public Guid Id { get; set; }

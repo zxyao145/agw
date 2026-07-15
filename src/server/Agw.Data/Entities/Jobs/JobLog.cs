@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Jobs;
 
 [Table("job_log")]
+[EntityTypeConfiguration(typeof(JobLogConfiguration))]
 public class JobLog : BaseEntity
 {
     public Guid Id { get; set; }

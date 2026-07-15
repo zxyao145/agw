@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Agw.Shared.Data.Entities.Jobs;
 
 [Table("job")]
+[EntityTypeConfiguration(typeof(JobConfiguration))]
 public class Job : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }
