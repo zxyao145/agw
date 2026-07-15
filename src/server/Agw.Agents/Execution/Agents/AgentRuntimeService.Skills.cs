@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Agents.Skills;
+using Agw.Integrations.Application.Capabilities;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
@@ -29,37 +30,94 @@ public partial class AgentRuntimeService
         - If a skill or script is not found, report the error. Do not search the project workspace.
         """;
 
-    private async Task<AIContextProvider?> CreateSkillsProviderAsync(Agent agent, Project project)
+    private async Task<AIContextProvider?> CreateSkillsProviderAsync(
+        Agent agent,
+        Project project,
+        IReadOnlyList<PluginSkillReference> pluginSkills)
     {
         var skillIds = agent.AgentSkillRelations
             .Select(relation => relation.SkillId)
             .Concat(project.ProjectSkillRelations.Select(relation => relation.SkillId));
         var skills = await _agentAppService.ListSkillsAsync(skillIds);
-        var skillPaths = skills
+        var userSkillPaths = skills
             .Select(GetSkillAbsolutePath)
             .Where(Directory.Exists)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-
-        if (skillPaths.Length == 0)
+        var userSkillNames = skills
+            .Select(skill => skill.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var pluginSkillPaths = new List<string>();
+        var pluginSkillNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pluginSkill in pluginSkills)
         {
-            _logger.LogWarning(
-                "Agent {AgentId} has skill relations configured but no extracted skill directories were found.",
-                agent.Id);
+            if (userSkillNames.Contains(pluginSkill.SkillId))
+            {
+                _logger.LogWarning(
+                    "User skill {SkillName} overrides plugin skill from plugin {PluginId}",
+                    pluginSkill.SkillId,
+                    pluginSkill.PluginId);
+                continue;
+            }
+
+            if (!TryGetPluginSkillDirectory(pluginSkill.SkillFilePath, out var skillDirectory))
+            {
+                _logger.LogWarning(
+                    "Plugin skill {SkillName} from plugin {PluginId} has no valid SKILL.md",
+                    pluginSkill.SkillId,
+                    pluginSkill.PluginId);
+                continue;
+            }
+
+            if (!pluginSkillNames.Add(pluginSkill.SkillId))
+            {
+                _logger.LogWarning(
+                    "Plugin skill {SkillName} from plugin {PluginId} conflicts with another plugin skill",
+                    pluginSkill.SkillId,
+                    pluginSkill.PluginId);
+                continue;
+            }
+
+            pluginSkillPaths.Add(skillDirectory);
+        }
+
+        if (userSkillPaths.Length == 0 && pluginSkillPaths.Count == 0)
+        {
+            if (agent.AgentSkillRelations.Count > 0 || project.ProjectSkillRelations.Count > 0 || pluginSkills.Count > 0)
+            {
+                _logger.LogWarning(
+                    "Agent {AgentId} has skill references configured but no valid skill directories were found.",
+                    agent.Id);
+            }
+
             return null;
         }
 
-        return new AgentSkillsProvider(
-            skillPaths: skillPaths,
-            scriptRunner: LocalSkillScriptRunner.RunAsync,
-            fileOptions: new AgentFileSkillsSourceOptions
-            {
-                AllowedScriptExtensions = [.. LocalSkillScriptRunner.SupportedScriptExtensions],
-            },
-            options: new AgentSkillsProviderOptions
-            {
-                SkillsInstructionPrompt = SkillsInstructionPrompt,
-            });
+        var builder = new AgentSkillsProviderBuilder()
+            .UsePromptTemplate(SkillsInstructionPrompt);
+        if (userSkillPaths.Length > 0)
+        {
+            builder.UseFileSkills(
+                userSkillPaths,
+                new AgentFileSkillsSourceOptions
+                {
+                    AllowedScriptExtensions = [.. LocalSkillScriptRunner.SupportedScriptExtensions],
+                },
+                LocalSkillScriptRunner.RunAsync);
+        }
+
+        if (pluginSkillPaths.Count > 0)
+        {
+            builder.UseFileSkills(
+                pluginSkillPaths.Distinct(StringComparer.Ordinal),
+                new AgentFileSkillsSourceOptions
+                {
+                    AllowedScriptExtensions = [],
+                },
+                RejectPluginSkillScriptAsync);
+        }
+
+        return builder.Build();
     }
 
     private string GetSkillAbsolutePath(Skill skill)
@@ -71,5 +129,39 @@ public partial class AgentRuntimeService
         }
 
         return Path.Combine(_dataPaths.SkillsDirectory, skill.Name);
+    }
+
+    private static bool TryGetPluginSkillDirectory(string skillFilePath, out string skillDirectory)
+    {
+        skillDirectory = string.Empty;
+        try
+        {
+            if (!string.Equals(
+                    Path.GetFileName(skillFilePath),
+                    "SKILL.md",
+                    StringComparison.OrdinalIgnoreCase) ||
+                !File.Exists(skillFilePath))
+            {
+                return false;
+            }
+
+            skillDirectory = Path.GetDirectoryName(Path.GetFullPath(skillFilePath)) ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(skillDirectory);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    private static Task<object?> RejectPluginSkillScriptAsync(
+        AgentFileSkill skill,
+        AgentFileSkillScript script,
+        System.Text.Json.JsonElement? arguments,
+        IServiceProvider? serviceProvider,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromException<object?>(
+            new InvalidOperationException("Plugin skill scripts are not trusted for execution."));
     }
 }

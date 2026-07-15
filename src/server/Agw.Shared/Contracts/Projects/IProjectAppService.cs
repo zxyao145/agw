@@ -18,7 +18,7 @@ public interface IProjectAppService
         Project project,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? appInstanceIds,
+        IEnumerable<Guid>? connectionIds,
         string user) => CreateAsync(project, user);
 
     Task<bool> DeleteAsync(Guid id);
@@ -32,6 +32,6 @@ public interface IProjectAppService
         Action<Project> updateAction,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? appInstanceIds,
+        IEnumerable<Guid>? connectionIds,
         string user) => UpdateAsync(id, updateAction, user);
 }

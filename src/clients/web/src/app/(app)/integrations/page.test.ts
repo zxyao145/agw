@@ -4,13 +4,18 @@ import test from "node:test";
 
 const PAGE_URL = new URL("./page.tsx", import.meta.url);
 
-test("integrations page renders connected instances above an adaptive app catalog", async () => {
+test("integrations page renders connections above plugin installations", async () => {
   const source = await readFile(PAGE_URL, "utf8");
 
-  assert.match(source, /<AppInstanceCard/);
-  assert.match(source, /Connected apps/);
-  assert.match(source, /<AppDefinitionCard/);
-  assert.match(source, /grid-cols-\[repeat\(auto-fit,minmax\(280px,400px\)\)\]/);
-  assert.match(source, /<CreateConnectionDialog/);
+  assert.match(source, /<ConnectionCard/);
+  assert.match(source, /<h2 className="text-xl font-semibold">Connections<\/h2>/);
+  assert.match(source, /<PluginCard/);
+  assert.match(source, /Plugin installations/);
+  assert.match(source, /<ConnectionDialog/);
+  assert.match(source, /<PluginInstallationDialog/);
   assert.match(source, /callbackUrl=\{callbackUrl\}/);
+  assert.match(source, /\/api\/integrations\/oauth\/authorize-start/);
+  assert.match(source, /alias: createDefaultConnectionAlias\(selection\.plugin\.id\)/);
+  assert.doesNotMatch(source, /app-instances|app-definitions/);
+  assert.doesNotMatch(source, /_account/);
 });

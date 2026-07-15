@@ -2,12 +2,12 @@ import * as React from "react";
 import { UseQueryResult } from "@tanstack/react-query";
 
 import {
-  AppsPanel,
+  ConnectionsPanel,
   EnvironmentVariablesPanel,
   McpToolServersPanel,
   SkillsPanel,
   ToolsPanel,
-  type AppInstanceOption,
+  type ConnectionOption,
   type EnvironmentVariableEntry,
   type McpToolServerDto,
   type SkillDto,
@@ -50,9 +50,9 @@ interface AgentFormFieldsProps {
   environmentVariables: EnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: EnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
-  appOptions: AppInstanceOption[];
-  selectedAppInstanceIds: string[];
-  toggleAppInstance: (appInstanceId: string) => void;
+  connectionOptions: ConnectionOption[];
+  selectedConnectionIds: string[];
+  toggleConnection: (connectionId: string) => void;
   selectedTools: string[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
@@ -95,9 +95,9 @@ export function AgentFormFields({
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
-  appOptions,
-  selectedAppInstanceIds,
-  toggleAppInstance,
+  connectionOptions,
+  selectedConnectionIds,
+  toggleConnection,
   selectedTools,
   modelProvidersQuery,
   skillsQuery,
@@ -274,13 +274,13 @@ export function AgentFormFields({
               <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="tools">Tools</TabsTrigger>
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
-              <TabsTrigger value="apps">Apps</TabsTrigger>
+              <TabsTrigger value="connections">Connections</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
             </TabsList>
             <p className="mt-2 max-w-4xl text-xs text-muted-foreground">
-              Agw recommends configuring Skills, Tools, MCP Tool Servers, Apps, and Environment
-              Variables in the Project. When the agent runs, it merges the configurations from both
-              the agent and the project.
+              Agw recommends configuring Skills, Tools, MCP Tool Servers, Connections, and
+              Environment Variables in the Project. When the agent runs, it merges the
+              configurations from both the agent and the project.
             </p>
           </div>
 
@@ -351,12 +351,12 @@ export function AgentFormFields({
             />
           </TabsContent>
 
-          <TabsContent value="apps" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
-            <AppsPanel
+          <TabsContent value="connections" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+            <ConnectionsPanel
               idPrefix={idPrefix}
-              appOptions={appOptions}
-              selectedAppInstanceIds={selectedAppInstanceIds}
-              toggleAppInstance={toggleAppInstance}
+              connectionOptions={connectionOptions}
+              selectedConnectionIds={selectedConnectionIds}
+              toggleConnection={toggleConnection}
             />
           </TabsContent>
 

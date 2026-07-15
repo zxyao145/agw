@@ -27,9 +27,9 @@ export interface AgentDto extends BaseDto {
     agentId: string;
     skillId: string;
   }> | null;
-  agentAppRelations?: Array<{
+  agentConnectionRelations?: Array<{
     agentId: string;
-    appInstanceId: string;
+    connectionId: string;
   }> | null;
 }
 

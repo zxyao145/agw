@@ -43,6 +43,7 @@
     <Project Path="tests/Agw.Agents.Tests/Agw.Agents.Tests.csproj" />
     <Project Path="tests/Agw.Files.Tests/Agw.Files.Tests.csproj" />
     <Project Path="tests/Agw.Host.Tests/Agw.Host.Tests.csproj" />
+    <Project Path="tests/Agw.Integrations.Tests/Agw.Integrations.Tests.csproj" />
     <Project Path="tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj" />
     <Project Path="tests/Agw.Shared.Tests/Agw.Shared.Tests.csproj" />
     <Project Path="tests/Agw.Setup.Tests/Agw.Setup.Tests.csproj" />

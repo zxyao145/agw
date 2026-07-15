@@ -78,15 +78,18 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             return null;
         }
 
-        var workflow = await CreateAiWorkflow(agentflow, cancellationToken);
-        if (workflow == null)
+        var workflowLease = await CreateAiWorkflow(agentflow, cancellationToken);
+        if (workflowLease == null)
         {
             return null;
         }
 
-        var mermaidString = WorkflowVisualizer.ToMermaidString(workflow);
-        _logger.LogInformation("Constructed workflow: {Workflow}", mermaidString);
-        return mermaidString;
+        await using (workflowLease)
+        {
+            var mermaidString = WorkflowVisualizer.ToMermaidString(workflowLease.Workflow);
+            _logger.LogInformation("Constructed workflow: {Workflow}", mermaidString);
+            return mermaidString;
+        }
     }
 
     /// <summary>
@@ -116,16 +119,19 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             resolvedContextId,
             resolvedTaskId);
         var sessionScope = CreateSessionScope(resolvedProjectId, resolvedContextId, resolvedTaskId);
-        var workflow = await CreateAiWorkflow(
+        var workflowLease = await CreateAiWorkflow(
             agentflow,
             cancellationToken,
             sessionScope,
             executionTraceContext,
             environmentVariables);
-        if (workflow == null)
+        if (workflowLease == null)
         {
             yield break;
         }
+
+        await using var workflowResources = workflowLease;
+        var workflow = workflowLease.Workflow;
 
         var humanGateNodes = (await _agentflowNodeRepository.ListAsync(
                 x => x.AgentflowId == agentflow.Id && x.Kind == AgentflowNodeKind.HumanGate))
@@ -136,7 +142,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
         var messages = CreateWorkflowInputMessages(input);
 
-        var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: cancellationToken);
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow,
+            messages,
+            cancellationToken: cancellationToken);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         var executorsWithUpdates = new HashSet<string>(StringComparer.Ordinal);
 
@@ -324,7 +333,9 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             contextId).ConfigureAwait(false);
     }
 
-    public async Task<Workflow?> CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken = default)
+    public async Task<AgentflowWorkflowLease?> CreateAiWorkflow(
+        Guid agentflowId,
+        CancellationToken cancellationToken = default)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null || !agentflow.Enable)
@@ -347,7 +358,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             taskId);
     }
 
-    private async Task<Workflow?> CreateAiWorkflow(
+    private async Task<AgentflowWorkflowLease?> CreateAiWorkflow(
         Guid agentflowId,
         CancellationToken cancellationToken,
         AgentflowAgentSessionScope? sessionScope,
@@ -396,17 +407,23 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             resolvedContextId,
             taskId.Value);
         var sessionScope = CreateSessionScope(projectId, resolvedContextId, taskId);
-        var workflow = await CreateAiWorkflow(
+        var workflowLease = await CreateAiWorkflow(
             agentflow,
             cancellationToken,
             sessionScope,
             executionTraceContext);
-        if (workflow == null)
+        if (workflowLease == null)
         {
             return null;
         }
 
-        var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: cancellationToken);
+        await using var workflowResources = workflowLease;
+        var workflow = workflowLease.Workflow;
+
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow,
+            messages,
+            cancellationToken: cancellationToken);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var outputs = new List<AgwMessage>();
@@ -464,7 +481,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             .ToList();
     }
 
-    private async Task<Workflow?> CreateAiWorkflow(
+    private async Task<AgentflowWorkflowLease?> CreateAiWorkflow(
         Agentflow agentflow,
         CancellationToken cancellationToken,
         AgentflowAgentSessionScope? sessionScope = null,
@@ -480,62 +497,102 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
         var orderedNodes = _agentflowDomainService.OrderNodesByEdges(agentflowNodes, agentflowEdges);
         var nodeIdToAgent = new Dictionary<string, AIAgent>(StringComparer.Ordinal);
+        var resources = new AgentResourceLease();
 
-        foreach (var node in orderedNodes)
+        try
         {
-            AIAgent? aiAgent;
-            if (node.Kind == AgentflowNodeKind.Agent && node.RelateId.HasValue)
+            foreach (var node in orderedNodes)
             {
-                aiAgent = await _agentRuntimeService.CreateAiAgentAsync(
-                    node.RelateId.Value,
-                    sessionScope?.ProjectId,
-                    resume: false,
-                    environmentVariables,
-                    cancellationToken: cancellationToken);
-            }
-            else if (node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
-            {
-                var flowNode = await CreateAiWorkflow(
-                    node.RelateId.Value,
-                    cancellationToken,
-                    sessionScope,
-                    executionTraceContext,
-                    environmentVariables);
-                aiAgent = flowNode?.AsAIAgent();
-            }
-            else
-            {
-                continue;
+                AIAgent? aiAgent;
+                if (node.Kind == AgentflowNodeKind.Agent && node.RelateId.HasValue)
+                {
+                    aiAgent = await _agentRuntimeService.CreateAiAgentAsync(
+                        node.RelateId.Value,
+                        sessionScope?.ProjectId,
+                        resume: false,
+                        environmentVariables,
+                        cancellationToken: cancellationToken);
+                    if (aiAgent != null)
+                    {
+                        resources.Add(new AgentflowAgentLifetime(aiAgent));
+                    }
+                }
+                else if (node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
+                {
+                    var flowNode = await CreateAiWorkflow(
+                        node.RelateId.Value,
+                        cancellationToken,
+                        sessionScope,
+                        executionTraceContext,
+                        environmentVariables);
+                    if (flowNode == null)
+                    {
+                        await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
+                        return null;
+                    }
+
+                    resources.Add(flowNode);
+                    aiAgent = flowNode.Workflow.AsAIAgent();
+                }
+                else
+                {
+                    continue;
+                }
+
+                if (aiAgent == null)
+                {
+                    await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
+                    return null;
+                }
+
+                nodeIdToAgent[node.NodeId] = aiAgent;
             }
 
-            if (aiAgent == null)
+            if (nodeIdToAgent.Count == 0)
             {
+                await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
                 return null;
             }
 
-            nodeIdToAgent[node.NodeId] = aiAgent;
-        }
+            var summaryContext = sessionScope != null && agentflow.SummaryModelProviderId.HasValue
+                ? new AgentflowSummaryContext(
+                    _summaryService,
+                    agentflow.SummaryModelProviderId.Value,
+                    sessionScope.ProjectId,
+                    sessionScope.ContextId)
+                : null;
+            var workflow = _workflowCompiler.Compile(
+                agentflow,
+                orderedNodes,
+                agentflowEdges,
+                nodeIdToAgent,
+                sessionScope,
+                executionTraceContext,
+                summaryContext);
+            if (workflow == null)
+            {
+                await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
+                return null;
+            }
 
-        if (nodeIdToAgent.Count == 0)
+            return new AgentflowWorkflowLease(workflow, resources);
+        }
+        catch
         {
-            return null;
+            await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
+            throw;
         }
+    }
 
-        var summaryContext = sessionScope != null && agentflow.SummaryModelProviderId.HasValue
-            ? new AgentflowSummaryContext(
-                _summaryService,
-                agentflow.SummaryModelProviderId.Value,
-                sessionScope.ProjectId,
-                sessionScope.ContextId)
-            : null;
-        return _workflowCompiler.Compile(
-            agentflow,
-            orderedNodes,
-            agentflowEdges,
-            nodeIdToAgent,
-            sessionScope,
-            executionTraceContext,
-            summaryContext);
+    private static async ValueTask DisposeWorkflowResourcesWithoutThrowingAsync(IAsyncDisposable resources)
+    {
+        try
+        {
+            await resources.DisposeAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+        }
     }
 
     private static HumanGateApprovalRequest CreateHumanGateApprovalRequest(

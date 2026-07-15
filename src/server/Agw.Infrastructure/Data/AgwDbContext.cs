@@ -38,7 +38,7 @@ public class AgwDbContext : DbContext
     public DbSet<ModelProviderRelation> ModelProviders => Set<ModelProviderRelation>();
 
     public DbSet<Agent> Agents => Set<Agent>();
-    public DbSet<AgentAppRelation> AgentAppRelations => Set<AgentAppRelation>();
+    public DbSet<AgentConnectionRelation> AgentConnectionRelations => Set<AgentConnectionRelation>();
 
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<AgentSkillRelation> AgentSkillRelations => Set<AgentSkillRelation>();
@@ -54,7 +54,7 @@ public class AgwDbContext : DbContext
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectSkillRelation> ProjectSkillRelations => Set<ProjectSkillRelation>();
     public DbSet<ProjectMcpServerRelation> ProjectMcpToolServers => Set<ProjectMcpServerRelation>();
-    public DbSet<ProjectAppRelation> ProjectAppRelations => Set<ProjectAppRelation>();
+    public DbSet<ProjectConnectionRelation> ProjectConnectionRelations => Set<ProjectConnectionRelation>();
     public DbSet<ProjectContext> ProjectContexts => Set<ProjectContext>();
     public DbSet<AgentUsage> AgentUsages => Set<AgentUsage>();
     public DbSet<TaskSessionBinding> TaskSessionBindings => Set<TaskSessionBinding>();
@@ -62,9 +62,10 @@ public class AgwDbContext : DbContext
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobLog> JobLogs => Set<JobLog>();
 
-    public DbSet<AppInstance> AppInstances => Set<AppInstance>();
-
-    public DbSet<OAuthAuthorizationToken> OAuthAuthorizationTokens => Set<OAuthAuthorizationToken>();
+    public DbSet<PluginInstallation> PluginInstallations => Set<PluginInstallation>();
+    public DbSet<PluginInstallationCredential> PluginInstallationCredentials => Set<PluginInstallationCredential>();
+    public DbSet<Connection> Connections => Set<Connection>();
+    public DbSet<ConnectionCredential> ConnectionCredentials => Set<ConnectionCredential>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -101,24 +102,14 @@ public class AgwDbContext : DbContext
             .Where(entry => entry.State == EntityState.Deleted)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
-        var deletedAppInstanceIds = ChangeTracker.Entries<AppInstance>()
+        var deletedPluginInstallationIds = ChangeTracker.Entries<PluginInstallation>()
             .Where(entry => entry.State == EntityState.Deleted)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
-
-        if (deletedAgentIds.Count > 0 || deletedAppInstanceIds.Count > 0)
-        {
-            var agentAppRelationsToRemove = AgentAppRelations
-                .Where(relation =>
-                    deletedAgentIds.Contains(relation.AgentId)
-                    || deletedAppInstanceIds.Contains(relation.AppInstanceId))
-                .ToList();
-
-            if (agentAppRelationsToRemove.Count > 0)
-            {
-                AgentAppRelations.RemoveRange(agentAppRelationsToRemove);
-            }
-        }
+        var deletedConnectionIds = ChangeTracker.Entries<Connection>()
+            .Where(entry => entry.State == EntityState.Deleted)
+            .Select(entry => entry.Entity.Id)
+            .ToHashSet();
 
         if (deletedProjectIds.Count > 0 || deletedSkillIds.Count > 0)
         {
@@ -148,17 +139,55 @@ public class AgwDbContext : DbContext
             }
         }
 
-        if (deletedProjectIds.Count > 0 || deletedAppInstanceIds.Count > 0)
+        if (deletedPluginInstallationIds.Count > 0)
         {
-            var projectAppRelationsToRemove = ProjectAppRelations
-                .Where(relation =>
-                    deletedProjectIds.Contains(relation.ProjectId)
-                    || deletedAppInstanceIds.Contains(relation.AppInstanceId))
+            var pluginInstallationCredentialsToRemove = PluginInstallationCredentials
+                .Where(credential => deletedPluginInstallationIds.Contains(credential.PluginInstallationId))
                 .ToList();
 
-            if (projectAppRelationsToRemove.Count > 0)
+            if (pluginInstallationCredentialsToRemove.Count > 0)
             {
-                ProjectAppRelations.RemoveRange(projectAppRelationsToRemove);
+                PluginInstallationCredentials.RemoveRange(pluginInstallationCredentialsToRemove);
+            }
+        }
+
+        if (deletedConnectionIds.Count > 0)
+        {
+            var connectionCredentialsToRemove = ConnectionCredentials
+                .Where(credential => deletedConnectionIds.Contains(credential.ConnectionId))
+                .ToList();
+
+            if (connectionCredentialsToRemove.Count > 0)
+            {
+                ConnectionCredentials.RemoveRange(connectionCredentialsToRemove);
+            }
+        }
+
+        if (deletedAgentIds.Count > 0 || deletedConnectionIds.Count > 0)
+        {
+            var agentConnectionRelationsToRemove = AgentConnectionRelations
+                .Where(relation =>
+                    deletedAgentIds.Contains(relation.AgentId)
+                    || deletedConnectionIds.Contains(relation.ConnectionId))
+                .ToList();
+
+            if (agentConnectionRelationsToRemove.Count > 0)
+            {
+                AgentConnectionRelations.RemoveRange(agentConnectionRelationsToRemove);
+            }
+        }
+
+        if (deletedProjectIds.Count > 0 || deletedConnectionIds.Count > 0)
+        {
+            var projectConnectionRelationsToRemove = ProjectConnectionRelations
+                .Where(relation =>
+                    deletedProjectIds.Contains(relation.ProjectId)
+                    || deletedConnectionIds.Contains(relation.ConnectionId))
+                .ToList();
+
+            if (projectConnectionRelationsToRemove.Count > 0)
+            {
+                ProjectConnectionRelations.RemoveRange(projectConnectionRelationsToRemove);
             }
         }
     }

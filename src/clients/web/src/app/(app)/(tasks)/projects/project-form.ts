@@ -107,7 +107,7 @@ interface ProjectCapabilitiesInput {
   selectedTools: string[];
   selectedSkillIds: string[];
   selectedMcpToolServerIds: string[];
-  selectedAppInstanceIds: string[];
+  selectedConnectionIds: string[];
   environmentVariables: Record<string, string>;
 }
 
@@ -115,14 +115,14 @@ export function serializeProjectCapabilities({
   selectedTools,
   selectedSkillIds,
   selectedMcpToolServerIds,
-  selectedAppInstanceIds,
+  selectedConnectionIds,
   environmentVariables,
 }: ProjectCapabilitiesInput) {
   return {
     tools: JSON.stringify(selectedTools),
     skillIds: selectedSkillIds,
     mcpToolServerIds: selectedMcpToolServerIds,
-    appInstanceIds: selectedAppInstanceIds,
+    connectionIds: selectedConnectionIds,
     environmentVariables,
   };
 }
@@ -131,7 +131,7 @@ interface ProjectCapabilityResponse {
   tools?: string | null;
   projectSkillRelations?: Array<{ skillId: string }> | null;
   projectMcpToolServers?: Array<{ mcpToolServerId: string }> | null;
-  projectAppRelations?: Array<{ appInstanceId: string }> | null;
+  projectConnectionRelations?: Array<{ connectionId: string }> | null;
   environmentVariables?: Record<string, string> | null;
 }
 
@@ -150,8 +150,8 @@ export function toProjectCapabilityFormState(project: ProjectCapabilityResponse)
     selectedSkillIds: project.projectSkillRelations?.map((relation) => relation.skillId) ?? [],
     selectedMcpToolServerIds:
       project.projectMcpToolServers?.map((relation) => relation.mcpToolServerId) ?? [],
-    selectedAppInstanceIds:
-      project.projectAppRelations?.map((relation) => relation.appInstanceId) ?? [],
+    selectedConnectionIds:
+      project.projectConnectionRelations?.map((relation) => relation.connectionId) ?? [],
     environmentVariables: project.environmentVariables ?? {},
   };
 }

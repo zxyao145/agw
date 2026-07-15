@@ -31,7 +31,7 @@ public class EntityTypeConfigurationTests
     {
         AssertConfigured(
             typeof(Agent),
-            typeof(AgentAppRelation),
+            typeof(AgentConnectionRelation),
             typeof(AgentSkillRelation),
             typeof(McpServer),
             typeof(AgentMcpServerRelation));
@@ -55,7 +55,7 @@ public class EntityTypeConfigurationTests
             typeof(Project),
             typeof(ProjectSkillRelation),
             typeof(ProjectMcpServerRelation),
-            typeof(ProjectAppRelation),
+            typeof(ProjectConnectionRelation),
             typeof(ProjectContext),
             typeof(TaskSessionBinding),
             typeof(TaskRecord));
@@ -67,8 +67,10 @@ public class EntityTypeConfigurationTests
         AssertConfigured(
             typeof(Job),
             typeof(JobLog),
-            typeof(AppInstance),
-            typeof(OAuthAuthorizationToken));
+            typeof(PluginInstallation),
+            typeof(PluginInstallationCredential),
+            typeof(Connection),
+            typeof(ConnectionCredential));
     }
 
     [Fact]
@@ -80,7 +82,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(26, entityTypes.Length);
+        Assert.Equal(28, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 

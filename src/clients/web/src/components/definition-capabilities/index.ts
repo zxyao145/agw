@@ -1,16 +1,16 @@
 export {
-  AppsPanel,
+  ConnectionsPanel,
   EnvironmentVariablesPanel,
   McpToolServersPanel,
   SkillsPanel,
   ToolsPanel,
 } from "./capability-panels";
 export {
-  buildAppOptionLabel,
-  buildSelectedAppItems,
-  buildSelectedSkillItems,
-  getAppAuthorizationState,
-} from "./app-selector";
+  buildConnectionOptionLabel,
+  buildConnectionSelectOptions,
+  buildSelectedConnectionItems,
+} from "./connection-selector";
+export { buildSelectedSkillItems } from "./selection-items";
 export { applyDialogOpenChange } from "./dialog-lifecycle";
 export {
   getEnvironmentVariablesError,
@@ -19,4 +19,4 @@ export {
 } from "./environment-variables";
 export { SelectedItemsList } from "./selected-items-list";
 export type { EnvironmentVariableEntry } from "./environment-variables";
-export type { AppInstanceOption, McpToolServerDto, SkillDto, ToolInfo } from "./types";
+export type { ConnectionOption, McpToolServerDto, SkillDto, ToolInfo } from "./types";

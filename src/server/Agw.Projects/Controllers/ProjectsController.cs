@@ -55,7 +55,7 @@ public class ProjectsController : ControllerBase
             project,
             request.McpToolServerIds,
             request.SkillIds,
-            request.AppInstanceIds,
+            request.ConnectionIds,
             user);
         if (created == null)
         {
@@ -91,7 +91,7 @@ public class ProjectsController : ControllerBase
             },
             request.McpToolServerIds,
             request.SkillIds,
-            request.AppInstanceIds,
+            request.ConnectionIds,
             user);
 
         return updated == null

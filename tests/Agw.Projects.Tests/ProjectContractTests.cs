@@ -15,12 +15,12 @@ public class ProjectContractTests
         Assert.Null(create.Tools);
         Assert.Null(create.McpToolServerIds);
         Assert.Null(create.SkillIds);
-        Assert.Null(create.AppInstanceIds);
+        Assert.Null(create.ConnectionIds);
         Assert.Null(create.EnvironmentVariables);
         Assert.Null(update.Tools);
         Assert.Null(update.McpToolServerIds);
         Assert.Null(update.SkillIds);
-        Assert.Null(update.AppInstanceIds);
+        Assert.Null(update.ConnectionIds);
         Assert.Null(update.EnvironmentVariables);
     }
 
@@ -57,7 +57,7 @@ public class ProjectContractTests
         var projectId = Guid.NewGuid();
         var mcpToolServerId = Guid.NewGuid();
         var skillId = Guid.NewGuid();
-        var appInstanceId = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
         var project = new Project
         {
             Id = projectId,
@@ -81,9 +81,9 @@ public class ProjectContractTests
             [
                 new ProjectSkillRelation { ProjectId = projectId, SkillId = skillId }
             ],
-            ProjectAppRelations =
+            ProjectConnectionRelations =
             [
-                new ProjectAppRelation { ProjectId = projectId, AppInstanceId = appInstanceId }
+                new ProjectConnectionRelation { ProjectId = projectId, ConnectionId = connectionId }
             ]
         };
 
@@ -100,7 +100,7 @@ public class ProjectContractTests
         Assert.Equal("secret", response.EnvironmentVariables["API_KEY"]);
         Assert.Equal(mcpToolServerId, Assert.Single(response.ProjectMcpToolServers).McpToolServerId);
         Assert.Equal(skillId, Assert.Single(response.ProjectSkillRelations).SkillId);
-        Assert.Equal(appInstanceId, Assert.Single(response.ProjectAppRelations).AppInstanceId);
+        Assert.Equal(connectionId, Assert.Single(response.ProjectConnectionRelations).ConnectionId);
         Assert.Equal(project.CreateTime, response.CreateTime);
         Assert.Equal(project.CreateBy, response.CreateBy);
         Assert.Equal(project.UpdateTime, response.UpdateTime);

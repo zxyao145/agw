@@ -17,7 +17,788 @@ namespace Agw.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
 
-            modelBuilder.Entity("Agw.Jobs.Domain.Entities.Job", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.Agentflow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("Enable")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enable");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("SummaryModelProviderId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("summary_model_provider_id");
+
+                    b.Property<string>("SystemPrompt")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("system_prompt");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_agentflow");
+
+                    b.ToTable("agentflow", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowEdge", b =>
+                {
+                    b.Property<Guid>("AgentflowId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agentflow_id");
+
+                    b.Property<string>("EdgeId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("edge_id");
+
+                    b.Property<string>("ConditionJson")
+                        .HasMaxLength(8000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("condition_json");
+
+                    b.Property<string>("ConfigJson")
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("config_json");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("label");
+
+                    b.Property<string>("SourceNodeId")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("source_node_id");
+
+                    b.Property<string>("TargetNodeId")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_node_id");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("AgentflowId", "EdgeId")
+                        .HasName("pk_agentflow_edge");
+
+                    b.HasIndex("AgentflowId", "SourceNodeId")
+                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_source_node_id");
+
+                    b.HasIndex("AgentflowId", "TargetNodeId")
+                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_target_node_id");
+
+                    b.ToTable("agentflow_edge", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowNode", b =>
+                {
+                    b.Property<Guid>("AgentflowId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agentflow_id");
+
+                    b.Property<string>("NodeId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("node_id");
+
+                    b.Property<string>("ConfigJson")
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("config_json");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Instructions")
+                        .HasMaxLength(8000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("instructions");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PositionJson")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("position_json");
+
+                    b.Property<Guid?>("RelateId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("relate_id");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("AgentflowId", "NodeId")
+                        .HasName("pk_agentflow_node");
+
+                    b.HasIndex("AgentflowId", "Kind", "RelateId")
+                        .HasDatabaseName("ix_agentflow_node_agentflow_id_kind_relate_id");
+
+                    b.ToTable("agentflow_node", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowTrace", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AgentId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_id");
+
+                    b.Property<string>("AgentName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_name");
+
+                    b.Property<Guid>("AgentflowId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agentflow_id");
+
+                    b.Property<string>("ContextId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("context_id");
+
+                    b.Property<long>("DurationMilliseconds")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("duration_milliseconds");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<string>("Input")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("input");
+
+                    b.Property<string>("NodeId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("node_id");
+
+                    b.Property<string>("NodeKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("node_kind");
+
+                    b.Property<string>("NodeName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("node_name");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<DateTimeOffset>("StartTimeUtc")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("start_time_utc");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("task_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_agentflow_trace");
+
+                    b.HasIndex("AgentflowId", "NodeId", "StartTimeUtc")
+                        .HasDatabaseName("ix_agentflow_trace_agentflow_id_node_id_start_time_utc");
+
+                    b.HasIndex("ProjectId", "ContextId", "TaskId", "StartTimeUtc")
+                        .HasDatabaseName("ix_agentflow_trace_project_id_context_id_task_id_start_time_utc");
+
+                    b.ToTable("agentflow_trace", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("EnableSummary")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enable_summary");
+
+                    b.Property<string>("EnvironmentVariables")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("environment_variables");
+
+                    b.Property<string>("Extra")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("extra");
+
+                    b.Property<Guid?>("ModelProviderId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("model_provider_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("SummaryModelProviderId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("summary_model_provider_id");
+
+                    b.Property<string>("SystemPrompt")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("system_prompt");
+
+                    b.Property<string>("Tools")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tools");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("type");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_agent");
+
+                    b.HasIndex("ModelProviderId")
+                        .HasDatabaseName("ix_agent_model_provider_id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_agent_name");
+
+                    b.ToTable("agent", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentConnectionRelation", b =>
+                {
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("connection_id");
+
+                    b.HasKey("AgentId", "ConnectionId")
+                        .HasName("pk_agent_connection_relation");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_agent_connection_relation_connection_id");
+
+                    b.ToTable("agent_connection_relation", null, t =>
+                        {
+                            t.HasComment("Binds an agent to an integration connection.");
+                        });
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentMcpServerRelation", b =>
+                {
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_id");
+
+                    b.Property<Guid>("McpToolServerId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("mcp_tool_server_id");
+
+                    b.HasKey("AgentId", "McpToolServerId")
+                        .HasName("pk_agent_mcp_server_relation");
+
+                    b.HasIndex("McpToolServerId")
+                        .HasDatabaseName("ix_agent_mcp_server_relation_mcp_tool_server_id");
+
+                    b.ToTable("agent_mcp_server_relation", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSkillRelation", b =>
+                {
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_id");
+
+                    b.Property<Guid>("SkillId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("skill_id");
+
+                    b.HasKey("AgentId", "SkillId")
+                        .HasName("pk_agent_skill_relation");
+
+                    b.HasIndex("SkillId")
+                        .HasDatabaseName("ix_agent_skill_relation_skill_id");
+
+                    b.ToTable("agent_skill_relation", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.McpServer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Arguments")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("arguments");
+
+                    b.Property<string>("Command")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("command");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("EnvironmentVariables")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("environment_variables");
+
+                    b.Property<string>("Headers")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("headers");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<string>("TransportType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("transport_type");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("url");
+
+                    b.Property<string>("WorkingDirectory")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("working_directory");
+
+                    b.HasKey("Id")
+                        .HasName("pk_mcp_server");
+
+                    b.ToTable("mcp_server", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.Connection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Alias")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("alias");
+
+                    b.Property<string>("AuthSchemeId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("auth_scheme_id");
+
+                    b.Property<string>("ConfigurationJson")
+                        .IsRequired()
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("configuration_json");
+
+                    b.Property<string>("ConnectorId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("connector_id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enabled");
+
+                    b.Property<DateTimeOffset?>("LastValidatedAtUtc")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_validated_at_utc");
+
+                    b.Property<string>("LastValidationErrorCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_validation_error_code");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Subject")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("subject");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.Property<string>("ValidationMetadataJson")
+                        .HasMaxLength(8000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("validation_metadata_json");
+
+                    b.HasKey("Id")
+                        .HasName("pk_integration_connection");
+
+                    b.HasIndex("Alias")
+                        .IsUnique()
+                        .HasDatabaseName("ix_integration_connection_alias");
+
+                    b.HasIndex("PluginId")
+                        .HasDatabaseName("ix_integration_connection_plugin_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_integration_connection_status");
+
+                    b.ToTable("integration_connection", null, t =>
+                        {
+                            t.HasComment("Represents an external account or service endpoint available to agents.");
+                        });
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.ConnectionCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("connection_id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<DateTimeOffset?>("ExpiresAtUtc")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<int>("FormatVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("format_version");
+
+                    b.Property<string>("MetadataJson")
+                        .HasMaxLength(8000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("metadata_json");
+
+                    b.Property<string>("ProtectedValue")
+                        .IsRequired()
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("protected_value");
+
+                    b.Property<string>("Slot")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("slot");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_integration_connection_credential");
+
+                    b.HasIndex("ExpiresAtUtc")
+                        .HasDatabaseName("ix_integration_connection_credential_expires_at_utc");
+
+                    b.HasIndex("ConnectionId", "Slot")
+                        .IsUnique()
+                        .HasDatabaseName("ix_integration_connection_credential_connection_id_slot");
+
+                    b.ToTable("integration_connection_credential", null, t =>
+                        {
+                            t.HasComment("Stores protected credentials owned by an integration connection.");
+                        });
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.PluginInstallation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ConfigurationJson")
+                        .IsRequired()
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("configuration_json");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_plugin_installation");
+
+                    b.HasIndex("PluginId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_plugin_installation_plugin_id");
+
+                    b.ToTable("plugin_installation", null, t =>
+                        {
+                            t.HasComment("Stores platform-wide plugin installation configuration.");
+                        });
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.PluginInstallationCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<int>("FormatVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("format_version");
+
+                    b.Property<Guid>("PluginInstallationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("plugin_installation_id");
+
+                    b.Property<string>("ProtectedValue")
+                        .IsRequired()
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("protected_value");
+
+                    b.Property<string>("Slot")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("slot");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_plugin_installation_credential");
+
+                    b.HasIndex("PluginInstallationId", "Slot")
+                        .IsUnique()
+                        .HasDatabaseName("ix_plugin_installation_credential_plugin_installation_id_slot");
+
+                    b.ToTable("plugin_installation_credential", null, t =>
+                        {
+                            t.HasComment("Stores protected credentials owned by a plugin installation.");
+                        });
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Jobs.Job", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -116,7 +897,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("job", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Jobs.Domain.Entities.JobLog", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Jobs.JobLog", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -177,154 +958,69 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("job_log", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agent", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.AgentUsage", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("Description")
+                    b.Property<string>("AgentName")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
-                        .HasColumnName("description");
+                        .HasColumnName("agent_name");
 
-                    b.Property<string>("DisplayName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("display_name");
-
-                    b.Property<bool>("EnableSummary")
+                    b.Property<long>("CachedInputTokenCount")
                         .HasColumnType("INTEGER")
-                        .HasColumnName("enable_summary");
+                        .HasColumnName("cached_input_token_count");
 
-                    b.Property<string>("EnvironmentVariables")
+                    b.Property<string>("ContextId")
                         .IsRequired()
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT")
-                        .HasColumnName("environment_variables");
+                        .HasColumnName("context_id");
 
-                    b.Property<string>("Extra")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("extra");
-
-                    b.Property<Guid?>("ModelProviderId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("model_provider_id");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("name");
-
-                    b.Property<Guid?>("SummaryModelProviderId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("summary_model_provider_id");
-
-                    b.Property<string>("SystemPrompt")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("system_prompt");
-
-                    b.Property<string>("Tools")
-                        .HasMaxLength(4000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("tools");
-
-                    b.Property<int>("Type")
+                    b.Property<long>("InputTokenCount")
                         .HasColumnType("INTEGER")
-                        .HasColumnName("type");
+                        .HasColumnName("input_token_count");
 
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_by");
+                    b.Property<long>("OutputTokenCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("output_token_count");
 
-                    b.Property<DateTimeOffset?>("UpdateTime")
+                    b.Property<Guid>("ProjectId")
                         .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
+                        .HasColumnName("project_id");
+
+                    b.Property<long>("ReasoningTokenCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("reasoning_token_count");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<long>("TotalTokenCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("total_token_count");
 
                     b.HasKey("Id")
-                        .HasName("pk_agent");
+                        .HasName("pk_agent_usage");
 
-                    b.HasIndex("ModelProviderId")
-                        .HasDatabaseName("ix_agent_model_provider_id");
+                    b.HasIndex("AgentName")
+                        .HasDatabaseName("ix_agent_usage_agent_name");
 
-                    b.HasIndex("Name")
-                        .IsUnique()
-                        .HasDatabaseName("ix_agent_name");
+                    b.HasIndex("RecordedAt")
+                        .HasDatabaseName("ix_agent_usage_recorded_at");
 
-                    b.ToTable("agent", (string)null);
+                    b.HasIndex("ProjectId", "ContextId")
+                        .HasDatabaseName("ix_agent_usage_project_id_context_id");
+
+                    b.ToTable("agent_usage", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentAppRelation", b =>
-                {
-                    b.Property<Guid>("AgentId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_id");
-
-                    b.Property<Guid>("AppInstanceId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("app_instance_id");
-
-                    b.HasKey("AgentId", "AppInstanceId")
-                        .HasName("pk_agent_app_relation");
-
-                    b.HasIndex("AppInstanceId")
-                        .HasDatabaseName("ix_agent_app_relation_app_instance_id");
-
-                    b.ToTable("agent_app_relation", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentMcpServerRelation", b =>
-                {
-                    b.Property<Guid>("AgentId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_id");
-
-                    b.Property<Guid>("McpToolServerId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("mcp_tool_server_id");
-
-                    b.HasKey("AgentId", "McpToolServerId")
-                        .HasName("pk_agent_mcp_server_relation");
-
-                    b.HasIndex("McpToolServerId")
-                        .HasDatabaseName("ix_agent_mcp_server_relation_mcp_tool_server_id");
-
-                    b.ToTable("agent_mcp_server_relation", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSkillRelation", b =>
-                {
-                    b.Property<Guid>("AgentId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_id");
-
-                    b.Property<Guid>("SkillId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("skill_id");
-
-                    b.HasKey("AgentId", "SkillId")
-                        .HasName("pk_agent_skill_relation");
-
-                    b.HasIndex("SkillId")
-                        .HasDatabaseName("ix_agent_skill_relation_skill_id");
-
-                    b.ToTable("agent_skill_relation", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agentflow", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -348,21 +1044,30 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("enable");
 
+                    b.Property<string>("EnvironmentVariables")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("environment_variables");
+
+                    b.Property<string>("ExtraSetting")
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("extra_setting");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
-                    b.Property<Guid?>("SummaryModelProviderId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("summary_model_provider_id");
-
-                    b.Property<string>("SystemPrompt")
-                        .IsRequired()
+                    b.Property<string>("Tools")
                         .HasMaxLength(4000)
                         .HasColumnType("TEXT")
-                        .HasColumnName("system_prompt");
+                        .HasColumnName("tools");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("type");
 
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT")
@@ -372,161 +1077,49 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
-                    b.HasKey("Id")
-                        .HasName("pk_agentflow");
-
-                    b.ToTable("agentflow", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowEdge", b =>
-                {
-                    b.Property<Guid>("AgentflowId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agentflow_id");
-
-                    b.Property<string>("EdgeId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("edge_id");
-
-                    b.Property<string>("ConditionJson")
-                        .HasMaxLength(8000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("condition_json");
-
-                    b.Property<string>("ConfigJson")
-                        .HasMaxLength(16000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("config_json");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("kind");
-
-                    b.Property<string>("Label")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("label");
-
-                    b.Property<string>("SourceNodeId")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("source_node_id");
-
-                    b.Property<string>("TargetNodeId")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("target_node_id");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_by");
-
-                    b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.HasKey("AgentflowId", "EdgeId")
-                        .HasName("pk_agentflow_edge");
-
-                    b.HasIndex("AgentflowId", "SourceNodeId")
-                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_source_node_id");
-
-                    b.HasIndex("AgentflowId", "TargetNodeId")
-                        .HasDatabaseName("ix_agentflow_edge_agentflow_id_target_node_id");
-
-                    b.ToTable("agentflow_edge", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowNode", b =>
-                {
-                    b.Property<Guid>("AgentflowId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agentflow_id");
-
-                    b.Property<string>("NodeId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("node_id");
-
-                    b.Property<string>("ConfigJson")
-                        .HasMaxLength(16000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("config_json");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("Instructions")
-                        .HasMaxLength(8000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("instructions");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("kind");
-
-                    b.Property<string>("Name")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("name");
-
-                    b.Property<string>("PositionJson")
+                    b.Property<string>("Workspace")
                         .HasMaxLength(1000)
                         .HasColumnType("TEXT")
-                        .HasColumnName("position_json");
+                        .HasColumnName("workspace");
 
-                    b.Property<Guid?>("RelateId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("relate_id");
+                    b.HasKey("Id")
+                        .HasName("pk_project");
 
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_by");
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_project_name");
 
-                    b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.HasKey("AgentflowId", "NodeId")
-                        .HasName("pk_agentflow_node");
-
-                    b.HasIndex("AgentflowId", "Kind", "RelateId")
-                        .HasDatabaseName("ix_agentflow_node_agentflow_id_kind_relate_id");
-
-                    b.ToTable("agentflow_node", (string)null);
+                    b.ToTable("project", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowTrace", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConnectionRelation", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("connection_id");
+
+                    b.HasKey("ProjectId", "ConnectionId")
+                        .HasName("pk_project_connection_relation");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_project_connection_relation_connection_id");
+
+                    b.ToTable("project_connection_relation", null, t =>
+                        {
+                            t.HasComment("Binds a project to an integration connection.");
+                        });
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectContext", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
-
-                    b.Property<Guid?>("AgentId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_id");
-
-                    b.Property<string>("AgentName")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_name");
-
-                    b.Property<Guid>("AgentflowId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agentflow_id");
 
                     b.Property<string>("ContextId")
                         .IsRequired()
@@ -534,80 +1127,184 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("context_id");
 
-                    b.Property<long>("DurationMilliseconds")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("duration_milliseconds");
-
-                    b.Property<string>("Error")
-                        .HasColumnType("text")
-                        .HasColumnName("error");
-
-                    b.Property<string>("Input")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("input");
-
-                    b.Property<string>("NodeId")
-                        .IsRequired()
-                        .HasMaxLength(200)
+                    b.Property<string>("CreateBy")
                         .HasColumnType("TEXT")
-                        .HasColumnName("node_id");
+                        .HasColumnName("create_by");
 
-                    b.Property<string>("NodeKind")
-                        .IsRequired()
-                        .HasMaxLength(32)
+                    b.Property<DateTimeOffset>("CreateTime")
                         .HasColumnType("TEXT")
-                        .HasColumnName("node_kind");
+                        .HasColumnName("create_time");
 
-                    b.Property<string>("NodeName")
-                        .HasMaxLength(200)
+                    b.Property<Guid?>("JobId")
                         .HasColumnType("TEXT")
-                        .HasColumnName("node_name");
+                        .HasColumnName("job_id");
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("TEXT")
                         .HasColumnName("project_id");
 
-                    b.Property<DateTimeOffset>("StartTimeUtc")
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT")
-                        .HasColumnName("start_time_utc");
+                        .HasDefaultValue("Untitled")
+                        .HasColumnName("title");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_context");
+
+                    b.HasIndex("JobId")
+                        .HasDatabaseName("ix_project_context_job_id");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_project_context_project_id");
+
+                    b.HasIndex("UpdateTime")
+                        .HasDatabaseName("ix_project_context_update_time");
+
+                    b.HasIndex("ProjectId", "ContextId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_project_context_project_id_context_id");
+
+                    b.ToTable("project_context", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectMcpServerRelation", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("McpToolServerId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("mcp_tool_server_id");
+
+                    b.HasKey("ProjectId", "McpToolServerId")
+                        .HasName("pk_project_mcp_server_relation");
+
+                    b.HasIndex("McpToolServerId")
+                        .HasDatabaseName("ix_project_mcp_server_relation_mcp_tool_server_id");
+
+                    b.ToTable("project_mcp_server_relation", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectSkillRelation", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("SkillId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("skill_id");
+
+                    b.HasKey("ProjectId", "SkillId")
+                        .HasName("pk_project_skill_relation");
+
+                    b.HasIndex("SkillId")
+                        .HasDatabaseName("ix_project_skill_relation_skill_id");
+
+                    b.ToTable("project_skill_relation", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AgentName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_name");
+
+                    b.Property<string>("ConversationPayload")
+                        .HasColumnType("text")
+                        .HasColumnName("conversation_payload");
+
+                    b.Property<long?>("ConversationSequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("conversation_sequence");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<DateTimeOffset?>("FinishedTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("finished_time");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata");
+
+                    b.Property<Guid>("ProjectContextId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_context_id");
 
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER")
                         .HasColumnName("status");
 
+                    b.Property<string>("TaskErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("task_error_message");
+
                     b.Property<Guid>("TaskId")
                         .HasColumnType("TEXT")
                         .HasColumnName("task_id");
 
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
                     b.HasKey("Id")
-                        .HasName("pk_agentflow_trace");
+                        .HasName("pk_project_task_record");
 
-                    b.HasIndex("AgentflowId", "NodeId", "StartTimeUtc")
-                        .HasDatabaseName("ix_agentflow_trace_agentflow_id_node_id_start_time_utc");
+                    b.HasIndex("ProjectContextId")
+                        .HasDatabaseName("ix_project_task_record_project_context_id");
 
-                    b.HasIndex("ProjectId", "ContextId", "TaskId", "StartTimeUtc")
-                        .HasDatabaseName("ix_agentflow_trace_project_id_context_id_task_id_start_time_utc");
+                    b.HasIndex("ProjectContextId", "ConversationSequence")
+                        .HasDatabaseName("ix_project_task_record_project_context_id_conversation_sequence");
 
-                    b.ToTable("agentflow_trace", (string)null);
+                    b.HasIndex("TaskId", "ConversationSequence")
+                        .HasDatabaseName("ix_project_task_record_task_id_conversation_sequence");
+
+                    b.HasIndex("TaskId", "CreateTime")
+                        .HasDatabaseName("ix_project_task_record_task_id_create_time");
+
+                    b.ToTable("project_task_record", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.McpServer", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskSessionBinding", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
-                    b.Property<string>("Arguments")
-                        .IsRequired()
+                    b.Property<Guid>("AgentId")
                         .HasColumnType("TEXT")
-                        .HasColumnName("arguments");
-
-                    b.Property<string>("Command")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("command");
+                        .HasColumnName("agent_id");
 
                     b.Property<string>("CreateBy")
                         .HasColumnType("TEXT")
@@ -617,36 +1314,21 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("description");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("enabled");
-
-                    b.Property<string>("EnvironmentVariables")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("environment_variables");
-
-                    b.Property<string>("Headers")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("headers");
-
-                    b.Property<string>("Name")
+                    b.Property<string>("ExternalAgentName")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("TEXT")
-                        .HasColumnName("name");
+                        .HasColumnName("external_agent_name");
 
-                    b.Property<string>("TransportType")
-                        .IsRequired()
-                        .HasMaxLength(20)
+                    b.Property<Guid>("ProjectContextId")
                         .HasColumnType("TEXT")
-                        .HasColumnName("transport_type");
+                        .HasColumnName("project_context_id");
+
+                    b.Property<string>("ProviderSessionId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider_session_id");
 
                     b.Property<string>("UpdateBy")
                         .HasColumnType("TEXT")
@@ -656,129 +1338,17 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
-                    b.Property<string>("Url")
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("url");
-
-                    b.Property<string>("WorkingDirectory")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("working_directory");
-
                     b.HasKey("Id")
-                        .HasName("pk_mcp_server");
+                        .HasName("pk_task_session_binding");
 
-                    b.ToTable("mcp_server", (string)null);
-                });
+                    b.HasIndex("ExternalAgentName", "ProviderSessionId")
+                        .HasDatabaseName("ix_task_session_binding_external_agent_name_provider_session_id");
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.AppInstance", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AppName")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("app_name");
-
-                    b.Property<string>("ClientId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("client_id");
-
-                    b.Property<string>("ClientSecret")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("client_secret");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_by");
-
-                    b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.Property<bool>("UsePkce")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("use_pkce");
-
-                    b.HasKey("Id")
-                        .HasName("pk_app_instance");
-
-                    b.HasIndex("AppName")
-                        .HasDatabaseName("ix_app_instance_app_name");
-
-                    b.HasIndex("ClientId")
+                    b.HasIndex("ProjectContextId", "AgentId", "ExternalAgentName")
                         .IsUnique()
-                        .HasDatabaseName("ix_app_instance_client_id");
+                        .HasDatabaseName("ix_task_session_binding_project_context_id_agent_id_external_agent_name");
 
-                    b.ToTable("app_instance", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.OAuthAuthorizationToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AccessToken")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("access_token");
-
-                    b.Property<Guid>("AppInstanceId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("app_instance_id");
-
-                    b.Property<DateTimeOffset?>("ExpiresAtUtc")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("expires_at_utc");
-
-                    b.Property<string>("RefreshToken")
-                        .HasMaxLength(4000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("refresh_token");
-
-                    b.Property<string>("Subject")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("subject");
-
-                    b.Property<string>("TokenType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("token_type");
-
-                    b.HasKey("Id")
-                        .HasName("pk_oauth_authorization");
-
-                    b.HasIndex("AppInstanceId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_oauth_authorization_app_instance_id");
-
-                    b.HasIndex("ExpiresAtUtc")
-                        .HasDatabaseName("ix_oauth_authorization_expires_at_utc");
-
-                    b.ToTable("oauth_authorization", (string)null);
+                    b.ToTable("task_session_binding", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.LlmModel", b =>
@@ -1051,394 +1621,42 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("skill", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.AgentUsage", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowEdge", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AgentName")
+                    b.HasOne("Agw.Shared.Data.Entities.Agentflows.Agentflow", null)
+                        .WithMany("Edges")
+                        .HasForeignKey("AgentflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_name");
+                        .HasConstraintName("fk_agentflow_edge_agentflow_agentflow_id");
 
-                    b.Property<long>("CachedInputTokenCount")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("cached_input_token_count");
-
-                    b.Property<string>("ContextId")
+                    b.HasOne("Agw.Shared.Data.Entities.Agentflows.AgentflowNode", "SourceNode")
+                        .WithMany("SourceEdges")
+                        .HasForeignKey("AgentflowId", "SourceNodeId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("context_id");
+                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_source_node_id");
 
-                    b.Property<long>("InputTokenCount")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("input_token_count");
+                    b.HasOne("Agw.Shared.Data.Entities.Agentflows.AgentflowNode", "TargetNode")
+                        .WithMany("TargetEdges")
+                        .HasForeignKey("AgentflowId", "TargetNodeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_target_node_id");
 
-                    b.Property<long>("OutputTokenCount")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("output_token_count");
+                    b.Navigation("SourceNode");
 
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_id");
-
-                    b.Property<long>("ReasoningTokenCount")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("reasoning_token_count");
-
-                    b.Property<DateTimeOffset>("RecordedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("recorded_at");
-
-                    b.Property<long>("TotalTokenCount")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("total_token_count");
-
-                    b.HasKey("Id")
-                        .HasName("pk_agent_usage");
-
-                    b.HasIndex("AgentName")
-                        .HasDatabaseName("ix_agent_usage_agent_name");
-
-                    b.HasIndex("RecordedAt")
-                        .HasDatabaseName("ix_agent_usage_recorded_at");
-
-                    b.HasIndex("ProjectId", "ContextId")
-                        .HasDatabaseName("ix_agent_usage_project_id_context_id");
-
-                    b.ToTable("agent_usage", (string)null);
+                    b.Navigation("TargetNode");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowNode", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("id");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("description");
-
-                    b.Property<bool>("Enable")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("enable");
-
-                    b.Property<string>("EnvironmentVariables")
+                    b.HasOne("Agw.Shared.Data.Entities.Agentflows.Agentflow", null)
+                        .WithMany("Nodes")
+                        .HasForeignKey("AgentflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("environment_variables");
-
-                    b.Property<string>("ExtraSetting")
-                        .HasMaxLength(16000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("extra_setting");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("name");
-
-                    b.Property<string>("Tools")
-                        .HasMaxLength(4000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("tools");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("type");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_by");
-
-                    b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.Property<string>("Workspace")
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("workspace");
-
-                    b.HasKey("Id")
-                        .HasName("pk_project");
-
-                    b.HasIndex("Name")
-                        .IsUnique()
-                        .HasDatabaseName("ix_project_name");
-
-                    b.ToTable("project", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectAppRelation", b =>
-                {
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_id");
-
-                    b.Property<Guid>("AppInstanceId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("app_instance_id");
-
-                    b.HasKey("ProjectId", "AppInstanceId")
-                        .HasName("pk_project_app_relation");
-
-                    b.HasIndex("AppInstanceId")
-                        .HasDatabaseName("ix_project_app_relation_app_instance_id");
-
-                    b.ToTable("project_app_relation", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectContext", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("id");
-
-                    b.Property<string>("ContextId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("context_id");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<Guid?>("JobId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("job_id");
-
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_id");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasDefaultValue("Untitled")
-                        .HasColumnName("title");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_by");
-
-                    b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.HasKey("Id")
-                        .HasName("pk_project_context");
-
-                    b.HasIndex("JobId")
-                        .HasDatabaseName("ix_project_context_job_id");
-
-                    b.HasIndex("ProjectId")
-                        .HasDatabaseName("ix_project_context_project_id");
-
-                    b.HasIndex("UpdateTime")
-                        .HasDatabaseName("ix_project_context_update_time");
-
-                    b.HasIndex("ProjectId", "ContextId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_project_context_project_id_context_id");
-
-                    b.ToTable("project_context", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectMcpServerRelation", b =>
-                {
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_id");
-
-                    b.Property<Guid>("McpToolServerId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("mcp_tool_server_id");
-
-                    b.HasKey("ProjectId", "McpToolServerId")
-                        .HasName("pk_project_mcp_server_relation");
-
-                    b.HasIndex("McpToolServerId")
-                        .HasDatabaseName("ix_project_mcp_server_relation_mcp_tool_server_id");
-
-                    b.ToTable("project_mcp_server_relation", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectSkillRelation", b =>
-                {
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_id");
-
-                    b.Property<Guid>("SkillId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("skill_id");
-
-                    b.HasKey("ProjectId", "SkillId")
-                        .HasName("pk_project_skill_relation");
-
-                    b.HasIndex("SkillId")
-                        .HasDatabaseName("ix_project_skill_relation_skill_id");
-
-                    b.ToTable("project_skill_relation", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AgentName")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_name");
-
-                    b.Property<string>("ConversationPayload")
-                        .HasColumnType("text")
-                        .HasColumnName("conversation_payload");
-
-                    b.Property<long?>("ConversationSequence")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("conversation_sequence");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("Error")
-                        .HasColumnType("text")
-                        .HasColumnName("error");
-
-                    b.Property<DateTimeOffset?>("FinishedTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("finished_time");
-
-                    b.Property<Guid?>("JobId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("job_id");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("metadata");
-
-                    b.Property<Guid>("ProjectContextId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_context_id");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("status");
-
-                    b.Property<string>("TaskErrorMessage")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("task_error_message");
-
-                    b.Property<Guid>("TaskId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("task_id");
-
-                    b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.HasKey("Id")
-                        .HasName("pk_project_task_record");
-
-                    b.HasIndex("ProjectContextId")
-                        .HasDatabaseName("ix_project_task_record_project_context_id");
-
-                    b.HasIndex("ProjectContextId", "ConversationSequence")
-                        .HasDatabaseName("ix_project_task_record_project_context_id_conversation_sequence");
-
-                    b.HasIndex("TaskId", "ConversationSequence")
-                        .HasDatabaseName("ix_project_task_record_task_id_conversation_sequence");
-
-                    b.HasIndex("TaskId", "CreateTime")
-                        .HasDatabaseName("ix_project_task_record_task_id_create_time");
-
-                    b.ToTable("project_task_record", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskSessionBinding", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("AgentId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_id");
-
-                    b.Property<string>("CreateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_by");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("ExternalAgentName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("external_agent_name");
-
-                    b.Property<Guid>("ProjectContextId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_context_id");
-
-                    b.Property<string>("ProviderSessionId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("provider_session_id");
-
-                    b.Property<string>("UpdateBy")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_by");
-
-                    b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.HasKey("Id")
-                        .HasName("pk_task_session_binding");
-
-                    b.HasIndex("ExternalAgentName", "ProviderSessionId")
-                        .HasDatabaseName("ix_task_session_binding_external_agent_name_provider_session_id");
-
-                    b.HasIndex("ProjectContextId", "AgentId", "ExternalAgentName")
-                        .IsUnique()
-                        .HasDatabaseName("ix_task_session_binding_project_context_id_agent_id_external_agent_name");
-
-                    b.ToTable("task_session_binding", (string)null);
+                        .HasConstraintName("fk_agentflow_node_agentflow_agentflow_id");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agent", b =>
@@ -1451,25 +1669,25 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("ModelProvider");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentAppRelation", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentConnectionRelation", b =>
                 {
                     b.HasOne("Agw.Shared.Data.Entities.Agents.Agent", "Agent")
-                        .WithMany("AgentAppRelations")
+                        .WithMany("AgentConnectionRelations")
                         .HasForeignKey("AgentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_app_relation_agent_agent_id");
+                        .HasConstraintName("fk_agent_connection_relation_agent_agent_id");
 
-                    b.HasOne("Agw.Shared.Data.Entities.Integrations.AppInstance", "AppInstance")
+                    b.HasOne("Agw.Shared.Data.Entities.Integrations.Connection", "Connection")
                         .WithMany()
-                        .HasForeignKey("AppInstanceId")
+                        .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_app_relation_app_instance_app_instance_id");
+                        .HasConstraintName("fk_agent_connection_relation_integration_connection_connection_id");
 
                     b.Navigation("Agent");
 
-                    b.Navigation("AppInstance");
+                    b.Navigation("Connection");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentMcpServerRelation", b =>
@@ -1512,104 +1730,47 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("Agent");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowEdge", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.ConnectionCredential", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Agents.Agentflow", null)
-                        .WithMany("Edges")
-                        .HasForeignKey("AgentflowId")
+                    b.HasOne("Agw.Shared.Data.Entities.Integrations.Connection", "Connection")
+                        .WithMany("Credentials")
+                        .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_edge_agentflow_agentflow_id");
+                        .HasConstraintName("fk_integration_connection_credential_integration_connection_connection_id");
 
-                    b.HasOne("Agw.Shared.Data.Entities.Agents.AgentflowNode", "SourceNode")
-                        .WithMany("SourceEdges")
-                        .HasForeignKey("AgentflowId", "SourceNodeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_source_node_id");
-
-                    b.HasOne("Agw.Shared.Data.Entities.Agents.AgentflowNode", "TargetNode")
-                        .WithMany("TargetEdges")
-                        .HasForeignKey("AgentflowId", "TargetNodeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_agentflow_edge_agentflow_node_agentflow_id_target_node_id");
-
-                    b.Navigation("SourceNode");
-
-                    b.Navigation("TargetNode");
+                    b.Navigation("Connection");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowNode", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.PluginInstallationCredential", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Agents.Agentflow", null)
-                        .WithMany("Nodes")
-                        .HasForeignKey("AgentflowId")
+                    b.HasOne("Agw.Shared.Data.Entities.Integrations.PluginInstallation", "PluginInstallation")
+                        .WithMany("Credentials")
+                        .HasForeignKey("PluginInstallationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agentflow_node_agentflow_agentflow_id");
+                        .HasConstraintName("fk_plugin_installation_credential_plugin_installation_plugin_installation_id");
+
+                    b.Navigation("PluginInstallation");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.OAuthAuthorizationToken", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConnectionRelation", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Integrations.AppInstance", null)
-                        .WithOne("AuthorizationToken")
-                        .HasForeignKey("Agw.Shared.Data.Entities.Integrations.OAuthAuthorizationToken", "AppInstanceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_oauth_authorization_app_instance_app_instance_id");
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.ModelProviderRelation", b =>
-                {
-                    b.HasOne("Agw.Shared.Data.Entities.Providers.LlmModel", "Model")
-                        .WithMany("Providers")
-                        .HasForeignKey("ModelId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_model_provider_relation_model_model_id");
-
-                    b.HasOne("Agw.Shared.Data.Entities.Providers.Provider", "Provider")
-                        .WithMany("Models")
-                        .HasForeignKey("ProviderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_model_provider_relation_provider_provider_id");
-
-                    b.Navigation("Model");
-
-                    b.Navigation("Provider");
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.ProviderAuthConfig", b =>
-                {
-                    b.HasOne("Agw.Shared.Data.Entities.Providers.Provider", "Provider")
-                        .WithMany("AuthConfigs")
-                        .HasForeignKey("ProviderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_provider_auth_config_provider_provider_id");
-
-                    b.Navigation("Provider");
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectAppRelation", b =>
-                {
-                    b.HasOne("Agw.Shared.Data.Entities.Integrations.AppInstance", "AppInstance")
+                    b.HasOne("Agw.Shared.Data.Entities.Integrations.Connection", "Connection")
                         .WithMany()
-                        .HasForeignKey("AppInstanceId")
+                        .HasForeignKey("ConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_project_app_relation_app_instance_app_instance_id");
+                        .HasConstraintName("fk_project_connection_relation_integration_connection_connection_id");
 
                     b.HasOne("Agw.Shared.Data.Entities.Projects.Project", "Project")
-                        .WithMany("ProjectAppRelations")
+                        .WithMany("ProjectConnectionRelations")
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_project_app_relation_project_project_id");
+                        .HasConstraintName("fk_project_connection_relation_project_project_id");
 
-                    b.Navigation("AppInstance");
+                    b.Navigation("Connection");
 
                     b.Navigation("Project");
                 });
@@ -1692,27 +1853,60 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("ProjectContext");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agent", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.ModelProviderRelation", b =>
                 {
-                    b.Navigation("AgentAppRelations");
+                    b.HasOne("Agw.Shared.Data.Entities.Providers.LlmModel", "Model")
+                        .WithMany("Providers")
+                        .HasForeignKey("ModelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_model_provider_relation_model_model_id");
 
-                    b.Navigation("AgentMcpToolServers");
+                    b.HasOne("Agw.Shared.Data.Entities.Providers.Provider", "Provider")
+                        .WithMany("Models")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_model_provider_relation_provider_provider_id");
 
-                    b.Navigation("AgentSkillRelations");
+                    b.Navigation("Model");
+
+                    b.Navigation("Provider");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agentflow", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.ProviderAuthConfig", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Providers.Provider", "Provider")
+                        .WithMany("AuthConfigs")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_provider_auth_config_provider_provider_id");
+
+                    b.Navigation("Provider");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.Agentflow", b =>
                 {
                     b.Navigation("Edges");
 
                     b.Navigation("Nodes");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentflowNode", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agentflows.AgentflowNode", b =>
                 {
                     b.Navigation("SourceEdges");
 
                     b.Navigation("TargetEdges");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.Agent", b =>
+                {
+                    b.Navigation("AgentConnectionRelations");
+
+                    b.Navigation("AgentMcpToolServers");
+
+                    b.Navigation("AgentSkillRelations");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.McpServer", b =>
@@ -1720,9 +1914,30 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("AgentMcpToolServers");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.AppInstance", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.Connection", b =>
                 {
-                    b.Navigation("AuthorizationToken");
+                    b.Navigation("Credentials");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.PluginInstallation", b =>
+                {
+                    b.Navigation("Credentials");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>
+                {
+                    b.Navigation("Contexts");
+
+                    b.Navigation("ProjectConnectionRelations");
+
+                    b.Navigation("ProjectMcpToolServers");
+
+                    b.Navigation("ProjectSkillRelations");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectContext", b =>
+                {
+                    b.Navigation("Records");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.LlmModel", b =>
@@ -1735,22 +1950,6 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("AuthConfigs");
 
                     b.Navigation("Models");
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>
-                {
-                    b.Navigation("Contexts");
-
-                    b.Navigation("ProjectAppRelations");
-
-                    b.Navigation("ProjectMcpToolServers");
-
-                    b.Navigation("ProjectSkillRelations");
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectContext", b =>
-                {
-                    b.Navigation("Records");
                 });
 #pragma warning restore 612, 618
         }

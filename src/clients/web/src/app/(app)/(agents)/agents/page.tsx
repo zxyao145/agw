@@ -17,7 +17,7 @@ import type {
   SkillDto,
 } from "./components/types";
 import { getApiErrorMessage } from "@/api/utils";
-import type { AppInstanceOption } from "./components/app-selector";
+import type { ConnectionOption } from "./components/connection-selector";
 import {
   toAgentEnvironmentVariableEntries,
   type AgentEnvironmentVariableEntry,
@@ -66,10 +66,10 @@ export default function AgentsPage() {
     },
   });
 
-  const appInstancesQuery = useQuery({
-    queryKey: ["appInstances"],
+  const connectionsQuery = useQuery({
+    queryKey: ["connections"],
     queryFn: async () => {
-      return (await apiGet("/api/integrations/app-instances")) as unknown as AppInstanceOption[];
+      return (await apiGet("/api/integrations/connections")) as unknown as ConnectionOption[];
     },
   });
 
@@ -83,7 +83,7 @@ export default function AgentsPage() {
   const [summaryModelProviderId, setSummaryModelProviderId] = React.useState("");
   const [enableSummary, setEnableSummary] = React.useState(false);
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
-  const [selectedAppInstanceIds, setSelectedAppInstanceIds] = React.useState<string[]>([]);
+  const [selectedConnectionIds, setSelectedConnectionIds] = React.useState<string[]>([]);
   const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
   const [selectedMcpToolServerIds, setSelectedMcpToolServerIds] = React.useState<string[]>([]);
   const [environmentVariables, setEnvironmentVariables] = React.useState<
@@ -101,7 +101,7 @@ export default function AgentsPage() {
   const [editSummaryModelProviderId, setEditSummaryModelProviderId] = React.useState("");
   const [editEnableSummary, setEditEnableSummary] = React.useState(false);
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
-  const [editSelectedAppInstanceIds, setEditSelectedAppInstanceIds] = React.useState<string[]>([]);
+  const [editSelectedConnectionIds, setEditSelectedConnectionIds] = React.useState<string[]>([]);
   const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>([]);
   const [editSelectedMcpToolServerIds, setEditSelectedMcpToolServerIds] = React.useState<string[]>(
     [],
@@ -134,7 +134,7 @@ export default function AgentsPage() {
       setSummaryModelProviderId("");
       setEnableSummary(false);
       setSelectedSkillIds([]);
-      setSelectedAppInstanceIds([]);
+      setSelectedConnectionIds([]);
       setSelectedTools([]);
       setSelectedMcpToolServerIds([]);
       setEnvironmentVariables([]);
@@ -159,7 +159,7 @@ export default function AgentsPage() {
       setEditSummaryModelProviderId("");
       setEditEnableSummary(false);
       setEditSelectedSkillIds([]);
-      setEditSelectedAppInstanceIds([]);
+      setEditSelectedConnectionIds([]);
       setEditEnvironmentVariables([]);
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
@@ -201,8 +201,8 @@ export default function AgentsPage() {
     setEditExtra(agent.extra || "");
     setEditEnvironmentVariables(toAgentEnvironmentVariableEntries(agent.environmentVariables));
     setEditSelectedSkillIds(agent.agentSkillRelations?.map((relation) => relation.skillId) ?? []);
-    setEditSelectedAppInstanceIds(
-      agent.agentAppRelations?.map((relation) => relation.appInstanceId) ?? [],
+    setEditSelectedConnectionIds(
+      agent.agentConnectionRelations?.map((relation) => relation.connectionId) ?? [],
     );
     try {
       const tools = agent.tools ? JSON.parse(agent.tools) : [];
@@ -249,20 +249,20 @@ export default function AgentsPage() {
     );
   };
 
-  const toggleAppInstance = (appInstanceId: string, isEdit: boolean = false) => {
+  const toggleConnection = (connectionId: string, isEdit: boolean = false) => {
     if (isEdit) {
-      setEditSelectedAppInstanceIds((prev) =>
-        prev.includes(appInstanceId)
-          ? prev.filter((id) => id !== appInstanceId)
-          : [...prev, appInstanceId],
+      setEditSelectedConnectionIds((prev) =>
+        prev.includes(connectionId)
+          ? prev.filter((id) => id !== connectionId)
+          : [...prev, connectionId],
       );
       return;
     }
 
-    setSelectedAppInstanceIds((prev) =>
-      prev.includes(appInstanceId)
-        ? prev.filter((id) => id !== appInstanceId)
-        : [...prev, appInstanceId],
+    setSelectedConnectionIds((prev) =>
+      prev.includes(connectionId)
+        ? prev.filter((id) => id !== connectionId)
+        : [...prev, connectionId],
     );
   };
 
@@ -322,8 +322,8 @@ export default function AgentsPage() {
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}
-            appOptions={appInstancesQuery.data ?? []}
-            selectedAppInstanceIds={selectedAppInstanceIds}
+            connectionOptions={connectionsQuery.data ?? []}
+            selectedConnectionIds={selectedConnectionIds}
             selectedTools={selectedTools}
             modelProvidersQuery={modelProvidersQuery}
             skillsQuery={skillsQuery}
@@ -332,7 +332,7 @@ export default function AgentsPage() {
             selectedMcpToolServerIds={selectedMcpToolServerIds}
             createAgentMutation={createAgentMutation}
             toggleSkill={(skillId) => toggleSkill(skillId, false)}
-            toggleAppInstance={(appInstanceId) => toggleAppInstance(appInstanceId, false)}
+            toggleConnection={(connectionId) => toggleConnection(connectionId, false)}
             toggleTool={(toolName) => toggleTool(toolName, false)}
             toggleMcpToolServer={(mcpToolServerId) => toggleMcpToolServer(mcpToolServerId, false)}
           />
@@ -369,8 +369,8 @@ export default function AgentsPage() {
         environmentVariables={editEnvironmentVariables}
         setEnvironmentVariables={setEditEnvironmentVariables}
         selectedSkillIds={editSelectedSkillIds}
-        appOptions={appInstancesQuery.data ?? []}
-        selectedAppInstanceIds={editSelectedAppInstanceIds}
+        connectionOptions={connectionsQuery.data ?? []}
+        selectedConnectionIds={editSelectedConnectionIds}
         selectedTools={editSelectedTools}
         modelProvidersQuery={modelProvidersQuery}
         skillsQuery={skillsQuery}
@@ -379,7 +379,7 @@ export default function AgentsPage() {
         selectedMcpToolServerIds={editSelectedMcpToolServerIds}
         updateAgentMutation={updateAgentMutation}
         toggleSkill={(skillId) => toggleSkill(skillId, true)}
-        toggleAppInstance={(appInstanceId) => toggleAppInstance(appInstanceId, true)}
+        toggleConnection={(connectionId) => toggleConnection(connectionId, true)}
         toggleTool={(toolName) => toggleTool(toolName, true)}
         toggleMcpToolServer={(mcpToolServerId) => toggleMcpToolServer(mcpToolServerId, true)}
       />

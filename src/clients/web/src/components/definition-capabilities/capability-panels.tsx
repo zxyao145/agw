@@ -6,16 +6,12 @@ import {
   type SearchableSelectOption,
 } from "@/components/SearchableSelect/searchable-select";
 
-import {
-  buildAppOptionLabel,
-  buildSelectedAppItems,
-  buildSelectedSkillItems,
-  getAppAuthorizationState,
-} from "./app-selector";
+import { buildConnectionSelectOptions, buildSelectedConnectionItems } from "./connection-selector";
 import { EnvironmentVariablesEditor } from "./environment-variables-editor";
 import type { EnvironmentVariableEntry } from "./environment-variables";
 import { SelectedItemsList } from "./selected-items-list";
-import type { AppInstanceOption, McpToolServerDto, SkillDto, ToolInfo } from "./types";
+import { buildSelectedSkillItems } from "./selection-items";
+import type { ConnectionOption, McpToolServerDto, SkillDto, ToolInfo } from "./types";
 
 interface SharedPanelProps {
   idPrefix?: string;
@@ -242,68 +238,63 @@ export function McpToolServersPanel({
   );
 }
 
-interface AppsPanelProps extends SharedPanelProps {
-  appOptions: AppInstanceOption[];
-  selectedAppInstanceIds: string[];
-  toggleAppInstance: (appInstanceId: string) => void;
+interface ConnectionsPanelProps extends SharedPanelProps {
+  connectionOptions: ConnectionOption[];
+  selectedConnectionIds: string[];
+  toggleConnection: (connectionId: string) => void;
 }
 
-export function AppsPanel({
+export function ConnectionsPanel({
   idPrefix = "",
   ownerLabel = "agent",
-  appOptions,
-  selectedAppInstanceIds,
-  toggleAppInstance,
-}: AppsPanelProps) {
-  const appSelectOptions = React.useMemo<SearchableSelectOption[]>(
-    () =>
-      appOptions.map((app) => ({
-        value: app.id,
-        title: buildAppOptionLabel(app),
-        subtitle: [app.provider, getAppAuthorizationState(app), app.authorizationSubject]
-          .filter(Boolean)
-          .join(" · "),
-        group: "Available Apps",
-      })),
-    [appOptions],
+  connectionOptions,
+  selectedConnectionIds,
+  toggleConnection,
+}: ConnectionsPanelProps) {
+  const connectionSelectOptions = React.useMemo<SearchableSelectOption[]>(
+    () => buildConnectionSelectOptions(connectionOptions, selectedConnectionIds),
+    [connectionOptions, selectedConnectionIds],
   );
-  const selectedApps = buildSelectedAppItems(selectedAppInstanceIds, appOptions);
+  const selectedConnections = buildSelectedConnectionItems(
+    selectedConnectionIds,
+    connectionOptions,
+  );
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-medium">Apps</h3>
+        <h3 className="font-medium">Connections</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Attach authorized integration connections to this {ownerLabel}.
+          Attach ready external accounts or service endpoints to this {ownerLabel}.
         </p>
       </div>
       <SearchableSelect
         multiple
-        id={`${idPrefix}appInstances`}
-        ariaLabel="Apps"
-        value={selectedAppInstanceIds}
+        id={`${idPrefix}connections`}
+        ariaLabel="Connections"
+        value={selectedConnectionIds}
         onValueChange={(values) =>
-          applySelectionChange(selectedAppInstanceIds, values, toggleAppInstance)
+          applySelectionChange(selectedConnectionIds, values, toggleConnection)
         }
-        options={appSelectOptions}
-        placeholder="Select apps..."
+        options={connectionSelectOptions}
+        placeholder="Select ready connections..."
         selectionText={
-          selectedAppInstanceIds.length > 0
-            ? `${selectedAppInstanceIds.length} app${selectedAppInstanceIds.length === 1 ? "" : "s"} selected`
+          selectedConnectionIds.length > 0
+            ? `${selectedConnectionIds.length} connection${selectedConnectionIds.length === 1 ? "" : "s"} selected`
             : undefined
         }
-        searchPlaceholder="Search apps..."
-        disabled={appOptions.length === 0}
+        searchPlaceholder="Search connections..."
+        disabled={connectionSelectOptions.length === 0}
         clearable={false}
       />
       <SelectedItemsList
-        items={selectedApps}
-        emptyLabel="No apps selected"
-        onRemove={toggleAppInstance}
+        items={selectedConnections}
+        emptyLabel="No connections selected"
+        onRemove={toggleConnection}
       />
-      {appOptions.length === 0 ? (
+      {connectionSelectOptions.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No app connections found. Create one on the integrations page first.
+          No ready connections found. Create and validate one on the integrations page first.
         </p>
       ) : null}
     </div>

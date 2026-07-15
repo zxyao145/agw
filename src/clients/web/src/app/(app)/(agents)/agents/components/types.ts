@@ -11,7 +11,7 @@ export interface AgentCreateRequest {
   tools: string | null;
   mcpToolServerIds?: string[] | null;
   skillIds?: string[] | null;
-  appInstanceIds?: string[] | null;
+  connectionIds?: string[] | null;
   environmentVariables: Record<string, string>;
 }
 
@@ -25,7 +25,7 @@ export interface AgentUpdateRequest {
   tools: string | null;
   mcpToolServerIds?: string[] | null;
   skillIds?: string[] | null;
-  appInstanceIds?: string[] | null;
+  connectionIds?: string[] | null;
   extra: string | null;
   environmentVariables: Record<string, string>;
 }

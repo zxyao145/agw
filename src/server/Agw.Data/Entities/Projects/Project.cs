@@ -25,7 +25,7 @@ public class Project : BaseEntity, IAggregateRoot
 
     public ICollection<ProjectSkillRelation> ProjectSkillRelations { get; set; } = new List<ProjectSkillRelation>();
     public ICollection<ProjectMcpServerRelation> ProjectMcpToolServers { get; set; } = new List<ProjectMcpServerRelation>();
-    public ICollection<ProjectAppRelation> ProjectAppRelations { get; set; } = new List<ProjectAppRelation>();
+    public ICollection<ProjectConnectionRelation> ProjectConnectionRelations { get; set; } = new List<ProjectConnectionRelation>();
 
     public string GetMustWorkspace()
     {

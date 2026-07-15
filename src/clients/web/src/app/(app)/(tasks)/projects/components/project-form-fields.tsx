@@ -1,12 +1,12 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 
 import {
-  AppsPanel,
+  ConnectionsPanel,
   EnvironmentVariablesPanel,
   McpToolServersPanel,
   SkillsPanel,
   ToolsPanel,
-  type AppInstanceOption,
+  type ConnectionOption,
   type EnvironmentVariableEntry,
   type McpToolServerDto,
   type SkillDto,
@@ -33,15 +33,15 @@ export interface ProjectFormFieldsProps {
   environmentVariables: EnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: EnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
-  appOptions: AppInstanceOption[];
-  selectedAppInstanceIds: string[];
+  connectionOptions: ConnectionOption[];
+  selectedConnectionIds: string[];
   selectedTools: string[];
   skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
   toggleSkill: (skillId: string) => void;
-  toggleAppInstance: (appInstanceId: string) => void;
+  toggleConnection: (connectionId: string) => void;
   toggleTool: (toolName: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
   idPrefix?: string;
@@ -62,15 +62,15 @@ export function ProjectFormFields({
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
-  appOptions,
-  selectedAppInstanceIds,
+  connectionOptions,
+  selectedConnectionIds,
   selectedTools,
   skillsQuery,
   toolsQuery,
   mcpToolServersQuery,
   selectedMcpToolServerIds,
   toggleSkill,
-  toggleAppInstance,
+  toggleConnection,
   toggleTool,
   toggleMcpToolServer,
   idPrefix = "",
@@ -154,7 +154,7 @@ export function ProjectFormFields({
               <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="tools">Tools</TabsTrigger>
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
-              <TabsTrigger value="apps">Apps</TabsTrigger>
+              <TabsTrigger value="connections">Connections</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
             </TabsList>
           </div>
@@ -189,13 +189,13 @@ export function ProjectFormFields({
             />
           </TabsContent>
 
-          <TabsContent value="apps" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
-            <AppsPanel
+          <TabsContent value="connections" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+            <ConnectionsPanel
               idPrefix={idPrefix}
               ownerLabel="project"
-              appOptions={appOptions}
-              selectedAppInstanceIds={selectedAppInstanceIds}
-              toggleAppInstance={toggleAppInstance}
+              connectionOptions={connectionOptions}
+              selectedConnectionIds={selectedConnectionIds}
+              toggleConnection={toggleConnection}
             />
           </TabsContent>
 

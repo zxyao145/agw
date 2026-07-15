@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:5016/"
+      "url": "http://127.0.0.1:5099/"
     }
   ],
   "paths": {
@@ -37,7 +37,7 @@
     "/.well-known/agents.json": {
       "get": {
         "tags": [
-          "agw-server"
+          "A2A"
         ],
         "responses": {
           "200": {
@@ -49,7 +49,7 @@
     "/a2a/{agentName}/.well-known/agent-card.json": {
       "get": {
         "tags": [
-          "agw-server"
+          "A2A"
         ],
         "parameters": [
           {
@@ -71,7 +71,7 @@
     "/a2a/{agentName}": {
       "post": {
         "tags": [
-          "agw-server"
+          "A2A"
         ],
         "parameters": [
           {
@@ -487,7 +487,7 @@
     "/api/server-info": {
       "get": {
         "tags": [
-          "ServerInfo"
+          "agw-server"
         ],
         "responses": {
           "200": {
@@ -1929,39 +1929,20 @@
         }
       }
     },
-    "/api/integrations/app-definitions": {
+    "/api/integrations/connections": {
       "get": {
         "tags": [
-          "Integrations"
+          "Connections"
         ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAppDefinitionListItemResponse[]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAppDefinitionListItemResponse[]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAppDefinitionListItemResponse[]"
-                }
-              }
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
-        }
-      }
-    },
-    "/api/integrations/app-instances": {
-      "get": {
-        "tags": [
-          "Integrations"
         ],
         "responses": {
           "200": {
@@ -1969,17 +1950,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAppInstanceListItemResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse[]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAppInstanceListItemResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse[]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAppInstanceListItemResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse[]"
                 }
               }
             }
@@ -1988,23 +1969,23 @@
       },
       "post": {
         "tags": [
-          "Integrations"
+          "Connections"
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AppInstanceCreateRequest"
+                "$ref": "#/components/schemas/ConnectionCreateRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/AppInstanceCreateRequest"
+                "$ref": "#/components/schemas/ConnectionCreateRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/AppInstanceCreateRequest"
+                "$ref": "#/components/schemas/ConnectionCreateRequest"
               }
             }
           },
@@ -2016,74 +1997,78 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAppInstanceListItemResponse"
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAppInstanceListItemResponse"
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAppInstanceListItemResponse"
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse"
                 }
               }
             }
           }
         }
-      }
-    },
-    "/api/integrations/app-instances/{id}/authorize-start": {
-      "post": {
+      },
+      "put": {
         "tags": [
-          "Integrations"
+          "Connections"
         ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionUpdateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionUpdateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionUpdateRequest"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAuthorizeStartResponse"
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAuthorizeStartResponse"
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfAuthorizeStartResponse"
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse"
                 }
               }
             }
           }
         }
-      }
-    },
-    "/api/integrations/app-instances/{id}": {
+      },
       "delete": {
         "tags": [
-          "Integrations"
+          "Connections"
         ],
         "parameters": [
           {
             "name": "id",
-            "in": "path",
-            "required": true,
+            "in": "query",
             "schema": {
               "type": "string",
               "format": "uuid"
@@ -2107,6 +2092,104 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/connections/validate": {
+      "post": {
+        "tags": [
+          "Connections"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionValidateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionValidateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConnectionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/oauth/authorize-start": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthAuthorizeStartRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthAuthorizeStartRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthAuthorizeStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOAuthAuthorizeStartResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOAuthAuthorizeStartResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOAuthAuthorizeStartResponse"
                 }
               }
             }
@@ -2122,6 +2205,133 @@
         "responses": {
           "302": {
             "description": "Found"
+          }
+        }
+      }
+    },
+    "/api/integrations/oauth/refresh": {
+      "post": {
+        "tags": [
+          "OAuth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthRefreshRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthRefreshRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOAuthRefreshResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOAuthRefreshResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOAuthRefreshResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/plugin-installations": {
+      "put": {
+        "tags": [
+          "PluginInstallations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginInstallationUpsertRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginInstallationUpsertRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginInstallationUpsertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPluginInstallationResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPluginInstallationResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPluginInstallationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/plugins": {
+      "get": {
+        "tags": [
+          "Plugins"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPluginResponse[]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPluginResponse[]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfPluginResponse[]"
+                }
+              }
+            }
           }
         }
       }
@@ -2371,6 +2581,506 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultOfJobLogResponse[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/contexts": {
+      "get": {
+        "tags": [
+          "ProjectContexts"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectContextSummaryResponse[]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectContextSummaryResponse[]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectContextSummaryResponse[]"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ProjectContexts"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/contexts/{contextId}": {
+      "get": {
+        "tags": [
+          "ProjectContexts"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "contextId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ProjectContexts"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "contextId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/contexts/{contextId}/clear-records": {
+      "delete": {
+        "tags": [
+          "ProjectContexts"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "contextId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/contexts/{contextId}/title": {
+      "put": {
+        "tags": [
+          "ProjectContexts"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "contextId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects": {
+      "get": {
+        "tags": [
+          "Projects"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse[]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse[]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse[]"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Projects"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}": {
+      "get": {
+        "tags": [
+          "Projects"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Projects"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Projects"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
                 }
               }
             }
@@ -3246,506 +3956,6 @@
         }
       }
     },
-    "/api/projects/{projectId}/contexts": {
-      "get": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextSummaryResponse[]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextSummaryResponse[]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextSummaryResponse[]"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/contexts/{contextId}": {
-      "get": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "contextId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "contextId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/contexts/{contextId}/clear-records": {
-      "delete": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "contextId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/contexts/{contextId}/title": {
-      "put": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "contextId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects": {
-      "get": {
-        "tags": [
-          "Projects"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse[]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse[]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse[]"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Projects"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectCreateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectCreateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}": {
-      "get": {
-        "tags": [
-          "Projects"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Projects"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectUpdateRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectUpdateRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Projects"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/tools": {
       "get": {
         "tags": [
@@ -3945,10 +4155,10 @@
               "$ref": "#/components/schemas/AgentMcpServerRelation"
             }
           },
-          "agentAppRelations": {
+          "agentConnectionRelations": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AgentAppRelation"
+              "$ref": "#/components/schemas/AgentConnectionRelation"
             }
           },
           "createTime": {
@@ -3976,10 +4186,10 @@
           }
         }
       },
-      "AgentAppRelation": {
+      "AgentConnectionRelation": {
         "required": [
           "agentId",
-          "appInstanceId"
+          "connectionId"
         ],
         "type": "object",
         "properties": {
@@ -3987,22 +4197,16 @@
             "type": "string",
             "format": "uuid"
           },
-          "appInstanceId": {
+          "connectionId": {
             "type": "string",
             "format": "uuid"
-          },
-          "agent": {
-            "$ref": "#/components/schemas/Agent"
-          },
-          "appInstance": {
-            "$ref": "#/components/schemas/AppInstance"
           }
         }
       },
-      "AgentAppRelationResponse": {
+      "AgentConnectionRelationResponse": {
         "required": [
           "agentId",
-          "appInstanceId"
+          "connectionId"
         ],
         "type": "object",
         "properties": {
@@ -4010,7 +4214,7 @@
             "type": "string",
             "format": "uuid"
           },
-          "appInstanceId": {
+          "connectionId": {
             "type": "string",
             "format": "uuid"
           }
@@ -4073,7 +4277,7 @@
               "format": "uuid"
             }
           },
-          "appInstanceIds": {
+          "connectionIds": {
             "type": [
               "null",
               "array"
@@ -4690,7 +4894,7 @@
           "environmentVariables",
           "agentMcpToolServers",
           "agentSkillRelations",
-          "agentAppRelations",
+          "agentConnectionRelations",
           "createTime",
           "createBy",
           "updateTime",
@@ -4764,10 +4968,10 @@
               "$ref": "#/components/schemas/AgentSkillRelationResponse"
             }
           },
-          "agentAppRelations": {
+          "agentConnectionRelations": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AgentAppRelationResponse"
+              "$ref": "#/components/schemas/AgentConnectionRelationResponse"
             }
           },
           "createTime": {
@@ -4950,7 +5154,7 @@
               "format": "uuid"
             }
           },
-          "appInstanceIds": {
+          "connectionIds": {
             "type": [
               "null",
               "array"
@@ -5603,40 +5807,7 @@
           }
         }
       },
-      "ApiResultOfAppDefinitionListItemResponse[]": {
-        "required": [
-          "code",
-          "title",
-          "detail",
-          "contentType"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/AppDefinitionListItemResponse"
-            }
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "ApiResultOfAppInstanceListItemResponse": {
+      "ApiResultOfConnectionResponse": {
         "required": [
           "code",
           "title",
@@ -5651,7 +5822,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AppInstanceListItemResponse"
+                "$ref": "#/components/schemas/ConnectionResponse"
               }
             ]
           },
@@ -5670,7 +5841,7 @@
           }
         }
       },
-      "ApiResultOfAppInstanceListItemResponse[]": {
+      "ApiResultOfConnectionResponse[]": {
         "required": [
           "code",
           "title",
@@ -5685,42 +5856,8 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/AppInstanceListItemResponse"
+              "$ref": "#/components/schemas/ConnectionResponse"
             }
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "ApiResultOfAuthorizeStartResponse": {
-        "required": [
-          "code",
-          "title",
-          "detail",
-          "contentType"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/AuthorizeStartResponse"
-              }
-            ]
           },
           "code": {
             "type": "integer",
@@ -6109,6 +6246,74 @@
           }
         }
       },
+      "ApiResultOfOAuthAuthorizeStartResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OAuthAuthorizeStartResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfOAuthRefreshResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OAuthRefreshResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfObject[]": {
         "required": [
           "code",
@@ -6157,6 +6362,73 @@
                 "$ref": "#/components/schemas/PagedResultOfAgentflowTraceDto"
               }
             ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPluginInstallationResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PluginInstallationResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPluginResponse[]": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PluginResponse"
+            }
           },
           "code": {
             "type": "integer",
@@ -6539,260 +6811,107 @@
           }
         }
       },
-      "AppDefinitionListItemResponse": {
+      "AuthSchemeResponse": {
         "required": [
-          "name",
+          "id",
           "displayName",
-          "category",
-          "provider",
-          "description",
-          "authUrl",
-          "scopes",
-          "usePkce",
-          "tags",
-          "toolNames"
+          "type"
         ],
         "type": "object",
         "properties": {
-          "name": {
+          "id": {
             "type": "string"
           },
           "displayName": {
             "type": "string"
           },
-          "category": {
-            "$ref": "#/components/schemas/CategoryType"
+          "type": {
+            "$ref": "#/components/schemas/AuthSchemeTypeResponse"
           },
-          "provider": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "authUrl": {
-            "type": "string"
-          },
-          "scopes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "usePkce": {
-            "type": "boolean"
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "toolNames": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "AppInstance": {
-        "required": [
-          "id",
-          "appName",
-          "usePkce",
-          "clientId",
-          "clientSecret",
-          "createTime",
-          "createBy",
-          "updateBy"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "appName": {
-            "type": "string",
-            "description": "AppDefinition.Name, used to identify the app type and link to the app definitions"
-          },
-          "usePkce": {
-            "type": "boolean"
-          },
-          "clientId": {
-            "type": "string"
-          },
-          "clientSecret": {
-            "type": "string"
-          },
-          "authorizationToken": {
+          "oAuth2AuthorizationCode": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/OAuthAuthorizationToken"
+                "$ref": "#/components/schemas/OAuth2AuthorizationCodeResponse"
               }
             ]
           },
-          "createTime": {
-            "type": "string",
-            "format": "date-time"
+          "installationFields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FormFieldResponse"
+            }
           },
-          "createBy": {
-            "type": [
-              "null",
-              "string"
-            ]
+          "connectionFields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FormFieldResponse"
+            }
           },
-          "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "updateBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "AppInstanceCreateRequest": {
-        "required": [
-          "appName",
-          "clientId",
-          "clientSecret",
-          "usePkce"
-        ],
-        "type": "object",
-        "properties": {
-          "appName": {
-            "type": "string"
-          },
-          "clientId": {
-            "type": "string"
-          },
-          "clientSecret": {
-            "type": "string"
-          },
-          "usePkce": {
-            "type": "boolean"
-          }
-        }
-      },
-      "AppInstanceListItemResponse": {
-        "required": [
-          "id",
-          "appName",
-          "displayName",
-          "provider",
-          "category",
-          "usePkce",
-          "clientId",
-          "hasClientSecret",
-          "isAuthorized",
-          "isAuthorizationExpired",
-          "authorizationExpiresAtUtc",
-          "authorizationSubject",
-          "createTime",
-          "createBy",
-          "updateTime",
-          "updateBy"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "appName": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "provider": {
-            "type": "string"
-          },
-          "category": {
+          "installation": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/CategoryType"
+                "$ref": "#/components/schemas/PluginInstallationScopeResponse"
               }
-            ]
-          },
-          "usePkce": {
-            "type": "boolean"
-          },
-          "clientId": {
-            "type": "string"
-          },
-          "hasClientSecret": {
-            "type": "boolean"
-          },
-          "isAuthorized": {
-            "type": "boolean"
-          },
-          "isAuthorizationExpired": {
-            "type": "boolean"
-          },
-          "authorizationExpiresAtUtc": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "authorizationSubject": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "createTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "updateBy": {
-            "type": [
-              "null",
-              "string"
             ]
           }
         }
       },
-      "AuthorizeStartResponse": {
+      "AuthSchemeTypeResponse": {
+        "enum": [
+          "OAuth2",
+          "ApiKey",
+          "AkSk"
+        ]
+      },
+      "CapabilitySourceKindResponse": {
+        "enum": [
+          "Native",
+          "Mcp"
+        ]
+      },
+      "CapabilitySourceResponse": {
         "required": [
-          "authorizeUrl"
+          "id",
+          "kind",
+          "provider"
         ],
         "type": "object",
         "properties": {
-          "authorizeUrl": {
+          "id": {
             "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CapabilitySourceKindResponse"
+          },
+          "provider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mcpTransport": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/McpTransportResponse"
+              }
+            ]
+          },
+          "credentialBindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CredentialBindingResponse"
+            }
           }
         }
-      },
-      "CategoryType": {
-        "type": "integer"
       },
       "ChangePasswordRequest": {
         "required": [
@@ -6812,6 +6931,235 @@
           }
         }
       },
+      "ConnectionCreateRequest": {
+        "required": [
+          "pluginId",
+          "connectorId",
+          "authSchemeId",
+          "displayName",
+          "alias",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "pluginId": {
+            "type": "string"
+          },
+          "connectorId": {
+            "type": "string"
+          },
+          "authSchemeId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "secrets": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SecretFieldUpdateRequest"
+            }
+          }
+        }
+      },
+      "ConnectionResponse": {
+        "required": [
+          "id",
+          "pluginId",
+          "connectorId",
+          "authSchemeId",
+          "displayName",
+          "alias",
+          "enabled",
+          "status",
+          "subject",
+          "lastValidationErrorCode"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pluginId": {
+            "type": "string"
+          },
+          "connectorId": {
+            "type": "string"
+          },
+          "authSchemeId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConnectionStatusResponse"
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expiresAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastValidatedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastValidationErrorCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "secrets": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SecretFieldStateResponse"
+            }
+          }
+        }
+      },
+      "ConnectionStatusResponse": {
+        "enum": [
+          "NeedsConfiguration",
+          "PendingAuthorization",
+          "Unverified",
+          "Ready",
+          "Expired",
+          "Invalid",
+          "Disabled",
+          "DefinitionUnavailable"
+        ]
+      },
+      "ConnectionUpdateRequest": {
+        "required": [
+          "id",
+          "pluginId",
+          "connectorId",
+          "authSchemeId",
+          "displayName",
+          "alias",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pluginId": {
+            "type": "string"
+          },
+          "connectorId": {
+            "type": "string"
+          },
+          "authSchemeId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "alias": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "secrets": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SecretFieldUpdateRequest"
+            }
+          }
+        }
+      },
+      "ConnectionValidateRequest": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ConnectorResponse": {
+        "required": [
+          "id",
+          "displayName",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "authSchemes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuthSchemeResponse"
+            }
+          },
+          "capabilitySources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapabilitySourceResponse"
+            }
+          }
+        }
+      },
       "CreateTokenRequest": {
         "required": [
           "name"
@@ -6822,6 +7170,56 @@
             "type": "string"
           }
         }
+      },
+      "CredentialBindingResponse": {
+        "required": [
+          "sourceKind",
+          "authSchemeId",
+          "fieldId",
+          "target",
+          "targetName",
+          "valuePrefix"
+        ],
+        "type": "object",
+        "properties": {
+          "sourceKind": {
+            "$ref": "#/components/schemas/CredentialValueSourceKindResponse"
+          },
+          "authSchemeId": {
+            "type": "string"
+          },
+          "fieldId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "target": {
+            "$ref": "#/components/schemas/CredentialBindingTargetResponse"
+          },
+          "targetName": {
+            "type": "string"
+          },
+          "valuePrefix": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CredentialBindingTargetResponse": {
+        "enum": [
+          "EnvironmentVariable",
+          "HttpHeader"
+        ]
+      },
+      "CredentialValueSourceKindResponse": {
+        "enum": [
+          "ConnectionField",
+          "InstallationField",
+          "OAuthAccessToken"
+        ]
       },
       "DashboardStatsResponse": {
         "required": [
@@ -6969,6 +7367,43 @@
             "type": "string"
           }
         }
+      },
+      "FormFieldResponse": {
+        "required": [
+          "id",
+          "label",
+          "type",
+          "isRequired",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/FormFieldTypeResponse"
+          },
+          "isRequired": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "FormFieldTypeResponse": {
+        "enum": [
+          "Text",
+          "Secret",
+          "Url"
+        ]
       },
       "IFormFile": {
         "type": "string",
@@ -7653,6 +8088,44 @@
           }
         }
       },
+      "McpTransportKindResponse": {
+        "enum": [
+          "Stdio",
+          "Http",
+          "Sse"
+        ]
+      },
+      "McpTransportResponse": {
+        "required": [
+          "kind",
+          "command",
+          "endpoint"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/McpTransportKindResponse"
+          },
+          "command": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "arguments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "endpoint": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ModelCreateRequest": {
         "required": [
           "name",
@@ -7914,55 +8387,158 @@
           }
         }
       },
-      "OAuthAuthorizationToken": {
+      "OAuth2AuthorizationCodeResponse": {
         "required": [
-          "id",
-          "appInstanceId",
-          "subject",
-          "accessToken",
-          "refreshToken",
-          "tokenType"
+          "authorizationEndpoint",
+          "tokenEndpoint",
+          "userInfoEndpoint",
+          "clientIdFieldId",
+          "clientSecretFieldId",
+          "usePkce",
+          "clientAuthenticationMethod",
+          "supportsRefresh"
         ],
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "description": "Gets or sets the unique identifier for the stored token record.",
-            "format": "uuid"
+          "authorizationEndpoint": {
+            "type": "string"
           },
-          "appInstanceId": {
-            "type": "string",
-            "format": "uuid"
+          "tokenEndpoint": {
+            "type": "string"
           },
-          "subject": {
-            "type": "string",
-            "description": "Gets or sets the provider-specific subject or account identifier the token belongs to."
-          },
-          "accessToken": {
-            "type": "string",
-            "description": "Gets or sets the access token used for authenticated provider requests."
-          },
-          "refreshToken": {
+          "userInfoEndpoint": {
             "type": [
               "null",
               "string"
-            ],
-            "description": "Gets or sets the optional refresh token used to obtain a new access token."
+            ]
           },
-          "tokenType": {
+          "clientIdFieldId": {
+            "type": "string"
+          },
+          "clientSecretFieldId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subjectResolution": {
+            "$ref": "#/components/schemas/OAuthSubjectResolutionResponse"
+          },
+          "usePkce": {
+            "type": "boolean"
+          },
+          "clientAuthenticationMethod": {
+            "$ref": "#/components/schemas/OAuth2ClientAuthenticationMethodResponse"
+          },
+          "supportsRefresh": {
+            "type": "boolean"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "additionalAuthorizeParameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "additionalTokenParameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "OAuth2ClientAuthenticationMethodResponse": {
+        "enum": [
+          "Body",
+          "Basic",
+          "None"
+        ]
+      },
+      "OAuthAuthorizeStartRequest": {
+        "required": [
+          "connectionId",
+          "returnPath"
+        ],
+        "type": "object",
+        "properties": {
+          "connectionId": {
             "type": "string",
-            "description": "Gets or sets the token type returned by the provider, such as Bearer."
+            "format": "uuid"
+          },
+          "returnPath": {
+            "type": "string"
+          }
+        }
+      },
+      "OAuthAuthorizeStartResponse": {
+        "required": [
+          "authorizationUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "authorizationUrl": {
+            "type": "string"
+          }
+        }
+      },
+      "OAuthRefreshRequest": {
+        "required": [
+          "connectionId"
+        ],
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "OAuthRefreshResponse": {
+        "required": [
+          "connectionId"
+        ],
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
           },
           "expiresAtUtc": {
             "type": [
               "null",
               "string"
             ],
-            "description": "Gets or sets the UTC timestamp when the access token expires, if known.",
             "format": "date-time"
           }
-        },
-        "description": "Persists provider-issued OAuth tokens for a specific authenticated subject."
+        }
+      },
+      "OAuthSubjectResolutionResponse": {
+        "required": [
+          "source",
+          "field"
+        ],
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/OAuthSubjectSourceResponse"
+          },
+          "field": {
+            "type": "string"
+          }
+        }
+      },
+      "OAuthSubjectSourceResponse": {
+        "enum": [
+          "UserInfo",
+          "TokenResponse",
+          "IdToken"
+        ]
       },
       "PagedResultOfAgentflowTraceDto": {
         "required": [
@@ -7994,6 +8570,172 @@
           "pageSize": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "PluginInstallationResponse": {
+        "required": [
+          "id",
+          "pluginId",
+          "connectorId",
+          "authSchemeId",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pluginId": {
+            "type": "string"
+          },
+          "connectorId": {
+            "type": "string"
+          },
+          "authSchemeId": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "secrets": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SecretFieldStateResponse"
+            }
+          }
+        }
+      },
+      "PluginInstallationScopeResponse": {
+        "required": [
+          "id",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "secrets": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SecretFieldStateResponse"
+            }
+          }
+        }
+      },
+      "PluginInstallationUpsertRequest": {
+        "required": [
+          "pluginId",
+          "connectorId",
+          "authSchemeId",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "pluginId": {
+            "type": "string"
+          },
+          "connectorId": {
+            "type": "string"
+          },
+          "authSchemeId": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "secrets": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SecretFieldUpdateRequest"
+            }
+          }
+        }
+      },
+      "PluginResponse": {
+        "required": [
+          "id",
+          "version",
+          "displayName",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "connectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectorResponse"
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PluginSkillResponse"
+            }
+          }
+        }
+      },
+      "PluginSkillResponse": {
+        "required": [
+          "id",
+          "description",
+          "contentPath"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "contentPath": {
+            "type": "string"
           }
         }
       },
@@ -8036,10 +8778,10 @@
           }
         }
       },
-      "ProjectAppRelationResponse": {
+      "ProjectConnectionRelationResponse": {
         "required": [
           "projectId",
-          "appInstanceId"
+          "connectionId"
         ],
         "type": "object",
         "properties": {
@@ -8047,7 +8789,7 @@
             "type": "string",
             "format": "uuid"
           },
-          "appInstanceId": {
+          "connectionId": {
             "type": "string",
             "format": "uuid"
           }
@@ -8323,7 +9065,7 @@
               "format": "uuid"
             }
           },
-          "appInstanceIds": {
+          "connectionIds": {
             "type": [
               "null",
               "array"
@@ -8374,7 +9116,7 @@
           "environmentVariables",
           "projectMcpToolServers",
           "projectSkillRelations",
-          "projectAppRelations",
+          "projectConnectionRelations",
           "createTime",
           "createBy",
           "updateTime",
@@ -8437,10 +9179,10 @@
               "$ref": "#/components/schemas/ProjectSkillRelationResponse"
             }
           },
-          "projectAppRelations": {
+          "projectConnectionRelations": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProjectAppRelationResponse"
+              "$ref": "#/components/schemas/ProjectConnectionRelationResponse"
             }
           },
           "createTime": {
@@ -8549,7 +9291,7 @@
               "format": "uuid"
             }
           },
-          "appInstanceIds": {
+          "connectionIds": {
             "type": [
               "null",
               "array"
@@ -8828,6 +9570,42 @@
             }
           }
         }
+      },
+      "SecretFieldStateResponse": {
+        "required": [
+          "configured"
+        ],
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SecretFieldUpdateRequest": {
+        "required": [
+          "action",
+          "secretValue"
+        ],
+        "type": "object",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/SecretUpdateAction"
+          },
+          "secretValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SecretUpdateAction": {
+        "enum": [
+          "Keep",
+          "Set",
+          "Clear"
+        ]
       },
       "SkillResponse": {
         "required": [
@@ -9113,13 +9891,13 @@
       "name": "agw-server"
     },
     {
+      "name": "A2A"
+    },
+    {
       "name": "Auth"
     },
     {
       "name": "Dashboard"
-    },
-    {
-      "name": "ServerInfo"
     },
     {
       "name": "Agentflows"
@@ -9137,13 +9915,25 @@
       "name": "Files"
     },
     {
-      "name": "Integrations"
+      "name": "Connections"
     },
     {
       "name": "OAuth"
     },
     {
+      "name": "PluginInstallations"
+    },
+    {
+      "name": "Plugins"
+    },
+    {
       "name": "Jobs"
+    },
+    {
+      "name": "ProjectContexts"
+    },
+    {
+      "name": "Projects"
     },
     {
       "name": "ModelProviders"
@@ -9156,12 +9946,6 @@
     },
     {
       "name": "Skills"
-    },
-    {
-      "name": "ProjectContexts"
-    },
-    {
-      "name": "Projects"
     },
     {
       "name": "Tools"

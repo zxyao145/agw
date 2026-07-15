@@ -11,7 +11,7 @@ public record AgentCreateRequest(
     string? Tools = null,  // JSON array of tool names
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
-    List<Guid>? AppInstanceIds = null,
+    List<Guid>? ConnectionIds = null,
     Dictionary<string, string>? EnvironmentVariables = null,
     bool EnableSummary = false,
     Guid? SummaryModelProviderId = null);
@@ -24,7 +24,7 @@ public record AgentUpdateRequest(
     string? Tools = null,  // JSON array of tool names
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
-    List<Guid>? AppInstanceIds = null,
+    List<Guid>? ConnectionIds = null,
     string? Extra = null,
     Dictionary<string, string>? EnvironmentVariables = null,
     bool EnableSummary = false,
@@ -46,12 +46,12 @@ public sealed record AgentSkillRelationResponse(
         new(relation.AgentId, relation.SkillId);
 }
 
-public sealed record AgentAppRelationResponse(
+public sealed record AgentConnectionRelationResponse(
     Guid AgentId,
-    Guid AppInstanceId)
+    Guid ConnectionId)
 {
-    public static AgentAppRelationResponse FromDomain(AgentAppRelation relation) =>
-        new(relation.AgentId, relation.AppInstanceId);
+    public static AgentConnectionRelationResponse FromDomain(AgentConnectionRelation relation) =>
+        new(relation.AgentId, relation.ConnectionId);
 }
 
 public sealed record AgentResponse(
@@ -69,7 +69,7 @@ public sealed record AgentResponse(
     IReadOnlyDictionary<string, string> EnvironmentVariables,
     IReadOnlyList<AgentMcpToolServerRelationResponse> AgentMcpToolServers,
     IReadOnlyList<AgentSkillRelationResponse> AgentSkillRelations,
-    IReadOnlyList<AgentAppRelationResponse> AgentAppRelations,
+    IReadOnlyList<AgentConnectionRelationResponse> AgentConnectionRelations,
     DateTimeOffset CreateTime,
     string? CreateBy,
     DateTimeOffset? UpdateTime,
@@ -91,7 +91,7 @@ public sealed record AgentResponse(
             agent.EnvironmentVariables,
             [.. agent.AgentMcpToolServers.Select(AgentMcpToolServerRelationResponse.FromDomain)],
             [.. agent.AgentSkillRelations.Select(AgentSkillRelationResponse.FromDomain)],
-            [.. agent.AgentAppRelations.Select(AgentAppRelationResponse.FromDomain)],
+            [.. agent.AgentConnectionRelations.Select(AgentConnectionRelationResponse.FromDomain)],
             agent.CreateTime,
             agent.CreateBy,
             agent.UpdateTime,

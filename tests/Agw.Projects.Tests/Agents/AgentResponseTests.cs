@@ -11,7 +11,7 @@ public class AgentResponseTests
         var agentId = Guid.NewGuid();
         var mcpToolServerId = Guid.NewGuid();
         var skillId = Guid.NewGuid();
-        var appInstanceId = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
 
         var agent = new Agent
         {
@@ -37,9 +37,9 @@ public class AgentResponseTests
             [
                 new AgentSkillRelation { AgentId = agentId, SkillId = skillId }
             ],
-            AgentAppRelations =
+            AgentConnectionRelations =
             [
-                new AgentAppRelation { AgentId = agentId, AppInstanceId = appInstanceId }
+                new AgentConnectionRelation { AgentId = agentId, ConnectionId = connectionId }
             ]
         };
 
@@ -68,8 +68,8 @@ public class AgentResponseTests
         Assert.Equal(agentId, skillRelation.AgentId);
         Assert.Equal(skillId, skillRelation.SkillId);
 
-        var appRelation = Assert.Single(response.AgentAppRelations);
-        Assert.Equal(agentId, appRelation.AgentId);
-        Assert.Equal(appInstanceId, appRelation.AppInstanceId);
+        var connectionRelation = Assert.Single(response.AgentConnectionRelations);
+        Assert.Equal(agentId, connectionRelation.AgentId);
+        Assert.Equal(connectionId, connectionRelation.ConnectionId);
     }
 }

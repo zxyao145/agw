@@ -23,13 +23,13 @@ export type SkillDto = {
   agentIds: string[];
 };
 
-export type AppInstanceOption = {
+export type ConnectionOption = {
   id: string;
-  appName: string;
+  pluginId: string;
+  connectorId: string;
+  authSchemeId: string;
   displayName: string;
-  provider: string;
-  clientId: string;
-  isAuthorized: boolean;
-  isAuthorizationExpired: boolean;
-  authorizationSubject?: string | null;
+  alias: string;
+  status: string;
+  subject?: string | null;
 };

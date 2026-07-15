@@ -48,35 +48,69 @@ public partial class AgentRuntimeService
         }
 
         var authConfig = authConfigs[Random.Shared.Next(authConfigs.Count)];
-        IList<AITool>? tools =
-            await CreateAgentTools(agentDefinition, project, environmentVariables, cancellationToken)
-                .ConfigureAwait(false);
-        var skillsProvider = await CreateSkillsProviderAsync(agentDefinition, project).ConfigureAwait(false);
-
-        string workspace = project.GetMustWorkspace();
-        AIAgent aiAgent = provider.ProviderType switch
+        var capabilities = await _capabilityComposer
+            .ComposeAsync(agentDefinition, project, environmentVariables, cancellationToken)
+            .ConfigureAwait(false);
+        AIAgent? aiAgent = null;
+        try
         {
-            ProviderType.OpenAIChatCompletions => CreateOpenAiAgent(agentDefinition, model, provider, authConfig, tools,
-                skillsProvider, workspace),
-            ProviderType.Anthropic => CreateAnthropicAgent(agentDefinition, model, provider, authConfig, tools,
-                skillsProvider, workspace),
-            _ => throw new AgwException(ErrorCodes.UnsupportedProviderType,
-                $"Provider type '{provider.ProviderType}' is not supported")
-        };
+            IList<AITool>? tools = capabilities.Tools.Count > 0
+                ? capabilities.Tools.ToList()
+                : null;
+            var skillsProvider = await CreateSkillsProviderAsync(
+                    agentDefinition,
+                    project,
+                    capabilities.PluginSkills)
+                .ConfigureAwait(false);
 
-        aiAgent = aiAgent.AsBuilder()
-            .UseToolApproval(new ToolApprovalAgentOptions
+            string workspace = project.GetMustWorkspace();
+            aiAgent = provider.ProviderType switch
             {
-                AutoApprovalRules = [AgentSkillsProvider.AllToolsAutoApprovalRule],
-            })
-            .Use(
-                runFunc: _observabilityMiddleware.LogRunMiddleware,
-                runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware)
-            .Use(
-                runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
-                runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware)
-            .Build();
-        return aiAgent;
+                ProviderType.OpenAIChatCompletions => CreateOpenAiAgent(
+                    agentDefinition,
+                    model,
+                    provider,
+                    authConfig,
+                    tools,
+                    skillsProvider,
+                    workspace),
+                ProviderType.Anthropic => CreateAnthropicAgent(
+                    agentDefinition,
+                    model,
+                    provider,
+                    authConfig,
+                    tools,
+                    skillsProvider,
+                    workspace),
+                _ => throw new AgwException(
+                    ErrorCodes.UnsupportedProviderType,
+                    $"Provider type '{provider.ProviderType}' is not supported")
+            };
+
+            aiAgent = aiAgent.AsBuilder()
+                .UseToolApproval(new ToolApprovalAgentOptions
+                {
+                    AutoApprovalRules = [AgentSkillsProvider.AllToolsAutoApprovalRule],
+                })
+                .Use(
+                    runFunc: _observabilityMiddleware.LogRunMiddleware,
+                    runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware)
+                .Use(
+                    runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
+                    runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware)
+                .Build();
+            return new ResourceOwningAIAgent(aiAgent, capabilities);
+        }
+        catch
+        {
+            if (aiAgent != null)
+            {
+                await DisposeAgentWithoutThrowingAsync(aiAgent).ConfigureAwait(false);
+            }
+
+            await DisposeResourceWithoutThrowingAsync(capabilities).ConfigureAwait(false);
+            throw;
+        }
     }
 
     private AIAgent CreateOpenAiAgent(
@@ -176,5 +210,35 @@ public partial class AgentRuntimeService
         }
 
         return apiKeyFromEnv;
+    }
+
+    private static async ValueTask DisposeAgentWithoutThrowingAsync(AIAgent agent)
+    {
+        try
+        {
+            switch (agent)
+            {
+                case IAsyncDisposable asyncDisposable:
+                    await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+                    break;
+                case IDisposable disposable:
+                    disposable.Dispose();
+                    break;
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static async ValueTask DisposeResourceWithoutThrowingAsync(IAsyncDisposable resource)
+    {
+        try
+        {
+            await resource.DisposeAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+        }
     }
 }

@@ -57,7 +57,6 @@ public class SummaryChatClientFactoryTests
             null!,
             null!,
             null!,
-            null!,
             new EfRepository<ModelProviderRelation>(dbContext),
             new EfRepository<LlmModel>(dbContext),
             new EfRepository<Provider>(dbContext),

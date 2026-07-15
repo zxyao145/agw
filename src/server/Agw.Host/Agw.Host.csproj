@@ -45,8 +45,4 @@
     <ProjectReference Include="..\Agw.Setup\Agw.Setup.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="logs\" />
-  </ItemGroup>
-
 </Project>

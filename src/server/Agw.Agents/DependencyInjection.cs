@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<AgentSuggestionAppService>();
         services.AddScoped<McpToolServerAppService>();
         services.AddScoped<AgentSessionStateStore>();
+        services.AddScoped<AgentCapabilityComposer>();
         services.AddScoped<IAgentRuntimeService, AgentRuntimeService>();
         services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();
         services.AddScoped<IAgentTurnSummaryService, AgentTurnSummaryService>();

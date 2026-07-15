@@ -48,7 +48,7 @@ export function CreateProjectDialog({
   selectedTools,
   selectedSkillIds,
   selectedMcpToolServerIds,
-  selectedAppInstanceIds,
+  selectedConnectionIds,
   ...formProps
 }: CreateProjectDialogProps) {
   const normalizedName = formatProjectFolderName(name);
@@ -64,7 +64,7 @@ export function CreateProjectDialog({
       selectedTools,
       selectedSkillIds,
       selectedMcpToolServerIds,
-      selectedAppInstanceIds,
+      selectedConnectionIds,
       environmentVariables: normalizeEnvironmentVariables(environmentVariables),
     });
 
@@ -148,7 +148,7 @@ export function CreateProjectDialog({
             selectedTools={selectedTools}
             selectedSkillIds={selectedSkillIds}
             selectedMcpToolServerIds={selectedMcpToolServerIds}
-            selectedAppInstanceIds={selectedAppInstanceIds}
+            selectedConnectionIds={selectedConnectionIds}
           />
         </div>
       </DialogContent>

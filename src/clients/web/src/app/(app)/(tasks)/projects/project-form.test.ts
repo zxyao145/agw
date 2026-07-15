@@ -82,14 +82,14 @@ test("serializeProjectCapabilities always sends explicit empty capability values
       selectedTools: [],
       selectedSkillIds: [],
       selectedMcpToolServerIds: [],
-      selectedAppInstanceIds: [],
+      selectedConnectionIds: [],
       environmentVariables: {},
     }),
     {
       tools: "[]",
       skillIds: [],
       mcpToolServerIds: [],
-      appInstanceIds: [],
+      connectionIds: [],
       environmentVariables: {},
     },
   );
@@ -103,14 +103,14 @@ test("toProjectCapabilityFormState backfills all five capabilities", async () =>
       tools: '["tool-a"]',
       projectSkillRelations: [{ projectId: "project", skillId: "skill" }],
       projectMcpToolServers: [{ projectId: "project", mcpToolServerId: "mcp" }],
-      projectAppRelations: [{ projectId: "project", appInstanceId: "app" }],
+      projectConnectionRelations: [{ projectId: "project", connectionId: "app" }],
       environmentVariables: { API_TOKEN: "secret" },
     }),
     {
       selectedTools: ["tool-a"],
       selectedSkillIds: ["skill"],
       selectedMcpToolServerIds: ["mcp"],
-      selectedAppInstanceIds: ["app"],
+      selectedConnectionIds: ["app"],
       environmentVariables: { API_TOKEN: "secret" },
     },
   );
@@ -123,7 +123,7 @@ test("toProjectCapabilityFormState treats malformed tools JSON as an empty selec
     tools: "not-json",
     projectSkillRelations: [],
     projectMcpToolServers: [],
-    projectAppRelations: [],
+    projectConnectionRelations: [],
     environmentVariables: {},
   });
 
