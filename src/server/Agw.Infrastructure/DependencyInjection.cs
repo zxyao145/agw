@@ -1,5 +1,6 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Scheduling;
@@ -25,6 +26,9 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddDataProtection();
+        services.AddSingleton<IEncryptedDataProtector, DataProtectionEncryptedDataProtector>();
+
         var configuredDatabaseProvider = configuration[$"{DatabaseSettings.SectionName}:Provider"];
         if (configuredDatabaseProvider != null)
         {

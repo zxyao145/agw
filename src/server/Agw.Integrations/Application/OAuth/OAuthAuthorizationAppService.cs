@@ -56,7 +56,6 @@ public sealed class OAuthAuthorizationAppService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPluginCatalog _pluginCatalog;
     private readonly IConnectionCredentialReader _credentialReader;
-    private readonly IConnectionCredentialProtector _credentialProtector;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly OAuthStateProtector _stateProtector;
     private readonly TimeProvider _timeProvider;
@@ -69,7 +68,6 @@ public sealed class OAuthAuthorizationAppService
         IUnitOfWork unitOfWork,
         IPluginCatalog pluginCatalog,
         IConnectionCredentialReader credentialReader,
-        IConnectionCredentialProtector credentialProtector,
         IHttpClientFactory httpClientFactory,
         OAuthStateProtector stateProtector,
         TimeProvider timeProvider,
@@ -81,7 +79,6 @@ public sealed class OAuthAuthorizationAppService
         _unitOfWork = unitOfWork;
         _pluginCatalog = pluginCatalog;
         _credentialReader = credentialReader;
-        _credentialProtector = credentialProtector;
         _httpClientFactory = httpClientFactory;
         _stateProtector = stateProtector;
         _timeProvider = timeProvider;
@@ -545,7 +542,7 @@ public sealed class OAuthAuthorizationAppService
             credential.UpdateTime = _timeProvider.GetUtcNow();
         }
 
-        credential.ProtectedValue = _credentialProtector.Protect(value);
+        credential.Value = value;
         credential.ExpiresAtUtc = expiresAtUtc;
         credential.MetadataJson = null;
         credential.FormatVersion = 1;

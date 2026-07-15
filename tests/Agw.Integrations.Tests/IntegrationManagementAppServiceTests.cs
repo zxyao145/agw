@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Application.Credentials;
@@ -6,7 +7,6 @@ using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
-using Agw.Integrations.Infrastructure.Credentials;
 using Agw.Integrations.Infrastructure.Plugins;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
@@ -53,10 +53,7 @@ public class IntegrationManagementAppServiceTests
 
         scope.DbContext.ChangeTracker.Clear();
         var stored = await scope.DbContext.PluginInstallationCredentials.SingleAsync(cancellationToken);
-        Assert.NotNull(stored.ProtectedValue);
-        Assert.NotEqual(plaintext, stored.ProtectedValue);
-        Assert.DoesNotContain(plaintext, stored.ProtectedValue, StringComparison.Ordinal);
-        Assert.Equal(plaintext, scope.Protector.Unprotect(stored.ProtectedValue));
+        Assert.Equal(plaintext, stored.Value);
         Assert.Equal("field:api:api-key:client-secret", stored.Slot);
 
         var plugins = await scope.Plugins.ListAsync(cancellationToken);
@@ -90,7 +87,7 @@ public class IntegrationManagementAppServiceTests
 
         var credentialBeforeKeep = await scope.DbContext.PluginInstallationCredentials
             .SingleAsync(item => item.Slot.EndsWith("client-secret"), cancellationToken);
-        var protectedBeforeKeep = credentialBeforeKeep.ProtectedValue;
+        var valueBeforeKeep = credentialBeforeKeep.Value;
 
         scope.DbContext.ChangeTracker.Clear();
         var kept = await scope.Installations.UpsertAsync(new PluginInstallationUpsertRequest
@@ -117,7 +114,7 @@ public class IntegrationManagementAppServiceTests
         scope.DbContext.ChangeTracker.Clear();
         var credentialAfterKeep = await scope.DbContext.PluginInstallationCredentials
             .SingleAsync(item => item.Slot.EndsWith("client-secret"), cancellationToken);
-        Assert.Equal(protectedBeforeKeep, credentialAfterKeep.ProtectedValue);
+        Assert.Equal(valueBeforeKeep, credentialAfterKeep.Value);
 
         await scope.Installations.UpsertAsync(new PluginInstallationUpsertRequest
         {
@@ -135,7 +132,7 @@ public class IntegrationManagementAppServiceTests
         scope.DbContext.ChangeTracker.Clear();
         var credentials = await scope.DbContext.PluginInstallationCredentials.ToListAsync(cancellationToken);
         var replacement = Assert.Single(credentials);
-        Assert.Equal("replacement-secret", scope.Protector.Unprotect(replacement.ProtectedValue!));
+        Assert.Equal("replacement-secret", replacement.Value);
         Assert.EndsWith("client-secret", replacement.Slot, StringComparison.Ordinal);
     }
 
@@ -255,7 +252,7 @@ public class IntegrationManagementAppServiceTests
             cancellationToken);
 
         Assert.Equal("connection-secret", value!.Value);
-        Assert.DoesNotContain("connection-secret", stored.ProtectedValue!, StringComparison.Ordinal);
+        Assert.Equal("connection-secret", stored.Value);
     }
 
     [Fact]
@@ -277,11 +274,14 @@ public class IntegrationManagementAppServiceTests
         var invalidCredential = await scope.DbContext.ConnectionCredentials.SingleAsync(
             credential => credential.ConnectionId == invalidCandidate.Id,
             cancellationToken);
-        invalidCredential.ProtectedValue = "invalid-protected-value";
-        await scope.DbContext.SaveChangesAsync(cancellationToken);
         scope.DbContext.ChangeTracker.Clear();
-        var invalid = await scope.Connections.ValidateAsync(invalidCandidate.Id, "tester", cancellationToken);
-        Assert.Equal(ConnectionStatusResponse.Invalid, invalid.Status);
+        const string invalidProtectedValue = "invalid-protected-value";
+        await scope.DbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE integration_connection_credential SET protected_value = {invalidProtectedValue} WHERE id = {invalidCredential.Id}",
+            cancellationToken);
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Connections.ValidateAsync(invalidCandidate.Id, "tester", cancellationToken));
+        Assert.Equal(ErrorCodes.EncryptedDataInvalid.Code, exception.Code);
 
         var disabledRequest = ConnectionRequest("disabled");
         disabledRequest.Enabled = false;
@@ -296,7 +296,7 @@ public class IntegrationManagementAppServiceTests
             Id = Guid.NewGuid(),
             ConnectionId = oauth.Id,
             Slot = IntegrationCredentialSlots.OAuthAccessToken,
-            ProtectedValue = scope.Protector.Protect("oauth-token"),
+            Value = "oauth-token",
             ExpiresAtUtc = now.AddMinutes(-1),
             CreateBy = "tester",
             CreateTime = now
@@ -576,7 +576,7 @@ public class IntegrationManagementAppServiceTests
             Id = Guid.NewGuid(),
             ConnectionId = tokenConnection.Id,
             Slot = IntegrationCredentialSlots.OAuthAccessToken,
-            ProtectedValue = scope.Protector.Protect("oauth-token"),
+            Value = "oauth-token",
             CreateBy = "tester",
             CreateTime = now
         });
@@ -735,7 +735,6 @@ public class IntegrationManagementAppServiceTests
         private ManagementTestScope(
             SqliteConnection connection,
             AgwDbContext dbContext,
-            IConnectionCredentialProtector protector,
             PluginCatalogAppService plugins,
             PluginInstallationAppService installations,
             ConnectionAppService connections,
@@ -743,7 +742,6 @@ public class IntegrationManagementAppServiceTests
         {
             _connection = connection;
             DbContext = dbContext;
-            Protector = protector;
             Plugins = plugins;
             Installations = installations;
             Connections = connections;
@@ -751,7 +749,6 @@ public class IntegrationManagementAppServiceTests
         }
 
         public AgwDbContext DbContext { get; }
-        public IConnectionCredentialProtector Protector { get; }
         public PluginCatalogAppService Plugins { get; }
         public PluginInstallationAppService Installations { get; }
         public ConnectionAppService Connections { get; }
@@ -768,10 +765,11 @@ public class IntegrationManagementAppServiceTests
                 .UseSqlite(connection)
                 .UseSnakeCaseNamingConvention()
                 .Options;
-            var dbContext = new AgwDbContext(options);
+            var encryptedDataProtector = new DataProtectionEncryptedDataProtector(
+                new EphemeralDataProtectionProvider());
+            var dbContext = new AgwDbContext(options, encryptedDataProtector);
             await dbContext.Database.EnsureCreatedAsync(cancellationToken);
 
-            var protector = new DataProtectionConnectionCredentialProtector(new EphemeralDataProtectionProvider());
             catalog ??= new TestPluginCatalog();
             var timeProvider = new TestTimeProvider(now ?? TimeProvider.System.GetUtcNow());
 
@@ -785,12 +783,10 @@ public class IntegrationManagementAppServiceTests
 
             var reader = new ConnectionCredentialReader(
                 installationCredentialRepository,
-                connectionCredentialRepository,
-                protector);
+                connectionCredentialRepository);
             var credentialMutations = new CredentialMutationService(
                 installationCredentialRepository,
                 connectionCredentialRepository,
-                protector,
                 timeProvider);
             var installations = new PluginInstallationAppService(
                 installationRepository,
@@ -824,7 +820,6 @@ public class IntegrationManagementAppServiceTests
             return new ManagementTestScope(
                 connection,
                 dbContext,
-                protector,
                 plugins,
                 installations,
                 connections,

@@ -121,6 +121,8 @@ public static class ErrorCodes
     public static readonly ErrorCode IntegrationNativeProviderUnavailable = new(500_0020, "The integration native capability provider is unavailable.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode IntegrationMcpMaterializationFailed = new(500_0021, "Failed to materialize the integration MCP capability.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode GitHubCloneFailed = new(500_0022, "GitHub clone failed.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode EncryptedDataInvalid = new(500_0023, "Stored encrypted data is invalid.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode EncryptedModelInvalid = new(500_0024, "Encrypted entity model configuration is invalid.", HttpStatusCode.InternalServerError);
 
     public static readonly ErrorCode UnsupportedTransportType = new(501_0001, "Transport type is not supported.", HttpStatusCode.NotImplemented);
     public static readonly ErrorCode UnsupportedAgentType = new(501_0002, "Agent type is not supported.", HttpStatusCode.NotImplemented);

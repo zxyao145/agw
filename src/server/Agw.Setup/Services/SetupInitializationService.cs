@@ -1,5 +1,6 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Encryption;
 using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
@@ -17,19 +18,22 @@ public class SetupInitializationService : ISetupInitializationService
     private readonly IPasswordHasher<object> _passwordHasher;
     private readonly AgwDataPaths _paths;
     private readonly TimeProvider _timeProvider;
+    private readonly IEncryptedDataProtector _encryptedDataProtector;
 
     public SetupInitializationService(
         IInitializationStateStore stateStore,
         ILoggerFactory loggerFactory,
         IPasswordHasher<object> passwordHasher,
         AgwDataPaths paths,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IEncryptedDataProtector encryptedDataProtector)
     {
         _stateStore = stateStore;
         _loggerFactory = loggerFactory;
         _passwordHasher = passwordHasher;
         _paths = paths;
         _timeProvider = timeProvider;
+        _encryptedDataProtector = encryptedDataProtector;
     }
 
     public async Task InitializeAsync(SetupRequest request, CancellationToken cancellationToken = default)
@@ -47,7 +51,7 @@ public class SetupInitializationService : ISetupInitializationService
         };
         ConfigureDatabaseProvider(dbOptions, resolvedRequest);
 
-        await using var context = new AgwDbContext(dbOptions.Options);
+        await using var context = new AgwDbContext(dbOptions.Options, _encryptedDataProtector);
         var seeder = new DbSeeder(context, _loggerFactory.CreateLogger<DbSeeder>(), _timeProvider);
         await seeder.SeedAsync();
 

@@ -3,7 +3,6 @@ using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Application.Plugins;
-using Agw.Integrations.Infrastructure.Credentials;
 using Agw.Integrations.Infrastructure.Plugins;
 using Agw.Integrations.Mcp;
 using Agw.Integrations.Tools.GitHub;
@@ -19,7 +18,6 @@ public static class DependencyInjection
     {
         services.AddDataProtection();
         services.AddSingleton<IPluginCatalog, BuiltInPluginCatalog>();
-        services.AddSingleton<IConnectionCredentialProtector, DataProtectionConnectionCredentialProtector>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IConnectionCredentialReader, ConnectionCredentialReader>();
         services.AddScoped<CredentialMutationService>();

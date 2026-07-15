@@ -1,4 +1,3 @@
-using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Contracts.Management;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
@@ -10,18 +9,15 @@ public sealed class CredentialMutationService
 {
     private readonly IRepository<PluginInstallationCredential> _installationCredentialRepository;
     private readonly IRepository<ConnectionCredential> _connectionCredentialRepository;
-    private readonly IConnectionCredentialProtector _protector;
     private readonly TimeProvider _timeProvider;
 
     public CredentialMutationService(
         IRepository<PluginInstallationCredential> installationCredentialRepository,
         IRepository<ConnectionCredential> connectionCredentialRepository,
-        IConnectionCredentialProtector protector,
         TimeProvider timeProvider)
     {
         _installationCredentialRepository = installationCredentialRepository;
         _connectionCredentialRepository = connectionCredentialRepository;
-        _protector = protector;
         _timeProvider = timeProvider;
     }
 
@@ -123,15 +119,15 @@ public sealed class CredentialMutationService
         }
     }
 
-    private void ApplySet(PluginInstallationCredential credential, SecretFieldUpdateRequest update)
+    private static void ApplySet(PluginInstallationCredential credential, SecretFieldUpdateRequest update)
     {
-        credential.ProtectedValue = _protector.Protect(update.SecretValue!);
+        credential.Value = update.SecretValue!;
         credential.FormatVersion = 1;
     }
 
-    private void ApplySet(ConnectionCredential credential, SecretFieldUpdateRequest update)
+    private static void ApplySet(ConnectionCredential credential, SecretFieldUpdateRequest update)
     {
-        credential.ProtectedValue = _protector.Protect(update.SecretValue!);
+        credential.Value = update.SecretValue!;
         credential.FormatVersion = 1;
     }
 }

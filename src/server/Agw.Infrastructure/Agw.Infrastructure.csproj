@@ -1,6 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
 		<ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
 		<ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />

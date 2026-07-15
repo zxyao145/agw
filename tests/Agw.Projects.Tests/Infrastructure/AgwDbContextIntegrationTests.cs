@@ -72,7 +72,7 @@ public class AgwDbContextIntegrationTests
                 Id = Guid.NewGuid(),
                 ConnectionId = connectionId,
                 Slot = "oauth.access-token",
-                ProtectedValue = "ciphertext"
+                Value = "plaintext"
             });
             seed.AgentConnectionRelations.Add(new AgentConnectionRelation
             {

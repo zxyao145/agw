@@ -2,13 +2,13 @@ using System.Net;
 using System.Text;
 
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Domain.Plugins;
-using Agw.Integrations.Infrastructure.Credentials;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -383,10 +383,7 @@ public sealed class OAuthAppServiceTests
         ConnectionCredential credential,
         string expectedValue)
     {
-        Assert.NotNull(credential.ProtectedValue);
-        Assert.NotEqual(expectedValue, credential.ProtectedValue);
-        Assert.DoesNotContain(expectedValue, credential.ProtectedValue, StringComparison.Ordinal);
-        Assert.Equal(expectedValue, scope.Protector.Unprotect(credential.ProtectedValue));
+        Assert.Equal(expectedValue, credential.Value);
     }
 
     private sealed class OAuthTestScope : IAsyncDisposable
@@ -398,7 +395,6 @@ public sealed class OAuthAppServiceTests
             AgwDbContext dbContext,
             Guid connectionId,
             DateTimeOffset now,
-            IConnectionCredentialProtector protector,
             IConnectionCredentialReader reader,
             OAuthAuthorizationAppService authorization,
             OAuthRefreshAppService refresh,
@@ -409,7 +405,6 @@ public sealed class OAuthAppServiceTests
             DbContext = dbContext;
             ConnectionId = connectionId;
             Now = now;
-            Protector = protector;
             Reader = reader;
             Authorization = authorization;
             Refresh = refresh;
@@ -420,7 +415,6 @@ public sealed class OAuthAppServiceTests
         public AgwDbContext DbContext { get; }
         public Guid ConnectionId { get; }
         public DateTimeOffset Now { get; }
-        public IConnectionCredentialProtector Protector { get; }
         public IConnectionCredentialReader Reader { get; }
         public OAuthAuthorizationAppService Authorization { get; }
         public OAuthRefreshAppService Refresh { get; }
@@ -441,11 +435,12 @@ public sealed class OAuthAppServiceTests
                 .UseSqlite(connection)
                 .UseSnakeCaseNamingConvention()
                 .Options;
-            var dbContext = new AgwDbContext(options);
+            var encryptedDataProtector = new DataProtectionEncryptedDataProtector(
+                new EphemeralDataProtectionProvider());
+            var dbContext = new AgwDbContext(options, encryptedDataProtector);
             await dbContext.Database.EnsureCreatedAsync(cancellationToken);
             var now = new DateTimeOffset(2026, 7, 15, 8, 0, 0, TimeSpan.Zero);
             var timeProvider = new TestTimeProvider(now);
-            var protector = new DataProtectionConnectionCredentialProtector(new EphemeralDataProtectionProvider());
             var catalog = new OAuthTestCatalog(clientAuthenticationMethod, subjectSource, supportsRefresh);
             var handler = new QueueHttpMessageHandler();
             var httpClientFactory = new TestHttpClientFactory(handler);
@@ -460,8 +455,7 @@ public sealed class OAuthAppServiceTests
             IUnitOfWork unitOfWork = new UnitOfWork(dbContext);
             var reader = new ConnectionCredentialReader(
                 installationCredentialRepository,
-                connectionCredentialRepository,
-                protector);
+                connectionCredentialRepository);
             var stateProtector = new OAuthStateProtector(new EphemeralDataProtectionProvider(), timeProvider);
             var authorization = new OAuthAuthorizationAppService(
                 connectionRepository,
@@ -470,7 +464,6 @@ public sealed class OAuthAppServiceTests
                 unitOfWork,
                 catalog,
                 reader,
-                protector,
                 httpClientFactory,
                 stateProtector,
                 timeProvider,
@@ -504,7 +497,7 @@ public sealed class OAuthAppServiceTests
                         OAuthTestCatalog.ConnectorId,
                         OAuthTestCatalog.AuthSchemeId,
                         "client-secret"),
-                    ProtectedValue = protector.Protect(clientSecret),
+                    Value = clientSecret,
                     CreateBy = "seed",
                     CreateTime = now
                 });
@@ -532,7 +525,6 @@ public sealed class OAuthAppServiceTests
                 dbContext,
                 connectionId,
                 now,
-                protector,
                 reader,
                 authorization,
                 refresh,
@@ -551,7 +543,7 @@ public sealed class OAuthAppServiceTests
                 Id = Guid.NewGuid(),
                 ConnectionId = ConnectionId,
                 Slot = slot,
-                ProtectedValue = Protector.Protect(value),
+                Value = value,
                 ExpiresAtUtc = expiresAtUtc,
                 CreateBy = "seed",
                 CreateTime = Now

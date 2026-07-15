@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Agw.Shared.Data.Entities.Agents;
@@ -29,12 +30,20 @@ public class McpServerConfiguration : IEntityTypeConfiguration<McpServer>
                 : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v,
                       (System.Text.Json.JsonSerializerOptions?)null)
                   ?? new Dictionary<string, string>());
-        builder.Property(e => e.Headers).HasConversion(
+        var headersProperty = builder.Property(e => e.Headers).HasConversion(
             v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
             v => string.IsNullOrWhiteSpace(v)
                 ? new Dictionary<string, string>()
                 : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v,
                       (System.Text.Json.JsonSerializerOptions?)null)
                   ?? new Dictionary<string, string>());
+        headersProperty.Metadata.SetValueComparer(new ValueComparer<Dictionary<string, string>>(
+            (left, right) => left != null
+                && right != null
+                && left.OrderBy(pair => pair.Key).SequenceEqual(right.OrderBy(pair => pair.Key)),
+            value => value.OrderBy(pair => pair.Key).Aggregate(
+                0,
+                (hash, pair) => HashCode.Combine(hash, pair.Key, pair.Value)),
+            value => new Dictionary<string, string>(value, value.Comparer)));
     }
 }

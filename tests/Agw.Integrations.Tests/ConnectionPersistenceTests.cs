@@ -43,11 +43,13 @@ public class ConnectionPersistenceTests
 
         var connectionCredential = dbContext.Model.FindEntityType(typeof(ConnectionCredential));
         Assert.NotNull(connectionCredential);
-        Assert.False(connectionCredential.FindProperty(nameof(ConnectionCredential.ProtectedValue))!.IsNullable);
+        var valueProperty = connectionCredential.FindProperty(nameof(ConnectionCredential.Value));
+        Assert.NotNull(valueProperty);
+        Assert.False(valueProperty.IsNullable);
+        Assert.Equal("protected_value", valueProperty.GetColumnName());
         Assert.Null(connectionCredential.FindProperty("Source"));
         Assert.Null(connectionCredential.FindProperty("EnvironmentVariableName"));
         Assert.Null(connectionCredential.FindProperty("DisplayHint"));
-        Assert.Null(connectionCredential.FindProperty("Value"));
         Assert.Null(connectionCredential.FindProperty("Secret"));
     }
 
@@ -254,7 +256,7 @@ public class ConnectionPersistenceTests
         Id = Guid.NewGuid(),
         PluginInstallationId = ownerId,
         Slot = slot,
-        ProtectedValue = "protected-payload",
+        Value = "protected-payload",
         CreateBy = "tester",
         CreateTime = TimeProvider.System.GetUtcNow()
     };
@@ -279,7 +281,7 @@ public class ConnectionPersistenceTests
         Id = Guid.NewGuid(),
         ConnectionId = connectionId,
         Slot = slot,
-        ProtectedValue = "protected-payload",
+        Value = "protected-payload",
         ExpiresAtUtc = TimeProvider.System.GetUtcNow().AddHours(1),
         CreateBy = "tester",
         CreateTime = TimeProvider.System.GetUtcNow()

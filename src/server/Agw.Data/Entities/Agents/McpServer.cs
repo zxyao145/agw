@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
+using Agw.Shared.Data.Encryption;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Agents;
@@ -59,6 +61,7 @@ public sealed class McpServer : BaseEntity, IAggregateRoot
     /// <summary>
     /// HTTP headers for HTTP/SSE transport (e.g., auth tokens).
     /// </summary>
+    [Encrypted]
     public Dictionary<string, string> Headers { get; set; } = new();
 
     /// <summary>

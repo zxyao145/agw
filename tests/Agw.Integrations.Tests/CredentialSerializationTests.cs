@@ -15,7 +15,7 @@ public sealed class CredentialSerializationTests
             Id = Guid.NewGuid(),
             ConnectionId = Guid.NewGuid(),
             Slot = "api-key",
-            ProtectedValue = "protected-secret-sentinel",
+            Value = "protected-secret-sentinel",
             MetadataJson = "{\"secret\":\"metadata-sentinel\"}",
         };
 
@@ -42,7 +42,7 @@ public sealed class CredentialSerializationTests
                 [
                     new ConnectionCredential
                     {
-                        ProtectedValue = "relation-secret-sentinel",
+                        Value = "relation-secret-sentinel",
                     },
                 ],
             },

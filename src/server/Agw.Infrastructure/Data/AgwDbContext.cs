@@ -6,6 +6,9 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 
+using Agw.Infrastructure.Data.Encryption;
+
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -13,22 +16,37 @@ namespace Agw.Infrastructure.Data;
 
 public class AgwDbContext : DbContext
 {
-    public AgwDbContext(DbContextOptions<AgwDbContext> options) : base(options)
+    private static readonly IEncryptedDataProtector DefaultEncryptedDataProtector =
+        new DataProtectionEncryptedDataProtector(new EphemeralDataProtectionProvider());
+    private static readonly EncryptedMaterializationInterceptor MaterializationInterceptor = new();
+
+    private readonly EncryptedPropertyProcessor _encryptedPropertyProcessor;
+
+    public AgwDbContext(DbContextOptions<AgwDbContext> options)
+        : this(options, DefaultEncryptedDataProtector)
     {
+    }
+
+    public AgwDbContext(
+        DbContextOptions<AgwDbContext> options,
+        IEncryptedDataProtector encryptedDataProtector)
+        : base(options)
+    {
+        _encryptedPropertyProcessor = new EncryptedPropertyProcessor(encryptedDataProtector);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         PruneDeletedRelations();
         StampJobRowVersions();
-        return base.SaveChanges(acceptAllChangesOnSuccess);
+        return SaveChangesWithEncryption(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         PruneDeletedRelations();
         StampJobRowVersions();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        return SaveChangesWithEncryptionAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
     public DbSet<Provider> Providers => Set<Provider>();
@@ -69,8 +87,94 @@ public class AgwDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
+        optionsBuilder.AddInterceptors(MaterializationInterceptor);
         optionsBuilder.ReplaceService<IMigrationsModelDiffer, NoForeignKeyModelDiffer>();
         base.OnConfiguring(optionsBuilder);
+    }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+        EncryptedEntityMetadata.Validate(modelBuilder);
+    }
+
+    internal void DecryptMaterializedEntity(object entity)
+    {
+        _encryptedPropertyProcessor.DecryptMaterializedEntity(this, entity);
+    }
+
+    private int SaveChangesWithEncryption(bool acceptAllChangesOnSuccess)
+    {
+        var autoDetectChangesEnabled = ChangeTracker.AutoDetectChangesEnabled;
+        if (autoDetectChangesEnabled)
+        {
+            ChangeTracker.DetectChanges();
+        }
+
+        var restores = _encryptedPropertyProcessor.EncryptPendingChanges(ChangeTracker);
+        var plaintextRestored = false;
+        try
+        {
+            ChangeTracker.AutoDetectChangesEnabled = false;
+            var result = base.SaveChanges(acceptAllChangesOnSuccess: false);
+            _encryptedPropertyProcessor.RestorePlaintext(restores);
+            plaintextRestored = true;
+
+            if (acceptAllChangesOnSuccess)
+            {
+                ChangeTracker.AcceptAllChanges();
+            }
+
+            return result;
+        }
+        finally
+        {
+            if (!plaintextRestored)
+            {
+                _encryptedPropertyProcessor.RestorePlaintext(restores);
+            }
+
+            ChangeTracker.AutoDetectChangesEnabled = autoDetectChangesEnabled;
+        }
+    }
+
+    private async Task<int> SaveChangesWithEncryptionAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken)
+    {
+        var autoDetectChangesEnabled = ChangeTracker.AutoDetectChangesEnabled;
+        if (autoDetectChangesEnabled)
+        {
+            ChangeTracker.DetectChanges();
+        }
+
+        var restores = _encryptedPropertyProcessor.EncryptPendingChanges(ChangeTracker);
+        var plaintextRestored = false;
+        try
+        {
+            ChangeTracker.AutoDetectChangesEnabled = false;
+            var result = await base.SaveChangesAsync(
+                acceptAllChangesOnSuccess: false,
+                cancellationToken);
+            _encryptedPropertyProcessor.RestorePlaintext(restores);
+            plaintextRestored = true;
+
+            if (acceptAllChangesOnSuccess)
+            {
+                ChangeTracker.AcceptAllChanges();
+            }
+
+            return result;
+        }
+        finally
+        {
+            if (!plaintextRestored)
+            {
+                _encryptedPropertyProcessor.RestorePlaintext(restores);
+            }
+
+            ChangeTracker.AutoDetectChangesEnabled = autoDetectChangesEnabled;
+        }
     }
 
     private void StampJobRowVersions()

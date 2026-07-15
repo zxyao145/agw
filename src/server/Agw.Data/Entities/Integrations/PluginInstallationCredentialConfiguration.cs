@@ -11,7 +11,10 @@ public class PluginInstallationCredentialConfiguration : IEntityTypeConfiguratio
         builder.HasKey(entity => entity.Id);
         builder.HasIndex(entity => new { entity.PluginInstallationId, entity.Slot }).IsUnique();
         builder.Property(entity => entity.Slot).IsRequired().HasMaxLength(512);
-        builder.Property(entity => entity.ProtectedValue).IsRequired().HasMaxLength(16000);
+        builder.Property(entity => entity.Value)
+            .HasColumnName("protected_value")
+            .IsRequired()
+            .HasMaxLength(16000);
 
         builder.HasOne(entity => entity.PluginInstallation)
             .WithMany(installation => installation.Credentials)

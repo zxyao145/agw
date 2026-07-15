@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -12,16 +10,13 @@ public sealed class ConnectionCredentialReader : IConnectionCredentialReader
 {
     private readonly IRepository<PluginInstallationCredential> _installationCredentialRepository;
     private readonly IRepository<ConnectionCredential> _connectionCredentialRepository;
-    private readonly IConnectionCredentialProtector _protector;
 
     public ConnectionCredentialReader(
         IRepository<PluginInstallationCredential> installationCredentialRepository,
-        IRepository<ConnectionCredential> connectionCredentialRepository,
-        IConnectionCredentialProtector protector)
+        IRepository<ConnectionCredential> connectionCredentialRepository)
     {
         _installationCredentialRepository = installationCredentialRepository;
         _connectionCredentialRepository = connectionCredentialRepository;
-        _protector = protector;
     }
 
     public async Task<ResolvedCredential?> ReadConnectionAsync(
@@ -34,7 +29,7 @@ public sealed class ConnectionCredentialReader : IConnectionCredentialReader
             cancellationToken);
         return credential == null
             ? null
-            : Resolve(credential.ProtectedValue, credential.ExpiresAtUtc);
+            : Resolve(credential.Value, credential.ExpiresAtUtc);
     }
 
     public async Task<ResolvedCredential?> ReadPluginInstallationAsync(
@@ -47,25 +42,13 @@ public sealed class ConnectionCredentialReader : IConnectionCredentialReader
             cancellationToken);
         return credential == null
             ? null
-            : Resolve(credential.ProtectedValue, null);
+            : Resolve(credential.Value, null);
     }
 
     private ResolvedCredential Resolve(
-        string? protectedValue,
+        string? value,
         DateTimeOffset? expiresAtUtc)
     {
-        string? value;
-        try
-        {
-            value = string.IsNullOrWhiteSpace(protectedValue)
-                ? null
-                : _protector.Unprotect(protectedValue);
-        }
-        catch (CryptographicException)
-        {
-            throw new AgwException(ErrorCodes.IntegrationCredentialUnavailable);
-        }
-
         if (string.IsNullOrEmpty(value))
         {
             throw new AgwException(ErrorCodes.IntegrationCredentialUnavailable);
