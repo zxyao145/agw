@@ -14,7 +14,7 @@ using Agw.Infrastructure.Data;
 using Agw.Integrations.Controllers;
 using Agw.Integrations.Extensions;
 using Agw.Jobs;
-using Agw.Jobs.Controllers;
+using Agw.Jobs.Api;
 using Agw.Manager.Api.Controllers;
 using Agw.Projects;
 using Agw.Projects.Controllers;
@@ -154,7 +154,6 @@ try
         .AddApplicationPart(typeof(ProjectsController).Assembly)
         .AddApplicationPart(typeof(FilesController).Assembly)
         .AddApplicationPart(typeof(SkillsController).Assembly)
-        .AddApplicationPart(typeof(JobsController).Assembly)
         .AddApplicationPart(typeof(SetupController).Assembly)
         .AddApplicationPart(typeof(OAuthController).Assembly)
         .AddApplicationPart(typeof(ToolsController).Assembly)
@@ -332,6 +331,7 @@ try
         .GetRequiredService<Microsoft.Extensions.Options.IOptions<AgwA2AServerOptions>>()
         .Value;
     app.MapAgwA2A(a2AServerOptions.Prefix).RequireAuthorization();
+    app.MapJobsApi();
     app.MapControllers();
     app.MapHub<ExecutionHub>("/api/hubs/exec", options =>
     {

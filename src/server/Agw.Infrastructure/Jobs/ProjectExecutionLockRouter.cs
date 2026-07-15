@@ -1,5 +1,5 @@
 using Agw.Infrastructure.Configuration;
-using Agw.Jobs.External;
+using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Runtime;
 
 using Medallion.Threading;

@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-using Agw.Jobs.External;
+using Agw.Jobs.Scheduling.Coordination;
 
 namespace Agw.Infrastructure.Jobs;
 

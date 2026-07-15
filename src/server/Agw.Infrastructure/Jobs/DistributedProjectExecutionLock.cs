@@ -1,4 +1,4 @@
-using Agw.Jobs.External;
+using Agw.Jobs.Scheduling.Coordination;
 
 using Medallion.Threading;
 

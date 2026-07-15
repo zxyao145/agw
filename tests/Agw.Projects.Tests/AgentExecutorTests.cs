@@ -1,6 +1,6 @@
 using System.Reflection;
 
-using Agw.Jobs.Application.Services;
+using Agw.Jobs.Execution;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 
@@ -36,7 +36,7 @@ public class AgentExecutorTests
 
     private static (string Prompt, string Title) InvokeBuildPromptAndTitle(Job job)
     {
-        var method = typeof(AgentExecutor).GetMethod(
+        var method = typeof(JobAgentExecutor).GetMethod(
             "BuildPromptAndTitle",
             BindingFlags.NonPublic | BindingFlags.Static);
 

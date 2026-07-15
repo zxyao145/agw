@@ -1,7 +1,9 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
-using Agw.Jobs.Contracts;
+using Agw.Jobs.Scheduling;
+using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Testing;
@@ -140,8 +142,8 @@ public class JobAppServiceTests
                 new EfRepository<TaskRecord>(dbContext),
                 new EfRepository<ProjectContext>(dbContext),
                 new UnitOfWork(dbContext),
-                new JobTimeCalculator(),
-                new JobDomainEventDispatcher(),
+                new JobScheduleCalculator(),
+                new JobSchedulerWakeSignal(timeProvider),
                 timeProvider);
 
             return new JobAppServiceFixture(

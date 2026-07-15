@@ -1,4 +1,4 @@
-using Agw.Jobs.Application.Services;
+using Agw.Jobs.Scheduling;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;

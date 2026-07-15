@@ -1,6 +1,6 @@
 using System.Reflection;
 
-using Agw.Jobs.Contracts;
+using Agw.Jobs.Application.Contracts;
 using Agw.Shared.Data.Entities.Jobs;
 
 namespace Agw.Jobs.Tests;
