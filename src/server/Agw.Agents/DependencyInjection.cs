@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Agents.Execution.Turns;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Store;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

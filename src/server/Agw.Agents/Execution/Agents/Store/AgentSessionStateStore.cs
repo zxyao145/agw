@@ -1,13 +1,12 @@
 using System.Text.Json;
 
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Agents.Execution.Agents;
+namespace Agw.Agents.Execution.Agents.Store;
 
 public sealed class AgentSessionStateStore
 {
