@@ -88,31 +88,31 @@ public sealed class PluginCatalogAppService
     private static ConnectorResponse MapConnector(
         ConnectorDefinition connector,
         PluginInstallation? installation) => new()
-    {
-        Id = connector.Id,
-        DisplayName = connector.DisplayName,
-        Description = connector.Description,
-        AuthSchemes = connector.AuthSchemes
+        {
+            Id = connector.Id,
+            DisplayName = connector.DisplayName,
+            Description = connector.Description,
+            AuthSchemes = connector.AuthSchemes
             .Select(authScheme => MapAuthScheme(connector, authScheme, installation))
             .ToList(),
-        CapabilitySources = connector.CapabilitySources.Select(MapCapabilitySource).ToList()
-    };
+            CapabilitySources = connector.CapabilitySources.Select(MapCapabilitySource).ToList()
+        };
 
     private static AuthSchemeResponse MapAuthScheme(
         ConnectorDefinition connector,
         AuthSchemeDefinition authScheme,
         PluginInstallation? installation) => new()
-    {
-        Id = authScheme.Id,
-        DisplayName = authScheme.DisplayName,
-        Type = (AuthSchemeTypeResponse)authScheme.Type,
-        OAuth2AuthorizationCode = authScheme.OAuth2AuthorizationCode == null
+        {
+            Id = authScheme.Id,
+            DisplayName = authScheme.DisplayName,
+            Type = (AuthSchemeTypeResponse)authScheme.Type,
+            OAuth2AuthorizationCode = authScheme.OAuth2AuthorizationCode == null
             ? null
             : MapOAuth(authScheme.OAuth2AuthorizationCode),
-        InstallationFields = authScheme.InstallationFields.Select(MapField).ToList(),
-        ConnectionFields = authScheme.ConnectionFields.Select(MapField).ToList(),
-        Installation = installation == null ? null : MapInstallation(connector, authScheme, installation)
-    };
+            InstallationFields = authScheme.InstallationFields.Select(MapField).ToList(),
+            ConnectionFields = authScheme.ConnectionFields.Select(MapField).ToList(),
+            Installation = installation == null ? null : MapInstallation(connector, authScheme, installation)
+        };
 
     private static PluginInstallationScopeResponse MapInstallation(
         ConnectorDefinition connector,

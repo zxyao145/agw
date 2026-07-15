@@ -44,33 +44,18 @@ export function PluginCard({ plugin, onConfigure, onCreateConnection }: PluginCa
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{connector.displayName}</span>
                     <Badge variant="secondary">{authScheme.displayName}</Badge>
-                    <Badge
-                      variant={
-                        authScheme.installation?.enabled ? "default" : "outline"
-                      }
-                    >
-                      {authScheme.installation?.enabled
-                        ? "Installed"
-                        : "Needs setup"}
+                    <Badge variant={authScheme.installation?.enabled ? "default" : "outline"}>
+                      {authScheme.installation?.enabled ? "Installed" : "Needs setup"}
                     </Badge>
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {connector.description}
-                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">{connector.description}</p>
                 </div>
                 <div className="w-full flex flex-wrap gap-2 justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onConfigure(selection)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => onConfigure(selection)}>
                     <Settings2 className="size-4" />
                     Configure
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => onCreateConnection(selection)}
-                  >
+                  <Button size="sm" onClick={() => onCreateConnection(selection)}>
                     <Cable className="size-4" />
                     New connection
                   </Button>

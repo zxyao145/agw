@@ -778,15 +778,11 @@ function JobDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        size="xl"
-        className="flex max-h-[90vh] flex-col overflow-hidden"
-      >
+      <DialogContent size="xl" className="flex max-h-[90vh] flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            Configure the project target, agent routing, and trigger schedule
-            for this job.
+            Configure the project target, agent routing, and trigger schedule for this job.
           </DialogDescription>
         </DialogHeader>
 
@@ -863,9 +859,7 @@ function JobDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={String(TRIGGER_TYPE_ONCE)}>Once</SelectItem>
-                <SelectItem value={String(TRIGGER_TYPE_INTERVAL)}>
-                  Interval
-                </SelectItem>
+                <SelectItem value={String(TRIGGER_TYPE_INTERVAL)}>Interval</SelectItem>
                 <SelectItem value={String(TRIGGER_TYPE_CRON)}>Cron</SelectItem>
               </SelectContent>
             </Select>
@@ -886,8 +880,8 @@ function JobDialog({
                 }
               />
               <p className="text-xs text-muted-foreground">
-                Pick the exact time to run this job once. This value will be
-                sent as the once trigger value.
+                Pick the exact time to run this job once. This value will be sent as the once
+                trigger value.
               </p>
             </div>
           ) : null}
@@ -900,11 +894,7 @@ function JobDialog({
               <Input
                 id={`${mode}-trigger-value`}
                 value={form.triggerValue}
-                placeholder={
-                  isIntervalTrigger
-                    ? DEFAULT_INTERVAL_TRIGGER_VALUE
-                    : "*/5 * * * *"
-                }
+                placeholder={isIntervalTrigger ? DEFAULT_INTERVAL_TRIGGER_VALUE : "*/5 * * * *"}
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
@@ -938,9 +928,7 @@ function JobDialog({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor={`${mode}-max-retry-count`}>
-                  Max Retry Count
-                </Label>
+                <Label htmlFor={`${mode}-max-retry-count`}>Max Retry Count</Label>
                 <Input
                   id={`${mode}-max-retry-count`}
                   type="number"
@@ -968,10 +956,7 @@ function JobDialog({
                       }))
                     }
                   />
-                  <Label
-                    htmlFor={`${mode}-enabled`}
-                    className="ml-3 text-sm font-normal"
-                  >
+                  <Label htmlFor={`${mode}-enabled`} className="ml-3 text-sm font-normal">
                     Allow this job to be picked up by the scheduler
                   </Label>
                 </div>
@@ -1020,12 +1005,7 @@ function JobDialog({
           >
             Cancel
           </Button>
-          <Button
-            size="sm"
-            type="button"
-            onClick={onSubmit}
-            disabled={isSubmitting}
-          >
+          <Button size="sm" type="button" onClick={onSubmit} disabled={isSubmitting}>
             {isSubmitting ? "Saving..." : submitLabel}
           </Button>
         </DialogFooter>

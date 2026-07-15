@@ -1,5 +1,5 @@
-using Agw.Jobs.Application.Services;
 using Agw.Jobs.Api;
+using Agw.Jobs.Application.Services;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
