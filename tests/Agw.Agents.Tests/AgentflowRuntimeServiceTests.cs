@@ -24,6 +24,71 @@ namespace Agw.Agents.Tests;
 public class AgentflowRuntimeServiceTests
 {
     [Fact]
+    public async Task GetMermaidAsync_AgentCreationFails_DisposesAlreadyCreatedAgents()
+    {
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "creation-failure", Enable = true };
+        var firstAgentId = Guid.NewGuid();
+        var secondAgentId = Guid.NewGuid();
+        var firstAgent = new TrackingAIAgent();
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "first",
+                Kind = AgentflowNodeKind.Agent,
+                RelateId = firstAgentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "second",
+                Kind = AgentflowNodeKind.Agent,
+                RelateId = secondAgentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "first-second",
+                SourceNodeId = "first",
+                TargetNodeId = "second",
+            },
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "second-output",
+                SourceNodeId = "second",
+                TargetNodeId = "output",
+            },
+        };
+        var service = new AgentflowRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new AgentflowDomainService(TimeProvider.System),
+            new StubAgentRuntimeService(agentId => agentId == firstAgentId ? firstAgent : null),
+            new StubProviderSessionState(),
+            new RecordingSummaryService());
+
+        var mermaid = await service.GetMermaidAsync(
+            agentflow.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(mermaid);
+        Assert.True(firstAgent.Disposed);
+    }
+
+    [Fact]
     public async Task AgentflowRuntime_ExecuteStreamingAsync_ForwardsSessionEnvironmentVariables()
     {
         var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "environment-flow", Enable = true };
@@ -89,10 +154,150 @@ public class AgentflowRuntimeServiceTests
                            new DelayedApprovalHandler(),
                            TestContext.Current.CancellationToken))
         {
+            break;
         }
 
         Assert.NotNull(agentRuntimeService.LastEnvironmentVariables);
         Assert.Equal("session", agentRuntimeService.LastEnvironmentVariables["SESSION_ONLY"]);
+        Assert.All(agentRuntimeService.CreatedAgents, agent => Assert.True(agent.Disposed));
+    }
+
+    [Fact]
+    public async Task GetMermaidAsync_NestedWorkflow_DisposesNestedAgents()
+    {
+        var innerFlow = new Agentflow { Id = Guid.NewGuid(), Name = "inner", Enable = true };
+        var outerFlow = new Agentflow { Id = Guid.NewGuid(), Name = "outer", Enable = true };
+        var agentId = Guid.NewGuid();
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = innerFlow.Id,
+                NodeId = "inner-agent",
+                Kind = AgentflowNodeKind.Agent,
+                RelateId = agentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = innerFlow.Id,
+                NodeId = "inner-output",
+                Kind = AgentflowNodeKind.Output,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = outerFlow.Id,
+                NodeId = "nested",
+                Kind = AgentflowNodeKind.WorkflowAsAgent,
+                RelateId = innerFlow.Id,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = outerFlow.Id,
+                NodeId = "outer-output",
+                Kind = AgentflowNodeKind.Output,
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = innerFlow.Id,
+                EdgeId = "inner-output",
+                SourceNodeId = "inner-agent",
+                TargetNodeId = "inner-output",
+            },
+            new AgentflowEdge
+            {
+                AgentflowId = outerFlow.Id,
+                EdgeId = "outer-output",
+                SourceNodeId = "nested",
+                TargetNodeId = "outer-output",
+            },
+        };
+        var agentRuntimeService = new StubAgentRuntimeService(agentId);
+        var service = new AgentflowRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([innerFlow, outerFlow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new AgentflowDomainService(TimeProvider.System),
+            agentRuntimeService,
+            new StubProviderSessionState(),
+            new RecordingSummaryService());
+
+        var mermaid = await service.GetMermaidAsync(
+            outerFlow.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(mermaid);
+        Assert.All(agentRuntimeService.CreatedAgents, agent => Assert.True(agent.Disposed));
+    }
+
+    [Fact]
+    public async Task ExecuteStreamingAsync_ApprovalCancellation_DisposesWorkflowAgents()
+    {
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "cancelled", Enable = true };
+        var agentId = Guid.NewGuid();
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "human",
+                Kind = AgentflowNodeKind.HumanGate,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                RelateId = agentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "human-agent",
+                SourceNodeId = "human",
+                TargetNodeId = "agent",
+            },
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "agent-output",
+                SourceNodeId = "agent",
+                TargetNodeId = "output",
+            },
+        };
+        var agentRuntimeService = new StubAgentRuntimeService(agentId);
+        var service = new AgentflowRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new AgentflowDomainService(TimeProvider.System),
+            agentRuntimeService,
+            new StubProviderSessionState(),
+            new RecordingSummaryService());
+        using var cancellationSource = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await foreach (var _ in service.ExecuteStreamingAsync(
+                           agentflow.Id,
+                           "cancel",
+                           cancellationSource.Token,
+                           humanGateApprovalHandler: new CancellingApprovalHandler()))
+        {
+        }
+
+        Assert.All(agentRuntimeService.CreatedAgents, agent => Assert.True(agent.Disposed));
     }
 
     [Fact]
@@ -304,6 +509,17 @@ public class AgentflowRuntimeServiceTests
         }
     }
 
+    private sealed class CancellingApprovalHandler : IHumanGateApprovalHandler
+    {
+        public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
+            HumanGateApprovalRequest request,
+            CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return new HumanGateApprovalDecision(request.RequestId, true, null);
+        }
+    }
+
     private sealed class CollectingTraceStore : IAgentflowNodeExecutionTraceStore
     {
         private readonly object _lock = new();
@@ -406,12 +622,20 @@ public class AgentflowRuntimeServiceTests
     private sealed class StubAgentRuntimeService : IAgentRuntimeService
     {
         private readonly Guid _agentId;
+        private readonly Func<Guid, AIAgent?>? _agentFactory;
 
         public IReadOnlyDictionary<string, string>? LastEnvironmentVariables { get; private set; }
+
+        public List<TrackingAIAgent> CreatedAgents { get; } = [];
 
         public StubAgentRuntimeService(Guid agentId)
         {
             _agentId = agentId;
+        }
+
+        public StubAgentRuntimeService(Func<Guid, AIAgent?> agentFactory)
+        {
+            _agentFactory = agentFactory;
         }
 
         public Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default) =>
@@ -439,11 +663,13 @@ public class AgentflowRuntimeServiceTests
             CancellationToken cancellationToken = default)
         {
             LastEnvironmentVariables = environmentVariables;
-            AIAgent? agent = agentId == _agentId
-                ? new ChatClientAgent(
-                    new StubChatClient(),
-                    new ChatClientAgentOptions { Id = "worker", Name = "persisted-worker" })
-                : null;
+            AIAgent? agent = _agentFactory?.Invoke(agentId) ??
+                (agentId == _agentId ? new TrackingAIAgent() : null);
+            if (agent is TrackingAIAgent trackingAgent)
+            {
+                CreatedAgents.Add(trackingAgent);
+            }
+
             return Task.FromResult(agent);
         }
 
@@ -470,6 +696,24 @@ public class AgentflowRuntimeServiceTests
             AgentExecuteByIdRequest request,
             CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
+    }
+
+    private sealed class TrackingAIAgent : DelegatingAIAgent, IAsyncDisposable
+    {
+        public TrackingAIAgent()
+            : base(new ChatClientAgent(
+                new StubChatClient(),
+                new ChatClientAgentOptions { Id = "tracking", Name = "tracking" }))
+        {
+        }
+
+        public bool Disposed { get; private set; }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class StubChatClient : IChatClient

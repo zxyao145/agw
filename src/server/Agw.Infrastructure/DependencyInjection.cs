@@ -5,7 +5,6 @@ using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.External;
 using Agw.Shared.Configuration;
-using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -78,7 +77,6 @@ public static class DependencyInjection
 
         services.AddScoped<DbContext, AgwDbContext>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
-        services.AddScoped<IRepository<AppDefinition>, AppDefinitionRepo>();
         services.AddScoped<JobRepo>();
         services.AddScoped<IRepository<Job>, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
         services.AddScoped<IJobStore, JobRepo>(sp => sp.GetRequiredService<JobRepo>());

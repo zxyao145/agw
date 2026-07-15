@@ -25,7 +25,7 @@ test("shared capability panels use SearchableSelect multi-selects for every capa
   assert.match(source, /searchPlaceholder="Search skills\.\.\."/);
   assert.match(source, /searchPlaceholder="Search tools\.\.\."/);
   assert.match(source, /searchPlaceholder="Search MCP tool servers\.\.\."/);
-  assert.match(source, /searchPlaceholder="Search apps\.\.\."/);
+  assert.match(source, /searchPlaceholder="Search connections\.\.\."/);
   assert.doesNotMatch(source, /<DropdownMenu/);
   assert.doesNotMatch(source, /<Popover/);
 });
@@ -37,27 +37,26 @@ test("Agent form consumes all five shared panels while retaining Agent-only tabs
   assert.match(source, /<SkillsPanel/);
   assert.match(source, /<ToolsPanel/);
   assert.match(source, /<McpToolServersPanel/);
-  assert.match(source, /<AppsPanel/);
+  assert.match(source, /<ConnectionsPanel/);
   assert.match(source, /<EnvironmentVariablesPanel/);
   assert.match(source, /<TabsTrigger value="system-prompt">Instructions<\/TabsTrigger>/);
-  assert.match(source, /External agents do not support Instructions configuration/);
+  assert.match(source, /External agents do not support instructions configuration/);
   assert.match(source, /External agents do not support skill configuration/);
   assert.match(source, /External agents do not support tool configuration/);
 });
 
-test("App options expose searchable labels and authorization metadata", async () => {
+test("Connection options expose ready-only searchable metadata", async () => {
   const source = await readSource(PANELS_URL, "shared capability panels");
 
-  assert.match(source, /title: buildAppOptionLabel\(app\)/);
-  assert.match(source, /getAppAuthorizationState\(app\)/);
-  assert.match(source, /authorizationSubject/);
+  assert.match(source, /buildConnectionSelectOptions\(connectionOptions, selectedConnectionIds\)/);
+  assert.match(source, /buildSelectedConnectionItems/);
 });
 
-test("Skills and Apps selected lists are built from selected IDs with removable fallbacks", async () => {
+test("Skills and Connections selected lists are built from selected IDs with removable fallbacks", async () => {
   const source = await readSource(PANELS_URL, "shared capability panels");
 
   assert.match(source, /buildSelectedSkillItems\(selectedSkillIds, skillsQuery\.data \?\? \[\]\)/);
-  assert.match(source, /buildSelectedAppItems\(selectedAppInstanceIds, appOptions\)/);
+  assert.match(source, /buildSelectedConnectionItems\(/);
   assert.match(source, /items=\{selectedSkills\}[\s\S]*onRemove=\{toggleSkill\}/);
-  assert.match(source, /items=\{selectedApps\}[\s\S]*onRemove=\{toggleAppInstance\}/);
+  assert.match(source, /items=\{selectedConnections\}[\s\S]*onRemove=\{toggleConnection\}/);
 });

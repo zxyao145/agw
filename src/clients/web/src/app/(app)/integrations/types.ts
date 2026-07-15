@@ -1,110 +1,122 @@
-import { formatLocalDateTime } from "@/lib/date-time";
+import type { FormField, SecretFieldState } from "./form-state";
 
-export type IntegrationCategory = number | null;
+export type AuthSchemeType = "OAuth2" | "ApiKey" | "AkSk";
+export type ConnectionStatus =
+  | "NeedsConfiguration"
+  | "PendingAuthorization"
+  | "Unverified"
+  | "Ready"
+  | "Expired"
+  | "Invalid"
+  | "Disabled"
+  | "DefinitionUnavailable";
 
-export type AppDefinitionItem = {
-  name: string;
-  displayName: string;
-  category: number;
-  provider: string;
-  description: string;
-  authUrl: string;
+export type PluginInstallation = {
+  id: string;
+  enabled: boolean;
+  configuration: Record<string, string | null>;
+  secrets: Record<string, SecretFieldState>;
+};
+
+export type OAuthDefinition = {
+  authorizationEndpoint: string;
   scopes: string[];
   usePkce: boolean;
-  tags: string[];
-  toolNames: string[];
+  supportsRefresh: boolean;
 };
 
-export type AppInstanceItem = {
+export type AuthSchemeDefinition = {
   id: string;
-  appName: string;
   displayName: string;
-  provider: string;
-  category: IntegrationCategory;
-  usePkce: boolean;
-  clientId: string;
-  hasClientSecret: boolean;
-  isAuthorized: boolean;
-  isAuthorizationExpired: boolean;
-  authorizationExpiresAtUtc: string | null;
-  authorizationSubject: string | null;
-  createTime: string;
-  createBy: string | null;
-  updateTime: string | null;
-  updateBy: string | null;
+  type: AuthSchemeType;
+  oauth2AuthorizationCode?: OAuthDefinition | null;
+  installationFields: FormField[];
+  connectionFields: FormField[];
+  installation?: PluginInstallation | null;
 };
 
-export type AppInstanceCreateRequest = {
-  appName: string;
-  clientId: string;
-  clientSecret: string;
-  usePkce: boolean;
+export type ConnectorDefinition = {
+  id: string;
+  displayName: string;
+  description?: string | null;
+  authSchemes: AuthSchemeDefinition[];
+  capabilitySources: Array<{
+    id: string;
+    kind: "Native" | "Mcp";
+    provider?: string | null;
+  }>;
 };
 
-export type AuthorizeStartResponse = {
-  authorizeUrl: string;
+export type PluginDefinition = {
+  id: string;
+  version: string;
+  displayName: string;
+  description?: string | null;
+  tags: string[];
+  connectors: ConnectorDefinition[];
+  skills: Array<{ id: string; description: string }>;
 };
 
-export type CreateConnectionFormState = {
-  clientId: string;
-  clientSecret: string;
-  usePkce: boolean;
+export type Connection = {
+  id: string;
+  pluginId: string;
+  connectorId: string;
+  authSchemeId: string;
+  displayName: string;
+  alias: string;
+  enabled: boolean;
+  status: ConnectionStatus;
+  subject?: string | null;
+  expiresAtUtc?: string | null;
+  lastValidatedAtUtc?: string | null;
+  lastValidationErrorCode?: string | null;
+  configuration: Record<string, string | null>;
+  secrets: Record<string, SecretFieldState>;
 };
 
-export type PendingOAuthSessionState = {
-  appInstanceId: string;
-  createdAt: string;
-  integrationId: string;
-  state: string;
+export type IntegrationSelection = {
+  plugin: PluginDefinition;
+  connector: ConnectorDefinition;
+  authScheme: AuthSchemeDefinition;
 };
 
 export const integrationQueryKeys = {
-  appDefinitions: ["integrations", "app-definitions"],
-  appInstances: ["integrations", "app-instances"],
-} as const;
+  plugins: ["integrations", "plugins"] as const,
+  connections: ["integrations", "connections"] as const,
+};
 
-export function createConnectionFormState(
-  definition?: Pick<AppDefinitionItem, "usePkce"> | null,
-): CreateConnectionFormState {
-  return {
-    clientId: "",
-    clientSecret: "",
-    usePkce: definition?.usePkce ?? true,
-  };
+export function findIntegrationSelection(
+  plugins: readonly PluginDefinition[],
+  connection: Pick<Connection, "pluginId" | "connectorId" | "authSchemeId">,
+): IntegrationSelection | null {
+  const plugin = plugins.find((candidate) => candidate.id === connection.pluginId);
+  const connector = plugin?.connectors.find((candidate) => candidate.id === connection.connectorId);
+  const authScheme = connector?.authSchemes.find(
+    (candidate) => candidate.id === connection.authSchemeId,
+  );
+  return plugin && connector && authScheme ? { plugin, connector, authScheme } : null;
 }
 
-export function formatIntegrationCategory(category: IntegrationCategory): string {
-  switch (category) {
-    case 0:
-      return "Git server";
-    case 1:
-      return "WebDAV storage";
-    case 2:
-      return "Other";
-    default:
-      return "Integration";
-  }
-}
-
-export function formatDateTime(value: string | null | undefined): string {
-  return value ? formatLocalDateTime(value) : "Not available";
-}
-
-export function getAuthorizationState(instance: AppInstanceItem): {
+export function connectionStatusPresentation(status: ConnectionStatus): {
   label: string;
   variant: "default" | "secondary" | "destructive" | "outline";
 } {
-  if (instance.isAuthorizationExpired) {
-    return { label: "Authorization expired", variant: "destructive" };
+  switch (status) {
+    case "Ready":
+      return { label: "Ready", variant: "default" };
+    case "Expired":
+    case "Invalid":
+      return { label: status, variant: "destructive" };
+    case "Disabled":
+    case "DefinitionUnavailable":
+      return {
+        label: status === "DefinitionUnavailable" ? "Definition unavailable" : status,
+        variant: "secondary",
+      };
+    default:
+      return {
+        label: status.replace(/([a-z])([A-Z])/g, "$1 $2"),
+        variant: "outline",
+      };
   }
-
-  if (instance.isAuthorized) {
-    return { label: "Authorized", variant: "default" };
-  }
-
-  return { label: "Not connected", variant: "outline" };
-}
-
-export function getPendingOAuthSessionStorageKey(appInstanceId: string): string {
-  return `agw.oauth2.${appInstanceId}`;
 }

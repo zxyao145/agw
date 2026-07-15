@@ -18,7 +18,7 @@ import {
   type AgentEnvironmentVariableEntry,
 } from "./agent-environment-variables";
 import { AgentFormFields } from "./agent-form-fields";
-import type { AppInstanceOption } from "./app-selector";
+import type { ConnectionOption } from "./connection-selector";
 import type {
   AgentDto,
   AgentUpdateRequest,
@@ -51,8 +51,8 @@ interface EditAgentDialogProps {
   environmentVariables: AgentEnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: AgentEnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
-  appOptions: AppInstanceOption[];
-  selectedAppInstanceIds: string[];
+  connectionOptions: ConnectionOption[];
+  selectedConnectionIds: string[];
   selectedTools: string[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
@@ -66,7 +66,7 @@ interface EditAgentDialogProps {
     unknown
   >;
   toggleSkill: (skillId: string) => void;
-  toggleAppInstance: (appInstanceId: string) => void;
+  toggleConnection: (connectionId: string) => void;
   toggleTool: (toolName: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
 }
@@ -94,8 +94,8 @@ export function EditAgentDialog({
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
-  appOptions,
-  selectedAppInstanceIds,
+  connectionOptions,
+  selectedConnectionIds,
   selectedTools,
   modelProvidersQuery,
   skillsQuery,
@@ -104,7 +104,7 @@ export function EditAgentDialog({
   selectedMcpToolServerIds,
   updateAgentMutation,
   toggleSkill,
-  toggleAppInstance,
+  toggleConnection,
   toggleTool,
   toggleMcpToolServer,
 }: EditAgentDialogProps) {
@@ -132,7 +132,7 @@ export function EditAgentDialog({
         tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
         skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
         mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
-        appInstanceIds: selectedAppInstanceIds.length > 0 ? selectedAppInstanceIds : null,
+        connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
         extra: isExternalAgent ? normalizeAgentExtraSettings(extra) : null,
         environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
       },
@@ -218,9 +218,9 @@ export function EditAgentDialog({
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}
-            appOptions={appOptions}
-            selectedAppInstanceIds={selectedAppInstanceIds}
-            toggleAppInstance={toggleAppInstance}
+            connectionOptions={connectionOptions}
+            selectedConnectionIds={selectedConnectionIds}
+            toggleConnection={toggleConnection}
             selectedTools={selectedTools}
             modelProvidersQuery={modelProvidersQuery}
             skillsQuery={skillsQuery}

@@ -1,6 +1,5 @@
 using Agw.Shared.AgwMsgVm;
 
-using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Agentflows;
@@ -33,7 +32,7 @@ public interface IAgentflowRuntimeService
         Guid? projectId = null,
         string? contextId = null);
 
-    Task<Workflow?> CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken = default);
+    Task<AgentflowWorkflowLease?> CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken = default);
 
     Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default);
 }

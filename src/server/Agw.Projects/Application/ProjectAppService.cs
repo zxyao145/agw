@@ -21,8 +21,8 @@ public class ProjectAppService : IProjectAppService
     private readonly IRepository<McpServer> _mcpToolServerRepository;
     private readonly IRepository<ProjectSkillRelation> _projectSkillRelationRepository;
     private readonly IRepository<Skill> _skillRepository;
-    private readonly IRepository<ProjectAppRelation> _projectAppRelationRepository;
-    private readonly IRepository<AppInstance> _appInstanceRepository;
+    private readonly IRepository<ProjectConnectionRelation> _projectConnectionRelationRepository;
+    private readonly IRepository<Connection> _connectionRepository;
     private readonly IRepository<AgentflowTrace> _traceRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectDomainService _projectDomainService;
@@ -34,8 +34,8 @@ public class ProjectAppService : IProjectAppService
         IRepository<McpServer> mcpToolServerRepository,
         IRepository<ProjectSkillRelation> projectSkillRelationRepository,
         IRepository<Skill> skillRepository,
-        IRepository<ProjectAppRelation> projectAppRelationRepository,
-        IRepository<AppInstance> appInstanceRepository,
+        IRepository<ProjectConnectionRelation> projectConnectionRelationRepository,
+        IRepository<Connection> connectionRepository,
         IRepository<AgentflowTrace> traceRepository,
         IUnitOfWork unitOfWork,
         ProjectDomainService projectDomainService,
@@ -46,8 +46,8 @@ public class ProjectAppService : IProjectAppService
         _mcpToolServerRepository = mcpToolServerRepository;
         _projectSkillRelationRepository = projectSkillRelationRepository;
         _skillRepository = skillRepository;
-        _projectAppRelationRepository = projectAppRelationRepository;
-        _appInstanceRepository = appInstanceRepository;
+        _projectConnectionRelationRepository = projectConnectionRelationRepository;
+        _connectionRepository = connectionRepository;
         _traceRepository = traceRepository;
         _unitOfWork = unitOfWork;
         _projectDomainService = projectDomainService;
@@ -61,7 +61,7 @@ public class ProjectAppService : IProjectAppService
             null,
             project => project.ProjectMcpToolServers,
             project => project.ProjectSkillRelations,
-            project => project.ProjectAppRelations);
+            project => project.ProjectConnectionRelations);
         return projects
             .OrderByDescending(project => project.CreateTime)
             .ThenBy(project => project.Name)
@@ -75,7 +75,7 @@ public class ProjectAppService : IProjectAppService
             null,
             project => project.ProjectMcpToolServers,
             project => project.ProjectSkillRelations,
-            project => project.ProjectAppRelations);
+            project => project.ProjectConnectionRelations);
         return projects.FirstOrDefault();
     }
 
@@ -86,7 +86,7 @@ public class ProjectAppService : IProjectAppService
         Project project,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? appInstanceIds,
+        IEnumerable<Guid>? connectionIds,
         string user)
     {
         if (!_projectDomainService.TryPrepareForCreate(project, user))
@@ -98,7 +98,7 @@ public class ProjectAppService : IProjectAppService
         await _projectRepository.AddAsync(project);
         await SyncProjectMcpToolServerRelationsAsync(project.Id, mcpToolServerIds);
         await SyncProjectSkillRelationsAsync(project.Id, skillIds);
-        await SyncProjectAppRelationsAsync(project.Id, appInstanceIds);
+        await SyncProjectConnectionRelationsAsync(project.Id, connectionIds);
         await _unitOfWork.SaveChangesAsync();
         return await GetAsync(project.Id);
     }
@@ -111,7 +111,7 @@ public class ProjectAppService : IProjectAppService
         Action<Project> updateAction,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? appInstanceIds,
+        IEnumerable<Guid>? connectionIds,
         string user)
     {
         var existing = await _projectRepository.GetByIdAsync(id);
@@ -135,9 +135,9 @@ public class ProjectAppService : IProjectAppService
         {
             await SyncProjectSkillRelationsAsync(existing.Id, skillIds);
         }
-        if (appInstanceIds != null)
+        if (connectionIds != null)
         {
-            await SyncProjectAppRelationsAsync(existing.Id, appInstanceIds);
+            await SyncProjectConnectionRelationsAsync(existing.Id, connectionIds);
         }
         await _unitOfWork.SaveChangesAsync();
         return await GetAsync(existing.Id);
@@ -253,37 +253,37 @@ public class ProjectAppService : IProjectAppService
         }
     }
 
-    private async Task SyncProjectAppRelationsAsync(Guid projectId, IEnumerable<Guid>? appInstanceIds)
+    private async Task SyncProjectConnectionRelationsAsync(Guid projectId, IEnumerable<Guid>? connectionIds)
     {
-        var currentIds = await _projectAppRelationRepository.Queryable
+        var currentIds = await _projectConnectionRelationRepository.Queryable
             .Where(relation => relation.ProjectId == projectId)
-            .Select(relation => relation.AppInstanceId)
+            .Select(relation => relation.ConnectionId)
             .ToListAsync();
 
-        var requestedIds = NormalizeRelationIds(appInstanceIds);
+        var requestedIds = NormalizeRelationIds(connectionIds);
         var validIds = requestedIds.Count == 0
             ? []
-            : (await _appInstanceRepository.ListAsync(appInstance => requestedIds.Contains(appInstance.Id)))
-                .Select(appInstance => appInstance.Id)
+            : (await _connectionRepository.ListAsync(connection => requestedIds.Contains(connection.Id)))
+                .Select(connection => connection.Id)
                 .ToList();
         var removedIds = currentIds.Except(validIds).ToList();
         if (removedIds.Count > 0)
         {
-            var removedRelations = await _projectAppRelationRepository.Queryable
-                .Where(relation => relation.ProjectId == projectId && removedIds.Contains(relation.AppInstanceId))
+            var removedRelations = await _projectConnectionRelationRepository.Queryable
+                .Where(relation => relation.ProjectId == projectId && removedIds.Contains(relation.ConnectionId))
                 .ToListAsync();
             foreach (var relation in removedRelations)
             {
-                _projectAppRelationRepository.Remove(relation);
+                _projectConnectionRelationRepository.Remove(relation);
             }
         }
 
         foreach (var resourceId in validIds.Except(currentIds))
         {
-            await _projectAppRelationRepository.AddAsync(new ProjectAppRelation
+            await _projectConnectionRelationRepository.AddAsync(new ProjectConnectionRelation
             {
                 ProjectId = projectId,
-                AppInstanceId = resourceId
+                ConnectionId = resourceId
             });
         }
     }

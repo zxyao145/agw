@@ -2,177 +2,173 @@
 
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGrid, PlugZap, RefreshCw } from "lucide-react";
+import { Cable, Puzzle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import { apiDelete, apiGet, apiPost } from "@/api/client";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import { getApiErrorMessage } from "@/api/utils";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 
-import { AppDefinitionCard } from "./components/app-definition-card";
-import { AppInstanceCard } from "./components/app-instance-card";
 import { buildOAuthServerCallbackUrl } from "./callback-url";
-import { CreateConnectionDialog } from "./components/create-connection-dialog";
+import { ConnectionCard } from "./components/connection-card";
+import { ConnectionDialog, type ConnectionEditorState } from "./components/connection-dialog";
+import { PluginCard } from "./components/plugin-card";
+import { PluginInstallationDialog } from "./components/plugin-installation-dialog";
+import { createDefaultConnectionAlias } from "./connection-alias";
+import { buildFieldPayload, createSchemaFormState, type SchemaFormState } from "./form-state";
 import {
-  createConnectionFormState,
-  getPendingOAuthSessionStorageKey,
+  findIntegrationSelection,
   integrationQueryKeys,
-  type AppDefinitionItem,
-  type AppInstanceCreateRequest,
-  type AppInstanceItem,
-  type AuthorizeStartResponse,
-  type CreateConnectionFormState,
-  type PendingOAuthSessionState,
+  type Connection,
+  type IntegrationSelection,
+  type PluginDefinition,
 } from "./types";
 
-function rememberPendingOAuthSession(
-  appInstanceId: string,
-  integrationId: string,
-  authorizeUrl: string,
-) {
-  if (typeof window === "undefined") {
-    return;
-  }
+const emptySchemaForm = (): SchemaFormState => ({ configuration: {}, secrets: {} });
+const emptyConnectionEditor = (): ConnectionEditorState => ({
+  alias: "",
+  displayName: "",
+  enabled: true,
+  fields: emptySchemaForm(),
+});
 
-  const state = new URL(authorizeUrl, window.location.origin).searchParams.get("state");
-  if (!state) {
-    throw new Error("Authorize URL did not contain a state parameter.");
-  }
-
-  const sessionState: PendingOAuthSessionState = {
-    appInstanceId,
-    createdAt: new Date().toISOString(),
-    integrationId,
-    state,
-  };
-
-  sessionStorage.setItem(
-    getPendingOAuthSessionStorageKey(appInstanceId),
-    JSON.stringify(sessionState),
-  );
-}
-
-function redirectToAuthorizeUrl(authorizeUrl: string) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.location.assign(authorizeUrl);
+function redirectToAuthorization(authorizationUrl: string) {
+  window.location.assign(authorizationUrl);
 }
 
 export default function IntegrationsPage() {
   const queryClient = useQueryClient();
-  const [createOpen, setCreateOpen] = React.useState(false);
-  const [selectedDefinition, setSelectedDefinition] = React.useState<AppDefinitionItem | null>(
+  const [installationSelection, setInstallationSelection] =
+    React.useState<IntegrationSelection | null>(null);
+  const [installationEnabled, setInstallationEnabled] = React.useState(true);
+  const [installationForm, setInstallationForm] = React.useState<SchemaFormState>(emptySchemaForm);
+  const [connectionSelection, setConnectionSelection] = React.useState<IntegrationSelection | null>(
     null,
   );
-  const [createForm, setCreateForm] = React.useState<CreateConnectionFormState>(() =>
-    createConnectionFormState(),
-  );
+  const [editingConnection, setEditingConnection] = React.useState<Connection | null>(null);
+  const [connectionEditor, setConnectionEditor] =
+    React.useState<ConnectionEditorState>(emptyConnectionEditor);
 
-  const appDefinitionsQuery = useQuery({
-    queryKey: integrationQueryKeys.appDefinitions,
-    queryFn: async () => {
-      return (await apiGet("/api/integrations/app-definitions")) as unknown as AppDefinitionItem[];
-    },
+  const pluginsQuery = useQuery({
+    queryKey: integrationQueryKeys.plugins,
+    queryFn: async () =>
+      (await apiGet("/api/integrations/plugins")) as unknown as PluginDefinition[],
+  });
+  const connectionsQuery = useQuery({
+    queryKey: integrationQueryKeys.connections,
+    queryFn: async () => (await apiGet("/api/integrations/connections")) as unknown as Connection[],
   });
 
-  const appInstancesQuery = useQuery({
-    queryKey: integrationQueryKeys.appInstances,
-    queryFn: async () => {
-      return (await apiGet("/api/integrations/app-instances")) as unknown as AppInstanceItem[];
-    },
-  });
+  const refreshIntegrations = React.useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: integrationQueryKeys.plugins }),
+      queryClient.invalidateQueries({ queryKey: integrationQueryKeys.connections }),
+    ]);
+  }, [queryClient]);
 
-  const createAndAuthorizeMutation = useMutation({
-    mutationFn: async ({
-      definition,
-      form,
-    }: {
-      definition: AppDefinitionItem;
-      form: CreateConnectionFormState;
-    }) => {
-      const requestBody: AppInstanceCreateRequest = {
-        appName: definition.name,
-        clientId: form.clientId.trim(),
-        clientSecret: form.clientSecret.trim(),
-        usePkce: form.usePkce,
-      };
-
-      const created = (await apiPost("/api/integrations/app-instances", {
-        body: requestBody,
-      })) as unknown as AppInstanceItem;
-
-      const authorizeStart = (await apiPost(
-        "/api/integrations/app-instances/{id}/authorize-start",
-        {
-          params: { path: { id: created.id } },
+  const installationMutation = useMutation({
+    mutationFn: async () => {
+      if (!installationSelection) throw new Error("No plugin installation selected.");
+      const fields = buildFieldPayload(
+        installationSelection.authScheme.installationFields,
+        installationForm,
+      );
+      return await apiPut("/api/integrations/plugin-installations", {
+        body: {
+          pluginId: installationSelection.plugin.id,
+          connectorId: installationSelection.connector.id,
+          authSchemeId: installationSelection.authScheme.id,
+          enabled: installationEnabled,
+          ...fields,
         },
-      )) as unknown as AuthorizeStartResponse;
-
-      if (!authorizeStart.authorizeUrl) {
-        throw new Error("Provider authorize URL was empty.");
-      }
-
-      rememberPendingOAuthSession(created.id, definition.displayName, authorizeStart.authorizeUrl);
-
-      return { authorizeStart, created };
+      });
     },
-    onSuccess: ({ authorizeStart }) => {
-      toast.success("Redirecting to provider consent");
-      setCreateOpen(false);
-      redirectToAuthorizeUrl(authorizeStart.authorizeUrl);
+    onSuccess: async () => {
+      toast.success("Plugin installation saved");
+      setInstallationSelection(null);
+      await refreshIntegrations();
     },
-    onError: (error) => {
-      toast.error(`Connect failed: ${getApiErrorMessage(error)}`);
-    },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: integrationQueryKeys.appInstances });
-    },
+    onError: (error) => toast.error(`Save failed: ${getApiErrorMessage(error)}`),
   });
 
-  const reconnectMutation = useMutation({
-    mutationFn: async (instance: AppInstanceItem) => {
-      const payload = (await apiPost("/api/integrations/app-instances/{id}/authorize-start", {
-        params: { path: { id: instance.id } },
-      })) as unknown as AuthorizeStartResponse;
+  const authorizeMutation = useMutation({
+    mutationFn: async (connection: Connection) =>
+      (await apiPost("/api/integrations/oauth/authorize-start", {
+        body: { connectionId: connection.id, returnPath: "/integrations" },
+      })) as unknown as { authorizationUrl: string },
+    onSuccess: ({ authorizationUrl }) => redirectToAuthorization(authorizationUrl),
+    onError: (error) => toast.error(`Authorization failed: ${getApiErrorMessage(error)}`),
+  });
 
-      if (!payload.authorizeUrl) {
-        throw new Error("Provider authorize URL was empty.");
-      }
+  const saveConnectionMutation = useMutation({
+    mutationFn: async () => {
+      if (!connectionSelection) throw new Error("No connection definition selected.");
+      const fields = buildFieldPayload(
+        connectionSelection.authScheme.connectionFields,
+        connectionEditor.fields,
+      );
+      const common = {
+        pluginId: connectionSelection.plugin.id,
+        connectorId: connectionSelection.connector.id,
+        authSchemeId: connectionSelection.authScheme.id,
+        displayName: connectionEditor.displayName.trim(),
+        alias: connectionEditor.alias.trim(),
+        enabled: connectionEditor.enabled,
+        ...fields,
+      };
+      const connection = editingConnection
+        ? ((await apiPut("/api/integrations/connections", {
+            body: { id: editingConnection.id, ...common },
+          })) as unknown as Connection)
+        : ((await apiPost("/api/integrations/connections", {
+            body: common,
+          })) as unknown as Connection);
+      return {
+        connection,
+        shouldAuthorize: !editingConnection && connectionSelection.authScheme.type === "OAuth2",
+      };
+    },
+    onSuccess: async ({ connection, shouldAuthorize }) => {
+      toast.success(editingConnection ? "Connection updated" : "Connection created");
+      setConnectionSelection(null);
+      setEditingConnection(null);
+      await refreshIntegrations();
+      if (shouldAuthorize) authorizeMutation.mutate(connection);
+    },
+    onError: (error) => toast.error(`Save failed: ${getApiErrorMessage(error)}`),
+  });
 
-      rememberPendingOAuthSession(instance.id, instance.displayName, payload.authorizeUrl);
-      return { authorizeUrl: payload.authorizeUrl };
+  const validateMutation = useMutation({
+    mutationFn: async (connection: Connection) => {
+      await apiPost("/api/integrations/connections/validate", {
+        body: { id: connection.id },
+      });
+      return connection;
     },
-    onSuccess: ({ authorizeUrl }) => {
-      toast.success("Redirecting to provider consent");
-      redirectToAuthorizeUrl(authorizeUrl);
+    onSuccess: async (connection) => {
+      toast.success(`${connection.displayName} validated`);
+      await refreshIntegrations();
     },
-    onError: (error) => {
-      toast.error(`Reconnect failed: ${getApiErrorMessage(error)}`);
-    },
+    onError: (error) => toast.error(`Validation failed: ${getApiErrorMessage(error)}`),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (instance: AppInstanceItem) => {
-      await apiDelete("/api/integrations/app-instances/{id}", {
-        params: { path: { id: instance.id } },
+    mutationFn: async (connection: Connection) => {
+      await apiDelete("/api/integrations/connections", {
+        params: { query: { id: connection.id } },
       });
-      return instance;
+      return connection;
     },
-    onSuccess: async (instance) => {
-      toast.success(`${instance.displayName} deleted`);
-      await queryClient.invalidateQueries({ queryKey: integrationQueryKeys.appInstances });
+    onSuccess: async (connection) => {
+      toast.success(`${connection.displayName} deleted`);
+      await refreshIntegrations();
     },
-    onError: (error) => {
-      toast.error(`Delete failed: ${getApiErrorMessage(error)}`);
-    },
+    onError: (error) => toast.error(`Delete failed: ${getApiErrorMessage(error)}`),
   });
 
-  const appDefinitions = appDefinitionsQuery.data ?? [];
-  const appInstances = appInstancesQuery.data ?? [];
-  const isRefreshing = appDefinitionsQuery.isFetching || appInstancesQuery.isFetching;
+  const plugins = pluginsQuery.data ?? [];
+  const connections = connectionsQuery.data ?? [];
   const callbackUrl = React.useMemo(
     () =>
       buildOAuthServerCallbackUrl({
@@ -182,120 +178,115 @@ export default function IntegrationsPage() {
     [],
   );
 
-  const openCreateDialog = (definition: AppDefinitionItem) => {
-    setSelectedDefinition(definition);
-    setCreateForm(createConnectionFormState(definition));
-    setCreateOpen(true);
+  const openInstallation = (selection: IntegrationSelection) => {
+    const installation = selection.authScheme.installation;
+    setInstallationSelection(selection);
+    setInstallationEnabled(installation?.enabled ?? true);
+    setInstallationForm(
+      createSchemaFormState(selection.authScheme.installationFields, installation ?? undefined),
+    );
   };
-
-  const handleDialogOpenChange = (open: boolean) => {
-    setCreateOpen(open);
-    if (!open) {
-      setSelectedDefinition(null);
-      setCreateForm(createConnectionFormState());
-    }
-  };
-
-  const handleCreateAndAuthorize = () => {
-    if (!selectedDefinition) {
-      return;
-    }
-
-    if (!createForm.clientId.trim() || !createForm.clientSecret.trim()) {
-      toast.error("Client ID and client secret are required.");
-      return;
-    }
-
-    createAndAuthorizeMutation.mutate({
-      definition: selectedDefinition,
-      form: createForm,
+  const openCreateConnection = (selection: IntegrationSelection) => {
+    setEditingConnection(null);
+    setConnectionSelection(selection);
+    setConnectionEditor({
+      ...emptyConnectionEditor(),
+      displayName: `${selection.plugin.displayName} connection`,
+      alias: createDefaultConnectionAlias(selection.plugin.id),
+      fields: createSchemaFormState(selection.authScheme.connectionFields),
     });
   };
-
-  const handleReconnect = (instance: AppInstanceItem) => {
-    reconnectMutation.mutate(instance);
-  };
-
-  const handleDelete = (instance: AppInstanceItem) => {
-    const confirmed = window.confirm(
-      `Delete ${instance.displayName}?\n\nThis permanently removes the app instance and stored OAuth token.`,
-    );
-
-    if (!confirmed) {
+  const openEditConnection = (connection: Connection) => {
+    const selection = findIntegrationSelection(plugins, connection);
+    if (!selection) {
+      toast.error("The plugin definition for this connection is unavailable.");
       return;
     }
-
-    deleteMutation.mutate(instance);
-  };
-
-  const handleRefresh = async () => {
-    await Promise.all([appDefinitionsQuery.refetch(), appInstancesQuery.refetch()]);
+    setEditingConnection(connection);
+    setConnectionSelection(selection);
+    setConnectionEditor({
+      alias: connection.alias,
+      displayName: connection.displayName,
+      enabled: connection.enabled,
+      fields: createSchemaFormState(selection.authScheme.connectionFields, connection),
+    });
   };
 
   return (
     <div className="w-full max-w-7xl space-y-8 py-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight">Integrations</h1>
           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-            Persist OAuth client credentials per app instance, reconnect them through a
-            backend-owned authorization start endpoint, and let Agw handle token exchange on
-            callback.
+            Configure a plugin once, then create named connections for the exact accounts and
+            endpoints Agents can use.
           </p>
         </div>
-
-        <Button variant="outline" onClick={() => void handleRefresh()} disabled={isRefreshing}>
-          <RefreshCw className={isRefreshing ? "mr-2 size-4 animate-spin" : "mr-2 size-4"} />
+        <Button
+          variant="outline"
+          onClick={() => void refreshIntegrations()}
+          disabled={pluginsQuery.isFetching || connectionsQuery.isFetching}
+        >
+          <RefreshCw
+            className={
+              pluginsQuery.isFetching || connectionsQuery.isFetching
+                ? "size-4 animate-spin"
+                : "size-4"
+            }
+          />
           Refresh
         </Button>
-      </div>
+      </header>
 
       <section className="space-y-4">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold">Connected apps</h2>
+            <h2 className="text-xl font-semibold">Connections</h2>
             <p className="text-sm text-muted-foreground">
-              Reconnect existing app instances or remove credentials and stored OAuth tokens.
+              Agent-selectable accounts and service endpoints, each with an immutable alias.
             </p>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <PlugZap className="size-4" />
-            {appInstances.length} persisted instance{appInstances.length === 1 ? "" : "s"}
+            <Cable className="size-4" /> {connections.length}
           </div>
-        </header>
-
-        {appInstancesQuery.isLoading ? (
-          <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-            Loading connected app instances...
-          </div>
-        ) : appInstancesQuery.isError ? (
-          <div className="rounded-xl border border-dashed border-destructive/40 p-6 text-sm text-destructive">
-            Failed to load app instances: {getApiErrorMessage(appInstancesQuery.error)}
-          </div>
-        ) : appInstances.length > 0 ? (
-          <div className="grid gap-4 justify-start grid-cols-[repeat(auto-fit,minmax(280px,400px))]">
-            {appInstances.map((instance) => (
-              <AppInstanceCard
-                key={instance.id}
-                instance={instance}
-                onReconnect={handleReconnect}
-                onDelete={handleDelete}
-                isReconnectPending={
-                  reconnectMutation.isPending && reconnectMutation.variables?.id === instance.id
+        </div>
+        {connectionsQuery.isError ? (
+          <p className="rounded-lg border border-destructive/40 p-4 text-sm text-destructive">
+            Failed to load connections: {getApiErrorMessage(connectionsQuery.error)}
+          </p>
+        ) : connections.length > 0 ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {connections.map((connection) => (
+              <ConnectionCard
+                key={connection.id}
+                connection={connection}
+                selection={findIntegrationSelection(plugins, connection)}
+                isBusy={
+                  (validateMutation.isPending &&
+                    validateMutation.variables?.id === connection.id) ||
+                  (deleteMutation.isPending && deleteMutation.variables?.id === connection.id) ||
+                  (authorizeMutation.isPending && authorizeMutation.variables?.id === connection.id)
                 }
-                isDeletePending={
-                  deleteMutation.isPending && deleteMutation.variables?.id === instance.id
-                }
+                onAuthorize={(value) => authorizeMutation.mutate(value)}
+                onDelete={(value) => {
+                  if (
+                    window.confirm(
+                      `Delete ${value.displayName}? This also removes its credentials and bindings.`,
+                    )
+                  )
+                    deleteMutation.mutate(value);
+                }}
+                onEdit={openEditConnection}
+                onValidate={(value) => validateMutation.mutate(value)}
               />
             ))}
           </div>
         ) : (
           <Empty>
             <EmptyHeader>
-              <EmptyTitle>No app instances yet</EmptyTitle>
+              <EmptyTitle>No connections yet</EmptyTitle>
               <EmptyDescription>
-                Choose an app definition below to store its client credentials and launch the first
-                OAuth consent flow.
+                Configure a plugin below, then create the first named account or endpoint.
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
@@ -303,59 +294,61 @@ export default function IntegrationsPage() {
       </section>
 
       <section className="space-y-4">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold">App catalog</h2>
+            <h2 className="text-xl font-semibold">Plugin installations</h2>
             <p className="text-sm text-muted-foreground">
-              Every definition opens a modal with readonly provider metadata and editable client
-              credentials.
+              Platform-level definitions and shared OAuth client or protocol configuration.
             </p>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <LayoutGrid className="size-4" />
-            {appDefinitions.length} available definition{appDefinitions.length === 1 ? "" : "s"}
+            <Puzzle className="size-4" /> {plugins.length}
           </div>
-        </header>
-
-        {appDefinitionsQuery.isLoading ? (
-          <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-            Loading app definitions...
-          </div>
-        ) : appDefinitionsQuery.isError ? (
-          <div className="rounded-xl border border-dashed border-destructive/40 p-6 text-sm text-destructive">
-            Failed to load app definitions: {getApiErrorMessage(appDefinitionsQuery.error)}
-          </div>
-        ) : appDefinitions.length > 0 ? (
-          <div className="grid gap-4 justify-start grid-cols-[repeat(auto-fit,minmax(280px,400px))]">
-            {appDefinitions.map((definition) => (
-              <AppDefinitionCard
-                key={definition.name}
-                definition={definition}
-                onSelect={openCreateDialog}
+        </div>
+        {pluginsQuery.isError ? (
+          <p className="rounded-lg border border-destructive/40 p-4 text-sm text-destructive">
+            Failed to load plugins: {getApiErrorMessage(pluginsQuery.error)}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 md:grid-cols-3 gap-4">
+            {plugins.map((plugin) => (
+              <PluginCard
+                key={plugin.id}
+                plugin={plugin}
+                onConfigure={openInstallation}
+                onCreateConnection={openCreateConnection}
               />
             ))}
           </div>
-        ) : (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>No app definitions found</EmptyTitle>
-              <EmptyDescription>
-                The backend did not return any available integrations for this environment.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
         )}
       </section>
 
-      <CreateConnectionDialog
+      <PluginInstallationDialog
         callbackUrl={callbackUrl}
-        open={createOpen}
-        onOpenChange={handleDialogOpenChange}
-        definition={selectedDefinition}
-        form={createForm}
-        onFormChange={setCreateForm}
-        onSubmit={handleCreateAndAuthorize}
-        isSubmitting={createAndAuthorizeMutation.isPending}
+        enabled={installationEnabled}
+        form={installationForm}
+        isSubmitting={installationMutation.isPending}
+        onEnabledChange={setInstallationEnabled}
+        onFormChange={setInstallationForm}
+        onOpenChange={(open) => !open && setInstallationSelection(null)}
+        onSubmit={() => installationMutation.mutate()}
+        open={Boolean(installationSelection)}
+        selection={installationSelection}
+      />
+      <ConnectionDialog
+        connection={editingConnection}
+        editor={connectionEditor}
+        isSubmitting={saveConnectionMutation.isPending}
+        onEditorChange={setConnectionEditor}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConnectionSelection(null);
+            setEditingConnection(null);
+          }
+        }}
+        onSubmit={() => saveConnectionMutation.mutate()}
+        open={Boolean(connectionSelection)}
+        selection={connectionSelection}
       />
     </div>
   );

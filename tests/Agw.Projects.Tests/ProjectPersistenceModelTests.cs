@@ -23,7 +23,7 @@ public class ProjectPersistenceModelTests
 
         AssertRelation(dbContext.Model, "project_skill_relation", "SkillId");
         AssertRelation(dbContext.Model, "project_mcp_server_relation", "McpToolServerId");
-        AssertRelation(dbContext.Model, "project_app_relation", "AppInstanceId");
+        AssertRelation(dbContext.Model, "project_connection_relation", "ConnectionId");
     }
 
     private static void AssertRelation(IModel model, string tableName, string relatedIdPropertyName)

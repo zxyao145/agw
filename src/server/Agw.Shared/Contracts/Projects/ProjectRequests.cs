@@ -11,7 +11,7 @@ public record ProjectCreateRequest(
     string? Tools = null,
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
-    List<Guid>? AppInstanceIds = null,
+    List<Guid>? ConnectionIds = null,
     Dictionary<string, string>? EnvironmentVariables = null);
 
 public record ProjectUpdateRequest(
@@ -23,7 +23,7 @@ public record ProjectUpdateRequest(
     string? Tools = null,
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
-    List<Guid>? AppInstanceIds = null,
+    List<Guid>? ConnectionIds = null,
     Dictionary<string, string>? EnvironmentVariables = null);
 
 public sealed record ProjectMcpToolServerRelationResponse(
@@ -42,12 +42,12 @@ public sealed record ProjectSkillRelationResponse(
         new(relation.ProjectId, relation.SkillId);
 }
 
-public sealed record ProjectAppRelationResponse(
+public sealed record ProjectConnectionRelationResponse(
     Guid ProjectId,
-    Guid AppInstanceId)
+    Guid ConnectionId)
 {
-    public static ProjectAppRelationResponse FromDomain(ProjectAppRelation relation) =>
-        new(relation.ProjectId, relation.AppInstanceId);
+    public static ProjectConnectionRelationResponse FromDomain(ProjectConnectionRelation relation) =>
+        new(relation.ProjectId, relation.ConnectionId);
 }
 
 public sealed record ProjectResponse(
@@ -62,7 +62,7 @@ public sealed record ProjectResponse(
     IReadOnlyDictionary<string, string> EnvironmentVariables,
     IReadOnlyList<ProjectMcpToolServerRelationResponse> ProjectMcpToolServers,
     IReadOnlyList<ProjectSkillRelationResponse> ProjectSkillRelations,
-    IReadOnlyList<ProjectAppRelationResponse> ProjectAppRelations,
+    IReadOnlyList<ProjectConnectionRelationResponse> ProjectConnectionRelations,
     DateTimeOffset CreateTime,
     string? CreateBy,
     DateTimeOffset? UpdateTime,
@@ -81,7 +81,7 @@ public sealed record ProjectResponse(
             project.EnvironmentVariables ?? new Dictionary<string, string>(),
             [.. project.ProjectMcpToolServers.Select(ProjectMcpToolServerRelationResponse.FromDomain)],
             [.. project.ProjectSkillRelations.Select(ProjectSkillRelationResponse.FromDomain)],
-            [.. project.ProjectAppRelations.Select(ProjectAppRelationResponse.FromDomain)],
+            [.. project.ProjectConnectionRelations.Select(ProjectConnectionRelationResponse.FromDomain)],
             project.CreateTime,
             project.CreateBy,
             project.UpdateTime,

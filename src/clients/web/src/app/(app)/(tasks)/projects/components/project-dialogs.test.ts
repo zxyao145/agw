@@ -67,7 +67,7 @@ test("Project form has the 400px metadata column and exactly five shared capabil
   assert.match(source, /<TabsTrigger value="skills">Skills<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="tools">Tools<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="mcp-tool-servers">MCP Tool Server<\/TabsTrigger>/);
-  assert.match(source, /<TabsTrigger value="apps">Apps<\/TabsTrigger>/);
+  assert.match(source, /<TabsTrigger value="connections">Connections<\/TabsTrigger>/);
   assert.match(
     source,
     /<TabsTrigger value="environment-variables">Environment Variables<\/TabsTrigger>/,
@@ -86,7 +86,7 @@ test("Project dialogs serialize all five capabilities into Create and Update pay
     assert.match(source, /selectedTools/);
     assert.match(source, /selectedSkillIds/);
     assert.match(source, /selectedMcpToolServerIds/);
-    assert.match(source, /selectedAppInstanceIds/);
+    assert.match(source, /selectedConnectionIds/);
     assert.match(source, /environmentVariables/);
   }
 });
@@ -98,7 +98,7 @@ test("Projects page backfills Edit capabilities and resets every Create capabili
   assert.match(source, /setSelectedTools\(\[\]\)/);
   assert.match(source, /setSelectedSkillIds\(\[\]\)/);
   assert.match(source, /setSelectedMcpToolServerIds\(\[\]\)/);
-  assert.match(source, /setSelectedAppInstanceIds\(\[\]\)/);
+  assert.match(source, /setSelectedConnectionIds\(\[\]\)/);
   assert.match(source, /setEnvironmentVariables\(\[\]\)/);
   assert.match(source, /<CreateProjectDialog/);
   assert.match(source, /<EditProjectDialog/);

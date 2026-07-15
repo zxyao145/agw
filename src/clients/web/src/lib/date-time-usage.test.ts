@@ -49,17 +49,17 @@ test("browser date displays do not use locale-dependent date formatters", async 
 });
 
 test("special date display sites use the shared local formatters", async () => {
-  const [commentSource, callbackSource, jobsSource] = await Promise.all([
+  const [commentSource, connectionSource, jobsSource] = await Promise.all([
     readFile(new URL("../components/file-explorer/comment-section.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/(app)/integrations/callback/page.tsx", import.meta.url), "utf8"),
+    readFile(
+      new URL("../app/(app)/integrations/components/connection-card.tsx", import.meta.url),
+      "utf8",
+    ),
     readFile(new URL("../app/(app)/(jobs)/jobs/page.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(commentSource, /formatLocalDateTimeExact\(comment\.timestamp\)/);
-  assert.match(
-    callbackSource,
-    /matchingRequest\?\.createdAt\s*\?\s*formatLocalDateTime\(matchingRequest\.createdAt\)/,
-  );
+  assert.match(connectionSource, /formatLocalDateTime\(connection\.expiresAtUtc\)/);
 
   const onceTriggerDisplays = jobsSource.match(
     /job\.triggerType === TRIGGER_TYPE_ONCE[\s\S]{0,160}formatLocalDateTime\(job\.triggerValue\)/g,

@@ -12,172 +12,134 @@ namespace Agw.Infrastructure.Tests;
 public class AgwDbContextIntegrationTests
 {
     [Fact]
-    public async Task ProjectRelations_WhenProjectDeletedWithoutForeignKeys_RemovesAllRelations()
+    public async Task Project_WhenDeletedWithoutForeignKeys_RemovesCapabilityRelations()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
-        await connection.OpenAsync(cancellationToken);
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
+        await using var scope = await TestScope.CreateAsync(foreignKeys: false, cancellationToken);
         var projectId = Guid.NewGuid();
         var skillId = Guid.NewGuid();
-        var mcpToolServerId = Guid.NewGuid();
-        var appInstanceId = Guid.NewGuid();
-        await using (var seedContext = new AgwDbContext(options))
+        var mcpId = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
+
+        await using (var seed = scope.CreateContext())
         {
-            seedContext.Projects.Add(CreateProject(projectId));
-            seedContext.Skills.Add(CreateSkill(skillId));
-            seedContext.McpToolServers.Add(CreateMcpServer(mcpToolServerId));
-            seedContext.AppInstances.Add(CreateAppInstance(appInstanceId, "project-delete-client"));
-            seedContext.ProjectSkillRelations.Add(new ProjectSkillRelation { ProjectId = projectId, SkillId = skillId });
-            seedContext.ProjectMcpToolServers.Add(new ProjectMcpServerRelation { ProjectId = projectId, McpToolServerId = mcpToolServerId });
-            seedContext.ProjectAppRelations.Add(new ProjectAppRelation { ProjectId = projectId, AppInstanceId = appInstanceId });
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using (var deleteContext = new AgwDbContext(options))
-        {
-            var project = await deleteContext.Projects.FindAsync([projectId], cancellationToken);
-            deleteContext.Projects.Remove(project!);
-            await deleteContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using var assertContext = new AgwDbContext(options);
-        Assert.False(await assertContext.ProjectSkillRelations.AnyAsync(cancellationToken));
-        Assert.False(await assertContext.ProjectMcpToolServers.AnyAsync(cancellationToken));
-        Assert.False(await assertContext.ProjectAppRelations.AnyAsync(cancellationToken));
-    }
-
-    [Fact]
-    public async Task ProjectSkillRelation_WhenSkillDeletedWithoutForeignKeys_RemovesRelation()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
-        await connection.OpenAsync(cancellationToken);
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
-        var projectId = Guid.NewGuid();
-        var skillId = Guid.NewGuid();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Projects.Add(CreateProject(projectId));
-            seedContext.Skills.Add(CreateSkill(skillId));
-            seedContext.ProjectSkillRelations.Add(new ProjectSkillRelation { ProjectId = projectId, SkillId = skillId });
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using (var deleteContext = new AgwDbContext(options))
-        {
-            var skill = await deleteContext.Skills.FindAsync([skillId], cancellationToken);
-            deleteContext.Skills.Remove(skill!);
-            await deleteContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using var assertContext = new AgwDbContext(options);
-        Assert.False(await assertContext.ProjectSkillRelations.AnyAsync(cancellationToken));
-    }
-
-    [Fact]
-    public async Task ProjectMcpServerRelation_WhenMcpServerDeletedWithoutForeignKeys_RemovesRelation()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
-        await connection.OpenAsync(cancellationToken);
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
-        var projectId = Guid.NewGuid();
-        var mcpToolServerId = Guid.NewGuid();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Projects.Add(CreateProject(projectId));
-            seedContext.McpToolServers.Add(CreateMcpServer(mcpToolServerId));
-            seedContext.ProjectMcpToolServers.Add(new ProjectMcpServerRelation { ProjectId = projectId, McpToolServerId = mcpToolServerId });
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using (var deleteContext = new AgwDbContext(options))
-        {
-            var mcpToolServer = await deleteContext.McpToolServers.FindAsync([mcpToolServerId], cancellationToken);
-            deleteContext.McpToolServers.Remove(mcpToolServer!);
-            await deleteContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using var assertContext = new AgwDbContext(options);
-        Assert.False(await assertContext.ProjectMcpToolServers.AnyAsync(cancellationToken));
-    }
-
-    [Fact]
-    public async Task ProjectAppRelation_WhenAppInstanceDeletedWithoutForeignKeys_RemovesRelations()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-
-        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
-        await using (var setupContext = new AgwDbContext(options))
-        {
-            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
-        }
-
-        var projectId = Guid.NewGuid();
-        var appInstanceId = Guid.NewGuid();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Projects.Add(new Project
-            {
-                Id = projectId,
-                Name = "project-1",
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-            seedContext.AppInstances.Add(new AppInstance
-            {
-                Id = appInstanceId,
-                AppName = "github",
-                ClientId = "project-client-1",
-                ClientSecret = "secret-1",
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-            seedContext.ProjectAppRelations.Add(new ProjectAppRelation
+            seed.Projects.Add(CreateProject(projectId));
+            seed.Skills.Add(CreateSkill(skillId));
+            seed.McpToolServers.Add(CreateMcpServer(mcpId));
+            seed.Connections.Add(CreateConnection(connectionId, "project-connection"));
+            seed.ProjectSkillRelations.Add(new ProjectSkillRelation { ProjectId = projectId, SkillId = skillId });
+            seed.ProjectMcpToolServers.Add(new ProjectMcpServerRelation
             {
                 ProjectId = projectId,
-                AppInstanceId = appInstanceId
+                McpToolServerId = mcpId
             });
-            await seedContext.SaveChangesAsync(cancellationToken);
+            seed.ProjectConnectionRelations.Add(new ProjectConnectionRelation
+            {
+                ProjectId = projectId,
+                ConnectionId = connectionId
+            });
+            await seed.SaveChangesAsync(cancellationToken);
         }
 
-        await using (var deleteContext = new AgwDbContext(options))
+        await using (var delete = scope.CreateContext())
         {
-            var appInstance = await deleteContext.AppInstances.FindAsync([appInstanceId], cancellationToken);
-            deleteContext.AppInstances.Remove(appInstance!);
-            await deleteContext.SaveChangesAsync(cancellationToken);
+            delete.Projects.Remove((await delete.Projects.FindAsync([projectId], cancellationToken))!);
+            await delete.SaveChangesAsync(cancellationToken);
         }
 
-        await using var assertContext = new AgwDbContext(options);
-        Assert.False(await assertContext.ProjectAppRelations.AnyAsync(cancellationToken));
+        await using var assertContext = scope.CreateContext();
+        Assert.False(await assertContext.ProjectSkillRelations.AnyAsync(cancellationToken));
+        Assert.False(await assertContext.ProjectMcpToolServers.AnyAsync(cancellationToken));
+        Assert.False(await assertContext.ProjectConnectionRelations.AnyAsync(cancellationToken));
     }
 
-    private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
-
-    private static async Task EnsureCreatedAsync(
-        DbContextOptions<AgwDbContext> options,
-        CancellationToken cancellationToken)
+    [Fact]
+    public async Task Connection_WhenDeletedWithoutForeignKeys_RemovesCredentialsAndBindings()
     {
-        await using var setupContext = new AgwDbContext(options);
-        await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await TestScope.CreateAsync(foreignKeys: false, cancellationToken);
+        var agentId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
+
+        await using (var seed = scope.CreateContext())
+        {
+            seed.Agents.Add(CreateAgent(agentId));
+            seed.Projects.Add(CreateProject(projectId));
+            seed.Connections.Add(CreateConnection(connectionId, "shared-connection"));
+            seed.ConnectionCredentials.Add(new ConnectionCredential
+            {
+                Id = Guid.NewGuid(),
+                ConnectionId = connectionId,
+                Slot = "oauth.access-token",
+                ProtectedValue = "ciphertext"
+            });
+            seed.AgentConnectionRelations.Add(new AgentConnectionRelation
+            {
+                AgentId = agentId,
+                ConnectionId = connectionId
+            });
+            seed.ProjectConnectionRelations.Add(new ProjectConnectionRelation
+            {
+                ProjectId = projectId,
+                ConnectionId = connectionId
+            });
+            await seed.SaveChangesAsync(cancellationToken);
+        }
+
+        await using (var delete = scope.CreateContext())
+        {
+            delete.Connections.Remove((await delete.Connections.FindAsync([connectionId], cancellationToken))!);
+            await delete.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var assertContext = scope.CreateContext();
+        Assert.False(await assertContext.ConnectionCredentials.AnyAsync(cancellationToken));
+        Assert.False(await assertContext.AgentConnectionRelations.AnyAsync(cancellationToken));
+        Assert.False(await assertContext.ProjectConnectionRelations.AnyAsync(cancellationToken));
     }
+
+    [Fact]
+    public async Task AgentConnectionRelation_WhenDuplicatePairInserted_RejectsInsert()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await TestScope.CreateAsync(foreignKeys: true, cancellationToken);
+        var agentId = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
+
+        await using (var seed = scope.CreateContext())
+        {
+            seed.Agents.Add(CreateAgent(agentId));
+            seed.Connections.Add(CreateConnection(connectionId, "agent-connection"));
+            seed.AgentConnectionRelations.Add(new AgentConnectionRelation
+            {
+                AgentId = agentId,
+                ConnectionId = connectionId
+            });
+            await seed.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var duplicate = scope.CreateContext();
+        duplicate.AgentConnectionRelations.Add(new AgentConnectionRelation
+        {
+            AgentId = agentId,
+            ConnectionId = connectionId
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => duplicate.SaveChangesAsync(cancellationToken));
+    }
+
+    private static Agent CreateAgent(Guid id) => new()
+    {
+        Id = id,
+        Name = $"agent-{id:N}",
+        DisplayName = "Agent",
+        Description = "desc",
+        SystemPrompt = "prompt",
+        Type = AgentType.External,
+        CreateBy = "tester",
+        CreateTime = TimeProvider.System.GetUtcNow()
+    };
 
     private static Project CreateProject(Guid id) => new()
     {
@@ -192,299 +154,52 @@ public class AgwDbContextIntegrationTests
         Id = id,
         Name = $"skill-{id:N}",
         Description = "Skill",
-        ContentPath = $"/skills/{id:N}",
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
+        ContentPath = $"/skills/{id:N}"
     };
 
     private static McpServer CreateMcpServer(Guid id) => new()
     {
         Id = id,
-        Name = $"mcp-{id:N}",
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
+        Name = $"mcp-{id:N}"
     };
 
-    private static AppInstance CreateAppInstance(Guid id, string clientId) => new()
+    private static Connection CreateConnection(Guid id, string alias) => new()
     {
         Id = id,
-        AppName = "github",
-        ClientId = clientId,
-        ClientSecret = "secret",
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
+        PluginId = "github",
+        ConnectorId = "github-cloud",
+        AuthSchemeId = "oauth",
+        DisplayName = alias,
+        Alias = alias
     };
 
-    [Fact]
-    public async Task AgentAppRelation_WhenDuplicatePairInserted_RejectsInsert()
+    private sealed class TestScope : IAsyncDisposable
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
+        private readonly SqliteConnection _connection;
+        private readonly DbContextOptions<AgwDbContext> _options;
 
-        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
-
-        await using (var setupContext = new AgwDbContext(options))
+        private TestScope(SqliteConnection connection, DbContextOptions<AgwDbContext> options)
         {
-            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+            _connection = connection;
+            _options = options;
         }
 
-        var agentId = Guid.NewGuid();
-        var appInstanceId = Guid.NewGuid();
-
-        await using (var seedContext = new AgwDbContext(options))
+        public static async Task<TestScope> CreateAsync(bool foreignKeys, CancellationToken cancellationToken)
         {
-            seedContext.Agents.Add(new Agent
-            {
-                Id = agentId,
-                Name = "agent-1",
-                DisplayName = "Agent 1",
-                Description = "desc",
-                SystemPrompt = "prompt",
-                Type = AgentType.System,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-            seedContext.AppInstances.Add(new AppInstance
-            {
-                Id = appInstanceId,
-                AppName = "github",
-                ClientId = "client-1",
-                ClientSecret = "secret-1",
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-            seedContext.Set<AgentAppRelation>().Add(new AgentAppRelation
-            {
-                AgentId = agentId,
-                AppInstanceId = appInstanceId
-            });
-
-            await seedContext.SaveChangesAsync(cancellationToken);
+            var connection = new SqliteConnection(
+                $"Data Source=:memory:;Foreign Keys={(foreignKeys ? "True" : "False")}");
+            await connection.OpenAsync(cancellationToken);
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite(connection)
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var setup = new AgwDbContext(options);
+            await setup.Database.EnsureCreatedAsync(cancellationToken);
+            return new TestScope(connection, options);
         }
 
-        await using var dbContext = new AgwDbContext(options);
-        dbContext.Set<AgentAppRelation>().Add(new AgentAppRelation
-        {
-            AgentId = agentId,
-            AppInstanceId = appInstanceId
-        });
+        public AgwDbContext CreateContext() => new(_options);
 
-        await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync(cancellationToken));
-    }
-
-    [Fact]
-    public async Task AgentAppRelation_WhenAppInstanceDeleted_RemovesRelations()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-
-        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
-
-        await using (var setupContext = new AgwDbContext(options))
-        {
-            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
-        }
-
-        var agentId = Guid.NewGuid();
-        var appInstanceId = Guid.NewGuid();
-
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Agents.Add(new Agent
-            {
-                Id = agentId,
-                Name = "agent-1",
-                DisplayName = "Agent 1",
-                Description = "desc",
-                SystemPrompt = "prompt",
-                Type = AgentType.System,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-            seedContext.AppInstances.Add(new AppInstance
-            {
-                Id = appInstanceId,
-                AppName = "github",
-                ClientId = "client-1",
-                ClientSecret = "secret-1",
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-            seedContext.Set<AgentAppRelation>().Add(new AgentAppRelation
-            {
-                AgentId = agentId,
-                AppInstanceId = appInstanceId
-            });
-
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using (var deleteContext = new AgwDbContext(options))
-        {
-            var appInstance = await deleteContext.AppInstances.FindAsync([appInstanceId], cancellationToken);
-            deleteContext.AppInstances.Remove(appInstance!);
-            await deleteContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using var assertContext = new AgwDbContext(options);
-        Assert.False(await assertContext.Set<AgentAppRelation>().AnyAsync(cancellationToken));
-    }
-
-    [Fact]
-    public async Task AppInstance_WhenAppNameDuplicatesAndClientIdDiffers_AllowsInsert()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
-
-        await using (var setupContext = new AgwDbContext(options))
-        {
-            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
-        }
-
-        await using (var dbContext = new AgwDbContext(options))
-        {
-            dbContext.AppInstances.AddRange(
-                new AppInstance
-                {
-                    Id = Guid.NewGuid(),
-                    AppName = "github",
-                    ClientId = "client-1",
-                    ClientSecret = "secret-1",
-                    CreateBy = "tester",
-                    CreateTime = TimeProvider.System.GetUtcNow()
-                },
-                new AppInstance
-                {
-                    Id = Guid.NewGuid(),
-                    AppName = "github",
-                    ClientId = "client-2",
-                    ClientSecret = "secret-2",
-                    CreateBy = "tester",
-                    CreateTime = TimeProvider.System.GetUtcNow()
-                });
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using var assertContext = new AgwDbContext(options);
-        var instances = await assertContext.AppInstances
-            .Where(instance => instance.AppName == "github")
-            .ToListAsync(cancellationToken);
-
-        Assert.Equal(2, instances.Count);
-    }
-
-    [Fact]
-    public async Task AppInstance_WhenClientIdDuplicates_RejectsInsert()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
-
-        await using (var setupContext = new AgwDbContext(options))
-        {
-            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
-        }
-
-        var sharedClientId = "shared-client";
-        await using var dbContext = new AgwDbContext(options);
-        dbContext.AppInstances.AddRange(
-            new AppInstance
-            {
-                Id = Guid.NewGuid(),
-                AppName = "github",
-                ClientId = sharedClientId,
-                ClientSecret = "secret-1",
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            },
-            new AppInstance
-            {
-                Id = Guid.NewGuid(),
-                AppName = "google-workspace",
-                ClientId = sharedClientId,
-                ClientSecret = "secret-2",
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-
-        await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync(cancellationToken));
-    }
-
-    [Fact]
-    public async Task OAuthAuthorizationToken_WhenSecondTokenUsesSameAppInstance_RejectsInsert()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
-
-        await using (var setupContext = new AgwDbContext(options))
-        {
-            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
-        }
-
-        var appInstanceId = Guid.NewGuid();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.AppInstances.Add(new AppInstance
-            {
-                Id = appInstanceId,
-                AppName = "github",
-                ClientId = "client-1",
-                ClientSecret = "secret-1",
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-
-            seedContext.OAuthAuthorizationTokens.Add(new OAuthAuthorizationToken
-            {
-                Id = Guid.NewGuid(),
-                AppInstanceId = appInstanceId,
-                Subject = "subject-1",
-                AccessToken = "access-token-1"
-            });
-
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using var dbContext = new AgwDbContext(options);
-        dbContext.OAuthAuthorizationTokens.Add(new OAuthAuthorizationToken
-        {
-            Id = Guid.NewGuid(),
-            AppInstanceId = appInstanceId,
-            Subject = "subject-2",
-            AccessToken = "access-token-2"
-        });
-
-        await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync(cancellationToken));
+        public async ValueTask DisposeAsync() => await _connection.DisposeAsync();
     }
 }

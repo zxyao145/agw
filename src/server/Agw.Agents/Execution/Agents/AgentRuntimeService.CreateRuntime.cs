@@ -57,20 +57,32 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        var agentSession = await _sessionStateStore.GetOrCreateAsync(agent, aiAgent, sessionKey, cancellationToken);
-        _providerSessionState.InitializeSessionState(agentSession, resolvedContextId,
-            ProjectDefaults.GetDefaultProjectIdentifier(projectId));
-        var summaryModelProviderId = ResolveSummaryModelProviderId(agent);
-        return new AgentRuntime(
-            logger: _logger,
-            aiAgent,
-            agentSession,
-            projectId: projectId,
-            contextId: resolvedContextId,
-            sessionKey: sessionKey,
-            enableSummary: agent.EnableSummary && summaryModelProviderId.HasValue,
-            summaryModelProviderId: summaryModelProviderId,
-            summaryService: _summaryService);
+        try
+        {
+            var agentSession = await _sessionStateStore
+                .GetOrCreateAsync(agent, aiAgent, sessionKey, cancellationToken)
+                .ConfigureAwait(false);
+            _providerSessionState.InitializeSessionState(
+                agentSession,
+                resolvedContextId,
+                ProjectDefaults.GetDefaultProjectIdentifier(projectId));
+            var summaryModelProviderId = ResolveSummaryModelProviderId(agent);
+            return new AgentRuntime(
+                logger: _logger,
+                aiAgent,
+                agentSession,
+                projectId: projectId,
+                contextId: resolvedContextId,
+                sessionKey: sessionKey,
+                enableSummary: agent.EnableSummary && summaryModelProviderId.HasValue,
+                summaryModelProviderId: summaryModelProviderId,
+                summaryService: _summaryService);
+        }
+        catch
+        {
+            await DisposeAgentWithoutThrowingAsync(aiAgent).ConfigureAwait(false);
+            throw;
+        }
     }
 
     private async Task<Guid?> GetCodexProviderSessionIdAsync(

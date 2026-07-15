@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildOAuthServerCallbackUrl } from "./callback-url";
+import { buildOAuthServerCallbackUrl } from "./callback-url.ts";
 
 test("buildOAuthServerCallbackUrl prefers the current origin and appends the backend callback path", () => {
   assert.equal(

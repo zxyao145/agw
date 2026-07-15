@@ -9,7 +9,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import { getApiErrorMessage } from "@/api/utils";
 import {
   toEnvironmentVariableEntries,
-  type AppInstanceOption,
+  type ConnectionOption,
   type EnvironmentVariableEntry,
   type McpToolServerDto,
   type SkillDto,
@@ -63,10 +63,10 @@ export default function ProjectsPage() {
     queryKey: ["skills"],
     queryFn: async () => (await apiGet("/api/skills")) as unknown as SkillDto[],
   });
-  const appInstancesQuery = useQuery({
-    queryKey: ["appInstances"],
+  const connectionsQuery = useQuery({
+    queryKey: ["connections"],
     queryFn: async () =>
-      (await apiGet("/api/integrations/app-instances")) as unknown as AppInstanceOption[],
+      (await apiGet("/api/integrations/connections")) as unknown as ConnectionOption[],
   });
 
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -76,7 +76,7 @@ export default function ProjectsPage() {
   const [enable, setEnable] = React.useState(true);
   const [extraSetting, setExtraSetting] = React.useState("{\n  \n}");
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
-  const [selectedAppInstanceIds, setSelectedAppInstanceIds] = React.useState<string[]>([]);
+  const [selectedConnectionIds, setSelectedConnectionIds] = React.useState<string[]>([]);
   const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
   const [selectedMcpToolServerIds, setSelectedMcpToolServerIds] = React.useState<string[]>([]);
   const [environmentVariables, setEnvironmentVariables] = React.useState<
@@ -112,7 +112,7 @@ export default function ProjectsPage() {
       setSelectedTools([]);
       setSelectedSkillIds([]);
       setSelectedMcpToolServerIds([]);
-      setSelectedAppInstanceIds([]);
+      setSelectedConnectionIds([]);
       setEnvironmentVariables([]);
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
@@ -129,7 +129,7 @@ export default function ProjectsPage() {
   const [editEnable, setEditEnable] = React.useState(true);
   const [editExtraSetting, setEditExtraSetting] = React.useState("");
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
-  const [editSelectedAppInstanceIds, setEditSelectedAppInstanceIds] = React.useState<string[]>([]);
+  const [editSelectedConnectionIds, setEditSelectedConnectionIds] = React.useState<string[]>([]);
   const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>([]);
   const [editSelectedMcpToolServerIds, setEditSelectedMcpToolServerIds] = React.useState<string[]>(
     [],
@@ -180,7 +180,7 @@ export default function ProjectsPage() {
       setEditSelectedTools(capabilityState.selectedTools);
       setEditSelectedSkillIds(capabilityState.selectedSkillIds);
       setEditSelectedMcpToolServerIds(capabilityState.selectedMcpToolServerIds);
-      setEditSelectedAppInstanceIds(capabilityState.selectedAppInstanceIds);
+      setEditSelectedConnectionIds(capabilityState.selectedConnectionIds);
       setEditEnvironmentVariables(
         toEnvironmentVariableEntries(capabilityState.environmentVariables),
       );
@@ -251,8 +251,8 @@ export default function ProjectsPage() {
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}
-            appOptions={appInstancesQuery.data ?? []}
-            selectedAppInstanceIds={selectedAppInstanceIds}
+            connectionOptions={connectionsQuery.data ?? []}
+            selectedConnectionIds={selectedConnectionIds}
             selectedTools={selectedTools}
             skillsQuery={skillsQuery}
             toolsQuery={toolsQuery}
@@ -260,7 +260,9 @@ export default function ProjectsPage() {
             selectedMcpToolServerIds={selectedMcpToolServerIds}
             createProjectMutation={createProjectMutation}
             toggleSkill={(skillId) => toggleSelection(setSelectedSkillIds, skillId)}
-            toggleAppInstance={(appId) => toggleSelection(setSelectedAppInstanceIds, appId)}
+            toggleConnection={(connectionId) =>
+              toggleSelection(setSelectedConnectionIds, connectionId)
+            }
             toggleTool={(toolName) => toggleSelection(setSelectedTools, toolName)}
             toggleMcpToolServer={(serverId) =>
               toggleSelection(setSelectedMcpToolServerIds, serverId)
@@ -364,8 +366,8 @@ export default function ProjectsPage() {
         environmentVariables={editEnvironmentVariables}
         setEnvironmentVariables={setEditEnvironmentVariables}
         selectedSkillIds={editSelectedSkillIds}
-        appOptions={appInstancesQuery.data ?? []}
-        selectedAppInstanceIds={editSelectedAppInstanceIds}
+        connectionOptions={connectionsQuery.data ?? []}
+        selectedConnectionIds={editSelectedConnectionIds}
         selectedTools={editSelectedTools}
         skillsQuery={skillsQuery}
         toolsQuery={toolsQuery}
@@ -373,7 +375,9 @@ export default function ProjectsPage() {
         selectedMcpToolServerIds={editSelectedMcpToolServerIds}
         updateProjectMutation={updateProjectMutation}
         toggleSkill={(skillId) => toggleSelection(setEditSelectedSkillIds, skillId)}
-        toggleAppInstance={(appId) => toggleSelection(setEditSelectedAppInstanceIds, appId)}
+        toggleConnection={(connectionId) =>
+          toggleSelection(setEditSelectedConnectionIds, connectionId)
+        }
         toggleTool={(toolName) => toggleSelection(setEditSelectedTools, toolName)}
         toggleMcpToolServer={(serverId) =>
           toggleSelection(setEditSelectedMcpToolServerIds, serverId)

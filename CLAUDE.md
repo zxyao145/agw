@@ -19,7 +19,7 @@ Agw.Shared/          # Shared entities, contracts, exceptions, repository abstra
 Agw.A2A/             # A2A protocol types, discovery, communication endpoints, and route builders
 Agw.Agents/          # Agent definitions, agentflows, MCP tools, and runtime execution services
 Agw.Files/           # File and workspace APIs, path security, request validation, and error mapping
-Agw.Integrations/    # OAuth integrations, app definitions and instances, and integration tools
+Agw.Integrations/    # Plugin catalog, installations, connections, credentials, OAuth, MCP, and connection-bound tools
 Agw.Jobs/            # Scheduled jobs, project leases, execution logs, and hosted scheduling
 Agw.Providers/       # LLM models, providers, model-provider links, and auth configuration
 Agw.Setup/           # First-run setup, initialization state, and API-key guard middleware
@@ -28,7 +28,7 @@ Agw.Projects/           # Projects, project tasks, task records, contexts, and t
 Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registry
 ```
 
-`Agw.slnx` is the root solution and includes the backend projects and tests. `src/server/server.sln` includes backend projects only. The root solution includes test projects for A2A, Agents, Files, Host, Jobs, Setup, Shared, Skills, Tasks, and Tools.
+`Agw.slnx` is the root solution and includes the backend projects and tests. `src/server/server.sln` includes backend projects only. The root solution includes test projects for A2A, Agents, Files, Host, Integrations, Jobs, Setup, Shared, Skills, Tasks, and Tools.
 
 ### Module Layering
 
@@ -102,8 +102,9 @@ The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients
 - `src/server/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations, caches metadata, and creates `AITool` instances through `AgwToolFactory`.
 - `src/server/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and stores extracted skills under `wwwroot/skills/{skillName}/`.
 - `src/server/Agw.Projects/Application/TaskAppService.cs`: resolves logical tasks from project contexts and task records for execution and history queries.
-- `src/server/Agw.Integrations/Controllers/OauthController.cs`: handles OAuth authorization start and callback endpoints for integration connections.
-- `src/server/Agw.Integrations/Tools/GitHub/GitHubTools.cs`: provides integration-backed GitHub tools to runtime agents.
+- `src/server/Agw.Integrations/Controllers/OauthController.cs`: delegates generic OAuth authorization start, callback, and refresh flows to application services.
+- `src/server/Agw.Integrations/Application/Capabilities/ConnectionCapabilityResolver.cs`: resolves ready Connection-bound Native tools, plugin MCP tools, bundled Skills, warnings, and owned resource leases.
+- `src/server/Agw.Integrations/Tools/GitHub/GitHubConnectionNativeCapabilityProvider.cs`: creates namespaced GitHub tools that resolve the selected Connection credential at invocation time.
 - `src/server/Agw.Shared/Exceptions/ErrorCodes.cs`: is the central catalog for backend `AgwException` error codes and HTTP status mapping.
 
 ### Important Domain Concepts
@@ -115,7 +116,7 @@ The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients
 - `Skill`: uploaded skill archive with validated `SKILL.md` metadata and agent-skill relations.
 - `Project`, `ProjectContext`, `TaskRecord`, `TaskProjection`: workspace configuration, conversation grouping, persisted execution records, and logical task views reconstructed from those records.
 - `Job`, `JobLog`: scheduled background execution and per-run logging.
-- `AppDefinition`, `AppInstance`, `OAuthAuthorizationToken`: integration catalog, authorized app connections, and OAuth authorization state and token persistence.
+- `PluginDefinition`, `PluginInstallation`, `Connection`, and their credential entities: static integration capabilities, platform configuration, Agent-selectable external accounts or endpoints, and protected or environment-referenced secrets.
 
 ## Build, Run, and Test
 

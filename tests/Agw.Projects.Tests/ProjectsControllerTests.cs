@@ -55,7 +55,7 @@ public class ProjectsControllerTests
         Assert.Equal("secret", service.CreatedProject.EnvironmentVariables["API_KEY"]);
         Assert.Equal([mcpToolServerId], service.McpToolServerIds);
         Assert.Equal([skillId], service.SkillIds);
-        Assert.Equal([appInstanceId], service.AppInstanceIds);
+        Assert.Equal([appInstanceId], service.ConnectionIds);
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class ProjectsControllerTests
         Assert.Equal("safe", project.EnvironmentVariables["MODE"]);
         Assert.Equal([mcpToolServerId], service.McpToolServerIds);
         Assert.Equal([skillId], service.SkillIds);
-        Assert.Equal([appInstanceId], service.AppInstanceIds);
+        Assert.Equal([appInstanceId], service.ConnectionIds);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class ProjectsControllerTests
         Assert.Equal("secret", project.EnvironmentVariables["API_KEY"]);
         Assert.Null(service.McpToolServerIds);
         Assert.Null(service.SkillIds);
-        Assert.Null(service.AppInstanceIds);
+        Assert.Null(service.ConnectionIds);
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class ProjectsControllerTests
         Assert.Empty(project.EnvironmentVariables);
         Assert.Empty(service.McpToolServerIds!);
         Assert.Empty(service.SkillIds!);
-        Assert.Empty(service.AppInstanceIds!);
+        Assert.Empty(service.ConnectionIds!);
     }
 
     private static object ReadApiResultData(IActionResult result)
@@ -173,7 +173,7 @@ public class ProjectsControllerTests
         public Project? CreatedProject { get; private set; }
         public IReadOnlyList<Guid>? McpToolServerIds { get; private set; }
         public IReadOnlyList<Guid>? SkillIds { get; private set; }
-        public IReadOnlyList<Guid>? AppInstanceIds { get; private set; }
+        public IReadOnlyList<Guid>? ConnectionIds { get; private set; }
 
         public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
             Task.FromResult<IReadOnlyList<Project>>([_project]);
@@ -194,11 +194,11 @@ public class ProjectsControllerTests
             Project project,
             IEnumerable<Guid>? mcpToolServerIds,
             IEnumerable<Guid>? skillIds,
-            IEnumerable<Guid>? appInstanceIds,
+            IEnumerable<Guid>? connectionIds,
             string user)
         {
             CreatedProject = project;
-            CaptureRelationIds(mcpToolServerIds, skillIds, appInstanceIds);
+            CaptureRelationIds(mcpToolServerIds, skillIds, connectionIds);
             return Task.FromResult<Project?>(_project);
         }
 
@@ -217,22 +217,22 @@ public class ProjectsControllerTests
             Action<Project> updateAction,
             IEnumerable<Guid>? mcpToolServerIds,
             IEnumerable<Guid>? skillIds,
-            IEnumerable<Guid>? appInstanceIds,
+            IEnumerable<Guid>? connectionIds,
             string user)
         {
             updateAction(_project);
-            CaptureRelationIds(mcpToolServerIds, skillIds, appInstanceIds);
+            CaptureRelationIds(mcpToolServerIds, skillIds, connectionIds);
             return Task.FromResult<Project?>(_project);
         }
 
         private void CaptureRelationIds(
             IEnumerable<Guid>? mcpToolServerIds,
             IEnumerable<Guid>? skillIds,
-            IEnumerable<Guid>? appInstanceIds)
+            IEnumerable<Guid>? connectionIds)
         {
             McpToolServerIds = mcpToolServerIds?.ToList();
             SkillIds = skillIds?.ToList();
-            AppInstanceIds = appInstanceIds?.ToList();
+            ConnectionIds = connectionIds?.ToList();
         }
     }
 }

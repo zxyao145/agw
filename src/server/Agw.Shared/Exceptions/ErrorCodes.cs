@@ -61,6 +61,14 @@ public static class ErrorCodes
     public static readonly ErrorCode InvalidAgentExtraSettings = new(400_0055, "Agent extra settings must be a JSON object.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode InvalidAgentEnvironmentVariableName = new(400_0056, "Agent environment variable names must be unique after trimming, non-empty, and cannot contain '=' or null characters.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode InvalidProjectEnvironmentVariableName = new(400_0057, "Project environment variable names must be unique after trimming, non-empty, and cannot contain '=' or null characters.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode IntegrationDefinitionNotFound = new(400_0058, "The requested integration definition was not found.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode IntegrationConfigurationInvalid = new(400_0059, "Integration configuration is invalid.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode IntegrationSecretMutationInvalid = new(400_0060, "Integration secret update is invalid.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode IntegrationAliasInvalid = new(400_0061, "Connection alias must use lowercase kebab-case.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode OAuthReturnPathInvalid = new(400_0062, "OAuth return path must be a local absolute path.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode IntegrationToolNameInvalid = new(400_0063, "Integration capability tool name is invalid.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode GitHubRepositoryInvalid = new(400_0064, "The GitHub repository owner or name is invalid.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode GitHubClonePathInvalid = new(400_0065, "The clone destination must be a relative path inside the project workspace.", HttpStatusCode.BadRequest);
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode SftpAuthenticationFailed = new(401_0002, "SFTP authentication failed.", HttpStatusCode.Unauthorized);
@@ -78,6 +86,8 @@ public static class ErrorCodes
     public static readonly ErrorCode AgentNotFound = new(404_0006, "Agent was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode ResourceNotFound = new(404_0007, "Resource was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode ApiTokenNotFound = new(404_0008, "API token was not found.", HttpStatusCode.NotFound);
+    public static readonly ErrorCode ConnectionNotFound = new(404_0009, "Connection was not found.", HttpStatusCode.NotFound);
+    public static readonly ErrorCode GitHubProjectWorkspaceNotFound = new(404_0010, "The project workspace was not found.", HttpStatusCode.NotFound);
 
     public static readonly ErrorCode SkillAlreadyExists = new(409_0001, "Skill already exists.", HttpStatusCode.Conflict);
     public static readonly ErrorCode A2ATaskIdAlreadyUsed = new(409_0002, "Task id is already used by a non-A2A task.", HttpStatusCode.Conflict);
@@ -86,6 +96,9 @@ public static class ErrorCodes
     public static readonly ErrorCode A2ATerminalTaskCannotAcceptMessages = new(409_0005, "Task is in a terminal state and cannot accept messages.", HttpStatusCode.Conflict);
     public static readonly ErrorCode A2ATerminalTaskCannotBeSubscribed = new(409_0006, "Task is in a terminal state and cannot be subscribed to.", HttpStatusCode.Conflict);
     public static readonly ErrorCode ApiTokenNameAlreadyExists = new(409_0007, "An API token with this name already exists.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode ConnectionAliasAlreadyExists = new(409_0008, "Connection alias already exists.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode ConnectionAliasImmutable = new(409_0009, "Connection alias cannot be changed.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode IntegrationToolNameConflict = new(409_0010, "Integration capability tool name conflicts with another source.", HttpStatusCode.Conflict);
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(429_0001, "Too many authentication attempts.", HttpStatusCode.TooManyRequests);
 
@@ -104,6 +117,13 @@ public static class ErrorCodes
     public static readonly ErrorCode EnvironmentVariableNotSet = new(500_0013, "Required environment variable is not set.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode FileStorageConfigInvalid = new(500_0014, "File storage configuration is invalid.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode SftpConnectionFailed = new(500_0015, "SFTP connection failed.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode IntegrationCredentialUnavailable = new(500_0016, "Integration credential is unavailable.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode IntegrationDataInvalid = new(500_0017, "Stored integration data is invalid.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode IntegrationCapabilityResolutionFailed = new(500_0018, "Failed to resolve integration capabilities.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode IntegrationResourceDisposalFailed = new(500_0019, "Failed to release integration capability resources.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode IntegrationNativeProviderUnavailable = new(500_0020, "The integration native capability provider is unavailable.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode IntegrationMcpMaterializationFailed = new(500_0021, "Failed to materialize the integration MCP capability.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode GitHubCloneFailed = new(500_0022, "GitHub clone failed.", HttpStatusCode.InternalServerError);
 
     public static readonly ErrorCode UnsupportedTransportType = new(501_0001, "Transport type is not supported.", HttpStatusCode.NotImplemented);
     public static readonly ErrorCode UnsupportedAgentType = new(501_0002, "Agent type is not supported.", HttpStatusCode.NotImplemented);
@@ -115,4 +135,5 @@ public static class ErrorCodes
     public static readonly ErrorCode FileStorageBackendNotSupported = new(501_0008, "File storage backend is not supported.", HttpStatusCode.NotImplemented);
 
     public static readonly ErrorCode GitHubBadResponseStatusCode = new(502_0001, "GitHub returned a bad response status code.", HttpStatusCode.BadGateway);
+    public static readonly ErrorCode OAuthProviderRequestFailed = new(502_0002, "OAuth provider request failed.", HttpStatusCode.BadGateway);
 }

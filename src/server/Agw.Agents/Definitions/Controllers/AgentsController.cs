@@ -70,7 +70,7 @@ public class AgentsController : ControllerBase
             agent,
             request.McpToolServerIds,
             request.SkillIds,
-            request.AppInstanceIds,
+            request.ConnectionIds,
             user);
         return created == null
             ? AgwApiResult.BadRequest("Failed to create agent.")
@@ -98,7 +98,7 @@ public class AgentsController : ControllerBase
             },
             request.McpToolServerIds,
             request.SkillIds,
-            request.AppInstanceIds,
+            request.ConnectionIds,
             user);
 
         return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(AgentResponse.FromDomain(updated));

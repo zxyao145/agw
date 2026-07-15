@@ -109,6 +109,8 @@ Direct `new HttpClient()` causes socket exhaustion and DNS staleness. `IHttpClie
 ## 8. Backend Service Registration and Boundaries
 
 - Register new backend services in the relevant module `DependencyInjection.cs` or extension method and ensure `Agw.Host/Program.cs` composes the module.
-- `Agw.Integrations` treats `IntegrationConstants.AppList` as the single source of truth for `AppDefinition`; do not add `DbSet<AppDefinition>` or migrations for it.
-- Persist integration configuration in `AppInstance` and `OAuthAuthorizationToken`.
-- 
+- `Agw.Integrations` treats `IPluginCatalog` as the source of truth for plugin, connector, authentication, capability-source, and bundled Skill definitions; definitions are code/content assets and are not EF entities.
+- Persist platform-level configuration in `PluginInstallation`, Agent-selectable accounts or endpoints in `Connection`, and protected or environment-referenced secrets in their dedicated credential entities.
+- Agent and Project integration bindings must reference concrete `ConnectionId` values. Only `Ready` Connections may contribute runtime tools or bundled Plugin Skills.
+- Never return or log plaintext installation secrets, access or refresh tokens, API keys, AK/SK values, protected credential payloads, or complete OAuth token responses.
+- Plugin MCP sources that inject credentials into HTTP or SSE requests must use HTTPS endpoints. Materialize them with invocation-scoped credentials and dispose the client and transport after the invocation.

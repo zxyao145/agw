@@ -338,7 +338,7 @@ public class AgentRuntimeServiceCompositionTests
         return new AgentRuntimeService(
             agentAppService: null!,
             projectAppService: null!,
-            toolRegistry: null!,
+            capabilityComposer: null!,
             chatHistoryProvider: null!,
             providerSessionState: null!,
             taskSessionBindingService: null!,

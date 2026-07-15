@@ -9,6 +9,8 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Integrations.Application.Capabilities;
+using Agw.Integrations.Mcp;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Data.Entities.Agents;
@@ -37,6 +39,13 @@ public class AgentRuntimeServiceSystemCompositionTests
         var root = Path.Combine(Path.GetTempPath(), $"agw-system-composition-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(root, "agent-skill"));
         Directory.CreateDirectory(Path.Combine(root, "project-skill"));
+        var overriddenPluginSkillDirectory = Path.Combine(root, "plugin-overridden-skill");
+        var pluginSkillDirectory = Path.Combine(root, "plugin-skill");
+        Directory.CreateDirectory(overriddenPluginSkillDirectory);
+        Directory.CreateDirectory(pluginSkillDirectory);
+        File.WriteAllText(Path.Combine(overriddenPluginSkillDirectory, "SKILL.md"), "# overridden");
+        File.WriteAllText(Path.Combine(pluginSkillDirectory, "SKILL.md"), "# plugin");
+        File.WriteAllText(Path.Combine(pluginSkillDirectory, "untrusted.py"), "print('do not run')");
 
         await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
         await connection.OpenAsync(cancellationToken);
@@ -50,12 +59,11 @@ public class AgentRuntimeServiceSystemCompositionTests
         var modelProviderId = Guid.NewGuid();
         var modelId = Guid.NewGuid();
         var providerId = Guid.NewGuid();
-        var agentAppInstanceId = Guid.NewGuid();
-        var projectAppInstanceId = Guid.NewGuid();
         var agentMcpServerId = Guid.NewGuid();
         var projectMcpServerId = Guid.NewGuid();
         var agentSkillId = Guid.NewGuid();
         var projectSkillId = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
 
         dbContext.Models.Add(new LlmModel { Id = modelId, Name = "test-model" });
         dbContext.Providers.Add(new Provider
@@ -82,21 +90,6 @@ public class AgentRuntimeServiceSystemCompositionTests
             ModelId = modelId,
             ProviderId = providerId,
         });
-        dbContext.AppInstances.AddRange(
-            new AppInstance
-            {
-                Id = agentAppInstanceId,
-                AppName = "agent-app",
-                ClientId = "agent-client",
-                ClientSecret = "agent-secret",
-            },
-            new AppInstance
-            {
-                Id = projectAppInstanceId,
-                AppName = "project-app",
-                ClientId = "project-client",
-                ClientSecret = "project-secret",
-            });
         dbContext.McpToolServers.AddRange(
             new McpServer { Id = agentMcpServerId, Name = "agent_mcp", Enabled = true },
             new McpServer { Id = projectMcpServerId, Name = "project_mcp", Enabled = true });
@@ -117,12 +110,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             });
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var appDefinitions = new TestRepository<AppDefinition>(
-        [
-            CreateAppDefinition("agent-app", ["agent_app"]),
-            CreateAppDefinition("project-app", ["project_app"]),
-        ]);
-        var agentAppService = CreateAgentAppService(dbContext, appDefinitions);
+        var agentAppService = CreateAgentAppService(dbContext);
         var project = new Project
         {
             Id = Guid.NewGuid(),
@@ -132,10 +120,6 @@ public class AgentRuntimeServiceSystemCompositionTests
                 ["SHARED"] = "project",
                 ["PROJECT_ONLY"] = "project",
             },
-            ProjectAppRelations =
-            [
-                new ProjectAppRelation { AppInstanceId = projectAppInstanceId },
-            ],
             ProjectMcpToolServers =
             [
                 new ProjectMcpServerRelation { McpToolServerId = projectMcpServerId },
@@ -143,6 +127,10 @@ public class AgentRuntimeServiceSystemCompositionTests
             ProjectSkillRelations =
             [
                 new ProjectSkillRelation { SkillId = projectSkillId },
+            ],
+            ProjectConnectionRelations =
+            [
+                new ProjectConnectionRelation { ConnectionId = connectionId },
             ],
         };
         var agent = new Agent
@@ -158,10 +146,6 @@ public class AgentRuntimeServiceSystemCompositionTests
                 ["SHARED"] = "agent",
                 ["AGENT_ONLY"] = "agent",
             },
-            AgentAppRelations =
-            [
-                new AgentAppRelation { AppInstanceId = agentAppInstanceId },
-            ],
             AgentMcpToolServers =
             [
                 new AgentMcpServerRelation { McpToolServerId = agentMcpServerId },
@@ -170,31 +154,44 @@ public class AgentRuntimeServiceSystemCompositionTests
             [
                 new AgentSkillRelation { SkillId = agentSkillId },
             ],
+            AgentConnectionRelations =
+            [
+                new AgentConnectionRelation { ConnectionId = connectionId },
+            ],
         };
         var toolRegistry = CreateToolRegistry(
-            "agent_app",
             "agent_direct",
-            "project_app",
             "project_direct",
             "Shared");
-        var mcpCalls = new List<McpListCall>();
-        Task<IReadOnlyList<AITool>> ListMcpToolsAsync(
-            McpServer server,
-            IReadOnlyDictionary<string, string> environmentVariables,
-            CancellationToken _)
-        {
-            mcpCalls.Add(new McpListCall(
-                server.Id,
-                new Dictionary<string, string>(environmentVariables, StringComparer.Ordinal)));
-            return Task.FromResult<IReadOnlyList<AITool>>([new TestTool(server.Name).ToAITool()]);
-        }
+        var mcpMaterializer = new TestMcpToolMaterializer();
+        var connectionResource = new TrackingResource();
+        var connectionResolver = new TestConnectionCapabilityResolver(CreateResolution(
+            pluginSkills:
+            [
+                new PluginSkillReference
+                {
+                    PluginId = "github",
+                    SkillId = "agent-skill",
+                    Description = "overridden",
+                    SkillFilePath = Path.Combine(overriddenPluginSkillDirectory, "SKILL.md"),
+                },
+                new PluginSkillReference
+                {
+                    PluginId = "github",
+                    SkillId = "plugin-skill",
+                    Description = "plugin",
+                    SkillFilePath = Path.Combine(pluginSkillDirectory, "SKILL.md"),
+                },
+            ],
+            resource: connectionResource));
 
         var runtimeService = CreateRuntimeService(
             agentAppService,
             new TestProjectAppService(project),
             toolRegistry,
             AgwDataPaths.Resolve(root, root),
-            ListMcpToolsAsync);
+            connectionResolver,
+            mcpMaterializer);
         var request = new CreateAiAgentRequest
         {
             Agent = agent,
@@ -226,10 +223,8 @@ public class AgentRuntimeServiceSystemCompositionTests
                 new[]
                 {
                     "Shared",
-                    "agent_app",
                     "agent_direct",
                     "agent_mcp",
-                    "project_app",
                     "project_direct",
                     "project_mcp",
                 }.OrderBy(name => name, StringComparer.Ordinal).ToArray(),
@@ -238,11 +233,11 @@ public class AgentRuntimeServiceSystemCompositionTests
                     .OrderBy(name => name, StringComparer.Ordinal)
                     .ToArray());
 
-            Assert.Equal(2, mcpCalls.Count);
+            Assert.Equal(2, mcpMaterializer.Calls.Count);
             Assert.Equal(
-                new[] { agentMcpServerId, projectMcpServerId }.OrderBy(id => id).ToArray(),
-                mcpCalls.Select(call => call.ServerId).OrderBy(id => id).ToArray());
-            foreach (var call in mcpCalls)
+                new[] { "agent_mcp", "project_mcp" },
+                mcpMaterializer.Calls.Select(call => call.ServerName).OrderBy(name => name).ToArray());
+            foreach (var call in mcpMaterializer.Calls)
             {
                 Assert.Equal("session", call.EnvironmentVariables["SHARED"]);
                 Assert.Equal("agent", call.EnvironmentVariables["AGENT_ONLY"]);
@@ -255,6 +250,15 @@ public class AgentRuntimeServiceSystemCompositionTests
             var providerStrings = CollectStringsInObjectGraph(skillsProvider);
             Assert.Contains(Path.Combine(root, "agent-skill"), providerStrings);
             Assert.Contains(Path.Combine(root, "project-skill"), providerStrings);
+            Assert.Contains(pluginSkillDirectory, providerStrings);
+            Assert.DoesNotContain(overriddenPluginSkillDirectory, providerStrings);
+            var pluginFileSource = TraverseObjectGraph(skillsProvider)
+                .OfType<AgentFileSkillsSource>()
+                .Single(source => CollectStringsInObjectGraph(source).Contains(pluginSkillDirectory));
+            var pluginSourceStrings = CollectStringsInObjectGraph(pluginFileSource);
+            Assert.DoesNotContain(".py", pluginSourceStrings);
+            Assert.DoesNotContain(".js", pluginSourceStrings);
+            Assert.DoesNotContain(".cs", pluginSourceStrings);
             var skillsInstructionPrompt = Assert.Single(
                 providerStrings,
                 value => value.Contains(
@@ -288,6 +292,9 @@ public class AgentRuntimeServiceSystemCompositionTests
                 IReadOnlyList<Func<FunctionCallContent, ValueTask<bool>>>>(rulesField.GetValue(approvalAgent));
             Assert.Same(AgentSkillsProvider.AllToolsAutoApprovalRule, Assert.Single(approvalRules));
             Assert.DoesNotContain(ToolApprovalAgent.AllToolsAutoApprovalRule, approvalRules);
+
+            await Assert.IsAssignableFrom<IAsyncDisposable>(aiAgent).DisposeAsync();
+            Assert.True(connectionResource.Disposed);
         }
         finally
         {
@@ -295,15 +302,12 @@ public class AgentRuntimeServiceSystemCompositionTests
         }
     }
 
-    private static AgentAppService CreateAgentAppService(
-        AgwDbContext dbContext,
-        IRepository<AppDefinition> appDefinitionRepository)
+    private static AgentAppService CreateAgentAppService(AgwDbContext dbContext)
     {
         return new AgentAppService(
             new EfRepository<Agent>(dbContext),
-            new EfRepository<AgentAppRelation>(dbContext),
-            new EfRepository<AppInstance>(dbContext),
-            appDefinitionRepository,
+            new EfRepository<AgentConnectionRelation>(dbContext),
+            new EfRepository<Connection>(dbContext),
             new EfRepository<ModelProviderRelation>(dbContext),
             new EfRepository<LlmModel>(dbContext),
             new EfRepository<Provider>(dbContext),
@@ -320,16 +324,18 @@ public class AgentRuntimeServiceSystemCompositionTests
         IProjectAppService projectAppService,
         ToolRegistryService toolRegistry,
         AgwDataPaths dataPaths,
-        Func<
-            McpServer,
-            IReadOnlyDictionary<string, string>,
-            CancellationToken,
-            Task<IReadOnlyList<AITool>>> mcpToolLister)
+        IConnectionCapabilityResolver connectionCapabilityResolver,
+        IMcpToolMaterializer mcpToolMaterializer)
     {
         return new AgentRuntimeService(
             appService,
             projectAppService,
-            toolRegistry,
+            new AgentCapabilityComposer(
+                appService,
+                toolRegistry,
+                connectionCapabilityResolver,
+                mcpToolMaterializer,
+                NullLogger<AgentCapabilityComposer>.Instance),
             chatHistoryProvider: null!,
             providerSessionState: null!,
             taskSessionBindingService: null!,
@@ -342,8 +348,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 providerSessionState: null!,
                 usageRecorder: null!,
                 NullLogger<UsageTrackingMiddleware>.Instance),
-            summaryService: null!,
-            mcpToolLister);
+            summaryService: null!);
     }
 
     private static ToolRegistryService CreateToolRegistry(params string[] toolNames)
@@ -358,20 +363,6 @@ public class AgentRuntimeServiceSystemCompositionTests
 
         return registry;
     }
-
-    private static AppDefinition CreateAppDefinition(string name, List<string> toolNames) =>
-        new()
-        {
-            Name = name,
-            DisplayName = name,
-            Category = CategoryType.Other,
-            Provider = "test",
-            Description = "test",
-            AuthUrl = "https://example.test/auth",
-            TokenEndpoint = "https://example.test/token",
-            Scopes = [],
-            ToolNames = toolNames,
-        };
 
     private static T FindInObjectGraph<T>(object root) where T : class
     {
@@ -431,8 +422,84 @@ public class AgentRuntimeServiceSystemCompositionTests
     }
 
     private sealed record McpListCall(
-        Guid ServerId,
+        string ServerName,
         IReadOnlyDictionary<string, string> EnvironmentVariables);
+
+    private sealed class TestMcpToolMaterializer : IMcpToolMaterializer
+    {
+        public List<McpListCall> Calls { get; } = [];
+
+        public Task<ConnectionToolLease> MaterializeAsync(
+            McpEndpointDescriptor descriptor,
+            McpRuntimeOverrides? runtimeOverrides = null,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(new McpListCall(
+                descriptor.Name,
+                new Dictionary<string, string>(
+                    runtimeOverrides?.EnvironmentVariables ?? new Dictionary<string, string>(),
+                    StringComparer.Ordinal)));
+            var tools = new AITool[] { new TestTool(descriptor.Name).ToAITool() };
+            var lease = (ConnectionToolLease)Activator.CreateInstance(
+                typeof(ConnectionToolLease),
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                args: [tools, Array.Empty<IAsyncDisposable>()],
+                culture: null)!;
+            return Task.FromResult(lease);
+        }
+    }
+
+    private sealed class TestConnectionCapabilityResolver : IConnectionCapabilityResolver
+    {
+        private readonly ConnectionCapabilityResolution _resolution;
+
+        public TestConnectionCapabilityResolver(ConnectionCapabilityResolution resolution)
+        {
+            _resolution = resolution;
+        }
+
+        public Task<ConnectionCapabilityResolution> ResolveAsync(
+            Guid projectId,
+            IReadOnlyCollection<Guid> connectionIds,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(_resolution);
+    }
+
+    private static ConnectionCapabilityResolution CreateResolution(
+        IReadOnlyList<PluginSkillReference> pluginSkills,
+        IAsyncDisposable resource)
+    {
+        var lease = new ConnectionCapabilityLease();
+        typeof(ConnectionCapabilityLease)
+            .GetMethod("Add", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(lease, [resource]);
+        return (ConnectionCapabilityResolution)Activator.CreateInstance(
+            typeof(ConnectionCapabilityResolution),
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            args:
+            [
+                Array.Empty<AITool>(),
+                Array.Empty<AITool>(),
+                Array.Empty<ResolvedMcpCapabilitySource>(),
+                pluginSkills,
+                Array.Empty<ConnectionCapabilityWarning>(),
+                lease,
+            ],
+            culture: null)!;
+    }
+
+    private sealed class TrackingResource : IAsyncDisposable
+    {
+        public bool Disposed { get; private set; }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
+    }
 
     private sealed class TestTool : IAgwTool
     {

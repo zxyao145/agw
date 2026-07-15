@@ -33,27 +33,12 @@ public class AgentAppServiceCapabilityTests
     [Fact]
     public async Task CollectNamedToolNamesAsync_AgentAndProjectSources_UnionsAndDeduplicatesNames()
     {
-        var agentAppId = Guid.NewGuid();
-        var projectAppId = Guid.NewGuid();
-        var service = CreateService(
-            appInstances:
-            [
-                new AppInstance { Id = agentAppId, AppName = "agent-app" },
-                new AppInstance { Id = projectAppId, AppName = "project-app" },
-            ],
-            appDefinitions:
-            [
-                CreateAppDefinition("agent-app", ["agent_app", "app_shared"]),
-                CreateAppDefinition("project-app", ["APP_SHARED", "project_app"]),
-            ]);
+        var service = CreateService();
 
         var names = await service.CollectNamedToolNamesAsync(
-            new string?[] { """["agent_direct","Shared"]""", """["project_direct","shared"]""" },
-            new[] { agentAppId, projectAppId, agentAppId });
+            new string?[] { """["agent_direct","Shared"]""", """["project_direct","shared"]""" });
 
-        Assert.Equal(
-            ["agent_app", "agent_direct", "app_shared", "project_app", "project_direct", "Shared"],
-            names);
+        Assert.Equal(["agent_direct", "project_direct", "Shared"], names);
     }
 
     [Fact]
@@ -108,21 +93,13 @@ public class AgentAppServiceCapabilityTests
     }
 
     [Fact]
-    public async Task CollectNamedToolNamesAsync_AgentCompatibilityWrapper_UsesAgentRelations()
+    public async Task CollectNamedToolNamesAsync_NullAndMalformedLayers_ContinuesWithLaterLayer()
     {
-        var agentId = Guid.NewGuid();
-        var appInstanceId = Guid.NewGuid();
-        var service = CreateService(
-            appInstances: [new AppInstance { Id = appInstanceId, AppName = "agent-app" }],
-            appDefinitions: [CreateAppDefinition("agent-app", ["agent_app"])],
-            agentAppRelations:
-            [
-                new AgentAppRelation { AgentId = agentId, AppInstanceId = appInstanceId },
-            ]);
+        var service = CreateService();
+        var names = await service.CollectNamedToolNamesAsync(
+            new string?[] { null, "{malformed", """["later_direct"]""" });
 
-        var names = await service.CollectNamedToolNamesAsync(agentId, """["agent_direct"]""");
-
-        Assert.Equal(["agent_app", "agent_direct"], names);
+        Assert.Equal(["later_direct"], names);
     }
 
     [Fact]
@@ -160,36 +137,19 @@ public class AgentAppServiceCapabilityTests
     }
 
     [Fact]
-    public async Task CollectNamedToolNamesAsync_NullAndMalformedLayers_ContinuesWithLaterLayerAndApps()
-    {
-        var appInstanceId = Guid.NewGuid();
-        var service = CreateService(
-            appInstances: [new AppInstance { Id = appInstanceId, AppName = "project-app" }],
-            appDefinitions: [CreateAppDefinition("project-app", ["project_app"])]);
-
-        var names = await service.CollectNamedToolNamesAsync(
-            new string?[] { null, "{malformed", """["later_direct"]""" },
-            [appInstanceId]);
-
-        Assert.Equal(["later_direct", "project_app"], names);
-    }
-
-    [Fact]
     public async Task CreateAiAgentAsync_ExternalAgent_UsesProjectEnvironmentWithoutResolvingCapabilities()
     {
-        var agentAppRelationRepository = new TestRepository<AgentAppRelation> { ThrowOnList = true };
+        var agentConnectionRelationRepository = new TestRepository<AgentConnectionRelation> { ThrowOnList = true };
         var agentMcpRelationRepository = new TestRepository<AgentMcpServerRelation> { ThrowOnList = true };
         var agentSkillRelationRepository = new TestRepository<AgentSkillRelation> { ThrowOnList = true };
-        var appInstanceRepository = new TestRepository<AppInstance> { ThrowOnList = true };
-        var appDefinitionRepository = new TestRepository<AppDefinition> { ThrowOnList = true };
+        var connectionRepository = new TestRepository<Connection> { ThrowOnList = true };
         var mcpServerRepository = new TestRepository<McpServer> { ThrowOnList = true };
         var skillRepository = new TestRepository<Skill> { ThrowOnList = true };
         var appService = CreateService(
-            agentAppRelationRepository: agentAppRelationRepository,
+            agentConnectionRelationRepository: agentConnectionRelationRepository,
             agentMcpRelationRepository: agentMcpRelationRepository,
             agentSkillRelationRepository: agentSkillRelationRepository,
-            appInstanceRepository: appInstanceRepository,
-            appDefinitionRepository: appDefinitionRepository,
+            connectionRepository: connectionRepository,
             mcpServerRepository: mcpServerRepository,
             skillRepository: skillRepository);
         var project = new Project
@@ -205,9 +165,9 @@ public class AgentAppServiceCapabilityTests
                 ["PROJECT_ONLY"] = "project",
             },
             Tools = """["project_direct"]""",
-            ProjectAppRelations =
+            ProjectConnectionRelations =
             [
-                new ProjectAppRelation { AppInstanceId = Guid.NewGuid() },
+                new ProjectConnectionRelation { ConnectionId = Guid.NewGuid() },
             ],
             ProjectMcpToolServers =
             [
@@ -237,9 +197,9 @@ public class AgentAppServiceCapabilityTests
                     ["SHARED"] = "agent",
                     ["AGENT_ONLY"] = "agent",
                 },
-                AgentAppRelations =
+                AgentConnectionRelations =
                 [
-                    new AgentAppRelation { AppInstanceId = Guid.NewGuid() },
+                    new AgentConnectionRelation { ConnectionId = Guid.NewGuid() },
                 ],
                 AgentMcpToolServers =
                 [
@@ -275,51 +235,31 @@ public class AgentAppServiceCapabilityTests
         Assert.Equal("agent", options.EnvironmentVariables["AGENT_ONLY"]);
         Assert.Equal("project", options.EnvironmentVariables["PROJECT_ONLY"]);
         Assert.Equal("session", options.EnvironmentVariables["SESSION_ONLY"]);
-        Assert.Equal(0, agentAppRelationRepository.ListCallCount);
+        Assert.Equal(0, agentConnectionRelationRepository.ListCallCount);
         Assert.Equal(0, agentMcpRelationRepository.ListCallCount);
         Assert.Equal(0, agentSkillRelationRepository.ListCallCount);
-        Assert.Equal(0, appInstanceRepository.ListCallCount);
-        Assert.Equal(0, appDefinitionRepository.ListCallCount);
+        Assert.Equal(0, connectionRepository.ListCallCount);
         Assert.Equal(0, mcpServerRepository.ListCallCount);
         Assert.Equal(0, skillRepository.ListCallCount);
         Assert.Equal(1, forbiddenTool.ToAIToolCallCount);
     }
 
-    private static AppDefinition CreateAppDefinition(string name, List<string> toolNames) =>
-        new()
-        {
-            Name = name,
-            DisplayName = name,
-            Category = CategoryType.Other,
-            Provider = "test",
-            Description = "test",
-            AuthUrl = "https://example.test/auth",
-            TokenEndpoint = "https://example.test/token",
-            Scopes = [],
-            ToolNames = toolNames,
-        };
-
     private static AgentAppService CreateService(
-        IEnumerable<AppInstance>? appInstances = null,
-        IEnumerable<AppDefinition>? appDefinitions = null,
         IEnumerable<McpServer>? mcpServers = null,
         IEnumerable<Skill>? skills = null,
-        IEnumerable<AgentAppRelation>? agentAppRelations = null,
         IEnumerable<AgentMcpServerRelation>? agentMcpRelations = null,
         IEnumerable<AgentSkillRelation>? agentSkillRelations = null,
-        IRepository<AgentAppRelation>? agentAppRelationRepository = null,
+        IRepository<AgentConnectionRelation>? agentConnectionRelationRepository = null,
         IRepository<AgentMcpServerRelation>? agentMcpRelationRepository = null,
         IRepository<AgentSkillRelation>? agentSkillRelationRepository = null,
-        IRepository<AppInstance>? appInstanceRepository = null,
-        IRepository<AppDefinition>? appDefinitionRepository = null,
+        IRepository<Connection>? connectionRepository = null,
         IRepository<McpServer>? mcpServerRepository = null,
         IRepository<Skill>? skillRepository = null)
     {
         return new AgentAppService(
             new TestRepository<Agent>(),
-            agentAppRelationRepository ?? new TestRepository<AgentAppRelation>(agentAppRelations),
-            appInstanceRepository ?? new TestRepository<AppInstance>(appInstances),
-            appDefinitionRepository ?? new TestRepository<AppDefinition>(appDefinitions),
+            agentConnectionRelationRepository ?? new TestRepository<AgentConnectionRelation>(),
+            connectionRepository ?? new TestRepository<Connection>(),
             new TestRepository<ModelProviderRelation>(),
             new TestRepository<LlmModel>(),
             new TestRepository<Provider>(),
@@ -340,7 +280,12 @@ public class AgentAppServiceCapabilityTests
         return new AgentRuntimeService(
             appService,
             projectAppService,
-            toolRegistry,
+            new AgentCapabilityComposer(
+                appService,
+                toolRegistry,
+                connectionCapabilityResolver: null!,
+                mcpToolMaterializer: null!,
+                NullLogger<AgentCapabilityComposer>.Instance),
             chatHistoryProvider: null!,
             providerSessionState: null!,
             taskSessionBindingService: null!,

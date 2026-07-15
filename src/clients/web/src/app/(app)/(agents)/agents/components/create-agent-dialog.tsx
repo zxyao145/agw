@@ -18,7 +18,7 @@ import {
   normalizeAgentEnvironmentVariables,
   type AgentEnvironmentVariableEntry,
 } from "./agent-environment-variables";
-import type { AppInstanceOption } from "./app-selector";
+import type { ConnectionOption } from "./connection-selector";
 import type {
   AgentCreateRequest,
   McpToolServerDto,
@@ -47,8 +47,8 @@ interface CreateAgentDialogProps {
   environmentVariables: AgentEnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: AgentEnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
-  appOptions: AppInstanceOption[];
-  selectedAppInstanceIds: string[];
+  connectionOptions: ConnectionOption[];
+  selectedConnectionIds: string[];
   selectedTools: string[];
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
@@ -57,7 +57,7 @@ interface CreateAgentDialogProps {
   selectedMcpToolServerIds: string[];
   createAgentMutation: UseMutationResult<unknown, Error, AgentCreateRequest, unknown>;
   toggleSkill: (skillId: string) => void;
-  toggleAppInstance: (appInstanceId: string) => void;
+  toggleConnection: (connectionId: string) => void;
   toggleTool: (toolName: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
 }
@@ -82,8 +82,8 @@ export function CreateAgentDialog({
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
-  appOptions,
-  selectedAppInstanceIds,
+  connectionOptions,
+  selectedConnectionIds,
   selectedTools,
   modelProvidersQuery,
   skillsQuery,
@@ -92,7 +92,7 @@ export function CreateAgentDialog({
   selectedMcpToolServerIds,
   createAgentMutation,
   toggleSkill,
-  toggleAppInstance,
+  toggleConnection,
   toggleTool,
   toggleMcpToolServer,
 }: CreateAgentDialogProps) {
@@ -110,7 +110,7 @@ export function CreateAgentDialog({
       tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
       skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
       mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
-      appInstanceIds: selectedAppInstanceIds.length > 0 ? selectedAppInstanceIds : null,
+      connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
       environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
     });
   };
@@ -194,9 +194,9 @@ export function CreateAgentDialog({
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}
-            appOptions={appOptions}
-            selectedAppInstanceIds={selectedAppInstanceIds}
-            toggleAppInstance={toggleAppInstance}
+            connectionOptions={connectionOptions}
+            selectedConnectionIds={selectedConnectionIds}
+            toggleConnection={toggleConnection}
             selectedTools={selectedTools}
             modelProvidersQuery={modelProvidersQuery}
             skillsQuery={skillsQuery}

@@ -46,5 +46,5 @@ public class Agent : BaseEntity, IAggregateRoot
 
     public ICollection<AgentMcpServerRelation> AgentMcpToolServers { get; set; } = new List<AgentMcpServerRelation>();
 
-    public ICollection<AgentAppRelation> AgentAppRelations { get; set; } = new List<AgentAppRelation>();
+    public ICollection<AgentConnectionRelation> AgentConnectionRelations { get; set; } = new List<AgentConnectionRelation>();
 }

@@ -47,7 +47,7 @@ export function EditProjectDialog({
   selectedTools,
   selectedSkillIds,
   selectedMcpToolServerIds,
-  selectedAppInstanceIds,
+  selectedConnectionIds,
   ...formProps
 }: EditProjectDialogProps) {
   const extraSettingError = getProjectExtraSettingsError(extraSetting);
@@ -68,7 +68,7 @@ export function EditProjectDialog({
       selectedTools,
       selectedSkillIds,
       selectedMcpToolServerIds,
-      selectedAppInstanceIds,
+      selectedConnectionIds,
       environmentVariables: normalizeEnvironmentVariables(environmentVariables),
     });
 
@@ -158,7 +158,7 @@ export function EditProjectDialog({
             selectedTools={selectedTools}
             selectedSkillIds={selectedSkillIds}
             selectedMcpToolServerIds={selectedMcpToolServerIds}
-            selectedAppInstanceIds={selectedAppInstanceIds}
+            selectedConnectionIds={selectedConnectionIds}
           />
         </div>
       </DialogContent>
