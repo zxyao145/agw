@@ -2,12 +2,14 @@
   "name": "web",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.7.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "oxlint ./src",
     "lint:fix": "oxlint --fix ./src",
+    "test:e2e": "playwright test",
     "format": "oxfmt ./src",
     "format:check": "oxfmt --check ./src",
     "fmt": "oxfmt ./src",
@@ -61,6 +63,7 @@
   },
   "devDependencies": {
     "@code-inspector/core": "1.4.5",
+    "@playwright/test": "1.61.1",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",

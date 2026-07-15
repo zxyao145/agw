@@ -100,7 +100,7 @@ importers:
         version: 0.55.1
       next:
         specifier: 16.2.1
-        version: 16.2.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 16.2.1(@playwright/test@1.61.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -140,7 +140,10 @@ importers:
     devDependencies:
       '@code-inspector/core':
         specifier: 1.4.5
-        version: 1.4.5
+        version: 1.4.5(supports-color@10.2.2)
+      '@playwright/test':
+        specifier: 1.61.1
+        version: 1.61.1
       '@tailwindcss/postcss':
         specifier: ^4.2.2
         version: 4.2.2
@@ -758,6 +761,11 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
+
+  '@playwright/test@1.61.1':
+    resolution: {integrity: sha512-8nKv6+0RJSL9FE4jYOEGXnPeM/Hg12qZpmqzZjRh3qM0Y7c3z1mrOTfFLids72RDQYVh9WpLEfR5WdpNX4fkig==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@radix-ui/number@1.1.2':
     resolution: {integrity: sha512-ceTwaxc4I5IOi97DgCotl3pqiyRGvffcc0oOsE2dQYaJOFIDsDt4VWG6xEbg1QePv9QWausCEIppud/tJ1wNig==}
@@ -2134,6 +2142,11 @@ packages:
       react-dom:
         optional: true
 
+  fsevents@2.3.2:
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+    os: [darwin]
+
   fuse.js@7.4.2:
     resolution: {integrity: sha512-LVbzjD4WA6UP5B1UnP8wuaXJiLnqMdM/E4fiJXTJ5haJ5b/MBNsK29h2fm6swEoQaVQjvYFWKLE2RanyZIoRVQ==}
     engines: {node: '>=10'}
@@ -2583,6 +2596,16 @@ packages:
   pkg-types@1.3.1:
     resolution: {integrity: sha512-/Jm5M4RvtBFVkKWRu2BLUTNP8/M2a+UwuAX+ae4770q1qVGtfjG+WTCupoZixokjmHiry8uI+dlY8KXYV5HVVQ==}
 
+  playwright-core@1.61.1:
+    resolution: {integrity: sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.61.1:
+    resolution: {integrity: sha512-DWnY5o3YbLWK4GovuAVwpqL+1VwGNdUGrRr++8j8PtQQzvAVZUIMjKQ90fY689sEJZJBbZVw1rXaOKSTitkzPQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
@@ -3017,45 +3040,45 @@ snapshots:
 
   '@chevrotain/utils@11.1.2': {}
 
-  '@code-inspector/core@1.4.5':
+  '@code-inspector/core@1.4.5(supports-color@10.2.2)':
     dependencies:
       '@vue/compiler-dom': 3.5.30
       chalk: 4.1.1
       dotenv: 16.6.1
       launch-ide: 1.4.3
-      portfinder: 1.0.38
+      portfinder: 1.0.38(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
   '@code-inspector/esbuild@1.4.5':
     dependencies:
-      '@code-inspector/core': 1.4.5
+      '@code-inspector/core': 1.4.5(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
   '@code-inspector/mako@1.4.5':
     dependencies:
-      '@code-inspector/core': 1.4.5
+      '@code-inspector/core': 1.4.5(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
   '@code-inspector/turbopack@1.4.5':
     dependencies:
-      '@code-inspector/core': 1.4.5
+      '@code-inspector/core': 1.4.5(supports-color@10.2.2)
       '@code-inspector/webpack': 1.4.5
     transitivePeerDependencies:
       - supports-color
 
   '@code-inspector/vite@1.4.5':
     dependencies:
-      '@code-inspector/core': 1.4.5
+      '@code-inspector/core': 1.4.5(supports-color@10.2.2)
       chalk: 4.1.1
     transitivePeerDependencies:
       - supports-color
 
   '@code-inspector/webpack@1.4.5':
     dependencies:
-      '@code-inspector/core': 1.4.5
+      '@code-inspector/core': 1.4.5(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -3371,6 +3394,10 @@ snapshots:
 
   '@oxlint/binding-win32-x64-msvc@1.56.0':
     optional: true
+
+  '@playwright/test@1.61.1':
+    dependencies:
+      playwright: 1.61.1
 
   '@radix-ui/number@1.1.2': {}
 
@@ -4561,7 +4588,7 @@ snapshots:
 
   code-inspector-plugin@1.4.5:
     dependencies:
-      '@code-inspector/core': 1.4.5
+      '@code-inspector/core': 1.4.5(supports-color@10.2.2)
       '@code-inspector/esbuild': 1.4.5
       '@code-inspector/mako': 1.4.5
       '@code-inspector/turbopack': 1.4.5
@@ -4855,6 +4882,9 @@ snapshots:
     optionalDependencies:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
+
+  fsevents@2.3.2:
+    optional: true
 
   fuse.js@7.4.2: {}
 
@@ -5427,7 +5457,7 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  next@16.2.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+  next@16.2.1(@playwright/test@1.61.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
       '@next/env': 16.2.1
       '@swc/helpers': 0.5.15
@@ -5446,6 +5476,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.2.1
       '@next/swc-win32-arm64-msvc': 16.2.1
       '@next/swc-win32-x64-msvc': 16.2.1
+      '@playwright/test': 1.61.1
       sharp: 0.34.5
     transitivePeerDependencies:
       - '@babel/core'
@@ -5547,6 +5578,14 @@ snapshots:
       mlly: 1.8.2
       pathe: 2.0.3
 
+  playwright-core@1.61.1: {}
+
+  playwright@1.61.1:
+    dependencies:
+      playwright-core: 1.61.1
+    optionalDependencies:
+      fsevents: 2.3.2
+
   pluralize@8.0.0: {}
 
   points-on-curve@0.2.0: {}
@@ -5556,7 +5595,7 @@ snapshots:
       path-data-parser: 0.1.0
       points-on-curve: 0.2.0
 
-  portfinder@1.0.38:
+  portfinder@1.0.38(supports-color@10.2.2):
     dependencies:
       async: 3.2.6
       debug: 4.4.3(supports-color@10.2.2)
