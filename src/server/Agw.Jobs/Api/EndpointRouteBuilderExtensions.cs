@@ -18,7 +18,7 @@ public static class EndpointRouteBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         var routeGroup = endpoints.MapGroup("api")
-            .WithTags("jobs");
+            .WithTags("Jobs");
 
         routeGroup.MapGet("jobs", ListAsync)
             .Produces<Bens.Results.ApiResult<Job[]>>();
