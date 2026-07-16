@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Results;
 
@@ -28,6 +29,23 @@ public class AgentsController : ControllerBase
     {
         var agents = await _agentAppService.ListAgentsAsync();
         return AgwApiResult.Ok(agents.Select(AgentResponse.FromDomain).ToArray());
+    }
+
+    [HttpGet("paged")]
+    [ProducesApiResult(typeof(PagedResult<AgentResponse>))]
+    public async Task<IActionResult> ListPagedAsync(
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var page = await _agentAppService.ListAgentPageAsync(pageIndex, pageSize, cancellationToken);
+        return AgwApiResult.Ok(new PagedResult<AgentResponse>
+        {
+            Items = page.Items.Select(AgentResponse.FromDomain).ToList(),
+            Total = page.Total,
+            PageIndex = page.PageIndex,
+            PageSize = page.PageSize,
+        });
     }
 
     [HttpGet("{id:guid}")]

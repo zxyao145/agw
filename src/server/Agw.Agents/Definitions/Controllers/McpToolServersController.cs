@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Results;
 
@@ -29,6 +30,20 @@ public class McpToolServersController : ControllerBase
     {
         var servers = await _mcpToolServerAppService.ListMcpToolServersAsync();
         return AgwApiResult.Ok(servers);
+    }
+
+    [HttpGet("paged")]
+    [ProducesApiResult(typeof(PagedResult<McpServer>))]
+    public async Task<IActionResult> ListPagedAsync(
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var page = await _mcpToolServerAppService.ListMcpToolServerPageAsync(
+            pageIndex,
+            pageSize,
+            cancellationToken);
+        return AgwApiResult.Ok(page);
     }
 
     [HttpGet("{id:guid}")]

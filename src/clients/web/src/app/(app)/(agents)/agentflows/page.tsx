@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import mermaid from "mermaid";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet } from "@/api/client";
+import { TablePagination } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@/lib/pagination";
 import { VisualAgentflowDialog } from "./components/visual-agentflow-dialog";
 import { AgentDto, AgentflowDto, AgentflowDetailDto, ModelProviderDto } from "@/types/agentflow";
 import { AgentflowsTable, ExecuteAgentflowDrawer, fetchAgentflowDetails } from "./components";
@@ -28,14 +30,35 @@ import {
 
 export default function AgentflowsPage() {
   const queryClient = useQueryClient();
+  const [pageIndex, setPageIndex] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
+  const [visualOpen, setVisualOpen] = React.useState(false);
 
   const agentflowsQuery = useQuery({
-    queryKey: ["agentflows"],
+    queryKey: ["agentflows", "paged", pageIndex, pageSize],
     queryFn: async () => {
-      // OpenAPI currently doesn't declare response schemas.
-      return (await apiGet("/api/agentflows")) as unknown as AgentflowDto[];
+      return (await apiGet("/api/agentflows/paged", {
+        params: { query: { pageIndex, pageSize } },
+      })) as unknown as PagedResult<AgentflowDto>;
     },
+    placeholderData: keepPreviousData,
   });
+
+  const agentflowOptionsQuery = useQuery({
+    queryKey: ["agentflows", "options"],
+    queryFn: async () => (await apiGet("/api/agentflows")) as unknown as AgentflowDto[],
+    enabled: visualOpen,
+  });
+
+  const total = Number(agentflowsQuery.data?.total ?? 0);
+
+  React.useEffect(() => {
+    if (!agentflowsQuery.data) return;
+    const clampedPageIndex = getClampedPageIndex(total, pageIndex, pageSize);
+    if (clampedPageIndex !== pageIndex) {
+      setPageIndex(clampedPageIndex);
+    }
+  }, [agentflowsQuery.data, pageIndex, pageSize, total]);
 
   const agentsQuery = useQuery({
     queryKey: ["agents"],
@@ -52,7 +75,6 @@ export default function AgentflowsPage() {
     },
   });
 
-  const [visualOpen, setVisualOpen] = React.useState(false);
   const [editingAgentflow, setEditingAgentflow] = React.useState<AgentflowDetailDto | null>(null);
 
   // Execute drawer state
@@ -165,6 +187,7 @@ export default function AgentflowsPage() {
     },
     onSuccess: async () => {
       toast.success("Agentflow deleted");
+      setPageIndex(getClampedPageIndex(Math.max(0, total - 1), pageIndex, pageSize));
       await queryClient.invalidateQueries({ queryKey: ["agentflows"] });
     },
     onError: (error) => {
@@ -198,6 +221,7 @@ export default function AgentflowsPage() {
   }, []);
 
   const handleAgentflowCreated = React.useCallback(async () => {
+    setPageIndex(1);
     await queryClient.invalidateQueries({ queryKey: ["agentflows"] });
     setVisualOpen(false);
     setEditingAgentflow(null);
@@ -364,7 +388,7 @@ export default function AgentflowsPage() {
             open={visualOpen}
             onOpenChange={handleVisualDialogClose}
             agents={agentsQuery.data || []}
-            agentflows={agentflowsQuery.data || []}
+            agentflows={agentflowOptionsQuery.data || []}
             modelProviders={modelProvidersQuery.data || []}
             editingAgentflow={editingAgentflow}
             onAgentflowCreated={handleAgentflowCreated}
@@ -373,7 +397,7 @@ export default function AgentflowsPage() {
       </div>
 
       <AgentflowsTable
-        agentflows={agentflowsQuery.data || []}
+        agentflows={agentflowsQuery.data?.items || []}
         isLoading={agentflowsQuery.isLoading}
         isError={agentflowsQuery.isError}
         error={agentflowsQuery.error}
@@ -382,6 +406,18 @@ export default function AgentflowsPage() {
         onDelete={handleDelete}
         onExecute={handleExecute}
         onViewMermaid={handleViewMermaid}
+      />
+
+      <TablePagination
+        pageIndex={pageIndex}
+        pageSize={pageSize}
+        total={total}
+        isFetching={agentflowsQuery.isFetching}
+        onPageIndexChange={setPageIndex}
+        onPageSizeChange={(value) => {
+          setPageSize(value);
+          setPageIndex(1);
+        }}
       />
 
       <ExecuteAgentflowDrawer

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import { StaticTable } from "@/components/static-table";
+import { TablePagination } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +30,7 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { Textarea } from "@/components/ui/textarea";
 import { getApiErrorMessage } from "@/api/utils";
 import { formatLocalDateTime } from "@/lib/date-time";
+import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@/lib/pagination";
 
 type SkillDto = {
   id: string;
@@ -155,6 +158,8 @@ function buildSkillFormData(
 
 export default function SkillsPage() {
   const queryClient = useQueryClient();
+  const [pageIndex, setPageIndex] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -166,11 +171,25 @@ export default function SkillsPage() {
   const [editFileInputKey, setEditFileInputKey] = React.useState(0);
 
   const skillsQuery = useQuery({
-    queryKey: ["skills"],
+    queryKey: ["skills", "paged", pageIndex, pageSize],
     queryFn: async () => {
-      return (await apiGet("/api/skills")) as unknown as SkillDto[];
+      return (await apiGet("/api/skills/paged", {
+        params: { query: { pageIndex, pageSize } },
+      })) as unknown as PagedResult<SkillDto>;
     },
+    placeholderData: keepPreviousData,
   });
+
+  const skills = skillsQuery.data?.items ?? [];
+  const total = Number(skillsQuery.data?.total ?? 0);
+
+  React.useEffect(() => {
+    if (!skillsQuery.data) return;
+    const clampedPageIndex = getClampedPageIndex(total, pageIndex, pageSize);
+    if (clampedPageIndex !== pageIndex) {
+      setPageIndex(clampedPageIndex);
+    }
+  }, [pageIndex, pageSize, skillsQuery.data, total]);
 
   const createMutation = useMutation({
     mutationFn: async (body: FormData) => {
@@ -178,6 +197,7 @@ export default function SkillsPage() {
     },
     onSuccess: async () => {
       toast.success("Skill created");
+      setPageIndex(1);
       setCreateOpen(false);
       setCreateForm(createDefaultFormState());
       setCreateFileInputKey((value) => value + 1);
@@ -197,6 +217,7 @@ export default function SkillsPage() {
     },
     onSuccess: async () => {
       toast.success("Skill updated");
+      setPageIndex(1);
       setEditOpen(false);
       setEditingSkill(null);
       setEditForm(createDefaultFormState());
@@ -218,6 +239,7 @@ export default function SkillsPage() {
       toast.success("Skill deleted");
       setDeleteOpen(false);
       setDeletingSkill(null);
+      setPageIndex(getClampedPageIndex(Math.max(0, total - 1), pageIndex, pageSize));
       await queryClient.invalidateQueries({ queryKey: ["skills"] });
     },
     onError: (error) => {
@@ -317,66 +339,79 @@ export default function SkillsPage() {
           Failed to load skills: {getApiErrorMessage(skillsQuery.error)}
         </div>
       ) : (
-        <StaticTable isEmpty={skillsQuery.data === undefined || skillsQuery.data.length === 0}>
-          <Empty>
-            <div className="text-sm text-muted-foreground">
-              No skills found. Upload a skill archive to get started.
-            </div>
-          </Empty>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Content Path</TableHead>
-              <TableHead>Updated</TableHead>
-              <TableHead className="w-32 text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {skillsQuery.data?.map((skill) => (
-              <TableRow key={skill.id}>
-                <TableCell className="min-w-44">
-                  <div className="font-medium">{skill.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Created {formatLocalDateTime(skill.createTime)}
-                  </div>
-                </TableCell>
-                <TableCell className="max-w-md">
-                  <div className="line-clamp-3 text-sm text-muted-foreground">
-                    {skill.description}
-                  </div>
-                </TableCell>
-                <TableCell className="max-w-sm font-mono text-xs break-all text-muted-foreground">
-                  {skill.contentPath}
-                </TableCell>
-                <TableCell className="min-w-40 text-sm text-muted-foreground">
-                  {formatLocalDateTime(skill.updateTime ?? skill.createTime)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEditDialog(skill)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDelete(skill)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
+        <>
+          <StaticTable isEmpty={skills.length === 0}>
+            <Empty>
+              <div className="text-sm text-muted-foreground">
+                No skills found. Upload a skill archive to get started.
+              </div>
+            </Empty>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Content Path</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead className="w-32 text-right">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </StaticTable>
+            </TableHeader>
+            <TableBody>
+              {skills.map((skill) => (
+                <TableRow key={skill.id}>
+                  <TableCell className="min-w-44">
+                    <div className="font-medium">{skill.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Created {formatLocalDateTime(skill.createTime)}
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-md">
+                    <div className="line-clamp-3 text-sm text-muted-foreground">
+                      {skill.description}
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-sm font-mono text-xs break-all text-muted-foreground">
+                    {skill.contentPath}
+                  </TableCell>
+                  <TableCell className="min-w-40 text-sm text-muted-foreground">
+                    {formatLocalDateTime(skill.updateTime ?? skill.createTime)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditDialog(skill)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete(skill)}
+                        disabled={deleteMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </StaticTable>
+          <TablePagination
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            total={total}
+            isFetching={skillsQuery.isFetching}
+            onPageIndexChange={setPageIndex}
+            onPageSizeChange={(value) => {
+              setPageSize(value);
+              setPageIndex(1);
+            }}
+          />
+        </>
       )}
 
       <SkillDialog

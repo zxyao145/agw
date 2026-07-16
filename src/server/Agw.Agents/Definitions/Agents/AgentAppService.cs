@@ -1,11 +1,13 @@
 using System.Text.Json;
 
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Pagination;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -82,6 +84,25 @@ public class AgentAppService
             .OrderBy(x => x.Name)
             .ThenByDescending(x => x.CreateTime)
             .ToList();
+    }
+
+    public Task<PagedResult<Agent>> ListAgentPageAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var queryable = _agentRepository.Queryable
+            .Include(agent => agent.AgentMcpToolServers)
+            .Include(agent => agent.AgentSkillRelations)
+            .Include(agent => agent.AgentConnectionRelations)
+            .AsSplitQuery();
+
+        return UpdatedTimePagination.ToPagedResultAsync(
+            queryable,
+            agent => agent.Id,
+            pageIndex,
+            pageSize,
+            cancellationToken);
     }
 
     public async Task<Agent?> GetAgentAsync(Guid id)

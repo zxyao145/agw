@@ -1,11 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
+import { TablePagination } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
+import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@/lib/pagination";
 
 import type {
   AgentDto,
@@ -30,13 +32,28 @@ import { AgentsTable } from "./components/agents-table";
 
 export default function AgentsPage() {
   const queryClient = useQueryClient();
+  const [pageIndex, setPageIndex] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
 
   const agentsQuery = useQuery({
-    queryKey: ["agents"],
+    queryKey: ["agents", "paged", pageIndex, pageSize],
     queryFn: async () => {
-      return (await apiGet("/api/agents")) as unknown as AgentDto[];
+      return (await apiGet("/api/agents/paged", {
+        params: { query: { pageIndex, pageSize } },
+      })) as unknown as PagedResult<AgentDto>;
     },
+    placeholderData: keepPreviousData,
   });
+
+  const total = Number(agentsQuery.data?.total ?? 0);
+
+  React.useEffect(() => {
+    if (!agentsQuery.data) return;
+    const clampedPageIndex = getClampedPageIndex(total, pageIndex, pageSize);
+    if (clampedPageIndex !== pageIndex) {
+      setPageIndex(clampedPageIndex);
+    }
+  }, [agentsQuery.data, pageIndex, pageSize, total]);
 
   const modelProvidersQuery = useQuery({
     queryKey: ["modelProviders"],
@@ -125,6 +142,7 @@ export default function AgentsPage() {
     },
     onSuccess: async () => {
       toast.success("Agent created");
+      setPageIndex(1);
       setCreateOpen(false);
       setDisplayName("");
       setName("");
@@ -154,6 +172,7 @@ export default function AgentsPage() {
     },
     onSuccess: async () => {
       toast.success("Agent updated");
+      setPageIndex(1);
       setEditOpen(false);
       setEditingAgent(null);
       setEditSummaryModelProviderId("");
@@ -178,6 +197,7 @@ export default function AgentsPage() {
       toast.success("Agent deleted");
       setDeleteOpen(false);
       setDeletingAgent(null);
+      setPageIndex(getClampedPageIndex(Math.max(0, total - 1), pageIndex, pageSize));
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
     onError: (error) => {
@@ -344,6 +364,18 @@ export default function AgentsPage() {
         onEdit={handleEdit}
         onDelete={handleDelete}
         onExecute={handleExecute}
+      />
+
+      <TablePagination
+        pageIndex={pageIndex}
+        pageSize={pageSize}
+        total={total}
+        isFetching={agentsQuery.isFetching}
+        onPageIndexChange={setPageIndex}
+        onPageSizeChange={(value) => {
+          setPageSize(value);
+          setPageIndex(1);
+        }}
       />
 
       <EditAgentDialog

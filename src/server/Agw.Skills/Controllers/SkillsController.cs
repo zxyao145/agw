@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
@@ -25,6 +26,23 @@ public class SkillsController : ControllerBase
     {
         var skills = await _skillAppService.ListAsync();
         return AgwApiResult.Ok(skills.Select(Map));
+    }
+
+    [HttpGet("paged")]
+    [ProducesApiResult(typeof(PagedResult<SkillResponse>))]
+    public async Task<IActionResult> ListPagedAsync(
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var page = await _skillAppService.ListPageAsync(pageIndex, pageSize, cancellationToken);
+        return AgwApiResult.Ok(new PagedResult<SkillResponse>
+        {
+            Items = page.Items.Select(Map).ToList(),
+            Total = page.Total,
+            PageIndex = page.PageIndex,
+            PageSize = page.PageSize,
+        });
     }
 
     [HttpGet("{id:guid}")]

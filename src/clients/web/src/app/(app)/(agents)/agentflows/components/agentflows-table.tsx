@@ -65,7 +65,7 @@ export function AgentflowsTable({
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Description</TableHead>
-            <TableHead>Created</TableHead>
+            <TableHead>Updated</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -80,7 +80,7 @@ export function AgentflowsTable({
               </TableCell>
               <TableCell className="max-w-xs truncate">{agentflow.description || "-"}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {formatLocalDateTime(agentflow.createTime)}
+                {formatLocalDateTime(agentflow.updateTime ?? agentflow.createTime)}
               </TableCell>
               <TableCell>
                 <div className="flex justify-end">

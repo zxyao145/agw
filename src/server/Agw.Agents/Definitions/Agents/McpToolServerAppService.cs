@@ -1,5 +1,7 @@
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Pagination;
 
 using ModelContextProtocol.Client;
 
@@ -28,6 +30,17 @@ public class McpToolServerAppService
     }
 
     public Task<IReadOnlyList<McpServer>> ListMcpToolServersAsync() => _mcpToolServerRepository.ListAsync();
+
+    public Task<PagedResult<McpServer>> ListMcpToolServerPageAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken = default) =>
+        UpdatedTimePagination.ToPagedResultAsync(
+            _mcpToolServerRepository.Queryable,
+            server => server.Id,
+            pageIndex,
+            pageSize,
+            cancellationToken);
 
     public Task<McpServer?> GetMcpToolServerAsync(Guid id) => _mcpToolServerRepository.GetByIdAsync(id);
 
