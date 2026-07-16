@@ -863,6 +863,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agentflows/paged": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfPagedResultOfAgentflow"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfAgentflow"];
+            "text/json": components["schemas"]["ApiResultOfPagedResultOfAgentflow"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/agentflows/{id}": {
     parameters: {
       query?: never;
@@ -1135,6 +1175,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agents/paged": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfPagedResultOfAgentResponse"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfAgentResponse"];
+            "text/json": components["schemas"]["ApiResultOfPagedResultOfAgentResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/agents/{id}": {
     parameters: {
       query?: never;
@@ -1324,6 +1404,46 @@ export interface paths {
         };
       };
     };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/mcp-tool-servers/paged": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfPagedResultOfMcpServer"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfMcpServer"];
+            "text/json": components["schemas"]["ApiResultOfPagedResultOfMcpServer"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -3152,6 +3272,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/skills/paged": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfPagedResultOfSkillResponse"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfSkillResponse"];
+            "text/json": components["schemas"]["ApiResultOfPagedResultOfSkillResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/skills/{id}": {
     parameters: {
       query?: never;
@@ -3895,8 +4055,36 @@ export interface components {
       title: string;
       detail: null | string;
     };
+    ApiResultOfPagedResultOfAgentflow: {
+      data?: null | components["schemas"]["PagedResultOfAgentflow"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
     ApiResultOfPagedResultOfAgentflowTraceDto: {
       data?: null | components["schemas"]["PagedResultOfAgentflowTraceDto"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfPagedResultOfAgentResponse: {
+      data?: null | components["schemas"]["PagedResultOfAgentResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfPagedResultOfMcpServer: {
+      data?: null | components["schemas"]["PagedResultOfMcpServer"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfPagedResultOfSkillResponse: {
+      data?: null | components["schemas"]["PagedResultOfSkillResponse"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -4462,8 +4650,44 @@ export interface components {
     };
     /** @enum {unknown} */
     OAuthSubjectSourceResponse: "UserInfo" | "TokenResponse" | "IdToken";
+    PagedResultOfAgentflow: {
+      items: components["schemas"]["Agentflow"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
     PagedResultOfAgentflowTraceDto: {
       items: components["schemas"]["AgentflowTraceDto"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfAgentResponse: {
+      items: components["schemas"]["AgentResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfMcpServer: {
+      items: components["schemas"]["McpServer"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfSkillResponse: {
+      items: components["schemas"]["SkillResponse"][];
       /** Format: int64 */
       total: number | string;
       /** Format: int32 */

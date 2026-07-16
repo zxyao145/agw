@@ -1,4 +1,4 @@
-namespace Agw.Shared.Contracts.Agents;
+namespace Agw.Shared.Contracts.Pagination;
 
 public sealed class PagedResult<T>
 {

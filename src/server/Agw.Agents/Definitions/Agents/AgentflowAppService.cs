@@ -1,7 +1,9 @@
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Pagination;
 
 namespace Agw.Agents.Definitions.Agents;
 
@@ -37,6 +39,17 @@ public class AgentflowAppService
     }
 
     public Task<IReadOnlyList<Agentflow>> ListAsync() => _agentflowRepository.ListAsync();
+
+    public Task<PagedResult<Agentflow>> ListPageAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken = default) =>
+        UpdatedTimePagination.ToPagedResultAsync(
+            _agentflowRepository.Queryable,
+            agentflow => agentflow.Id,
+            pageIndex,
+            pageSize,
+            cancellationToken);
 
     public Task<Agentflow?> GetAsync(Guid id) => _agentflowRepository.GetByIdAsync(id);
 

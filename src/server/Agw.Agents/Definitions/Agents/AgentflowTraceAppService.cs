@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;

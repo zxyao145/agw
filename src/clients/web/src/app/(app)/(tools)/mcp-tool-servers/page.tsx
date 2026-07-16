@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
+import { TablePagination } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,6 +32,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { getApiErrorMessage } from "@/api/utils";
 import { StaticTable } from "@/components/static-table";
 import { Empty } from "@/components/ui/empty";
+import { formatLocalDateTime } from "@/lib/date-time";
+import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@/lib/pagination";
 
 type McpToolServerDto = {
   id: string;
@@ -45,6 +48,7 @@ type McpToolServerDto = {
   headers?: Record<string, string> | null;
   enabled: boolean;
   createTime?: string;
+  updateTime?: string | null;
 };
 
 type McpConnectResponse = {
@@ -156,6 +160,8 @@ function fromServer(server: McpToolServerDto): FormState {
 
 export default function McpToolServersPage() {
   const queryClient = useQueryClient();
+  const [pageIndex, setPageIndex] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [createForm, setCreateForm] = React.useState<FormState>(defaultForm);
@@ -164,11 +170,25 @@ export default function McpToolServersPage() {
   const [toolsCount, setToolsCount] = React.useState<Record<string, number>>({});
 
   const mcpToolServersQuery = useQuery({
-    queryKey: ["mcpToolServers"],
+    queryKey: ["mcpToolServers", "paged", pageIndex, pageSize],
     queryFn: async () => {
-      return (await apiGet("/api/mcp-tool-servers")) as unknown as McpToolServerDto[];
+      return (await apiGet("/api/mcp-tool-servers/paged", {
+        params: { query: { pageIndex, pageSize } },
+      })) as unknown as PagedResult<McpToolServerDto>;
     },
+    placeholderData: keepPreviousData,
   });
+
+  const servers = mcpToolServersQuery.data?.items ?? [];
+  const total = Number(mcpToolServersQuery.data?.total ?? 0);
+
+  React.useEffect(() => {
+    if (!mcpToolServersQuery.data) return;
+    const clampedPageIndex = getClampedPageIndex(total, pageIndex, pageSize);
+    if (clampedPageIndex !== pageIndex) {
+      setPageIndex(clampedPageIndex);
+    }
+  }, [mcpToolServersQuery.data, pageIndex, pageSize, total]);
 
   const createMutation = useMutation({
     mutationFn: async (body: McpToolServerRequest) => {
@@ -176,6 +196,7 @@ export default function McpToolServersPage() {
     },
     onSuccess: async () => {
       toast.success("MCP tool server created");
+      setPageIndex(1);
       setCreateOpen(false);
       setCreateForm(defaultForm);
       await queryClient.invalidateQueries({ queryKey: ["mcpToolServers"] });
@@ -194,6 +215,7 @@ export default function McpToolServersPage() {
     },
     onSuccess: async () => {
       toast.success("MCP tool server updated");
+      setPageIndex(1);
       setEditOpen(false);
       setEditing(null);
       await queryClient.invalidateQueries({ queryKey: ["mcpToolServers"] });
@@ -211,6 +233,7 @@ export default function McpToolServersPage() {
     },
     onSuccess: async () => {
       toast.success("MCP tool server deleted");
+      setPageIndex(getClampedPageIndex(Math.max(0, total - 1), pageIndex, pageSize));
       await queryClient.invalidateQueries({ queryKey: ["mcpToolServers"] });
     },
     onError: (error) => {
@@ -336,87 +359,102 @@ export default function McpToolServersPage() {
           Failed to load servers: {getApiErrorMessage(mcpToolServersQuery.error)}
         </div>
       ) : (
-        <StaticTable
-          isEmpty={mcpToolServersQuery.data === undefined || mcpToolServersQuery.data.length === 0}
-        >
-          <Empty>
-            <div className="text-sm text-muted-foreground">
-              No MCP tool servers found. Create one to get started.
-            </div>
-          </Empty>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Transport</TableHead>
-              <TableHead>Target</TableHead>
-              <TableHead>Enabled</TableHead>
-              <TableHead className="w-52 text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {mcpToolServersQuery.data?.map((server) => (
-              <TableRow key={server.id}>
-                <TableCell>
-                  <div className="font-medium">{server.name}</div>
-                  {toolsCount[server.id] !== undefined && (
-                    <div className="text-xs text-green-600 max-w-xs">
-                      {toolsCount[server.id]} tools available
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell>{server.description || "-"}</TableCell>
-                <TableCell className="uppercase text-xs">{server.transportType}</TableCell>
-                <TableCell className="max-w-sm truncate font-mono text-xs">
-                  {server.transportType === "stdio" ? server.command || "-" : server.url || "-"}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center">
-                    <Switch
-                      checked={server.enabled}
-                      onCheckedChange={(checked) => onToggleEnabled(server, checked)}
-                      disabled={updateMutation.isPending}
-                      aria-label={`${server.name} enabled`}
-                    />
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="cursor-pointer"
-                      onClick={() => connectMutation.mutate(server.id)}
-                      disabled={connectMutation.isPending}
-                      title="Connect and list tools"
-                    >
-                      <Link2 className="h-4 w-4" />
-                      {/* <Cable className="h-4 w-4" /> */}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onEdit(server)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => onDelete(server)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
+        <>
+          <StaticTable isEmpty={servers.length === 0}>
+            <Empty>
+              <div className="text-sm text-muted-foreground">
+                No MCP tool servers found. Create one to get started.
+              </div>
+            </Empty>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Transport</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Enabled</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead className="w-52 text-right">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </StaticTable>
+            </TableHeader>
+            <TableBody>
+              {servers.map((server) => (
+                <TableRow key={server.id}>
+                  <TableCell>
+                    <div className="font-medium">{server.name}</div>
+                    {toolsCount[server.id] !== undefined && (
+                      <div className="text-xs text-green-600 max-w-xs">
+                        {toolsCount[server.id]} tools available
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>{server.description || "-"}</TableCell>
+                  <TableCell className="uppercase text-xs">{server.transportType}</TableCell>
+                  <TableCell className="max-w-sm truncate font-mono text-xs">
+                    {server.transportType === "stdio" ? server.command || "-" : server.url || "-"}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center">
+                      <Switch
+                        checked={server.enabled}
+                        onCheckedChange={(checked) => onToggleEnabled(server, checked)}
+                        disabled={updateMutation.isPending}
+                        aria-label={`${server.name} enabled`}
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell className="min-w-40 text-sm text-muted-foreground">
+                    {formatLocalDateTime(server.updateTime ?? server.createTime)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="cursor-pointer"
+                        onClick={() => connectMutation.mutate(server.id)}
+                        disabled={connectMutation.isPending}
+                        title="Connect and list tools"
+                      >
+                        <Link2 className="h-4 w-4" />
+                        {/* <Cable className="h-4 w-4" /> */}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onEdit(server)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => onDelete(server)}
+                        disabled={deleteMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </StaticTable>
+          <TablePagination
+            pageIndex={pageIndex}
+            pageSize={pageSize}
+            total={total}
+            isFetching={mcpToolServersQuery.isFetching}
+            onPageIndexChange={setPageIndex}
+            onPageSizeChange={(value) => {
+              setPageSize(value);
+              setPageIndex(1);
+            }}
+          />
+        </>
       )}
 
       <McpToolServerDialog

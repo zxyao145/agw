@@ -2,10 +2,12 @@ using System.IO.Compression;
 using System.Text;
 
 using Agw.Domain.Services.Skills;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Pagination;
 using Agw.Shared.Runtime;
 
 using Microsoft.AspNetCore.Http;
@@ -48,6 +50,28 @@ public class SkillAppService
     {
         var skills = await _skillRepository.ListAsync();
         return await AttachAgentIdsAsync(skills);
+    }
+
+    public async Task<PagedResult<SkillDetails>> ListPageAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var page = await UpdatedTimePagination.ToPagedResultAsync(
+            _skillRepository.Queryable,
+            skill => skill.Id,
+            pageIndex,
+            pageSize,
+            cancellationToken);
+        var details = await AttachAgentIdsAsync(page.Items);
+
+        return new PagedResult<SkillDetails>
+        {
+            Items = details,
+            Total = page.Total,
+            PageIndex = page.PageIndex,
+            PageSize = page.PageSize,
+        };
     }
 
     public async Task<SkillDetails?> GetAsync(Guid id)

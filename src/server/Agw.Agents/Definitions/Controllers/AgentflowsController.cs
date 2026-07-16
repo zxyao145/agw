@@ -1,6 +1,7 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Execution.Agentflows;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Results;
 
@@ -29,6 +30,17 @@ public class AgentflowsController : ControllerBase
     {
         var agentflows = await _agentflowAppService.ListAsync();
         return AgwApiResult.Ok(agentflows);
+    }
+
+    [HttpGet("paged")]
+    [ProducesApiResult(typeof(PagedResult<Agentflow>))]
+    public async Task<IActionResult> ListPagedAsync(
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var page = await _agentflowAppService.ListPageAsync(pageIndex, pageSize, cancellationToken);
+        return AgwApiResult.Ok(page);
     }
 
     [HttpGet("{id:guid}")]

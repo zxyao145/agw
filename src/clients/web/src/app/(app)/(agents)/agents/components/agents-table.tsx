@@ -9,16 +9,17 @@ import { getApiErrorMessage } from "@/api/utils";
 import { StaticTable } from "@/components/static-table";
 import { Empty } from "@/components/ui/empty";
 import { formatLocalDateTime } from "@/lib/date-time";
+import type { PagedResult } from "@/lib/pagination";
 
 interface AgentsTableProps {
-  agentsQuery: UseQueryResult<AgentDto[], Error>;
+  agentsQuery: UseQueryResult<PagedResult<AgentDto>, Error>;
   onEdit: (agent: AgentDto) => void;
   onDelete: (agent: AgentDto) => void;
   onExecute: (agent: AgentDto) => void;
 }
 
 export function AgentsTable({ agentsQuery, onEdit, onDelete, onExecute }: AgentsTableProps) {
-  const agents = agentsQuery.data ?? [];
+  const agents = agentsQuery.data?.items ?? [];
 
   if (agentsQuery.isLoading) {
     return <div className="text-sm text-muted-foreground">Loading...</div>;
@@ -47,7 +48,7 @@ export function AgentsTable({ agentsQuery, onEdit, onDelete, onExecute }: Agents
           <TableHead>Description</TableHead>
           <TableHead>Instructions</TableHead>
           <TableHead>Tools</TableHead>
-          <TableHead>Created</TableHead>
+          <TableHead>Updated</TableHead>
           <TableHead className="text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
@@ -109,7 +110,7 @@ export function AgentsTable({ agentsQuery, onEdit, onDelete, onExecute }: Agents
                 )}
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {formatLocalDateTime(agent.createTime)}
+                {formatLocalDateTime(agent.updateTime ?? agent.createTime)}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">
