@@ -3,6 +3,7 @@ import type { AiMessage } from "@/types";
 const ErrorContent = "ErrorContent";
 const TextContent = "TextContent";
 const ResultType = "result";
+const ControlMessageTypes = new Set(["turn-start", "turn-finished", "human-gate-request"]);
 
 export function isResultMessage(message: AiMessage): boolean {
   return (
@@ -81,7 +82,9 @@ export function prepareClaudeHistory(messages: AiMessage[]): {
   for (const message of messages) {
     const init = parseClaudeInitMessage(message);
     if (!init.isInit) {
-      visibleMessages.push(message);
+      if (!ControlMessageTypes.has(String(message.additionalProperties?.type))) {
+        visibleMessages.push(message);
+      }
       continue;
     }
 

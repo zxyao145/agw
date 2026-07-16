@@ -10,6 +10,7 @@ import {
 import { X } from "lucide-react";
 import type { AgentDto } from "./types";
 import { Chat } from "@/components/message/chat";
+import { EMPTY_TOKEN_USAGE } from "@/lib/token-usage";
 
 interface ExecuteAgentDrawerProps {
   open: boolean;
@@ -26,13 +27,23 @@ export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAge
     }
   }, [open, executingAgent]);
 
+  const sessionSeed = React.useMemo(
+    () => ({
+      revision: `${executingAgent?.id ?? "none"}:${resetSignal}`,
+      contextId: null,
+      messages: [],
+      usage: EMPTY_TOKEN_USAGE,
+    }),
+    [executingAgent?.id, resetSignal],
+  );
+
   if (!executingAgent) return null;
   const projectId = `11111111-1111-1111-1111-000000000001`;
 
   return (
     <Drawer direction="right" open={open} onOpenChange={setOpen} modal={true}>
       <DrawerContent
-        className="data-[vaul-drawer-direction=right]:sm:max-w-xl"
+        className="data-[vaul-drawer-direction=right]:sm:max-w-xl pb-3"
         onPointerDownOutside={(e) => {
           e.preventDefault();
         }}
@@ -48,12 +59,11 @@ export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAge
         </DrawerHeader>
 
         <Chat
-          className="px-4 pb-4 h-[calc(100vh-62px)]"
-          targetId={executingAgent.id}
-          agentType={0}
+          className="h-[calc(100vh-62px)]"
+          target={{ id: executingAgent.id, type: "agent" }}
           projectId={projectId}
           active={open}
-          resetSignal={`${executingAgent.id}:${resetSignal}`}
+          sessionSeed={sessionSeed}
           placeholder="请输入要发送给 agent 的内容..."
         />
       </DrawerContent>

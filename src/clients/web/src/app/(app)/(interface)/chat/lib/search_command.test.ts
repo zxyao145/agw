@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { searchCommand } from "./search_command.ts";
+import { searchCommand } from "../../../../../lib/chat/search-command.ts";
 
 test("system mode searches only API suggestions and keeps skill/tool name collisions", () => {
   const suggestions = searchCommand("deploy", {

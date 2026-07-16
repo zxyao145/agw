@@ -1,41 +1,61 @@
 "use client";
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Uuid4 } from "id128";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { Conversation } from "@/components/message/conversation";
-import { cn } from "@/lib/utils";
-import type { AiMessage, ProcessedMessageItem } from "@/types";
+import { apiGet } from "@/api/client";
 import {
   ExecutionHubClient,
   getPendingHumanGate,
   getTurnFinishedStatus,
   type PendingHumanGate,
 } from "@/api/execution-hub";
+import { clearProjectContextRecords } from "@/api/task-client";
+import { ChatAside } from "@/components/message/chat-aside";
+import { ChatInput } from "@/components/message/chat-input";
+import { Conversation } from "@/components/message/conversation";
+import { HumanGateApproval } from "@/components/message/human-gate-approval";
+import type { UserInputRef } from "@/components/message/user-input";
+import {
+  getAgentSuggestionQueryParams,
+  toCommandSource,
+  type AgentSuggestionsResponse,
+} from "@/lib/chat/agent-suggestions";
+import { getClaudeInitCommands, prepareClaudeHistory } from "@/lib/chat/ai-message-handlers";
 import {
   createUserTextMessage,
   mergeStreamingMessagesById,
   toExecutionUserInput,
 } from "@/lib/execution-stream";
-import { UserInput, UserInputRef } from "./user-input";
-import { HumanGateApproval } from "./human-gate-approval";
-import { ArrowUp, Eraser, Square } from "lucide-react";
-import { Separator } from "../ui/separator";
-import { clearProjectContextRecords } from "@/api/task-client";
-import { QuickTextDialog } from "../task/quick-text-dialog";
+import {
+  addTokenUsage,
+  EMPTY_TOKEN_USAGE,
+  getMessageTokenUsage,
+  stripUsageContents,
+  type TokenUsage,
+} from "@/lib/token-usage";
+import { cn } from "@/lib/utils";
+import type { AiMessage } from "@/types";
+import type { ChatTargetOption } from "@/types/chat-target";
+
+export interface ChatSessionSeed {
+  revision: string | number;
+  contextId: string | null;
+  messages: AiMessage[];
+  usage: TokenUsage;
+}
 
 export interface ChatProps {
-  targetId: string | null | undefined;
-  agentType: number;
-  projectId: string;
-  contextId?: string | null;
-  resume?: boolean;
-  resetSignal?: string | number | boolean;
+  target: Pick<ChatTargetOption, "id" | "type"> | null;
+  projectId: string | null;
+  sessionSeed: ChatSessionSeed;
+  environmentVariables?: Record<string, string>;
   placeholder?: string;
   className?: string;
-  onExecutionComplete?: () => void | Promise<void>;
+  onContextIdChange?: (contextId: string | null) => void;
+  onConversationChange?: () => void | Promise<void>;
   onExecutionError?: (error: unknown) => void;
   active?: boolean;
 }
@@ -44,53 +64,134 @@ function nextContextId(): string {
   return Uuid4.generate().toCanonical();
 }
 
+/**
+ * Shared chat container that owns session state, execution, message rendering, and input.
+ * 共享聊天容器，拥有会话状态、执行、消息渲染和输入。
+ * */
 export function Chat({
-  targetId,
-  agentType, // agent type
+  target,
   projectId,
-  contextId,
-  resetSignal,
+  sessionSeed,
+  environmentVariables,
   placeholder = "Type your message...",
   className,
-  onExecutionComplete,
+  onContextIdChange,
+  onConversationChange,
   onExecutionError,
   active = true,
 }: ChatProps) {
+  const initialHistory = React.useMemo(
+    () => prepareClaudeHistory(sessionSeed.messages),
+    [sessionSeed.revision],
+  );
   const [isExecuting, setIsExecuting] = React.useState(false);
-  const [messages, setMessages] = React.useState<AiMessage[]>([]);
-  const [curContextId, setContextId] = React.useState<string>(contextId ?? nextContextId());
+  const [isTransitioning, setIsTransitioning] = React.useState(false);
+  const [messages, setMessages] = React.useState<AiMessage[]>(initialHistory.messages);
+  const [claudeCommands, setClaudeCommands] = React.useState<string[]>(initialHistory.commands);
+  const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(sessionSeed.usage);
+  const [contextId, setContextId] = React.useState<string | null>(sessionSeed.contextId);
+  const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
   const userInputRef = React.useRef<UserInputRef | null>(null);
   const executionClientRef = React.useRef<ExecutionHubClient | null>(null);
   const configuredSessionRef = React.useRef<string | null>(null);
-  const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
-  const processMessages = React.useCallback(
-    (items: AiMessage[]): ProcessedMessageItem[] =>
-      items.map((message) => ({ type: "normal", message })),
-    [],
+  const executionGenerationRef = React.useRef(0);
+  const pendingTeardownCountRef = React.useRef(0);
+  const targetKey = target ? `${target.type}:${target.id}` : "";
+  const previousTargetKeyRef = React.useRef(targetKey);
+
+  const suggestionQueryParams = React.useMemo(
+    () => getAgentSuggestionQueryParams(projectId, target),
+    [projectId, target],
+  );
+  const agentSuggestionsQuery = useQuery({
+    queryKey: [
+      "agentSuggestions",
+      suggestionQueryParams?.projectId,
+      suggestionQueryParams?.agentId,
+    ],
+    queryFn: async () => {
+      if (!suggestionQueryParams) {
+        throw new Error("Agent suggestion query requires an agent.");
+      }
+
+      return (await apiGet("/api/agents/suggestions", {
+        params: { query: suggestionQueryParams },
+      })) as AgentSuggestionsResponse;
+    },
+    enabled: suggestionQueryParams !== null,
+    retry: false,
+  });
+  const commandSource = React.useMemo(
+    () => toCommandSource(agentSuggestionsQuery.data, claudeCommands),
+    [agentSuggestionsQuery.data, claudeCommands],
+  );
+  const visibleMessages = React.useMemo(() => stripUsageContents(messages), [messages]);
+
+  const notifyExecutionError = React.useCallback(
+    (error: unknown) => {
+      if (onExecutionError) {
+        onExecutionError(error);
+        return;
+      }
+
+      toast.error(`Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+    },
+    [onExecutionError],
   );
 
-  const interruptAndDispose = React.useCallback(async () => {
+  const interruptAndDispose = React.useCallback(async (reason: string) => {
+    executionGenerationRef.current += 1;
     const client = executionClientRef.current;
     executionClientRef.current = null;
     configuredSessionRef.current = null;
-    if (!client) return;
-    await client.interrupt("Execution drawer closed.").catch(() => undefined);
-    await client.dispose();
+    pendingTeardownCountRef.current += 1;
+    setIsTransitioning(true);
+
+    try {
+      if (client) {
+        await client.interruptAndWait(reason).catch(() => undefined);
+        await client.dispose().catch(() => undefined);
+      }
+    } finally {
+      pendingTeardownCountRef.current -= 1;
+      if (pendingTeardownCountRef.current === 0) {
+        setIsTransitioning(false);
+        setIsExecuting(false);
+      }
+    }
   }, []);
 
   React.useEffect(() => {
-    void interruptAndDispose();
-    setContextId(contextId ?? nextContextId());
-    setMessages([]);
+    if (previousTargetKeyRef.current === targetKey) {
+      return;
+    }
+
+    previousTargetKeyRef.current = targetKey;
+    void interruptAndDispose("Execution target changed.");
     setPendingHumanGate(null);
-  }, [contextId, interruptAndDispose, resetSignal]);
+    setClaudeCommands([]);
+  }, [interruptAndDispose, targetKey]);
 
   React.useEffect(() => {
-    if (!active) void interruptAndDispose();
+    const preparedHistory = prepareClaudeHistory(sessionSeed.messages);
+    void interruptAndDispose("Execution session changed.");
+    setPendingHumanGate(null);
+    setMessages(preparedHistory.messages);
+    setClaudeCommands(preparedHistory.commands);
+    setConversationUsage(sessionSeed.usage);
+    setContextId(sessionSeed.contextId);
+    userInputRef.current?.setInput("");
+  }, [interruptAndDispose, sessionSeed.revision]);
+
+  React.useEffect(() => {
+    if (!active) {
+      void interruptAndDispose("Execution drawer closed.");
+    }
+
     return () => {
-      void interruptAndDispose();
+      void interruptAndDispose("Chat unmounted.");
     };
   }, [active, interruptAndDispose]);
 
@@ -98,78 +199,122 @@ export function Chat({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleQuickCommand = (text: string) => {
-    userInputRef.current?.insertText(text);
-  };
-
-  const submitHumanGateResponse = React.useCallback(
-    async (approved: boolean, responseText?: string) => {
-      const client = executionClientRef.current;
-      if (!pendingHumanGate || !client) {
+  const applyExecutionMessage = React.useCallback(
+    (message: AiMessage, generation: number) => {
+      if (generation !== executionGenerationRef.current) {
         return;
       }
 
-      await client.submitHumanResponse({
-        requestId: pendingHumanGate.requestId,
-        approved,
-        responseText,
-      });
-      setPendingHumanGate(null);
+      const initCommands = getClaudeInitCommands(message);
+      if (initCommands !== null) {
+        setClaudeCommands(initCommands);
+        return;
+      }
+
+      const messageUsage = getMessageTokenUsage(message);
+      if (messageUsage) {
+        setConversationUsage((current) => addTokenUsage(current, messageUsage));
+      }
+
+      const humanGate = getPendingHumanGate(message);
+      if (humanGate) {
+        setPendingHumanGate(humanGate);
+        return;
+      }
+
+      if (message.additionalProperties?.type === "turn-start") {
+        setIsExecuting(true);
+        return;
+      }
+
+      const terminalStatus = getTurnFinishedStatus(message);
+      if (terminalStatus) {
+        setIsExecuting(false);
+        setPendingHumanGate(null);
+        void onConversationChange?.();
+        if (terminalStatus === "failed") {
+          notifyExecutionError(new Error("Execution failed"));
+        }
+        return;
+      }
+
+      if (message.role !== "user") {
+        setMessages((current) => mergeStreamingMessagesById([...current, message]));
+      }
     },
-    [pendingHumanGate],
+    [notifyExecutionError, onConversationChange],
   );
 
-  const handleSend = React.useCallback(
+  const handleExecute = React.useCallback(
     async (value: string) => {
-      if (!targetId) {
-        toast.error("Please select an execution target");
+      if (isTransitioning) {
+        toast.error("Please wait for the previous execution to stop");
         return;
       }
-      if (!value.trim()) {
+
+      const trimmedValue = value.trim();
+      if (!trimmedValue) {
         toast.error("Please enter a prompt");
         return;
       }
+      if (!projectId) {
+        toast.error("Please select a project");
+        return;
+      }
+      if (!target) {
+        toast.error("Please select an execution target");
+        return;
+      }
 
-      const userMessage = createUserTextMessage(value);
-      setMessages((prev) => [...prev, userMessage]);
+      const nextId = contextId ?? nextContextId();
+      if (!contextId) {
+        setContextId(nextId);
+        onContextIdChange?.(nextId);
+      }
+
+      const userMessage = createUserTextMessage(trimmedValue);
+      const firstContent = userMessage.contents[0];
+      if (firstContent) {
+        firstContent.additionalProperties = {
+          ...firstContent.additionalProperties,
+          targetType: target.type,
+          targetId: target.id,
+        };
+      }
+
+      setMessages((current) => [...current, userMessage]);
       setPendingHumanGate(null);
       setIsExecuting(true);
+      const generation = executionGenerationRef.current;
+      let didReportExecutionError = false;
+      const reportExecutionErrorOnce = (error: unknown) => {
+        if (didReportExecutionError) {
+          return;
+        }
+
+        didReportExecutionError = true;
+        notifyExecutionError(error);
+      };
 
       try {
         let client = executionClientRef.current;
         const handlers = {
-          onMessage: (message: AiMessage) => {
-            const humanGate = getPendingHumanGate(message);
-            if (humanGate) {
-              setPendingHumanGate(humanGate);
+          onMessage: (message: AiMessage) => applyExecutionMessage(message, generation),
+          onClose: (error?: Error) => {
+            if (generation !== executionGenerationRef.current) {
               return;
             }
-            if (message.additionalProperties?.type === "turn-start") {
-              setIsExecuting(true);
-              return;
+
+            configuredSessionRef.current = null;
+            if (executionClientRef.current === client) {
+              executionClientRef.current = null;
             }
-            const terminalStatus = getTurnFinishedStatus(message);
-            if (terminalStatus) {
-              setIsExecuting(false);
-              setPendingHumanGate(null);
-              if (terminalStatus === "failed") {
-                const error = new Error("Execution failed");
-                if (onExecutionError) onExecutionError(error);
-                else toast.error(error.message);
-              } else {
-                void onExecutionComplete?.();
-              }
-              return;
-            }
-            if (message.role !== "user") {
-              setMessages((prev) => mergeStreamingMessagesById([...prev, message]));
+            setIsExecuting(false);
+            setPendingHumanGate(null);
+            if (error) {
+              reportExecutionErrorOnce(error);
             }
           },
-          onError: (error: Error) => {
-            if (onExecutionError) onExecutionError(error);
-            else toast.error(`Execute failed: ${error.message}`);
-          },
-          onClose: () => setIsExecuting(false),
         };
         if (!client) {
           client = new ExecutionHubClient(handlers);
@@ -177,116 +322,204 @@ export function Chat({
         } else {
           client.setHandlers(handlers);
         }
-        const sessionKey = `${projectId}:${curContextId}`;
-        if (configuredSessionRef.current !== sessionKey) {
-          await client.configure({ projectId, contextId: curContextId });
-          configuredSessionRef.current = sessionKey;
+
+        const configurationKey = JSON.stringify({
+          projectId,
+          contextId: nextId,
+          environmentVariables,
+        });
+        if (configuredSessionRef.current !== configurationKey) {
+          await client.configure({
+            projectId,
+            contextId: nextId,
+            environmentVariables,
+          });
+          if (
+            generation !== executionGenerationRef.current ||
+            executionClientRef.current !== client
+          ) {
+            return;
+          }
+          configuredSessionRef.current = configurationKey;
+        }
+
+        if (
+          generation !== executionGenerationRef.current ||
+          executionClientRef.current !== client
+        ) {
+          return;
         }
         await client.execute({
-          agentId: targetId,
-          agentType,
+          agentId: target.id,
+          agentType: target.type === "agent" ? 0 : 1,
           stream: true,
           input: toExecutionUserInput(userMessage),
         });
-      } catch (error) {
-        console.error("Execute failed:", error);
-        if (onExecutionError) {
-          onExecutionError(error);
-        } else {
-          toast.error(
-            `Execute failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-          );
+        if (
+          generation !== executionGenerationRef.current ||
+          executionClientRef.current !== client
+        ) {
+          return;
         }
-        setIsExecuting(false);
-        setPendingHumanGate(null);
+        void onConversationChange?.();
+      } catch (error) {
+        if (generation === executionGenerationRef.current) {
+          setIsExecuting(false);
+          setPendingHumanGate(null);
+          reportExecutionErrorOnce(error);
+        }
       }
     },
-    [agentType, targetId, onExecutionComplete, onExecutionError, projectId, curContextId],
+    [
+      applyExecutionMessage,
+      contextId,
+      environmentVariables,
+      isTransitioning,
+      notifyExecutionError,
+      onContextIdChange,
+      onConversationChange,
+      projectId,
+      target,
+    ],
   );
 
-  const handleStop = React.useCallback(() => {
+  const handleInterrupt = React.useCallback(() => {
     const client = executionClientRef.current;
-    if (client) {
-      void client.interrupt("Stop requested by user.");
-    }
-  }, []);
-
-  const handleClear = React.useCallback(async () => {
-    const contextToClear = contextId ?? curContextId;
-    if (!contextToClear) {
+    if (!client) {
+      toast.error("No active session to interrupt");
       return;
     }
 
-    const success = await clearProjectContextRecords(projectId, contextToClear);
-    if (success) {
-      setMessages([]);
-    }
-  }, [contextId, curContextId, projectId]);
+    const generation = executionGenerationRef.current;
+    void client.interrupt("Stop requested by user.").catch((error) => {
+      if (generation === executionGenerationRef.current && executionClientRef.current === client) {
+        notifyExecutionError(error);
+      }
+    });
+  }, [notifyExecutionError]);
 
-  const handleScrollToTop = () => {
+  const submitHumanGateResponse = React.useCallback(
+    (approved: boolean, responseText?: string) => {
+      const client = executionClientRef.current;
+      if (!pendingHumanGate || !client) {
+        toast.error("No active HumanGate request");
+        return;
+      }
+
+      const generation = executionGenerationRef.current;
+      const requestId = pendingHumanGate.requestId;
+      void client
+        .submitHumanResponse({
+          requestId,
+          approved,
+          responseText,
+        })
+        .then(() => {
+          if (
+            generation !== executionGenerationRef.current ||
+            executionClientRef.current !== client
+          ) {
+            return;
+          }
+
+          setPendingHumanGate((current) => (current?.requestId === requestId ? null : current));
+        })
+        .catch((error) => {
+          if (
+            generation === executionGenerationRef.current &&
+            executionClientRef.current === client
+          ) {
+            notifyExecutionError(error);
+          }
+        });
+    },
+    [notifyExecutionError, pendingHumanGate],
+  );
+
+  const handleClear = React.useCallback(() => {
+    const contextToClear = contextId;
+    void interruptAndDispose("Conversation cleared.");
+    setPendingHumanGate(null);
+    setMessages([]);
+    setClaudeCommands([]);
+    setConversationUsage(EMPTY_TOKEN_USAGE);
+    setContextId(null);
+    userInputRef.current?.setInput("");
+    onContextIdChange?.(null);
+
+    if (projectId && contextToClear) {
+      void clearProjectContextRecords(projectId, contextToClear)
+        .then(() => onConversationChange?.())
+        .catch(notifyExecutionError);
+    } else {
+      void onConversationChange?.();
+    }
+  }, [
+    contextId,
+    interruptAndDispose,
+    notifyExecutionError,
+    onContextIdChange,
+    onConversationChange,
+    projectId,
+  ]);
+
+  const handleScrollToTop = React.useCallback(() => {
     messagesStartRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "start",
     });
-  };
+  }, []);
 
   return (
-    <div className={cn("flex h-full relative", className)}>
-      {/* Conversation */}
-      <Conversation
-        messages={messages}
-        messagesStartRef={messagesStartRef}
-        messagesEndRef={messagesEndRef}
-        processMessages={processMessages}
-      />
-
-      {/* input */}
-      <div className="absolute bottom-0 z-10 left-0 right-0 h-30 px-2 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent pointer-events-none">
-        {pendingHumanGate ? (
-          <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
-            <HumanGateApproval
-              request={pendingHumanGate}
-              onApprove={(responseText) => submitHumanGateResponse(true, responseText)}
-              onReject={(responseText) => submitHumanGateResponse(false, responseText)}
+    <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
+      <div className="h-full w-full overflow-y-auto">
+        <div className="mx-auto flex min-h-full w-full justify-center">
+          <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
+            {/* 对话列表 */}
+            <Conversation
+              messages={visibleMessages}
+              messagesStartRef={messagesStartRef}
+              messagesEndRef={messagesEndRef}
+              scrollable={false}
             />
           </div>
-        ) : null}
-        <UserInput
-          ref={userInputRef}
-          isExecuting={isExecuting}
-          onExecute={handleSend}
-          onStop={handleStop}
-          placeholder={placeholder}
-        >
-          {/* <UserInput.TopLeft></UserInput.TopLeft> */}
 
-          <UserInput.TopRight>
-            <QuickTextDialog onCommandSelect={handleQuickCommand} />
-            <Separator orientation="vertical" />
-            <Button onClick={handleClear} disabled={isExecuting} variant="ghost" size="sm">
-              <Eraser width={16} />
-            </Button>
+          {visibleMessages.length > 0 ? <ChatAside usage={conversationUsage} /> : null}
+        </div>
+      </div>
 
-            <Separator orientation="vertical" />
-            <Button onClick={handleScrollToTop} variant="ghost" size="sm">
-              <ArrowUp width={16} />
-            </Button>
-          </UserInput.TopRight>
-
-          {/* {isExecuting ? executingLabel : sendLabel} */}
-
-          {isExecuting ? (
-            <UserInput.Sender>
-              <Square size={20} />
-            </UserInput.Sender>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center">
+        <div className="relative h-30 min-w-0 max-w-5xl flex-1 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent px-6">
+          {/* 用户确认 */}
+          {pendingHumanGate ? (
+            <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
+              <HumanGateApproval
+                request={pendingHumanGate}
+                onApprove={(responseText) => submitHumanGateResponse(true, responseText)}
+                onReject={(responseText) => submitHumanGateResponse(false, responseText)}
+              />
+            </div>
           ) : null}
-
-          {/* {messages.length > 0 && (
-            <Button variant="outline" onClick={handleClear} className="w-full">
-              清空会话
-            </Button>
-          )} */}
-        </UserInput>
+          {/* 输入框 */}
+          <ChatInput
+            isExecuting={isExecuting}
+            isTransitioning={isTransitioning}
+            hasMessages={visibleMessages.length > 0}
+            onExecute={(value) => {
+              void handleExecute(value);
+            }}
+            onInterrupt={handleInterrupt}
+            onClearSession={handleClear}
+            onScrollToTop={handleScrollToTop}
+            projectId={projectId}
+            commandSource={commandSource}
+            placeholder={placeholder}
+            userInputRef={userInputRef}
+          />
+        </div>
+        {visibleMessages.length > 0 ? (
+          <div className="hidden w-75 shrink-0 @min-[64rem]:block" aria-hidden="true" />
+        ) : null}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const CHAT_PAGE_URL = new URL("./page.tsx", import.meta.url);
+const CHAT_COMPONENT_URL = new URL("../../../../components/message/chat.tsx", import.meta.url);
 const CONVERSATION_DETAILS_PAGE_URL = new URL(
   "../../(tasks)/projects/conversations/details/page.tsx",
   import.meta.url,
@@ -28,12 +29,13 @@ test("chat page refreshes the conversation list after an execution completes", a
   );
   assert.match(pageSource, /setConversationListRefreshSignal\(\(signal\) => signal \+ 1\)/);
   assert.match(pageSource, /refreshSignal=\{conversationListRefreshSignal\}/);
+  assert.match(pageSource, /onConversationChange=\{refreshConversationList\}/);
 });
 
-test("chat page preserves streamed messages after an execution completes", async () => {
-  const pageSource = await readFile(CHAT_PAGE_URL, "utf8");
-  const terminalBranchStart = pageSource.indexOf("const terminalStatus =");
-  const nextMessageBranchStart = pageSource.indexOf(
+test("shared chat preserves streamed messages after an execution completes", async () => {
+  const chatSource = await readFile(CHAT_COMPONENT_URL, "utf8");
+  const terminalBranchStart = chatSource.indexOf("const terminalStatus =");
+  const nextMessageBranchStart = chatSource.indexOf(
     'if (message.role !== "user")',
     terminalBranchStart,
   );
@@ -41,7 +43,7 @@ test("chat page preserves streamed messages after an execution completes", async
   assert.notEqual(terminalBranchStart, -1);
   assert.notEqual(nextMessageBranchStart, -1);
 
-  const terminalBranch = pageSource.slice(terminalBranchStart, nextMessageBranchStart);
+  const terminalBranch = chatSource.slice(terminalBranchStart, nextMessageBranchStart);
   assert.doesNotMatch(terminalBranch, /getProjectContextDetails|setMessages/);
 });
 

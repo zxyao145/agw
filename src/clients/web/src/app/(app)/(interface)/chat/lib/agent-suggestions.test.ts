@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getAgentSuggestionQueryParams, toCommandSource } from "./agent-suggestions.ts";
+import {
+  getAgentSuggestionQueryParams,
+  toCommandSource,
+} from "../../../../../lib/chat/agent-suggestions.ts";
 
 test("suggestions query is enabled for a single agent with or without a project", () => {
   assert.deepEqual(

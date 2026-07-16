@@ -5,7 +5,7 @@ import {
   getClaudeInitCommands,
   handleSystemMessage,
   prepareClaudeHistory,
-} from "./ai-message-handlers.ts";
+} from "../../../../../lib/chat/ai-message-handlers.ts";
 
 test("system result with top-level marker stops executing and appends the message", () => {
   const message = {
@@ -92,7 +92,7 @@ test("malformed or incomplete Claude init metadata falls back to no commands", (
   assert.deepEqual(getClaudeInitCommands(incomplete), []);
 });
 
-test("history removes init messages and restores commands from the latest valid init", () => {
+test("history removes init and control messages and restores the latest valid commands", () => {
   const visibleMessage = {
     messageId: "visible",
     role: "assistant",
@@ -117,6 +117,20 @@ test("history removes init messages and restores commands from the latest valid 
       role: "system",
       contents: [{ type: "TextContent", content: "invalid" }],
       additionalProperties: { subtype: "init" },
+    },
+    {
+      messageId: "turn-start",
+      role: "assistant",
+      author: "Agw",
+      contents: [{ type: "TextContent", content: "started" }],
+      additionalProperties: { type: "turn-start" },
+    },
+    {
+      messageId: "turn-finished",
+      role: "assistant",
+      author: "Agw",
+      contents: [{ type: "TextContent", content: "finished" }],
+      additionalProperties: { type: "turn-finished", status: "completed" },
     },
   ];
 

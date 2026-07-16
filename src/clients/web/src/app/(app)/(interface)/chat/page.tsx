@@ -1,13 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Uuid4 } from "id128";
 import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Brain,
-  CircleGauge,
-  Database,
   FileText,
   PanelLeftClose,
   PanelLeftOpen,
@@ -22,23 +16,12 @@ import { toast } from "sonner";
 
 import { getFileDiff, readFile, type GitDiffResponse } from "@/api/files";
 import { apiGet } from "@/api/client";
-import {
-  ExecutionHubClient,
-  getPendingHumanGate,
-  getTurnFinishedStatus,
-  type PendingHumanGate,
-} from "@/api/execution-hub";
-import {
-  clearProjectContextRecords,
-  getProjectContextDetails,
-  type ContextSummary,
-} from "@/api/task-client";
+import { getProjectContextDetails, type ContextSummary } from "@/api/task-client";
 import { AgentSelector, type AgentSelection } from "@/components/agent-selector";
 import { Explorer, FileContent } from "@/components/file-explorer";
 import type { LineComment } from "@/components/file-explorer";
-import { Conversation } from "@/components/message/conversation";
-import { HumanGateApproval } from "@/components/message/human-gate-approval";
-import { type UserInputRef } from "@/components/message/user-input";
+import { Chat } from "@/components/message/chat";
+import type { ChatSessionSeed } from "@/components/message/chat";
 import { ConversationList } from "@/components/task/conversation-list";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -60,33 +43,14 @@ import {
   type SearchableSelectOption,
 } from "@/components/SearchableSelect/searchable-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  createUserTextMessage,
-  mergeStreamingMessagesById,
-  toExecutionUserInput,
-} from "@/lib/execution-stream";
-import {
-  addTokenUsage,
-  EMPTY_TOKEN_USAGE,
-  formatTokenCount,
-  getMessageTokenUsage,
-  stripUsageContents,
-  type TokenUsage,
-} from "@/lib/token-usage";
+import { EMPTY_TOKEN_USAGE } from "@/lib/token-usage";
 import type { AiMessage } from "@/types";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
-import { InputArea } from "./components/user-input/input-area";
 import {
   CHAT_SETTINGS_DIALOG_BODY_CLASS_NAME,
   CHAT_SETTINGS_DIALOG_CONTENT_CLASS_NAME,
 } from "./lib/chat-settings";
-import {
-  getAgentSuggestionQueryParams,
-  toCommandSource,
-  type AgentSuggestionsResponse,
-} from "./lib/agent-suggestions";
-import { getClaudeInitCommands, prepareClaudeHistory } from "./lib/ai-message-handlers";
 import {
   getChatRouteSessionAction,
   getContextHydrationKey,
@@ -151,10 +115,6 @@ function getRestoredTargetValue(messages: AiMessage[]): string | null {
   }
 
   return null;
-}
-
-function nextContextId(): string {
-  return Uuid4.generate().toCanonical();
 }
 
 function getChatRouteHref({
@@ -405,13 +365,14 @@ export default function ChatPage() {
   );
   const [showChatHistory, setShowChatHistory] = React.useState(true);
   const [showFileExplorer, setShowFileExplorer] = React.useState(true);
-  const [messages, setMessages] = React.useState<AiMessage[]>([]);
-  const [claudeCommands, setClaudeCommands] = React.useState<string[]>([]);
-  const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(EMPTY_TOKEN_USAGE);
   const [contextId, setContextId] = React.useState<string | null>(queryContextId);
+  const [chatSessionSeed, setChatSessionSeed] = React.useState<ChatSessionSeed>({
+    revision: 0,
+    contextId: queryContextId,
+    messages: [],
+    usage: EMPTY_TOKEN_USAGE,
+  });
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
-  const [isExecuting, setIsExecuting] = React.useState(false);
-  const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
   const [fileContent, setFileContent] = React.useState("");
@@ -425,12 +386,6 @@ export default function ChatPage() {
     routeSettings?.chatSettings?.envVars ?? [],
   );
 
-  const executionClientRef = React.useRef<ExecutionHubClient | null>(null);
-  const configuredExecutionSessionRef = React.useRef<string | null>(null);
-  const executionGenerationRef = React.useRef(0);
-  const messagesStartRef = React.useRef<HTMLDivElement>(null!);
-  const messagesEndRef = React.useRef<HTMLDivElement>(null!);
-  const userInputRef = React.useRef<UserInputRef | null>(null);
   const hydratedContextKeyRef = React.useRef<string | null>(null);
 
   const projectsQuery = useQuery({
@@ -470,35 +425,6 @@ export default function ChatPage() {
     [projects, selectedProjectId],
   );
 
-  const agentSuggestionQueryParams = React.useMemo(
-    () => getAgentSuggestionQueryParams(selectedProjectId, selectedTarget),
-    [selectedProjectId, selectedTarget],
-  );
-
-  const agentSuggestionsQuery = useQuery({
-    queryKey: [
-      "agentSuggestions",
-      agentSuggestionQueryParams?.projectId,
-      agentSuggestionQueryParams?.agentId,
-    ],
-    queryFn: async () => {
-      if (!agentSuggestionQueryParams) {
-        throw new Error("Agent suggestion query requires an agent.");
-      }
-
-      return (await apiGet("/api/agents/suggestions", {
-        params: { query: agentSuggestionQueryParams },
-      })) as AgentSuggestionsResponse;
-    },
-    enabled: agentSuggestionQueryParams !== null,
-    retry: false,
-  });
-
-  const commandSource = React.useMemo(
-    () => toCommandSource(agentSuggestionsQuery.data, claudeCommands),
-    [agentSuggestionsQuery.data, claudeCommands],
-  );
-
   const resolvedWorkspace = React.useMemo(
     () => selectedProject?.workspace?.trim() || "",
     [selectedProject],
@@ -531,14 +457,6 @@ export default function ChatPage() {
       }),
     );
   }, [envVars, selectedTarget]);
-
-  const detachExecution = React.useCallback(() => {
-    executionGenerationRef.current += 1;
-    configuredExecutionSessionRef.current = null;
-    const client = executionClientRef.current;
-    executionClientRef.current = null;
-    if (client) void client.dispose();
-  }, []);
 
   const syncRoute = React.useCallback(
     (
@@ -573,47 +491,12 @@ export default function ChatPage() {
     setConversationListRefreshSignal((signal) => signal + 1);
   }, []);
 
-  const applyExecutionMessage = React.useCallback(
-    (message: AiMessage, generation: number) => {
-      if (generation !== executionGenerationRef.current) return;
-
-      const initCommands = getClaudeInitCommands(message);
-      if (initCommands !== null) {
-        setClaudeCommands(initCommands);
-        return;
-      }
-
-      const messageUsage = getMessageTokenUsage(message);
-      if (messageUsage) {
-        setConversationUsage((current) => addTokenUsage(current, messageUsage));
-      }
-
-      const humanGate = getPendingHumanGate(message);
-      if (humanGate) {
-        setPendingHumanGate(humanGate);
-        return;
-      }
-
-      if (message.additionalProperties?.type === "turn-start") {
-        setIsExecuting(true);
-        return;
-      }
-
-      const terminalStatus = getTurnFinishedStatus(message);
-      if (terminalStatus) {
-        setIsExecuting(false);
-        setPendingHumanGate(null);
-        refreshConversationList();
-        if (terminalStatus === "failed") toast.error("Execution failed");
-        return;
-      }
-
-      if (message.role !== "user") {
-        setMessages((current) => mergeStreamingMessagesById([...current, message]));
-      }
-    },
-    [refreshConversationList],
-  );
+  const replaceChatSession = React.useCallback((nextSession: Omit<ChatSessionSeed, "revision">) => {
+    setChatSessionSeed((current) => ({
+      ...nextSession,
+      revision: Number(current.revision) + 1,
+    }));
+  }, []);
 
   const clearFilePreview = React.useCallback(() => {
     setSelectedFile(null);
@@ -647,7 +530,7 @@ export default function ChatPage() {
     [envVars, getProjectSettingsDraft, selectedProjectId],
   );
 
-  const buildEnvironmentVariables = React.useCallback(() => {
+  const environmentVariables = React.useMemo(() => {
     const environmentVariables: Record<string, string> = {};
 
     normalizeEnvVars(envVars).forEach((envVar) => {
@@ -732,41 +615,20 @@ export default function ChatPage() {
     [isMobile, loadFileContent, selectedFile],
   );
 
-  const ensureContextId = React.useCallback(() => {
-    if (contextId) {
-      return contextId;
-    }
-
-    const nextId = nextContextId();
-    hydratedContextKeyRef.current = getContextHydrationKey(selectedProjectId, nextId);
-    setContextId(nextId);
-    syncRoute(selectedProjectId, nextId);
-    return nextId;
-  }, [contextId, selectedProjectId, syncRoute]);
-
   const clearLocalSessionState = React.useCallback(() => {
-    detachExecution();
     hydratedContextKeyRef.current = null;
-    setIsExecuting(false);
-    setPendingHumanGate(null);
-    setMessages([]);
-    setClaudeCommands([]);
-    setConversationUsage(EMPTY_TOKEN_USAGE);
     setContextId(null);
-    userInputRef.current?.setInput("");
-  }, [detachExecution]);
-
-  const clearActiveSessionState = React.useCallback(() => {
-    if (selectedProjectId && contextId) {
-      void clearProjectContextRecords(selectedProjectId, contextId);
-    }
-    clearLocalSessionState();
-  }, [clearLocalSessionState, contextId, selectedProjectId]);
+    replaceChatSession({
+      contextId: null,
+      messages: [],
+      usage: EMPTY_TOKEN_USAGE,
+    });
+  }, [replaceChatSession]);
 
   const resetSession = React.useCallback(() => {
-    clearActiveSessionState();
+    clearLocalSessionState();
     syncRoute(selectedProjectId, null);
-  }, [clearActiveSessionState, selectedProjectId, syncRoute]);
+  }, [clearLocalSessionState, selectedProjectId, syncRoute]);
 
   const startNewConversation = React.useCallback(() => {
     clearLocalSessionState();
@@ -777,30 +639,23 @@ export default function ChatPage() {
     async (projectId: string, nextContextIdValue: string) => {
       const details = await getProjectContextDetails(projectId, nextContextIdValue);
       const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
-      const preparedHistory = prepareClaudeHistory(details.messages ?? []);
 
-      detachExecution();
       hydratedContextKeyRef.current = getContextHydrationKey(projectId, details.contextId);
       setSelectedProjectId(projectId);
-      setIsExecuting(false);
       setContextId(details.contextId);
-      setMessages(preparedHistory.messages);
-      setClaudeCommands(preparedHistory.commands);
-      setConversationUsage(details.usage);
+      replaceChatSession({
+        contextId: details.contextId,
+        messages: details.messages ?? [],
+        usage: details.usage,
+      });
       if (restoredTargetValue) {
         setSelectedTargetValue(restoredTargetValue);
       }
       syncRoute(projectId, details.contextId, null);
       return details;
     },
-    [detachExecution, syncRoute],
+    [replaceChatSession, syncRoute],
   );
-
-  React.useEffect(() => {
-    return () => {
-      detachExecution();
-    };
-  }, [detachExecution]);
 
   React.useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 768px)");
@@ -838,10 +693,6 @@ export default function ChatPage() {
   React.useEffect(() => {
     clearFilePreview();
   }, [clearFilePreview, resolvedWorkspace, selectedProjectId]);
-
-  React.useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   React.useEffect(() => {
     if (projects.length === 0) {
@@ -972,19 +823,18 @@ export default function ChatPage() {
             routeAction.contextId,
           );
           const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
-          const preparedHistory = prepareClaudeHistory(details.messages ?? []);
           if (cancelled) {
             return;
           }
 
-          detachExecution();
           hydratedContextKeyRef.current = routeAction.hydrateKey;
           setSelectedProjectId(routeAction.projectId);
-          setIsExecuting(false);
           setContextId(details.contextId);
-          setMessages(preparedHistory.messages);
-          setClaudeCommands(preparedHistory.commands);
-          setConversationUsage(details.usage);
+          replaceChatSession({
+            contextId: details.contextId,
+            messages: details.messages ?? [],
+            usage: details.usage,
+          });
           const nextTargetValue = routeTargetValue ?? restoredTargetValue;
           if (nextTargetValue) {
             setSelectedTargetValue(nextTargetValue);
@@ -1007,9 +857,9 @@ export default function ChatPage() {
     };
   }, [
     clearLocalSessionState,
-    detachExecution,
     queryContextId,
     queryProjectId,
+    replaceChatSession,
     routeTargetValue,
     syncRoute,
   ]);
@@ -1020,17 +870,18 @@ export default function ChatPage() {
         return;
       }
 
-      detachExecution();
       hydratedContextKeyRef.current = null;
-      setIsExecuting(false);
       setSelectedProjectId(nextProjectId);
       setSelectedTargetValue(null);
-      setMessages([]);
-      setClaudeCommands([]);
       setContextId(null);
+      replaceChatSession({
+        contextId: null,
+        messages: [],
+        usage: EMPTY_TOKEN_USAGE,
+      });
       syncRoute(nextProjectId, null, null);
     },
-    [detachExecution, selectedProjectId, syncRoute],
+    [replaceChatSession, selectedProjectId, syncRoute],
   );
 
   const handleTargetChange = React.useCallback(
@@ -1039,15 +890,12 @@ export default function ChatPage() {
         return;
       }
 
-      detachExecution();
-      setIsExecuting(false);
-      setClaudeCommands([]);
       setSelectedTargetValue(nextTargetValue);
       if (selectedProjectId) {
         chatSettingsStorage.set(selectedProjectId, { targetValue: nextTargetValue });
       }
     },
-    [detachExecution, selectedProjectId, selectedTargetValue],
+    [selectedProjectId, selectedTargetValue],
   );
 
   const handleAgentSelect = React.useCallback(
@@ -1062,134 +910,15 @@ export default function ChatPage() {
     [handleTargetChange],
   );
 
-  const handleExecute = React.useCallback(
-    async (value: string) => {
-      const trimmedValue = value.trim();
-      if (!trimmedValue) {
-        toast.error("Please enter a prompt");
-        return;
-      }
-
-      if (!selectedProjectId) {
-        toast.error("Please select a project");
-        return;
-      }
-
-      if (!selectedTarget) {
-        toast.error("Please select a target");
-        return;
-      }
-
-      setIsExecuting(true);
-      setPendingHumanGate(null);
-      let generation: number | null = null;
-
-      try {
-        const userMessage = createUserTextMessage(trimmedValue);
-        const firstContent = userMessage.contents[0];
-        if (firstContent) {
-          firstContent.additionalProperties = {
-            ...firstContent.additionalProperties,
-            targetType: selectedTarget.type,
-            targetId: selectedTarget.id,
-          };
-        }
-
-        const nextContextIdValue = ensureContextId();
-        const initialMessages = [...messages, userMessage];
-        generation = executionGenerationRef.current;
-        setMessages(initialMessages);
-
-        const handlers = {
-          onMessage: (message: AiMessage) => applyExecutionMessage(message, generation!),
-          onError: (error: Error) => {
-            if (generation === executionGenerationRef.current) {
-              toast.error(`Execution failed: ${getApiErrorMessage(error)}`);
-              setIsExecuting(false);
-            }
-          },
-          onClose: (error?: Error) => {
-            if (generation === executionGenerationRef.current) {
-              setIsExecuting(false);
-              if (error) toast.error(`Execution connection closed: ${error.message}`);
-            }
-          },
-        };
-        let client = executionClientRef.current;
-        if (!client) {
-          client = new ExecutionHubClient(handlers);
-          executionClientRef.current = client;
-        } else {
-          client.setHandlers(handlers);
-        }
-
-        const environmentVariables = buildEnvironmentVariables();
-        const configurationKey = JSON.stringify({
-          projectId: selectedProjectId,
-          contextId: nextContextIdValue,
-          environmentVariables,
-        });
-        if (configuredExecutionSessionRef.current !== configurationKey) {
-          await client.configure({
-            projectId: selectedProjectId,
-            contextId: nextContextIdValue,
-            environmentVariables,
-          });
-          configuredExecutionSessionRef.current = configurationKey;
-        }
-        await client.execute({
-          agentId: selectedTarget.id,
-          agentType: selectedTarget.type === "agent" ? 0 : 1,
-          stream: true,
-          input: toExecutionUserInput(userMessage),
-        });
-        refreshConversationList();
-      } catch (error) {
-        if (generation === null || generation === executionGenerationRef.current) {
-          detachExecution();
-          toast.error(`Execute failed: ${getApiErrorMessage(error)}`);
-          setIsExecuting(false);
-        }
-      }
+  const handleChatContextIdChange = React.useCallback(
+    (nextContextId: string | null) => {
+      hydratedContextKeyRef.current = nextContextId
+        ? getContextHydrationKey(selectedProjectId, nextContextId)
+        : null;
+      setContextId(nextContextId);
+      syncRoute(selectedProjectId, nextContextId);
     },
-    [
-      applyExecutionMessage,
-      buildEnvironmentVariables,
-      contextId,
-      ensureContextId,
-      messages,
-      refreshConversationList,
-      selectedProjectId,
-      selectedTarget,
-    ],
-  );
-
-  const handleInterrupt = React.useCallback(async () => {
-    const client = executionClientRef.current;
-    if (!client) {
-      toast.error("No active session to interrupt");
-      return;
-    }
-
-    await client.interrupt("Stop requested by user.");
-  }, []);
-
-  const submitHumanGateResponse = React.useCallback(
-    async (approved: boolean, responseText?: string) => {
-      const client = executionClientRef.current;
-      if (!pendingHumanGate || !client) {
-        toast.error("No active HumanGate request");
-        return;
-      }
-
-      await client.submitHumanResponse({
-        requestId: pendingHumanGate.requestId,
-        approved,
-        responseText,
-      });
-      setPendingHumanGate(null);
-    },
-    [pendingHumanGate],
+    [selectedProjectId, syncRoute],
   );
 
   const handleContextSelect = React.useCallback(
@@ -1216,7 +945,6 @@ export default function ChatPage() {
       }
 
       hydratedContextKeyRef.current = getContextHydrationKey(selectedProjectId, context.contextId);
-      setClaudeCommands([]);
       setContextId(context.contextId);
       syncRoute(selectedProjectId, context.contextId);
     },
@@ -1232,13 +960,6 @@ export default function ChatPage() {
     resetSession();
     setIsDrawerOpen(false);
   }, [resetSession]);
-
-  const handleScrollToTop = React.useCallback(() => {
-    messagesStartRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  }, []);
 
   const openDrawer = React.useCallback((type: "chat" | "files") => {
     setDrawerContent(type);
@@ -1356,7 +1077,6 @@ export default function ChatPage() {
     ? showChatHistory
     : hasProjectFileSystem && showFileExplorer;
   const activeSidebarTitle = isChatTab ? "chat history" : "file explorer";
-  const visibleMessages = React.useMemo(() => stripUsageContents(messages), [messages]);
   const isSidebarToggleDisabled = isFilesTab && !hasProjectFileSystem;
   const sidebarToggleTitle = isSidebarToggleDisabled
     ? "Select a project to browse files"
@@ -1448,7 +1168,11 @@ export default function ChatPage() {
           </Button>
         </div>
 
-        <TabsContent value="chat" className="mt-2 flex min-h-0 flex-1">
+        <TabsContent
+          value="chat"
+          forceMount
+          className="mt-2 flex min-h-0 flex-1 data-[state=inactive]:hidden"
+        >
           <ColResizeSplit>
             {!isMobile && isChatTab && showChatHistory ? (
               <ColResizeSplit.Left minWidth={260} maxWidth={520}>
@@ -1468,116 +1192,14 @@ export default function ChatPage() {
                 </div> */}
 
                 <div className="relative flex h-[calc(100%-57px)] min-h-0 flex-1 flex-col border-t">
-                  <div className="@container relative h-full w-full">
-                    <div className="h-full w-full overflow-y-auto">
-                      <div className="mx-auto flex min-h-full w-full justify-center">
-                        <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
-                          <Conversation
-                            messages={visibleMessages}
-                            messagesStartRef={messagesStartRef}
-                            messagesEndRef={messagesEndRef}
-                            scrollable={false}
-                          />
-                        </div>
-
-                        {visibleMessages.length > 0 ? (
-                          <aside
-                            className="sticky top-0 hidden w-75 shrink-0 self-start border-border/60 bg-background py-10 @min-[64rem]:block"
-                            aria-label="Current conversation token usage"
-                          >
-                            <div className="space-y-2 border py-3 px-3 rounded-2xl border-border bg-background/50 shadow-xs">
-                              <div>
-                                <h2 className="mb-2 text-base font-medium text-muted-foreground">
-                                  Token usage
-                                </h2>
-
-                                <dl className="space-y-1.5">
-                                  <div className="session-aside-row">
-                                    <CircleGauge className="size-4 shrink-0" aria-hidden="true" />
-                                    <dt className="text-sm font-medium text-foreground">Total</dt>
-                                    <dd className="ml-auto font-mono text-sm font-medium tabular-nums">
-                                      {formatTokenCount(conversationUsage.totalTokenCount)}
-                                    </dd>
-                                  </div>
-                                  <div className="session-aside-row">
-                                    <ArrowDownToLine
-                                      className="size-4 shrink-0"
-                                      aria-hidden="true"
-                                    />
-                                    <dt className="text-sm text-foreground">Input</dt>
-                                    <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
-                                      {formatTokenCount(conversationUsage.inputTokenCount)}
-                                    </dd>
-                                  </div>
-                                  <div className="session-aside-row">
-                                    <ArrowUpFromLine
-                                      className="size-4 shrink-0"
-                                      aria-hidden="true"
-                                    />
-                                    <dt className="text-sm text-foreground">Output</dt>
-                                    <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
-                                      {formatTokenCount(conversationUsage.outputTokenCount)}
-                                    </dd>
-                                  </div>
-                                  <div className="session-aside-row">
-                                    <Database className="size-4 shrink-0" aria-hidden="true" />
-                                    <dt className="text-sm text-foreground">Cached input</dt>
-                                    <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
-                                      {formatTokenCount(conversationUsage.cachedInputTokenCount)}
-                                    </dd>
-                                  </div>
-                                  <div className="session-aside-row">
-                                    <Brain className="size-4 shrink-0" aria-hidden="true" />
-                                    <dt className="text-sm text-foreground">Reasoning</dt>
-                                    <dd className="ml-auto font-mono text-sm tabular-nums text-foreground/80">
-                                      {formatTokenCount(conversationUsage.reasoningTokenCount)}
-                                    </dd>
-                                  </div>
-                                </dl>
-                              </div>
-                            </div>
-                          </aside>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center">
-                      <div className="relative h-30 min-w-0 max-w-5xl flex-1 bg-linear-to-t from-bg-000 from-50% via-bg-000/80 via-70% to-transparent px-6">
-                        {pendingHumanGate ? (
-                          <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
-                            <HumanGateApproval
-                              request={pendingHumanGate}
-                              onApprove={(responseText) =>
-                                submitHumanGateResponse(true, responseText)
-                              }
-                              onReject={(responseText) =>
-                                submitHumanGateResponse(false, responseText)
-                              }
-                            />
-                          </div>
-                        ) : null}
-                        <InputArea
-                          isExecuting={isExecuting}
-                          hasMessages={visibleMessages.length > 0}
-                          onExecute={(value) => {
-                            void handleExecute(value);
-                          }}
-                          onInterrupt={handleInterrupt}
-                          onClearSession={resetSession}
-                          onScrollToTop={handleScrollToTop}
-                          projectId={selectedProjectId}
-                          commandSource={commandSource}
-                          userInputRef={userInputRef}
-                        />
-                      </div>
-                      {visibleMessages.length > 0 ? (
-                        <div
-                          className="hidden w-75 shrink-0 @min-[64rem]:block"
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                    </div>
-                  </div>
+                  <Chat
+                    target={selectedTarget}
+                    projectId={selectedProjectId}
+                    sessionSeed={chatSessionSeed}
+                    environmentVariables={environmentVariables}
+                    onContextIdChange={handleChatContextIdChange}
+                    onConversationChange={refreshConversationList}
+                  />
                 </div>
               </div>
             </ColResizeSplit.Right>

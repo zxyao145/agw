@@ -1,10 +1,6 @@
-import type { SuggestionItem } from "@/components/message/user-input";
 import { searchFiles } from "@/api/files";
+import type { SuggestionItem } from "@/components/message/user-input";
 
-/**
- * Search for files by keyword
- * Returns async suggestions with file paths prefixed with @
- */
 export async function searchFile(
   projectId: string | null,
   keyword: string,
@@ -12,11 +8,10 @@ export async function searchFile(
   if (!projectId) {
     return [];
   }
-  // console.debug("searchFile", rootDirectory, keyword)
 
   try {
     const response = await searchFiles(projectId, "", keyword, true);
-    return response.results.map((result) => ({
+    return response.results.slice(0, 5).map((result) => ({
       text: `@${result.relativePath}`,
       description: result.fullPath,
     }));

@@ -55,3 +55,12 @@ test("getTurnFinishedStatus reads terminal AgwMessage", async () => {
     null,
   );
 });
+
+test("waitForExecutionTerminal times out when execution never emits a terminal message", async () => {
+  const { waitForExecutionTerminal } = await import("./execution-hub" + ".ts");
+
+  await assert.rejects(
+    waitForExecutionTerminal(Promise.resolve(), new Promise<void>(() => undefined), 5),
+    /Timed out waiting for execution to stop/,
+  );
+});

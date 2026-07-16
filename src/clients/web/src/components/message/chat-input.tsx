@@ -6,14 +6,28 @@ import { ArrowUp, Eraser, Square } from "lucide-react";
 import { QuickTextDialog } from "@/components/task/quick-text-dialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { UserInput, type UserInputRef } from "@/components/message/user-input";
 import { getTrailingSuggestionTrigger } from "@/components/message/suggestion-trigger";
-import type { ChatInputAreaProps } from "../../types";
-import { searchCommand } from "../../lib/search_command";
-import { searchFile } from "../../lib/search_file";
+import { UserInput, type UserInputRef } from "@/components/message/user-input";
+import { searchCommand, type CommandSource } from "@/lib/chat/search-command";
+import { searchFile } from "@/lib/chat/search-file";
 
-export function InputArea({
+interface ChatInputProps {
+  isExecuting: boolean;
+  isTransitioning: boolean;
+  hasMessages: boolean;
+  onExecute: (value: string) => void;
+  onInterrupt: () => void;
+  onClearSession: () => void;
+  onScrollToTop: () => void;
+  projectId: string | null;
+  commandSource: CommandSource;
+  placeholder?: string;
+  userInputRef?: React.RefObject<UserInputRef | null>;
+}
+
+export function ChatInput({
   isExecuting,
+  isTransitioning,
   hasMessages,
   onExecute,
   onInterrupt,
@@ -21,10 +35,12 @@ export function InputArea({
   onScrollToTop,
   projectId,
   commandSource,
+  placeholder,
   userInputRef: externalUserInputRef,
-}: ChatInputAreaProps) {
+}: ChatInputProps) {
   const internalUserInputRef = React.useRef<UserInputRef | null>(null);
   const userInputRef = externalUserInputRef ?? internalUserInputRef;
+  const isBusy = isExecuting || isTransitioning;
 
   const handleQuickCommand = (text: string) => {
     userInputRef.current?.insertText(text);
@@ -49,17 +65,18 @@ export function InputArea({
   return (
     <UserInput
       ref={userInputRef}
-      isExecuting={isExecuting}
+      isExecuting={isBusy}
       onExecute={onExecute}
-      onStop={onInterrupt}
+      onStop={isTransitioning ? undefined : onInterrupt}
       onSuggestion={handleSuggestion}
+      placeholder={placeholder}
     >
       <UserInput.TopRight>
         <QuickTextDialog onCommandSelect={handleQuickCommand} />
         <Separator orientation="vertical" />
         <Button
           onClick={onClearSession}
-          disabled={isExecuting || !hasMessages}
+          disabled={isBusy || !hasMessages}
           variant="ghost"
           size="sm"
         >
@@ -70,7 +87,7 @@ export function InputArea({
           <ArrowUp width={16} />
         </Button>
       </UserInput.TopRight>
-      {isExecuting ? (
+      {isExecuting && !isTransitioning ? (
         <UserInput.Sender>
           <Square size={20} />
         </UserInput.Sender>

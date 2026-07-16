@@ -1,12 +1,12 @@
 import type { components } from "@/api/openapi";
-import type { ChatTargetOption } from "../types";
-import type { CommandSource } from "./search_command";
+import type { ChatTargetOption } from "@/types/chat-target";
+import type { CommandSource } from "./search-command";
 
 export type AgentSuggestionsResponse = components["schemas"]["AgentSuggestionsResponse"];
 
 export function getAgentSuggestionQueryParams(
   projectId: string | null,
-  target: ChatTargetOption | null,
+  target: (Pick<ChatTargetOption, "id" | "type"> & Partial<Pick<ChatTargetOption, "label">>) | null,
 ): { projectId?: string; agentId: string } | null {
   if (!target || target.type !== "agent") {
     return null;

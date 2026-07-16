@@ -1,5 +1,3 @@
-// https://github.com/slopus/happy/blob/main/expo-app/sources/sync/suggestionCommands.ts
-
 import type { SuggestionItem } from "@/components/message/user-input";
 import Fuse from "fuse.js";
 
@@ -12,7 +10,6 @@ export type CommandSource =
   | { mode: "claudeCode"; slashCommands: string[] }
   | { mode: "unsupported" };
 
-// Commands to ignore/filter out
 export const IGNORED_COMMANDS = [
   "/add-dir",
   "/agents",
@@ -48,7 +45,6 @@ export const IGNORED_COMMANDS = [
   "/login",
 ];
 
-// Default commands always available
 const DEFAULT_COMMANDS: SuggestionItem[] = [
   { text: "/compact", description: "Compact the conversation history" },
   { text: "/clear", description: "Clear the conversation" },
@@ -59,12 +55,8 @@ const DEFAULT_COMMANDS: SuggestionItem[] = [
   },
 ];
 
-// Command descriptions for known tools/commands
 const COMMAND_DESCRIPTIONS: Record<string, string> = {
-  // Default commands
   "/compact": "Compact the conversation history",
-
-  // Common tool commands
   "/help": "Show available commands",
   "/clear": "Clear the conversation",
   "/reset": "Reset the session",
@@ -74,8 +66,6 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
   "/stop": "Stop current operation",
   "/abort": "Abort current operation",
   "/cancel": "Cancel current operation",
-
-  // Add more descriptions as needed
 };
 
 export const searchCommand = (keyword: string, source: CommandSource): SuggestionItem[] => {
@@ -90,23 +80,18 @@ export const searchCommand = (keyword: string, source: CommandSource): Suggestio
     return commands.slice(0, 5);
   }
 
-  // Use Fuse.js for fuzzy search
   const fuse = new Fuse(commands, {
     keys: [
       { name: "text", weight: 0.7 },
       { name: "description", weight: 0.3 },
     ],
-    threshold: 0.3, // Lower = more exact match, 0.3 is a good balance
+    threshold: 0.3,
     minMatchCharLength: 1,
     ignoreLocation: true,
     shouldSort: true,
   });
 
-  // Search and limit results to 5
-  const results = fuse.search(keyword, { limit: 5 });
-  const suggestions = results.map((result) => result.item);
-
-  return suggestions;
+  return fuse.search(keyword, { limit: 5 }).map((result) => result.item);
 };
 
 function buildClaudeCommands(slashCommands: string[]): SuggestionItem[] {

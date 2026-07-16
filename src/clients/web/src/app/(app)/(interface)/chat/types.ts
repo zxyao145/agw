@@ -1,7 +1,3 @@
-"use client";
-
-import type { UserInputRef } from "@/components/message/user-input";
-import type { CommandSource } from "./lib/search_command";
 export type { ChatTargetOption, ChatTargetType } from "@/types/chat-target";
 
 export interface EnvVar {
@@ -24,16 +20,4 @@ export interface InitMessageContent {
   skills: string[];
   plugins: string[];
   mcpServers: string[];
-}
-
-export interface ChatInputAreaProps {
-  isExecuting: boolean;
-  hasMessages: boolean;
-  onExecute: (value: string) => void;
-  onInterrupt: () => void;
-  onClearSession: () => void;
-  onScrollToTop: () => void;
-  projectId: string | null;
-  commandSource: CommandSource;
-  userInputRef?: React.RefObject<UserInputRef | null>;
 }

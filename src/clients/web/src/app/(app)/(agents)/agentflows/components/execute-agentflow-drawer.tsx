@@ -10,6 +10,7 @@ import {
 import { X } from "lucide-react";
 import type { AgentflowDto } from "@/types/agentflow";
 import { Chat } from "@/components/message/chat";
+import { EMPTY_TOKEN_USAGE } from "@/lib/token-usage";
 
 interface ExecuteAgentflowDrawerProps {
   open: boolean;
@@ -30,13 +31,23 @@ export function ExecuteAgentflowDrawer({
     }
   }, [open, agentflow]);
 
+  const sessionSeed = React.useMemo(
+    () => ({
+      revision: `${agentflow?.id ?? "none"}:${resetSignal}`,
+      contextId: null,
+      messages: [],
+      usage: EMPTY_TOKEN_USAGE,
+    }),
+    [agentflow?.id, resetSignal],
+  );
+
   if (!agentflow) return null;
   const projectId = "11111111-1111-1111-1111-000000000001";
 
   return (
     <Drawer direction="right" open={open} onOpenChange={onOpenChange} modal={true}>
       <DrawerContent
-        className="data-[vaul-drawer-direction=right]:sm:max-w-xl"
+        className="data-[vaul-drawer-direction=right]:sm:max-w-xl pb-3"
         onPointerDownOutside={(e) => {
           e.preventDefault();
         }}
@@ -52,12 +63,11 @@ export function ExecuteAgentflowDrawer({
         </DrawerHeader>
 
         <Chat
-          className="px-4 pb-4 h-[calc(100vh-62px)]"
-          targetId={agentflow.id}
-          agentType={1}
+          className="h-[calc(100vh-62px)]"
+          target={{ id: agentflow.id, type: "agentflow" }}
           projectId={projectId}
           active={open}
-          resetSignal={`${agentflow?.id ?? "none"}:${resetSignal}`}
+          sessionSeed={sessionSeed}
           placeholder="请输入要发送给 agentflow 的内容..."
         />
       </DrawerContent>

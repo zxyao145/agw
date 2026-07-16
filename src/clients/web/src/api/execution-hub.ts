@@ -95,10 +95,34 @@ export function getPendingHumanGate(message: AiMessage): PendingHumanGate | null
   };
 }
 
+const executionInterruptTimeoutMs = 3_000;
+
+export async function waitForExecutionTerminal(
+  interrupt: Promise<void>,
+  turnFinished: Promise<void>,
+  timeoutMs = executionInterruptTimeoutMs,
+): Promise<void> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error("Timed out waiting for execution to stop.")),
+      timeoutMs,
+    );
+  });
+
+  try {
+    await Promise.race([interrupt.then(() => turnFinished), timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 export class ExecutionHubClient {
   private readonly connection: HubConnection;
   private handlers: ExecutionHubHandlers;
   private disposed = false;
+  private hasActiveTurn = false;
+  private readonly turnFinishedWaiters = new Set<() => void>();
 
   public constructor(handlers: ExecutionHubHandlers) {
     this.handlers = handlers;
@@ -111,9 +135,16 @@ export class ExecutionHubClient {
       .build();
 
     this.connection.on("ReceiveMessage", (message: AiMessage) => {
+      if (message.additionalProperties?.type === "turn-start") {
+        this.hasActiveTurn = true;
+      } else if (getTurnFinishedStatus(message)) {
+        this.finishActiveTurn();
+      }
+
       if (!this.disposed) this.handlers.onMessage(message);
     });
     this.connection.onclose((error) => {
+      this.finishActiveTurn();
       if (!this.disposed) this.handlers.onClose?.(error);
     });
   }
@@ -127,11 +158,36 @@ export class ExecutionHubClient {
   }
 
   public async execute(request: ExecutionRequest): Promise<void> {
-    await this.dispatch(buildExecCommand(request));
+    this.hasActiveTurn = true;
+    try {
+      await this.dispatch(buildExecCommand(request));
+    } catch (error) {
+      this.finishActiveTurn();
+      throw error;
+    }
   }
 
   public async interrupt(reason?: string): Promise<void> {
     await this.dispatch({ type: "InterruptCommand", reason });
+  }
+
+  public async interruptAndWait(reason?: string): Promise<void> {
+    if (!this.hasActiveTurn) {
+      await this.interrupt(reason);
+      return;
+    }
+
+    let resolveTurnFinished!: () => void;
+    const turnFinished = new Promise<void>((resolve) => {
+      resolveTurnFinished = resolve;
+      this.turnFinishedWaiters.add(resolve);
+    });
+
+    try {
+      await waitForExecutionTerminal(this.interrupt(reason), turnFinished);
+    } finally {
+      this.turnFinishedWaiters.delete(resolveTurnFinished);
+    }
   }
 
   public async submitHumanResponse(args: {
@@ -168,5 +224,13 @@ export class ExecutionHubClient {
       throw new Error(`Execution connection is ${this.connection.state}`);
     }
     await this.connection.start();
+  }
+
+  private finishActiveTurn(): void {
+    this.hasActiveTurn = false;
+    for (const resolve of this.turnFinishedWaiters) {
+      resolve();
+    }
+    this.turnFinishedWaiters.clear();
   }
 }
