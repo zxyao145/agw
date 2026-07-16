@@ -1,9 +1,13 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
-
 import { getPaginationMeta, PAGE_SIZE_OPTIONS } from "@/lib/pagination";
-import { Button } from "@/components/ui/button";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import {
   Select,
   SelectContent,
@@ -62,28 +66,26 @@ export function TablePagination({
         <span>
           Page {pageIndex} of {pagination.totalPages}
         </span>
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            aria-label="Previous page"
-            disabled={!pagination.canGoPrevious || isFetching}
-            onClick={() => onPageIndexChange(Math.max(1, pageIndex - 1))}
-          >
-            <ChevronLeft />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            aria-label="Next page"
-            disabled={!pagination.canGoNext || isFetching}
-            onClick={() => onPageIndexChange(pageIndex + 1)}
-          >
-            <ChevronRight />
-          </Button>
-        </div>
+        <Pagination className="mx-0 w-auto justify-start">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                type="button"
+                aria-label="Previous page"
+                disabled={!pagination.canGoPrevious || isFetching}
+                onClick={() => onPageIndexChange(Math.max(1, pageIndex - 1))}
+              />
+            </PaginationItem>
+            <PaginationItem>
+              <PaginationNext
+                type="button"
+                aria-label="Next page"
+                disabled={!pagination.canGoNext || isFetching}
+                onClick={() => onPageIndexChange(pageIndex + 1)}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       </div>
     </div>
   );
