@@ -177,6 +177,8 @@ interface McpToolServersPanelProps extends SharedPanelProps {
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
   toggleMcpToolServer: (mcpToolServerId: string) => void;
+  disabled?: boolean;
+  notice?: React.ReactNode;
 }
 
 export function McpToolServersPanel({
@@ -185,6 +187,8 @@ export function McpToolServersPanel({
   mcpToolServersQuery,
   selectedMcpToolServerIds,
   toggleMcpToolServer,
+  disabled = false,
+  notice,
 }: McpToolServersPanelProps) {
   const serverOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
@@ -210,6 +214,7 @@ export function McpToolServersPanel({
           Connect the {ownerLabel} to configured Model Context Protocol servers.
         </p>
       </div>
+      {notice}
       <SearchableSelect
         multiple
         id={`${idPrefix}mcpToolServers`}
@@ -226,6 +231,7 @@ export function McpToolServersPanel({
             : undefined
         }
         searchPlaceholder="Search MCP tool servers..."
+        disabled={disabled}
         isLoading={mcpToolServersQuery.isLoading}
         clearable={false}
       />
@@ -233,6 +239,7 @@ export function McpToolServersPanel({
         items={selectedServers}
         emptyLabel="No MCP tool servers selected"
         onRemove={toggleMcpToolServer}
+        readOnly={disabled}
       />
     </div>
   );
@@ -242,6 +249,8 @@ interface ConnectionsPanelProps extends SharedPanelProps {
   connectionOptions: ConnectionOption[];
   selectedConnectionIds: string[];
   toggleConnection: (connectionId: string) => void;
+  disabled?: boolean;
+  notice?: React.ReactNode;
 }
 
 export function ConnectionsPanel({
@@ -250,6 +259,8 @@ export function ConnectionsPanel({
   connectionOptions,
   selectedConnectionIds,
   toggleConnection,
+  disabled = false,
+  notice,
 }: ConnectionsPanelProps) {
   const connectionSelectOptions = React.useMemo<SearchableSelectOption[]>(
     () => buildConnectionSelectOptions(connectionOptions, selectedConnectionIds),
@@ -268,6 +279,7 @@ export function ConnectionsPanel({
           Attach ready external accounts or service endpoints to this {ownerLabel}.
         </p>
       </div>
+      {notice}
       <SearchableSelect
         multiple
         id={`${idPrefix}connections`}
@@ -284,15 +296,16 @@ export function ConnectionsPanel({
             : undefined
         }
         searchPlaceholder="Search connections..."
-        disabled={connectionSelectOptions.length === 0}
+        disabled={disabled || connectionSelectOptions.length === 0}
         clearable={false}
       />
       <SelectedItemsList
         items={selectedConnections}
         emptyLabel="No connections selected"
         onRemove={toggleConnection}
+        readOnly={disabled}
       />
-      {connectionSelectOptions.length === 0 ? (
+      {!disabled && connectionSelectOptions.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No ready connections found. Create and validate one on the integrations page first.
         </p>

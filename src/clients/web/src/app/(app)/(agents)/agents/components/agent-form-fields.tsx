@@ -130,7 +130,12 @@ export function AgentFormFields({
       <div className="overflow-y-auto border-b bg-muted/20 p-6 lg:border-r lg:border-b-0">
         <div className="grid gap-5">
           <div className="grid gap-2">
-            <Label htmlFor={`${idPrefix}displayName`}>Display Name</Label>
+            <Label htmlFor={`${idPrefix}displayName`}>
+              Display Name
+              {isExternalAgent ? (
+                <span className="ml-2 text-xs text-muted-foreground">(Optional)</span>
+              ) : null}
+            </Label>
             <Input
               id={`${idPrefix}displayName`}
               value={displayName}
@@ -157,7 +162,12 @@ export function AgentFormFields({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor={`${idPrefix}description`}>Description</Label>
+            <Label htmlFor={`${idPrefix}description`}>
+              Description
+              {isExternalAgent ? (
+                <span className="ml-2 text-xs text-muted-foreground">(Optional)</span>
+              ) : null}
+            </Label>
             <Input
               id={`${idPrefix}description`}
               value={description}
@@ -200,6 +210,12 @@ export function AgentFormFields({
             />
           </div>
 
+          {isExternalAgent ? (
+            <ExternalAgentNotice>
+              External agents do not support turn summary configuration.
+            </ExternalAgentNotice>
+          ) : null}
+
           <div className="flex items-start justify-between gap-4 rounded-lg border bg-background px-4 py-3">
             <div className="space-y-1">
               <Label htmlFor={`${idPrefix}enableSummary`} className="cursor-pointer">
@@ -214,6 +230,7 @@ export function AgentFormFields({
               id={`${idPrefix}enableSummary`}
               checked={enableSummary}
               onCheckedChange={setEnableSummary}
+              disabled={isExternalAgent}
             />
           </div>
 
@@ -236,7 +253,8 @@ export function AgentFormFields({
                 placeholder="Select a summary model provider..."
                 searchPlaceholder="Search model providers..."
                 isLoading={modelProvidersQuery.isLoading}
-                clearable={Boolean(summaryModelProviderId)}
+                clearable={!isExternalAgent && Boolean(summaryModelProviderId)}
+                disabled={isExternalAgent}
               />
             </div>
           ) : null}
@@ -348,6 +366,14 @@ export function AgentFormFields({
               mcpToolServersQuery={mcpToolServersQuery}
               selectedMcpToolServerIds={selectedMcpToolServerIds}
               toggleMcpToolServer={toggleMcpToolServer}
+              disabled={isExternalAgent}
+              notice={
+                isExternalAgent ? (
+                  <ExternalAgentNotice>
+                    External agents do not support MCP tool server configuration.
+                  </ExternalAgentNotice>
+                ) : null
+              }
             />
           </TabsContent>
 
@@ -357,6 +383,14 @@ export function AgentFormFields({
               connectionOptions={connectionOptions}
               selectedConnectionIds={selectedConnectionIds}
               toggleConnection={toggleConnection}
+              disabled={isExternalAgent}
+              notice={
+                isExternalAgent ? (
+                  <ExternalAgentNotice>
+                    External agents do not support connection configuration.
+                  </ExternalAgentNotice>
+                ) : null
+              }
             />
           </TabsContent>
 

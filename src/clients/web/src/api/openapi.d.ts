@@ -3622,22 +3622,26 @@ export interface components {
     };
     /** @description Agent Definition Type */
     AgentType: number;
+    /**
+     * @description Updates an agent. External agents support partial updates for displayName, description,
+     *     modelProviderId, extra, and environmentVariables only. When supplied for an External agent,
+     *     displayName and description cannot be null.
+     */
     AgentUpdateRequest: {
-      displayName: string;
-      description: string;
-      systemPrompt: string;
+      displayName?: null | string;
+      description?: null | string;
+      systemPrompt?: null | string;
       /** Format: uuid */
-      modelProviderId: null | string;
-      tools: null | string;
+      modelProviderId?: null | string;
+      tools?: null | string;
       mcpToolServerIds?: null | string[];
       skillIds?: null | string[];
       connectionIds?: null | string[];
-      extra: null | string;
+      extra?: null | string;
       environmentVariables?: null | {
         [key: string]: string;
       };
-      /** @default false */
-      enableSummary: boolean;
+      enableSummary?: null | boolean;
       /** Format: uuid */
       summaryModelProviderId?: null | string;
     };

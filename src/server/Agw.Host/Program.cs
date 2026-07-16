@@ -3,6 +3,7 @@ using System.Net;
 using Agw.A2A;
 using Agw.A2A.Extensions;
 using Agw.Agents;
+using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Files;
@@ -179,6 +180,12 @@ try
             }
 
             var type = context.JsonTypeInfo.Type;
+            if (type == typeof(AgentUpdateRequest))
+            {
+                schema.Required?.Clear();
+                return Task.CompletedTask;
+            }
+
             if (type.IsClass)
             {
                 foreach (var property in context.JsonTypeInfo.Properties)

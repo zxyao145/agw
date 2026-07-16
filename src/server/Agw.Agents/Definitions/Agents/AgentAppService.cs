@@ -5,6 +5,7 @@ using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -17,6 +18,17 @@ public sealed record AgentModelRuntimeConfiguration(
 
 public class AgentAppService
 {
+    private static readonly (AgentUpdateField Field, string JsonName)[] ExternalUnsupportedFields =
+    [
+        (AgentUpdateField.SystemPrompt, "systemPrompt"),
+        (AgentUpdateField.Tools, "tools"),
+        (AgentUpdateField.SkillIds, "skillIds"),
+        (AgentUpdateField.McpToolServerIds, "mcpToolServerIds"),
+        (AgentUpdateField.ConnectionIds, "connectionIds"),
+        (AgentUpdateField.EnableSummary, "enableSummary"),
+        (AgentUpdateField.SummaryModelProviderId, "summaryModelProviderId")
+    ];
+
     private readonly IRepository<Agent> _agentRepository;
     private readonly IRepository<AgentConnectionRelation> _agentConnectionRelationRepository;
     private readonly IRepository<Connection> _connectionRepository;
@@ -194,19 +206,34 @@ public class AgentAppService
 
     public async Task<Agent?> UpdateAgentAsync(
         Guid id,
-        Action<Agent> updateAction,
-        IEnumerable<Guid>? mcpToolServerIds,
-        IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? connectionIds,
+        AgentUpdateCommand command,
         string user)
     {
+        ArgumentNullException.ThrowIfNull(command);
+
         var existing = await _agentRepository.GetByIdAsync(id);
         if (existing == null)
         {
             return null;
         }
 
-        _agentDomainService.ApplyUpdate(existing, updateAction, user);
+        if (existing.Type == AgentType.External)
+        {
+            ValidateExternalAgentUpdate(command);
+            _agentDomainService.ApplyUpdate(
+                existing,
+                agent => ApplyExternalAgentUpdate(agent, command),
+                user);
+        }
+        else
+        {
+            ValidateSystemAgentUpdate(command);
+            _agentDomainService.ApplyUpdate(
+                existing,
+                agent => ApplySystemAgentUpdate(agent, command),
+                user);
+        }
+
         if (await HasInvalidModelProviderAsync(existing.ModelProviderId) ||
             await HasInvalidModelProviderAsync(existing.SummaryModelProviderId))
         {
@@ -214,9 +241,13 @@ public class AgentAppService
         }
 
         _agentRepository.Update(existing);
-        await SyncAgentMcpToolServerRelationsAsync(existing.Id, mcpToolServerIds);
-        await SyncAgentSkillRelationsAsync(existing.Id, skillIds);
-        await SyncAgentConnectionRelationsAsync(existing.Id, connectionIds);
+        if (existing.Type == AgentType.System)
+        {
+            await SyncAgentMcpToolServerRelationsAsync(existing.Id, command.McpToolServerIds);
+            await SyncAgentSkillRelationsAsync(existing.Id, command.SkillIds);
+            await SyncAgentConnectionRelationsAsync(existing.Id, command.ConnectionIds);
+        }
+
         await _unitOfWork.SaveChangesAsync();
         return existing;
     }
@@ -254,6 +285,107 @@ public class AgentAppService
         }
 
         return await _modelProviderRepository.GetByIdAsync(modelProviderId.Value) == null;
+    }
+
+    private static void ValidateExternalAgentUpdate(AgentUpdateCommand command)
+    {
+        var unsupportedFields = ExternalUnsupportedFields
+            .Where(field => command.IsSpecified(field.Field))
+            .Select(field => field.JsonName)
+            .ToArray();
+        if (unsupportedFields.Length > 0)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                $"External agents cannot update fields: {string.Join(", ", unsupportedFields)}.");
+        }
+
+        if (command.IsSpecified(AgentUpdateField.DisplayName) && command.DisplayName == null)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "displayName cannot be null.");
+        }
+
+        if (command.IsSpecified(AgentUpdateField.Description) && command.Description == null)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "description cannot be null.");
+        }
+    }
+
+    private static void ValidateSystemAgentUpdate(AgentUpdateCommand command)
+    {
+        var missingFields = new List<string>();
+        if (!command.IsSpecified(AgentUpdateField.DisplayName) || command.DisplayName == null)
+        {
+            missingFields.Add("displayName");
+        }
+
+        if (!command.IsSpecified(AgentUpdateField.Description) || command.Description == null)
+        {
+            missingFields.Add("description");
+        }
+
+        if (!command.IsSpecified(AgentUpdateField.SystemPrompt) || command.SystemPrompt == null)
+        {
+            missingFields.Add("systemPrompt");
+        }
+
+        if (!command.IsSpecified(AgentUpdateField.ModelProviderId))
+        {
+            missingFields.Add("modelProviderId");
+        }
+
+        if (command.IsSpecified(AgentUpdateField.EnableSummary) && command.EnableSummary == null)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "enableSummary cannot be null.");
+        }
+
+        if (missingFields.Count > 0)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                $"System agent update requires fields: {string.Join(", ", missingFields)}.");
+        }
+    }
+
+    private static void ApplyExternalAgentUpdate(Agent agent, AgentUpdateCommand command)
+    {
+        if (command.IsSpecified(AgentUpdateField.DisplayName))
+        {
+            agent.DisplayName = command.DisplayName!;
+        }
+
+        if (command.IsSpecified(AgentUpdateField.Description))
+        {
+            agent.Description = command.Description!;
+        }
+
+        if (command.IsSpecified(AgentUpdateField.ModelProviderId))
+        {
+            agent.ModelProviderId = command.ModelProviderId;
+        }
+
+        if (command.IsSpecified(AgentUpdateField.Extra))
+        {
+            agent.Extra = command.Extra;
+        }
+
+        if (command.IsSpecified(AgentUpdateField.EnvironmentVariables))
+        {
+            agent.EnvironmentVariables = command.EnvironmentVariables ?? new Dictionary<string, string>();
+        }
+    }
+
+    private static void ApplySystemAgentUpdate(Agent agent, AgentUpdateCommand command)
+    {
+        agent.DisplayName = command.DisplayName!;
+        agent.Description = command.Description!;
+        agent.SystemPrompt = command.SystemPrompt!;
+        agent.ModelProviderId = command.ModelProviderId;
+        agent.SummaryModelProviderId = command.SummaryModelProviderId;
+        agent.EnableSummary = command.EnableSummary ?? false;
+        agent.Tools = command.Tools;
+        agent.Extra = command.Extra;
+        agent.EnvironmentVariables = command.EnvironmentVariables ?? new Dictionary<string, string>();
     }
 
     private async Task SyncAgentMcpToolServerRelationsAsync(Guid agentId, IEnumerable<Guid>? mcpToolServerIds)

@@ -1,4 +1,5 @@
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Domain;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -37,18 +38,22 @@ public class AgentConnectionRelationTests
     }
 
     [Fact]
-    public async Task UpdateAgentAsync_WhenConnectionIdsChange_ReplacesRelations()
+    public async Task UpdateAgentAsync_WhenSystemConnectionIdsChange_ReplacesRelations()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        await using var scope = await TestScope.CreateAsync(cancellationToken);
+        await using var scope = await TestScope.CreateAsync(cancellationToken, AgentType.System);
 
         var updated = await scope.Service.UpdateAgentAsync(
             scope.AgentId,
-            agent => agent.DisplayName = "Updated agent",
-            mcpToolServerIds: null,
-            skillIds: null,
-            connectionIds: [scope.SecondConnectionId],
-            user: "tester");
+            new AgentUpdateRequest
+            {
+                DisplayName = "Updated agent",
+                Description = "desc",
+                SystemPrompt = "prompt",
+                ModelProviderId = scope.ModelProviderId,
+                ConnectionIds = [scope.SecondConnectionId]
+            }.ToCommand(),
+            "tester");
 
         Assert.NotNull(updated);
         await using var assertContext = scope.CreateDbContext();
@@ -82,14 +87,15 @@ public class AgentConnectionRelationTests
         Assert.Equal(["git_status"], toolNames);
     }
 
-    private static Agent CreateAgent(Guid id) => new()
+    private static Agent CreateAgent(Guid id, AgentType type = AgentType.External, Guid? modelProviderId = null) => new()
     {
         Id = id,
         Name = $"agent-{id:N}",
         DisplayName = "Agent",
         Description = "desc",
         SystemPrompt = "prompt",
-        Type = AgentType.External
+        Type = type,
+        ModelProviderId = modelProviderId
     };
 
     private static Connection CreateConnection(Guid id, string alias) => new()
@@ -125,8 +131,11 @@ public class AgentConnectionRelationTests
         public Guid AgentId { get; private init; }
         public Guid FirstConnectionId { get; private init; }
         public Guid SecondConnectionId { get; private init; }
+        public Guid ModelProviderId { get; private init; }
 
-        public static async Task<TestScope> CreateAsync(CancellationToken cancellationToken)
+        public static async Task<TestScope> CreateAsync(
+            CancellationToken cancellationToken,
+            AgentType agentType = AgentType.External)
         {
             var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
             await connection.OpenAsync(cancellationToken);
@@ -142,9 +151,25 @@ public class AgentConnectionRelationTests
             var agentId = Guid.NewGuid();
             var firstConnectionId = Guid.NewGuid();
             var secondConnectionId = Guid.NewGuid();
+            var modelId = Guid.NewGuid();
+            var providerId = Guid.NewGuid();
+            var modelProviderId = Guid.NewGuid();
             await using (var seedContext = new AgwDbContext(options))
             {
-                seedContext.Agents.Add(CreateAgent(agentId));
+                seedContext.Models.Add(new LlmModel { Id = modelId, Name = "test-model" });
+                seedContext.Providers.Add(new Provider
+                {
+                    Id = providerId,
+                    Name = "test-provider",
+                    Endpoint = "https://example.test"
+                });
+                seedContext.ModelProviders.Add(new ModelProviderRelation
+                {
+                    Id = modelProviderId,
+                    ModelId = modelId,
+                    ProviderId = providerId
+                });
+                seedContext.Agents.Add(CreateAgent(agentId, agentType, modelProviderId));
                 seedContext.Connections.AddRange(
                     CreateConnection(firstConnectionId, "work-github"),
                     CreateConnection(secondConnectionId, "personal-github"));
@@ -161,7 +186,8 @@ public class AgentConnectionRelationTests
             {
                 AgentId = agentId,
                 FirstConnectionId = firstConnectionId,
-                SecondConnectionId = secondConnectionId
+                SecondConnectionId = secondConnectionId,
+                ModelProviderId = modelProviderId
             };
         }
 

@@ -84,21 +84,7 @@ public class AgentsController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
         var updated = await _agentAppService.UpdateAgentAsync(
             id,
-            agent =>
-            {
-                agent.DisplayName = request.DisplayName;
-                agent.Description = request.Description;
-                agent.SystemPrompt = request.SystemPrompt;
-                agent.ModelProviderId = request.ModelProviderId;
-                agent.SummaryModelProviderId = request.SummaryModelProviderId;
-                agent.EnableSummary = request.EnableSummary;
-                agent.Tools = request.Tools;
-                agent.Extra = request.Extra;
-                agent.EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>();
-            },
-            request.McpToolServerIds,
-            request.SkillIds,
-            request.ConnectionIds,
+            request.ToCommand(),
             user);
 
         return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(AgentResponse.FromDomain(updated));

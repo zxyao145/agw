@@ -43,6 +43,8 @@ test("Agent form consumes all five shared panels while retaining Agent-only tabs
   assert.match(source, /External agents do not support instructions configuration/);
   assert.match(source, /External agents do not support skill configuration/);
   assert.match(source, /External agents do not support tool configuration/);
+  assert.match(source, /External agents do not support MCP tool server configuration/);
+  assert.match(source, /External agents do not support connection configuration/);
 });
 
 test("Connection options expose ready-only searchable metadata", async () => {
@@ -59,4 +61,15 @@ test("Skills and Connections selected lists are built from selected IDs with rem
   assert.match(source, /buildSelectedConnectionItems\(/);
   assert.match(source, /items=\{selectedSkills\}[\s\S]*onRemove=\{toggleSkill\}/);
   assert.match(source, /items=\{selectedConnections\}[\s\S]*onRemove=\{toggleConnection\}/);
+});
+
+test("MCP Tool Server and Connection panels support disabled read-only states", async () => {
+  const source = await readSource(PANELS_URL, "shared capability panels");
+
+  assert.match(source, /interface McpToolServersPanelProps[\s\S]*disabled\?: boolean/);
+  assert.match(source, /interface ConnectionsPanelProps[\s\S]*disabled\?: boolean/);
+  assert.match(source, /items=\{selectedServers\}[\s\S]*readOnly=\{disabled\}/);
+  assert.match(source, /items=\{selectedConnections\}[\s\S]*readOnly=\{disabled\}/);
+  assert.match(source, /disabled=\{disabled \|\| connectionSelectOptions\.length === 0\}/);
+  assert.match(source, /!disabled && connectionSelectOptions\.length === 0/);
 });

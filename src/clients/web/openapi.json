@@ -5077,25 +5077,25 @@
         "description": "Agent Definition Type"
       },
       "AgentUpdateRequest": {
-        "required": [
-          "displayName",
-          "description",
-          "systemPrompt",
-          "modelProviderId",
-          "tools",
-          "extra",
-          "enableSummary"
-        ],
         "type": "object",
         "properties": {
           "displayName": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "description": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "systemPrompt": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "modelProviderId": {
             "type": [
@@ -5156,8 +5156,10 @@
             }
           },
           "enableSummary": {
-            "type": "boolean",
-            "default": false
+            "type": [
+              "null",
+              "boolean"
+            ]
           },
           "summaryModelProviderId": {
             "type": [
@@ -5166,7 +5168,8 @@
             ],
             "format": "uuid"
           }
-        }
+        },
+        "description": "Updates an agent. External agents support partial updates for displayName, description,\nmodelProviderId, extra, and environmentVariables only. When supplied for an External agent,\ndisplayName and description cannot be null."
       },
       "AgwContent": {
         "required": [

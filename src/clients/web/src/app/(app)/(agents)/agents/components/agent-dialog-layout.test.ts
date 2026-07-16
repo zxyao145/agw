@@ -57,8 +57,11 @@ test("Agent form uses a responsive 400px metadata column and six configuration t
   );
   assert.match(source, /<EnvironmentVariablesPanel/);
   assert.match(source, /External agents do not support instructions configuration/);
+  assert.match(source, /External agents do not support turn summary configuration/);
   assert.match(source, /External agents do not support skill configuration/);
   assert.match(source, /External agents do not support tool configuration/);
+  assert.match(source, /External agents do not support MCP tool server configuration/);
+  assert.match(source, /External agents do not support connection configuration/);
   assert.match(source, /<SkillsPanel/);
 });
 
@@ -77,10 +80,29 @@ test("Agent form explains project-level capability merging below the tabs", asyn
   );
 });
 
-test("Edit Agent only sends editable Extra Settings for External Agent updates", async () => {
+test("Edit Agent sends only allowed fields for External Agent updates", async () => {
   const source = await readFile(EDIT_DIALOG_URL, "utf8");
+  const externalBranchStart = source.indexOf("const body: AgentUpdateRequest = isExternalAgent");
+  const systemBranchStart = source.indexOf("      : {", externalBranchStart);
+  const externalBranch = source.slice(externalBranchStart, systemBranchStart);
 
-  assert.match(source, /extra: isExternalAgent \? normalizeAgentExtraSettings\(extra\) : null/);
+  assert.ok(externalBranchStart >= 0);
+  assert.ok(systemBranchStart > externalBranchStart);
+  assert.match(externalBranch, /displayName/);
+  assert.match(externalBranch, /description/);
+  assert.match(externalBranch, /modelProviderId: modelProviderId \|\| null/);
+  assert.match(externalBranch, /extra: normalizeAgentExtraSettings\(extra\)/);
+  assert.match(
+    externalBranch,
+    /environmentVariables: normalizeAgentEnvironmentVariables\(environmentVariables\)/,
+  );
+  assert.doesNotMatch(externalBranch, /systemPrompt/);
+  assert.doesNotMatch(externalBranch, /summaryModelProviderId/);
+  assert.doesNotMatch(externalBranch, /enableSummary/);
+  assert.doesNotMatch(externalBranch, /tools:/);
+  assert.doesNotMatch(externalBranch, /skillIds/);
+  assert.doesNotMatch(externalBranch, /mcpToolServerIds/);
+  assert.doesNotMatch(externalBranch, /connectionIds/);
 });
 
 test("Create and Edit Agent dialogs send normalized environment variables", async () => {
@@ -95,7 +117,7 @@ test("Create and Edit Agent dialogs send normalized environment variables", asyn
   }
 });
 
-test("All Agent forms expose and submit the optional turn summary setting", async () => {
+test("Agent forms expose summary settings but disable them for External Agents", async () => {
   const [createSource, editSource, formSource] = await Promise.all([
     readFile(CREATE_DIALOG_URL, "utf8"),
     readFile(EDIT_DIALOG_URL, "utf8"),
@@ -111,14 +133,31 @@ test("All Agent forms expose and submit the optional turn summary setting", asyn
     formSource,
     /isExternalAgent\s*\?\s*summaryModelProviderId\s*:\s*summaryModelProviderId \|\| modelProviderId/,
   );
-  assert.doesNotMatch(formSource, /\{!isExternalAgent \? \([\s\S]*Generate Turn Summary/);
   assert.match(formSource, /checked=\{enableSummary\}/);
   assert.match(formSource, /onCheckedChange=\{setEnableSummary\}/);
+  assert.match(formSource, /disabled=\{isExternalAgent\}/);
+  assert.match(formSource, /External agents do not support turn summary configuration/);
   assert.match(createSource, /enableSummary,/);
   assert.match(createSource, /summaryModelProviderId: summaryModelProviderId \|\| null/);
-  assert.doesNotMatch(editSource, /enableSummary: !isExternalAgent && enableSummary/);
   assert.match(editSource, /summaryModelProviderId: summaryModelProviderId \|\| null/);
-  assert.match(editSource, /enableSummary && !effectiveSummaryModelProviderId/);
+  assert.match(
+    editSource,
+    /!isExternalAgent &&[\s\S]*enableSummary && !effectiveSummaryModelProviderId/,
+  );
+});
+
+test("External Agent display name is optional while System validation remains required", async () => {
+  const [editSource, formSource] = await Promise.all([
+    readFile(EDIT_DIALOG_URL, "utf8"),
+    readFile(FORM_FIELDS_URL, "utf8"),
+  ]);
+
+  assert.match(
+    editSource,
+    /!isExternalAgent &&[\s\S]*!displayName\.trim\(\)[\s\S]*!modelProviderId\.trim\(\)/,
+  );
+  assert.match(formSource, /Display Name[\s\S]*\(Optional\)/);
+  assert.match(formSource, /Description[\s\S]*\(Optional\)/);
 });
 
 test("Agent forms use SearchableSelect for both model provider fields", async () => {

@@ -15,7 +15,7 @@ export interface AgentCreateRequest {
   environmentVariables: Record<string, string>;
 }
 
-export interface AgentUpdateRequest {
+export interface SystemAgentUpdateRequest {
   displayName: string;
   description: string;
   systemPrompt: string;
@@ -29,6 +29,16 @@ export interface AgentUpdateRequest {
   extra: string | null;
   environmentVariables: Record<string, string>;
 }
+
+export interface ExternalAgentUpdateRequest {
+  displayName?: string;
+  description?: string;
+  modelProviderId?: string | null;
+  extra?: string | null;
+  environmentVariables?: Record<string, string> | null;
+}
+
+export type AgentUpdateRequest = SystemAgentUpdateRequest | ExternalAgentUpdateRequest;
 
 export type { McpToolServerDto, SkillDto, ToolInfo } from "@/components/definition-capabilities";
 export type { ModelProviderDto } from "@/types/agentflow";

@@ -120,22 +120,32 @@ export function EditAgentDialog({
       return;
     }
 
+    const body: AgentUpdateRequest = isExternalAgent
+      ? {
+          displayName,
+          description,
+          modelProviderId: modelProviderId || null,
+          extra: normalizeAgentExtraSettings(extra),
+          environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
+        }
+      : {
+          displayName,
+          description,
+          systemPrompt,
+          modelProviderId,
+          summaryModelProviderId: summaryModelProviderId || null,
+          enableSummary,
+          tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
+          skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
+          mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
+          connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
+          extra: null,
+          environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
+        };
+
     updateAgentMutation.mutate({
       id: editingAgent.id,
-      body: {
-        displayName,
-        description,
-        systemPrompt,
-        modelProviderId,
-        summaryModelProviderId: summaryModelProviderId || null,
-        enableSummary,
-        tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
-        skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
-        mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
-        connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
-        extra: isExternalAgent ? normalizeAgentExtraSettings(extra) : null,
-        environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
-      },
+      body,
     });
   };
 
@@ -182,9 +192,10 @@ export function EditAgentDialog({
                   onClick={handleUpdate}
                   disabled={
                     !editingAgent ||
-                    !displayName.trim() ||
-                    (!isExternalAgent && !modelProviderId.trim()) ||
-                    (enableSummary && !effectiveSummaryModelProviderId) ||
+                    (!isExternalAgent &&
+                      (!displayName.trim() ||
+                        !modelProviderId.trim() ||
+                        (enableSummary && !effectiveSummaryModelProviderId))) ||
                     Boolean(extraError) ||
                     Boolean(environmentVariablesError) ||
                     updateAgentMutation.isPending
