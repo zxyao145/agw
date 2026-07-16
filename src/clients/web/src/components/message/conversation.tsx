@@ -11,6 +11,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { collapseConsecutiveSystemMessages } from "@/lib/chat/ai-message-handlers";
 import { cn } from "@/lib/utils";
 import { MessageTrigger } from "../MessageTrigger";
 
@@ -79,7 +80,6 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
 
     const currentMsg = msgs[i];
     // console.debug("Processing message", i, JSON.stringify(currentMsg));
-    // Skip messages without an author (could be system metadata or similar)
     const isResult = isResultMessage(currentMsg);
 
     if (isResult) {
@@ -88,13 +88,10 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
         message: currentMsg,
       });
       processedIndices.add(i);
-    }
-
-    if (!currentMsg.author) {
       continue;
     }
 
-    if (currentMsg.role === "system") {
+    if (!currentMsg.author && currentMsg.role !== "system") {
       continue;
     }
 
@@ -207,6 +204,8 @@ export function Conversation({
     );
   }
 
+  const visibleMessages = collapseConsecutiveSystemMessages(messages);
+
   return (
     <div className={cn("min-h-full w-full flex-1", scrollable && "overflow-y-auto")}>
       <div className="mx-auto w-full max-w-225 space-y-4 pb-36">
@@ -221,7 +220,7 @@ export function Conversation({
           </div>
         )}
 
-        {processMessages(messages).map((item, index) => {
+        {processMessages(visibleMessages).map((item, index) => {
           // function call / tool use
           if (item.type === "accordion") {
             return (
