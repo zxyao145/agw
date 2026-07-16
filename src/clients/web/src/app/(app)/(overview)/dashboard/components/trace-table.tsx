@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, RotateCcw, Search } from "lucide-react";
 import { apiGet } from "@/api/client";
 import type { components } from "@/api/openapi";
 import { getApiErrorMessage } from "@/api/utils";
+import { DateTimePicker } from "@/components/date-time-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -130,25 +131,23 @@ export function TraceTable() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="trace-from-utc">From</Label>
-              <Input
+              <Label htmlFor="trace-from-utc-date">From</Label>
+              <DateTimePicker
                 id="trace-from-utc"
-                type="datetime-local"
+                clearable
+                placeholder="Pick a date"
                 value={draftFilters.fromUtc}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({ ...current, fromUtc: event.target.value }))
-                }
+                onChange={(fromUtc) => setDraftFilters((current) => ({ ...current, fromUtc }))}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="trace-to-utc">To</Label>
-              <Input
+              <Label htmlFor="trace-to-utc-date">To</Label>
+              <DateTimePicker
                 id="trace-to-utc"
-                type="datetime-local"
+                clearable
+                placeholder="Pick a date"
                 value={draftFilters.toUtc}
-                onChange={(event) =>
-                  setDraftFilters((current) => ({ ...current, toUtc: event.target.value }))
-                }
+                onChange={(toUtc) => setDraftFilters((current) => ({ ...current, toUtc }))}
               />
             </div>
           </div>
@@ -250,12 +249,19 @@ export function TraceTable() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span
-                      className="block max-w-64 truncate whitespace-pre-line text-xs text-dust"
-                      title={inputText}
-                    >
-                      {inputText}
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="block max-w-64 truncate text-xs text-dust" tabIndex={0}>
+                          {inputText}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="max-h-80 max-w-[min(40rem,calc(100vw-2rem))] overflow-y-auto whitespace-pre-wrap break-words text-left"
+                      >
+                        {inputText}
+                      </TooltipContent>
+                    </Tooltip>
                   </TableCell>
                   <TableCell>
                     {trace.error ? (
