@@ -15,7 +15,7 @@ public class SetupRequest
     public string ConnectionString { get; set; } = string.Empty;
 
     [Required]
-    [StringLength(256, MinimumLength = 12)]
+    [StringLength(256, MinimumLength = 8)]
     [DataType(DataType.Password)]
     [Display(Name = "管理员密码")]
     public string AdminPassword { get; set; } = string.Empty;
