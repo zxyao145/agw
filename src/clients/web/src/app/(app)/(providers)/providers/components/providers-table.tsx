@@ -15,6 +15,7 @@ import { getApiErrorMessage } from "@/api/utils";
 import { StaticTable } from "@/components/static-table";
 import { Empty } from "@/components/ui/empty";
 import { formatLocalDateTime } from "@/lib/date-time";
+import { ButtonGroup } from "@/components/ui/button-group";
 
 interface ProvidersTableProps {
   providers?: ProviderDto[];
@@ -94,23 +95,26 @@ export function ProvidersTable({ providers, isLoading, isError, error }: Provide
             </TableCell>
             <TableCell className="text-right">
               <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditingProvider(provider)}
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  disabled={deleteProviderMutation.isPending}
-                  onClick={() => handleDelete(provider)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <ButtonGroup>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setEditingProvider(provider)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={deleteProviderMutation.isPending}
+                    onClick={() => handleDelete(provider)}
+                    className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </ButtonGroup>
               </div>
             </TableCell>
           </TableRow>

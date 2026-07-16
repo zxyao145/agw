@@ -34,6 +34,7 @@ import { StaticTable } from "@/components/static-table";
 import { Empty } from "@/components/ui/empty";
 import { formatLocalDateTime } from "@/lib/date-time";
 import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@/lib/pagination";
+import { ButtonGroup } from "@/components/ui/button-group";
 
 type McpToolServerDto = {
   id: string;
@@ -408,35 +409,38 @@ export default function McpToolServersPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="cursor-pointer"
-                        onClick={() => connectMutation.mutate(server.id)}
-                        disabled={connectMutation.isPending}
-                        title="Connect and list tools"
-                      >
-                        <Link2 className="h-4 w-4" />
-                        {/* <Cable className="h-4 w-4" /> */}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onEdit(server)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => onDelete(server)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <ButtonGroup>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="cursor-pointer"
+                          onClick={() => connectMutation.mutate(server.id)}
+                          disabled={connectMutation.isPending}
+                          title="Connect and list tools"
+                        >
+                          <Link2 className="h-4 w-4" />
+                          {/* <Cable className="h-4 w-4" /> */}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => onEdit(server)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => onDelete(server)}
+                          disabled={deleteMutation.isPending}
+                          className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </ButtonGroup>
                     </div>
                   </TableCell>
                 </TableRow>

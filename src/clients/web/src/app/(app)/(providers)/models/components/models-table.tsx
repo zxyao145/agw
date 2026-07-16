@@ -13,6 +13,7 @@ import { getApiErrorMessage } from "@/api/utils";
 import { StaticTable } from "@/components/static-table";
 import { Empty } from "@/components/ui/empty";
 import { formatLocalDateTime } from "@/lib/date-time";
+import { ButtonGroup } from "@/components/ui/button-group";
 
 interface ModelsTableProps {
   models: ModelDto[] | undefined;
@@ -71,21 +72,26 @@ export function ModelsTable({ models, isLoading, isError, error }: ModelsTablePr
                 {formatLocalDateTime(model.createTime)}
               </TableCell>
               <TableCell className="text-right">
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  disabled={deleteModelMutation.isPending}
-                  onClick={() => {
-                    const ok = window.confirm(
-                      `Delete model "${model.name}"?\n\nThis action cannot be undone.`,
-                    );
-                    if (!ok) return;
-                    deleteModelMutation.mutate(model.id);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex justify-end gap-2">
+                  <ButtonGroup>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={deleteModelMutation.isPending}
+                      onClick={() => {
+                        const ok = window.confirm(
+                          `Delete model "${model.name}"?\n\nThis action cannot be undone.`,
+                        );
+                        if (!ok) return;
+                        deleteModelMutation.mutate(model.id);
+                      }}
+                      className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </ButtonGroup>
+                </div>
               </TableCell>
             </TableRow>
           ))}

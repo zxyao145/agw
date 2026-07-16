@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getApiErrorMessage } from "@/api/utils";
 import { formatLocalDateTime } from "@/lib/date-time";
 import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@/lib/pagination";
+import { ButtonGroup } from "@/components/ui/button-group";
 
 type SkillDto = {
   id: string;
@@ -377,23 +378,26 @@ export default function SkillsPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditDialog(skill)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDelete(skill)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <ButtonGroup>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => openEditDialog(skill)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleDelete(skill)}
+                          disabled={deleteMutation.isPending}
+                          className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </ButtonGroup>
                     </div>
                   </TableCell>
                 </TableRow>
