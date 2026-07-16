@@ -21,9 +21,9 @@ namespace Agw.Infrastructure.Data;
 /// </summary>
 public class DbSeeder
 {
-    private const string DefaultSkillName = "xiaohongshu-skills";
-    private const string DefaultSkillContentPath = "skills/xiaohongshu-skills";
-    private const string DefaultSkillResourceName = "Agw.Infrastructure.SeedData.xiaohongshu-skills.zip";
+    private const string DefaultSkillName = "xhs-explore";
+    private const string DefaultSkillContentPath = "skills/xhs-explore";
+    private const string DefaultSkillResourceName = "Agw.Infrastructure.SeedData.xhs-explore.zip";
 
     private static readonly Guid DeepSeekOpenAiProviderId = Guid.Parse("11111111-1111-1111-3333-000000000001");
     private static readonly Guid DeepSeekAnthropicProviderId = Guid.Parse("11111111-1111-1111-3333-000000000002");
@@ -37,7 +37,7 @@ public class DbSeeder
 
     private static readonly Guid XiaohongshuAgentflowId = Guid.Parse("11111111-1111-1111-7777-000000000001");
 
-    private static readonly Guid XiaohongshuSkillId = Guid.Parse("11111111-1111-1111-8888-000000000001");
+    private static readonly Guid XhsExploreSkillId = Guid.Parse("11111111-1111-1111-8888-000000000001");
 
     public static IReadOnlyList<Project> BuiltInProjects { get; } =
     [
@@ -515,13 +515,13 @@ public class DbSeeder
     private async Task<Skill> SeedDefaultSkillAsync()
     {
         var skill = await _context.Skills
-            .FirstOrDefaultAsync(x => x.Id == XiaohongshuSkillId || x.Name == DefaultSkillName);
+            .FirstOrDefaultAsync(x => x.Id == XhsExploreSkillId || x.Name == DefaultSkillName);
         if (skill == null)
         {
             var now = _timeProvider.GetUtcNow();
             skill = new Skill
             {
-                Id = XiaohongshuSkillId,
+                Id = XhsExploreSkillId,
                 Name = DefaultSkillName,
                 Description = "小红书技能集合",
                 ContentPath = DefaultSkillContentPath,
@@ -532,8 +532,10 @@ public class DbSeeder
             };
             _context.Skills.Add(skill);
         }
-        else if (skill.Id == XiaohongshuSkillId && skill.ContentPath != DefaultSkillContentPath)
+        else if (skill.Id == XhsExploreSkillId &&
+                 (skill.Name != DefaultSkillName || skill.ContentPath != DefaultSkillContentPath))
         {
+            skill.Name = DefaultSkillName;
             skill.ContentPath = DefaultSkillContentPath;
             skill.UpdateBy = "system";
             skill.UpdateTime = _timeProvider.GetUtcNow();
