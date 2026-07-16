@@ -3,6 +3,7 @@ import { MessageNode } from "../types";
 import UriContent from "./uri-content";
 import Reasoning from "./reasoning";
 import TextContent from "./text-content";
+import SystemMessage from "./system-message";
 
 const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
   const isTextNode = (
@@ -15,6 +16,11 @@ const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
       MessageContentType.ErrorContent,
     ] as string[]
   ).includes(node.type);
+
+  const isSystem = msg.role === "system";
+  if (isSystem) {
+    return <SystemMessage node={node} />;
+  }
 
   if (isTextNode) {
     return <TextContent node={node} />;

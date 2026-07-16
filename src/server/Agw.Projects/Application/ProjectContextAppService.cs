@@ -66,7 +66,7 @@ public class ProjectContextAppService
 
         return contexts
             .Select(context => ToSummaryResponse(context, recordsByContextId.GetValueOrDefault(context.Id) ?? []))
-            .Where(HasConversationMessages)
+            .Where(ShouldIncludeContext)
             .OrderByDescending(context => context.UpdateTime ?? context.CreateTime)
             .ToList();
     }
@@ -280,6 +280,6 @@ public class ProjectContextAppService
             .ThenByDescending(task => task.TaskId)
             .FirstOrDefault();
 
-    private static bool HasConversationMessages(ProjectContextSummaryResponse context) =>
-        context.MessageCount > 0;
+    private static bool ShouldIncludeContext(ProjectContextSummaryResponse context) =>
+        context.MessageCount > 0 || context.ExecutionCount == 0;
 }

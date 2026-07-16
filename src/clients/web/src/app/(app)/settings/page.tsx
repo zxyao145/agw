@@ -201,7 +201,7 @@ export default function SettingsPage() {
               id="new-password"
               type="password"
               autoComplete="new-password"
-              minLength={12}
+              minLength={8}
               maxLength={256}
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
@@ -209,7 +209,7 @@ export default function SettingsPage() {
           </div>
           <Button
             variant="outline"
-            disabled={newPassword.length < 12}
+            disabled={newPassword.length < 8}
             onClick={async () => {
               await changePassword(currentPassword, newPassword);
               window.location.assign("/login/");

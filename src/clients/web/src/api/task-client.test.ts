@@ -125,6 +125,8 @@ test("getProjectContexts gets context list for a project", async (t) => {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push({ url: String(input), init });
     return Response.json({
+      code: 200,
+      title: "OK",
       data: [
         {
           projectId: "project-1",
@@ -150,6 +152,18 @@ test("getProjectContexts gets context list for a project", async (t) => {
           updateTime: "2026-01-02T00:00:00Z",
           errorMessage: null,
         },
+        {
+          projectId: "project-1",
+          contextId: "ctx-cleared",
+          jobId: null,
+          title: "Cleared chat",
+          latestStatus: null,
+          executionCount: 0,
+          messageCount: 0,
+          createTime: "2026-01-01T00:00:00Z",
+          updateTime: "2026-01-03T00:00:00Z",
+          errorMessage: null,
+        },
       ],
     });
   }) as typeof fetch;
@@ -160,10 +174,13 @@ test("getProjectContexts gets context list for a project", async (t) => {
 
   const result = await getProjectContexts("project-1");
 
-  assert.equal(result.length, 1);
+  assert.equal(result.length, 2);
   assert.equal(result[0].contextId, "ctx-1");
   assert.equal(result[0].jobId, "job-1");
   assert.equal(result[0].executionCount, 2);
+  assert.equal(result[1].contextId, "ctx-cleared");
+  assert.equal(result[1].executionCount, 0);
+  assert.equal(result[1].messageCount, 0);
   assert.deepEqual(requests, [
     {
       url: "/api/projects/project-1/contexts",
@@ -171,6 +188,7 @@ test("getProjectContexts gets context list for a project", async (t) => {
         method: "GET",
         headers: {},
         signal: undefined,
+        credentials: "same-origin",
       },
     },
   ]);

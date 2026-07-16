@@ -65,12 +65,12 @@ test("chat contexts use the shared friendly local date-time formatter", async ()
   assert.doesNotMatch(conversationListSource, /const formatDate =/);
 });
 
-test("chat context list filters empty conversation placeholders", async () => {
+test("chat context list keeps cleared contexts and filters empty execution placeholders", async () => {
   const taskClientSource = await readFile(TASK_CLIENT_URL, "utf8");
 
-  assert.match(taskClientSource, /function hasConversationMessages/);
-  assert.match(taskClientSource, /context\.messageCount > 0/);
-  assert.match(taskClientSource, /\.filter\(hasConversationMessages\)/);
+  assert.match(taskClientSource, /function shouldIncludeContext/);
+  assert.match(taskClientSource, /context\.messageCount > 0 \|\| context\.executionCount === 0/);
+  assert.match(taskClientSource, /\.filter\(shouldIncludeContext\)/);
 });
 
 test("chat page resolves the active context from context id only", async () => {
@@ -86,6 +86,34 @@ test("chat page resolves the active context from context id only", async () => {
   assert.match(pageSource, /currentContextId=\{contextId\}/);
   assert.match(pageSource, /setContextId\(context\.contextId\)/);
   assert.match(pageSource, /syncRoute\(selectedProjectId, context\.contextId\)/);
+});
+
+test("chat routes keep project and context parameters without URL settings", async () => {
+  const pageSource = await readFile(CHAT_PAGE_URL, "utf8");
+
+  assert.match(pageSource, /nextParams\.set\("projectId", projectId\)/);
+  assert.match(pageSource, /nextParams\.set\("contextId", contextId\)/);
+  assert.doesNotMatch(
+    pageSource,
+    /url-settings|hashSettingsValue|routeSettingsParam|settingsHash|hashchange/,
+  );
+});
+
+test("chat page clears legacy settings URLs without restoring their values", async () => {
+  const pageSource = await readFile(CHAT_PAGE_URL, "utf8");
+
+  assert.match(pageSource, /searchParams\.delete\("settings"\)/);
+  assert.match(pageSource, /window\.history\.replaceState/);
+  assert.doesNotMatch(pageSource, /decodeChatUrlSettings|getChatSettingsHashValue/);
+});
+
+test("chat page does not expose the share current URL action", async () => {
+  const pageSource = await readFile(CHAT_PAGE_URL, "utf8");
+
+  assert.doesNotMatch(
+    pageSource,
+    /Share2|copyCurrentUrlToClipboard|handleShareCurrentUrl|Share current URL/,
+  );
 });
 
 test("chat routes do not read or generate execution id query parameters", async () => {

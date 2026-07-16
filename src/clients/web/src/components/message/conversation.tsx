@@ -68,121 +68,126 @@ function getMessageMeta(message: AiMessage): MessageMeta | null {
 
 const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
   const items: ProcessedMessageItem[] = [];
+  type FragmentType = "normal" | "result" | "function-call" | "function-result";
+  type MessageFragment = {
+    type: FragmentType;
+    message: AiMessage;
+    groupKey: string | null;
+    toolName: string;
+  };
+  type ToolGroup = {
+    calls: MessageFragment[];
+    results: MessageFragment[];
+  };
 
-  // Track which message indices have been processed
-  const processedIndices = new Set<number>();
-  const msgLength = msgs?.length ?? 0;
-  for (let i = 0; i < msgLength; i++) {
-    if (processedIndices.has(i)) {
-      continue; // Skip already processed messages
-    }
-    processedIndices.add(i);
+  const fragments: MessageFragment[] = [];
 
-    const currentMsg = msgs[i];
-    // console.debug("Processing message", i, JSON.stringify(currentMsg));
-    const isResult = isResultMessage(currentMsg);
-
-    if (isResult) {
-      items.push({
-        type: "result",
-        message: currentMsg,
-      });
-      processedIndices.add(i);
+  for (const message of msgs) {
+    if (isResultMessage(message)) {
+      fragments.push({ type: "result", message, groupKey: null, toolName: "" });
       continue;
     }
 
-    if (!currentMsg.author && currentMsg.role !== "system") {
+    if ((!message.author && message.role !== "system") || message.contents.length === 0) {
       continue;
     }
 
-    if (!currentMsg.contents || currentMsg.contents.length === 0) {
-      continue;
-    }
+    let normalContents: AiMessage["contents"] = [];
+    const flushNormalContents = () => {
+      if (normalContents.length === 0) {
+        return;
+      }
 
-    // Check if current message is a FunctionCall
-    const isFunctionCall = currentMsg.contents[0].type === MessageContentType.FunctionCallContent;
-    if (isFunctionCall) {
-      handleFunctionCall(currentMsg, i);
-      continue;
-    }
-
-    // Check if it's an orphaned FunctionResult
-    const isFunctionResult =
-      currentMsg.contents[0].type === MessageContentType.FunctionResultContent;
-    if (isFunctionResult) {
-      // This FunctionResult wasn't matched to any FunctionCall
-      // (either no callId, or FunctionCall hasn't appeared yet, or already processed)
-      items.push({
+      fragments.push({
         type: "normal",
-        message: currentMsg,
+        message: { ...message, contents: normalContents },
+        groupKey: null,
+        toolName: "",
       });
+      normalContents = [];
+    };
+
+    for (const content of message.contents) {
+      const isFunctionCall = content.type === MessageContentType.FunctionCallContent;
+      const isFunctionResult = content.type === MessageContentType.FunctionResultContent;
+      if (!isFunctionCall && !isFunctionResult) {
+        normalContents.push(content);
+        continue;
+      }
+
+      flushNormalContents();
+      const callId = content.additionalProperties?.callId;
+      const groupKey =
+        typeof callId === "string" && callId.length > 0
+          ? JSON.stringify([message.streamingScopeId ?? null, callId])
+          : null;
+      const toolName = content.additionalProperties?.toolName;
+      fragments.push({
+        type: isFunctionCall ? "function-call" : "function-result",
+        message: { ...message, contents: [content] },
+        groupKey,
+        toolName: typeof toolName === "string" ? toolName : "",
+      });
+    }
+
+    flushNormalContents();
+  }
+
+  const toolGroups = new Map<string, ToolGroup>();
+  for (const fragment of fragments) {
+    if (!fragment.groupKey) {
       continue;
     }
 
-    // Normal message (user, assistant, etc.)
+    const group = toolGroups.get(fragment.groupKey) ?? { calls: [], results: [] };
+    if (fragment.type === "function-call") {
+      group.calls.push(fragment);
+    } else if (fragment.type === "function-result") {
+      group.results.push(fragment);
+    }
+    toolGroups.set(fragment.groupKey, group);
+  }
+
+  const renderedGroups = new Set<string>();
+  for (const fragment of fragments) {
+    if (fragment.type === "result") {
+      items.push({ type: "result", message: fragment.message });
+      continue;
+    }
+
+    if (fragment.type === "normal") {
+      items.push({ type: "normal", message: fragment.message });
+      continue;
+    }
+
+    const group = fragment.groupKey ? toolGroups.get(fragment.groupKey) : undefined;
+    if (fragment.type === "function-result") {
+      if (group && group.calls.length > 0) {
+        continue;
+      }
+
+      items.push({ type: "normal", message: fragment.message });
+      continue;
+    }
+
+    if (!fragment.groupKey || !group || group.results.length === 0) {
+      items.push({ type: "normal", message: fragment.message });
+      continue;
+    }
+
+    if (renderedGroups.has(fragment.groupKey)) {
+      continue;
+    }
+
+    renderedGroups.add(fragment.groupKey);
     items.push({
-      type: "normal",
-      message: currentMsg,
+      type: "accordion",
+      messages: [...group.calls, ...group.results].map((item) => item.message),
+      toolName: group.calls[0].toolName,
     });
-    processedIndices.add(i);
   }
 
   return items;
-
-  function handleFunctionCall(currentMsg: AiMessage, i: number) {
-    const callId = currentMsg.contents[0].additionalProperties?.callId as string;
-
-    if (callId) {
-      // Find all FunctionResults with matching callId (anywhere in the message list)
-      const matchingResults: { msg: AiMessage; index: number }[] = [];
-
-      for (let j = 0; j < msgs.length; j++) {
-        if (j === i || processedIndices.has(j)) continue;
-
-        const msg = msgs[j];
-        const isFunctionResult =
-          msg?.contents?.length === 1 &&
-          msg.contents[0].type === MessageContentType.FunctionResultContent;
-
-        if (isFunctionResult) {
-          const resultCallId = msg.contents[0].additionalProperties?.callId as string;
-          if (resultCallId === callId && msg.streamingScopeId === currentMsg.streamingScopeId) {
-            matchingResults.push({ msg, index: j });
-          }
-        }
-      }
-
-      // If we found matching results, create an accordion group
-      if (matchingResults.length > 0) {
-        const toolName = (currentMsg.contents[0].additionalProperties?.toolName as string) ?? "";
-        const groupedMessages = [currentMsg, ...matchingResults.map((r) => r.msg)];
-
-        items.push({
-          type: "accordion",
-          messages: groupedMessages,
-          toolName,
-        });
-
-        // Mark all these messages as processed
-        processedIndices.add(i);
-        matchingResults.forEach((r) => processedIndices.add(r.index));
-      } else {
-        // FunctionCall without matching results, treat as normal
-        items.push({
-          type: "normal",
-          message: currentMsg,
-        });
-        processedIndices.add(i);
-      }
-    } else {
-      // FunctionCall without callId, treat as normal
-      items.push({
-        type: "normal",
-        message: currentMsg,
-      });
-      processedIndices.add(i);
-    }
-  }
 };
 
 export function Conversation({

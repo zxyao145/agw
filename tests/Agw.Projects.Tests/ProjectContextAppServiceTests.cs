@@ -59,7 +59,7 @@ public class ProjectContextAppServiceTests
     }
 
     [Fact]
-    public async Task ListResponsesAsync_SkipsContextsWithoutMessages()
+    public async Task ListResponsesAsync_SkipsContextsWithExecutionsButWithoutMessages()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -385,6 +385,44 @@ public class ProjectContextAppServiceTests
         Assert.Empty(await dbContext.TaskSessionBindings.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.ProjectContexts.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
+    }
+
+    [Fact]
+    public async Task ClearRecordsAsync_AfterClearingContext_RemainsVisibleInList()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.NewGuid();
+        var contextId = Guid.NewGuid();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
+            seedContext.TaskRecords.Add(CreateRecord(
+                contextId,
+                Guid.NewGuid(),
+                0,
+                "Clear me",
+                TaskExecutionStatus.Succeeded));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var clearResult = await service.ClearRecordsAsync(projectId, "context-1");
+        var contexts = await service.ListResponsesAsync(projectId);
+
+        Assert.Equal(ApplicationResultType.Success, clearResult.Type);
+        var context = Assert.Single(contexts);
+        Assert.Equal("context-1", context.ContextId);
+        Assert.Equal(0, context.ExecutionCount);
+        Assert.Equal(0, context.MessageCount);
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>

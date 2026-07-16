@@ -1,8 +1,57 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import ts from "typescript";
 
 const CONVERSATION_URL = new URL("./conversation.tsx", import.meta.url);
+
+async function loadMessageProcessor() {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+  const start = source.indexOf("const defaultProcessMessages");
+  const end = source.indexOf("\nexport function Conversation");
+  const processorSource = source
+    .slice(start, end)
+    .replace("const defaultProcessMessages", "export const defaultProcessMessages");
+  const javascript = ts.transpileModule(
+    `
+const MessageContentType = {
+  FunctionCallContent: "FunctionCallContent",
+  FunctionResultContent: "FunctionResultContent",
+};
+const isResultMessage = (message) => message.additionalProperties?.type === "result";
+${processorSource}
+`,
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.ES2022,
+        target: ts.ScriptTarget.ES2022,
+      },
+    },
+  ).outputText;
+
+  return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
+}
+
+function toolMessage(type: string, scope: string, callId = "item_1") {
+  return toolContentsMessage(type, scope, [callId]);
+}
+
+function toolContentsMessage(type: string, scope: string, callIds: string[]) {
+  return {
+    messageId: `${type}-${scope}`,
+    author: "agent",
+    role: type === "FunctionCallContent" ? "assistant" : "tool",
+    streamingScopeId: scope,
+    contents: callIds.map((callId) => ({
+      type,
+      content: `${type}-${callId}`,
+      additionalProperties: {
+        callId,
+        ...(type === "FunctionCallContent" ? { toolName: `tool-${callId}` } : {}),
+      },
+    })),
+  };
+}
 
 test("conversation renders agent name and author metadata above agent messages", async () => {
   const source = await readFile(CONVERSATION_URL, "utf8");
@@ -37,18 +86,9 @@ test("conversation renders authorless system messages after collapsing consecuti
   const source = await readFile(CONVERSATION_URL, "utf8");
 
   assert.match(source, /collapseConsecutiveSystemMessages\(messages\)/);
-  assert.match(source, /!currentMsg\.author && currentMsg\.role !== "system"/);
-  assert.doesNotMatch(source, /if \(currentMsg\.role === "system"\) \{\s*continue;/);
-  assert.match(source, /if \(isResult\)[\s\S]*?continue;/);
-});
-
-test("function results only pair with calls from the same streaming scope", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-
-  assert.match(
-    source,
-    /resultCallId === callId &&[\s\S]*?msg\.streamingScopeId === currentMsg\.streamingScopeId/,
-  );
+  assert.match(source, /!message\.author && message\.role !== "system"/);
+  assert.doesNotMatch(source, /if \(message\.role === "system"\) \{\s*continue;/);
+  assert.match(source, /if \(isResultMessage\(message\)\)[\s\S]*?continue;/);
 });
 
 test("duplicate call ids produce one tool group per turn", async () => {
@@ -73,5 +113,86 @@ test("duplicate call ids produce one tool group per turn", async () => {
       ["user-1", "user-1"],
       ["user-2", "user-2"],
     ],
+  );
+});
+
+test("concurrent tool calls pair with out-of-order results in call order", async () => {
+  const { defaultProcessMessages } = await loadMessageProcessor();
+  const items = defaultProcessMessages([
+    toolContentsMessage("FunctionCallContent", "user-1", ["call-1", "call-2", "call-3"]),
+    toolContentsMessage("FunctionResultContent", "user-1", ["call-3", "call-1", "call-2"]),
+  ]);
+
+  assert.deepEqual(
+    items.map((item: { type: string }) => item.type),
+    ["accordion", "accordion", "accordion"],
+  );
+  assert.deepEqual(
+    items.map((item: { toolName: string }) => item.toolName),
+    ["tool-call-1", "tool-call-2", "tool-call-3"],
+  );
+  assert.deepEqual(
+    items.map((item: { messages: Array<{ contents: Array<{ additionalProperties: unknown }> }> }) =>
+      item.messages.map(
+        (message) => (message.contents[0].additionalProperties as { callId: string }).callId,
+      ),
+    ),
+    [
+      ["call-1", "call-1"],
+      ["call-2", "call-2"],
+      ["call-3", "call-3"],
+    ],
+  );
+});
+
+test("final result messages keep their result classification", async () => {
+  const { defaultProcessMessages } = await loadMessageProcessor();
+  const finalResult = {
+    messageId: "final-result",
+    author: "agent",
+    role: "assistant",
+    contents: [{ type: "TextContent", content: "done" }],
+    additionalProperties: { type: "result" },
+  };
+
+  const items = defaultProcessMessages([finalResult]);
+
+  assert.deepEqual(items, [{ type: "result", message: finalResult }]);
+});
+
+test("mixed ordinary and unmatched tool contents preserve content order", async () => {
+  const { defaultProcessMessages } = await loadMessageProcessor();
+  const message = {
+    messageId: "mixed-message",
+    author: "agent",
+    role: "assistant",
+    streamingScopeId: "user-1",
+    contents: [
+      { type: "TextContent", content: "before" },
+      {
+        type: "FunctionCallContent",
+        content: "call",
+        additionalProperties: { callId: "call-without-result", toolName: "orphan-call" },
+      },
+      { type: "TextContent", content: "after" },
+      {
+        type: "FunctionResultContent",
+        content: "result",
+        additionalProperties: { callId: "result-without-call" },
+      },
+    ],
+  };
+
+  const items = defaultProcessMessages([message]);
+
+  assert.deepEqual(
+    items.map((item: { type: string }) => item.type),
+    ["normal", "normal", "normal", "normal"],
+  );
+  assert.deepEqual(
+    items.map((item: { message: { contents: Array<{ type: string }> } }) =>
+      item.message.contents.map((content) => content.type),
+    ),
+    [["TextContent"], ["FunctionCallContent"], ["TextContent"], ["FunctionResultContent"]],
   );
 });

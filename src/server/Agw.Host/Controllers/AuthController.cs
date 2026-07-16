@@ -122,7 +122,7 @@ public sealed class AuthController : ControllerBase
             return AgwApiResult.FromError(ErrorCodes.InvalidAdminCredentials);
         }
 
-        if (request.NewPassword.Length is < 12 or > 256) return AgwApiResult.BadRequest("Password must be between 12 and 256 characters.");
+        if (request.NewPassword.Length is < 8 or > 256) return AgwApiResult.BadRequest("Password must be between 8 and 256 characters.");
         await _stateStore.UpdatePasswordAsync(_passwordHasher.HashPassword(new object(), request.NewPassword), cancellationToken);
         await HttpContext.SignOutAsync(CookieScheme);
         return AgwApiResult.Ok();

@@ -55,8 +55,8 @@ function toContextSummary(context: ProjectContextSummaryResponse): ContextSummar
   };
 }
 
-function hasConversationMessages(context: ContextSummary): boolean {
-  return context.messageCount > 0;
+function shouldIncludeContext(context: ContextSummary): boolean {
+  return context.messageCount > 0 || context.executionCount === 0;
 }
 
 function toContextDetails(context: ProjectContextResponse): ContextDetails {
@@ -76,7 +76,7 @@ export async function getProjectContexts(projectId: string): Promise<ContextSumm
     params: { path: { projectId } },
   })) as ProjectContextSummaryResponse[];
 
-  return result.map(toContextSummary).filter(hasConversationMessages);
+  return result.map(toContextSummary).filter(shouldIncludeContext);
 }
 
 export async function getProjectContextDetails(
