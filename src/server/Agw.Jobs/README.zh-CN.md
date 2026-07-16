@@ -212,7 +212,7 @@ cd src/clients/web
 pnpm dev
 ```
 
-Web 客户端会把 `/api/*` 代理到后端；默认后端地址是 `http://localhost:5015`。
+Web 客户端会把 `/api/*` 代理到后端；默认后端地址是 `http://localhost:30815`。
 
 ### 通过 REST API 使用
 
@@ -221,7 +221,7 @@ Job API 受 Host 认证边界保护。下面使用 API Token，避免基于 Cook
 创建一个每天 UTC 01:00 运行的 Agent Job：
 
 ```bash
-curl 'http://localhost:5015/api/jobs' \
+curl 'http://localhost:30815/api/jobs' \
   --request POST \
   --header 'Authorization: Bearer agw_...' \
   --header 'Content-Type: application/json' \
@@ -252,7 +252,7 @@ curl 'http://localhost:5015/api/jobs' \
 查询日志：
 
 ```bash
-curl 'http://localhost:5015/api/jobs/33333333-3333-3333-3333-000000000001/logs' \
+curl 'http://localhost:30815/api/jobs/33333333-3333-3333-3333-000000000001/logs' \
   --header 'Authorization: Bearer agw_...'
 ```
 

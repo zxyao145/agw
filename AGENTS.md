@@ -106,7 +106,7 @@ dotnet test Agw.slnx
 dotnet format Agw.slnx
 ```
 
-The development backend listens on `http://localhost:5015` by default through `src/server/Agw.Host/Properties/launchSettings.json`.
+The development backend listens on `http://localhost:30815` by default through `src/server/Agw.Host/Properties/launchSettings.json`.
 
 Run a focused project with `dotnet test tests/Agw.Files.Tests` (or the matching `Agw.*.Tests` project), and use `--filter "FullyQualifiedName~MethodName"` for a specific test.
 
@@ -140,7 +140,7 @@ pnpm gen:openapi
 
 The Next.js development server listens on `http://localhost:3000`. Linting and formatting use `oxlint` and `oxfmt`, not ESLint or Prettier.
 
-The frontend proxy target is resolved in this order: `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:5015`.
+The frontend proxy target is resolved in this order: `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:30815`.
 
 Regenerate `src/clients/web/src/api/openapi.d.ts` after backend contract changes.
 
@@ -148,7 +148,7 @@ After the first clone, configure hooks with `git config core.hooksPath .githooks
 
 ## Local Setup and Configuration
 
-On the first backend run, open `http://localhost:5015/setup` to choose the database provider, connection string, and administrator password. Setup seeds the database and writes `server-state.json` below the Agw data directory.
+On the first backend run, open `http://localhost:30815/setup` to choose the database provider, connection string, and administrator password. Setup seeds the database and writes `server-state.json` below the Agw data directory.
 
 Remote web access uses the administrator session cookie. Desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API tokens. The legacy `X-API-Key` setting is not supported.
 

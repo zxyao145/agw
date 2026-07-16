@@ -89,7 +89,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Host
 ```
 
-The development backend listens on `http://localhost:5015` by default. On the first run, open `http://localhost:5015/setup` to choose the database provider, connection string, and administrator password. All runtime data is stored in an `agw` directory under the current user's home directory. Setup through a domain name also requires the one-time setup code printed in the server startup logs.
+The development backend listens on `http://localhost:30815` by default. On the first run, open `http://localhost:30815/setup` to choose the database provider, connection string, and administrator password. All runtime data is stored in an `agw` directory under the current user's home directory. Setup through a domain name also requires the one-time setup code printed in the server startup logs.
 
 Start the frontend in another terminal:
 
@@ -99,7 +99,7 @@ pnpm install
 pnpm dev
 ```
 
-After both services are running, open `http://localhost:3000`. The Next.js development server proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:5015`.
+After both services are running, open `http://localhost:3000`. The Next.js development server proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30815`.
 
 Production packages embed the static Web UI in ASP.NET Core and serve it from a single server process. See the deployment guide below for details.
 

@@ -11,7 +11,7 @@ Run backend commands from the repo root:
 - `dotnet restore Agw.slnx` restores backend dependencies.
 - `dotnet build Agw.slnx` compiles all solution projects.
 - `dotnet test Agw.slnx` runs the normal xUnit suite.
-- `dotnet run --project src/server/Agw.Host` starts the API host, usually on `http://localhost:5015`.
+- `dotnet run --project src/server/Agw.Host` starts the API host, usually on `http://localhost:30815`.
 - `dotnet format` applies .NET formatting.
 
 For Web client work, run commands in `src/clients/web`: `pnpm install`, `pnpm dev`, `pnpm build`, `pnpm lint`, and `pnpm format:check`.

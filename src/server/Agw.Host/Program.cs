@@ -66,7 +66,7 @@ if (await Agw.Host.ServerCommand.TryRunAsync(args, dataPaths))
 if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
     && !string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase))
 {
-    Environment.SetEnvironmentVariable("ASPNETCORE_URLS", "http://127.0.0.1:5015");
+    Environment.SetEnvironmentVariable("ASPNETCORE_URLS", "http://127.0.0.1:30815");
 }
 
 // Configure Serilog early in the pipeline

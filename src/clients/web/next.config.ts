@@ -4,7 +4,7 @@
 // const backendBaseUrl =
 //   process.env.BACKEND_API_BASE_URL ??
 //   process.env.NEXT_PUBLIC_API_BASE_URL ??
-//   "http://localhost:5015";
+//   "http://localhost:30815";
 
 // const outputMode = process.env.NEXT_OUTPUT_MODE;
 // const isStaticExport = outputMode === "export";
@@ -46,7 +46,7 @@ const { codeInspectorPlugin } = require("code-inspector-plugin");
 const backendBaseUrl =
   process.env.BACKEND_API_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
-  "http://localhost:5015";
+  "http://localhost:30815";
 
 const outputMode = process.env.NEXT_OUTPUT_MODE;
 const isStaticExport = outputMode === "export";
