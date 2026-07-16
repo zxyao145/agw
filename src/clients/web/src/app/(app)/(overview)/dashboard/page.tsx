@@ -80,17 +80,20 @@ function SummaryCards({
     {
       label: "Total Input Token",
       value: formatStat(stats?.usageInputTokenCount, hasData),
-      color: "text-cyan-300",
+      color: "text-chart-1",
+      bar: "bg-chart-1",
     },
     {
       label: "Total Output Token",
       value: formatStat(stats?.usageOutputTokenCount, hasData),
-      color: "text-orange-300",
+      color: "text-chart-3",
+      bar: "bg-chart-3",
     },
     {
       label: "Total Token",
       value: formatStat(stats?.usageTotalTokenCount, hasData),
-      color: "text-emerald-300",
+      color: "text-chart-2",
+      bar: "bg-chart-2",
     },
     // {
     //   label: "Project",
@@ -125,18 +128,34 @@ function SummaryCards({
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {loading
         ? Array.from({ length: cards.length }).map((_, i) => (
-            <div key={i} className="animate-pulse rounded-xl border border-stone bg-charcoal p-4">
-              <div className="h-3 w-28 rounded bg-stone" />
-              <div className="mt-2 h-6 w-14 rounded bg-stone" />
+            <div
+              key={i}
+              className="relative overflow-hidden rounded-xl border border-border bg-card p-5"
+            >
+              <div className="absolute inset-y-0 left-0 w-1 bg-muted" />
+              <div className="animate-pulse pl-3">
+                <div className="h-3 w-24 rounded bg-muted" />
+                <div className="mt-3 h-7 w-32 rounded bg-muted" />
+              </div>
             </div>
           ))
         : cards.map((c) => (
-            <div key={c.label} className="rounded-xl border border-stone bg-charcoal p-4">
-              <div className="text-xs text-dust">{c.label}</div>
-              <div className={`mt-1 text-2xl font-bold ${c.color}`}>{c.value}</div>
+            <div
+              key={c.label}
+              className="relative overflow-hidden rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/20"
+            >
+              <div className={`absolute inset-y-0 left-0 w-1 ${c.bar}`} />
+              <div className="pl-3">
+                <div className="text-[0.7rem] font-medium uppercase tracking-wider text-muted-foreground">
+                  {c.label}
+                </div>
+                <div className={`mt-2 text-3xl font-semibold tabular-nums ${c.color}`}>
+                  {c.value}
+                </div>
+              </div>
             </div>
           ))}
     </div>
