@@ -12,6 +12,7 @@ export interface AiMessage {
   role?: string;
   contents: AiMessageContent[];
   additionalProperties?: AdditionalProperties;
+  streamingScopeId?: string;
   // agent error
   type?: string;
 }

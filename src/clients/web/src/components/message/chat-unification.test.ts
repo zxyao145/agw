@@ -67,6 +67,27 @@ test("shared Chat owns canonical message filtering, grouping, usage, and executi
   assert.match(source, /new ExecutionHubClient/);
 });
 
+test("shared Chat scopes history and merges only the incoming streaming message", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+
+  assert.match(source, /scopeMessagesByUserTurn\(preparedHistory\.messages\)/);
+  assert.match(source, /const activeStreamingScopeRef = React\.useRef<string \| null>\(null\)/);
+  assert.match(
+    source,
+    /activeStreamingScopeRef\.current \?\?= message\.messageId;[\s\S]*?setIsExecuting\(true\)/,
+  );
+  assert.match(source, /activeStreamingScopeRef\.current = userMessage\.messageId/);
+  assert.match(
+    source,
+    /scopeStreamingMessage\([\s\S]*?message,[\s\S]*?activeStreamingScopeRef\.current/,
+  );
+  assert.match(
+    source,
+    /setMessages\(\(current\) => mergeStreamingMessage\(current, scopedMessage\)\)/,
+  );
+  assert.doesNotMatch(source, /mergeStreamingMessagesById/);
+});
+
 test("shared Chat follows streaming output only while the viewport is at the bottom", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 

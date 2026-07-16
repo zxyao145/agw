@@ -27,7 +27,9 @@ import { getClaudeInitCommands, prepareClaudeHistory } from "@/lib/chat/ai-messa
 import { updateAutoScrollState, type AutoScrollState } from "@/lib/chat/auto-scroll";
 import {
   createUserTextMessage,
-  mergeStreamingMessagesById,
+  mergeStreamingMessage,
+  scopeMessagesByUserTurn,
+  scopeStreamingMessage,
   toExecutionUserInput,
 } from "@/lib/execution-stream";
 import {
@@ -65,6 +67,14 @@ function nextContextId(): string {
   return Uuid4.generate().toCanonical();
 }
 
+function prepareChatHistory(messages: AiMessage[]) {
+  const preparedHistory = prepareClaudeHistory(messages);
+  return {
+    ...preparedHistory,
+    messages: scopeMessagesByUserTurn(preparedHistory.messages),
+  };
+}
+
 /**
  * Shared chat container that owns session state, execution, message rendering, and input.
  * 共享聊天容器，拥有会话状态、执行、消息渲染和输入。
@@ -82,7 +92,7 @@ export function Chat({
   active = true,
 }: ChatProps) {
   const initialHistory = React.useMemo(
-    () => prepareClaudeHistory(sessionSeed.messages),
+    () => prepareChatHistory(sessionSeed.messages),
     [sessionSeed.revision],
   );
   const [isExecuting, setIsExecuting] = React.useState(false);
@@ -100,6 +110,7 @@ export function Chat({
   const configuredSessionRef = React.useRef<string | null>(null);
   const executionGenerationRef = React.useRef(0);
   const pendingTeardownCountRef = React.useRef(0);
+  const activeStreamingScopeRef = React.useRef<string | null>(null);
   const autoScrollStateRef = React.useRef<AutoScrollState>({
     shouldAutoScroll: true,
     scrollHeight: 0,
@@ -150,6 +161,7 @@ export function Chat({
 
   const interruptAndDispose = React.useCallback(async (reason: string) => {
     executionGenerationRef.current += 1;
+    activeStreamingScopeRef.current = null;
     const client = executionClientRef.current;
     executionClientRef.current = null;
     configuredSessionRef.current = null;
@@ -182,7 +194,7 @@ export function Chat({
   }, [interruptAndDispose, targetKey]);
 
   React.useEffect(() => {
-    const preparedHistory = prepareClaudeHistory(sessionSeed.messages);
+    const preparedHistory = prepareChatHistory(sessionSeed.messages);
     void interruptAndDispose("Execution session changed.");
     setPendingHumanGate(null);
     autoScrollStateRef.current = {
@@ -248,12 +260,14 @@ export function Chat({
       }
 
       if (message.additionalProperties?.type === "turn-start") {
+        activeStreamingScopeRef.current ??= message.messageId;
         setIsExecuting(true);
         return;
       }
 
       const terminalStatus = getTurnFinishedStatus(message);
       if (terminalStatus) {
+        activeStreamingScopeRef.current = null;
         setIsExecuting(false);
         setPendingHumanGate(null);
         void onConversationChange?.();
@@ -264,7 +278,11 @@ export function Chat({
       }
 
       if (message.role !== "user") {
-        setMessages((current) => mergeStreamingMessagesById([...current, message]));
+        const scopedMessage = scopeStreamingMessage(
+          message,
+          activeStreamingScopeRef.current ?? message.messageId,
+        );
+        setMessages((current) => mergeStreamingMessage(current, scopedMessage));
       }
     },
     [notifyExecutionError, onConversationChange],
@@ -307,7 +325,9 @@ export function Chat({
         };
       }
 
-      setMessages((current) => [...current, userMessage]);
+      activeStreamingScopeRef.current = userMessage.messageId;
+      const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
+      setMessages((current) => [...current, scopedUserMessage]);
       setPendingHumanGate(null);
       setIsExecuting(true);
       const generation = executionGenerationRef.current;
@@ -334,6 +354,7 @@ export function Chat({
             if (executionClientRef.current === client) {
               executionClientRef.current = null;
             }
+            activeStreamingScopeRef.current = null;
             setIsExecuting(false);
             setPendingHumanGate(null);
             if (error) {
@@ -389,6 +410,7 @@ export function Chat({
         void onConversationChange?.();
       } catch (error) {
         if (generation === executionGenerationRef.current) {
+          activeStreamingScopeRef.current = null;
           setIsExecuting(false);
           setPendingHumanGate(null);
           reportExecutionErrorOnce(error);

@@ -149,7 +149,7 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
 
         if (isFunctionResult) {
           const resultCallId = msg.contents[0].additionalProperties?.callId as string;
-          if (resultCallId === callId) {
+          if (resultCallId === callId && msg.streamingScopeId === currentMsg.streamingScopeId) {
             matchingResults.push({ msg, index: j });
           }
         }

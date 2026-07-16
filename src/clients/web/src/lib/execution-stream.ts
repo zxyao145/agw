@@ -31,6 +31,34 @@ function cloneMessage(message: AiMessage): AiMessage {
   };
 }
 
+function hasSameStreamingIdentity(message: AiMessage, incoming: AiMessage): boolean {
+  return (
+    message.streamingScopeId === incoming.streamingScopeId &&
+    message.messageId === incoming.messageId &&
+    message.role === incoming.role &&
+    message.author === incoming.author
+  );
+}
+
+export function scopeStreamingMessage(message: AiMessage, streamingScopeId: string): AiMessage {
+  return {
+    ...cloneMessage(message),
+    streamingScopeId,
+  };
+}
+
+export function scopeMessagesByUserTurn(messages: AiMessage[]): AiMessage[] {
+  let currentScopeId: string | null = null;
+
+  return messages.map((message, index) => {
+    if (message.role === "user") {
+      currentScopeId = message.messageId || `history-user-${index}`;
+    }
+
+    return scopeStreamingMessage(message, currentScopeId ?? `history-prelude-${index}`);
+  });
+}
+
 export function createUserTextMessage(input: string): AiMessage {
   return {
     messageId: Ulid.generate().toCanonical(),
@@ -53,7 +81,9 @@ export function getMessageTextContent(message: AiMessage): string {
 }
 
 export function mergeStreamingMessage(messages: AiMessage[], incoming: AiMessage): AiMessage[] {
-  const existingIndex = messages.findIndex((message) => message.messageId === incoming.messageId);
+  const existingIndex = messages.findIndex((message) =>
+    hasSameStreamingIdentity(message, incoming),
+  );
   if (existingIndex < 0) {
     return [...messages, cloneMessage(incoming)];
   }
