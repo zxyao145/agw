@@ -18,6 +18,16 @@ import {
 import { cn } from "@/lib/utils";
 import { listFiles, deleteFile, resetFile, type FileItem } from "@/api/files";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -85,6 +95,8 @@ function FileTreeNode({
   const initialChildren = item.children || [];
   const [children, setChildren] = React.useState<FileItem[]>(initialChildren);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   // Update children when item.children change (for pre-built trees)
@@ -128,22 +140,20 @@ function FileTreeNode({
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent) => {
+  const handleDeleteRequest = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setIsDeleteDialogOpen(true);
+  };
 
-    const confirmMessage =
-      item.type === FileItemType.Directory
-        ? `Are you sure you want to delete the directory "${item.name}" and all its contents?`
-        : `Are you sure you want to delete "${item.name}"?`;
-
-    if (!confirm(confirmMessage)) {
-      return;
-    }
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDeleting(true);
 
     try {
       const result = await deleteFile(projectId, item.path);
       if (result.success) {
+        setIsDeleteDialogOpen(false);
         toast.success(result.message);
         onFileDeleted?.(item.path);
       } else {
@@ -152,6 +162,8 @@ function FileTreeNode({
     } catch (err) {
       console.error("Error deleting:", err);
       toast.error((err as Error).message);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -245,7 +257,7 @@ function FileTreeNode({
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={handleDelete} variant="destructive">
+          <ContextMenuItem onClick={handleDeleteRequest} variant="destructive">
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
           </ContextMenuItem>
@@ -260,6 +272,27 @@ function FileTreeNode({
           )}
         </ContextMenuContent>
       </ContextMenu>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {item.type === FileItemType.Directory ? "directory" : "file"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {item.type === FileItemType.Directory
+                ? `Are you sure you want to delete the directory "${item.name}" and all its contents? This action cannot be undone.`
+                : `Are you sure you want to delete "${item.name}"? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {error && (
         <div
