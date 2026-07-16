@@ -35,6 +35,7 @@ public class SetupController : Controller
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult Index()
     {
+        // 初始化后，setup 页面将返回 404
         if (_stateStore.GetSnapshot().IsInitialized)
         {
             return NotFound();

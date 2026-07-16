@@ -53,6 +53,7 @@ public class InitializationGuardMiddleware
             return;
         }
 
+        // 初始化后，setup 页面将返回 404
         if (path.StartsWithSegments(SetupPath))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;

@@ -24,6 +24,7 @@ import {
   type AgentSuggestionsResponse,
 } from "@/lib/chat/agent-suggestions";
 import { getClaudeInitCommands, prepareClaudeHistory } from "@/lib/chat/ai-message-handlers";
+import { updateAutoScrollState, type AutoScrollState } from "@/lib/chat/auto-scroll";
 import {
   createUserTextMessage,
   mergeStreamingMessagesById,
@@ -93,11 +94,17 @@ export function Chat({
   const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
+  const conversationScrollRef = React.useRef<HTMLDivElement>(null);
   const userInputRef = React.useRef<UserInputRef | null>(null);
   const executionClientRef = React.useRef<ExecutionHubClient | null>(null);
   const configuredSessionRef = React.useRef<string | null>(null);
   const executionGenerationRef = React.useRef(0);
   const pendingTeardownCountRef = React.useRef(0);
+  const autoScrollStateRef = React.useRef<AutoScrollState>({
+    shouldAutoScroll: true,
+    scrollHeight: 0,
+    scrollTop: 0,
+  });
   const targetKey = target ? `${target.type}:${target.id}` : "";
   const previousTargetKeyRef = React.useRef(targetKey);
 
@@ -178,6 +185,11 @@ export function Chat({
     const preparedHistory = prepareClaudeHistory(sessionSeed.messages);
     void interruptAndDispose("Execution session changed.");
     setPendingHumanGate(null);
+    autoScrollStateRef.current = {
+      shouldAutoScroll: true,
+      scrollHeight: 0,
+      scrollTop: 0,
+    };
     setMessages(preparedHistory.messages);
     setClaudeCommands(preparedHistory.commands);
     setConversationUsage(sessionSeed.usage);
@@ -196,7 +208,20 @@ export function Chat({
   }, [active, interruptAndDispose]);
 
   React.useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const scrollContainer = conversationScrollRef.current;
+    if (!scrollContainer) {
+      return;
+    }
+
+    if (autoScrollStateRef.current.shouldAutoScroll) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+
+    autoScrollStateRef.current = {
+      ...autoScrollStateRef.current,
+      scrollHeight: scrollContainer.scrollHeight,
+      scrollTop: scrollContainer.scrollTop,
+    };
   }, [messages]);
 
   const applyExecutionMessage = React.useCallback(
@@ -464,15 +489,30 @@ export function Chat({
   ]);
 
   const handleScrollToTop = React.useCallback(() => {
+    autoScrollStateRef.current = {
+      ...autoScrollStateRef.current,
+      shouldAutoScroll: false,
+    };
     messagesStartRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "start",
     });
   }, []);
 
+  const handleConversationScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    autoScrollStateRef.current = updateAutoScrollState(
+      autoScrollStateRef.current,
+      event.currentTarget,
+    );
+  }, []);
+
   return (
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
-      <div className="h-full w-full overflow-y-auto">
+      <div
+        ref={conversationScrollRef}
+        className="h-full w-full overflow-y-auto"
+        onScroll={handleConversationScroll}
+      >
         <div className="mx-auto flex min-h-full w-full justify-center">
           <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
             {/* 对话列表 */}

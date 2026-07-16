@@ -67,6 +67,34 @@ test("shared Chat owns canonical message filtering, grouping, usage, and executi
   assert.match(source, /new ExecutionHubClient/);
 });
 
+test("shared Chat follows streaming output only while the viewport is at the bottom", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+
+  assert.match(source, /import \{ updateAutoScrollState, type AutoScrollState \}/);
+  assert.match(
+    source,
+    /const autoScrollStateRef = React\.useRef<AutoScrollState>\(\{[\s\S]*?shouldAutoScroll: true,[\s\S]*?scrollHeight: 0,[\s\S]*?scrollTop: 0/,
+  );
+  assert.match(
+    source,
+    /autoScrollStateRef\.current = updateAutoScrollState\([\s\S]*?autoScrollStateRef\.current,[\s\S]*?event\.currentTarget/,
+  );
+  assert.match(source, /ref=\{conversationScrollRef\}/);
+  assert.match(
+    source,
+    /if \(autoScrollStateRef\.current\.shouldAutoScroll\) \{[\s\S]*?scrollContainer\.scrollTop = scrollContainer\.scrollHeight/,
+  );
+  assert.match(
+    source,
+    /scrollHeight: scrollContainer\.scrollHeight,[\s\S]*?scrollTop: scrollContainer\.scrollTop/,
+  );
+  assert.match(
+    source,
+    /autoScrollStateRef\.current = \{[\s\S]*?shouldAutoScroll: true,[\s\S]*?scrollHeight: 0,[\s\S]*?scrollTop: 0,[\s\S]*?\};[\s\S]*?setMessages\(preparedHistory\.messages\)/,
+  );
+  assert.match(source, /onScroll=\{handleConversationScroll\}/);
+});
+
 test("shared Chat rejects stale async continuations and reports operation errors once", async () => {
   const [source, executionHubSource] = await Promise.all([
     readFile(CHAT_URL, "utf8"),
