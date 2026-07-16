@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Trash2, Play } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentDto } from "./types";
 import { getApiErrorMessage } from "@/api/utils";
 import { StaticTable } from "@/components/static-table";
@@ -78,7 +79,25 @@ export function AgentsTable({ agentsQuery, onEdit, onDelete, onExecute }: Agents
                 </span>
               </TableCell>
               <TableCell className="max-w-xs truncate">{agent.description || "-"}</TableCell>
-              <TableCell className="max-w-xs truncate">{agent.systemPrompt || "-"}</TableCell>
+              <TableCell className="max-w-xs">
+                {agent.systemPrompt ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="block truncate text-xs" tabIndex={0}>
+                        {agent.systemPrompt}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      className="max-h-80 max-w-[min(40rem,calc(100vw-2rem))] overflow-y-auto whitespace-pre-wrap break-words text-left"
+                    >
+                      {agent.systemPrompt}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
+                )}
+              </TableCell>
               <TableCell className="max-w-xs">
                 {toolNames.length > 0 ? (
                   <span className="text-xs">
