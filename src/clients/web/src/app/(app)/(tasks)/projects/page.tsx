@@ -16,6 +16,15 @@ import {
   type ToolInfo,
 } from "@/components/definition-capabilities";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogClose,
@@ -25,6 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { formatLocalDateTime } from "@/lib/date-time";
 
 import { CreateProjectDialog } from "./components/create-project-dialog";
@@ -280,72 +290,109 @@ export default function ProjectsPage() {
       ) : projects.length === 0 ? (
         <div className="text-sm text-muted-foreground">No projects.</div>
       ) : (
-        <div className="space-y-3">
-          {projects.map((project) => (
-            <div
-              key={project.id}
-              className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:justify-between"
-            >
-              <div className="min-w-0 space-y-1">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <Link
-                    href={`/projects/details/?projectId=${encodeURIComponent(project.id)}`}
-                    className="truncate font-medium underline-offset-4 hover:underline"
-                  >
-                    {project.name}
-                  </Link>
-                  {project.type !== 0 ? (
-                    <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
-                      BuiltIn
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader className="bg-muted/30">
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {projects.map((project) => (
+                <TableRow key={project.id}>
+                  <TableCell>
+                    <Link
+                      href={`/projects/details/?projectId=${encodeURIComponent(project.id)}`}
+                      className="font-medium underline-offset-4 hover:underline"
+                    >
+                      {project.name}
+                    </Link>
+                    <div className="font-mono text-xs break-all text-muted-foreground">
+                      {project.id}
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate">{project.description || "-"}</TableCell>
+                  <TableCell>
+                    {project.type !== 0 ? (
+                      <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
+                        BuiltIn
+                      </span>
+                    ) : (
+                      <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-xs text-blue-700 dark:text-blue-300">
+                        User
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={
+                        project.enable
+                          ? "rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300"
+                          : "rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                      }
+                    >
+                      {project.enable ? "Enabled" : "Disabled"}
                     </span>
-                  ) : null}
-                  <span
-                    className={
-                      project.enable
-                        ? "rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300"
-                        : "rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                    }
-                  >
-                    {project.enable ? "Enabled" : "Disabled"}
-                  </span>
-                </div>
-                {project.description ? (
-                  <div className="text-sm text-muted-foreground">{project.description}</div>
-                ) : null}
-                <div className="text-xs text-muted-foreground">
-                  <span className="font-mono">{project.id}</span>
-                  <span className="mx-2">·</span>
-                  Updated: {formatLocalDateTime(project.updateTime ?? project.createTime)}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 sm:justify-end">
-                <Button asChild variant="outline" size="sm">
-                  <Link href={`/projects/details/?projectId=${encodeURIComponent(project.id)}`}>
-                    View
-                  </Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openEdit(project)}
-                  disabled={project.type !== 0}
-                  title={project.type !== 0 ? "Built-in projects cannot be edited" : undefined}
-                >
-                  Edit
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => openDelete(project)}
-                  disabled={project.type !== 0 || deleteProjectMutation.isPending}
-                  title={project.type !== 0 ? "Built-in projects cannot be deleted" : undefined}
-                >
-                  Delete
-                </Button>
-              </div>
-            </div>
-          ))}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {formatLocalDateTime(project.updateTime ?? project.createTime)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end">
+                      <ButtonGroup>
+                        <Button
+                          asChild
+                          variant="ghost"
+                          className="cursor-pointer"
+                          size="icon-sm"
+                          title="View project"
+                        >
+                          <Link
+                            href={`/projects/details/?projectId=${encodeURIComponent(project.id)}`}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="cursor-pointer"
+                          size="icon-sm"
+                          onClick={() => openEdit(project)}
+                          disabled={project.type !== 0}
+                          title={
+                            project.type !== 0
+                              ? "Built-in projects cannot be edited"
+                              : "Edit project"
+                          }
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => openDelete(project)}
+                          disabled={project.type !== 0 || deleteProjectMutation.isPending}
+                          title={
+                            project.type !== 0
+                              ? "Built-in projects cannot be deleted"
+                              : "Delete project"
+                          }
+                          className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </ButtonGroup>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 

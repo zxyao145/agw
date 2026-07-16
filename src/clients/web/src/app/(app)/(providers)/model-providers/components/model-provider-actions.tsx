@@ -53,8 +53,8 @@ export function ModelProviderActions({ modelProviderId }: ModelProviderActionsPr
       <ButtonGroup>
         <Button
           type="button"
-          className="cursor-pointer"
-          variant="destructive"
+          variant="ghost"
+          className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
           size="sm"
           disabled={deleteModelProviderMutation.isPending}
           onClick={() => {
