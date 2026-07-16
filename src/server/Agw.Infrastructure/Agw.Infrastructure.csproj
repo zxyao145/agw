@@ -30,6 +30,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <EmbeddedResource Include="Data/SeedData/Skills/xiaohongshu-skills.zip"
+	                    LogicalName="Agw.Infrastructure.SeedData.xiaohongshu-skills.zip" />
 	  <Folder Include="Migrations\" />
 	</ItemGroup>
 </Project>

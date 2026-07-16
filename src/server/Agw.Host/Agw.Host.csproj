@@ -37,11 +37,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Agw.A2A\Agw.A2A.csproj" />
-    <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />
     <ProjectReference Include="..\Agw.Infrastructure\Agw.Infrastructure.csproj" />
-    <ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
-    <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
-    <ProjectReference Include="..\Agw.Jobs\Agw.Jobs.csproj" />
     <ProjectReference Include="..\Agw.Setup\Agw.Setup.csproj" />
   </ItemGroup>
 

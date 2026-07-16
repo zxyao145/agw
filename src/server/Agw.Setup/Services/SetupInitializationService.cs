@@ -52,7 +52,7 @@ public class SetupInitializationService : ISetupInitializationService
         ConfigureDatabaseProvider(dbOptions, resolvedRequest);
 
         await using var context = new AgwDbContext(dbOptions.Options, _encryptedDataProtector);
-        var seeder = new DbSeeder(context, _loggerFactory.CreateLogger<DbSeeder>(), _timeProvider);
+        var seeder = new DbSeeder(context, _loggerFactory.CreateLogger<DbSeeder>(), _timeProvider, _paths);
         await seeder.SeedAsync();
 
         var passwordHash = _passwordHasher.HashPassword(new object(), request.AdminPassword);
