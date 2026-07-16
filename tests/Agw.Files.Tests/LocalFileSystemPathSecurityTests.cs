@@ -66,7 +66,7 @@ public class LocalFileSystemPathSecurityTests
             return new TempDirectoryScope(System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
                 "agw-local-filesystem-tests",
-                Guid.NewGuid().ToString("N")));
+                Guid.CreateVersion7().ToString("N")));
         }
 
         public void Dispose()

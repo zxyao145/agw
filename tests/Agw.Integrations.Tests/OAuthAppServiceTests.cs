@@ -472,7 +472,7 @@ public sealed class OAuthAppServiceTests
 
             var installation = new PluginInstallation
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 PluginId = OAuthTestCatalog.PluginId,
                 Enabled = true,
                 ConfigurationJson = IntegrationConfigurationCodec.Write(new Dictionary<string, string?>
@@ -491,7 +491,7 @@ public sealed class OAuthAppServiceTests
             {
                 dbContext.PluginInstallationCredentials.Add(new PluginInstallationCredential
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
                     PluginInstallationId = installation.Id,
                     Slot = IntegrationCredentialSlots.InstallationField(
                         OAuthTestCatalog.ConnectorId,
@@ -503,7 +503,7 @@ public sealed class OAuthAppServiceTests
                 });
             }
 
-            var connectionId = Guid.NewGuid();
+            var connectionId = Guid.CreateVersion7();
             dbContext.Connections.Add(new IntegrationConnection
             {
                 Id = connectionId,
@@ -511,7 +511,7 @@ public sealed class OAuthAppServiceTests
                 ConnectorId = OAuthTestCatalog.ConnectorId,
                 AuthSchemeId = OAuthTestCatalog.AuthSchemeId,
                 DisplayName = "OAuth test",
-                Alias = $"oauth-{Guid.NewGuid():N}",
+                Alias = $"oauth-{Guid.CreateVersion7():N}",
                 Enabled = true,
                 Status = ConnectionStatus.Unverified,
                 CreateBy = "seed",
@@ -540,7 +540,7 @@ public sealed class OAuthAppServiceTests
         {
             DbContext.ConnectionCredentials.Add(new ConnectionCredential
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 ConnectionId = ConnectionId,
                 Slot = slot,
                 Value = value,
@@ -554,7 +554,7 @@ public sealed class OAuthAppServiceTests
 
         public async Task<Guid> SeedOtherConnectionAsync(CancellationToken cancellationToken)
         {
-            var connectionId = Guid.NewGuid();
+            var connectionId = Guid.CreateVersion7();
             DbContext.Connections.Add(new IntegrationConnection
             {
                 Id = connectionId,
@@ -562,7 +562,7 @@ public sealed class OAuthAppServiceTests
                 ConnectorId = OAuthTestCatalog.ConnectorId,
                 AuthSchemeId = OAuthTestCatalog.AuthSchemeId,
                 DisplayName = "Other OAuth test",
-                Alias = $"oauth-{Guid.NewGuid():N}",
+                Alias = $"oauth-{Guid.CreateVersion7():N}",
                 Enabled = true,
                 Status = ConnectionStatus.Unverified,
                 CreateBy = "seed",

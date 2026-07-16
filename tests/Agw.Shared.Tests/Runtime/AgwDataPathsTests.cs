@@ -33,7 +33,7 @@ public class AgwDataPathsTests
     public void ResolveFromEnvironment_WhenOverrideIsSet_UsesEnvironmentValue()
     {
         var original = Environment.GetEnvironmentVariable("AGW_DATA_DIR");
-        var root = Path.Combine(Path.GetTempPath(), $"agw-env-{Guid.NewGuid():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"agw-env-{Guid.CreateVersion7():N}");
         try
         {
             Environment.SetEnvironmentVariable("AGW_DATA_DIR", root);
@@ -49,7 +49,7 @@ public class AgwDataPathsTests
     [Fact]
     public void EnsureCreated_WhenCalledRepeatedly_PreservesExistingFiles()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"agw-paths-{Guid.NewGuid():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"agw-paths-{Guid.CreateVersion7():N}");
         var paths = AgwDataPaths.Resolve(root, "/unused");
 
         try

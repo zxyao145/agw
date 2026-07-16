@@ -10,8 +10,8 @@ public class ExecutionRequestsTests
     [Fact]
     public void Deserialize_SettingCommand_ReturnsSettingCommand()
     {
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid().ToString("D");
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7().ToString("D");
         const string json = """
                             {
                               "type": "SettingCommand",
@@ -34,8 +34,8 @@ public class ExecutionRequestsTests
     [Fact]
     public void Deserialize_SettingCommand_WithEnvironmentVariables_ReturnsEnvironmentVariables()
     {
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid().ToString("D");
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7().ToString("D");
         const string json = """
                             {
                               "type": "SettingCommand",
@@ -62,7 +62,7 @@ public class ExecutionRequestsTests
     [Fact]
     public void Deserialize_SettingCommand_IgnoresResume()
     {
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         var payload = $$"""
                         {
                           "type": "SettingCommand",
@@ -80,8 +80,8 @@ public class ExecutionRequestsTests
     [Fact]
     public void Equals_WhenOnlyResumeDiffers_ReturnsTrue()
     {
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid().ToString("D");
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7().ToString("D");
         var left = new SettingCommand(projectId, contextId: contextId) { Resume = false };
         var right = new SettingCommand(projectId, contextId: contextId) { Resume = true };
 
@@ -91,8 +91,8 @@ public class ExecutionRequestsTests
     [Fact]
     public void Equals_WhenEnvironmentVariablesDiffer_ReturnsFalse()
     {
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid().ToString("D");
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7().ToString("D");
 
         var left = CreateSettingCommand(projectId, contextId, new Dictionary<string, string>
         {
@@ -109,7 +109,7 @@ public class ExecutionRequestsTests
     [Fact]
     public void Deserialize_ExecCommand_ReturnsExecutionCommand()
     {
-        var agentId = Guid.NewGuid();
+        var agentId = Guid.CreateVersion7();
         const string json = """
                             {
                               "type": "ExecCommand",

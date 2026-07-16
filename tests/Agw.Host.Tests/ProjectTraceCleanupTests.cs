@@ -23,7 +23,7 @@ public class ProjectTraceCleanupTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
         var service = CreateProjectContextService(dbContext);
 
@@ -39,7 +39,7 @@ public class ProjectTraceCleanupTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
         var service = CreateProjectContextService(dbContext);
 
@@ -55,8 +55,8 @@ public class ProjectTraceCleanupTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
-        var projectId = Guid.NewGuid();
-        var otherProjectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var otherProjectId = Guid.CreateVersion7();
         await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
         await SeedProjectContextsAndTracesAsync(dbContext, otherProjectId, cancellationToken, "other-");
         var service = CreateProjectContextService(dbContext);
@@ -74,8 +74,8 @@ public class ProjectTraceCleanupTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
-        var projectId = Guid.NewGuid();
-        var otherProjectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var otherProjectId = Guid.CreateVersion7();
         await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
         await SeedProjectContextsAndTracesAsync(dbContext, otherProjectId, cancellationToken, "other-");
         var service = CreateProjectService(dbContext);
@@ -132,7 +132,7 @@ public class ProjectTraceCleanupTests
 
     private static ProjectContext CreateProjectContext(Guid projectId, string contextId) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = Guid.CreateVersion7(),
         ProjectId = projectId,
         ContextId = contextId,
         Title = contextId,
@@ -146,8 +146,8 @@ public class ProjectTraceCleanupTests
         StartTimeUtc = TimeProvider.System.GetUtcNow(),
         ProjectId = projectId,
         ContextId = contextId,
-        TaskId = Guid.NewGuid(),
-        AgentflowId = Guid.NewGuid(),
+        TaskId = Guid.CreateVersion7(),
+        AgentflowId = Guid.CreateVersion7(),
         NodeId = "node-1",
         NodeKind = AgentflowNodeKind.Agent,
         Input = "input",

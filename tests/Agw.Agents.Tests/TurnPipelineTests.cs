@@ -146,7 +146,7 @@ public class TurnPipelineTests
             ? null
             : new Microsoft.Extensions.AI.AdditionalPropertiesDictionary { ["type"] = type };
         return new AgwMessage(
-            Guid.NewGuid().ToString("D"),
+            Guid.CreateVersion7().ToString("D"),
             Agw.Shared.Constants.DefaultAgentAuthor,
             AiRole.Assistant,
             [new AgwTextContent { Content = content }],
@@ -159,7 +159,7 @@ public class TurnPipelineTests
             ? new Microsoft.Extensions.AI.AdditionalPropertiesDictionary { ["isFatalError"] = true }
             : null;
         return new AgwMessage(
-            Guid.NewGuid().ToString("D"),
+            Guid.CreateVersion7().ToString("D"),
             Agw.Shared.Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwErrorContent { Content = content, AdditionalProperties = properties }]);

@@ -113,7 +113,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
         var resolvedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         var resolvedContextId = ContextIdUtil.ResolveContextId(contextId); ;
-        var resolvedTaskId = taskId ?? Guid.NewGuid();
+        var resolvedTaskId = taskId ?? Guid.CreateVersion7();
         var executionTraceContext = new AgentflowExecutionTraceContext(
             resolvedProjectId,
             resolvedContextId,
@@ -398,7 +398,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
         if (taskId == null)
         {
-            taskId = Guid.NewGuid();
+            taskId = Guid.CreateVersion7();
         }
 
         var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);
@@ -660,7 +660,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         }
 
         return new AgwMessage(
-            Guid.NewGuid().Normalize(),
+            Guid.CreateVersion7().Normalize(),
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwTextContent { Content = request.Prompt }],
@@ -677,7 +677,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         };
 
         return new AgwMessage(
-            Guid.NewGuid().Normalize(),
+            Guid.CreateVersion7().Normalize(),
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwTextContent { Content = "HumanGate rejected. Workflow stopped." }],
@@ -693,7 +693,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         };
 
         return new AgwMessage(
-            Guid.NewGuid().Normalize(),
+            Guid.CreateVersion7().Normalize(),
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwErrorContent { Content = "HumanGate requires an active approval channel." }],
@@ -708,7 +708,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         };
 
         return new AgwMessage(
-            Guid.NewGuid().Normalize(),
+            Guid.CreateVersion7().Normalize(),
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwErrorContent { Content = exception?.Message ?? "Workflow execution failed." }],

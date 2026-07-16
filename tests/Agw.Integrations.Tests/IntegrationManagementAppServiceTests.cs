@@ -293,7 +293,7 @@ public class IntegrationManagementAppServiceTests
 
         scope.DbContext.ConnectionCredentials.Add(new ConnectionCredential
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ConnectionId = oauth.Id,
             Slot = IntegrationCredentialSlots.OAuthAccessToken,
             Value = "oauth-token",
@@ -318,7 +318,7 @@ public class IntegrationManagementAppServiceTests
 
         scope.DbContext.Connections.Add(new IntegrationConnection
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             PluginId = "missing-plugin",
             ConnectorId = "missing",
             AuthSchemeId = "missing",
@@ -573,7 +573,7 @@ public class IntegrationManagementAppServiceTests
         }, "tester", cancellationToken);
         scope.DbContext.ConnectionCredentials.Add(new ConnectionCredential
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ConnectionId = tokenConnection.Id,
             Slot = IntegrationCredentialSlots.OAuthAccessToken,
             Value = "oauth-token",
@@ -710,8 +710,8 @@ public class IntegrationManagementAppServiceTests
 
     private static Agent CreateAgent() => new()
     {
-        Id = Guid.NewGuid(),
-        Name = $"agent-{Guid.NewGuid():N}",
+        Id = Guid.CreateVersion7(),
+        Name = $"agent-{Guid.CreateVersion7():N}",
         DisplayName = "Agent",
         Description = "Agent",
         SystemPrompt = "Prompt",
@@ -722,8 +722,8 @@ public class IntegrationManagementAppServiceTests
 
     private static Project CreateProject() => new()
     {
-        Id = Guid.NewGuid(),
-        Name = $"project-{Guid.NewGuid():N}",
+        Id = Guid.CreateVersion7(),
+        Name = $"project-{Guid.CreateVersion7():N}",
         CreateBy = "tester",
         CreateTime = TimeProvider.System.GetUtcNow()
     };

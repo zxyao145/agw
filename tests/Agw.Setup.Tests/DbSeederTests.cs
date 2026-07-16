@@ -158,7 +158,7 @@ public class DbSeederTests
 
     private static AgwDataPaths CreatePaths()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"agw-seeder-{Guid.NewGuid():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"agw-seeder-{Guid.CreateVersion7():N}");
         var paths = AgwDataPaths.Resolve(root, "/unused");
         paths.EnsureCreated();
         return paths;

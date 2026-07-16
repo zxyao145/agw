@@ -49,7 +49,7 @@ public sealed class CredentialMutationService
                     {
                         existing = new PluginInstallationCredential
                         {
-                            Id = Guid.NewGuid(),
+                            Id = Guid.CreateVersion7(),
                             PluginInstallationId = installation.Id,
                             PluginInstallation = installation,
                             Slot = slot,
@@ -97,7 +97,7 @@ public sealed class CredentialMutationService
                     {
                         existing = new ConnectionCredential
                         {
-                            Id = Guid.NewGuid(),
+                            Id = Guid.CreateVersion7(),
                             ConnectionId = connection.Id,
                             Connection = connection,
                             Slot = slot,

@@ -570,7 +570,7 @@ public sealed class AgentflowWorkflowCompiler
             return Task.FromResult(new AgentResponse
             {
                 Messages = messages.ToList(),
-                ResponseId = Guid.NewGuid().ToString("D"),
+                ResponseId = Guid.CreateVersion7().ToString("D"),
             });
         }
 
@@ -587,7 +587,7 @@ public sealed class AgentflowWorkflowCompiler
                 cancellationToken.ThrowIfCancellationRequested();
                 yield return new AgentResponseUpdate
                 {
-                    MessageId = Guid.NewGuid().ToString("D"),
+                    MessageId = Guid.CreateVersion7().ToString("D"),
                     Role = message.Role,
                     AuthorName = message.AuthorName,
                     Contents = message.Contents,

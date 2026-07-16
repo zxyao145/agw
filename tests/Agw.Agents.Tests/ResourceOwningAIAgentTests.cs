@@ -50,7 +50,7 @@ public class ResourceOwningAIAgentTests
             NullLogger.Instance,
             agent,
             new TestAgentSession(),
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "context",
             "session");
 

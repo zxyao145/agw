@@ -94,6 +94,7 @@ public class AgwDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        ConfigureVersion7GuidKeys(modelBuilder);
         EncryptedEntityMetadata.Validate(modelBuilder);
     }
 
@@ -182,8 +183,24 @@ public class AgwDbContext : DbContext
         {
             if (entry.State is EntityState.Added or EntityState.Modified)
             {
-                entry.Entity.RowVersion = Guid.NewGuid().ToByteArray();
+                entry.Entity.RowVersion = Guid.CreateVersion7().ToByteArray();
             }
+        }
+    }
+
+    private static void ConfigureVersion7GuidKeys(ModelBuilder modelBuilder)
+    {
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            var primaryKey = entityType.FindPrimaryKey();
+            if (primaryKey?.Properties.Count != 1 || primaryKey.Properties[0].ClrType != typeof(Guid))
+            {
+                continue;
+            }
+
+            modelBuilder.Entity(entityType.ClrType)
+                .Property(primaryKey.Properties[0].Name)
+                .HasValueGenerator<GuidVersion7ValueGenerator>();
         }
     }
 

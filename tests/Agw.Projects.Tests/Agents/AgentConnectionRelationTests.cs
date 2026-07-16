@@ -20,13 +20,13 @@ public class AgentConnectionRelationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await TestScope.CreateAsync(cancellationToken);
-        var agent = CreateAgent(Guid.NewGuid());
+        var agent = CreateAgent(Guid.CreateVersion7());
 
         var created = await scope.Service.CreateAgentAsync(
             agent,
             mcpToolServerIds: null,
             skillIds: null,
-            connectionIds: [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.NewGuid()],
+            connectionIds: [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.CreateVersion7()],
             user: "tester");
 
         Assert.NotNull(created);
@@ -148,12 +148,12 @@ public class AgentConnectionRelationTests
                 await setupContext.Database.EnsureCreatedAsync(cancellationToken);
             }
 
-            var agentId = Guid.NewGuid();
-            var firstConnectionId = Guid.NewGuid();
-            var secondConnectionId = Guid.NewGuid();
-            var modelId = Guid.NewGuid();
-            var providerId = Guid.NewGuid();
-            var modelProviderId = Guid.NewGuid();
+            var agentId = Guid.CreateVersion7();
+            var firstConnectionId = Guid.CreateVersion7();
+            var secondConnectionId = Guid.CreateVersion7();
+            var modelId = Guid.CreateVersion7();
+            var providerId = Guid.CreateVersion7();
+            var modelProviderId = Guid.CreateVersion7();
             await using (var seedContext = new AgwDbContext(options))
             {
                 seedContext.Models.Add(new LlmModel { Id = modelId, Name = "test-model" });

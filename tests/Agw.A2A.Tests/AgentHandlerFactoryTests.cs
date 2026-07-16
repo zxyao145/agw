@@ -22,7 +22,7 @@ public class AgentHandlerFactoryTests
     public async Task CreateAsync_SameAgentName_ReturnsSameHandlerInstance()
     {
         var factory = CreateFactory(
-            new Agent { Id = Guid.NewGuid(), Name = "alpha", SystemPrompt = "Alpha prompt" });
+            new Agent { Id = Guid.CreateVersion7(), Name = "alpha", SystemPrompt = "Alpha prompt" });
 
         var first = await factory.CreateAsync("alpha");
         var second = await factory.CreateAsync("alpha");
@@ -36,8 +36,8 @@ public class AgentHandlerFactoryTests
     public async Task CreateAsync_DifferentAgentNames_ReturnsDifferentHandlerInstances()
     {
         var factory = CreateFactory(
-            new Agent { Id = Guid.NewGuid(), Name = "alpha", SystemPrompt = "Alpha prompt" },
-            new Agent { Id = Guid.NewGuid(), Name = "beta", SystemPrompt = "Beta prompt" });
+            new Agent { Id = Guid.CreateVersion7(), Name = "alpha", SystemPrompt = "Alpha prompt" },
+            new Agent { Id = Guid.CreateVersion7(), Name = "beta", SystemPrompt = "Beta prompt" });
 
         var alpha = await factory.CreateAsync("alpha");
         var beta = await factory.CreateAsync("beta");
@@ -55,7 +55,7 @@ public class AgentHandlerFactoryTests
 
         var missing = await factory.CreateAsync("alpha");
 
-        await repository.AddAsync(new Agent { Id = Guid.NewGuid(), Name = "alpha", SystemPrompt = "Alpha prompt" });
+        await repository.AddAsync(new Agent { Id = Guid.CreateVersion7(), Name = "alpha", SystemPrompt = "Alpha prompt" });
         var created = await factory.CreateAsync("alpha");
 
         Assert.Null(missing);
@@ -68,7 +68,7 @@ public class AgentHandlerFactoryTests
     {
         var repository = new InMemoryRepository<Agent>(
         [
-            new Agent { Id = Guid.NewGuid(), Name = "alpha", SystemPrompt = "Alpha prompt" }
+            new Agent { Id = Guid.CreateVersion7(), Name = "alpha", SystemPrompt = "Alpha prompt" }
         ]);
         var factory = CreateFactory(repository);
         var handler = await factory.CreateAsync("alpha");
@@ -239,7 +239,7 @@ public class AgentHandlerFactoryTests
             CreateA2AAgentService(
                 new InMemoryRepository<Agent>(
                 [
-                    new Agent { Id = Guid.NewGuid(), Name = agentName, SystemPrompt = $"{agentName} prompt" }
+                    new Agent { Id = Guid.CreateVersion7(), Name = agentName, SystemPrompt = $"{agentName} prompt" }
                 ])));
     }
 
@@ -274,7 +274,7 @@ public class AgentHandlerFactoryTests
 
     private static RequestContext CreateRequestContext(bool streamingResponse, List<Part> parts) => new()
     {
-        TaskId = Guid.NewGuid().ToString("D"),
+        TaskId = Guid.CreateVersion7().ToString("D"),
         ContextId = "ctx-a2a",
         StreamingResponse = streamingResponse,
         Message = new Message
@@ -288,14 +288,14 @@ public class AgentHandlerFactoryTests
 
     private static AgwMessage CreateTextMessage(string text) =>
         new(
-            Guid.NewGuid().ToString("N"),
+            Guid.CreateVersion7().ToString("N"),
             "$agent",
             AiRole.System,
             [new AgwTextContent { Content = text }]);
 
     private static AgwMessage CreateTurnFinishedMessage() =>
         new(
-            Guid.NewGuid().ToString("N"),
+            Guid.CreateVersion7().ToString("N"),
             "$agw",
             AiRole.System,
             [

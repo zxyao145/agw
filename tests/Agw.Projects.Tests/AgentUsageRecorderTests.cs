@@ -16,7 +16,7 @@ public class AgentUsageRecorderTests
     public async Task AddAsync_PersistsUsageFactWithDimensionsAndRecordedTime()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var databasePath = Path.Combine(Path.GetTempPath(), $"agw-usage-{Guid.NewGuid():N}.db");
+        var databasePath = Path.Combine(Path.GetTempPath(), $"agw-usage-{Guid.CreateVersion7():N}.db");
 
         try
         {
@@ -26,8 +26,8 @@ public class AgentUsageRecorderTests
             var recorder = new AgentUsageRecorder(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
                 new TestTimeProvider(RecordedAt));
-            var projectId = Guid.NewGuid();
-            var contextId = Guid.NewGuid();
+            var projectId = Guid.CreateVersion7();
+            var contextId = Guid.CreateVersion7();
 
             await recorder.AddAsync(
                 projectId,
@@ -67,7 +67,7 @@ public class AgentUsageRecorderTests
     public async Task AddAsync_SequentialCalls_AppendsOneFactPerCall()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var databasePath = Path.Combine(Path.GetTempPath(), $"agw-usage-{Guid.NewGuid():N}.db");
+        var databasePath = Path.Combine(Path.GetTempPath(), $"agw-usage-{Guid.CreateVersion7():N}.db");
 
         try
         {
@@ -77,7 +77,7 @@ public class AgentUsageRecorderTests
             var recorder = new AgentUsageRecorder(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
                 new TestTimeProvider(RecordedAt));
-            var projectId = Guid.NewGuid();
+            var projectId = Guid.CreateVersion7();
 
             await recorder.AddAsync(
                 projectId,
@@ -107,7 +107,7 @@ public class AgentUsageRecorderTests
     public async Task AddAsync_ConcurrentCalls_AppendsEveryFact()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var databasePath = Path.Combine(Path.GetTempPath(), $"agw-usage-{Guid.NewGuid():N}.db");
+        var databasePath = Path.Combine(Path.GetTempPath(), $"agw-usage-{Guid.CreateVersion7():N}.db");
 
         try
         {
@@ -117,7 +117,7 @@ public class AgentUsageRecorderTests
             var recorder = new AgentUsageRecorder(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
                 new TestTimeProvider(RecordedAt));
-            var projectId = Guid.NewGuid();
+            var projectId = Guid.CreateVersion7();
             var usage = new ProjectContextUsage { TotalTokenCount = 3 };
 
             await Task.WhenAll(

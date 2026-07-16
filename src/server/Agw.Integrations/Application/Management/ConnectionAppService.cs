@@ -90,7 +90,7 @@ public sealed class ConnectionAppService
             IntegrationCredentialSlots.ConnectionField);
         var connection = new Connection
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             PluginId = definition.Plugin.Id,
             ConnectorId = definition.Connector.Id,
             AuthSchemeId = definition.AuthScheme.Id,

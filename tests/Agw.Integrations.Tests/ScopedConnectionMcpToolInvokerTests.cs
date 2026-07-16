@@ -22,13 +22,13 @@ public class ScopedConnectionMcpToolInvokerTests
             provider.GetRequiredService<IServiceScopeFactory>());
 
         var first = await invoker.InvokeAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "source",
             "operation",
             new AIFunctionArguments(),
             cancellationToken);
         var second = await invoker.InvokeAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "source",
             "operation",
             new AIFunctionArguments(),
@@ -63,7 +63,7 @@ public class ScopedConnectionMcpToolInvokerTests
 
     private sealed class TrackingInvocationSession : IConnectionMcpInvocationSession, IDisposable
     {
-        private readonly Guid _id = Guid.NewGuid();
+        private readonly Guid _id = Guid.CreateVersion7();
         private readonly SessionRecorder _recorder;
 
         public TrackingInvocationSession(SessionRecorder recorder)

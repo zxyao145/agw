@@ -19,23 +19,23 @@ public class AgentAppServiceUpdateTests
     [Fact]
     public async Task UpdateAgentAsync_ExternalAllowedFields_UpdatesSpecifiedValuesAndPreservesRelations()
     {
-        var newModelProviderId = Guid.NewGuid();
-        var summaryModelProviderId = Guid.NewGuid();
+        var newModelProviderId = Guid.CreateVersion7();
+        var summaryModelProviderId = Guid.CreateVersion7();
         var agent = CreateExternalAgent();
         agent.EnableSummary = true;
         agent.SummaryModelProviderId = summaryModelProviderId;
         var mcpRelations = new TestRepository<AgentMcpServerRelation>(
-            [new AgentMcpServerRelation { AgentId = agent.Id, McpToolServerId = Guid.NewGuid() }])
+            [new AgentMcpServerRelation { AgentId = agent.Id, McpToolServerId = Guid.CreateVersion7() }])
         {
             ThrowOnList = true
         };
         var skillRelations = new TestRepository<AgentSkillRelation>(
-            [new AgentSkillRelation { AgentId = agent.Id, SkillId = Guid.NewGuid() }])
+            [new AgentSkillRelation { AgentId = agent.Id, SkillId = Guid.CreateVersion7() }])
         {
             ThrowOnList = true
         };
         var connectionRelations = new TestRepository<AgentConnectionRelation>(
-            [new AgentConnectionRelation { AgentId = agent.Id, ConnectionId = Guid.NewGuid() }])
+            [new AgentConnectionRelation { AgentId = agent.Id, ConnectionId = Guid.CreateVersion7() }])
         {
             ThrowOnList = true
         };
@@ -82,8 +82,8 @@ public class AgentAppServiceUpdateTests
     public async Task UpdateAgentAsync_ExternalSingleAllowedField_UpdatesOnlySpecifiedField(
         string fieldName)
     {
-        var originalModelProviderId = Guid.NewGuid();
-        var updatedModelProviderId = Guid.NewGuid();
+        var originalModelProviderId = Guid.CreateVersion7();
+        var updatedModelProviderId = Guid.CreateVersion7();
         var agent = CreateExternalAgent();
         agent.ModelProviderId = originalModelProviderId;
         var service = CreateService(
@@ -144,7 +144,7 @@ public class AgentAppServiceUpdateTests
     [Fact]
     public async Task UpdateAgentAsync_ExternalExplicitNulls_ClearNullableAllowedFields()
     {
-        var modelProviderId = Guid.NewGuid();
+        var modelProviderId = Guid.CreateVersion7();
         var agent = CreateExternalAgent();
         agent.ModelProviderId = modelProviderId;
         var service = CreateService(agent, modelProviderIds: [modelProviderId]);
@@ -211,11 +211,11 @@ public class AgentAppServiceUpdateTests
     [Fact]
     public async Task UpdateAgentAsync_SystemAgent_KeepsFullUpdateBehavior()
     {
-        var oldModelProviderId = Guid.NewGuid();
-        var newModelProviderId = Guid.NewGuid();
+        var oldModelProviderId = Guid.CreateVersion7();
+        var newModelProviderId = Guid.CreateVersion7();
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Type = AgentType.System,
             DisplayName = "Before",
             Description = "Before",
@@ -251,10 +251,10 @@ public class AgentAppServiceUpdateTests
     [Fact]
     public async Task UpdateAgentAsync_SystemAgentWithNullEnableSummary_ThrowsInvalidParam()
     {
-        var modelProviderId = Guid.NewGuid();
+        var modelProviderId = Guid.CreateVersion7();
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Type = AgentType.System,
             ModelProviderId = modelProviderId
         };
@@ -281,10 +281,10 @@ public class AgentAppServiceUpdateTests
     [Fact]
     public async Task UpdateAgentAsync_SystemAgentWithoutModelProviderField_ThrowsInvalidParam()
     {
-        var modelProviderId = Guid.NewGuid();
+        var modelProviderId = Guid.CreateVersion7();
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Type = AgentType.System,
             ModelProviderId = modelProviderId
         };
@@ -308,7 +308,7 @@ public class AgentAppServiceUpdateTests
 
     private static Agent CreateExternalAgent() => new()
     {
-        Id = Guid.NewGuid(),
+        Id = Guid.CreateVersion7(),
         Name = "external-agent",
         Type = AgentType.External,
         DisplayName = "External Agent",

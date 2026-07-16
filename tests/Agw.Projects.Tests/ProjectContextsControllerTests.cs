@@ -93,7 +93,7 @@ public class ProjectContextsControllerTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
@@ -125,7 +125,7 @@ public class ProjectContextsControllerTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
@@ -157,7 +157,7 @@ public class ProjectContextsControllerTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
@@ -189,7 +189,7 @@ public class ProjectContextsControllerTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
@@ -224,7 +224,7 @@ public class ProjectContextsControllerTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project

@@ -8,8 +8,8 @@ const EXECUTION_STREAM_URL = new URL("./execution-stream.ts", import.meta.url);
 async function loadExecutionStream() {
   let source = await readFile(EXECUTION_STREAM_URL, "utf8");
   source = source.replace(
-    'import { Ulid } from "id128";',
-    'const Ulid = { generate: () => ({ toCanonical: () => "generated-user-id" }) };',
+    'import { createUuidV7 } from "@/lib/uuid";',
+    'const createUuidV7 = () => "generated-user-id";',
   );
   source = source.replace(/import \{[\s\S]*?\} from "@\/types";/, "");
   source = `const MessageContentType = { TextContent: "TextContent" };\n${source}`;

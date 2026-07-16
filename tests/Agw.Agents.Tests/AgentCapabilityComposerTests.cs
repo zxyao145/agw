@@ -31,7 +31,7 @@ public class AgentCapabilityComposerTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var database = await TestDatabase.CreateAsync(cancellationToken);
-        var mcpServerId = Guid.NewGuid();
+        var mcpServerId = Guid.CreateVersion7();
         database.Context.McpToolServers.Add(new McpServer
         {
             Id = mcpServerId,
@@ -42,8 +42,8 @@ public class AgentCapabilityComposerTests
         });
         await database.Context.SaveChangesAsync(cancellationToken);
 
-        var firstConnectionId = Guid.NewGuid();
-        var secondConnectionId = Guid.NewGuid();
+        var firstConnectionId = Guid.CreateVersion7();
+        var secondConnectionId = Guid.CreateVersion7();
         var connectionResource = new TrackingResource();
         var resolver = new StubConnectionCapabilityResolver((_, _, _) => CreateResolution(
             nativeTools: [CreateTool("work__repo"), CreateTool("personal__repo")],
@@ -81,7 +81,7 @@ public class AgentCapabilityComposerTests
         };
         var project = new Project
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectConnectionRelations =
             [
                 new ProjectConnectionRelation { ConnectionId = firstConnectionId },
@@ -146,13 +146,13 @@ public class AgentCapabilityComposerTests
             Type = AgentType.External,
             AgentConnectionRelations =
             [
-                new AgentConnectionRelation { ConnectionId = Guid.NewGuid() },
+                new AgentConnectionRelation { ConnectionId = Guid.CreateVersion7() },
             ],
         };
 
         await using var composition = await composer.ComposeAsync(
             agent,
-            new Project { Id = Guid.NewGuid() },
+            new Project { Id = Guid.CreateVersion7() },
             new Dictionary<string, string>(),
             cancellationToken);
 
@@ -166,7 +166,7 @@ public class AgentCapabilityComposerTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var database = await TestDatabase.CreateAsync(cancellationToken);
-        var connectionId = Guid.NewGuid();
+        var connectionId = Guid.CreateVersion7();
         var resolver = new StubConnectionCapabilityResolver((_, _, _) => CreateResolution(
             warnings:
             [
@@ -193,7 +193,7 @@ public class AgentCapabilityComposerTests
 
         await using var composition = await composer.ComposeAsync(
             agent,
-            new Project { Id = Guid.NewGuid() },
+            new Project { Id = Guid.CreateVersion7() },
             new Dictionary<string, string>(),
             cancellationToken);
 
@@ -223,13 +223,13 @@ public class AgentCapabilityComposerTests
             Tools = """["duplicate"]""",
             AgentConnectionRelations =
             [
-                new AgentConnectionRelation { ConnectionId = Guid.NewGuid() },
+                new AgentConnectionRelation { ConnectionId = Guid.CreateVersion7() },
             ],
         };
 
         var exception = await Assert.ThrowsAsync<AgwException>(() => composer.ComposeAsync(
             agent,
-            new Project { Id = Guid.NewGuid() },
+            new Project { Id = Guid.CreateVersion7() },
             new Dictionary<string, string>(),
             cancellationToken));
 

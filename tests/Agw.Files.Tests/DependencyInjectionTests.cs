@@ -42,8 +42,8 @@ public class DependencyInjectionTests
     public async Task AddFiles_ResolvesAndCachesLocalProjectFileSystem()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var projectId = Guid.NewGuid();
-        var workspace = Path.Combine(Path.GetTempPath(), "agw-files-tests", Guid.NewGuid().ToString("N"));
+        var projectId = Guid.CreateVersion7();
+        var workspace = Path.Combine(Path.GetTempPath(), "agw-files-tests", Guid.CreateVersion7().ToString("N"));
         Directory.CreateDirectory(workspace);
 
         try

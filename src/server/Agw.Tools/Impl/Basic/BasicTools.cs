@@ -10,6 +10,6 @@ public static class BasicTools
     [Description("Generates a new unique identifier (GUID)")]
     public static string GenerateGuid()
     {
-        return Guid.NewGuid().ToString();
+        return Guid.CreateVersion7().ToString();
     }
 }

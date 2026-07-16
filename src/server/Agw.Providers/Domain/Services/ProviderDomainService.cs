@@ -14,7 +14,7 @@ public class ProviderDomainService
     public void PrepareForCreate(Provider provider, string user)
     {
         var now = _timeProvider.GetUtcNow();
-        provider.Id = provider.Id == Guid.Empty ? Guid.NewGuid() : provider.Id;
+        provider.Id = provider.Id == Guid.Empty ? Guid.CreateVersion7() : provider.Id;
         provider.CreateBy = user;
         provider.CreateTime = now;
 

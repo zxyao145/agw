@@ -24,9 +24,9 @@ public class ModelProviderAppServiceTests
             .UseSqlite(connection)
             .UseSnakeCaseNamingConvention()
             .Options;
-        var relationId = Guid.NewGuid();
-        var providerId = Guid.NewGuid();
-        var modelId = Guid.NewGuid();
+        var relationId = Guid.CreateVersion7();
+        var providerId = Guid.CreateVersion7();
+        var modelId = Guid.CreateVersion7();
 
         await using (var setupContext = new AgwDbContext(options))
         {
@@ -57,7 +57,7 @@ public class ModelProviderAppServiceTests
             });
             setupContext.Agents.Add(new Agent
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 DisplayName = "Agent",
                 Name = "agent",
                 Description = string.Empty,

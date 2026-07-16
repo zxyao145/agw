@@ -54,7 +54,7 @@ public class RuntimeTurnContextAccessorTests
 
     private static RuntimeTurnContext CreateContext(string userName) =>
         new(
-            new SettingCommand(Guid.NewGuid()),
+            new SettingCommand(Guid.CreateVersion7()),
             userName,
             "/workspace",
             new NullSink());

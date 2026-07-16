@@ -158,7 +158,7 @@ public class TaskStore : ITaskStore
         {
             existingContext = new ProjectContext
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 ProjectId = ProjectDefaults.A2AId,
                 ContextId = string.IsNullOrWhiteSpace(task.ContextId) ? taskGuid.Normalize() : task.ContextId.Trim(),
                 Title = BuildTitle(firstUserText),
@@ -186,7 +186,7 @@ public class TaskStore : ITaskStore
 
         await _recordRepository.AddAsync(new TaskRecord
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectContextId = existingContext!.Id,
             TaskId = taskGuid,
             JobId = null,
@@ -266,7 +266,7 @@ public class TaskStore : ITaskStore
                     : new Message
                     {
                         Role = Role.Agent,
-                        MessageId = Guid.NewGuid().ToString("N"),
+                        MessageId = Guid.CreateVersion7().ToString("N"),
                         ContextId = task.ContextId,
                         TaskId = task.TaskId.Normalize(),
                         Parts = [Part.FromText(statusMessageText)]

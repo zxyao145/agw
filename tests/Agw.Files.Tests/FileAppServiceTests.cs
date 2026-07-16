@@ -625,7 +625,7 @@ public class FileAppServiceTests
             return new TempDirectoryScope(System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
                 "agw-file-app-service-tests",
-                Guid.NewGuid().ToString("N")));
+                Guid.CreateVersion7().ToString("N")));
         }
 
         public void Dispose()

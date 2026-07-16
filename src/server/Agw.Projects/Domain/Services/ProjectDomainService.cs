@@ -51,7 +51,7 @@ public class ProjectDomainService
             ? GetDefaultWorkspace(projectName)
             : project.Workspace.Trim();
         NormalizeEnvironmentVariables(project);
-        project.Id = project.Id == Guid.Empty ? Guid.NewGuid() : project.Id;
+        project.Id = project.Id == Guid.Empty ? Guid.CreateVersion7() : project.Id;
         project.CreateBy = user;
         project.CreateTime = _timeProvider.GetUtcNow();
         return true;

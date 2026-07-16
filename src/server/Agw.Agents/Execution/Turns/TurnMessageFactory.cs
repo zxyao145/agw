@@ -9,7 +9,7 @@ internal static class TurnMessageFactory
 {
     public static AgwMessage CreateFinished() =>
         new(
-            Guid.NewGuid().Normalize(),
+            Guid.CreateVersion7().Normalize(),
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwTextContent { Content = "" }],

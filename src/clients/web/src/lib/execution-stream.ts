@@ -1,4 +1,4 @@
-import { Ulid } from "id128";
+import { createUuidV7 } from "@/lib/uuid";
 import { MessageContentType, type AiMessage, type AiMessageContent } from "@/types";
 
 export type ExecutionUserInput = Pick<AiMessage, "messageId" | "author" | "contents">;
@@ -61,7 +61,7 @@ export function scopeMessagesByUserTurn(messages: AiMessage[]): AiMessage[] {
 
 export function createUserTextMessage(input: string): AiMessage {
   return {
-    messageId: Ulid.generate().toCanonical(),
+    messageId: createUuidV7(),
     author: default_user,
     role: "user",
     contents: [{ type: MessageContentType.TextContent, content: input }],

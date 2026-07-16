@@ -14,7 +14,7 @@ public class GitHubConnectionInvokerTests
     public async Task GetCurrentUser_EachInvocationReadsLatestCredential()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var connectionId = Guid.NewGuid();
+        var connectionId = Guid.CreateVersion7();
         var credentials = new MutableCredentialReader();
         var handler = new RecordingHttpHandler();
         var invoker = new GitHubConnectionInvoker(
@@ -53,8 +53,8 @@ public class GitHubConnectionInvokerTests
                 runner);
 
             var result = await invoker.CloneRepositoryAsync(
-                Guid.NewGuid(),
-                Guid.NewGuid(),
+                Guid.CreateVersion7(),
+                Guid.CreateVersion7(),
                 "openai",
                 "codex",
                 "sources/codex",
@@ -97,8 +97,8 @@ public class GitHubConnectionInvokerTests
             runner);
 
         var error = await Assert.ThrowsAsync<AgwException>(() => invoker.CloneRepositoryAsync(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
             "openai",
             "codex",
             relativePath,
@@ -128,8 +128,8 @@ public class GitHubConnectionInvokerTests
                 runner);
 
             var error = await Assert.ThrowsAsync<AgwException>(() => invoker.CloneRepositoryAsync(
-                Guid.NewGuid(),
-                Guid.NewGuid(),
+                Guid.CreateVersion7(),
+                Guid.CreateVersion7(),
                 "openai",
                 "codex",
                 "linked/codex",
@@ -163,7 +163,7 @@ public class GitHubConnectionInvokerTests
             new RecordingGitRunner());
 
         var error = await Assert.ThrowsAsync<AgwException>(() =>
-            invoker.GetCurrentUserAsync(Guid.NewGuid(), cancellationToken));
+            invoker.GetCurrentUserAsync(Guid.CreateVersion7(), cancellationToken));
 
         Assert.Equal(ErrorCodes.GitHubBadResponseStatusCode.Code, error.Code);
         Assert.DoesNotContain("api-secret", error.ToString(), StringComparison.Ordinal);
@@ -206,14 +206,14 @@ public class GitHubConnectionInvokerTests
             new RecordingGitRunner());
 
         var error = await Assert.ThrowsAsync<AgwException>(() =>
-            invoker.GetCurrentUserAsync(Guid.NewGuid(), cancellationToken));
+            invoker.GetCurrentUserAsync(Guid.CreateVersion7(), cancellationToken));
 
         Assert.Equal(ErrorCodes.GitHubBadResponseStatusCode.Code, error.Code);
         Assert.DoesNotContain("transport-secret", error.ToString(), StringComparison.Ordinal);
 
         handler.Exception = new OperationCanceledException(cancellationToken);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            invoker.GetCurrentUserAsync(Guid.NewGuid(), cancellationToken));
+            invoker.GetCurrentUserAsync(Guid.CreateVersion7(), cancellationToken));
     }
 
     private sealed class MutableCredentialReader : IConnectionCredentialReader

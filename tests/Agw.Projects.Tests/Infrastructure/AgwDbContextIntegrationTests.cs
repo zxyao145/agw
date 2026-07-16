@@ -16,10 +16,10 @@ public class AgwDbContextIntegrationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await TestScope.CreateAsync(foreignKeys: false, cancellationToken);
-        var projectId = Guid.NewGuid();
-        var skillId = Guid.NewGuid();
-        var mcpId = Guid.NewGuid();
-        var connectionId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var skillId = Guid.CreateVersion7();
+        var mcpId = Guid.CreateVersion7();
+        var connectionId = Guid.CreateVersion7();
 
         await using (var seed = scope.CreateContext())
         {
@@ -58,9 +58,9 @@ public class AgwDbContextIntegrationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await TestScope.CreateAsync(foreignKeys: false, cancellationToken);
-        var agentId = Guid.NewGuid();
-        var projectId = Guid.NewGuid();
-        var connectionId = Guid.NewGuid();
+        var agentId = Guid.CreateVersion7();
+        var projectId = Guid.CreateVersion7();
+        var connectionId = Guid.CreateVersion7();
 
         await using (var seed = scope.CreateContext())
         {
@@ -69,7 +69,7 @@ public class AgwDbContextIntegrationTests
             seed.Connections.Add(CreateConnection(connectionId, "shared-connection"));
             seed.ConnectionCredentials.Add(new ConnectionCredential
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 ConnectionId = connectionId,
                 Slot = "oauth.access-token",
                 Value = "plaintext"
@@ -104,8 +104,8 @@ public class AgwDbContextIntegrationTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await TestScope.CreateAsync(foreignKeys: true, cancellationToken);
-        var agentId = Guid.NewGuid();
-        var connectionId = Guid.NewGuid();
+        var agentId = Guid.CreateVersion7();
+        var connectionId = Guid.CreateVersion7();
 
         await using (var seed = scope.CreateContext())
         {

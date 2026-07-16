@@ -16,7 +16,7 @@ public class AgentDomainServiceTests
         {
             Type = AgentType.System,
             Name = "   ",
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
             EnvironmentVariables = null!,
         };
 
@@ -35,7 +35,7 @@ public class AgentDomainServiceTests
         var agent = new Agent
         {
             Type = AgentType.System,
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
             EnvironmentVariables = new Dictionary<string, string>
             {
                 ["  AGW_TOKEN  "] = "secret",
@@ -55,7 +55,7 @@ public class AgentDomainServiceTests
         var agent = new Agent
         {
             Type = AgentType.System,
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
             EnvironmentVariables = new Dictionary<string, string>
             {
                 ["AGW_TOKEN"] = "first",
@@ -78,7 +78,7 @@ public class AgentDomainServiceTests
         var agent = new Agent
         {
             Type = AgentType.System,
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
             EnvironmentVariables = new Dictionary<string, string> { [name] = "value" },
         };
 
@@ -103,7 +103,7 @@ public class AgentDomainServiceTests
     [Fact]
     public void PrepareForCreate_ExternalAgentWithSummaryEnabledAndSummaryModelProvider_PreservesSummary()
     {
-        var summaryModelProviderId = Guid.NewGuid();
+        var summaryModelProviderId = Guid.CreateVersion7();
         var agent = new Agent
         {
             Type = AgentType.External,
@@ -141,7 +141,7 @@ public class AgentDomainServiceTests
         {
             Type = AgentType.System,
             EnableSummary = true,
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
             SummaryModelProviderId = null,
         };
 
@@ -156,10 +156,10 @@ public class AgentDomainServiceTests
     {
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
         };
 
         var exception = Assert.Throws<AgwException>(() =>
@@ -171,7 +171,7 @@ public class AgentDomainServiceTests
     [Fact]
     public void ApplyUpdate_ExternalAgent_PreservesImmutableFieldsWhileUpdatingMetadata()
     {
-        var originalId = Guid.NewGuid();
+        var originalId = Guid.CreateVersion7();
         var originalCreateTime = UtcNow.AddDays(-1);
         var agent = new Agent
         {
@@ -185,14 +185,14 @@ public class AgentDomainServiceTests
             CreateBy = "creator",
             CreateTime = originalCreateTime,
         };
-        var updatedModelProviderId = Guid.NewGuid();
-        var updatedSummaryModelProviderId = Guid.NewGuid();
+        var updatedModelProviderId = Guid.CreateVersion7();
+        var updatedSummaryModelProviderId = Guid.CreateVersion7();
 
         _service.ApplyUpdate(
             agent,
             current =>
             {
-                current.Id = Guid.NewGuid();
+                current.Id = Guid.CreateVersion7();
                 current.Name = "updated-name";
                 current.SystemPrompt = "updated-prompt";
                 current.Tools = "[\"tool-b\"]";
@@ -222,7 +222,7 @@ public class AgentDomainServiceTests
     {
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "external-agent",
             Type = AgentType.External,
             Extra = "{\"before\":true}",
@@ -241,7 +241,7 @@ public class AgentDomainServiceTests
     {
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "external-agent",
             Type = AgentType.External,
             Extra = "{\"before\":true}",
@@ -263,7 +263,7 @@ public class AgentDomainServiceTests
     {
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "external-agent",
             Type = AgentType.External,
         };
@@ -279,10 +279,10 @@ public class AgentDomainServiceTests
     {
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
             Extra = "{\"managed\":true}",
         };
 
@@ -299,10 +299,10 @@ public class AgentDomainServiceTests
     {
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
             EnvironmentVariables = new Dictionary<string, string> { ["BEFORE"] = "value" },
         };
 
@@ -321,8 +321,8 @@ public class AgentDomainServiceTests
     [Fact]
     public void NormalizeMcpToolServerIds_RemovesEmptyValuesAndDuplicates()
     {
-        var first = Guid.NewGuid();
-        var second = Guid.NewGuid();
+        var first = Guid.CreateVersion7();
+        var second = Guid.CreateVersion7();
 
         var result = _service.NormalizeMcpToolServerIds([Guid.Empty, first, second, first]);
 

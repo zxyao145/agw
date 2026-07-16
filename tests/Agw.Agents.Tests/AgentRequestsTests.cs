@@ -35,14 +35,14 @@ public class AgentRequestsTests
             "agent",
             "Description",
             "Prompt",
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             EnvironmentVariables: environmentVariables);
         var updateRequest = new AgentUpdateRequest
         {
             DisplayName = "Agent",
             Description = "Description",
             SystemPrompt = "Prompt",
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
             EnvironmentVariables = environmentVariables
         };
 
@@ -55,7 +55,7 @@ public class AgentRequestsTests
     {
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Type = AgentType.System,
             EnvironmentVariables = new Dictionary<string, string>
             {
@@ -71,20 +71,20 @@ public class AgentRequestsTests
     [Fact]
     public void AgentSummaryModelProviderId_RoundTripsThroughRequestsAndResponse()
     {
-        var summaryModelProviderId = Guid.NewGuid();
+        var summaryModelProviderId = Guid.CreateVersion7();
         var createRequest = new AgentCreateRequest(
             "Agent",
             "agent",
             "Description",
             "Prompt",
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             SummaryModelProviderId: summaryModelProviderId);
         var updateRequest = new AgentUpdateRequest
         {
             DisplayName = "Agent",
             Description = "Description",
             SystemPrompt = "Prompt",
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
             SummaryModelProviderId = summaryModelProviderId
         };
         var response = AgentResponse.FromDomain(new Agent

@@ -32,7 +32,7 @@ public sealed class AgentUsageRecorder : IAgentUsageRecorder
 
         await dbContext.Set<AgentUsage>().AddAsync(new AgentUsage
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectId = projectId,
             ContextId = ContextIdUtil.NormalizeContextId(contextId),
             AgentName = agentName,

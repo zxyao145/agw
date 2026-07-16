@@ -14,8 +14,8 @@ public class AgentTurnSummaryServiceTests
     [Fact]
     public async Task CreateResultAsync_Success_ReturnsAndPersistsTextResultWithUsage()
     {
-        var projectId = Guid.NewGuid();
-        var modelProviderId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var modelProviderId = Guid.CreateVersion7();
         var client = new RecordingChatClient(new ChatResponse([
             new ChatMessage(ChatRole.Assistant, "  ## 完成\n\n- 已支持 **Markdown**。  ")
         ])
@@ -91,9 +91,9 @@ public class AgentTurnSummaryServiceTests
         var service = CreateService(new RecordingChatClient(response), writer);
 
         var result = await service.CreateResultAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [new ChatMessage(ChatRole.User, "input")],
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "context-1",
             null,
             TestContext.Current.CancellationToken);
@@ -109,9 +109,9 @@ public class AgentTurnSummaryServiceTests
         var service = CreateService(new RecordingChatClient(new InvalidOperationException("provider failed")), writer);
 
         var result = await service.CreateResultAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [new ChatMessage(ChatRole.User, "input")],
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "context-1",
             null,
             TestContext.Current.CancellationToken);
@@ -131,9 +131,9 @@ public class AgentTurnSummaryServiceTests
             writer);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.CreateResultAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [new ChatMessage(ChatRole.User, "input")],
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "context-1",
             null,
             cancellationTokenSource.Token));

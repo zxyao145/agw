@@ -31,7 +31,7 @@ public class EfCoreChatHistoryProviderTests
             NullLogger<EfCoreChatHistoryProvider>.Instance,
             TimeProvider.System);
         var session = new FakeAgentSession();
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
 
         provider.InitializeSessionState(session, " context-1 ", projectId);
 
@@ -81,10 +81,10 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
-        var projectContextId = Guid.NewGuid();
-        var otherContextId = Guid.NewGuid();
-        var currentTaskId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
+        var otherContextId = Guid.CreateVersion7();
+        var currentTaskId = Guid.CreateVersion7();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         await using (var seedContext = new AgwDbContext(options))
         {
@@ -93,9 +93,9 @@ public class EfCoreChatHistoryProviderTests
                 CreateContext(projectContextId, projectId, "context-1"),
                 CreateContext(otherContextId, projectId, "context-2"));
             seedContext.TaskRecords.AddRange(
-                CreateRecord(projectContextId, Guid.NewGuid(), 0, "first", jsonOptions),
+                CreateRecord(projectContextId, Guid.CreateVersion7(), 0, "first", jsonOptions),
                 CreateRecord(projectContextId, currentTaskId, 1, "second", jsonOptions),
-                CreateRecord(otherContextId, Guid.NewGuid(), 0, "other", jsonOptions));
+                CreateRecord(otherContextId, Guid.CreateVersion7(), 0, "other", jsonOptions));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -135,16 +135,16 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
-        var projectContextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId));
             seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
             seedContext.TaskRecords.AddRange(
-                CreateRecord(projectContextId, Guid.NewGuid(), 0, "normal", jsonOptions),
-                CreateRecord(projectContextId, Guid.NewGuid(), 1, CreateResultMessage("summary"), jsonOptions));
+                CreateRecord(projectContextId, Guid.CreateVersion7(), 0, "normal", jsonOptions),
+                CreateRecord(projectContextId, Guid.CreateVersion7(), 1, CreateResultMessage("summary"), jsonOptions));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -182,8 +182,8 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
-        var projectContextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var approvalRequest = new ToolApprovalRequestContent(
             "approval-1",
@@ -194,7 +194,7 @@ public class EfCoreChatHistoryProviderTests
             seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
             seedContext.TaskRecords.Add(CreateRecord(
                 projectContextId,
-                Guid.NewGuid(),
+                Guid.CreateVersion7(),
                 0,
                 new ChatMessage(ChatRole.Assistant, [approvalRequest]),
                 jsonOptions));
@@ -242,8 +242,8 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
-        var projectContextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         await using (var seedContext = new AgwDbContext(options))
         {
@@ -252,7 +252,7 @@ public class EfCoreChatHistoryProviderTests
             seedContext.TaskRecords.AddRange(
                 CreateRecord(
                     projectContextId,
-                    Guid.NewGuid(),
+                    Guid.CreateVersion7(),
                     0,
                     new ChatMessage(
                         ChatRole.Assistant,
@@ -263,7 +263,7 @@ public class EfCoreChatHistoryProviderTests
                     jsonOptions),
                 CreateRecord(
                     projectContextId,
-                    Guid.NewGuid(),
+                    Guid.CreateVersion7(),
                     1,
                     new ChatMessage(
                         ChatRole.Tool,
@@ -271,19 +271,19 @@ public class EfCoreChatHistoryProviderTests
                     jsonOptions),
                 CreateRecord(
                     projectContextId,
-                    Guid.NewGuid(),
+                    Guid.CreateVersion7(),
                     2,
                     new ChatMessage(ChatRole.Assistant, "completed"),
                     jsonOptions),
                 CreateRecord(
                     projectContextId,
-                    Guid.NewGuid(),
+                    Guid.CreateVersion7(),
                     3,
                     new ChatMessage(ChatRole.Tool, [new FunctionResultContent("orphaned-call", "orphaned result")]),
                     jsonOptions),
                 CreateRecord(
                     projectContextId,
-                    Guid.NewGuid(),
+                    Guid.CreateVersion7(),
                     4,
                     new ChatMessage(ChatRole.User, "continue"),
                     jsonOptions));
@@ -332,8 +332,8 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
-        var projectContextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         await using (var seedContext = new AgwDbContext(options))
         {
@@ -341,7 +341,7 @@ public class EfCoreChatHistoryProviderTests
             seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
             seedContext.TaskRecords.Add(CreateRecord(
                 projectContextId,
-                Guid.NewGuid(),
+                Guid.CreateVersion7(),
                 0,
                 new ChatMessage(ChatRole.Tool, "portable tool content"),
                 jsonOptions));
@@ -472,7 +472,7 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId));
@@ -524,7 +524,7 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId));
@@ -571,9 +571,9 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
-        var contextGuid = Guid.NewGuid();
-        var projectContextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextGuid = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId));
@@ -625,14 +625,14 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
-        var projectContextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId));
             seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
-            seedContext.TaskRecords.Add(CreateRecord(projectContextId, Guid.NewGuid(), 0, "existing", jsonOptions));
+            seedContext.TaskRecords.Add(CreateRecord(projectContextId, Guid.CreateVersion7(), 0, "existing", jsonOptions));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -697,13 +697,13 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId));
             seedContext.ProjectContexts.Add(new ProjectContext
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 ProjectId = projectId,
                 ContextId = "context-1",
                 Title = "New Chat",
@@ -726,7 +726,7 @@ public class EfCoreChatHistoryProviderTests
         provider.InitializeSessionState(session, "context-1", projectId);
         var message = new ChatMessage(ChatRole.User, "Draft the launch plan")
         {
-            MessageId = Guid.NewGuid().ToString(),
+            MessageId = Guid.CreateVersion7().ToString(),
             AuthorName = "tester"
         };
 
@@ -758,7 +758,7 @@ public class EfCoreChatHistoryProviderTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId));
@@ -790,7 +790,7 @@ public class EfCoreChatHistoryProviderTests
                 }
             ])
         {
-            MessageId = Guid.NewGuid().ToString(),
+            MessageId = Guid.CreateVersion7().ToString(),
             AuthorName = "tester"
         };
 
@@ -838,7 +838,7 @@ public class EfCoreChatHistoryProviderTests
         string text,
         JsonSerializerOptions jsonOptions) => new()
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectContextId = projectContextId,
             TaskId = taskId,
             Status = TaskExecutionStatus.Succeeded,
@@ -855,7 +855,7 @@ public class EfCoreChatHistoryProviderTests
         ChatMessage message,
         JsonSerializerOptions jsonOptions) => new()
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectContextId = projectContextId,
             TaskId = taskId,
             Status = TaskExecutionStatus.Succeeded,
@@ -868,7 +868,7 @@ public class EfCoreChatHistoryProviderTests
     private static ChatMessage CreateResultMessage(string text) =>
         new(ChatRole.System, text)
         {
-            MessageId = Guid.NewGuid().ToString(),
+            MessageId = Guid.CreateVersion7().ToString(),
             AuthorName = Constants.DefaultAgentAuthor,
             AdditionalProperties = new AdditionalPropertiesDictionary
             {

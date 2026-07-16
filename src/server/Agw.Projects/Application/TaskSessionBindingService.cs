@@ -107,7 +107,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         {
             binding = new TaskSessionBinding
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 ProjectContextId = projectContext.Id,
                 AgentId = agentId,
                 ExternalAgentName = normalizedAgentName,

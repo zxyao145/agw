@@ -34,7 +34,7 @@ public class McpToolServerDomainServiceTests
     {
         var server = new McpServer
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "server",
             Arguments = ["--existing"],
             EnvironmentVariables = new Dictionary<string, string> { ["A"] = "1" },
@@ -62,8 +62,8 @@ public class McpToolServerDomainServiceTests
     [Fact]
     public void NormalizeAgentIds_RemovesEmptyValuesAndDuplicates()
     {
-        var first = Guid.NewGuid();
-        var second = Guid.NewGuid();
+        var first = Guid.CreateVersion7();
+        var second = Guid.CreateVersion7();
 
         var result = _service.NormalizeAgentIds([Guid.Empty, first, first, second]);
 

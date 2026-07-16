@@ -16,9 +16,9 @@ public class AgentRuntimeServiceSummaryTests
     [InlineData(AgentType.External)]
     public async Task AppendDefinitionSummaryAsync_EnabledAgent_AppendsResult(AgentType agentType)
     {
-        var projectId = Guid.NewGuid();
-        var agentModelProviderId = Guid.NewGuid();
-        var summaryModelProviderId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var agentModelProviderId = Guid.CreateVersion7();
+        var summaryModelProviderId = Guid.CreateVersion7();
         var summaryService = new RecordingSummaryService();
         var service = CreateService(summaryService);
         var agent = new Agent
@@ -51,7 +51,7 @@ public class AgentRuntimeServiceSummaryTests
     [Fact]
     public async Task AppendDefinitionSummaryAsync_SystemAgentWithoutSummaryModelProvider_UsesAgentModelProvider()
     {
-        var agentModelProviderId = Guid.NewGuid();
+        var agentModelProviderId = Guid.CreateVersion7();
         var summaryService = new RecordingSummaryService();
         var service = CreateService(summaryService);
 
@@ -65,7 +65,7 @@ public class AgentRuntimeServiceSummaryTests
             },
             [new ChatMessage(ChatRole.User, "request")],
             [new AgwMessage("assistant-1", "agent", AiRole.Assistant, [])],
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "context-1",
             TestContext.Current.CancellationToken);
 
@@ -88,11 +88,11 @@ public class AgentRuntimeServiceSummaryTests
             {
                 Type = agentType,
                 EnableSummary = enableSummary,
-                ModelProviderId = Guid.NewGuid(),
+                ModelProviderId = Guid.CreateVersion7(),
             },
             [new ChatMessage(ChatRole.User, "request")],
             [output],
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "context-1",
             TestContext.Current.CancellationToken);
 

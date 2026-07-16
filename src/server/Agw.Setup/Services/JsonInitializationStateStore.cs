@@ -81,7 +81,7 @@ public sealed class JsonInitializationStateStore : IInitializationStateStore, IS
             var token = $"agw_{Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_')}";
             var record = new ApiTokenRecord
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 Name = normalizedName,
                 Prefix = token[..Math.Min(token.Length, 12)],
                 SecretHash = Hash(token),
@@ -146,7 +146,7 @@ public sealed class JsonInitializationStateStore : IInitializationStateStore, IS
     private async Task WriteAsync(ServerState state, CancellationToken cancellationToken)
     {
         _paths.EnsureCreated();
-        var tempPath = $"{_paths.StateFile}.{Guid.NewGuid():N}.tmp";
+        var tempPath = $"{_paths.StateFile}.{Guid.CreateVersion7():N}.tmp";
         var streamOptions = new FileStreamOptions
         {
             Mode = FileMode.CreateNew,

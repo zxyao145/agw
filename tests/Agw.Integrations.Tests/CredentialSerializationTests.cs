@@ -12,8 +12,8 @@ public sealed class CredentialSerializationTests
     {
         var credential = new ConnectionCredential
         {
-            Id = Guid.NewGuid(),
-            ConnectionId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            ConnectionId = Guid.CreateVersion7(),
             Slot = "api-key",
             Value = "protected-secret-sentinel",
             MetadataJson = "{\"secret\":\"metadata-sentinel\"}",
@@ -32,11 +32,11 @@ public sealed class CredentialSerializationTests
     {
         var relation = new AgentConnectionRelation
         {
-            AgentId = Guid.NewGuid(),
-            ConnectionId = Guid.NewGuid(),
+            AgentId = Guid.CreateVersion7(),
+            ConnectionId = Guid.CreateVersion7(),
             Connection = new Connection
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 Alias = "private",
                 Credentials =
                 [

@@ -19,7 +19,7 @@ public class ProjectExecutionLockRouterTests
             state,
             new MutableOptionsMonitor<DistributedLockSettings>(new DistributedLockSettings()),
             (_, _) => throw new Xunit.Sdk.XunitException("Distributed provider should not be created."));
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         var firstLease = await projectLock.AcquireAsync(projectId, TestContext.Current.CancellationToken);
 
         var secondLeaseTask = projectLock.AcquireAsync(projectId, TestContext.Current.CancellationToken);
@@ -46,7 +46,7 @@ public class ProjectExecutionLockRouterTests
             (_, _) => throw new Xunit.Sdk.XunitException("Distributed provider should not be created."));
 
         await using var lease = await projectLock.AcquireAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             TestContext.Current.CancellationToken);
     }
 
@@ -75,7 +75,7 @@ public class ProjectExecutionLockRouterTests
                 createdConnectionString = connectionString;
                 return provider;
             });
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         using var cancellation = new CancellationTokenSource();
 
         await using (await projectLock.AcquireAsync(projectId, cancellation.Token))
@@ -106,13 +106,13 @@ public class ProjectExecutionLockRouterTests
                 createdConnectionStrings.Add(connectionString);
                 return new RecordingDistributedLockProvider();
             });
-        await using (await projectLock.AcquireAsync(Guid.NewGuid(), TestContext.Current.CancellationToken))
+        await using (await projectLock.AcquireAsync(Guid.CreateVersion7(), TestContext.Current.CancellationToken))
         {
         }
 
         state.DatabaseProvider = DatabaseProvider.Postgres;
         state.DatabaseConnectionString = "Host=database";
-        await using (await projectLock.AcquireAsync(Guid.NewGuid(), TestContext.Current.CancellationToken))
+        await using (await projectLock.AcquireAsync(Guid.CreateVersion7(), TestContext.Current.CancellationToken))
         {
         }
 
@@ -138,10 +138,10 @@ public class ProjectExecutionLockRouterTests
                 return new RecordingDistributedLockProvider();
             });
 
-        await using (await projectLock.AcquireAsync(Guid.NewGuid(), TestContext.Current.CancellationToken))
+        await using (await projectLock.AcquireAsync(Guid.CreateVersion7(), TestContext.Current.CancellationToken))
         {
         }
-        await using (await projectLock.AcquireAsync(Guid.NewGuid(), TestContext.Current.CancellationToken))
+        await using (await projectLock.AcquireAsync(Guid.CreateVersion7(), TestContext.Current.CancellationToken))
         {
         }
         options.CurrentValue = new DistributedLockSettings
@@ -149,7 +149,7 @@ public class ProjectExecutionLockRouterTests
             Provider = DistributedLockProvider.Postgres,
             ConnectionString = "Host=locks"
         };
-        await using (await projectLock.AcquireAsync(Guid.NewGuid(), TestContext.Current.CancellationToken))
+        await using (await projectLock.AcquireAsync(Guid.CreateVersion7(), TestContext.Current.CancellationToken))
         {
         }
 

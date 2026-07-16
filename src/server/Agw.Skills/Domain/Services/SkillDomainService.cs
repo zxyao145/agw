@@ -24,7 +24,7 @@ public partial class SkillDomainService
         ArgumentNullException.ThrowIfNull(skill);
 
         Validate(skill.Name, skill.Description);
-        skill.Id = skill.Id == Guid.Empty ? Guid.NewGuid() : skill.Id;
+        skill.Id = skill.Id == Guid.Empty ? Guid.CreateVersion7() : skill.Id;
         skill.CreateBy = user;
         skill.CreateTime = _timeProvider.GetUtcNow();
         skill.ContentPath = BuildContentPath(skill.Name);

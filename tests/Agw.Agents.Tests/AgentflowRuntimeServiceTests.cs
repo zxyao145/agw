@@ -26,9 +26,9 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task GetMermaidAsync_AgentCreationFails_DisposesAlreadyCreatedAgents()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "creation-failure" };
-        var firstAgentId = Guid.NewGuid();
-        var secondAgentId = Guid.NewGuid();
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "creation-failure" };
+        var firstAgentId = Guid.CreateVersion7();
+        var secondAgentId = Guid.CreateVersion7();
         var firstAgent = new TrackingAIAgent();
         var nodes = new[]
         {
@@ -91,8 +91,8 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task AgentflowRuntime_ExecuteStreamingAsync_ForwardsSessionEnvironmentVariables()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "environment-flow" };
-        var agentId = Guid.NewGuid();
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "environment-flow" };
+        var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
             new AgentflowNode
@@ -130,12 +130,12 @@ public class AgentflowRuntimeServiceTests
             agentRuntimeService,
             new StubProviderSessionState(),
             new RecordingSummaryService());
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         var task = new TaskProjection
         {
             ProjectId = projectId,
             ContextId = "environment-context",
-            TaskId = Guid.NewGuid(),
+            TaskId = Guid.CreateVersion7(),
         };
         var settings = new SettingCommand(
             projectId,
@@ -165,9 +165,9 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task GetMermaidAsync_NestedWorkflow_DisposesNestedAgents()
     {
-        var innerFlow = new Agentflow { Id = Guid.NewGuid(), Name = "inner" };
-        var outerFlow = new Agentflow { Id = Guid.NewGuid(), Name = "outer" };
-        var agentId = Guid.NewGuid();
+        var innerFlow = new Agentflow { Id = Guid.CreateVersion7(), Name = "inner" };
+        var outerFlow = new Agentflow { Id = Guid.CreateVersion7(), Name = "outer" };
+        var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
             new AgentflowNode
@@ -236,8 +236,8 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task ExecuteStreamingAsync_ApprovalCancellation_DisposesWorkflowAgents()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "cancelled" };
-        var agentId = Guid.NewGuid();
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "cancelled" };
+        var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
             new AgentflowNode
@@ -303,8 +303,8 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task ExecuteStreamingAsync_HumanGateApproved_PersistsWaitDurationAndInput()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "approval-flow" };
-        var agentId = Guid.NewGuid();
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "approval-flow" };
+        var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
             new AgentflowNode
@@ -360,8 +360,8 @@ public class AgentflowRuntimeServiceTests
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState(),
             new RecordingSummaryService());
-        var projectId = Guid.NewGuid();
-        var taskId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var taskId = Guid.CreateVersion7();
 
         await foreach (var _ in service.ExecuteStreamingAsync(
                            agentflow.Id,
@@ -394,12 +394,12 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task ExecuteStreamingAsync_SummaryEnabledOutput_EmitsOneResult()
     {
-        var agentId = Guid.NewGuid();
-        var modelProviderId = Guid.NewGuid();
-        var projectId = Guid.NewGuid();
+        var agentId = Guid.CreateVersion7();
+        var modelProviderId = Guid.CreateVersion7();
+        var projectId = Guid.CreateVersion7();
         var agentflow = new Agentflow
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "summary-flow",
             SummaryModelProviderId = modelProviderId,
         };
@@ -449,7 +449,7 @@ public class AgentflowRuntimeServiceTests
             TestContext.Current.CancellationToken,
             projectId,
             "context-1",
-            Guid.NewGuid()))
+            Guid.CreateVersion7()))
         {
             messages.Add(message);
         }

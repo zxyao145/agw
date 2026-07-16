@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Uuid4 } from "id128";
 import { toast } from "sonner";
 
 import { apiGet } from "@/api/client";
@@ -39,6 +38,7 @@ import {
   stripUsageContents,
   type TokenUsage,
 } from "@/lib/token-usage";
+import { createUuidV7 } from "@/lib/uuid";
 import { cn } from "@/lib/utils";
 import type { AiMessage } from "@/types";
 import type { ChatTargetOption } from "@/types/chat-target";
@@ -61,10 +61,6 @@ export interface ChatProps {
   onConversationChange?: () => void | Promise<void>;
   onExecutionError?: (error: unknown) => void;
   active?: boolean;
-}
-
-function nextContextId(): string {
-  return Uuid4.generate().toCanonical();
 }
 
 function prepareChatHistory(messages: AiMessage[]) {
@@ -309,7 +305,7 @@ export function Chat({
         return;
       }
 
-      const nextId = contextId ?? nextContextId();
+      const nextId = contextId ?? createUuidV7();
       if (!contextId) {
         setContextId(nextId);
         onContextIdChange?.(nextId);

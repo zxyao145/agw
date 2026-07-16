@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
 
+using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
@@ -15,6 +16,20 @@ namespace Agw.Infrastructure.Tests;
 
 public class EntityTypeConfigurationTests
 {
+    [Fact]
+    public void GuidPrimaryKey_WhenGeneratedByEfCore_UsesVersion7()
+    {
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite("Data Source=:memory:")
+            .Options;
+        using var context = new AgwDbContext(options);
+        var authConfig = new ProviderAuthConfig();
+
+        context.ProviderAuthConfigs.Add(authConfig);
+
+        Assert.Equal(7, authConfig.Id.Version);
+    }
+
     [Fact]
     public void ProviderAndSkillEntities_DeclareMatchingConfigurations()
     {

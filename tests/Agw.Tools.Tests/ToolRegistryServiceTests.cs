@@ -25,7 +25,7 @@ public class ToolRegistryServiceTests
     [Fact]
     public async Task InvokeAsync_ForRegisteredParameterObjectTool_AcceptsFlattenedArguments()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"agw-test-{Guid.NewGuid():N}");
+        var tempDir = Path.Combine(Path.GetTempPath(), $"agw-test-{Guid.CreateVersion7():N}");
         Directory.CreateDirectory(tempDir);
         var filePath = Path.Combine(tempDir, "test.txt");
         await File.WriteAllTextAsync(filePath, "line 1\nline 2", TestContext.Current.CancellationToken);
@@ -53,7 +53,7 @@ public class ToolRegistryServiceTests
 
     private static AIFunction CreateReadFileFunction(string? tempDir = null)
     {
-        var testDir = tempDir ?? Path.Combine(Path.GetTempPath(), $"agw-test-{Guid.NewGuid():N}");
+        var testDir = tempDir ?? Path.Combine(Path.GetTempPath(), $"agw-test-{Guid.CreateVersion7():N}");
         Directory.CreateDirectory(testDir);
 
         var services = new ServiceCollection();

@@ -22,7 +22,7 @@ public class AgentflowDomainService
             return false;
         }
 
-        agentflow.Id = agentflow.Id == Guid.Empty ? Guid.NewGuid() : agentflow.Id;
+        agentflow.Id = agentflow.Id == Guid.Empty ? Guid.CreateVersion7() : agentflow.Id;
         agentflow.CreateBy = user;
         agentflow.CreateTime = _timeProvider.GetUtcNow();
         return true;

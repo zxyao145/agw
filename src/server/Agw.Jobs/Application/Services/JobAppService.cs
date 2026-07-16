@@ -103,7 +103,7 @@ public class JobAppService
         var now = _timeProvider.GetUtcNow();
         var entity = new Job
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectId = request.ProjectId,
             AgentType = request.AgentType,
             AgentId = request.AgentId,

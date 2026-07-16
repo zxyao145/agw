@@ -63,10 +63,10 @@ public class ProjectContractTests
     [Fact]
     public void ProjectResponse_FromDomain_MapsProjectAndRelationFields()
     {
-        var projectId = Guid.NewGuid();
-        var mcpToolServerId = Guid.NewGuid();
-        var skillId = Guid.NewGuid();
-        var connectionId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var mcpToolServerId = Guid.CreateVersion7();
+        var skillId = Guid.CreateVersion7();
+        var connectionId = Guid.CreateVersion7();
         var project = new Project
         {
             Id = projectId,

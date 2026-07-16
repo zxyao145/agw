@@ -83,7 +83,7 @@ public class ProjectDomainServiceTests
     [Fact]
     public void TryApplyUpdate_BlankNameAfterUpdate_ReturnsFalse()
     {
-        var project = new Project { Id = Guid.NewGuid(), Name = "Project A" };
+        var project = new Project { Id = Guid.CreateVersion7(), Name = "Project A" };
 
         var result = _service.TryApplyUpdate(project, current => current.Name = "", "tester");
 
@@ -95,7 +95,7 @@ public class ProjectDomainServiceTests
     [Fact]
     public void TryApplyUpdate_ValidUpdate_SetsMetadata()
     {
-        var project = new Project { Id = Guid.NewGuid(), Name = "Project A" };
+        var project = new Project { Id = Guid.CreateVersion7(), Name = "Project A" };
 
         var result = _service.TryApplyUpdate(project, current => current.Description = "Updated", "tester");
 
@@ -186,7 +186,7 @@ public class ProjectDomainServiceTests
     [Fact]
     public void TryApplyUpdate_EnvironmentVariables_NormalizesNames()
     {
-        var project = new Project { Id = Guid.NewGuid(), Name = "Project A" };
+        var project = new Project { Id = Guid.CreateVersion7(), Name = "Project A" };
 
         var result = _service.TryApplyUpdate(
             project,

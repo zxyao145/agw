@@ -26,7 +26,7 @@ public class JobRowVersionTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var jobId = Guid.NewGuid();
+        var jobId = Guid.CreateVersion7();
         byte[] createdRowVersion;
 
         await using (var createContext = new AgwDbContext(options))
@@ -34,7 +34,7 @@ public class JobRowVersionTests
             var job = new Job
             {
                 Id = jobId,
-                ProjectId = Guid.NewGuid(),
+                ProjectId = Guid.CreateVersion7(),
                 Name = "Nightly sync",
                 TriggerType = TriggerType.Once,
                 TriggerValue = "2026-03-28T13:00:00Z",

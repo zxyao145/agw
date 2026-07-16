@@ -13,7 +13,7 @@ public sealed class OAuthStateProtectorTests
     {
         var now = new DateTimeOffset(2026, 7, 15, 8, 0, 0, TimeSpan.Zero);
         var service = CreateService(new TestTimeProvider(now));
-        var connectionId = Guid.NewGuid();
+        var connectionId = Guid.CreateVersion7();
 
         var protectedState = service.Protect(connectionId, "verifier-secret", "/integrations/callback?from=settings");
 
@@ -31,7 +31,7 @@ public sealed class OAuthStateProtectorTests
     public void TryUnprotect_TamperedState_ReturnsFalse()
     {
         var service = CreateService(new TestTimeProvider(DateTimeOffset.UtcNow));
-        var protectedState = service.Protect(Guid.NewGuid(), "verifier", "/integrations");
+        var protectedState = service.Protect(Guid.CreateVersion7(), "verifier", "/integrations");
         var replacement = protectedState[^1] == 'A' ? 'B' : 'A';
         var tamperedState = protectedState[..^1] + replacement;
 
@@ -44,7 +44,7 @@ public sealed class OAuthStateProtectorTests
     {
         var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 7, 15, 8, 0, 0, TimeSpan.Zero));
         var service = CreateService(timeProvider);
-        var protectedState = service.Protect(Guid.NewGuid(), "verifier", "/integrations");
+        var protectedState = service.Protect(Guid.CreateVersion7(), "verifier", "/integrations");
 
         timeProvider.SetUtcNow(timeProvider.GetUtcNow().AddMinutes(11));
 
@@ -65,7 +65,7 @@ public sealed class OAuthStateProtectorTests
         var service = CreateService(new TestTimeProvider(DateTimeOffset.UtcNow));
 
         var exception = Assert.Throws<AgwException>(() =>
-            service.Protect(Guid.NewGuid(), "verifier", returnPath));
+            service.Protect(Guid.CreateVersion7(), "verifier", returnPath));
 
         Assert.Equal(ErrorCodes.OAuthReturnPathInvalid.Code, exception.Code);
     }

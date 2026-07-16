@@ -20,10 +20,10 @@ public class AgentExecutorTests
     {
         var job = new Job
         {
-            Id = Guid.NewGuid(),
-            ProjectId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            ProjectId = Guid.CreateVersion7(),
             AgentType = AgentRuntimeType.Agent,
-            AgentId = Guid.NewGuid(),
+            AgentId = Guid.CreateVersion7(),
             Name = name,
             Prompt = prompt
         };

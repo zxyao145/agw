@@ -34,7 +34,7 @@ public class ProviderAppServiceTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
             setupContext.Models.Add(new LlmModel
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 Name = "existing-model",
                 MaxTokens = 8192,
                 CreateBy = "seed",
@@ -91,7 +91,7 @@ public class ProviderAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        var providerId = Guid.NewGuid();
+        var providerId = Guid.CreateVersion7();
 
         await using (var setupContext = new AgwDbContext(options))
         {
@@ -143,7 +143,7 @@ public class ProviderAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        var providerId = Guid.NewGuid();
+        var providerId = Guid.CreateVersion7();
         var model = CreateModel("existing-model");
 
         await using (var setupContext = new AgwDbContext(options))
@@ -186,7 +186,7 @@ public class ProviderAppServiceTests
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
         var options = CreateOptions(connection);
-        var providerId = Guid.NewGuid();
+        var providerId = Guid.CreateVersion7();
         var model = CreateModel("used-model");
         var relation = CreateRelation(providerId, model.Id);
 
@@ -200,7 +200,7 @@ public class ProviderAppServiceTests
             {
                 setupContext.Agentflows.Add(new Agentflow
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
                     Name = "flow",
                     SystemPrompt = string.Empty,
                     SummaryModelProviderId = relation.Id,
@@ -212,7 +212,7 @@ public class ProviderAppServiceTests
             {
                 setupContext.Agents.Add(new Agent
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
                     DisplayName = "Agent",
                     Name = $"agent-{usage}",
                     Description = string.Empty,
@@ -282,7 +282,7 @@ public class ProviderAppServiceTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var providerId = Guid.NewGuid();
+        var providerId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Providers.Add(new Provider
@@ -297,7 +297,7 @@ public class ProviderAppServiceTests
                 [
                     new ProviderAuthConfig
                     {
-                        Id = Guid.NewGuid(),
+                        Id = Guid.CreateVersion7(),
                         ProviderId = providerId,
                         AuthType = ProviderAuthType.ApiKey,
                         ApiKey = "test-key",
@@ -349,7 +349,7 @@ public class ProviderAppServiceTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var providerId = Guid.NewGuid();
+        var providerId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Providers.Add(new Provider
@@ -365,7 +365,7 @@ public class ProviderAppServiceTests
                 [
                     new ProviderAuthConfig
                     {
-                        Id = Guid.NewGuid(),
+                        Id = Guid.CreateVersion7(),
                         ProviderId = providerId,
                         AuthType = ProviderAuthType.ApiKey,
                         ApiKey = "old-key",
@@ -449,7 +449,7 @@ public class ProviderAppServiceTests
 
     private static LlmModel CreateModel(string name) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = Guid.CreateVersion7(),
         Name = name,
         MaxTokens = 256_000,
         CreateBy = "seed",
@@ -458,7 +458,7 @@ public class ProviderAppServiceTests
 
     private static ModelProviderRelation CreateRelation(Guid providerId, Guid modelId) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = Guid.CreateVersion7(),
         ProviderId = providerId,
         ModelId = modelId,
         CreateBy = "seed",

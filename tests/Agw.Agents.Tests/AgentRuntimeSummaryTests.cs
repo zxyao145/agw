@@ -15,8 +15,8 @@ public class AgentRuntimeSummaryTests
     [Fact]
     public async Task ExecuteAsync_SummaryEnabled_AppendsResultUsingOnlyCurrentTurnText()
     {
-        var projectId = Guid.NewGuid();
-        var modelProviderId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var modelProviderId = Guid.CreateVersion7();
         var summaryService = new RecordingSummaryService();
         var agent = CreateAgent(new StubChatClient("assistant response"));
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
@@ -65,11 +65,11 @@ public class AgentRuntimeSummaryTests
             NullLogger.Instance,
             agent,
             session,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "context-1",
             "session-1",
             enableSummary: true,
-            summaryModelProviderId: Guid.NewGuid(),
+            summaryModelProviderId: Guid.CreateVersion7(),
             summaryService);
         var messages = new List<AgwMessage>();
 
@@ -96,11 +96,11 @@ public class AgentRuntimeSummaryTests
             NullLogger.Instance,
             agent,
             session,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "context-1",
             "session-1",
             enableSummary: true,
-            summaryModelProviderId: Guid.NewGuid(),
+            summaryModelProviderId: Guid.CreateVersion7(),
             summaryService);
 
         await foreach (var _ in runtime.ExecuteStreamingAsync(
@@ -123,11 +123,11 @@ public class AgentRuntimeSummaryTests
             NullLogger.Instance,
             agent,
             session,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "context-1",
             "session-1",
             enableSummary: false,
-            summaryModelProviderId: Guid.NewGuid(),
+            summaryModelProviderId: Guid.CreateVersion7(),
             summaryService);
 
         var messages = await runtime.ExecuteAsync(

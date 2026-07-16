@@ -28,9 +28,9 @@ public class TaskSessionBindingServiceTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
-        var projectContextId = Guid.NewGuid();
-        var agentId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
+        var agentId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
@@ -105,9 +105,9 @@ public class TaskSessionBindingServiceTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
-        var projectContextId = Guid.NewGuid();
-        var agentId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
+        var agentId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
@@ -157,7 +157,7 @@ public class TaskSessionBindingServiceTests
     public async Task UpsertAsync_WhenSameBindingCreatedConcurrently_CompletesWithSingleBinding()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var dbPath = Path.Combine(Path.GetTempPath(), $"agw-binding-{Guid.NewGuid():N}.db");
+        var dbPath = Path.Combine(Path.GetTempPath(), $"agw-binding-{Guid.CreateVersion7():N}.db");
 
         try
         {
@@ -171,9 +171,9 @@ public class TaskSessionBindingServiceTests
                 await setupContext.Database.EnsureCreatedAsync(cancellationToken);
             }
 
-            var projectId = Guid.NewGuid();
-            var projectContextId = Guid.NewGuid();
-            var agentId = Guid.NewGuid();
+            var projectId = Guid.CreateVersion7();
+            var projectContextId = Guid.CreateVersion7();
+            var agentId = Guid.CreateVersion7();
             await using (var seedContext = new AgwDbContext(options))
             {
                 seedContext.Projects.Add(new Project
@@ -213,7 +213,7 @@ public class TaskSessionBindingServiceTests
                         "context-1",
                         agentId,
                         "codex",
-                        Guid.NewGuid().ToString("D"),
+                        Guid.CreateVersion7().ToString("D"),
                         $"tester-{index}",
                         cancellationToken);
                 })

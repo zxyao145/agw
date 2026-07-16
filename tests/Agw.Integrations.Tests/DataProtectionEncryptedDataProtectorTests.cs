@@ -11,7 +11,7 @@ public class DataProtectionEncryptedDataProtectorTests
     public void Protect_Plaintext_ReturnsV1EnvelopeThatRoundTrips()
     {
         var protector = CreateProtector();
-        var entityId = Guid.NewGuid();
+        var entityId = Guid.CreateVersion7();
         const string plaintext = "github-access-token";
 
         var protectedValue = protector.Protect("integration_connection_credential", entityId, plaintext);
@@ -27,7 +27,7 @@ public class DataProtectionEncryptedDataProtectorTests
     public void Protect_SamePlaintext_ReturnsDifferentCiphertext()
     {
         var protector = CreateProtector();
-        var entityId = Guid.NewGuid();
+        var entityId = Guid.CreateVersion7();
 
         var first = protector.Protect("provider_auth_config", entityId, "secret");
         var second = protector.Protect("provider_auth_config", entityId, "secret");
@@ -39,11 +39,11 @@ public class DataProtectionEncryptedDataProtectorTests
     public void Unprotect_DifferentEntityOrTamperedPayload_Throws()
     {
         var protector = CreateProtector();
-        var entityId = Guid.NewGuid();
+        var entityId = Guid.CreateVersion7();
         var protectedValue = protector.Protect("provider_auth_config", entityId, "secret");
 
         AssertEncryptedDataInvalid(() =>
-            protector.Unprotect("provider_auth_config", Guid.NewGuid(), protectedValue));
+            protector.Unprotect("provider_auth_config", Guid.CreateVersion7(), protectedValue));
 
         var characters = protectedValue.ToCharArray();
         characters[^1] = characters[^1] == 'A' ? 'B' : 'A';
@@ -80,7 +80,7 @@ public class DataProtectionEncryptedDataProtectorTests
         var protector = CreateProtector();
 
         AssertEncryptedDataInvalid(() =>
-            protector.Unprotect("provider_auth_config", Guid.NewGuid(), value));
+            protector.Unprotect("provider_auth_config", Guid.CreateVersion7(), value));
     }
 
     private static DataProtectionEncryptedDataProtector CreateProtector() =>

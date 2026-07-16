@@ -28,11 +28,11 @@ public class ProjectContextAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid();
-        var jobId = Guid.NewGuid();
-        var firstTaskId = Guid.NewGuid();
-        var secondTaskId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7();
+        var jobId = Guid.CreateVersion7();
+        var firstTaskId = Guid.CreateVersion7();
+        var secondTaskId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
@@ -68,10 +68,10 @@ public class ProjectContextAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var transientContextId = Guid.NewGuid();
-        var emptyTitledContextId = Guid.NewGuid();
-        var persistedContextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var transientContextId = Guid.CreateVersion7();
+        var emptyTitledContextId = Guid.CreateVersion7();
+        var persistedContextId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
@@ -82,25 +82,25 @@ public class ProjectContextAppServiceTests
             seedContext.TaskRecords.AddRange(
                 new TaskRecord
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
                     ProjectContextId = transientContextId,
-                    TaskId = Guid.NewGuid(),
+                    TaskId = Guid.CreateVersion7(),
                     Status = TaskExecutionStatus.Running,
                     CreateTime = TimeProvider.System.GetUtcNow(),
                     UpdateTime = TimeProvider.System.GetUtcNow()
                 },
                 new TaskRecord
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
                     ProjectContextId = emptyTitledContextId,
-                    TaskId = Guid.NewGuid(),
+                    TaskId = Guid.CreateVersion7(),
                     Status = TaskExecutionStatus.Running,
                     CreateTime = TimeProvider.System.GetUtcNow(),
                     UpdateTime = TimeProvider.System.GetUtcNow()
                 },
                 CreateRecord(
                     persistedContextId,
-                    Guid.NewGuid(),
+                    Guid.CreateVersion7(),
                     0,
                     "hello",
                     TaskExecutionStatus.Running));
@@ -126,13 +126,13 @@ public class ProjectContextAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid();
-        var jobId = Guid.NewGuid();
-        var otherContextId = Guid.NewGuid();
-        var firstTaskId = Guid.NewGuid();
-        var secondTaskId = Guid.NewGuid();
-        var otherTaskId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7();
+        var jobId = Guid.CreateVersion7();
+        var otherContextId = Guid.CreateVersion7();
+        var firstTaskId = Guid.CreateVersion7();
+        var secondTaskId = Guid.CreateVersion7();
+        var otherTaskId = Guid.CreateVersion7();
         var expectedUsage = new ProjectContextUsage
         {
             InputTokenCount = 10,
@@ -181,10 +181,10 @@ public class ProjectContextAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid();
-        var firstTaskId = Guid.NewGuid();
-        var secondTaskId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7();
+        var firstTaskId = Guid.CreateVersion7();
+        var secondTaskId = Guid.CreateVersion7();
         var now = TimeProvider.System.GetUtcNow();
         await using (var seedContext = new AgwDbContext(options))
         {
@@ -218,9 +218,9 @@ public class ProjectContextAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid();
-        var otherContextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7();
+        var otherContextId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
@@ -237,8 +237,8 @@ public class ProjectContextAppServiceTests
                 4,
                 5));
             seedContext.TaskRecords.AddRange(
-                CreateRecord(contextId, Guid.NewGuid(), 0, "Delete me", TaskExecutionStatus.Succeeded),
-                CreateRecord(otherContextId, Guid.NewGuid(), 0, "Keep me", TaskExecutionStatus.Succeeded));
+                CreateRecord(contextId, Guid.CreateVersion7(), 0, "Delete me", TaskExecutionStatus.Succeeded),
+                CreateRecord(otherContextId, Guid.CreateVersion7(), 0, "Keep me", TaskExecutionStatus.Succeeded));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -267,8 +267,8 @@ public class ProjectContextAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
@@ -296,9 +296,9 @@ public class ProjectContextAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var firstContextId = Guid.NewGuid();
-        var secondContextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var firstContextId = Guid.CreateVersion7();
+        var secondContextId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
@@ -340,8 +340,8 @@ public class ProjectContextAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             var projectContext = CreateContext(contextId, projectId, "context-1", "Trip");
@@ -358,17 +358,17 @@ public class ProjectContextAppServiceTests
                 5));
             seedContext.TaskRecords.Add(CreateRecord(
                 contextId,
-                Guid.NewGuid(),
+                Guid.CreateVersion7(),
                 0,
                 "Clear me",
                 TaskExecutionStatus.Succeeded));
             seedContext.TaskSessionBindings.Add(new TaskSessionBinding
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 ProjectContextId = contextId,
-                AgentId = Guid.NewGuid(),
+                AgentId = Guid.CreateVersion7(),
                 ExternalAgentName = "codex",
-                ProviderSessionId = Guid.NewGuid().Normalize(),
+                ProviderSessionId = Guid.CreateVersion7().Normalize(),
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
@@ -397,15 +397,15 @@ public class ProjectContextAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
             seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
             seedContext.TaskRecords.Add(CreateRecord(
                 contextId,
-                Guid.NewGuid(),
+                Guid.CreateVersion7(),
                 0,
                 "Clear me",
                 TaskExecutionStatus.Succeeded));
@@ -474,7 +474,7 @@ public class ProjectContextAppServiceTests
         long cachedInputTokenCount,
         long reasoningTokenCount) => new()
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectId = projectId,
             ContextId = contextId,
             AgentName = agentName,
@@ -502,14 +502,14 @@ public class ProjectContextAppServiceTests
         TaskExecutionStatus status,
         DateTimeOffset createTime) => new()
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectContextId = contextId,
             TaskId = taskId,
             Status = status,
             ConversationSequence = sequence,
             ConversationPayload = JsonUtil.Serialize(new ChatMessage(ChatRole.User, text)
             {
-                MessageId = Guid.NewGuid().ToString(),
+                MessageId = Guid.CreateVersion7().ToString(),
                 AuthorName = Constants.DefaultInputAuthor
             }),
             CreateTime = createTime,

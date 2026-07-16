@@ -16,23 +16,23 @@ public class TaskRecordDomainServiceTests
         {
             new TaskRecord
             {
-                Id = Guid.NewGuid(),
-                TaskId = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
+                TaskId = Guid.CreateVersion7(),
                 ConversationSequence = 2,
                 CreateTime = new DateTimeOffset(2024, 1, 1, 3, 0, 0, TimeSpan.Zero),
                 UpdateTime = new DateTimeOffset(2024, 1, 1, 3, 0, 1, TimeSpan.Zero),
             },
             new TaskRecord
             {
-                Id = Guid.NewGuid(),
-                TaskId = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
+                TaskId = Guid.CreateVersion7(),
                 ConversationSequence = null,
                 CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
             },
             new TaskRecord
             {
-                Id = Guid.NewGuid(),
-                TaskId = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
+                TaskId = Guid.CreateVersion7(),
                 ConversationSequence = 2,
                 CreateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 0, TimeSpan.Zero),
                 UpdateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 1, TimeSpan.Zero),
@@ -49,15 +49,15 @@ public class TaskRecordDomainServiceTests
     {
         var first = new TaskRecord
         {
-            Id = Guid.NewGuid(),
-            TaskId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            TaskId = Guid.CreateVersion7(),
             ConversationSequence = 1,
             CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
         };
         var second = new TaskRecord
         {
-            Id = Guid.NewGuid(),
-            TaskId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            TaskId = Guid.CreateVersion7(),
             ConversationSequence = 2,
             CreateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 0, TimeSpan.Zero),
         };
@@ -70,26 +70,26 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void GroupByTaskId_GroupsOrderedRecordsPerTaskId()
     {
-        var taskIdA = Guid.NewGuid();
-        var taskIdB = Guid.NewGuid();
+        var taskIdA = Guid.CreateVersion7();
+        var taskIdB = Guid.CreateVersion7();
 
         var earlier = new TaskRecord
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             TaskId = taskIdA,
             ConversationSequence = 1,
             CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
         };
         var later = new TaskRecord
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             TaskId = taskIdA,
             ConversationSequence = 2,
             CreateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 0, TimeSpan.Zero),
         };
         var other = new TaskRecord
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             TaskId = taskIdB,
             ConversationSequence = 1,
             CreateTime = new DateTimeOffset(2024, 1, 1, 3, 0, 0, TimeSpan.Zero),
@@ -104,7 +104,7 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void FindTask_ReturnsDirectMatchByTaskId()
     {
-        var task = new TaskProjection { TaskId = Guid.NewGuid(), ContextId = "context-1" };
+        var task = new TaskProjection { TaskId = Guid.CreateVersion7(), ContextId = "context-1" };
 
         var result = _service.FindTask(task.TaskId.Normalize(), [task], []);
 
@@ -114,7 +114,7 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void FindTask_ReturnsDirectMatchByNormalizedTaskId()
     {
-        var task = new TaskProjection { TaskId = Guid.NewGuid(), ContextId = "context-1" };
+        var task = new TaskProjection { TaskId = Guid.CreateVersion7(), ContextId = "context-1" };
 
         var result = _service.FindTask(task.TaskId.Normalize().ToUpperInvariant(), [task], []);
 
@@ -124,20 +124,20 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void FindTask_WhenDirectMatchMissing_UsesLatestRecordSession()
     {
-        var olderTask = new TaskProjection { TaskId = Guid.NewGuid(), ContextId = "context-a" };
-        var newerTask = new TaskProjection { TaskId = Guid.NewGuid(), ContextId = "context-b" };
+        var olderTask = new TaskProjection { TaskId = Guid.CreateVersion7(), ContextId = "context-a" };
+        var newerTask = new TaskProjection { TaskId = Guid.CreateVersion7(), ContextId = "context-b" };
         var records = new[]
         {
             new TaskRecord
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 TaskId = olderTask.TaskId,
                 CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
                 UpdateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
             },
             new TaskRecord
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 TaskId = newerTask.TaskId,
                 CreateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 0, TimeSpan.Zero),
                 UpdateTime = new DateTimeOffset(2024, 1, 1, 3, 0, 0, TimeSpan.Zero),
@@ -152,7 +152,7 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void FindTask_BlankTaskId_ReturnsNull()
     {
-        var task = new TaskProjection { TaskId = Guid.NewGuid(), ContextId = "context-1" };
+        var task = new TaskProjection { TaskId = Guid.CreateVersion7(), ContextId = "context-1" };
 
         var result = _service.FindTask(" ", [task], []);
 
@@ -162,7 +162,7 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void ShouldDeleteTask_ProjectBackedTask_ReturnsFalse()
     {
-        var task = new TaskProjection { ProjectId = Guid.NewGuid() };
+        var task = new TaskProjection { ProjectId = Guid.CreateVersion7() };
 
         var result = _service.ShouldDeleteTask(task);
 

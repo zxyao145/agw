@@ -122,7 +122,7 @@ public class FilesControllerSearchTests
 
     private static string CreateTempDirectory()
     {
-        var path = Path.Combine(Path.GetTempPath(), "agw-files-search-tests", Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(Path.GetTempPath(), "agw-files-search-tests", Guid.CreateVersion7().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }

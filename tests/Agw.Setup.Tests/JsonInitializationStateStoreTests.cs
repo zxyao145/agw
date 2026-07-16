@@ -107,7 +107,7 @@ public class JsonInitializationStateStoreTests
 
     private static AgwDataPaths CreatePaths()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"agw-state-{Guid.NewGuid():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"agw-state-{Guid.CreateVersion7():N}");
         var paths = AgwDataPaths.Resolve(root, "/unused");
         paths.EnsureCreated();
         return paths;

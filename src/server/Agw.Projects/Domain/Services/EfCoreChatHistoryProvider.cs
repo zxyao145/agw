@@ -275,7 +275,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         {
             projectContext = new ProjectContext
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 ProjectId = projectId,
                 ContextId = contextId,
                 Title = TaskTitleFactory.Create(firstUserText),
@@ -300,7 +300,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             projectContext.UpdateTime = now;
         }
 
-        var taskId = Guid.NewGuid();
+        var taskId = Guid.CreateVersion7();
 
         var nextSequence = await dbContext.Set<TaskRecord>()
             .Where(x => x.ProjectContextId == projectContext.Id)
@@ -315,7 +315,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
             dbContext.Set<TaskRecord>().Add(new TaskRecord
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 ProjectContextId = projectContext.Id,
                 TaskId = taskId,
                 Status = TaskExecutionStatus.Succeeded,

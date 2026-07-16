@@ -297,7 +297,7 @@ public async Task RunAsync_RecurringJobSucceeds_ReturnsRescheduleAndWritesSucces
 {
     var now = new DateTimeOffset(2026, 7, 15, 8, 0, 0, TimeSpan.Zero);
     var store = new RecordingJobStore { MarkRunningResult = true };
-    var taskId = Guid.NewGuid();
+    var taskId = Guid.CreateVersion7();
     var runner = CreateRunner(store, new StubJobAgentExecutor(taskId), now);
     var scheduled = CreateScheduledJob(TriggerType.Interval, "00:15:00", retryCount: 0, maxRetryCount: 3);
 

@@ -50,7 +50,7 @@ public class TaskAppServiceTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
@@ -101,10 +101,10 @@ public class TaskAppServiceTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var projectId = Guid.NewGuid();
-        var contextRowId = Guid.NewGuid();
-        var oldTaskId = Guid.NewGuid();
-        var latestTaskId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextRowId = Guid.CreateVersion7();
+        var oldTaskId = Guid.CreateVersion7();
+        var latestTaskId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
@@ -129,7 +129,7 @@ public class TaskAppServiceTests
             seedContext.TaskRecords.AddRange(
                 new TaskRecord
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
                     ProjectContextId = contextRowId,
                     TaskId = oldTaskId,
                     Status = TaskExecutionStatus.Succeeded,
@@ -138,7 +138,7 @@ public class TaskAppServiceTests
                 },
                 new TaskRecord
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
                     ProjectContextId = contextRowId,
                     TaskId = latestTaskId,
                     Status = TaskExecutionStatus.Running,

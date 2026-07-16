@@ -16,7 +16,7 @@ public class McpToolServerDomainService
         ArgumentNullException.ThrowIfNull(server);
 
         NormalizeCollections(server);
-        server.Id = server.Id == Guid.Empty ? Guid.NewGuid() : server.Id;
+        server.Id = server.Id == Guid.Empty ? Guid.CreateVersion7() : server.Id;
         server.CreateBy = user;
         server.CreateTime = _timeProvider.GetUtcNow();
     }

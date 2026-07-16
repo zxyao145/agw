@@ -38,7 +38,7 @@ public class FilesControllerProjectFileSystemTests
     {
         var controller = CreateController();
 
-        var result = await controller.ReadAsync(Guid.NewGuid(), "");
+        var result = await controller.ReadAsync(Guid.CreateVersion7(), "");
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("Path parameter is required", badRequest.Value?.ToString(), StringComparison.Ordinal);

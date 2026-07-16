@@ -23,12 +23,12 @@ public class ExecutionCommandHandlerTests
     {
         var runtime = new TestRuntime();
         await using var connection = CreateConnection(new SettingCommandHandler());
-        connection.Settings = new SettingCommand(Guid.NewGuid(), contextId: "old");
+        connection.Settings = new SettingCommand(Guid.CreateVersion7(), contextId: "old");
         connection.ResolvedTask = CreateTask("old");
         connection.Runtime = runtime;
 
         await connection.DispatchAsync(
-            new SettingCommand(Guid.NewGuid(), contextId: "new"),
+            new SettingCommand(Guid.CreateVersion7(), contextId: "new"),
             TestContext.Current.CancellationToken);
 
         Assert.True(runtime.Disposed);
@@ -46,12 +46,12 @@ public class ExecutionCommandHandlerTests
         using var cts = new CancellationTokenSource();
         runtime.TryStartTurn(new ActiveTurn(completion.Task, cts));
         await using var connection = CreateConnection(new SettingCommandHandler(), sink);
-        var current = new SettingCommand(Guid.NewGuid(), contextId: "current");
+        var current = new SettingCommand(Guid.CreateVersion7(), contextId: "current");
         connection.Settings = current;
         connection.Runtime = runtime;
 
         await connection.DispatchAsync(
-            new SettingCommand(Guid.NewGuid(), contextId: "new"),
+            new SettingCommand(Guid.CreateVersion7(), contextId: "new"),
             TestContext.Current.CancellationToken);
 
         Assert.Same(current, connection.Settings);
@@ -115,7 +115,7 @@ public class ExecutionCommandHandlerTests
         var factory = new FakeRuntimeFactory(CreateTask("resolved"));
         var handler = CreateExecCommandHandler(factory);
         await using var connection = CreateConnection(handler);
-        var agentId = Guid.NewGuid();
+        var agentId = Guid.CreateVersion7();
         var command = CreateExecCommand(agentId);
 
         await connection.DispatchAsync(command, TestContext.Current.CancellationToken);
@@ -136,12 +136,12 @@ public class ExecutionCommandHandlerTests
         await using var connection = CreateConnection(handler);
         var previous = new TestRuntime();
         connection.Runtime = previous;
-        connection.Target = new ExecutionTarget(Guid.NewGuid(), AgentRuntimeType.Agent);
-        connection.Settings = new SettingCommand(Guid.NewGuid());
+        connection.Target = new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent);
+        connection.Settings = new SettingCommand(Guid.CreateVersion7());
         connection.ResolvedTask = CreateTask("resolved");
 
         await connection.DispatchAsync(
-            CreateExecCommand(Guid.NewGuid()),
+            CreateExecCommand(Guid.CreateVersion7()),
             TestContext.Current.CancellationToken);
 
         Assert.True(previous.Disposed);
@@ -157,7 +157,7 @@ public class ExecutionCommandHandlerTests
         await using var connection = CreateConnection(handler);
 
         await connection.DispatchAsync(
-            CreateExecCommand(Guid.NewGuid()),
+            CreateExecCommand(Guid.CreateVersion7()),
             TestContext.Current.CancellationToken);
 
         var expectedWorkspace = Path.GetFullPath(PathUtil.ExpandTilde(configuredWorkspace));
@@ -199,8 +199,8 @@ public class ExecutionCommandHandlerTests
     private static TaskProjection CreateTask(string contextId) =>
         new()
         {
-            TaskId = Guid.NewGuid(),
-            ProjectId = Guid.NewGuid(),
+            TaskId = Guid.CreateVersion7(),
+            ProjectId = Guid.CreateVersion7(),
             ContextId = contextId,
             Title = "test",
             CreateTime = TimeProvider.System.GetUtcNow(),

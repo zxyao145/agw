@@ -25,14 +25,14 @@ public class ProjectAppServiceTests
             new ProjectFileSystemConfigurationProvider(scope.Service);
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            provider.GetAsync(Guid.NewGuid(), new CancellationToken(canceled: true)));
+            provider.GetAsync(Guid.CreateVersion7(), new CancellationToken(canceled: true)));
     }
 
     [Fact]
     public async Task ProjectFileSystemConfigurationProvider_WhenProjectExists_ReturnsWorkspaceOnly()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var workspace = Path.Combine(Path.GetTempPath(), "agw-project-tests", Guid.NewGuid().ToString("N"));
+        var workspace = Path.Combine(Path.GetTempPath(), "agw-project-tests", Guid.CreateVersion7().ToString("N"));
         try
         {
             await using var scope = await ProjectAppServiceTestScope.CreateAsync(cancellationToken);
@@ -66,9 +66,9 @@ public class ProjectAppServiceTests
 
         var created = await scope.Service.CreateAsync(
             CreateProject("Project A"),
-            [scope.FirstMcpToolServerId, scope.FirstMcpToolServerId, Guid.Empty, Guid.NewGuid()],
-            [scope.FirstSkillId, scope.FirstSkillId, Guid.Empty, Guid.NewGuid()],
-            [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.NewGuid()],
+            [scope.FirstMcpToolServerId, scope.FirstMcpToolServerId, Guid.Empty, Guid.CreateVersion7()],
+            [scope.FirstSkillId, scope.FirstSkillId, Guid.Empty, Guid.CreateVersion7()],
+            [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.CreateVersion7()],
             "tester");
 
         Assert.NotNull(created);
@@ -254,7 +254,7 @@ public class ProjectAppServiceTests
         {
             usageContext.AgentUsages.Add(new AgentUsage
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 ProjectId = created!.Id,
                 ContextId = "context-1",
                 AgentName = "planner",
@@ -278,7 +278,7 @@ public class ProjectAppServiceTests
     public async Task CreateAsync_WhenWorkspaceDoesNotExist_CreatesWorkspaceDirectory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var tempRoot = Path.Combine(Path.GetTempPath(), "agw-project-tests", Guid.NewGuid().ToString("N"));
+        var tempRoot = Path.Combine(Path.GetTempPath(), "agw-project-tests", Guid.CreateVersion7().ToString("N"));
         var workspace = Path.Combine(tempRoot, "workspace");
 
         try
@@ -374,12 +374,12 @@ public class ProjectAppServiceTests
         }
 
         public ProjectAppService Service { get; }
-        public Guid FirstMcpToolServerId { get; } = Guid.NewGuid();
-        public Guid SecondMcpToolServerId { get; } = Guid.NewGuid();
-        public Guid FirstSkillId { get; } = Guid.NewGuid();
-        public Guid SecondSkillId { get; } = Guid.NewGuid();
-        public Guid FirstConnectionId { get; } = Guid.NewGuid();
-        public Guid SecondConnectionId { get; } = Guid.NewGuid();
+        public Guid FirstMcpToolServerId { get; } = Guid.CreateVersion7();
+        public Guid SecondMcpToolServerId { get; } = Guid.CreateVersion7();
+        public Guid FirstSkillId { get; } = Guid.CreateVersion7();
+        public Guid SecondSkillId { get; } = Guid.CreateVersion7();
+        public Guid FirstConnectionId { get; } = Guid.CreateVersion7();
+        public Guid SecondConnectionId { get; } = Guid.CreateVersion7();
 
         public static async Task<ProjectAppServiceTestScope> CreateAsync(CancellationToken cancellationToken)
         {

@@ -190,7 +190,7 @@ public sealed class ExecutionConnection : IAsyncDisposable
 
     private static AgwMessage CreateMessage(AgwContent content) =>
         new(
-            Guid.NewGuid().ToString("D"),
+            Guid.CreateVersion7().ToString("D"),
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [content]);

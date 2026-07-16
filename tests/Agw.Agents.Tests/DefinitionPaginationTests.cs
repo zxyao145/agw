@@ -50,7 +50,7 @@ public class DefinitionPaginationTests
         var now = new DateTimeOffset(2026, 7, 16, 8, 0, 0, TimeSpan.Zero);
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "paged-agent",
             DisplayName = "Paged Agent",
             Type = AgentType.External,
@@ -58,14 +58,14 @@ public class DefinitionPaginationTests
         };
         var mcpServer = new McpServer
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "paged-mcp",
             TransportType = "stdio",
             CreateTime = now,
         };
         var skill = new Skill
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "paged-skill",
             Description = "Paged skill",
             ContentPath = "skills/paged-skill",
@@ -73,7 +73,7 @@ public class DefinitionPaginationTests
         };
         var connection = new Connection
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             PluginId = "test-plugin",
             ConnectorId = "test-connector",
             AuthSchemeId = "test-auth",
@@ -106,7 +106,7 @@ public class DefinitionPaginationTests
         var now = new DateTimeOffset(2026, 7, 16, 8, 0, 0, TimeSpan.Zero);
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "skill-agent",
             DisplayName = "Skill Agent",
             Type = AgentType.External,
@@ -114,7 +114,7 @@ public class DefinitionPaginationTests
         };
         var skill = new Skill
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "related-skill",
             Description = "Related skill",
             ContentPath = "skills/related-skill",

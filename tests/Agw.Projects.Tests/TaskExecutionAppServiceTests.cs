@@ -39,7 +39,7 @@ public class TaskExecutionAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Jobs Project"));
@@ -48,7 +48,7 @@ public class TaskExecutionAppServiceTests
 
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
-        var jobId = Guid.NewGuid();
+        var jobId = Guid.CreateVersion7();
 
         var result = await service.CreateRunningAsync(
             projectId,
@@ -91,7 +91,7 @@ public class TaskExecutionAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Jobs Project"));
@@ -103,7 +103,7 @@ public class TaskExecutionAppServiceTests
         var createResult = await service.CreateRunningAsync(
             projectId,
             new TaskCreateRequest(
-                JobId: Guid.NewGuid(),
+                JobId: Guid.CreateVersion7(),
                 Input: "Run scheduled sync",
                 Title: "Nightly sync",
                 ContextId: "context-1"),
@@ -129,7 +129,7 @@ public class TaskExecutionAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Jobs Project"));
@@ -138,7 +138,7 @@ public class TaskExecutionAppServiceTests
 
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
-        var taskId = Guid.NewGuid();
+        var taskId = Guid.CreateVersion7();
 
         var result = await service.CreateForExecutionAsync(
             projectId,
@@ -165,7 +165,7 @@ public class TaskExecutionAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Context Project"));
@@ -174,7 +174,7 @@ public class TaskExecutionAppServiceTests
 
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
-        var contextGuid = Guid.NewGuid();
+        var contextGuid = Guid.CreateVersion7();
 
         var uppercaseResult = await service.CreateForExecutionAsync(
             projectId,
@@ -212,10 +212,10 @@ public class TaskExecutionAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var contextGuid = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextGuid = Guid.CreateVersion7();
         var context = CreateContext(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             projectId,
             contextGuid.ToString("D").ToUpperInvariant(),
             "Legacy context");
@@ -254,11 +254,11 @@ public class TaskExecutionAppServiceTests
         var options = CreateOptions(connection);
         await EnsureCreatedAsync(options, cancellationToken);
 
-        var projectId = Guid.NewGuid();
-        var contextId = Guid.NewGuid();
-        var otherContextId = Guid.NewGuid();
-        var taskId = Guid.NewGuid();
-        var otherTaskId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7();
+        var otherContextId = Guid.CreateVersion7();
+        var taskId = Guid.CreateVersion7();
+        var otherTaskId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
@@ -320,7 +320,7 @@ public class TaskExecutionAppServiceTests
 
     private static TaskRecord CreateRecord(Guid contextId, Guid taskId) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = Guid.CreateVersion7(),
         ProjectContextId = contextId,
         TaskId = taskId,
         Status = TaskExecutionStatus.Running,

@@ -95,7 +95,7 @@ public class LocalSkillScriptRunnerTests
     public async Task RunAsync_ScriptOutsideSkillDirectory_ThrowsCommandExecutionFailure()
     {
         var root = CreateTempDirectory();
-        var outside = Path.Combine(Path.GetTempPath(), $"agw-outside-{Guid.NewGuid():N}.py");
+        var outside = Path.Combine(Path.GetTempPath(), $"agw-outside-{Guid.CreateVersion7():N}.py");
         await File.WriteAllTextAsync(outside, "print('outside')", TestContext.Current.CancellationToken);
 
         try
@@ -195,7 +195,7 @@ public class LocalSkillScriptRunnerTests
 
     private static string CreateTempDirectory()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"agw-local-skill-{Guid.NewGuid():N}");
+        var path = Path.Combine(Path.GetTempPath(), $"agw-local-skill-{Guid.CreateVersion7():N}");
         Directory.CreateDirectory(path);
         return path;
     }

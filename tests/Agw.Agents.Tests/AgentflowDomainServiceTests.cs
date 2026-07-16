@@ -36,7 +36,7 @@ public class AgentflowDomainServiceTests
     [Fact]
     public void TryApplyUpdate_BlankNameAfterUpdate_ReturnsFalse()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "workflow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "workflow" };
 
         var result = _service.TryApplyUpdate(agentflow, current => current.Name = "  ", "tester");
 
@@ -48,7 +48,7 @@ public class AgentflowDomainServiceTests
     [Fact]
     public void TryApplyUpdate_ValidUpdate_SetsMetadata()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "workflow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "workflow" };
 
         var result = _service.TryApplyUpdate(agentflow, current => current.Description = "updated", "tester");
 
@@ -64,7 +64,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             null,
             null,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             []);
 
         Assert.Empty(result.Nodes!);
@@ -77,7 +77,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             [],
             [],
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             []);
 
         Assert.Null(result.Nodes);
@@ -89,13 +89,13 @@ public class AgentflowDomainServiceTests
     {
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "node-a", Kind = AgentflowNodeKind.Agent, RelateId = Guid.NewGuid() },
+            new AgentflowNode { NodeId = "node-a", Kind = AgentflowNodeKind.Agent, RelateId = Guid.CreateVersion7() },
         };
 
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             [],
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             []);
 
         Assert.Null(result.Nodes);
@@ -105,7 +105,7 @@ public class AgentflowDomainServiceTests
     [Fact]
     public void ValidateAndNormalizeGraph_DuplicateNodeIds_ReturnsNullCollections()
     {
-        var agentId = Guid.NewGuid();
+        var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "node-a", Kind = AgentflowNodeKind.Agent, RelateId = agentId },
@@ -115,7 +115,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             [],
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [agentId]);
 
         Assert.Null(result.Nodes);
@@ -125,7 +125,7 @@ public class AgentflowDomainServiceTests
     [Fact]
     public void ValidateAndNormalizeGraph_DuplicateEdgeIds_ReturnsNullCollections()
     {
-        var agentId = Guid.NewGuid();
+        var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "node-a", Kind = AgentflowNodeKind.Agent, RelateId = agentId },
@@ -140,7 +140,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [agentId]);
 
         Assert.Null(result.Nodes);
@@ -150,7 +150,7 @@ public class AgentflowDomainServiceTests
     [Fact]
     public void ValidateAndNormalizeGraph_EdgeReferencesMissingNode_ReturnsNullCollections()
     {
-        var agentId = Guid.NewGuid();
+        var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "node-a", Kind = AgentflowNodeKind.Agent, RelateId = agentId },
@@ -163,7 +163,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [agentId]);
 
         Assert.Null(result.Nodes);
@@ -187,7 +187,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             []);
 
         Assert.Null(result.Nodes);
@@ -205,7 +205,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             [],
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             []);
 
         Assert.Null(result.Nodes);
@@ -234,7 +234,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             []);
 
         Assert.Null(result.Nodes);
@@ -263,7 +263,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             []);
 
         Assert.Null(result.Nodes);
@@ -293,7 +293,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             []);
 
         Assert.Null(result.Nodes);
@@ -323,7 +323,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             []);
 
         Assert.Null(result.Nodes);
@@ -353,7 +353,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             []);
 
         Assert.Null(result.Nodes);
@@ -363,8 +363,8 @@ public class AgentflowDomainServiceTests
     [Fact]
     public void ValidateAndNormalizeGraph_ValidDag_ReturnsNormalizedNodesAndEdges()
     {
-        var agentflowId = Guid.NewGuid();
-        var agentId = Guid.NewGuid();
+        var agentflowId = Guid.CreateVersion7();
+        var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
             new AgentflowNode
@@ -442,7 +442,7 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [],
             summaryModelProviderId: null);
 
@@ -459,9 +459,9 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [],
-            summaryModelProviderId: Guid.NewGuid());
+            summaryModelProviderId: Guid.CreateVersion7());
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
@@ -470,14 +470,14 @@ public class AgentflowDomainServiceTests
     [Fact]
     public void ValidateAndNormalizeGraph_SummaryEnabledWithSingleOutputAndModelProvider_ReturnsGraph()
     {
-        var summaryModelProviderId = Guid.NewGuid();
+        var summaryModelProviderId = Guid.CreateVersion7();
         var nodes = CreateSummaryOutputNodes(outputCount: 1);
         var edges = CreateSummaryOutputEdges(outputCount: 1);
 
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             edges,
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [],
             summaryModelProviderId,
             existingModelProviderIds: [summaryModelProviderId]);
@@ -492,9 +492,9 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             CreateSummaryOutputNodes(outputCount: 1),
             CreateSummaryOutputEdges(outputCount: 1),
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [],
-            summaryModelProviderId: Guid.NewGuid(),
+            summaryModelProviderId: Guid.CreateVersion7(),
             existingModelProviderIds: []);
 
         Assert.Null(result.Nodes);
@@ -510,9 +510,9 @@ public class AgentflowDomainServiceTests
         var result = _service.ValidateAndNormalizeGraph(
             nodes,
             CreateSummaryOutputEdges(outputCount: 1),
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [],
-            summaryModelProviderId: Guid.NewGuid());
+            summaryModelProviderId: Guid.CreateVersion7());
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);

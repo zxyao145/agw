@@ -25,11 +25,11 @@ public class AgentflowTraceTests
         await collector.StartAsync(TestContext.Current.CancellationToken);
 
         var execution = new AgentflowExecutionTraceContext(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             "context-1",
-            Guid.NewGuid());
-        var agentflowId = Guid.NewGuid();
-        var agentId = Guid.NewGuid();
+            Guid.CreateVersion7());
+        var agentflowId = Guid.CreateVersion7();
+        var agentId = Guid.CreateVersion7();
         using (var scope = AgentflowNodeExecutionActivity.StartAgent(
                    execution,
                    agentflowId,
@@ -74,8 +74,8 @@ public class AgentflowTraceTests
         await collector.StartAsync(TestContext.Current.CancellationToken);
 
         using (var scope = AgentflowNodeExecutionActivity.StartHumanGate(
-                   new AgentflowExecutionTraceContext(Guid.NewGuid(), "context-2", Guid.NewGuid()),
-                   Guid.NewGuid(),
+                   new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-2", Guid.CreateVersion7()),
+                   Guid.CreateVersion7(),
                    "human",
                    "Approval",
                    [new ChatMessage(ChatRole.User, "review")]))
@@ -97,8 +97,8 @@ public class AgentflowTraceTests
         await collector.StartAsync(TestContext.Current.CancellationToken);
 
         using (var scope = AgentflowNodeExecutionActivity.StartHumanGate(
-                   new AgentflowExecutionTraceContext(Guid.NewGuid(), "context-3", Guid.NewGuid()),
-                   Guid.NewGuid(),
+                   new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-3", Guid.CreateVersion7()),
+                   Guid.CreateVersion7(),
                    "human",
                    "Approval",
                    [new ChatMessage(ChatRole.User, "review")]))

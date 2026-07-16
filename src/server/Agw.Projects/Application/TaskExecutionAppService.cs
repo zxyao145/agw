@@ -139,7 +139,7 @@ public class TaskExecutionAppService
         var now = _timeProvider.GetUtcNow();
         var taskId = taskIdOverride.HasValue && taskIdOverride.Value != Guid.Empty
             ? taskIdOverride.Value
-            : Guid.NewGuid();
+            : Guid.CreateVersion7();
         var contextId = ContextIdUtil.ResolveContextId(request.ContextId);
         var title = string.IsNullOrWhiteSpace(request.Title)
             ? TaskTitleFactory.Create(request.Input)
@@ -148,7 +148,7 @@ public class TaskExecutionAppService
         var context = await GetOrCreateContextAsync(project.Id, contextId, request.JobId, title, user, now);
         var record = new TaskRecord
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectContextId = context.Id,
             TaskId = taskId,
             JobId = request.JobId,
@@ -320,7 +320,7 @@ public class TaskExecutionAppService
 
         context = new ProjectContext
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectId = projectId,
             JobId = jobId,
             ContextId = contextId,

@@ -255,8 +255,8 @@ public class SkillAppService
             Directory.CreateDirectory(tempPath);
         }
 
-        var extractionRoot = Path.Combine(tempPath, $"agw-skill-extract-{Guid.NewGuid():N}");
-        var preparedRoot = Path.Combine(tempPath, $"agw-skill-prepared-{Guid.NewGuid():N}");
+        var extractionRoot = Path.Combine(tempPath, $"agw-skill-extract-{Guid.CreateVersion7():N}");
+        var preparedRoot = Path.Combine(tempPath, $"agw-skill-prepared-{Guid.CreateVersion7():N}");
         Directory.CreateDirectory(extractionRoot);
         Directory.CreateDirectory(preparedRoot);
 

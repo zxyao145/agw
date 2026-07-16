@@ -77,7 +77,7 @@ public sealed class AgentRuntime : RuntimeBase
 
         var message = new ChatMessage(ChatRole.User, ConvertToAIContents(input.Contents))
         {
-            MessageId = string.IsNullOrWhiteSpace(input.MessageId) ? Guid.NewGuid().ToString() : input.MessageId,
+            MessageId = string.IsNullOrWhiteSpace(input.MessageId) ? Guid.CreateVersion7().ToString() : input.MessageId,
             AuthorName = string.IsNullOrWhiteSpace(input.Author) ? Constants.DefaultInputAuthor : input.Author,
         };
         var response = await Agent.RunAsync(message, Session, cancellationToken: cancellationToken);
@@ -103,7 +103,7 @@ public sealed class AgentRuntime : RuntimeBase
         var aiContents = ConvertToAIContents(contents);
         var message = new ChatMessage(ChatRole.User, aiContents)
         {
-            MessageId = string.IsNullOrWhiteSpace(messageId) ? Guid.NewGuid().ToString() : messageId,
+            MessageId = string.IsNullOrWhiteSpace(messageId) ? Guid.CreateVersion7().ToString() : messageId,
             AuthorName = string.IsNullOrWhiteSpace(author) ? Constants.DefaultInputAuthor : author
         };
 

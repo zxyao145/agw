@@ -13,7 +13,7 @@ public class ModelDomainService
 
     public void PrepareForCreate(LlmModel model, string user)
     {
-        model.Id = model.Id == Guid.Empty ? Guid.NewGuid() : model.Id;
+        model.Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id;
         model.CreateBy = user;
         model.CreateTime = _timeProvider.GetUtcNow();
     }

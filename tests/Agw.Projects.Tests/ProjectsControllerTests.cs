@@ -32,9 +32,9 @@ public class ProjectsControllerTests
         var project = CreateProject();
         var service = new CapturingProjectAppService(project);
         var controller = new ProjectsController(service);
-        var mcpToolServerId = Guid.NewGuid();
-        var skillId = Guid.NewGuid();
-        var appInstanceId = Guid.NewGuid();
+        var mcpToolServerId = Guid.CreateVersion7();
+        var skillId = Guid.CreateVersion7();
+        var appInstanceId = Guid.CreateVersion7();
         var request = new ProjectCreateRequest(
             "Project A",
             "Description",
@@ -63,9 +63,9 @@ public class ProjectsControllerTests
         var project = CreateProject();
         var service = new CapturingProjectAppService(project);
         var controller = new ProjectsController(service);
-        var mcpToolServerId = Guid.NewGuid();
-        var skillId = Guid.NewGuid();
-        var appInstanceId = Guid.NewGuid();
+        var mcpToolServerId = Guid.CreateVersion7();
+        var skillId = Guid.CreateVersion7();
+        var appInstanceId = Guid.CreateVersion7();
         var request = new ProjectUpdateRequest(
             "Project A",
             "Updated",
@@ -149,7 +149,7 @@ public class ProjectsControllerTests
 
     private static Project CreateProject() => new()
     {
-        Id = Guid.NewGuid(),
+        Id = Guid.CreateVersion7(),
         Name = "Project A",
         Type = ProjectType.UserDefined,
         Workspace = "~/project-a",

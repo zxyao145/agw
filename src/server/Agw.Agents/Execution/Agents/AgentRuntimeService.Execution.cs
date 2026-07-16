@@ -109,7 +109,7 @@ public partial class AgentRuntimeService
 
         try
         {
-            taskId ??= Guid.NewGuid();
+            taskId ??= Guid.CreateVersion7();
             string taskIdValue = taskId.Value.Normalize();
             var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);
             var sessionKey = CreateSessionKey(projectId.Value, resolvedContextId);

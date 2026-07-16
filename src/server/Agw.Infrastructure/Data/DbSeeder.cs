@@ -702,7 +702,7 @@ public class DbSeeder
             Directory.CreateDirectory(_dataPaths.TempDirectory);
             var extractionRoot = Path.Combine(
                 _dataPaths.TempDirectory,
-                $"agw-default-skill-{Guid.NewGuid():N}");
+                $"agw-default-skill-{Guid.CreateVersion7():N}");
             try
             {
                 using var archiveStream = typeof(DbSeeder).Assembly

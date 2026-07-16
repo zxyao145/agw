@@ -26,13 +26,13 @@ public class EncryptedDataPersistenceTests
 
         var providerAuthConfig = new ProviderAuthConfig
         {
-            Id = Guid.NewGuid(),
-            ProviderId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            ProviderId = Guid.CreateVersion7(),
             ApiKey = "provider-secret"
         };
         var mcpServer = new McpServer
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "encrypted-headers",
             Headers = new Dictionary<string, string>
             {
@@ -42,15 +42,15 @@ public class EncryptedDataPersistenceTests
         };
         var pluginCredential = new PluginInstallationCredential
         {
-            Id = Guid.NewGuid(),
-            PluginInstallationId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            PluginInstallationId = Guid.CreateVersion7(),
             Slot = "client-secret",
             Value = "plugin-secret"
         };
         var connectionCredential = new ConnectionCredential
         {
-            Id = Guid.NewGuid(),
-            ConnectionId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            ConnectionId = Guid.CreateVersion7(),
             Slot = "access-token",
             Value = "connection-secret"
         };
@@ -114,13 +114,13 @@ public class EncryptedDataPersistenceTests
         var protector = CreateProtector();
         var authConfig = new ProviderAuthConfig
         {
-            Id = Guid.NewGuid(),
-            ProviderId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            ProviderId = Guid.CreateVersion7(),
             ApiKey = "old-api-key"
         };
         var mcpServer = new McpServer
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "modified-headers",
             Headers = new Dictionary<string, string> { ["Authorization"] = "old-header" }
         };
@@ -165,8 +165,8 @@ public class EncryptedDataPersistenceTests
         var protector = CreateProtector();
         var credential = new ConnectionCredential
         {
-            Id = Guid.NewGuid(),
-            ConnectionId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            ConnectionId = Guid.CreateVersion7(),
             Slot = "access-token",
             Value = "plaintext-token"
         };
@@ -192,17 +192,17 @@ public class EncryptedDataPersistenceTests
         await using var connection = await OpenConnectionAsync();
         var options = CreateOptions(connection);
         var protector = CreateProtector();
-        var ownerId = Guid.NewGuid();
+        var ownerId = Guid.CreateVersion7();
         var first = new PluginInstallationCredential
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             PluginInstallationId = ownerId,
             Slot = "duplicate-slot",
             Value = "first-secret"
         };
         var second = new PluginInstallationCredential
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             PluginInstallationId = ownerId,
             Slot = "duplicate-slot",
             Value = "second-secret"
@@ -228,15 +228,15 @@ public class EncryptedDataPersistenceTests
         var options = CreateOptions(connection);
         var validCredential = new ConnectionCredential
         {
-            Id = Guid.NewGuid(),
-            ConnectionId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            ConnectionId = Guid.CreateVersion7(),
             Slot = "refresh-token",
             Value = "valid-plaintext-token"
         };
         var invalidCredential = new ConnectionCredential
         {
-            Id = Guid.NewGuid(),
-            ConnectionId = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
+            ConnectionId = Guid.CreateVersion7(),
             Slot = "access-token",
             Value = "invalid-plaintext-token"
         };
@@ -321,7 +321,7 @@ public class EncryptedDataPersistenceTests
     {
         await using var connection = await OpenConnectionAsync();
         var options = CreateOptions(connection);
-        var id = Guid.NewGuid();
+        var id = Guid.CreateVersion7();
 
         await using (var setupContext = new AgwDbContext(options, CreateProtector()))
         {
@@ -333,7 +333,7 @@ public class EncryptedDataPersistenceTests
             "INSERT INTO provider_auth_config (id, provider_id, auth_type, api_key, enable, create_time, update_time) "
             + "VALUES ($id, $providerId, 0, 'legacy-plaintext', 1, $now, $now)",
             ("$id", id),
-            ("$providerId", Guid.NewGuid()),
+            ("$providerId", Guid.CreateVersion7()),
             ("$now", DateTimeOffset.UtcNow));
 
         await using var context = new AgwDbContext(options, CreateProtector());

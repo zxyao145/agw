@@ -123,7 +123,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         var now = _timeProvider.GetUtcNow();
         var log = new JobLog
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             JobId = jobId,
             TaskId = taskId,
             StartTime = startTime,

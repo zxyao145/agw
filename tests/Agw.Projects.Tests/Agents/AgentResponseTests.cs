@@ -8,10 +8,10 @@ public class AgentResponseTests
     [Fact]
     public void FromDomain_WhenAgentHasRelations_MapsRelationIds()
     {
-        var agentId = Guid.NewGuid();
-        var mcpToolServerId = Guid.NewGuid();
-        var skillId = Guid.NewGuid();
-        var connectionId = Guid.NewGuid();
+        var agentId = Guid.CreateVersion7();
+        var mcpToolServerId = Guid.CreateVersion7();
+        var skillId = Guid.CreateVersion7();
+        var connectionId = Guid.CreateVersion7();
 
         var agent = new Agent
         {
@@ -20,7 +20,7 @@ public class AgentResponseTests
             Name = "writer",
             Description = "Writes content",
             SystemPrompt = "Write clearly",
-            ModelProviderId = Guid.NewGuid(),
+            ModelProviderId = Guid.CreateVersion7(),
             EnableSummary = true,
             Tools = """["read_file"]""",
             Type = AgentType.System,

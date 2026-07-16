@@ -44,9 +44,9 @@ public class AgentAppServiceCapabilityTests
     [Fact]
     public async Task ListEnabledMcpToolServersAsync_AgentAndProjectIds_DeduplicatesAndFiltersDisabledServers()
     {
-        var agentServerId = Guid.NewGuid();
-        var projectServerId = Guid.NewGuid();
-        var disabledServerId = Guid.NewGuid();
+        var agentServerId = Guid.CreateVersion7();
+        var projectServerId = Guid.CreateVersion7();
+        var disabledServerId = Guid.CreateVersion7();
         var service = CreateService(
             mcpServers:
             [
@@ -71,8 +71,8 @@ public class AgentAppServiceCapabilityTests
     [Fact]
     public async Task ListSkillsAsync_AgentAndProjectIds_DeduplicatesSkills()
     {
-        var agentSkillId = Guid.NewGuid();
-        var projectSkillId = Guid.NewGuid();
+        var agentSkillId = Guid.CreateVersion7();
+        var projectSkillId = Guid.CreateVersion7();
         var service = CreateService(
             skills:
             [
@@ -105,8 +105,8 @@ public class AgentAppServiceCapabilityTests
     [Fact]
     public async Task ListEnabledMcpToolServersByAgentAsync_AgentCompatibilityWrapper_UsesAgentRelations()
     {
-        var agentId = Guid.NewGuid();
-        var server = new McpServer { Id = Guid.NewGuid(), Name = "agent-mcp", Enabled = true };
+        var agentId = Guid.CreateVersion7();
+        var server = new McpServer { Id = Guid.CreateVersion7(), Name = "agent-mcp", Enabled = true };
         var service = CreateService(
             mcpServers: [server],
             agentMcpRelations:
@@ -122,8 +122,8 @@ public class AgentAppServiceCapabilityTests
     [Fact]
     public async Task ListSkillsByAgentAsync_AgentCompatibilityWrapper_UsesAgentRelations()
     {
-        var agentId = Guid.NewGuid();
-        var skill = new Skill { Id = Guid.NewGuid(), Name = "agent-skill" };
+        var agentId = Guid.CreateVersion7();
+        var skill = new Skill { Id = Guid.CreateVersion7(), Name = "agent-skill" };
         var service = CreateService(
             skills: [skill],
             agentSkillRelations:
@@ -154,7 +154,7 @@ public class AgentAppServiceCapabilityTests
             skillRepository: skillRepository);
         var project = new Project
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ExtraSetting = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions
             {
                 PermissionMode = PermissionMode.bypassPermissions,
@@ -167,15 +167,15 @@ public class AgentAppServiceCapabilityTests
             Tools = """["project_direct"]""",
             ProjectConnectionRelations =
             [
-                new ProjectConnectionRelation { ConnectionId = Guid.NewGuid() },
+                new ProjectConnectionRelation { ConnectionId = Guid.CreateVersion7() },
             ],
             ProjectMcpToolServers =
             [
-                new ProjectMcpServerRelation { McpToolServerId = Guid.NewGuid() },
+                new ProjectMcpServerRelation { McpToolServerId = Guid.CreateVersion7() },
             ],
             ProjectSkillRelations =
             [
-                new ProjectSkillRelation { SkillId = Guid.NewGuid() },
+                new ProjectSkillRelation { SkillId = Guid.CreateVersion7() },
             ],
         };
         var forbiddenTool = new ResolutionGuardTool("project_direct");
@@ -189,7 +189,7 @@ public class AgentAppServiceCapabilityTests
         {
             Agent = new Agent
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 Name = AgentNames.ClaudeCode,
                 Type = AgentType.External,
                 EnvironmentVariables = new Dictionary<string, string>
@@ -199,15 +199,15 @@ public class AgentAppServiceCapabilityTests
                 },
                 AgentConnectionRelations =
                 [
-                    new AgentConnectionRelation { ConnectionId = Guid.NewGuid() },
+                    new AgentConnectionRelation { ConnectionId = Guid.CreateVersion7() },
                 ],
                 AgentMcpToolServers =
                 [
-                    new AgentMcpServerRelation { McpToolServerId = Guid.NewGuid() },
+                    new AgentMcpServerRelation { McpToolServerId = Guid.CreateVersion7() },
                 ],
                 AgentSkillRelations =
                 [
-                    new AgentSkillRelation { SkillId = Guid.NewGuid() },
+                    new AgentSkillRelation { SkillId = Guid.CreateVersion7() },
                 ],
             },
             ProjectId = project.Id,

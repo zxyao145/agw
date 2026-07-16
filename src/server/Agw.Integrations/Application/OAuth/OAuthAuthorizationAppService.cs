@@ -526,7 +526,7 @@ public sealed class OAuthAuthorizationAppService
         {
             credential = new ConnectionCredential
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 ConnectionId = connection.Id,
                 Connection = connection,
                 Slot = slot,

@@ -18,7 +18,7 @@ public class JobAttemptRunnerTests
     public async Task RunAsync_RecurringJobSucceeds_ReturnsRescheduleAndWritesSuccessLog()
     {
         var store = new RecordingJobStore { MarkRunningResult = true };
-        var taskId = Guid.NewGuid();
+        var taskId = Guid.CreateVersion7();
         var executor = new StubJobAgentExecutor(taskId);
         var runner = CreateRunner(store, executor);
         var scheduledJob = CreateScheduledJob(TriggerType.Interval, "00:15:00");
@@ -38,7 +38,7 @@ public class JobAttemptRunnerTests
     public async Task RunAsync_OnceJobSucceeds_ReturnsDropAndMarksSucceededWithoutNextRun()
     {
         var store = new RecordingJobStore { MarkRunningResult = true };
-        var runner = CreateRunner(store, new StubJobAgentExecutor(Guid.NewGuid()));
+        var runner = CreateRunner(store, new StubJobAgentExecutor(Guid.CreateVersion7()));
         var scheduledJob = CreateScheduledJob(TriggerType.Once, UtcNow.ToString("O"));
 
         var result = await runner.RunAsync(scheduledJob, TestContext.Current.CancellationToken);
@@ -53,7 +53,7 @@ public class JobAttemptRunnerTests
     public async Task RunAsync_JobCannotBeClaimed_ReturnsDropWithoutExecutingOrLogging()
     {
         var store = new RecordingJobStore { MarkRunningResult = false };
-        var executor = new StubJobAgentExecutor(Guid.NewGuid());
+        var executor = new StubJobAgentExecutor(Guid.CreateVersion7());
         var runner = CreateRunner(store, executor);
 
         var result = await runner.RunAsync(
@@ -113,7 +113,7 @@ public class JobAttemptRunnerTests
         {
             MarkRunningException = new AgwException(ErrorCodes.JobNotFound)
         };
-        var executor = new StubJobAgentExecutor(Guid.NewGuid());
+        var executor = new StubJobAgentExecutor(Guid.CreateVersion7());
         var runner = CreateRunner(store, executor);
 
         var result = await runner.RunAsync(
@@ -147,10 +147,10 @@ public class JobAttemptRunnerTests
     {
         return new ScheduledJob
         {
-            JobId = Guid.NewGuid(),
-            ProjectId = Guid.NewGuid(),
+            JobId = Guid.CreateVersion7(),
+            ProjectId = Guid.CreateVersion7(),
             AgentType = AgentRuntimeType.Agent,
-            AgentId = Guid.NewGuid(),
+            AgentId = Guid.CreateVersion7(),
             Name = "scheduled job",
             Prompt = "run",
             TriggerType = triggerType,

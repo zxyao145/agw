@@ -12,7 +12,7 @@ public class ContextIdUtil
     public static string GenContextId()
     {
         var contextId = Activity.Current?.TraceId.ToString();
-        contextId ??= Guid.NewGuid().ToString("N");
+        contextId ??= Guid.CreateVersion7().ToString("N");
         return contextId;
     }
 

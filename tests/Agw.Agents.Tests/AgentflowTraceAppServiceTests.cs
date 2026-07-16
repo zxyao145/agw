@@ -16,8 +16,8 @@ public class AgentflowTraceAppServiceTests
     public async Task ListAsync_ByProjectId_ReturnsOnlyMatchingTraces()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var projectId = Guid.NewGuid();
-        var otherProjectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var otherProjectId = Guid.CreateVersion7();
 
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, new[]
@@ -45,8 +45,8 @@ public class AgentflowTraceAppServiceTests
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, new[]
         {
-            BuildTrace(projectId: Guid.NewGuid(), contextId: "ctx-a", startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.NewGuid(), contextId: "ctx-b", startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), contextId: "ctx-a", startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), contextId: "ctx-b", startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
         }, cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
@@ -65,12 +65,12 @@ public class AgentflowTraceAppServiceTests
     public async Task ListAsync_ByAgentflowId_ReturnsOnlyMatchingTraces()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var agentflowId = Guid.NewGuid();
+        var agentflowId = Guid.CreateVersion7();
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, new[]
         {
-            BuildTrace(projectId: Guid.NewGuid(), agentflowId: agentflowId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.NewGuid(), agentflowId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), agentflowId: agentflowId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), agentflowId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
         }, cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
@@ -95,11 +95,11 @@ public class AgentflowTraceAppServiceTests
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, new[]
         {
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 9, 59, 59, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 11, 30, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 12, 0, 1, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 9, 59, 59, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 11, 30, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 12, 0, 1, TimeSpan.Zero)),
         }, cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
@@ -122,9 +122,9 @@ public class AgentflowTraceAppServiceTests
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, new[]
         {
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 8, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.NewGuid(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 9, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 8, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero)),
+            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 9, 0, 0, TimeSpan.Zero)),
         }, cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
@@ -143,7 +143,7 @@ public class AgentflowTraceAppServiceTests
     public async Task ListAsync_WithPagination_ReturnsCorrectPageAndTotal()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         var traces = Enumerable.Range(0, 25)
             .Select(i => BuildTrace(projectId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, i, 0, TimeSpan.Zero)))
             .ToArray();
@@ -171,13 +171,13 @@ public class AgentflowTraceAppServiceTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var trace = BuildTrace(
-            projectId: Guid.NewGuid(),
+            projectId: Guid.CreateVersion7(),
             contextId: "ctx-map",
-            agentflowId: Guid.NewGuid(),
+            agentflowId: Guid.CreateVersion7(),
             nodeId: "node-map",
             nodeName: "Map Node",
             nodeKind: AgentflowNodeKind.Agent,
-            agentId: Guid.NewGuid(),
+            agentId: Guid.CreateVersion7(),
             agentName: "Map Agent",
             input: """[{"role":"user"}]""",
             durationMilliseconds: 1234L,
@@ -294,8 +294,8 @@ public class AgentflowTraceAppServiceTests
             StartTimeUtc = startTimeUtc ?? TimeProvider.System.GetUtcNow(),
             ProjectId = projectId,
             ContextId = contextId,
-            TaskId = Guid.NewGuid(),
-            AgentflowId = agentflowId ?? Guid.NewGuid(),
+            TaskId = Guid.CreateVersion7(),
+            AgentflowId = agentflowId ?? Guid.CreateVersion7(),
             NodeId = nodeId,
             NodeName = nodeName,
             NodeKind = nodeKind,

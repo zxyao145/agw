@@ -36,7 +36,7 @@ public class AgentRuntimeServiceSystemCompositionTests
     public async Task CreateAiAgentAsync_SystemAgent_ComposesProjectCapabilitiesAndPassesEffectiveEnvironmentToMcp()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var root = Path.Combine(Path.GetTempPath(), $"agw-system-composition-{Guid.NewGuid():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"agw-system-composition-{Guid.CreateVersion7():N}");
         Directory.CreateDirectory(Path.Combine(root, "agent-skill"));
         Directory.CreateDirectory(Path.Combine(root, "project-skill"));
         var overriddenPluginSkillDirectory = Path.Combine(root, "plugin-overridden-skill");
@@ -56,14 +56,14 @@ public class AgentRuntimeServiceSystemCompositionTests
         await using var dbContext = new AgwDbContext(dbOptions);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
 
-        var modelProviderId = Guid.NewGuid();
-        var modelId = Guid.NewGuid();
-        var providerId = Guid.NewGuid();
-        var agentMcpServerId = Guid.NewGuid();
-        var projectMcpServerId = Guid.NewGuid();
-        var agentSkillId = Guid.NewGuid();
-        var projectSkillId = Guid.NewGuid();
-        var connectionId = Guid.NewGuid();
+        var modelProviderId = Guid.CreateVersion7();
+        var modelId = Guid.CreateVersion7();
+        var providerId = Guid.CreateVersion7();
+        var agentMcpServerId = Guid.CreateVersion7();
+        var projectMcpServerId = Guid.CreateVersion7();
+        var agentSkillId = Guid.CreateVersion7();
+        var projectSkillId = Guid.CreateVersion7();
+        var connectionId = Guid.CreateVersion7();
 
         dbContext.Models.Add(new LlmModel { Id = modelId, Name = "test-model" });
         dbContext.Providers.Add(new Provider
@@ -76,7 +76,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             [
                 new ProviderAuthConfig
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
                     ProviderId = providerId,
                     AuthType = ProviderAuthType.ApiKey,
                     ApiKey = "test-api-key",
@@ -113,7 +113,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         var agentAppService = CreateAgentAppService(dbContext);
         var project = new Project
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Tools = """["project_direct","shared"]""",
             EnvironmentVariables = new Dictionary<string, string>
             {
@@ -135,7 +135,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         };
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "system-agent",
             DisplayName = "System Agent",
             Type = AgentType.System,

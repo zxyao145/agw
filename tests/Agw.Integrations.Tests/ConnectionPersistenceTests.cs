@@ -243,7 +243,7 @@ public class ConnectionPersistenceTests
 
     private static PluginInstallation CreatePluginInstallation(string pluginId) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = Guid.CreateVersion7(),
         PluginId = pluginId,
         Enabled = true,
         ConfigurationJson = "{}",
@@ -253,7 +253,7 @@ public class ConnectionPersistenceTests
 
     private static PluginInstallationCredential CreatePluginInstallationCredential(Guid ownerId, string slot) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = Guid.CreateVersion7(),
         PluginInstallationId = ownerId,
         Slot = slot,
         Value = "protected-payload",
@@ -263,7 +263,7 @@ public class ConnectionPersistenceTests
 
     private static IntegrationConnection CreateConnection(string alias) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = Guid.CreateVersion7(),
         PluginId = "github",
         ConnectorId = "github-cloud",
         AuthSchemeId = "oauth2",
@@ -278,7 +278,7 @@ public class ConnectionPersistenceTests
 
     private static ConnectionCredential CreateConnectionCredential(Guid connectionId, string slot) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = Guid.CreateVersion7(),
         ConnectionId = connectionId,
         Slot = slot,
         Value = "protected-payload",
@@ -289,8 +289,8 @@ public class ConnectionPersistenceTests
 
     private static Agent CreateAgent() => new()
     {
-        Id = Guid.NewGuid(),
-        Name = $"agent-{Guid.NewGuid():N}",
+        Id = Guid.CreateVersion7(),
+        Name = $"agent-{Guid.CreateVersion7():N}",
         DisplayName = "Agent",
         Description = "Test agent",
         SystemPrompt = "Test prompt",
@@ -301,8 +301,8 @@ public class ConnectionPersistenceTests
 
     private static Project CreateProject() => new()
     {
-        Id = Guid.NewGuid(),
-        Name = $"project-{Guid.NewGuid():N}",
+        Id = Guid.CreateVersion7(),
+        Name = $"project-{Guid.CreateVersion7():N}",
         CreateBy = "tester",
         CreateTime = TimeProvider.System.GetUtcNow()
     };

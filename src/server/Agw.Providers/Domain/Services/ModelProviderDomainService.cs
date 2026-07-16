@@ -13,7 +13,7 @@ public class ModelProviderDomainService
 
     public void PrepareForCreate(ModelProviderRelation entity, string user)
     {
-        entity.Id = Guid.NewGuid();
+        entity.Id = Guid.CreateVersion7();
         entity.CreateBy = user;
         entity.CreateTime = _timeProvider.GetUtcNow();
     }

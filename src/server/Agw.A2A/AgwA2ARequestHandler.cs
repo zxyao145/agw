@@ -461,8 +461,8 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         {
             Message = request.Message,
             Task = existingTask,
-            TaskId = taskId ?? Guid.NewGuid().ToString("N"),
-            ContextId = contextId ?? Guid.NewGuid().ToString("N"),
+            TaskId = taskId ?? Guid.CreateVersion7().ToString("N"),
+            ContextId = contextId ?? Guid.CreateVersion7().ToString("N"),
             ClientProvidedContextId = contextId is not null,
             StreamingResponse = streamingResponse,
             Configuration = request.Configuration,

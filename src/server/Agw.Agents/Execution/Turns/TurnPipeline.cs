@@ -101,7 +101,7 @@ public static class TurnPipeline
         if (status != null) properties["status"] = status;
 
         return new AgwMessage(
-            Guid.NewGuid().ToString("D"),
+            Guid.CreateVersion7().ToString("D"),
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwTextContent { Content = "" }],
@@ -110,7 +110,7 @@ public static class TurnPipeline
 
     private static AgwMessage CreateErrorMessage(string message) =>
         new(
-            Guid.NewGuid().ToString("D"),
+            Guid.CreateVersion7().ToString("D"),
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwErrorContent { Content = message }]);

@@ -42,8 +42,8 @@ public class SkillDomainServiceTests
     [Fact]
     public void NormalizeAgentIds_RemovesEmptyValuesAndDuplicates()
     {
-        var first = Guid.NewGuid();
-        var second = Guid.NewGuid();
+        var first = Guid.CreateVersion7();
+        var second = Guid.CreateVersion7();
 
         var result = _service.NormalizeAgentIds([Guid.Empty, first, second, first]);
 

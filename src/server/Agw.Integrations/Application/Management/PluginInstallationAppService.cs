@@ -56,7 +56,7 @@ public sealed class PluginInstallationAppService
         {
             installation = new PluginInstallation
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 PluginId = pluginId,
                 Enabled = request.Enabled,
                 ConfigurationJson = "{}",

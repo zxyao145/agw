@@ -49,7 +49,7 @@ public class JobAppServiceTests
             fixture.FirstJobId,
             new JobUpdateRequest
             {
-                ProjectId = Guid.NewGuid(),
+                ProjectId = Guid.CreateVersion7(),
                 Name = "",
                 TriggerType = TriggerType.Interval,
                 TriggerValue = "00:01:00",
@@ -67,7 +67,7 @@ public class JobAppServiceTests
     {
         return new JobCreateRequest
         {
-            ProjectId = Guid.NewGuid(),
+            ProjectId = Guid.CreateVersion7(),
             Name = name,
             TriggerType = TriggerType.Interval,
             TriggerValue = "00:01:00",
@@ -113,8 +113,8 @@ public class JobAppServiceTests
             var jobs = Enumerable.Range(1, jobCount)
                 .Select(index => new Job
                 {
-                    Id = Guid.NewGuid(),
-                    ProjectId = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
+                    ProjectId = Guid.CreateVersion7(),
                     Name = $"Existing Job {index}",
                     TriggerType = TriggerType.Interval,
                     TriggerValue = "00:01:00",

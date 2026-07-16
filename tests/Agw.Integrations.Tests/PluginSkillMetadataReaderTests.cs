@@ -31,7 +31,7 @@ public sealed class PluginSkillMetadataReaderTests
     [InlineData("---\nname: test-skill\ndescription: \"Use a test: safely.\"\n---\n", true)]
     public void TryRead_Frontmatter_ReturnsExpectedResult(string content, bool expected)
     {
-        var root = Path.Combine(Path.GetTempPath(), $"agw-plugin-skill-{Guid.NewGuid():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"agw-plugin-skill-{Guid.CreateVersion7():N}");
         var directory = Path.Combine(root, "skills", "test");
         Directory.CreateDirectory(directory);
         try

@@ -122,7 +122,7 @@ public class CommonAgentHandler : IAgentHandler
         return new AgwUserInput
         {
             MessageId = string.IsNullOrWhiteSpace(context.Message.MessageId)
-                ? Guid.NewGuid().ToString("N")
+                ? Guid.CreateVersion7().ToString("N")
                 : context.Message.MessageId,
             Author = Constants.DefaultInputAuthor,
             Contents = contents
@@ -224,7 +224,7 @@ public class CommonAgentHandler : IAgentHandler
     private static Message CreateStatusMessage(RequestContext context, string text) => new()
     {
         Role = Role.Agent,
-        MessageId = Guid.NewGuid().ToString("N"),
+        MessageId = Guid.CreateVersion7().ToString("N"),
         ContextId = context.ContextId,
         TaskId = context.TaskId,
         Parts = [Part.FromText(text)]

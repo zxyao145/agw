@@ -21,7 +21,7 @@ public class AgentDomainService
 
         EnsureModelProviderIsPresentWhenRequired(agent);
         NormalizeEnvironmentVariables(agent);
-        agent.Id = agent.Id == Guid.Empty ? Guid.NewGuid() : agent.Id;
+        agent.Id = agent.Id == Guid.Empty ? Guid.CreateVersion7() : agent.Id;
         agent.Name = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id.Normalize() : agent.Name;
         agent.CreateBy = user;
         agent.CreateTime = _timeProvider.GetUtcNow();

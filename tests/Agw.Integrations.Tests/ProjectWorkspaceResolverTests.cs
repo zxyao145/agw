@@ -22,7 +22,7 @@ public sealed class ProjectWorkspaceResolverTests
             .Options;
         await using var dbContext = new AgwDbContext(options);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         dbContext.Projects.Add(new Project
         {
             Id = projectId,

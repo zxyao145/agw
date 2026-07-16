@@ -22,7 +22,7 @@ public class DashboardControllerTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         dbContext.AgentUsages.AddRange(
             CreateAgentUsage(projectId, "context-1", 10, 20, 30),
             CreateAgentUsage(projectId, "context-2", 5, 7, 12));
@@ -59,7 +59,7 @@ public class DashboardControllerTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
-        var projectId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
         dbContext.Projects.Add(new Project
         {
             Id = projectId,
@@ -68,7 +68,7 @@ public class DashboardControllerTests
         });
         dbContext.ProjectContexts.Add(new ProjectContext
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectId = projectId,
             ContextId = "context-1",
             Title = "Context",
@@ -125,7 +125,7 @@ public class DashboardControllerTests
         long outputTokenCount,
         long totalTokenCount) => new()
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ProjectId = projectId,
             ContextId = contextId,
             AgentName = "planner",

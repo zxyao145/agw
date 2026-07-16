@@ -30,8 +30,8 @@ public class JobStoreTests
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
-        var jobId = Guid.NewGuid();
-        var taskId = Guid.NewGuid();
+        var jobId = Guid.CreateVersion7();
+        var taskId = Guid.CreateVersion7();
         var utcNow = new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero);
         var startTime = utcNow;
         var endTime = startTime.AddMinutes(1);

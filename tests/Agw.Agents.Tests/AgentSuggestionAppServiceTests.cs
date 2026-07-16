@@ -27,18 +27,18 @@ public class AgentSuggestionAppServiceTests
     {
         var deploySkill = new Skill
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "deploy",
             Description = "Deploy the application",
         };
         var reviewSkill = new Skill
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "review",
         };
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
             Tools = """["Deploy","missing","broken"]""",
@@ -50,7 +50,7 @@ public class AgentSuggestionAppServiceTests
         };
         var project = new Project
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Tools = """["deploy","search"]""",
             ProjectSkillRelations =
             [
@@ -85,14 +85,14 @@ public class AgentSuggestionAppServiceTests
     {
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
             Tools = "{malformed",
         };
         var project = new Project
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Tools = """["known","unknown","KNOWN"]""",
         };
         var service = CreateService(
@@ -112,12 +112,12 @@ public class AgentSuggestionAppServiceTests
     {
         var agentSkill = new Skill
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "agent-skill",
         };
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
             Tools = """["agent-tool"]""",
@@ -149,11 +149,11 @@ public class AgentSuggestionAppServiceTests
     {
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = agentName,
             Type = AgentType.External,
         };
-        var project = new Project { Id = Guid.NewGuid() };
+        var project = new Project { Id = Guid.CreateVersion7() };
         var service = CreateService(agents: [agent], projects: [project]);
 
         var response = await service.GetSuggestionsAsync(project.Id, agent.Id);
@@ -165,10 +165,10 @@ public class AgentSuggestionAppServiceTests
     [Fact]
     public async Task GetSuggestionsAsync_MissingAgent_ThrowsAgentNotFound()
     {
-        var service = CreateService(projects: [new Project { Id = Guid.NewGuid() }]);
+        var service = CreateService(projects: [new Project { Id = Guid.CreateVersion7() }]);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.GetSuggestionsAsync(Guid.NewGuid(), Guid.NewGuid()));
+            service.GetSuggestionsAsync(Guid.CreateVersion7(), Guid.CreateVersion7()));
 
         Assert.Equal(ErrorCodes.AgentNotFound.Code, exception.Code);
     }
@@ -176,8 +176,8 @@ public class AgentSuggestionAppServiceTests
     [Fact]
     public async Task GetSuggestionsAsync_MissingProject_ThrowsResourceNotFoundWithProjectContext()
     {
-        var agent = new Agent { Id = Guid.NewGuid(), Name = "system-agent" };
-        var projectId = Guid.NewGuid();
+        var agent = new Agent { Id = Guid.CreateVersion7(), Name = "system-agent" };
+        var projectId = Guid.CreateVersion7();
         var service = CreateService(agents: [agent]);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
@@ -192,11 +192,11 @@ public class AgentSuggestionAppServiceTests
     {
         var agent = new Agent
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
         };
-        var project = new Project { Id = Guid.NewGuid() };
+        var project = new Project { Id = Guid.CreateVersion7() };
         var service = CreateService(agents: [agent], projects: [project]);
         var controller = new AgentsController(null!, service);
 

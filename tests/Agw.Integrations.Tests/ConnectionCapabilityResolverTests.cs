@@ -32,7 +32,7 @@ public class ConnectionCapabilityResolverTests
         var personal = await scope.AddReadyConnectionAsync("personal", cancellationToken);
 
         await using var resolution = await scope.Resolver.ResolveAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [work.Id, personal.Id],
             cancellationToken);
 
@@ -60,7 +60,7 @@ public class ConnectionCapabilityResolverTests
         var personal = await scope.AddReadyConnectionAsync("personal", cancellationToken);
 
         await using var resolution = await scope.Resolver.ResolveAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [work.Id, work.Id, personal.Id],
             cancellationToken);
 
@@ -87,7 +87,7 @@ public class ConnectionCapabilityResolverTests
         var connection = await scope.AddConnectionAsync("work", status, enabled: true, cancellationToken);
 
         await using var resolution = await scope.Resolver.ResolveAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [connection.Id],
             cancellationToken);
 
@@ -113,7 +113,7 @@ public class ConnectionCapabilityResolverTests
         scope.Credentials.Values.Remove((missing.Id, "oauth.access-token"));
 
         await using var resolution = await scope.Resolver.ResolveAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [expired.Id, missing.Id],
             cancellationToken);
 
@@ -134,7 +134,7 @@ public class ConnectionCapabilityResolverTests
         scope.Credentials.ReadException = new OperationCanceledException(cancellationToken);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scope.Resolver.ResolveAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [connection.Id],
             cancellationToken));
     }
@@ -162,7 +162,7 @@ public class ConnectionCapabilityResolverTests
         };
 
         await using var resolution = await scope.Resolver.ResolveAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [connection.Id],
             cancellationToken);
 
@@ -197,7 +197,7 @@ public class ConnectionCapabilityResolverTests
         };
 
         await using var resolution = await scope.Resolver.ResolveAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [connection.Id],
             cancellationToken);
         var tool = Assert.IsAssignableFrom<AIFunction>(Assert.Single(resolution.McpTools));
@@ -234,7 +234,7 @@ public class ConnectionCapabilityResolverTests
         scope.Credentials.Values[(connection.Id, "oauth.access-token")] = new ResolvedCredential { Value = "oauth-secret" };
 
         await using var resolution = await scope.Resolver.ResolveAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [connection.Id],
             cancellationToken);
 
@@ -264,7 +264,7 @@ public class ConnectionCapabilityResolverTests
         scope.Credentials.Values[(connection.Id, "oauth.access-token")] = new ResolvedCredential { Value = "secret" };
 
         var error = await Assert.ThrowsAsync<AgwException>(() => scope.Resolver.ResolveAsync(
-            Guid.NewGuid(),
+            Guid.CreateVersion7(),
             [connection.Id],
             cancellationToken));
 
@@ -294,7 +294,7 @@ public class ConnectionCapabilityResolverTests
                 authSchemeId: "api-key");
 
             await using var resolution = await scope.Resolver.ResolveAsync(
-                Guid.NewGuid(),
+                Guid.CreateVersion7(),
                 [connection.Id],
                 cancellationToken);
 
@@ -333,7 +333,7 @@ public class ConnectionCapabilityResolverTests
                 authSchemeId: "api-key");
 
             await using var resolution = await scope.Resolver.ResolveAsync(
-                Guid.NewGuid(),
+                Guid.CreateVersion7(),
                 [connection.Id],
                 cancellationToken);
 
@@ -431,7 +431,7 @@ public class ConnectionCapabilityResolverTests
         {
             var connection = new IntegrationConnection
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 PluginId = pluginId,
                 ConnectorId = connectorId,
                 AuthSchemeId = authSchemeId,
@@ -447,7 +447,7 @@ public class ConnectionCapabilityResolverTests
             {
                 DbContext.PluginInstallations.Add(new PluginInstallation
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
                     PluginId = pluginId,
                     Enabled = true,
                     CreateBy = "test",

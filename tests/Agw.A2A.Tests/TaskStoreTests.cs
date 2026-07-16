@@ -29,7 +29,7 @@ public class TaskStoreTests
 
         await using var dbContext = new AgwDbContext(options);
         var store = CreateStore(dbContext);
-        var taskId = Guid.NewGuid().ToString("D");
+        var taskId = Guid.CreateVersion7().ToString("D");
 
         var task = CreateTask(
             taskId: taskId,
@@ -77,9 +77,9 @@ public class TaskStoreTests
         await using var dbContext = new AgwDbContext(options);
         var store = CreateStore(dbContext);
 
-        var firstTaskId = Guid.NewGuid().ToString("D");
-        var secondTaskId = Guid.NewGuid().ToString("D");
-        var thirdTaskId = Guid.NewGuid().ToString("D");
+        var firstTaskId = Guid.CreateVersion7().ToString("D");
+        var secondTaskId = Guid.CreateVersion7().ToString("D");
+        var thirdTaskId = Guid.CreateVersion7().ToString("D");
 
         await store.SaveTaskAsync(
             firstTaskId,
@@ -221,7 +221,7 @@ public class TaskStoreTests
                 (text, index) => new Message
                 {
                     Role = index == 0 ? Role.User : Role.Agent,
-                    MessageId = Guid.NewGuid().ToString("N"),
+                    MessageId = Guid.CreateVersion7().ToString("N"),
                     ContextId = contextId,
                     TaskId = taskId,
                     Parts = [Part.FromText(text)]
@@ -232,7 +232,7 @@ public class TaskStoreTests
             .Select(
                 text => new Artifact
                 {
-                    ArtifactId = Guid.NewGuid().ToString("N"),
+                    ArtifactId = Guid.CreateVersion7().ToString("N"),
                     Parts = [Part.FromText(text)]
                 })
             .ToList();
@@ -248,7 +248,7 @@ public class TaskStoreTests
                 Message = new Message
                 {
                     Role = Role.Agent,
-                    MessageId = Guid.NewGuid().ToString("N"),
+                    MessageId = Guid.CreateVersion7().ToString("N"),
                     ContextId = contextId,
                     TaskId = taskId,
                     Parts = [Part.FromText($"status-{state}")]

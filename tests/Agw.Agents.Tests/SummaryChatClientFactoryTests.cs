@@ -28,7 +28,7 @@ public class SummaryChatClientFactoryTests
 
         var provider = new Provider
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "OpenAI",
             ProviderType = ProviderType.OpenAIChatCompletions,
             Endpoint = "https://example.invalid",
@@ -36,17 +36,17 @@ public class SummaryChatClientFactoryTests
             [
                 new ProviderAuthConfig
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.CreateVersion7(),
                     AuthType = ProviderAuthType.ApiKey,
                     ApiKey = "test-key",
                     Enable = true,
                 }
             ]
         };
-        var model = new LlmModel { Id = Guid.NewGuid(), Name = "test-model" };
+        var model = new LlmModel { Id = Guid.CreateVersion7(), Name = "test-model" };
         var modelProvider = new ModelProviderRelation
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             ModelId = model.Id,
             ProviderId = provider.Id,
         };

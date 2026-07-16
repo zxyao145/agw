@@ -40,7 +40,7 @@ public class A2ADependencyInjectionTests
     [Fact]
     public async Task AgentExecutionBridge_WithOnlyAgentRuntimeInterfaceRegistration_ExecutesAgent()
     {
-        var agentId = Guid.NewGuid();
+        var agentId = Guid.CreateVersion7();
         var runtime = new FakeAgentRuntimeService();
         var services = new ServiceCollection();
         services.AddScoped<IAgentRuntimeService>(_ => runtime);
@@ -61,7 +61,7 @@ public class A2ADependencyInjectionTests
             "alpha",
             new RequestContext
             {
-                TaskId = Guid.NewGuid().ToString("D"),
+                TaskId = Guid.CreateVersion7().ToString("D"),
                 ContextId = "ctx-a2a",
                 StreamingResponse = false,
                 Message = new Message
@@ -150,7 +150,7 @@ public class A2ADependencyInjectionTests
         {
             CapturedRequest = request;
             return Task.FromResult<AgentExecutionResult?>(new AgentExecutionResult(
-                request.TaskId?.ToString("D") ?? Guid.NewGuid().ToString("D"),
+                request.TaskId?.ToString("D") ?? Guid.CreateVersion7().ToString("D"),
                 []));
         }
     }

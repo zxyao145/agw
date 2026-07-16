@@ -76,7 +76,7 @@ public class RuntimeBaseTests
         await using var runtime = new TestRuntime();
         var accessor = new RuntimeTurnContextAccessor();
         var context = new RuntimeTurnContext(
-            new SettingCommand(Guid.NewGuid()),
+            new SettingCommand(Guid.CreateVersion7()),
             "user",
             "/workspace",
             new NullSink());

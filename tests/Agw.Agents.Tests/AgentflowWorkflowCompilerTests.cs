@@ -77,7 +77,7 @@ public class AgentflowWorkflowCompilerTests
         };
         ActivitySource.AddActivityListener(listener);
 
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "observable-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "observable-flow" };
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "agent-node", Kind = AgentflowNodeKind.Agent, Name = "Node Alias" },
@@ -129,8 +129,8 @@ public class AgentflowWorkflowCompilerTests
             NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
         await collector.StartAsync(TestContext.Current.CancellationToken);
 
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "persisted-flow" };
-        var agentId = Guid.NewGuid();
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "persisted-flow" };
+        var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
             new AgentflowNode
@@ -143,7 +143,7 @@ public class AgentflowWorkflowCompilerTests
             },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
-        var execution = new AgentflowExecutionTraceContext(Guid.NewGuid(), "context-1", Guid.NewGuid());
+        var execution = new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-1", Guid.CreateVersion7());
         var workflow = _compiler.Compile(
             agentflow,
             nodes,
@@ -183,7 +183,7 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public void Compile_DirectDagWithHumanAndCheckpoint_ReturnsWorkflow()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "review-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "review-flow" };
         var agentId = "agent-a";
         var nodes = new[]
         {
@@ -222,7 +222,7 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public void Compile_FanOutAndFanInEdges_ReturnsWorkflow()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "parallel-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "parallel-flow" };
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "start", Kind = AgentflowNodeKind.PromptAdapter },
@@ -255,7 +255,7 @@ public class AgentflowWorkflowCompilerTests
     [InlineData(AgentflowNodeKind.MagenticBlock)]
     public void Compile_BlockNodeWithParticipants_ReturnsWorkflow(AgentflowNodeKind blockKind)
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "block-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "block-flow" };
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "agent-a", Kind = AgentflowNodeKind.Agent, Name = "Agent A" },
@@ -293,9 +293,9 @@ public class AgentflowWorkflowCompilerTests
             store,
             NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
         await collector.StartAsync(TestContext.Current.CancellationToken);
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "parallel-trace-flow" };
-        var agentAId = Guid.NewGuid();
-        var agentBId = Guid.NewGuid();
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "parallel-trace-flow" };
+        var agentAId = Guid.CreateVersion7();
+        var agentBId = Guid.CreateVersion7();
         var nodes = new[]
         {
             new AgentflowNode
@@ -331,7 +331,7 @@ public class AgentflowWorkflowCompilerTests
                 ["agent-b"] = CreateAgent("agent-b", "persisted-agent-b"),
             },
             sessionScope: null,
-            new AgentflowExecutionTraceContext(Guid.NewGuid(), "context-parallel", Guid.NewGuid()));
+            new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-parallel", Guid.CreateVersion7()));
 
         Assert.NotNull(workflow);
         await using (var run = await InProcessExecution.RunStreamingAsync(
@@ -368,9 +368,9 @@ public class AgentflowWorkflowCompilerTests
             store,
             NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
         await collector.StartAsync(TestContext.Current.CancellationToken);
-        var execution = new AgentflowExecutionTraceContext(Guid.NewGuid(), "context-nested", Guid.NewGuid());
-        var nestedAgentId = Guid.NewGuid();
-        var nestedAgentflow = new Agentflow { Id = Guid.NewGuid(), Name = "nested-flow" };
+        var execution = new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-nested", Guid.CreateVersion7());
+        var nestedAgentId = Guid.CreateVersion7();
+        var nestedAgentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "nested-flow" };
         var nestedWorkflow = _compiler.Compile(
             nestedAgentflow,
             [
@@ -392,7 +392,7 @@ public class AgentflowWorkflowCompilerTests
             execution);
         Assert.NotNull(nestedWorkflow);
 
-        var outerAgentflow = new Agentflow { Id = Guid.NewGuid(), Name = "outer-flow" };
+        var outerAgentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "outer-flow" };
         var outerWorkflow = _compiler.Compile(
             outerAgentflow,
             [
@@ -443,7 +443,7 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public async Task Compile_HumanGateBeforeAgent_ResumesWithUnwrappedResponse()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "human-agent-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "human-agent-flow" };
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "human", Kind = AgentflowNodeKind.HumanGate },
@@ -491,7 +491,7 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public async Task Compile_HumanGateBeforeConcurrentBlock_ResumesAndRunsParticipants()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "human-concurrent-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "human-concurrent-flow" };
         var agentAClient = new CountingChatClient("agent a output");
         var agentBClient = new CountingChatClient("agent b output");
         var nodes = new[]
@@ -558,7 +558,7 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public async Task Compile_ConcurrentBlock_ReassignsUpstreamAgentResponseAsUser()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "concurrent-role-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "concurrent-role-flow" };
         var upstreamClient = new CapturingChatClient("Hello World!");
         var participantClient = new CapturingChatClient("translated output");
         var nodes = new[]
@@ -609,7 +609,7 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public async Task Compile_InputBeforeAgent_PassesInitialMessagesDownstream()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "input-agent-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "input-agent-flow" };
         var chatClient = new CapturingChatClient("agent output");
         var nodes = new[]
         {
@@ -653,7 +653,7 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public async Task Compile_PromptAdapterBeforeAgent_ContinuesTurnIntoAgent()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "adapter-agent-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "adapter-agent-flow" };
         var chatClient = new CapturingChatClient("agent output");
         var nodes = new[]
         {
@@ -701,7 +701,7 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public async Task Compile_SequentialAgents_ReassignsOnlyUpstreamAgentResponseAsUser()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "sequential-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "sequential-flow" };
         var firstChatClient = new CapturingChatClient("first agent output");
         var secondChatClient = new CapturingChatClient("second agent output");
         var nodes = new[]
@@ -750,7 +750,7 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public async Task Compile_SequentialAgents_ForwardsOnlyPortableUpstreamContent()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "portable-handoff-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "portable-handoff-flow" };
         var secondChatClient = new CapturingChatClient("second agent output");
         var nodes = new[]
         {
@@ -799,7 +799,7 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public async Task Compile_ExternalFunctionResult_ContinuesSameAgentWithToolMessage()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "external-tool-flow" };
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "external-tool-flow" };
         var agent = new ExternalFunctionCallAgent();
         var nodes = new[]
         {
@@ -847,8 +847,8 @@ public class AgentflowWorkflowCompilerTests
     public async Task CreateParticipant_UsesPersistedNodeIdForHistoryScope()
     {
         var providerSessionState = new CapturingProviderSessionState();
-        var agentflowId = Guid.NewGuid();
-        var projectId = Guid.NewGuid();
+        var agentflowId = Guid.CreateVersion7();
+        var projectId = Guid.CreateVersion7();
         var participantNode = new AgentflowNode
         {
             NodeId = "participant",
@@ -885,9 +885,9 @@ public class AgentflowWorkflowCompilerTests
     public async Task Compile_WithSessionScope_InitializesInnerAgentSession()
     {
         var providerSessionState = new CapturingProviderSessionState();
-        var projectId = Guid.NewGuid();
-        var taskId = Guid.NewGuid();
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "scoped-flow" };
+        var projectId = Guid.CreateVersion7();
+        var taskId = Guid.CreateVersion7();
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "scoped-flow" };
         var sessionScope = new AgentflowAgentSessionScope(
             providerSessionState,
             projectId,
@@ -930,12 +930,12 @@ public class AgentflowWorkflowCompilerTests
     [Fact]
     public async Task Compile_SummaryEnabledOutput_AppendsResultFromIncomingMessages()
     {
-        var projectId = Guid.NewGuid();
-        var modelProviderId = Guid.NewGuid();
+        var projectId = Guid.CreateVersion7();
+        var modelProviderId = Guid.CreateVersion7();
         var summaryService = new RecordingSummaryService();
         var agentflow = new Agentflow
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "summary-flow",
             SummaryModelProviderId = modelProviderId,
         };
@@ -1003,11 +1003,11 @@ public class AgentflowWorkflowCompilerTests
     public async Task Compile_SummaryDisabledOutput_DoesNotCallSummaryService()
     {
         var summaryService = new RecordingSummaryService();
-        var modelProviderId = Guid.NewGuid();
+        var modelProviderId = Guid.CreateVersion7();
         var workflow = _compiler.Compile(
             new Agentflow
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 Name = "plain-flow",
                 SummaryModelProviderId = modelProviderId,
             },
@@ -1027,7 +1027,7 @@ public class AgentflowWorkflowCompilerTests
             new AgentflowSummaryContext(
                 summaryService,
                 modelProviderId,
-                Guid.NewGuid(),
+                Guid.CreateVersion7(),
                 "context-1"));
 
         Assert.NotNull(workflow);
