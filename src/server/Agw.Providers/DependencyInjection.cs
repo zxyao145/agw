@@ -13,9 +13,11 @@ public static class DependencyInjection
         services.AddScoped<ModelDomainService>();
         services.AddScoped<ProviderDomainService>();
         services.AddScoped<ModelProviderDomainService>();
+        services.AddScoped<ModelProviderUsageGuard>();
         services.AddScoped<IModelAppService, ModelAppService>();
         services.AddScoped<IProviderAppService, ProviderAppService>();
         services.AddScoped<IModelProviderAppService, ModelProviderAppService>();
+        services.AddScoped<IProviderModelDiscoveryService, ProviderModelDiscoveryService>();
 
         return services;
     }

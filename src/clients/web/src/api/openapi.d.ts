@@ -3206,6 +3206,49 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/providers/discover-models": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ProviderModelDiscoveryRequest"];
+          "text/json": components["schemas"]["ProviderModelDiscoveryRequest"];
+          "application/*+json": components["schemas"]["ProviderModelDiscoveryRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfProviderModelDiscoveryResponse"];
+            "application/json": components["schemas"]["ApiResultOfProviderModelDiscoveryResponse"];
+            "text/json": components["schemas"]["ApiResultOfProviderModelDiscoveryResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/skills": {
     parameters: {
       query?: never;
@@ -4146,6 +4189,13 @@ export interface components {
       title: string;
       detail: null | string;
     };
+    ApiResultOfProviderModelDiscoveryResponse: {
+      data?: null | components["schemas"]["ProviderModelDiscoveryResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
     ApiResultOfSkillResponse: {
       data?: null | components["schemas"]["SkillResponse"];
       /** Format: int32 */
@@ -4919,6 +4969,15 @@ export interface components {
       description: null | string;
       endpoint: string;
       authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
+      modelNames?: null | string[];
+    };
+    ProviderModelDiscoveryRequest: {
+      providerType: components["schemas"]["ProviderType"];
+      endpoint: string;
+      apiKey: string;
+    };
+    ProviderModelDiscoveryResponse: {
+      modelNames: string[];
     };
     /** @enum {unknown} */
     ProviderType: "OpenAIChatCompletions" | "OpenAIResponses" | "Anthropic";
@@ -4928,6 +4987,7 @@ export interface components {
       description: null | string;
       endpoint: string;
       authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
+      modelNames?: null | string[];
     };
     SecretFieldStateResponse: {
       configured: boolean;

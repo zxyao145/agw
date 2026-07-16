@@ -12,10 +12,14 @@ namespace Agw.Providers.Controllers.Controllers;
 public class ProvidersController : ControllerBase
 {
     private readonly IProviderAppService _service;
+    private readonly IProviderModelDiscoveryService _modelDiscoveryService;
 
-    public ProvidersController(IProviderAppService service)
+    public ProvidersController(
+        IProviderAppService service,
+        IProviderModelDiscoveryService modelDiscoveryService)
     {
         _service = service;
+        _modelDiscoveryService = modelDiscoveryService;
     }
 
     [HttpGet]
@@ -41,6 +45,16 @@ public class ProvidersController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
         var created = await _service.CreateAsync(request, user);
         return AgwApiResult.Ok(created);
+    }
+
+    [HttpPost("discover-models")]
+    [ProducesApiResult(typeof(ProviderModelDiscoveryResponse))]
+    public async Task<IActionResult> DiscoverModelsAsync(
+        [FromBody] ProviderModelDiscoveryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _modelDiscoveryService.DiscoverAsync(request, cancellationToken);
+        return AgwApiResult.Ok(result);
     }
 
     [HttpPut("{id:guid}")]

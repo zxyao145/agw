@@ -1,21 +1,6 @@
-import type { ModelProviderApiKeyDto } from "./types";
 import { apiRequest } from "@/api/client";
 
-export function parseIntOrNull(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed.length) return null;
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) return null;
-  return Math.trunc(n);
-}
-
-export function parseFloatOrNull(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed.length) return null;
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) return null;
-  return n;
-}
+import type { ModelProviderApiKeyDto } from "./types";
 
 export async function listKeysByPair(args: {
   modelProviderId: string;

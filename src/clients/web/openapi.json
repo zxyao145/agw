@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost:30815/"
+      "url": "http://127.0.0.1:30915/"
     }
   ],
   "paths": {
@@ -93,7 +93,7 @@
     "/api/jobs": {
       "get": {
         "tags": [
-          "jobs"
+          "Jobs"
         ],
         "responses": {
           "200": {
@@ -110,7 +110,7 @@
       },
       "post": {
         "tags": [
-          "jobs"
+          "Jobs"
         ],
         "requestBody": {
           "content": {
@@ -139,7 +139,7 @@
     "/api/jobs/{id}": {
       "get": {
         "tags": [
-          "jobs"
+          "Jobs"
         ],
         "parameters": [
           {
@@ -167,7 +167,7 @@
       },
       "put": {
         "tags": [
-          "jobs"
+          "Jobs"
         ],
         "parameters": [
           {
@@ -205,7 +205,7 @@
       },
       "delete": {
         "tags": [
-          "jobs"
+          "Jobs"
         ],
         "parameters": [
           {
@@ -235,7 +235,7 @@
     "/api/jobs/{id}/logs": {
       "get": {
         "tags": [
-          "jobs"
+          "Jobs"
         ],
         "parameters": [
           {
@@ -3865,6 +3865,55 @@
         }
       }
     },
+    "/api/providers/discover-models": {
+      "post": {
+        "tags": [
+          "Providers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderModelDiscoveryRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderModelDiscoveryRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderModelDiscoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProviderModelDiscoveryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProviderModelDiscoveryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProviderModelDiscoveryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/skills": {
       "get": {
         "tags": [
@@ -6945,6 +6994,40 @@
           }
         }
       },
+      "ApiResultOfProviderModelDiscoveryResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderModelDiscoveryResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfSkillResponse": {
         "required": [
           "code",
@@ -9944,6 +10027,48 @@
             "items": {
               "$ref": "#/components/schemas/ProviderAuthConfigRequest"
             }
+          },
+          "modelNames": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ProviderModelDiscoveryRequest": {
+        "required": [
+          "providerType",
+          "endpoint",
+          "apiKey"
+        ],
+        "type": "object",
+        "properties": {
+          "providerType": {
+            "$ref": "#/components/schemas/ProviderType"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          }
+        }
+      },
+      "ProviderModelDiscoveryResponse": {
+        "required": [
+          "modelNames"
+        ],
+        "type": "object",
+        "properties": {
+          "modelNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -9986,6 +10111,15 @@
             ],
             "items": {
               "$ref": "#/components/schemas/ProviderAuthConfigRequest"
+            }
+          },
+          "modelNames": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
             }
           }
         }
@@ -10313,7 +10447,7 @@
       "name": "A2A"
     },
     {
-      "name": "jobs"
+      "name": "Jobs"
     },
     {
       "name": "Auth"

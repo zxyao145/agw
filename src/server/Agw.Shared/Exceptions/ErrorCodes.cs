@@ -68,6 +68,7 @@ public static class ErrorCodes
     public static readonly ErrorCode IntegrationToolNameInvalid = new(400_0063, "Integration capability tool name is invalid.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode GitHubRepositoryInvalid = new(400_0064, "The GitHub repository owner or name is invalid.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode GitHubClonePathInvalid = new(400_0065, "The clone destination must be a relative path inside the project workspace.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode ProviderModelDiscoveryApiKeyRequired = new(400_0066, "An API key is required to discover provider models.", HttpStatusCode.BadRequest);
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode AuthenticationRequired = new(401_0003, "Authentication is required.", HttpStatusCode.Unauthorized);
@@ -96,6 +97,7 @@ public static class ErrorCodes
     public static readonly ErrorCode ConnectionAliasAlreadyExists = new(409_0008, "Connection alias already exists.", HttpStatusCode.Conflict);
     public static readonly ErrorCode ConnectionAliasImmutable = new(409_0009, "Connection alias cannot be changed.", HttpStatusCode.Conflict);
     public static readonly ErrorCode IntegrationToolNameConflict = new(409_0010, "Integration capability tool name conflicts with another source.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode ModelProviderInUse = new(409_0011, "The model provider is currently in use.", HttpStatusCode.Conflict);
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(429_0001, "Too many authentication attempts.", HttpStatusCode.TooManyRequests);
 
@@ -132,4 +134,5 @@ public static class ErrorCodes
 
     public static readonly ErrorCode GitHubBadResponseStatusCode = new(502_0001, "GitHub returned a bad response status code.", HttpStatusCode.BadGateway);
     public static readonly ErrorCode OAuthProviderRequestFailed = new(502_0002, "OAuth provider request failed.", HttpStatusCode.BadGateway);
+    public static readonly ErrorCode ProviderModelDiscoveryFailed = new(502_0003, "Provider model discovery failed.", HttpStatusCode.BadGateway);
 }

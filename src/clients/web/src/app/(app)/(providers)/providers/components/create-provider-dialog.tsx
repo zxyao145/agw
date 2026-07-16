@@ -1,40 +1,29 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { apiPost } from "@/api/client";
+import { apiGet, apiPost } from "@/api/client";
+import { getApiErrorMessage } from "@/api/utils";
+import { applyDialogOpenChange } from "@/components/definition-capabilities";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
-import type { ProviderAuthConfigRequest, ProviderCreateRequest, ProviderType } from "./types";
-import { getApiErrorMessage } from "@/api/utils";
-import { ProviderAuthConfigEditor } from "./provider-auth-config-editor";
-
-const providerTypeOptions: ProviderType[] = [
-  "OpenAIChatCompletions",
-  "OpenAIResponses",
-  "Anthropic",
-];
+import { ProviderFormFields } from "./provider-form-fields";
+import type {
+  ProviderAuthConfigRequest,
+  ProviderCreateRequest,
+  ProviderModelDto,
+  ProviderType,
+} from "./types";
 
 interface CreateProviderDialogProps {
   open: boolean;
@@ -43,12 +32,18 @@ interface CreateProviderDialogProps {
 
 export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialogProps) {
   const queryClient = useQueryClient();
-
   const [name, setName] = React.useState("");
   const [providerType, setProviderType] = React.useState<ProviderType>("OpenAIChatCompletions");
-  const [description, setDescription] = React.useState<string>("");
+  const [description, setDescription] = React.useState("");
   const [endpoint, setEndpoint] = React.useState("");
   const [authConfigs, setAuthConfigs] = React.useState<ProviderAuthConfigRequest[]>([]);
+  const [selectedModelNames, setSelectedModelNames] = React.useState<string[]>([]);
+
+  const modelsQuery = useQuery({
+    queryKey: ["models"],
+    queryFn: async () => (await apiGet("/api/models")) as unknown as ProviderModelDto[],
+    enabled: open,
+  });
 
   const createProviderMutation = useMutation({
     mutationFn: async (body: ProviderCreateRequest) => {
@@ -62,7 +57,12 @@ export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialo
       setDescription("");
       setEndpoint("");
       setAuthConfigs([]);
-      await queryClient.invalidateQueries({ queryKey: ["providers"] });
+      setSelectedModelNames([]);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["providers"] }),
+        queryClient.invalidateQueries({ queryKey: ["models"] }),
+        queryClient.invalidateQueries({ queryKey: ["model-providers"] }),
+      ]);
     },
     onError: (error) => {
       toast.error(`Create failed: ${getApiErrorMessage(error)}`);
@@ -74,91 +74,89 @@ export function CreateProviderDialog({ open, onOpenChange }: CreateProviderDialo
       name,
       providerType,
       endpoint,
-      description: description.length ? description : null,
-      authConfigs: authConfigs.map((config) => ({
-        ...config,
-        apiKey: config.authType === "ApiKey" ? config.apiKey?.trim() || null : null,
-        envKey: config.authType === "EnvVariable" ? config.envKey?.trim() || null : null,
-      })),
+      description: description.trim() || null,
+      authConfigs: normalizeAuthConfigs(authConfigs),
+      modelNames: selectedModelNames,
     });
   };
 
   const isDisabled = !name.trim() || !endpoint.trim() || createProviderMutation.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg">
-        <DialogHeader>
-          <DialogTitle>Create provider</DialogTitle>
-          <DialogDescription>
-            Uses <code>/api/providers</code>.
-          </DialogDescription>
-        </DialogHeader>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) =>
+        applyDialogOpenChange({
+          isPending: createProviderMutation.isPending,
+          nextOpen,
+          setOpen: onOpenChange,
+        })
+      }
+    >
+      <DialogContent
+        className="fixed inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 p-0 sm:max-w-none"
+        onInteractOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
+        showCloseButton={false}
+      >
+        <div className="flex min-h-0 flex-col">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <DialogTitle>Create provider</DialogTitle>
+                <DialogDescription className="mt-1">
+                  Configure provider metadata, authentication, and available models.
+                </DialogDescription>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <DialogClose asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={createProviderMutation.isPending}
+                  >
+                    Cancel
+                  </Button>
+                </DialogClose>
+                <Button type="button" size="sm" onClick={handleCreate} disabled={isDisabled}>
+                  {createProviderMutation.isPending ? "Creating..." : "Create"}
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
 
-        <div className="grid max-h-[calc(100vh-200px)] gap-4 overflow-y-auto pr-2">
-          <div className="grid gap-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="openai"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="endpoint">Endpoint</Label>
-            <Input
-              id="endpoint"
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="https://api.openai.com/v1"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="providerType">Provider type</Label>
-            <Select
-              value={providerType}
-              onValueChange={(value) => setProviderType(value as ProviderType)}
-            >
-              <SelectTrigger id="providerType">
-                <SelectValue placeholder="Select a provider type" />
-              </SelectTrigger>
-              <SelectContent>
-                {providerTypeOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <ProviderAuthConfigEditor value={authConfigs} onChange={setAuthConfigs} />
+          <ProviderFormFields
+            idPrefix="create-provider-"
+            name={name}
+            setName={setName}
+            endpoint={endpoint}
+            setEndpoint={setEndpoint}
+            providerType={providerType}
+            setProviderType={setProviderType}
+            description={description}
+            setDescription={setDescription}
+            authConfigs={authConfigs}
+            setAuthConfigs={setAuthConfigs}
+            models={modelsQuery.data ?? []}
+            selectedModelNames={selectedModelNames}
+            setSelectedModelNames={setSelectedModelNames}
+            modelsLoading={modelsQuery.isLoading}
+            modelsError={modelsQuery.error}
+            retryModels={() => void modelsQuery.refetch()}
+          />
         </div>
-
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              Cancel
-            </Button>
-          </DialogClose>
-          <Button type="button" onClick={handleCreate} disabled={isDisabled}>
-            {createProviderMutation.isPending ? "Creating..." : "Create"}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+function normalizeAuthConfigs(
+  authConfigs: ProviderAuthConfigRequest[],
+): ProviderAuthConfigRequest[] {
+  return authConfigs.map((config) => ({
+    ...config,
+    apiKey: config.authType === "ApiKey" ? config.apiKey?.trim() || null : null,
+    envKey: config.authType === "EnvVariable" ? config.envKey?.trim() || null : null,
+  }));
 }
