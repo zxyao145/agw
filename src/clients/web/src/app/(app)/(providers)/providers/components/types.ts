@@ -17,18 +17,35 @@ export type ProviderAuthConfigRequest = {
 
 export type ProviderCreateRequest = Omit<
   OpenApiProviderCreateRequest,
-  "providerType" | "authConfigs"
+  "providerType" | "authConfigs" | "modelNames"
 > & {
   providerType: ProviderType;
   authConfigs: ProviderAuthConfigRequest[];
+  modelNames: string[];
 };
 
 export type ProviderUpdateRequest = Omit<
   OpenApiProviderUpdateRequest,
-  "providerType" | "authConfigs"
+  "providerType" | "authConfigs" | "modelNames"
 > & {
   providerType: ProviderType;
   authConfigs: ProviderAuthConfigRequest[];
+  modelNames: string[];
+};
+
+export type ProviderModelDiscoveryResponse = {
+  modelNames: string[];
+};
+
+export type ProviderModelDto = {
+  id: string;
+  name: string;
+};
+
+export type ProviderModelRelationDto = {
+  id: string;
+  modelId: string;
+  providerId: string;
 };
 
 export type ProviderAuthConfigDto = {

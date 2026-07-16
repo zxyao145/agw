@@ -1,45 +1,31 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { apiPut } from "@/api/client";
+import { apiGet, apiPut } from "@/api/client";
+import { getApiErrorMessage } from "@/api/utils";
+import { applyDialogOpenChange } from "@/components/definition-capabilities";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
-import { ProviderAuthConfigEditor } from "./provider-auth-config-editor";
+import { ProviderFormFields } from "./provider-form-fields";
 import type {
   ProviderAuthConfigRequest,
-  ProviderType,
   ProviderDto,
+  ProviderModelDto,
+  ProviderModelRelationDto,
+  ProviderType,
   ProviderUpdateRequest,
 } from "./types";
-import { getApiErrorMessage } from "@/api/utils";
-
-const providerTypeOptions: ProviderType[] = [
-  "OpenAIChatCompletions",
-  "OpenAIResponses",
-  "Anthropic",
-];
 
 interface EditProviderDialogProps {
   provider: ProviderDto | null;
@@ -49,15 +35,39 @@ interface EditProviderDialogProps {
 
 export function EditProviderDialog({ provider, open, onOpenChange }: EditProviderDialogProps) {
   const queryClient = useQueryClient();
-
+  const initializedProviderId = React.useRef<string | null>(null);
   const [name, setName] = React.useState("");
   const [providerType, setProviderType] = React.useState<ProviderType>("OpenAIChatCompletions");
   const [description, setDescription] = React.useState("");
   const [endpoint, setEndpoint] = React.useState("");
   const [authConfigs, setAuthConfigs] = React.useState<ProviderAuthConfigRequest[]>([]);
+  const [selectedModelNames, setSelectedModelNames] = React.useState<string[]>([]);
+
+  const modelsQuery = useQuery({
+    queryKey: ["models"],
+    queryFn: async () => (await apiGet("/api/models")) as unknown as ProviderModelDto[],
+    enabled: open,
+  });
+
+  const modelRelationsQuery = useQuery({
+    queryKey: ["model-providers", provider?.id],
+    queryFn: async () => {
+      if (!provider) {
+        return [];
+      }
+      return (await apiGet("/api/model-providers", {
+        params: { query: { providerId: provider.id } },
+      })) as unknown as ProviderModelRelationDto[];
+    },
+    enabled: open && provider !== null,
+  });
 
   React.useEffect(() => {
-    if (!provider || !open) {
+    if (!open) {
+      initializedProviderId.current = null;
+      return;
+    }
+    if (!provider || initializedProviderId.current === provider.id) {
       return;
     }
 
@@ -75,6 +85,26 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
     );
   }, [provider, open]);
 
+  React.useEffect(() => {
+    if (
+      !open ||
+      !provider ||
+      !modelsQuery.data ||
+      !modelRelationsQuery.data ||
+      initializedProviderId.current === provider.id
+    ) {
+      return;
+    }
+
+    const modelNameById = new Map(modelsQuery.data.map((model) => [model.id, model.name]));
+    setSelectedModelNames(
+      modelRelationsQuery.data
+        .map((relation) => modelNameById.get(relation.modelId))
+        .filter((modelName): modelName is string => modelName !== undefined),
+    );
+    initializedProviderId.current = provider.id;
+  }, [modelRelationsQuery.data, modelsQuery.data, open, provider]);
+
   const updateProviderMutation = useMutation({
     mutationFn: async (body: ProviderUpdateRequest) => {
       if (!provider) {
@@ -88,7 +118,11 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
     onSuccess: async () => {
       toast.success("Provider updated");
       onOpenChange(false);
-      await queryClient.invalidateQueries({ queryKey: ["providers"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["providers"] }),
+        queryClient.invalidateQueries({ queryKey: ["models"] }),
+        queryClient.invalidateQueries({ queryKey: ["model-providers"] }),
+      ]);
     },
     onError: (error) => {
       toast.error(`Update failed: ${getApiErrorMessage(error)}`);
@@ -104,91 +138,103 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
       name,
       providerType,
       endpoint,
-      description: description.length ? description : null,
-      authConfigs: authConfigs.map((config) => ({
-        ...config,
-        apiKey: config.authType === "ApiKey" ? config.apiKey?.trim() || null : null,
-        envKey: config.authType === "EnvVariable" ? config.envKey?.trim() || null : null,
-      })),
+      description: description.trim() || null,
+      authConfigs: normalizeAuthConfigs(authConfigs),
+      modelNames: selectedModelNames,
     });
   };
 
+  const modelDraftReady =
+    provider !== null &&
+    initializedProviderId.current === provider.id &&
+    modelsQuery.isSuccess &&
+    modelRelationsQuery.isSuccess;
   const isDisabled =
-    !provider || !name.trim() || !endpoint.trim() || updateProviderMutation.isPending;
+    !provider ||
+    !name.trim() ||
+    !endpoint.trim() ||
+    !modelDraftReady ||
+    updateProviderMutation.isPending;
+  const modelsError = modelsQuery.error ?? modelRelationsQuery.error;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg">
-        <DialogHeader>
-          <DialogTitle>Edit provider</DialogTitle>
-          <DialogDescription>
-            Uses <code>/api/providers</code>.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid max-h-[calc(100vh-200px)] gap-4 overflow-y-auto pr-2">
-          <div className="grid gap-2">
-            <Label htmlFor="edit-name">Name</Label>
-            <Input
-              id="edit-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="openai"
-            />
-          </div>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) =>
+        applyDialogOpenChange({
+          isPending: updateProviderMutation.isPending,
+          nextOpen,
+          setOpen: onOpenChange,
+        })
+      }
+    >
+      <DialogContent
+        className="fixed inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 p-0 sm:max-w-none"
+        onInteractOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
+        showCloseButton={false}
+      >
+        <div className="flex min-h-0 flex-col">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <DialogTitle>Edit provider</DialogTitle>
+                <DialogDescription className="mt-1">
+                  Update provider metadata, authentication, and available models.
+                </DialogDescription>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <DialogClose asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={updateProviderMutation.isPending}
+                  >
+                    Cancel
+                  </Button>
+                </DialogClose>
+                <Button type="button" size="sm" onClick={handleUpdate} disabled={isDisabled}>
+                  {updateProviderMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
 
-          <div className="grid gap-2">
-            <Label htmlFor="edit-endpoint">Endpoint</Label>
-            <Input
-              id="edit-endpoint"
-              value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="https://api.openai.com/v1"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="edit-providerType">Provider type</Label>
-            <Select
-              value={providerType}
-              onValueChange={(value) => setProviderType(value as ProviderType)}
-            >
-              <SelectTrigger id="edit-providerType" className="w-full">
-                <SelectValue placeholder="Select a provider type" />
-              </SelectTrigger>
-              <SelectContent>
-                {providerTypeOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="edit-description">Description</Label>
-            <Textarea
-              id="edit-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <ProviderAuthConfigEditor value={authConfigs} onChange={setAuthConfigs} />
+          <ProviderFormFields
+            idPrefix="edit-provider-"
+            name={name}
+            setName={setName}
+            endpoint={endpoint}
+            setEndpoint={setEndpoint}
+            providerType={providerType}
+            setProviderType={setProviderType}
+            description={description}
+            setDescription={setDescription}
+            authConfigs={authConfigs}
+            setAuthConfigs={setAuthConfigs}
+            models={modelsQuery.data ?? []}
+            selectedModelNames={selectedModelNames}
+            setSelectedModelNames={setSelectedModelNames}
+            modelsLoading={modelsQuery.isLoading || modelRelationsQuery.isLoading}
+            modelsError={modelsError}
+            retryModels={() => {
+              void modelsQuery.refetch();
+              void modelRelationsQuery.refetch();
+            }}
+          />
         </div>
-
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              Cancel
-            </Button>
-          </DialogClose>
-          <Button type="button" onClick={handleUpdate} disabled={isDisabled}>
-            {updateProviderMutation.isPending ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+function normalizeAuthConfigs(
+  authConfigs: ProviderAuthConfigRequest[],
+): ProviderAuthConfigRequest[] {
+  return authConfigs.map((config) => ({
+    ...config,
+    apiKey: config.authType === "ApiKey" ? config.apiKey?.trim() || null : null,
+    envKey: config.authType === "EnvVariable" ? config.envKey?.trim() || null : null,
+  }));
 }

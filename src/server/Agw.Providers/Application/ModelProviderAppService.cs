@@ -10,15 +10,18 @@ public class ModelProviderAppService : IModelProviderAppService
     private readonly IRepository<ModelProviderRelation> _repository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ModelProviderDomainService _domainService;
+    private readonly ModelProviderUsageGuard _usageGuard;
 
     public ModelProviderAppService(
         IRepository<ModelProviderRelation> repository,
         IUnitOfWork unitOfWork,
-        ModelProviderDomainService domainService)
+        ModelProviderDomainService domainService,
+        ModelProviderUsageGuard usageGuard)
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
         _domainService = domainService;
+        _usageGuard = usageGuard;
     }
 
     public async Task<IReadOnlyList<ModelProviderRelation>> ListAsync(Guid? modelId = null, Guid? providerId = null)
@@ -98,6 +101,7 @@ public class ModelProviderAppService : IModelProviderAppService
             return false;
         }
 
+        await _usageGuard.EnsureNotInUseAsync([existing.Id]);
         _repository.Remove(existing);
         await _unitOfWork.SaveChangesAsync();
         return true;

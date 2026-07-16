@@ -5,26 +5,24 @@ import { useMutation, useQueryClient, type UseQueryResult } from "@tanstack/reac
 import { toast } from "sonner";
 
 import { apiPost } from "@/api/client";
+import { getApiErrorMessage } from "@/api/utils";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/SearchableSelect/searchable-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription as UiDialogDescription,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle as UiDialogTitle,
+  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  SearchableSelect,
-  type SearchableSelectOption,
-} from "@/components/SearchableSelect/searchable-select";
-import type { ModelProviderCreateRequest, ModelDto, ProviderDto } from "./types";
-import { parseFloatOrNull, parseIntOrNull } from "./utils";
-import { getApiErrorMessage } from "@/api/utils";
+
+import type { ModelDto, ModelProviderCreateRequest, ProviderDto } from "./types";
 
 type CreateModelProviderDialogProps = {
   modelsQuery: UseQueryResult<ModelDto[], Error>;
@@ -39,27 +37,26 @@ export function CreateModelProviderDialog({
   const [createOpen, setCreateOpen] = React.useState(false);
   const [modelId, setModelId] = React.useState("");
   const [providerId, setProviderId] = React.useState("");
-  const [inputPrice, setInputPrice] = React.useState("0");
-  const [outputPrice, setOutputPrice] = React.useState("0");
-  const [cacheRead, setCacheRead] = React.useState("0");
-  const [cacheWrite, setCacheWrite] = React.useState("0");
-  const [rpsLimit, setRpsLimit] = React.useState("60");
 
-  const modelOptions = React.useMemo<SearchableSelectOption[]>(() => {
-    return (modelsQuery.data ?? []).map((m) => ({
-      value: m.id,
-      title: m.name,
-      subtitle: m.id,
-    }));
-  }, [modelsQuery.data]);
+  const modelOptions = React.useMemo<SearchableSelectOption[]>(
+    () =>
+      (modelsQuery.data ?? []).map((model) => ({
+        value: model.id,
+        title: model.name,
+        subtitle: model.id,
+      })),
+    [modelsQuery.data],
+  );
 
-  const providerOptions = React.useMemo<SearchableSelectOption[]>(() => {
-    return (providersQuery.data ?? []).map((p) => ({
-      value: p.id,
-      title: `${p.name} - ${p.providerType}`,
-      subtitle: p.id,
-    }));
-  }, [providersQuery.data]);
+  const providerOptions = React.useMemo<SearchableSelectOption[]>(
+    () =>
+      (providersQuery.data ?? []).map((provider) => ({
+        value: provider.id,
+        title: `${provider.name} - ${provider.providerType}`,
+        subtitle: provider.id,
+      })),
+    [providersQuery.data],
+  );
 
   const createMutation = useMutation({
     mutationFn: async (body: ModelProviderCreateRequest) => {
@@ -70,11 +67,6 @@ export function CreateModelProviderDialog({
       setCreateOpen(false);
       setModelId("");
       setProviderId("");
-      setInputPrice("0");
-      setOutputPrice("0");
-      setCacheRead("0");
-      setCacheWrite("0");
-      setRpsLimit("60");
       await queryClient.invalidateQueries({ queryKey: ["model-providers"] });
     },
     onError: (error) => {
@@ -82,21 +74,7 @@ export function CreateModelProviderDialog({
     },
   });
 
-  const parsedInputPrice = parseFloatOrNull(inputPrice);
-  const parsedOutputPrice = parseFloatOrNull(outputPrice);
-  const parsedCacheRead = parseFloatOrNull(cacheRead);
-  const parsedCacheWrite = parseFloatOrNull(cacheWrite);
-  const parsedRpsLimit = parseIntOrNull(rpsLimit);
-
-  const createDisabled =
-    !modelId.trim() ||
-    !providerId.trim() ||
-    parsedInputPrice === null ||
-    parsedOutputPrice === null ||
-    parsedCacheRead === null ||
-    parsedCacheWrite === null ||
-    parsedRpsLimit === null ||
-    createMutation.isPending;
+  const createDisabled = !modelId.trim() || !providerId.trim() || createMutation.isPending;
 
   return (
     <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -104,93 +82,36 @@ export function CreateModelProviderDialog({
         <Button>Create</Button>
       </DialogTrigger>
 
-      <DialogContent size="lg" className="max-h-[90vh] overflow-y-auto">
+      <DialogContent size="lg">
         <DialogHeader>
-          <UiDialogTitle>Create model provider</UiDialogTitle>
-          <UiDialogDescription>
-            Uses <code>/api/model-providers</code> with <code>ModelProviderCreateRequest</code>.
-          </UiDialogDescription>
+          <DialogTitle>Create model provider</DialogTitle>
+          <DialogDescription>Associate an existing model with a provider.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           <SearchableSelect
             id="modelId"
-            label="Model ID"
+            label="Model"
             value={modelId}
             onValueChange={setModelId}
             options={modelOptions}
             placeholder="Select a model"
-            searchPlaceholder="Search models (name/id)..."
+            searchPlaceholder="Search models..."
             isLoading={modelsQuery.isLoading}
             errorMessage={modelsQuery.isError ? getApiErrorMessage(modelsQuery.error) : null}
           />
 
           <SearchableSelect
             id="providerId"
-            label="Provider ID"
+            label="Provider"
             value={providerId}
             onValueChange={setProviderId}
             options={providerOptions}
             placeholder="Select a provider"
-            searchPlaceholder="Search providers (name/id)..."
+            searchPlaceholder="Search providers..."
             isLoading={providersQuery.isLoading}
             errorMessage={providersQuery.isError ? getApiErrorMessage(providersQuery.error) : null}
           />
-
-          <div className="grid gap-2">
-            <Label htmlFor="inputPrice">Input price (double)</Label>
-            <Input
-              id="inputPrice"
-              inputMode="decimal"
-              value={inputPrice}
-              onChange={(e) => setInputPrice(e.target.value)}
-              placeholder="0.0"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="outputPrice">Output price (double)</Label>
-            <Input
-              id="outputPrice"
-              inputMode="decimal"
-              value={outputPrice}
-              onChange={(e) => setOutputPrice(e.target.value)}
-              placeholder="0.0"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="cacheRead">Cache read (double)</Label>
-            <Input
-              id="cacheRead"
-              inputMode="decimal"
-              value={cacheRead}
-              onChange={(e) => setCacheRead(e.target.value)}
-              placeholder="0.0"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="cacheWrite">Cache write (double)</Label>
-            <Input
-              id="cacheWrite"
-              inputMode="decimal"
-              value={cacheWrite}
-              onChange={(e) => setCacheWrite(e.target.value)}
-              placeholder="0.0"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="rpsLimit">RPS limit (int)</Label>
-            <Input
-              id="rpsLimit"
-              inputMode="numeric"
-              value={rpsLimit}
-              onChange={(e) => setRpsLimit(e.target.value)}
-              placeholder="60"
-            />
-          </div>
         </div>
 
         <DialogFooter>
@@ -199,7 +120,6 @@ export function CreateModelProviderDialog({
               Cancel
             </Button>
           </DialogClose>
-
           <Button
             type="button"
             disabled={createDisabled}
@@ -207,11 +127,11 @@ export function CreateModelProviderDialog({
               createMutation.mutate({
                 modelId,
                 providerId,
-                inputPrice: parsedInputPrice ?? 0,
-                outputPrice: parsedOutputPrice ?? 0,
-                cacheRead: parsedCacheRead ?? 0,
-                cacheWrite: parsedCacheWrite ?? 0,
-                rpsLimit: parsedRpsLimit ?? 0,
+                inputPrice: 0,
+                outputPrice: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                rpsLimit: 0,
               })
             }
           >

@@ -48,7 +48,7 @@ export default function ModelProvidersPage() {
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">Model Providers</h1>
           <p className="text-sm text-muted-foreground">
-            Manage pricing/limits for a model on a provider.
+            Manage which models are available through each provider.
           </p>
         </div>
 

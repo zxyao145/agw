@@ -38,16 +38,11 @@ export function ModelProviderTable({
         <div className="text-sm text-muted-foreground">No model providers found.</div>
       ) : (
         <div className="rounded-md border">
-          <Table className="min-w-[960px]">
+          <Table>
             <TableHeader className="bg-muted/30">
               <TableRow>
                 <TableHead>Provider</TableHead>
                 <TableHead>Model</TableHead>
-                <TableHead className="text-right">Input</TableHead>
-                <TableHead className="text-right">Output</TableHead>
-                <TableHead className="text-right">Cache read</TableHead>
-                <TableHead className="text-right">Cache write</TableHead>
-                <TableHead className="text-right">RPS</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -59,35 +54,10 @@ export function ModelProviderTable({
                 return (
                   <TableRow key={`${item.modelId}:${item.providerId}`} className="align-top">
                     <TableCell className="min-w-48">
-                      <div className="min-w-0">
-                        <div className="truncate">{providerName}</div>
-                        {/* <div className="truncate font-mono text-xs text-muted-foreground">
-                            {item.providerId}
-                          </div> */}
-                      </div>
+                      <div className="truncate">{providerName}</div>
                     </TableCell>
                     <TableCell className="min-w-48">
-                      <div className="min-w-0">
-                        <div className="truncate">{modelName}</div>
-                        {/* <div className="truncate font-mono text-xs text-muted-foreground">
-                            {item.modelId}
-                          </div> */}
-                      </div>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-right font-mono text-xs">
-                      {String(item.inputPrice)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-right font-mono text-xs">
-                      {String(item.outputPrice)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-right font-mono text-xs">
-                      {String(item.cacheRead)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-right font-mono text-xs">
-                      {String(item.cacheWrite)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-right font-mono text-xs">
-                      {String(item.rpsLimit)}
+                      <div className="truncate font-mono text-sm">{modelName}</div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right">
                       <ModelProviderActions modelProviderId={item.id} />
