@@ -12,6 +12,12 @@ export function isResultMessage(message: AiMessage): boolean {
   );
 }
 
+export function collapseConsecutiveSystemMessages(messages: AiMessage[]): AiMessage[] {
+  return messages.filter(
+    (message, index) => message.role !== "system" || messages[index + 1]?.role !== "system",
+  );
+}
+
 export type AiMessageAction =
   | { type: "append"; message: AiMessage }
   | { type: "setClaudeCommands"; commands: string[] }

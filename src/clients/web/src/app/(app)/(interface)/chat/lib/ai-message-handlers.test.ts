@@ -2,10 +2,57 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  collapseConsecutiveSystemMessages,
   getClaudeInitCommands,
   handleSystemMessage,
   prepareClaudeHistory,
 } from "../../../../../lib/chat/ai-message-handlers.ts";
+
+test("consecutive system messages keep only the latest message in each sequence", () => {
+  const assistant = {
+    messageId: "assistant-1",
+    role: "assistant",
+    contents: [{ type: "TextContent", content: "Before" }],
+  };
+  const firstRetry = {
+    messageId: "system-1",
+    role: "system",
+    contents: [{ type: "ErrorContent", content: "Retry 1" }],
+  };
+  const secondRetry = {
+    messageId: "system-2",
+    role: "system",
+    contents: [{ type: "ErrorContent", content: "Retry 2" }],
+  };
+  const user = {
+    messageId: "user-1",
+    role: "user",
+    contents: [{ type: "TextContent", content: "Continue" }],
+  };
+  const thirdRetry = {
+    messageId: "system-3",
+    role: "system",
+    contents: [{ type: "ErrorContent", content: "Retry 3" }],
+  };
+  const result = {
+    messageId: "result-1",
+    role: "system",
+    contents: [{ type: "TextContent", content: "Done" }],
+    additionalProperties: { type: "result" },
+  };
+
+  assert.deepEqual(
+    collapseConsecutiveSystemMessages([
+      assistant,
+      firstRetry,
+      secondRetry,
+      user,
+      thirdRetry,
+      result,
+    ]),
+    [assistant, secondRetry, user, result],
+  );
+});
 
 test("system result with top-level marker stops executing and appends the message", () => {
   const message = {

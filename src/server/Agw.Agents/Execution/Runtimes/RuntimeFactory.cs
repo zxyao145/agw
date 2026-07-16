@@ -148,14 +148,16 @@ public sealed class RuntimeFactory : IRuntimeFactory
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             session.CancellationToken);
+        var linkedToken = linkedCts.Token;
         var messages = command.Stream
-            ? _agentRuntimeService.ExecuteStreamingAsync(session, command.Input, linkedCts.Token)
-            : ToAsyncEnumerable(await _agentRuntimeService.ExecuteAsync(session, command.Input, linkedCts.Token));
+            ? _agentRuntimeService.ExecuteStreamingAsync(session, command.Input, linkedToken)
+            : ToAsyncEnumerable(
+                () => _agentRuntimeService.ExecuteAsync(session, command.Input, linkedToken));
         await TurnPipeline.RunAsync(
             messages,
             command.Stream,
             sink,
-            linkedCts.Token);
+            linkedToken);
     }
 
     private async Task ExecuteAgentflowAsync(
@@ -190,9 +192,10 @@ public sealed class RuntimeFactory : IRuntimeFactory
         return new RuntimeStartResult(runtime, activeTurn);
     }
 
-    private static async IAsyncEnumerable<AgwMessage> ToAsyncEnumerable(
-        IReadOnlyList<AgwMessage> messages)
+    internal static async IAsyncEnumerable<AgwMessage> ToAsyncEnumerable(
+        Func<Task<IReadOnlyList<AgwMessage>>> messagesFactory)
     {
+        var messages = await messagesFactory().ConfigureAwait(false);
         foreach (var message in messages)
         {
             yield return message;

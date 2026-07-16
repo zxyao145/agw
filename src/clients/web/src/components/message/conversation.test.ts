@@ -32,3 +32,12 @@ test("conversation can delegate scrolling while keeping messages centered", asyn
   assert.match(source, /scrollable && "overflow-y-auto"/);
   assert.match(source, /<div className="mx-auto w-full max-w-225 space-y-4 pb-36">/);
 });
+
+test("conversation renders authorless system messages after collapsing consecutive entries", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+
+  assert.match(source, /collapseConsecutiveSystemMessages\(messages\)/);
+  assert.match(source, /!currentMsg\.author && currentMsg\.role !== "system"/);
+  assert.doesNotMatch(source, /if \(currentMsg\.role === "system"\) \{\s*continue;/);
+  assert.match(source, /if \(isResult\)[\s\S]*?continue;/);
+});

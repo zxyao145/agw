@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 
 using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 
@@ -42,6 +43,93 @@ public class TurnPipelineTests
             sink.Messages.Select(GetType));
     }
 
+    [Fact]
+    public async Task RunAsync_FatalErrorContent_EmitsFailedFinish()
+    {
+        var sink = new CapturingSink();
+        var error = CreateErrorMessage("model unavailable", fatal: true);
+
+        await TurnPipeline.RunAsync(
+            ToStream(error, cancellationToken: TestContext.Current.CancellationToken),
+            true,
+            sink,
+            TestContext.Current.CancellationToken);
+
+        Assert.Same(error, sink.Messages[1]);
+        Assert.Equal("failed", sink.Messages[^1].AdditionalProperties!["status"]);
+    }
+
+    [Fact]
+    public async Task RunAsync_RecoverableErrorContent_EmitsCompletedFinish()
+    {
+        var sink = new CapturingSink();
+        var error = CreateErrorMessage("tool failed", fatal: false);
+
+        await TurnPipeline.RunAsync(
+            ToStream(error, cancellationToken: TestContext.Current.CancellationToken),
+            true,
+            sink,
+            TestContext.Current.CancellationToken);
+
+        Assert.Same(error, sink.Messages[1]);
+        Assert.Equal("completed", sink.Messages[^1].AdditionalProperties!["status"]);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RunAsync_FatalErrorThenException_DoesNotEmitDuplicateError(bool stream)
+    {
+        var sink = new CapturingSink();
+        var error = CreateErrorMessage("model unavailable", fatal: true);
+
+        await TurnPipeline.RunAsync(
+            ThrowingStream(error, TestContext.Current.CancellationToken),
+            stream,
+            sink,
+            TestContext.Current.CancellationToken);
+
+        Assert.Single(sink.Messages.SelectMany(message => message.Contents).OfType<AgwErrorContent>());
+        Assert.Equal("failed", sink.Messages[^1].AdditionalProperties!["status"]);
+    }
+
+    [Fact]
+    public async Task RunAsync_ExceptionWithoutErrorContent_EmitsSyntheticError()
+    {
+        var sink = new CapturingSink();
+
+        await TurnPipeline.RunAsync(
+            ThrowingStream(null, TestContext.Current.CancellationToken),
+            true,
+            sink,
+            TestContext.Current.CancellationToken);
+
+        var error = Assert.IsType<AgwErrorContent>(Assert.Single(sink.Messages[1].Contents));
+        Assert.Equal("stream failed", error.Content);
+        Assert.Equal("failed", sink.Messages[^1].AdditionalProperties!["status"]);
+    }
+
+    [Fact]
+    public async Task RunAsync_LazyNonStreamingExecutionFails_EmitsSyntheticErrorAndFinish()
+    {
+        var sink = new CapturingSink();
+        var messages = RuntimeFactory.ToAsyncEnumerable(
+            () => Task.FromException<IReadOnlyList<AgwMessage>>(
+                new InvalidOperationException("non-streaming failed")));
+
+        Assert.Empty(sink.Messages);
+
+        await TurnPipeline.RunAsync(
+            messages,
+            false,
+            sink,
+            TestContext.Current.CancellationToken);
+
+        var error = Assert.IsType<AgwErrorContent>(Assert.Single(sink.Messages[1].Contents));
+        Assert.Equal("non-streaming failed", error.Content);
+        Assert.Equal("failed", sink.Messages[^1].AdditionalProperties!["status"]);
+    }
+
     private static async IAsyncEnumerable<AgwMessage> ToStream(
         AgwMessage first,
         AgwMessage? second = null,
@@ -63,6 +151,32 @@ public class TurnPipelineTests
             AiRole.Assistant,
             [new AgwTextContent { Content = content }],
             properties);
+    }
+
+    private static AgwMessage CreateErrorMessage(string content, bool fatal)
+    {
+        var properties = fatal
+            ? new Microsoft.Extensions.AI.AdditionalPropertiesDictionary { ["isFatalError"] = true }
+            : null;
+        return new AgwMessage(
+            Guid.NewGuid().ToString("D"),
+            Agw.Shared.Constants.DefaultAgentAuthor,
+            AiRole.System,
+            [new AgwErrorContent { Content = content, AdditionalProperties = properties }]);
+    }
+
+    private static async IAsyncEnumerable<AgwMessage> ThrowingStream(
+        AgwMessage? first,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (first != null)
+        {
+            yield return first;
+        }
+
+        await Task.Yield();
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new InvalidOperationException("stream failed");
     }
 
     private static string? GetType(AgwMessage message) =>

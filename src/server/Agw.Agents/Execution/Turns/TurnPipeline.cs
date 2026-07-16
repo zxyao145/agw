@@ -16,6 +16,7 @@ public static class TurnPipeline
         await sink.WriteAsync(CreateTurnStateMessage("turn-start"), CancellationToken.None);
         var bufferedMessages = new List<AgwMessage>();
         var status = "completed";
+        var fatalErrorReceived = false;
 
         try
         {
@@ -25,6 +26,25 @@ public static class TurnPipeline
                 if (string.Equals(messageType, "turn-finished", StringComparison.Ordinal))
                 {
                     continue;
+                }
+
+                var isFatalError = IsFatalError(message);
+                if (isFatalError)
+                {
+                    fatalErrorReceived = true;
+                    status = "failed";
+
+                    if (!stream)
+                    {
+                        foreach (var bufferedMessage in bufferedMessages)
+                        {
+                            await sink.WriteAsync(bufferedMessage, CancellationToken.None);
+                        }
+
+                        bufferedMessages.Clear();
+                        await sink.WriteAsync(message, CancellationToken.None);
+                        continue;
+                    }
                 }
 
                 if (stream || IsControlMessage(messageType))
@@ -44,12 +64,15 @@ public static class TurnPipeline
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            status = "interrupted";
+            status = fatalErrorReceived ? "failed" : "interrupted";
         }
         catch (Exception exception)
         {
             status = "failed";
-            await sink.WriteAsync(CreateErrorMessage(exception.Message), CancellationToken.None);
+            if (!fatalErrorReceived)
+            {
+                await sink.WriteAsync(CreateErrorMessage(exception.Message), CancellationToken.None);
+            }
         }
         finally
         {
@@ -59,6 +82,13 @@ public static class TurnPipeline
 
     private static bool IsControlMessage(string? messageType) =>
         messageType?.StartsWith("human-gate-", StringComparison.Ordinal) == true;
+
+    private static bool IsFatalError(AgwMessage message) =>
+        message.Contents
+            .OfType<AgwErrorContent>()
+            .Any(content =>
+                content.AdditionalProperties?.TryGetValue("isFatalError", out var value) == true &&
+                value is true);
 
     private static string? GetMessageType(AgwMessage message) =>
         message.AdditionalProperties?.TryGetValue("type", out var value) == true
