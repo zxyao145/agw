@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.IO.Compression;
-using System.Threading.Tasks;
 
 using Agw.Agents.ExternalAgents;
 using Agw.Shared.Contracts.Projects;
@@ -34,13 +30,13 @@ public class DbSeeder
     private static readonly Guid DeepSeekModelId = Guid.Parse("11111111-1111-1111-4444-000000000001");
     private static readonly Guid DeepSeekOpenAiModelProviderId = Guid.Parse("11111111-1111-1111-5555-000000000001");
     private static readonly Guid DeepSeekAnthropicModelProviderId = Guid.Parse("11111111-1111-1111-5555-000000000002");
-    
+
     private static readonly Guid GeneralAgentId = Guid.Parse("11111111-1111-1111-6666-000000000001");
     private static readonly Guid LocationExtractorAgentId = Guid.Parse("11111111-1111-1111-6666-000000000002");
     private static readonly Guid AmapPoiSearchAgentId = Guid.Parse("11111111-1111-1111-6666-000000000003");
-    
+
     private static readonly Guid XiaohongshuAgentflowId = Guid.Parse("11111111-1111-1111-7777-000000000001");
-    
+
     private static readonly Guid XiaohongshuSkillId = Guid.Parse("11111111-1111-1111-8888-000000000001");
 
     public static IReadOnlyList<Project> BuiltInProjects { get; } =

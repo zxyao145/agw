@@ -61,7 +61,10 @@ export function AgentsTable({ agentsQuery, onEdit, onDelete, onExecute }: Agents
 
           return (
             <TableRow key={agent.id}>
-              <TableCell className="font-medium">{agent.name}</TableCell>
+              <TableCell>
+                <div className="font-medium">{agent.name}</div>
+                <div className="font-mono text-xs break-all text-muted-foreground">{agent.id}</div>
+              </TableCell>
               <TableCell className="font-medium">{agent.displayName}</TableCell>
               <TableCell>
                 <span

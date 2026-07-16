@@ -69,7 +69,6 @@ export function AgentflowsTable({
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Description</TableHead>
-            <TableHead>Mode</TableHead>
             <TableHead>Created</TableHead>
             <TableHead className="text-center">Enabled</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -78,9 +77,13 @@ export function AgentflowsTable({
         <TableBody>
           {agentflows.map((agentflow) => (
             <TableRow key={agentflow.id}>
-              <TableCell className="font-medium">{agentflow.name}</TableCell>
+              <TableCell>
+                <div className="font-medium">{agentflow.name}</div>
+                <div className="font-mono text-xs break-all text-muted-foreground">
+                  {agentflow.id}
+                </div>
+              </TableCell>
               <TableCell className="max-w-xs truncate">{agentflow.description || "-"}</TableCell>
-              <TableCell>DAG</TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {formatLocalDateTime(agentflow.createTime)}
               </TableCell>
