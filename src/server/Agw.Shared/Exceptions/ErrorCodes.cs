@@ -70,7 +70,6 @@ public static class ErrorCodes
     public static readonly ErrorCode GitHubClonePathInvalid = new(400_0065, "The clone destination must be a relative path inside the project workspace.", HttpStatusCode.BadRequest);
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
-    public static readonly ErrorCode SftpAuthenticationFailed = new(401_0002, "SFTP authentication failed.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode AuthenticationRequired = new(401_0003, "Authentication is required.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode InvalidAdminCredentials = new(401_0004, "Invalid administrator credentials.", HttpStatusCode.Unauthorized);
 
@@ -113,7 +112,6 @@ public static class ErrorCodes
     public static readonly ErrorCode AgentExecutionFailed = new(500_0011, "Agent execution failed.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode TaskMarkSucceededFailed = new(500_0012, "Failed to mark task as succeeded.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode EnvironmentVariableNotSet = new(500_0013, "Required environment variable is not set.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode SftpConnectionFailed = new(500_0015, "SFTP connection failed.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode IntegrationCredentialUnavailable = new(500_0016, "Integration credential is unavailable.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode IntegrationDataInvalid = new(500_0017, "Stored integration data is invalid.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode IntegrationCapabilityResolutionFailed = new(500_0018, "Failed to resolve integration capabilities.", HttpStatusCode.InternalServerError);

@@ -37,7 +37,7 @@
   - streaming 默认用 `InProcessExecution.OffThread.RunStreamingAsync`。
   - 测试使用 `InProcessExecution.Lockstep`，保证事件顺序稳定。
   - 监听 `AgentResponseUpdateEvent`、`WorkflowOutputEvent`、`RequestInfoEvent`、`SuperStepCompletedEvent`。
-  - HITL pending 时保存 request payload、request id、run/session id、最近 checkpoint。
+  - HITL pending 时保存 request payload、request id、run/session id、最后一个 checkpoint。
   - 用户提交 HITL response 后从 checkpoint/resume 继续执行。
 - 前端：
   - React Flow 节点侧栏支持编辑：节点类型、instructions、checkpoint、human request schema、边条件。

@@ -22,7 +22,6 @@ public sealed class ProjectFileSystemConfigurationProvider : IProjectFileSystemC
             ? null
             : new ProjectFileSystemConfiguration(
                 project.Name,
-                project.Workspace,
-                project.ExtraSetting);
+                project.Workspace);
     }
 }

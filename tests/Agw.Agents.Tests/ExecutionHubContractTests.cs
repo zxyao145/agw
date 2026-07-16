@@ -57,12 +57,12 @@ public class ExecutionHubContractTests
         Assert.NotNull(invokeAsync);
         var action = new Func<Task>(() => Task.FromException(
             new AgwFilesException(
-                FilesErrorCode.UnsupportedStorageBackend,
-                "Storage backend is not supported.")));
+                FilesErrorCode.PathOutsideRoot,
+                "Path is outside the project workspace.")));
         var invocation = Assert.IsAssignableFrom<Task>(invokeAsync.Invoke(null, [action]));
 
         var exception = await Assert.ThrowsAsync<HubException>(() => invocation);
 
-        Assert.Equal("5010008: Storage backend is not supported.", exception.Message);
+        Assert.Equal("4030001: Path is outside the project workspace.", exception.Message);
     }
 }

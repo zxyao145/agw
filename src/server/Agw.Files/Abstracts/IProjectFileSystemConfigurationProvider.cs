@@ -10,5 +10,4 @@ public interface IProjectFileSystemConfigurationProvider
 
 public sealed record ProjectFileSystemConfiguration(
     string Name,
-    string? Workspace,
-    string? ExtraSetting);
+    string? Workspace);

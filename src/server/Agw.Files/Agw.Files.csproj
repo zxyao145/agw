@@ -6,7 +6,6 @@
 
     <ItemGroup>
       <PackageReference Include="CliWrap" />
-      <PackageReference Include="SSH.NET" />
     </ItemGroup>
 
 </Project>

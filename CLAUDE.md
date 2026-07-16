@@ -14,8 +14,9 @@ The repository is a modular monolith with an ASP.NET Core and EF Core backend pl
 
 ```text
 Agw.Host/            # ASP.NET Core entry point, composition root, middleware, OpenAPI, static files, websockets, and DB seeding
+Agw.Data/            # Persisted entities, EF configurations, repository abstractions, and unit-of-work contracts
 Agw.Infrastructure/  # EF Core DbContext, repositories, migrations, and seeding
-Agw.Shared/          # Shared entities, contracts, exceptions, repository abstractions, results, and utilities
+Agw.Shared/          # Shared contracts, exceptions, results, and utilities
 Agw.A2A/             # A2A protocol types, discovery, communication endpoints, and route builders
 Agw.Agents/          # Agent definitions, agentflows, MCP tools, and runtime execution services
 Agw.Files/           # File and workspace APIs, path security, request validation, and error mapping
@@ -24,11 +25,11 @@ Agw.Jobs/            # Scheduled jobs, project leases, execution logs, and hoste
 Agw.Providers/       # LLM models, providers, model-provider links, and auth configuration
 Agw.Setup/           # First-run setup, initialization state, and API-key guard middleware
 Agw.Skills/          # Skill archive validation, storage, and agent-skill relations
-Agw.Projects/           # Projects, project tasks, task records, contexts, and task APIs
+Agw.Projects/         # Projects, project tasks, task records, contexts, and task APIs
 Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registry
 ```
 
-`Agw.slnx` is the root solution and includes the backend projects and tests. `src/server/server.sln` includes backend projects only. The root solution includes test projects for A2A, Agents, Files, Host, Integrations, Jobs, Setup, Shared, Skills, Tasks, and Tools.
+`Agw.slnx` is the root solution and includes the backend projects and tests. `src/server/server.sln` includes backend projects only. The root solution includes test projects for A2A, Agents, Files, Host, Integrations, Jobs, Projects, Setup, Shared, Skills, and Tools.
 
 ### Module Layering
 
@@ -55,40 +56,13 @@ Controller → AppService / RuntimeService → DomainService → IRepository / I
 
 The web client uses Next.js 16 App Router, React 19, Tailwind CSS 4, Radix UI/Shadcn components, React Query, and generated `openapi-fetch` types.
 
-```text
-src/app/(app)/
-  (agents)/agents            # Agent CRUD
-  (agents)/agentflows        # Workflow editor
-  (interface)/chat
-  (jobs)/jobs
-  (overview)/dashboard
-  (overview)/traces
-  (providers)/models
-  (providers)/providers
-  (providers)/model-providers
-  (tasks)/projects
-  (tools)/mcp-tool-servers
-  integrations
-  settings
-  skills
-src/api/                     # Typed fetch helpers and generated OpenAPI types
-src/components/              # Shared UI components
-src/hooks/                   # Shared React hooks
-src/lib/                     # Shared frontend utilities
-src/types/                   # Shared frontend types
-```
+Routes live under `src/app/(app)/`, typed API helpers under `src/api/`, shared UI under `src/components/`, and shared hooks, utilities, and types under `src/hooks/`, `src/lib/`, and `src/types/`.
 
 `src/clients/web/next.config.ts` proxies `/api/*` and `/openapi/*` to the backend unless `NEXT_OUTPUT_MODE=export`.
 
 ### Mobile Client (`src/clients/mobile/`)
 
 The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients/mobile/AGENTS.md`, run mobile npm commands from `shared/`, and do not hand-maintain generated native projects.
-
-### Other Top-Level Paths
-
-- `docs/` contains project documentation.
-- `tests/` contains xUnit test projects.
-- Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated artifacts.
 
 ## Key Runtime Components
 
@@ -97,24 +71,23 @@ The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients
 - `src/server/Agw.Host/Program.cs`: bootstraps logging, OpenTelemetry, dependency injection, OpenAPI/Scalar, websockets, static files, module registration, and database seeding.
 - `src/server/Agw.Agents/Execution/README.md`: documents the SignalR command boundary, reusable runtimes, turn lifecycle, message flow, and command extension model.
 - `src/server/Agw.Agents/Execution/Agents/AgentRuntimeService.cs`: builds `AIAgent` instances from persisted agents, hydrates provider configuration, selects enabled auth configuration, attaches registered and MCP tools, and supports OpenAI, Anthropic, Claude Code, and Codex-backed execution through Microsoft.Agents.AI integrations.
-- `src/server/Agw.Agents/Execution/Agentflows/AgentflowRuntimeService.cs`: executes Concurrent, Sequential, GroupChat, and Handoff workflows. Magentic scaffolding exists, but runtime execution currently returns `MagenticNotSupported`.
-- `src/server/Agw.Jobs/HostedService/JobHostedService.cs`: prefetches persistent jobs into an in-memory priority queue, serializes execution per project, and coordinates execution through `IProjectExecutionLock`.
+- `src/server/Agw.Agents/Execution/Agentflows/AgentflowRuntimeService.cs`: executes persisted DAG workflows compiled by `AgentflowWorkflowCompiler`, including Agent, Workflow-as-Agent, HumanGate, Concurrent, GroupChat, Handoff, and Magentic nodes.
+- `src/server/Agw.Jobs/Scheduling/Coordination/JobHostedService.cs`: prefetches persistent jobs into an in-memory priority queue, serializes execution per project, and coordinates execution through `IProjectExecutionLock`.
 - `src/server/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations, caches metadata, and creates `AITool` instances through `AgwToolFactory`.
-- `src/server/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and stores extracted skills under `wwwroot/skills/{skillName}/`.
+- `src/server/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and stores extracted skills below `AgwDataPaths.SkillsDirectory`.
 - `src/server/Agw.Projects/Application/TaskAppService.cs`: resolves logical tasks from project contexts and task records for execution and history queries.
-- `src/server/Agw.Integrations/Controllers/OauthController.cs`: delegates generic OAuth authorization start, callback, and refresh flows to application services.
-- `src/server/Agw.Integrations/Application/Capabilities/ConnectionCapabilityResolver.cs`: resolves ready Connection-bound Native tools, plugin MCP tools, bundled Skills, warnings, and owned resource leases.
-- `src/server/Agw.Integrations/Tools/GitHub/GitHubConnectionNativeCapabilityProvider.cs`: creates namespaced GitHub tools that resolve the selected Connection credential at invocation time.
+- `src/server/Agw.Files/Application/Storage/Resolver/ProjectScopedFileSystemResolver.cs`: resolves `Project.Workspace` to a host-visible local file system and caches `CachedEntry` values by Project ID.
+- `src/server/Agw.Integrations/Application/Capabilities/ConnectionCapabilityResolver.cs`: resolves ready Connection-bound Native/MCP tools, bundled Skills, warnings, and leases; OAuth controllers and Native providers remain boundary adapters.
 - `src/server/Agw.Shared/Exceptions/ErrorCodes.cs`: is the central catalog for backend `AgwException` error codes and HTTP status mapping.
 
 ### Important Domain Concepts
 
 - `Agent`: persisted AI agent configuration with prompt, runtime type, model-provider linkage, tool bindings, and optional skill assignments.
-- `Agentflow`: multi-agent workflow graph with nodes, edges, and an orchestration pattern.
+- `Agentflow`: persisted multi-agent DAG with nodes, edges, and execution blocks.
 - `McpToolServer`: MCP server configuration for stdio, HTTP, or SSE transport.
 - `LlmModel`, `Provider`, `ModelProvider`, `ProviderAuthConfig`: provider and model catalog plus authentication configuration.
 - `Skill`: uploaded skill archive with validated `SKILL.md` metadata and agent-skill relations.
-- `Project`, `ProjectContext`, `TaskRecord`, `TaskProjection`: workspace configuration, conversation grouping, persisted execution records, and logical task views reconstructed from those records.
+- `Project`, `ProjectContext`, `TaskRecord`, `TaskProjection`: host-visible workspace configuration, conversation grouping, persisted execution records, and logical task views reconstructed from those records.
 - `Job`, `JobLog`: scheduled background execution and per-run logging.
 - `PluginDefinition`, `PluginInstallation`, `Connection`, and their credential entities: static integration capabilities, platform configuration, Agent-selectable external accounts or endpoints, and protected or environment-referenced secrets.
 
@@ -135,20 +108,7 @@ dotnet format Agw.slnx
 
 The development backend listens on `http://localhost:5015` by default through `src/server/Agw.Host/Properties/launchSettings.json`.
 
-Run a specific test project or filtered test when needed:
-
-```bash
-dotnet test tests/Agw.Agents.Tests
-dotnet test tests/Agw.Projects.Tests
-dotnet test tests/Agw.Skills.Tests
-dotnet test tests/Agw.A2A.Tests
-dotnet test tests/Agw.Files.Tests
-dotnet test tests/Agw.Setup.Tests
-dotnet test tests/Agw.Shared.Tests
-dotnet test tests/Agw.Tools.Tests
-dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj
-dotnet test <project-or-solution> --filter "FullyQualifiedName~MethodName"
-```
+Run a focused project with `dotnet test tests/Agw.Files.Tests` (or the matching `Agw.*.Tests` project), and use `--filter "FullyQualifiedName~MethodName"` for a specific test.
 
 Do not add or apply EF Core migrations automatically. When the user explicitly requests a migration, use:
 
@@ -184,20 +144,7 @@ The frontend proxy target is resolved in this order: `BACKEND_API_BASE_URL`, `NE
 
 Regenerate `src/clients/web/src/api/openapi.d.ts` after backend contract changes.
 
-### Git Hooks
-
-After the first clone, configure repository hooks:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-### Test Conventions
-
-- Backend tests use xUnit.
-- Run `dotnet test Agw.slnx` for the normal repository-wide backend test pass.
-- Prefer namespaces that mirror production namespaces.
-- Prefer method names such as `Method_Condition_ExpectedResult`.
+After the first clone, configure hooks with `git config core.hooksPath .githooks`. Backend tests use xUnit; mirror production namespaces and prefer names such as `Method_Condition_ExpectedResult`.
 
 ## Local Setup and Configuration
 
@@ -205,25 +152,7 @@ On the first backend run, open `http://localhost:5015/setup` to choose the datab
 
 Remote web access uses the administrator session cookie. Desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API tokens. The legacy `X-API-Key` setting is not supported.
 
-Primary backend settings live in `src/server/Agw.Host/appsettings.json`:
-
-```json
-{
-  "Database": {
-    "Provider": "sqlite",
-    "ConnectionString": "Data Source=agw.db"
-  },
-  "DistributedLock": {
-    "Provider": null,
-    "ConnectionString": ""
-  },
-  "OpenTelemetry": {
-    "ServiceName": "Agw",
-    "ServiceVersion": "1.0.0",
-    "OtlpEndpoint": "http://localhost:4317"
-  }
-}
-```
+Primary backend settings live in `src/server/Agw.Host/appsettings.json` under `Database`, `DistributedLock`, `OpenTelemetry`, and `SystemInitialization`.
 
 Configuration guidance:
 
@@ -249,9 +178,14 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 
 ### A2A
 
-- `Agw.A2A` includes `src/server/Agw.A2A/Extensions/A2ARoutesBuilderExtensions.cs`.
-- `Agw.Host/Program.cs` registers A2A through `.AddA2A(builder.Configuration)` and maps it through `app.MapAgwA2A(a2AServerOptions.Prefix)`.
-- A2A routes require authentication at the host boundary.
+- `Agw.Host/Program.cs` registers A2A through `.AddA2A(builder.Configuration)`, maps it through `app.MapAgwA2A(a2AServerOptions.Prefix)`, and requires authentication at the host boundary.
+
+### Project Workspaces
+
+- `Project.Workspace` is the only file-root source. Files APIs and in-process consumers use `projectId` plus project-relative paths.
+- The Workspace must be visible to the Agw process. Mount network storage through the operating system or container platform; do not reintroduce application-level SFTP or `fileStorage` backends.
+- Files, Git, Claude Code, Codex, compilers, and shells must consume the same host-visible working tree.
+- `ProjectScopedFileSystemResolver` caches `CachedEntry(FileSystem, CreatedAt)` by Project ID without TTL; changing an already-resolved Workspace requires restart unless explicit invalidation is designed.
 
 ## Frontend Integration
 
@@ -299,11 +233,4 @@ Do not edit generated artifacts unless the task explicitly concerns generated ou
 
 ## Commit Conventions
 
-Follow Conventional Commits:
-
-- `feat:` new features
-- `fix:` bug fixes
-- `refactor:` code restructuring
-- `chore:` maintenance tasks
-- `docs:` documentation
-- `test:` tests
+Follow Conventional Commits with `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, or `test:`.

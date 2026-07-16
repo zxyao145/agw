@@ -2,7 +2,7 @@
 
 [中文文档](README.zh-CN.md) | [Documentation](README.md)
 
-Agw is a self-hosted backend engineering agent hub for individuals and small R&D teams, as well as an AssS (Agent as a Service) platform and agent gateway. It lets users work with multiple agents from a single UI:
+Agw is a self-hosted backend engineering agent hub for individuals and small R&D teams, as well as an AaaS (Agent as a Service) platform and agent gateway. It lets users work with multiple agents from a single UI:
 
 - Create custom agents
 - Integrate external agents, such as Claude Code and Codex
@@ -111,6 +111,10 @@ A typical local workflow is:
 4. Use `Chat` or `Projects` to run agent sessions and review the persisted task history.
 5. Use `Agentflows` for multi-agent orchestration and `Jobs` for scheduled or recurring tasks.
 
+### Project workspaces
+
+Each `Project.Workspace` must be a directory visible to the Agw Server process. The file API, Git operations, Claude Code, and Codex use the same local working tree. To use network storage, mount it through the operating system or container platform first and configure the mount path as the Workspace; Agw does not provide an application-level SFTP backend. Restart the Server after changing a Workspace that has already been used.
+
 ## Screenshots
 
 The following screenshots show the main Agw interfaces:
@@ -174,6 +178,7 @@ flowchart BT
         Agw.Providers
         Agw.Skills
         Agw.Tools
+        Agw.Files
         Agw.Integrations
         Agw.Projects
 
@@ -186,11 +191,14 @@ flowchart BT
         Agw.Skills --> Agw.Agents
         Agw.Tools --> Agw.Agents
         Agw.Integrations --> Agw.Agents
+        Agw.Files --> Agw.Agents
 
 
         Agw.Projects --> Agw.Agents
         Agw.Projects --> Agw.Jobs
         Agw.Projects --> Agw.A2A
+        Agw.Files --> Agw.Projects
+        Agw.Files --> Agw.Tools
 
     end
 
@@ -200,6 +208,7 @@ flowchart BT
 
     Agw.Shared 
 
+    Agw.Data --> Agw.Shared
     Agw.Shared --> Core
 
     Core --> Agw.Infrastructure
@@ -231,6 +240,9 @@ flowchart BT
 - Agw.Projects
   Manages agent conversation history and sessions. In Agw, a session corresponds to a task, and every task is associated with a project.
 
+- Agw.Files
+  Provides project-scoped file APIs and Git operations over the host-visible local Workspace.
+
 - Agw.Jobs
   Provides scheduled, recurring, and one-time tasks, with support for Cron expressions.
 
@@ -256,6 +268,7 @@ Detailed project documentation is available under [`docs/`](docs/):
 - [Chat Suggestions Design](docs/5.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure fallback behavior.
 - [Agent Execution Flow](docs/ws-flow.md): SignalR commands, turn messages, runtime lifecycle, and disconnection behavior.
 - [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): Directory responsibilities, data flow, and command extension methods.
+- [Files Module](src/server/Agw.Files/README.zh-CN.md): Project workspace resolution, path boundaries, Git behavior, and mount requirements.
 
 ## Configuration
 

@@ -1,8 +1,6 @@
 using Agw.Files.Abstracts;
 using Agw.Files.Application.Files;
-using Agw.Files.Application.Storage.Local;
 using Agw.Files.Application.Storage.Resolver;
-using Agw.Files.Application.Storage.Sftp;
 using Agw.Files.Services;
 
 using Microsoft.Extensions.Configuration;
@@ -17,9 +15,6 @@ public static class DependencyInjection
     {
         services.AddSingleton<FileAppService>();
         services.TryAddSingleton(TimeProvider.System);
-
-        services.AddSingleton<LocalFileSystemFactory>();
-        services.AddSingleton<SftpFileSystemFactory>();
         services.AddSingleton<IAgwFileSystemResolver, ProjectScopedFileSystemResolver>();
         services.AddSingleton<IGitCommandService, GitCommandService>();
 

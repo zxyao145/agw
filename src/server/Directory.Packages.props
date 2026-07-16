@@ -86,7 +86,6 @@
     <PackageVersion Include="Serilog.Enrichers.Thread" Version="4.0.0" />
     <PackageVersion Include="Serilog.Enrichers.Sensitive" Version="2.1.0" />
     <PackageVersion Include="Serilog.Enrichers.OpenTelemetry" Version="1.0.1" />
-    <PackageVersion Include="SSH.NET" Version="2025.1.0" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="Mapster" Version="10.0.6" />

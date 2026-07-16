@@ -29,7 +29,7 @@ public class ProjectAppServiceTests
     }
 
     [Fact]
-    public async Task ProjectFileSystemConfigurationProvider_WhenProjectExists_ReturnsFileConfiguration()
+    public async Task ProjectFileSystemConfigurationProvider_WhenProjectExists_ReturnsWorkspaceOnly()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var workspace = Path.Combine(Path.GetTempPath(), "agw-project-tests", Guid.NewGuid().ToString("N"));
@@ -47,7 +47,7 @@ public class ProjectAppServiceTests
             Assert.NotNull(configuration);
             Assert.Equal(project.Name, configuration.Name);
             Assert.Equal(project.Workspace, configuration.Workspace);
-            Assert.Equal(project.ExtraSetting, configuration.ExtraSetting);
+            Assert.Null(typeof(ProjectFileSystemConfiguration).GetProperty("ExtraSetting"));
         }
         finally
         {

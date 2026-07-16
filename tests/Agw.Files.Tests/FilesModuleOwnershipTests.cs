@@ -58,4 +58,19 @@ public class FilesModuleOwnershipTests
 
         Assert.NotNull(sdkType);
     }
+
+    [Theory]
+    [InlineData("Agw.Files.FileStorageOptions")]
+    [InlineData("Agw.Files.LocalFileStorageOptions")]
+    [InlineData("Agw.Files.SftpFileStorageOptions")]
+    [InlineData("Agw.Files.FileStorageType")]
+    [InlineData("Agw.Files.Application.Storage.Local.LocalFileSystemFactory")]
+    [InlineData("Agw.Files.Application.Storage.Sftp.SftpFileSystem")]
+    [InlineData("Agw.Files.Application.Storage.Sftp.SftpFileSystemFactory")]
+    public void RemovedStorageSdkType_IsAbsent(string typeName)
+    {
+        var sdkType = typeof(FilesController).Assembly.GetType(typeName);
+
+        Assert.Null(sdkType);
+    }
 }

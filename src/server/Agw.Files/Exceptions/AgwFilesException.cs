@@ -24,8 +24,6 @@ public sealed class AgwFilesException : Exception
     {
         FilesErrorCode.InvalidParameter => HttpStatusCode.BadRequest,
         FilesErrorCode.PathOutsideRoot => HttpStatusCode.Forbidden,
-        FilesErrorCode.InvalidStorageConfiguration => HttpStatusCode.InternalServerError,
-        FilesErrorCode.UnsupportedStorageBackend => HttpStatusCode.NotImplemented,
         _ => HttpStatusCode.InternalServerError
     };
 }

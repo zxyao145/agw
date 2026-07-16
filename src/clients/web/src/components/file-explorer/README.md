@@ -130,10 +130,10 @@ This module currently depends on [`@/api/files`](../../api/files.ts) for:
 Because of that, it assumes:
 
 - paths are relative to the selected project's file-system root
-- git diff mode is supported only for Local project file systems
+- the selected project's workspace is a host-visible local directory
 - file reset means reset to git `HEAD`
 
-If you need a storage-agnostic explorer later, the next refactor would be to inject a file-service interface instead of importing `@/api/files` directly.
+Remote storage must first be mounted or materialized as `Project.Workspace` by the host or container platform. Injecting a different frontend file-service interface alone would not give Git or external agent processes a usable working directory.
 
 ## Example Integration
 

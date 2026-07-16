@@ -2,7 +2,7 @@
 
 [中文文档](README.zh-CN.md) | [Documentation](README.md)
 
-Agw 是一个面向个人用户和小型研发团队的、自托管的后台工程 Agent 中心，也是一个 AssS (Agent as a Service) 平台和 Agent Gateway。用户可以在一个 UI 中，同时操作多个 Agent：
+Agw 是一个面向个人用户和小型研发团队的、自托管的后台工程 Agent 中心，也是一个 AaaS (Agent as a Service) 平台和 Agent Gateway。用户可以在一个 UI 中，同时操作多个 Agent：
 - 自定义创建 Agent
 - 集成外部的 Agent（例如 Claude Code、Codex）。
 
@@ -92,7 +92,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Host
 ```
 
-开发环境后端默认监听 `http://localhost:5015`。首次运行时，打开 `http://localhost:5015/setup`，选择数据库 Provider、连接字符串和管理员密码。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
+开发环境后端默认监听 `http://localhost:30815`。首次运行时，打开 `http://localhost:30815/setup`，选择数据库 Provider、连接字符串和管理员密码。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
 
 在另一个终端启动前端：
 
@@ -102,7 +102,7 @@ pnpm install
 pnpm dev
 ```
 
-两个服务都启动后，打开 `http://localhost:3000`。Next.js 开发服务器会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:5015`。
+两个服务都启动后，打开 `http://localhost:3000`。Next.js 开发服务器会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:30815`。
 
 生产发布包会把静态 Web UI 嵌入 ASP.NET Core，由单一 Server 进程提供服务，详见下方部署指南。
 
@@ -113,6 +113,10 @@ pnpm dev
 3. 在 `Agents` 中创建 Agent，并按需关联 MCP Tool Servers、Tools、Skills 或集成应用。
 4. 通过 `Chat` 或 `Projects` 运行 Agent Session，并查看持久化的 Task 历史。
 5. 使用 `Agentflows` 进行多 Agent 编排，使用 `Jobs` 执行定时或周期任务。
+
+### 项目 Workspace
+
+每个 `Project.Workspace` 都必须是 Agw Server 进程可见的目录。文件 API、Git、Claude Code 和 Codex 使用同一棵本地工作树。需要使用网络存储时，应先通过操作系统或容器平台完成挂载，再把挂载路径配置为 Workspace；Agw 不提供应用内 SFTP 后端。已经使用过的 Workspace 发生变化后，需要重启 Server。
 
 ## 界面截图
 
@@ -177,6 +181,7 @@ flowchart BT
         Agw.Providers
         Agw.Skills
         Agw.Tools
+        Agw.Files
         Agw.Integrations
         Agw.Projects
 
@@ -189,11 +194,14 @@ flowchart BT
         Agw.Skills --> Agw.Agents
         Agw.Tools --> Agw.Agents
         Agw.Integrations --> Agw.Agents
+        Agw.Files --> Agw.Agents
 
 
         Agw.Projects --> Agw.Agents
         Agw.Projects --> Agw.Jobs
         Agw.Projects --> Agw.A2A
+        Agw.Files --> Agw.Projects
+        Agw.Files --> Agw.Tools
 
     end
 
@@ -203,6 +211,7 @@ flowchart BT
 
     Agw.Shared 
 
+    Agw.Data --> Agw.Shared
     Agw.Shared --> Core
 
     Core --> Agw.Infrastructure
@@ -234,6 +243,9 @@ flowchart BT
 - Agw.Projects  
   Agent 对话历史与 Session 管理模块。在 Agw 中，一个 Session 对应一个 Task，而每个 Task 都关联一个 Project。
 
+- Agw.Files
+  基于宿主机可见的本地 Workspace 提供项目级文件 API 与 Git 操作。
+
 - Agw.Jobs  
   用于提供定时任务、周期任务和一次性任务的能力，支持使用 Cron 表达式。
 
@@ -259,6 +271,7 @@ flowchart BT
 - [Chat Suggestions 设计](docs/5.Chat%20Suggestions.md)：Agent 感知的 slash commands、Claude init commands、文件建议与失败降级。
 - [Agent 执行流程](docs/ws-flow.md)：SignalR 命令、turn 消息、runtime 生命周期与断线行为。
 - [Execution 子系统](src/server/Agw.Agents/Execution/README.md)：目录职责、数据流与 command 扩展方式。
+- [Files 模块](src/server/Agw.Files/README.zh-CN.md)：Project Workspace 解析、路径边界、Git 行为与挂载要求。
 
 ## 配置
 
