@@ -45,7 +45,6 @@ public class ProjectsController : ControllerBase
             Name = request.Name,
             Description = request.Description,
             Workspace = request.Workspace,
-            Enable = request.Enable,
             ExtraSetting = request.ExtraSetting,
             Tools = request.Tools,
             EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>()
@@ -78,7 +77,6 @@ public class ProjectsController : ControllerBase
                 project.Name = request.Name;
                 project.Description = request.Description;
                 project.Workspace = request.Workspace;
-                project.Enable = request.Enable;
                 project.ExtraSetting = request.ExtraSetting;
                 if (request.Tools != null)
                 {

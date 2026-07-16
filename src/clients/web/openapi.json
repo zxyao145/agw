@@ -1827,13 +1827,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": {}
+                "schema": { }
               },
               "application/json": {
-                "schema": {}
+                "schema": { }
               },
               "text/json": {
-                "schema": {}
+                "schema": { }
               }
             }
           },
@@ -1908,13 +1908,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": {}
+                "schema": { }
               },
               "application/json": {
-                "schema": {}
+                "schema": { }
               },
               "text/json": {
-                "schema": {}
+                "schema": { }
               }
             }
           },
@@ -1989,13 +1989,13 @@
             "description": "OK",
             "content": {
               "text/plain": {
-                "schema": {}
+                "schema": { }
               },
               "application/json": {
-                "schema": {}
+                "schema": { }
               },
               "text/json": {
-                "schema": {}
+                "schema": { }
               }
             }
           },
@@ -4291,7 +4291,6 @@
           "name",
           "description",
           "systemPrompt",
-          "enable",
           "createTime",
           "createBy",
           "updateBy"
@@ -4313,9 +4312,6 @@
           },
           "systemPrompt": {
             "type": "string"
-          },
-          "enable": {
-            "type": "boolean"
           },
           "summaryModelProviderId": {
             "type": [
@@ -4365,7 +4361,6 @@
         "required": [
           "name",
           "description",
-          "enable",
           "nodes",
           "edges"
         ],
@@ -4379,9 +4374,6 @@
               "null",
               "string"
             ]
-          },
-          "enable": {
-            "type": "boolean"
           },
           "nodes": {
             "type": "array",
@@ -4775,7 +4767,6 @@
         "required": [
           "name",
           "description",
-          "enable",
           "nodes",
           "edges"
         ],
@@ -4789,9 +4780,6 @@
               "null",
               "string"
             ]
-          },
-          "enable": {
-            "type": "boolean"
           },
           "nodes": {
             "type": "array",
@@ -8988,7 +8976,6 @@
           "name",
           "description",
           "workspace",
-          "enable",
           "extraSetting",
           "tools"
         ],
@@ -9008,9 +8995,6 @@
               "null",
               "string"
             ]
-          },
-          "enable": {
-            "type": "boolean"
           },
           "extraSetting": {
             "type": [
@@ -9089,7 +9073,6 @@
           "type",
           "description",
           "workspace",
-          "enable",
           "extraSetting",
           "tools",
           "environmentVariables",
@@ -9124,9 +9107,6 @@
               "null",
               "string"
             ]
-          },
-          "enable": {
-            "type": "boolean"
           },
           "extraSetting": {
             "type": [
@@ -9214,7 +9194,6 @@
           "name",
           "description",
           "workspace",
-          "enable",
           "extraSetting",
           "tools"
         ],
@@ -9234,9 +9213,6 @@
               "null",
               "string"
             ]
-          },
-          "enable": {
-            "type": "boolean"
           },
           "extraSetting": {
             "type": [

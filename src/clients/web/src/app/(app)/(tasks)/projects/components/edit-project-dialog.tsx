@@ -41,7 +41,6 @@ export function EditProjectDialog({
   name,
   description,
   workspace,
-  enable,
   extraSetting,
   environmentVariables,
   selectedTools,
@@ -78,7 +77,6 @@ export function EditProjectDialog({
         name,
         description: description.length ? description : null,
         workspace: workspace.trim().length ? workspace.trim() : null,
-        enable,
         extraSetting: normalizeProjectExtraSettings(extraSetting),
         ...capabilities,
       },
@@ -151,7 +149,6 @@ export function EditProjectDialog({
             name={name}
             description={description}
             workspace={workspace}
-            enable={enable}
             extraSetting={extraSetting}
             extraSettingError={extraSettingError}
             environmentVariables={environmentVariables}

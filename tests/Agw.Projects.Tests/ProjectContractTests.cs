@@ -7,10 +7,19 @@ namespace Agw.Projects.Tests;
 public class ProjectContractTests
 {
     [Fact]
+    public void ProjectContracts_DoNotExposeEnable()
+    {
+        Assert.Null(typeof(Project).GetProperty("Enable"));
+        Assert.Null(typeof(ProjectCreateRequest).GetProperty("Enable"));
+        Assert.Null(typeof(ProjectUpdateRequest).GetProperty("Enable"));
+        Assert.Null(typeof(ProjectResponse).GetProperty("Enable"));
+    }
+
+    [Fact]
     public void RequestContracts_LegacyConstructorValues_LeaveCapabilitiesUnset()
     {
-        var create = new ProjectCreateRequest("Project A", "Description", "~/project-a", true, "{}");
-        var update = new ProjectUpdateRequest("Project A", "Description", "~/project-a", true, "{}");
+        var create = new ProjectCreateRequest("Project A", "Description", "~/project-a", "{}");
+        var update = new ProjectUpdateRequest("Project A", "Description", "~/project-a", "{}");
 
         Assert.Null(create.Tools);
         Assert.Null(create.McpToolServerIds);
@@ -65,7 +74,6 @@ public class ProjectContractTests
             Type = ProjectType.UserDefined,
             Description = "Description",
             Workspace = "~/project-a",
-            Enable = true,
             ExtraSetting = "{}",
             Tools = "[\"read_file\"]",
             EnvironmentVariables = new Dictionary<string, string> { ["API_KEY"] = "secret" },
@@ -94,7 +102,6 @@ public class ProjectContractTests
         Assert.Equal(project.Type, response.Type);
         Assert.Equal(project.Description, response.Description);
         Assert.Equal(project.Workspace, response.Workspace);
-        Assert.Equal(project.Enable, response.Enable);
         Assert.Equal(project.ExtraSetting, response.ExtraSetting);
         Assert.Equal(project.Tools, response.Tools);
         Assert.Equal("secret", response.EnvironmentVariables["API_KEY"]);

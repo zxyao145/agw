@@ -111,7 +111,6 @@ export interface AgentflowEdgeRequest {
 export interface AgentflowSaveRequest {
   name: string;
   description: string | null;
-  enable: boolean;
   nodes: AgentflowNodeRequest[];
   edges: AgentflowEdgeRequest[];
   summaryModelProviderId: string | null;
@@ -122,7 +121,6 @@ export interface AgentflowDto extends BaseDto {
   name: string;
   description: string | null;
   systemPrompt: string;
-  enable: boolean;
   summaryModelProviderId: string | null;
 }
 

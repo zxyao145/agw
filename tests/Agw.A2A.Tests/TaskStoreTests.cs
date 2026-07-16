@@ -194,7 +194,6 @@ public class TaskStoreTests
             Id = A2AProjectId,
             Name = "a2a",
             Type = ProjectType.UserDefined,
-            Enable = true,
             CreateBy = "tester",
             CreateTime = TimeProvider.System.GetUtcNow()
         });

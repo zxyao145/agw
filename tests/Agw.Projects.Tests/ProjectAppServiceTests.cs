@@ -304,8 +304,7 @@ public class ProjectAppServiceTests
                 {
                     Name = "Project A",
                     Type = ProjectType.UserDefined,
-                    Workspace = workspace,
-                    Enable = true
+                    Workspace = workspace
                 },
                 "tester");
 
@@ -343,8 +342,7 @@ public class ProjectAppServiceTests
     {
         Name = name,
         Type = ProjectType.UserDefined,
-        Workspace = Path.GetTempPath(),
-        Enable = true
+        Workspace = Path.GetTempPath()
     };
 
     private static void AssertProjectRelations(

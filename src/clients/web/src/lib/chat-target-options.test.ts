@@ -34,13 +34,13 @@ test("buildChatTargetOptions preserves restricted-project filtering and sorting"
         { id: "agent-1", name: "GeneralAgent", displayName: "General Agent" },
         { id: "agent-2", name: "ClaudeCode", displayName: "Claude Code" },
       ],
-      agentflows: [{ id: "flow-1", name: "Team Flow", enable: true }],
+      agentflows: [{ id: "flow-1", name: "Team Flow" }],
     }),
     [{ id: "agent-2", label: "Claude Code", type: "agent" }],
   );
 });
 
-test("buildChatTargetOptions includes enabled agentflows and sorts normal projects by label", () => {
+test("buildChatTargetOptions includes all agentflows and sorts normal projects by label", () => {
   assert.deepEqual(
     buildChatTargetOptions({
       projectId: "11111111-1111-1111-1111-000000000099",
@@ -49,12 +49,13 @@ test("buildChatTargetOptions includes enabled agentflows and sorts normal projec
         { id: "agent-1", name: "GeneralAgent", displayName: "General Agent" },
       ],
       agentflows: [
-        { id: "flow-2", name: "Zeta Flow", enable: true },
-        { id: "flow-1", name: "Alpha Flow", enable: false },
-        { id: "flow-3", name: "Beta Flow", enable: true },
+        { id: "flow-2", name: "Zeta Flow" },
+        { id: "flow-1", name: "Alpha Flow" },
+        { id: "flow-3", name: "Beta Flow" },
       ],
     }),
     [
+      { id: "flow-1", label: "Alpha Flow", type: "agentflow" },
       { id: "flow-3", label: "Beta Flow", type: "agentflow" },
       { id: "agent-2", label: "Claude Code", type: "agent" },
       { id: "agent-1", label: "General Agent", type: "agent" },
@@ -71,7 +72,7 @@ test("buildChatTargetOptions restricts codex project to codex agent only", () =>
         { id: "agent-1", name: "GeneralAgent", displayName: "General Agent" },
         { id: "agent-2", name: "Codex", displayName: "OpenAI Codex" },
       ],
-      agentflows: [{ id: "flow-1", name: "Team Flow", enable: true }],
+      agentflows: [{ id: "flow-1", name: "Team Flow" }],
     }),
     [{ id: "agent-2", label: "OpenAI Codex", type: "agent" }],
   );

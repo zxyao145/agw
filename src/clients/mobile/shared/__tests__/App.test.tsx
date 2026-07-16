@@ -654,14 +654,12 @@ function createAgwFetchMock({
           id: "project-1",
           name: "Mobile Workspace",
           workspace: "D:\\work\\mobile",
-          enable: true,
           extraSetting: "{}",
         },
         {
           id: "project-2",
           name: "Backend Project Two",
           workspace: "D:\\work\\project-two",
-          enable: true,
           extraSetting: "{}",
         },
       ];
@@ -671,7 +669,6 @@ function createAgwFetchMock({
           id: "default-built-in",
           name: "Default Built In",
           workspace: "D:\\work\\default-built-in",
-          enable: true,
           extraSetting: "{}",
         });
       }
@@ -709,7 +706,6 @@ function createAgwFetchMock({
         {
           id: "agentflow-1",
           name: "Mobile Flow",
-          enable: true,
         },
       ]);
     }

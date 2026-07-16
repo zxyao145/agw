@@ -404,7 +404,6 @@ public class ProjectContextAppServiceTests
         Id = projectId,
         Name = name,
         Type = ProjectType.UserDefined,
-        Enable = true,
         CreateBy = "tester",
         CreateTime = TimeProvider.System.GetUtcNow()
     };

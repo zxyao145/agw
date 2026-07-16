@@ -101,7 +101,6 @@ public class ProjectContextsControllerTests
                 Id = projectId,
                 Name = "Project",
                 Type = ProjectType.UserDefined,
-                Enable = true,
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
@@ -134,7 +133,6 @@ public class ProjectContextsControllerTests
                 Id = projectId,
                 Name = "Project",
                 Type = ProjectType.UserDefined,
-                Enable = true,
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
@@ -167,7 +165,6 @@ public class ProjectContextsControllerTests
                 Id = projectId,
                 Name = "Project",
                 Type = ProjectType.UserDefined,
-                Enable = true,
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
@@ -200,7 +197,6 @@ public class ProjectContextsControllerTests
                 Id = projectId,
                 Name = "Project",
                 Type = ProjectType.UserDefined,
-                Enable = true,
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
@@ -236,7 +232,6 @@ public class ProjectContextsControllerTests
                 Id = projectId,
                 Name = "Project",
                 Type = ProjectType.UserDefined,
-                Enable = true,
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });

@@ -3,7 +3,6 @@ export type AgwProject = {
   name: string;
   description?: string | null;
   workspace?: string | null;
-  enable: boolean;
   extraSetting?: string | null;
 };
 
@@ -16,7 +15,6 @@ export type AgwAgent = {
 export type AgwAgentflow = {
   id: string;
   name: string;
-  enable?: boolean;
 };
 
 export type AgwTargetType = "agent" | "agentflow";

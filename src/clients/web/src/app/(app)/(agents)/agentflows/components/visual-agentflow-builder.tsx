@@ -462,7 +462,6 @@ export function VisualAgentflowBuilder({
   const [pendingFocusNodeId, setPendingFocusNodeId] = React.useState<string | null>(null);
   const [agentflowName, setAgentflowName] = React.useState("");
   const [agentflowDescription, setAgentflowDescription] = React.useState("");
-  const [agentflowEnabled, setAgentflowEnabled] = React.useState(true);
   const [summaryModelProviderId, setSummaryModelProviderId] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
 
@@ -665,7 +664,6 @@ export function VisualAgentflowBuilder({
     if (!editingAgentflow) {
       setAgentflowName("");
       setAgentflowDescription("");
-      setAgentflowEnabled(true);
       setSummaryModelProviderId("");
       setNodes([createInputNode<DagNodeData>()]);
       setEdges([]);
@@ -678,7 +676,6 @@ export function VisualAgentflowBuilder({
 
     setAgentflowName(editingAgentflow.name);
     setAgentflowDescription(editingAgentflow.description || "");
-    setAgentflowEnabled(editingAgentflow.enable);
     setSummaryModelProviderId(editingAgentflow.summaryModelProviderId ?? "");
 
     const loadedNodes = editingAgentflow.nodes.map((node, index) => {
@@ -973,7 +970,6 @@ export function VisualAgentflowBuilder({
     const requestBody: AgentflowSaveRequest = {
       name: agentflowName,
       description: agentflowDescription || null,
-      enable: agentflowEnabled,
       summaryModelProviderId: summaryModelProviderId || null,
       nodes: nodes.map((node) => ({
         nodeId: node.id,
@@ -1013,7 +1009,6 @@ export function VisualAgentflowBuilder({
 
       setAgentflowName("");
       setAgentflowDescription("");
-      setAgentflowEnabled(true);
       setSummaryModelProviderId("");
       setNodes([createInputNode<DagNodeData>()]);
       setEdges([]);
@@ -1029,7 +1024,6 @@ export function VisualAgentflowBuilder({
     }
   }, [
     agentflowDescription,
-    agentflowEnabled,
     agentflowName,
     editingAgentflow,
     edges,
@@ -1078,17 +1072,6 @@ export function VisualAgentflowBuilder({
               onChange={(event) => setAgentflowDescription(event.target.value)}
               placeholder="Optional notes"
               className="min-h-20"
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
-            <Label htmlFor="agentflowEnabled" className="cursor-pointer">
-              Enabled
-            </Label>
-            <Switch
-              id="agentflowEnabled"
-              checked={agentflowEnabled}
-              onCheckedChange={setAgentflowEnabled}
             />
           </div>
         </div>

@@ -14,7 +14,6 @@ public class Project : BaseEntity, IAggregateRoot
     public ProjectType Type { get; set; } = ProjectType.UserDefined;
     public string? Description { get; set; }
     public string? Workspace { get; set; }
-    public bool Enable { get; set; } = true;
 
     public string? ExtraSetting { get; set; }
     public string? Tools { get; set; }

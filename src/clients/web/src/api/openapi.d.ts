@@ -3436,7 +3436,6 @@ export interface components {
       name: string;
       description: null | string;
       systemPrompt: string;
-      enable: boolean;
       /** Format: uuid */
       summaryModelProviderId?: null | string;
       nodes?: components["schemas"]["AgentflowNode"][];
@@ -3451,7 +3450,6 @@ export interface components {
     AgentflowCreateRequest: {
       name: string;
       description: null | string;
-      enable: boolean;
       nodes: components["schemas"]["AgentflowNodeRequest"][];
       edges: components["schemas"]["AgentflowEdgeRequest"][];
       /** Format: uuid */
@@ -3545,7 +3543,6 @@ export interface components {
     AgentflowUpdateRequest: {
       name: string;
       description: null | string;
-      enable: boolean;
       nodes: components["schemas"]["AgentflowNodeRequest"][];
       edges: components["schemas"]["AgentflowEdgeRequest"][];
       /** Format: uuid */
@@ -4593,7 +4590,6 @@ export interface components {
       name: string;
       description: null | string;
       workspace: null | string;
-      enable: boolean;
       extraSetting: null | string;
       tools: null | string;
       mcpToolServerIds?: null | string[];
@@ -4616,7 +4612,6 @@ export interface components {
       type: components["schemas"]["ProjectType"];
       description: null | string;
       workspace: null | string;
-      enable: boolean;
       extraSetting: null | string;
       tools: null | string;
       environmentVariables: {
@@ -4643,7 +4638,6 @@ export interface components {
       name: string;
       description: null | string;
       workspace: null | string;
-      enable: boolean;
       extraSetting: null | string;
       tools: null | string;
       mcpToolServerIds?: null | string[];

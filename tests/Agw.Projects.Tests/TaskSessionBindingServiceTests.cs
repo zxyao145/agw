@@ -38,7 +38,6 @@ public class TaskSessionBindingServiceTests
                 Id = projectId,
                 Name = "Binding Project",
                 Type = ProjectType.UserDefined,
-                Enable = true,
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
@@ -116,7 +115,6 @@ public class TaskSessionBindingServiceTests
                 Id = projectId,
                 Name = "Binding Project",
                 Type = ProjectType.UserDefined,
-                Enable = true,
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
@@ -183,7 +181,6 @@ public class TaskSessionBindingServiceTests
                     Id = projectId,
                     Name = "Binding Project",
                     Type = ProjectType.UserDefined,
-                    Enable = true,
                     CreateBy = "tester",
                     CreateTime = TimeProvider.System.GetUtcNow()
                 });

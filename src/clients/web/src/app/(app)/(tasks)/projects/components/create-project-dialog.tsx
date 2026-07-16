@@ -42,7 +42,6 @@ export function CreateProjectDialog({
   name,
   description,
   workspace,
-  enable,
   extraSetting,
   environmentVariables,
   selectedTools,
@@ -72,7 +71,6 @@ export function CreateProjectDialog({
       name: normalizedName,
       description: description.length ? description : null,
       workspace: resolveCreateProjectWorkspace(normalizedName, workspace),
-      enable,
       extraSetting: normalizeProjectExtraSettings(extraSetting),
       ...capabilities,
     });
@@ -141,7 +139,6 @@ export function CreateProjectDialog({
             name={name}
             description={description}
             workspace={workspace}
-            enable={enable}
             extraSetting={extraSetting}
             extraSettingError={extraSettingError}
             environmentVariables={environmentVariables}

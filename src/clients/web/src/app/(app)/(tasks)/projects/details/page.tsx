@@ -40,7 +40,6 @@ type AgentDto = {
 type AgentflowDto = {
   id: string;
   name: string;
-  enable?: boolean;
 };
 
 function getApiErrorMessage(error: unknown): string {
@@ -198,22 +197,9 @@ export default function ProjectDetailsPage() {
     <div className="space-y-6 w-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-xl font-semibold">
-              {projectQuery.isLoading ? "Loading project..." : (project?.name ?? "Project")}
-            </h1>
-            {project ? (
-              <span
-                className={`rounded-md px-2 py-0.5 text-xs ${
-                  project.enable
-                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {project.enable ? "Enabled" : "Disabled"}
-              </span>
-            ) : null}
-          </div>
+          <h1 className="truncate text-xl font-semibold">
+            {projectQuery.isLoading ? "Loading project..." : (project?.name ?? "Project")}
+          </h1>
           <div className="text-sm text-muted-foreground">
             {project?.description?.trim() || "Read-only conversation history for this project."}
           </div>
@@ -233,11 +219,7 @@ export default function ProjectDetailsPage() {
           <Button variant="outline" size="sm" onClick={() => setDetailsOpen(true)}>
             {DETAILS_BUTTON_LABEL}
           </Button>
-          <Button
-            size="sm"
-            onClick={() => setCreateTaskOpen(true)}
-            disabled={!project || !project.enable}
-          >
+          <Button size="sm" onClick={() => setCreateTaskOpen(true)} disabled={!project}>
             {CREATE_TASK_BUTTON_LABEL}
           </Button>
         </ButtonGroup>

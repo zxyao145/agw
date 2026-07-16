@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Pencil, Trash2, Play, Waypoints } from "lucide-react";
-import type { AgentflowDto, AgentflowSaveRequest } from "@/types/agentflow";
+import type { AgentflowDto } from "@/types/agentflow";
 import { getApiErrorMessage } from "@/api/utils";
 import { formatLocalDateTime } from "@/lib/date-time";
 
@@ -20,9 +20,7 @@ interface AgentflowsTableProps {
   isLoading: boolean;
   isError: boolean;
   error: unknown;
-  updateMutation: UseMutationResult<unknown, Error, { id: string; body: AgentflowSaveRequest }>;
   deleteMutation: UseMutationResult<unknown, Error, string>;
-  onToggleEnabled: (agentflow: AgentflowDto) => void;
   onEdit: (agentflow: AgentflowDto) => void;
   onDelete: (agentflow: AgentflowDto) => void;
   onExecute: (agentflow: AgentflowDto) => void;
@@ -34,9 +32,7 @@ export function AgentflowsTable({
   isLoading,
   isError,
   error,
-  updateMutation,
   deleteMutation,
-  onToggleEnabled,
   onEdit,
   onDelete,
   onExecute,
@@ -70,7 +66,6 @@ export function AgentflowsTable({
             <TableHead>Name</TableHead>
             <TableHead>Description</TableHead>
             <TableHead>Created</TableHead>
-            <TableHead className="text-center">Enabled</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -86,18 +81,6 @@ export function AgentflowsTable({
               <TableCell className="max-w-xs truncate">{agentflow.description || "-"}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {formatLocalDateTime(agentflow.createTime)}
-              </TableCell>
-              <TableCell className="text-center">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={agentflow.enable}
-                    onChange={() => onToggleEnabled(agentflow)}
-                    disabled={updateMutation.isPending}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-                </label>
               </TableCell>
               <TableCell>
                 <div className="flex justify-end">

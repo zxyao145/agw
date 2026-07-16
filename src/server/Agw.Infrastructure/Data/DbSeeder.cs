@@ -46,16 +46,14 @@ public class DbSeeder
             Id = ProjectDefaults.DefaultBuiltInId,
             Name = ProjectDefaults.DefaultBuiltInName,
             Description = "Default built-in project for general task execution.",
-            Type = ProjectType.DefaultBuiltIn,
-            Enable = true
+            Type = ProjectType.DefaultBuiltIn
         },
         new Project
         {
             Id = ProjectDefaults.A2AId,
             Name = ProjectDefaults.A2AName,
             Description = "Built-in project for A2A task execution.",
-            Type = ProjectType.DefaultBuiltIn,
-            Enable = true
+            Type = ProjectType.DefaultBuiltIn
         },
     ];
 
@@ -124,7 +122,6 @@ public class DbSeeder
             //existingProject.Name = definition.Name;
             //existingProject.Type = definition.Type;
             //existingProject.Description = definition.Description;
-            //existingProject.Enable = true;
             //existingProject.UpdateTime = _timeProvider.GetUtcNow();
         }
     }
@@ -142,7 +139,6 @@ public class DbSeeder
             Type = definition.Type,
             Description = definition.Description,
             Workspace = workspace,
-            Enable = true,
             ExtraSetting = definition.ExtraSetting,
             CreateBy = "system",
             CreateTime = now,
@@ -593,7 +589,6 @@ public class DbSeeder
                 4. 取搜索结果中的第一个 POI 作为最终结果。
                 5. 输出 POI 的名称、地址、经纬度（如有）以及与景点的关联。
                 """,
-            Enable = true,
             CreateBy = "system",
             CreateTime = now,
             UpdateBy = "system",

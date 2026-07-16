@@ -39,7 +39,6 @@ public class ProjectsControllerTests
             "Project A",
             "Description",
             "~/project-a",
-            true,
             "{}",
             "[\"read_file\"]",
             [mcpToolServerId],
@@ -71,7 +70,6 @@ public class ProjectsControllerTests
             "Project A",
             "Updated",
             "~/project-a",
-            true,
             "{}",
             "[\"write_file\"]",
             [mcpToolServerId],
@@ -98,7 +96,7 @@ public class ProjectsControllerTests
         project.EnvironmentVariables = new Dictionary<string, string> { ["API_KEY"] = "secret" };
         var service = new CapturingProjectAppService(project);
         var controller = new ProjectsController(service);
-        var request = new ProjectUpdateRequest("Project A", "Updated", "~/project-a", true, "{}");
+        var request = new ProjectUpdateRequest("Project A", "Updated", "~/project-a", "{}");
 
         var result = await controller.UpdateAsync(project.Id, request);
 
@@ -122,7 +120,6 @@ public class ProjectsControllerTests
             "Project A",
             "Updated",
             "~/project-a",
-            true,
             "{}",
             "[]",
             [],
@@ -156,7 +153,6 @@ public class ProjectsControllerTests
         Name = "Project A",
         Type = ProjectType.UserDefined,
         Workspace = "~/project-a",
-        Enable = true,
         EnvironmentVariables = new Dictionary<string, string>(),
         CreateTime = new DateTimeOffset(2026, 7, 13, 1, 0, 0, TimeSpan.Zero)
     };

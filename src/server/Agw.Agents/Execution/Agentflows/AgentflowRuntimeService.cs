@@ -73,7 +73,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     public async Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
-        if (agentflow == null || !agentflow.Enable)
+        if (agentflow == null)
         {
             return null;
         }
@@ -106,7 +106,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IReadOnlyDictionary<string, string>? environmentVariables = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
-        if (agentflow == null || !agentflow.Enable)
+        if (agentflow == null)
         {
             yield break;
         }
@@ -338,7 +338,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         CancellationToken cancellationToken = default)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
-        if (agentflow == null || !agentflow.Enable)
+        if (agentflow == null)
         {
             return null;
         }
@@ -366,7 +366,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IReadOnlyDictionary<string, string>? environmentVariables = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
-        if (agentflow == null || !agentflow.Enable)
+        if (agentflow == null)
         {
             return null;
         }
@@ -391,7 +391,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         string? contextId = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
-        if (agentflow == null || !agentflow.Enable)
+        if (agentflow == null)
         {
             return null;
         }

@@ -112,6 +112,5 @@ test("Built-in Projects cannot open or submit the edit dialog", async () => {
 
   assert.match(pageSource, /if \(project\.type !== 0\) \{\s*return;\s*\}/);
   assert.match(pageSource, /disabled=\{project\.type !== 0\}/);
-  assert.doesNotMatch(pageSource, /Only the enable toggle is available/);
   assert.match(editSource, /editingProject\.type !== 0/);
 });

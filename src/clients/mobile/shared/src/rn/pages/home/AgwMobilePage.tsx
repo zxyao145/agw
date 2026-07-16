@@ -178,9 +178,9 @@ function AgwMobilePage({
           return;
         }
 
-        setProjects(nextProjects.filter((project) => project.enable));
+        setProjects(nextProjects);
         setAgents(nextAgents);
-        setAgentflows(nextAgentflows.filter((agentflow) => agentflow.enable !== false));
+        setAgentflows(nextAgentflows);
       } catch (error) {
         if (!isMounted) {
           return;

@@ -118,7 +118,6 @@ public class ProjectTraceCleanupTests
             Id = projectId,
             Name = $"Project-{projectId:N}",
             Type = ProjectType.UserDefined,
-            Enable = true,
             CreateBy = "tester",
             CreateTime = TimeProvider.System.GetUtcNow(),
         });

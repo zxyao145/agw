@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import mermaid from "mermaid";
 import { toast } from "sonner";
 
-import { apiGet, apiPut, apiDelete } from "@/api/client";
+import { apiDelete, apiGet } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,13 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { VisualAgentflowDialog } from "./components/visual-agentflow-dialog";
-import {
-  AgentDto,
-  AgentflowDto,
-  AgentflowDetailDto,
-  AgentflowSaveRequest,
-  ModelProviderDto,
-} from "@/types/agentflow";
+import { AgentDto, AgentflowDto, AgentflowDetailDto, ModelProviderDto } from "@/types/agentflow";
 import { AgentflowsTable, ExecuteAgentflowDrawer, fetchAgentflowDetails } from "./components";
 import { Copy, X } from "lucide-react";
 import {
@@ -163,22 +157,6 @@ export default function AgentflowsPage() {
     };
   }, [isMermaidLoading, mermaidOpen, normalizedMermaidText]);
 
-  const updateAgentflowMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: string; body: AgentflowSaveRequest }) => {
-      return await apiPut("/api/agentflows/{id}", {
-        params: { path: { id } },
-        body,
-      });
-    },
-    onSuccess: async () => {
-      toast.success("Agentflow updated");
-      await queryClient.invalidateQueries({ queryKey: ["agentflows"] });
-    },
-    onError: (error) => {
-      toast.error(`Update failed: ${error.message}`);
-    },
-  });
-
   const deleteAgentflowMutation = useMutation({
     mutationFn: async (id: string) => {
       return await apiDelete("/api/agentflows/{id}", {
@@ -193,45 +171,6 @@ export default function AgentflowsPage() {
       toast.error(`Delete failed: ${error.message}`);
     },
   });
-
-  const handleToggleEnabled = React.useCallback(
-    async (agentflow: AgentflowDto) => {
-      try {
-        const details = await fetchAgentflowDetails(agentflow.id);
-
-        updateAgentflowMutation.mutate({
-          id: agentflow.id,
-          body: {
-            name: agentflow.name,
-            description: agentflow.description,
-            enable: !agentflow.enable,
-            summaryModelProviderId: agentflow.summaryModelProviderId,
-            nodes: details.nodes.map((node) => ({
-              nodeId: node.nodeId,
-              kind: node.kind,
-              relateId: node.relateId,
-              name: node.name,
-              positionJson: node.positionJson,
-              instructions: node.instructions,
-              configJson: node.configJson,
-            })),
-            edges: details.edges.map((edge) => ({
-              edgeId: edge.edgeId,
-              sourceNodeId: edge.sourceNodeId,
-              targetNodeId: edge.targetNodeId,
-              kind: edge.kind,
-              label: edge.label,
-              conditionJson: edge.conditionJson,
-              configJson: edge.configJson,
-            })),
-          },
-        });
-      } catch {
-        toast.error("Failed to fetch agentflow details");
-      }
-    },
-    [updateAgentflowMutation],
-  );
 
   const handleDelete = React.useCallback(
     (agentflow: AgentflowDto) => {
@@ -438,9 +377,7 @@ export default function AgentflowsPage() {
         isLoading={agentflowsQuery.isLoading}
         isError={agentflowsQuery.isError}
         error={agentflowsQuery.error}
-        updateMutation={updateAgentflowMutation}
         deleteMutation={deleteAgentflowMutation}
-        onToggleEnabled={handleToggleEnabled}
         onEdit={handleEdit}
         onDelete={handleDelete}
         onExecute={handleExecute}

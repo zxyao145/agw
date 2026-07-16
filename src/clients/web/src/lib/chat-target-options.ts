@@ -14,7 +14,6 @@ type ChatAgentTargetSource = {
 type ChatAgentflowTargetSource = {
   id: string;
   name: string;
-  enable?: boolean;
 };
 
 type BuildChatTargetOptionsInput = {
@@ -77,13 +76,11 @@ export function buildChatTargetOptions({
 
   const agentflowOptions = restrictedAgentName
     ? []
-    : agentflows
-        .filter((agentflow) => agentflow.enable ?? true)
-        .map((agentflow) => ({
-          id: agentflow.id,
-          label: agentflow.name,
-          type: "agentflow" as const,
-        }));
+    : agentflows.map((agentflow) => ({
+        id: agentflow.id,
+        label: agentflow.name,
+        type: "agentflow" as const,
+      }));
 
   return [...agentOptions, ...agentflowOptions].sort((left, right) =>
     left.label.localeCompare(right.label),

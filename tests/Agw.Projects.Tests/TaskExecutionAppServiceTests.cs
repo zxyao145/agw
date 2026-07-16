@@ -302,7 +302,6 @@ public class TaskExecutionAppServiceTests
         Id = projectId,
         Name = name,
         Type = ProjectType.UserDefined,
-        Enable = true,
         CreateBy = "tester",
         CreateTime = TimeProvider.System.GetUtcNow()
     };

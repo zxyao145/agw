@@ -38,14 +38,12 @@ export function buildAgwTargetOptions({
 
   const agentflowOptions = restrictedAgentName
     ? []
-    : agentflows
-        .filter((agentflow) => agentflow.enable ?? true)
-        .map((agentflow) => ({
-          agentType: 1 as const,
-          id: agentflow.id,
-          label: agentflow.name,
-          type: "agentflow" as const,
-        }));
+    : agentflows.map((agentflow) => ({
+        agentType: 1 as const,
+        id: agentflow.id,
+        label: agentflow.name,
+        type: "agentflow" as const,
+      }));
 
   return [...agentOptions, ...agentflowOptions].sort((left, right) =>
     left.label.localeCompare(right.label)

@@ -58,7 +58,6 @@ public class TaskAppServiceTests
                 Id = projectId,
                 Name = "Chat Project",
                 Type = ProjectType.UserDefined,
-                Enable = true,
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
@@ -113,7 +112,6 @@ public class TaskAppServiceTests
                 Id = projectId,
                 Name = "Chat Project",
                 Type = ProjectType.UserDefined,
-                Enable = true,
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });

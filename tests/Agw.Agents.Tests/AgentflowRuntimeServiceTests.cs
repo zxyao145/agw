@@ -26,7 +26,7 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task GetMermaidAsync_AgentCreationFails_DisposesAlreadyCreatedAgents()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "creation-failure", Enable = true };
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "creation-failure" };
         var firstAgentId = Guid.NewGuid();
         var secondAgentId = Guid.NewGuid();
         var firstAgent = new TrackingAIAgent();
@@ -91,7 +91,7 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task AgentflowRuntime_ExecuteStreamingAsync_ForwardsSessionEnvironmentVariables()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "environment-flow", Enable = true };
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "environment-flow" };
         var agentId = Guid.NewGuid();
         var nodes = new[]
         {
@@ -165,8 +165,8 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task GetMermaidAsync_NestedWorkflow_DisposesNestedAgents()
     {
-        var innerFlow = new Agentflow { Id = Guid.NewGuid(), Name = "inner", Enable = true };
-        var outerFlow = new Agentflow { Id = Guid.NewGuid(), Name = "outer", Enable = true };
+        var innerFlow = new Agentflow { Id = Guid.NewGuid(), Name = "inner" };
+        var outerFlow = new Agentflow { Id = Guid.NewGuid(), Name = "outer" };
         var agentId = Guid.NewGuid();
         var nodes = new[]
         {
@@ -236,7 +236,7 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task ExecuteStreamingAsync_ApprovalCancellation_DisposesWorkflowAgents()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "cancelled", Enable = true };
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "cancelled" };
         var agentId = Guid.NewGuid();
         var nodes = new[]
         {
@@ -303,7 +303,7 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task ExecuteStreamingAsync_HumanGateApproved_PersistsWaitDurationAndInput()
     {
-        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "approval-flow", Enable = true };
+        var agentflow = new Agentflow { Id = Guid.NewGuid(), Name = "approval-flow" };
         var agentId = Guid.NewGuid();
         var nodes = new[]
         {
@@ -401,7 +401,6 @@ public class AgentflowRuntimeServiceTests
         {
             Id = Guid.NewGuid(),
             Name = "summary-flow",
-            Enable = true,
             SummaryModelProviderId = modelProviderId,
         };
         var nodes = new[]

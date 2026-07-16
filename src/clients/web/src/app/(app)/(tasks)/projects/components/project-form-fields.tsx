@@ -14,7 +14,6 @@ import {
 } from "@/components/definition-capabilities";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -28,8 +27,6 @@ export interface ProjectFormFieldsProps {
   extraSetting: string;
   setExtraSetting: (value: string) => void;
   extraSettingError: string | null;
-  enable: boolean;
-  setEnable: (value: boolean) => void;
   environmentVariables: EnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: EnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
@@ -57,8 +54,6 @@ export function ProjectFormFields({
   extraSetting,
   setExtraSetting,
   extraSettingError,
-  enable,
-  setEnable,
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
@@ -138,11 +133,6 @@ export function ProjectFormFields({
                 Optional JSON settings. Objects, arrays, and scalar values are supported.
               </p>
             )}
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border bg-background/70 px-3 py-3">
-            <Label htmlFor={`${idPrefix}enable`}>Enable</Label>
-            <Switch id={`${idPrefix}enable`} checked={enable} onCheckedChange={setEnable} />
           </div>
         </div>
       </div>

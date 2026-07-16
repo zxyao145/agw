@@ -83,7 +83,6 @@ export default function ProjectsPage() {
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [workspace, setWorkspace] = React.useState("");
-  const [enable, setEnable] = React.useState(true);
   const [extraSetting, setExtraSetting] = React.useState("{\n  \n}");
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedConnectionIds, setSelectedConnectionIds] = React.useState<string[]>([]);
@@ -117,7 +116,6 @@ export default function ProjectsPage() {
       setName("");
       setDescription("");
       setWorkspace("");
-      setEnable(true);
       setExtraSetting("{\n  \n}");
       setSelectedTools([]);
       setSelectedSkillIds([]);
@@ -136,7 +134,6 @@ export default function ProjectsPage() {
   const [editName, setEditName] = React.useState("");
   const [editDescription, setEditDescription] = React.useState("");
   const [editWorkspace, setEditWorkspace] = React.useState("");
-  const [editEnable, setEditEnable] = React.useState(true);
   const [editExtraSetting, setEditExtraSetting] = React.useState("");
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
   const [editSelectedConnectionIds, setEditSelectedConnectionIds] = React.useState<string[]>([]);
@@ -185,7 +182,6 @@ export default function ProjectsPage() {
       setEditName(project.name ?? "");
       setEditDescription(project.description ?? "");
       setEditWorkspace(project.workspace ?? "");
-      setEditEnable(Boolean(project.enable));
       setEditExtraSetting(project.extraSetting ?? "");
       setEditSelectedTools(capabilityState.selectedTools);
       setEditSelectedSkillIds(capabilityState.selectedSkillIds);
@@ -254,8 +250,6 @@ export default function ProjectsPage() {
             setDescription={setDescription}
             workspace={workspace}
             setWorkspace={setWorkspace}
-            enable={enable}
-            setEnable={setEnable}
             extraSetting={extraSetting}
             setExtraSetting={setExtraSetting}
             environmentVariables={environmentVariables}
@@ -297,7 +291,6 @@ export default function ProjectsPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Updated</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -327,17 +320,6 @@ export default function ProjectsPage() {
                         User
                       </span>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={
-                        project.enable
-                          ? "rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300"
-                          : "rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                      }
-                    >
-                      {project.enable ? "Enabled" : "Disabled"}
-                    </span>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {formatLocalDateTime(project.updateTime ?? project.createTime)}
@@ -406,8 +388,6 @@ export default function ProjectsPage() {
         setDescription={setEditDescription}
         workspace={editWorkspace}
         setWorkspace={setEditWorkspace}
-        enable={editEnable}
-        setEnable={setEditEnable}
         extraSetting={editExtraSetting}
         setExtraSetting={setEditExtraSetting}
         environmentVariables={editEnvironmentVariables}

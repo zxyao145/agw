@@ -20,14 +20,12 @@ const agents = [
 
 const agentflows = [
   {
-    id: "flow-enabled",
-    name: "Enabled Flow",
-    enable: true,
+    id: "flow-zeta",
+    name: "Zeta Flow",
   },
   {
-    id: "flow-disabled",
-    name: "Disabled Flow",
-    enable: false,
+    id: "flow-alpha",
+    name: "Alpha Flow",
   },
 ];
 
@@ -66,7 +64,7 @@ describe("buildAgwTargetOptions", () => {
     ]);
   });
 
-  it("returns all agents and enabled agentflows for unrestricted projects", () => {
+  it("returns all agents and agentflows for unrestricted projects", () => {
     expect(
       buildAgwTargetOptions({
         projectId: "project-general",
@@ -74,6 +72,12 @@ describe("buildAgwTargetOptions", () => {
         agentflows,
       })
     ).toEqual([
+      {
+        agentType: 1,
+        id: "flow-alpha",
+        label: "Alpha Flow",
+        type: "agentflow",
+      },
       {
         agentType: 0,
         id: "agent-claude",
@@ -87,16 +91,16 @@ describe("buildAgwTargetOptions", () => {
         type: "agent",
       },
       {
-        agentType: 1,
-        id: "flow-enabled",
-        label: "Enabled Flow",
-        type: "agentflow",
-      },
-      {
         agentType: 0,
         id: "agent-general",
         label: "General Agent",
         type: "agent",
+      },
+      {
+        agentType: 1,
+        id: "flow-zeta",
+        label: "Zeta Flow",
+        type: "agentflow",
       },
     ]);
   });

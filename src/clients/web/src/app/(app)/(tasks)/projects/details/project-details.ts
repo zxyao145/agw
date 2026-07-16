@@ -6,7 +6,6 @@ export type ProjectDetails = {
   description: string | null;
   workspace?: string | null;
   extraSetting?: string | null;
-  enable: boolean;
   createTime?: string | null;
   updateTime?: string | null;
 };

@@ -114,7 +114,6 @@ type ProjectDto = {
   id: string;
   name: string;
   workspace?: string | null;
-  enable: boolean;
 };
 
 type AgentDto = {
@@ -126,7 +125,6 @@ type AgentDto = {
 type AgentflowDto = {
   id: string;
   name: string;
-  enable?: boolean;
 };
 
 const DEFAULT_PROJECT_VALUE = "default-built-in";
@@ -450,10 +448,7 @@ export default function ChatPage() {
     queryFn: async () => (await apiGet("/api/agentflows")) as Array<AgentflowDto>,
   });
 
-  const projects = React.useMemo(
-    () => (projectsQuery.data ?? []).filter((project) => project.enable),
-    [projectsQuery.data],
-  );
+  const projects = projectsQuery.data ?? [];
 
   const targetOptions = React.useMemo<ChatTargetOption[]>(
     () =>
