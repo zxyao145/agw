@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 
 import type { ProviderAuthConfigRequest, ProviderAuthType } from "./types";
 
-const authTypeOptions: ProviderAuthType[] = ["ApiKey", "EnvVariable"];
+const authTypeOptions: ProviderAuthType[] = ["ApiKey"];
 
 interface ProviderAuthConfigEditorProps {
   value: ProviderAuthConfigRequest[];
@@ -67,8 +67,8 @@ export function ProviderAuthConfigEditor({ value, onChange }: ProviderAuthConfig
                   onValueChange={(nextType) =>
                     updateConfig(index, {
                       authType: nextType as ProviderAuthType,
-                      apiKey: nextType === "ApiKey" ? (config.apiKey ?? "") : null,
-                      envKey: nextType === "EnvVariable" ? (config.envKey ?? "") : null,
+                      apiKey: config.apiKey ?? "",
+                      envKey: null,
                     })
                   }
                 >
@@ -96,25 +96,14 @@ export function ProviderAuthConfigEditor({ value, onChange }: ProviderAuthConfig
               </Button>
             </div>
 
-            {config.authType === "ApiKey" ? (
-              <div className="grid gap-2">
-                <Label>API key / bearer token</Label>
-                <Input
-                  value={config.apiKey ?? ""}
-                  onChange={(e) => updateConfig(index, { apiKey: e.target.value })}
-                  placeholder="sk-..."
-                />
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                <Label>Environment variable Name (get api key from this variable)</Label>
-                <Input
-                  value={config.envKey ?? ""}
-                  onChange={(e) => updateConfig(index, { envKey: e.target.value })}
-                  placeholder="OPENAI_API_KEY"
-                />
-              </div>
-            )}
+            <div className="grid gap-2">
+              <Label>API key / bearer token</Label>
+              <Input
+                value={config.apiKey ?? ""}
+                onChange={(e) => updateConfig(index, { apiKey: e.target.value })}
+                placeholder="sk-..."
+              />
+            </div>
 
             <div className="flex items-center gap-2">
               <Switch

@@ -234,7 +234,7 @@ function normalizeAuthConfigs(
 ): ProviderAuthConfigRequest[] {
   return authConfigs.map((config) => ({
     ...config,
-    apiKey: config.authType === "ApiKey" ? config.apiKey?.trim() || null : null,
-    envKey: config.authType === "EnvVariable" ? config.envKey?.trim() || null : null,
+    apiKey: config.apiKey?.trim() || null,
+    envKey: null,
   }));
 }

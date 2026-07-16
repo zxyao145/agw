@@ -10,6 +10,7 @@ import { getApiErrorMessage } from "@/api/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import {
   findDiscoveryApiKey,
@@ -110,18 +111,27 @@ export function ProviderModelsEditor({
             save.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={discoveryDisabled}
-          onClick={() => discoveryMutation.mutate()}
-        >
-          <RefreshCw
-            className={`mr-2 h-4 w-4 ${discoveryMutation.isPending ? "animate-spin" : ""}`}
-          />
-          {discoveryMutation.isPending ? "Fetching..." : "Fetch Models"}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={discoveryDisabled ? 0 : undefined} className="inline-flex">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={discoveryDisabled}
+                onClick={() => discoveryMutation.mutate()}
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${discoveryMutation.isPending ? "animate-spin" : ""}`}
+                />
+                {discoveryMutation.isPending ? "Fetching..." : "Fetch Models"}
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            Only OpenAI APIs are supported, and an ApiKey must be configured before fetching models.
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       {!discoverySupported ? (

@@ -84,20 +84,6 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
 
     private static string ResolveApiKey(ProviderAuthConfig authConfig)
     {
-        if (authConfig.AuthType == ProviderAuthType.ApiKey)
-        {
-            return authConfig.ApiKey!;
-        }
-
-        var environmentVariableName = authConfig.EnvName!;
-        var apiKey = Environment.GetEnvironmentVariable(environmentVariableName);
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            throw new AgwException(
-                ErrorCodes.EnvironmentVariableNotSet,
-                $"Environment variable '{environmentVariableName}' is not set or empty.");
-        }
-
-        return apiKey;
+        return authConfig.ApiKey!;
     }
 }

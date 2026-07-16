@@ -58,7 +58,6 @@ export function ModelsTable({ models, isLoading, isError, error }: ModelsTablePr
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Description</TableHead>
-            <TableHead>Max Tokens</TableHead>
             <TableHead>Created</TableHead>
             <TableHead className="w-24 text-right">Actions</TableHead>
           </TableRow>
@@ -68,7 +67,6 @@ export function ModelsTable({ models, isLoading, isError, error }: ModelsTablePr
             <TableRow key={model.id}>
               <TableCell className="font-medium">{model.name}</TableCell>
               <TableCell className="max-w-xs truncate">{model.description || "-"}</TableCell>
-              <TableCell className="text-right">{model.maxTokens.toLocaleString()}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {formatLocalDateTime(model.createTime)}
               </TableCell>

@@ -22,7 +22,6 @@ test("mergeProviderModelOptions marks only remote-only exact names as new", asyn
 test("findDiscoveryApiKey returns the first enabled non-empty ApiKey", async () => {
   const { findDiscoveryApiKey } = await import("./provider-models" + ".ts");
   const apiKey = findDiscoveryApiKey([
-    { authType: "EnvVariable", apiKey: null, envKey: "OPENAI_API_KEY", enable: true },
     { authType: "ApiKey", apiKey: "  ", envKey: null, enable: true },
     { authType: "ApiKey", apiKey: " first-key ", envKey: null, enable: true },
     { authType: "ApiKey", apiKey: "second-key", envKey: null, enable: true },

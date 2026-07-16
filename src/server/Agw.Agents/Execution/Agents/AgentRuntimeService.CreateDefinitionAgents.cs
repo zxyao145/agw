@@ -195,21 +195,7 @@ public partial class AgentRuntimeService
 
     private string ResolveApiKey(ProviderAuthConfig authConfig)
     {
-        if (authConfig.AuthType == ProviderAuthType.ApiKey)
-        {
-            return authConfig.ApiKey!;
-        }
-
-        var envVariableName = authConfig.EnvName!;
-        var apiKeyFromEnv = Environment.GetEnvironmentVariable(envVariableName);
-        if (string.IsNullOrWhiteSpace(apiKeyFromEnv))
-        {
-            _logger.LogError("Environment variable '{EnvName}' is not set or empty.", envVariableName);
-            throw new AgwException(ErrorCodes.EnvironmentVariableNotSet,
-                $"Environment variable '{envVariableName}' is not set or empty.");
-        }
-
-        return apiKeyFromEnv;
+        return authConfig.ApiKey!;
     }
 
     private static async ValueTask DisposeAgentWithoutThrowingAsync(AIAgent agent)

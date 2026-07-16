@@ -4962,7 +4962,7 @@ export interface components {
       enable: boolean;
     };
     /** @enum {unknown} */
-    ProviderAuthType: "ApiKey" | "EnvVariable";
+    ProviderAuthType: "ApiKey";
     ProviderCreateRequest: {
       name: string;
       providerType: components["schemas"]["ProviderType"];

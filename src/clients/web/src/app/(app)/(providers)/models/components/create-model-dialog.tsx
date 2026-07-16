@@ -19,7 +19,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { ModelCreateRequest } from "./types";
-import { parseIntOrNull } from "./utils";
 import { getApiErrorMessage } from "@/api/utils";
 
 interface CreateModelDialogProps {
@@ -32,7 +31,6 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
 
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
-  const [maxTokens, setMaxTokens] = React.useState("4096");
 
   const createModelMutation = useMutation({
     mutationFn: async (body: ModelCreateRequest) => {
@@ -43,7 +41,6 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
       onOpenChange(false);
       setName("");
       setDescription("");
-      setMaxTokens("4096");
       await queryClient.invalidateQueries({ queryKey: ["models"] });
     },
     onError: (error) => {
@@ -51,9 +48,7 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
     },
   });
 
-  const parsedMaxTokens = parseIntOrNull(maxTokens);
-
-  const createDisabled = !name.trim() || parsedMaxTokens === null || createModelMutation.isPending;
+  const createDisabled = !name.trim() || createModelMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -74,17 +69,6 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="gpt-4o-mini"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="maxTokens">Max tokens (int)</Label>
-            <Input
-              id="maxTokens"
-              inputMode="numeric"
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(e.target.value)}
-              placeholder="4096"
             />
           </div>
 
@@ -113,7 +97,7 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
               createModelMutation.mutate({
                 name,
                 description: description.length ? description : null,
-                maxTokens: parsedMaxTokens ?? 0,
+                maxTokens: 4096,
               })
             }
           >

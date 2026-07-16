@@ -16,6 +16,12 @@ namespace Agw.Projects.Tests;
 public class ProviderAppServiceTests
 {
     [Fact]
+    public void ProviderAuthType_OnlySupportsApiKey()
+    {
+        Assert.Equal([nameof(ProviderAuthType.ApiKey)], Enum.GetNames<ProviderAuthType>());
+    }
+
+    [Fact]
     public async Task CreateAsync_WithModelNames_ReusesExistingAndCreatesMissingModels()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -387,9 +393,9 @@ public class ProviderAppServiceTests
                     AuthConfigs:
                     [
                         new ProviderAuthConfigRequest(
-                            ProviderAuthType.EnvVariable,
-                            ApiKey: null,
-                            EnvKey: "OPENAI_API_KEY",
+                            ProviderAuthType.ApiKey,
+                            ApiKey: "new-key",
+                            EnvKey: null,
                             Enable: true)
                     ]),
                 "tester");
@@ -404,9 +410,9 @@ public class ProviderAppServiceTests
 
         var authConfig = Assert.Single(provider.AuthConfigs);
         Assert.Equal("Updated description", provider.Description);
-        Assert.Equal(ProviderAuthType.EnvVariable, authConfig.AuthType);
-        Assert.Equal("OPENAI_API_KEY", authConfig.EnvName);
-        Assert.Null(authConfig.ApiKey);
+        Assert.Equal(ProviderAuthType.ApiKey, authConfig.AuthType);
+        Assert.Null(authConfig.EnvName);
+        Assert.Equal("new-key", authConfig.ApiKey);
     }
 
     private static ProviderAppService CreateService(AgwDbContext dbContext)
@@ -445,7 +451,7 @@ public class ProviderAppServiceTests
     {
         Id = Guid.NewGuid(),
         Name = name,
-        MaxTokens = 4096,
+        MaxTokens = 256_000,
         CreateBy = "seed",
         CreateTime = TimeProvider.System.GetUtcNow()
     };

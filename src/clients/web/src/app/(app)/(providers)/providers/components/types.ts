@@ -6,7 +6,7 @@ type OpenApiProviderUpdateRequest = components["schemas"]["ProviderUpdateRequest
 
 export type ProviderType = components["schemas"]["ProviderType"];
 
-export type ProviderAuthType = "ApiKey" | "EnvVariable";
+export type ProviderAuthType = "ApiKey";
 
 export type ProviderAuthConfigRequest = {
   authType: ProviderAuthType;

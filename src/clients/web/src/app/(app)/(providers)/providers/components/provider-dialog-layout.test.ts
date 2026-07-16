@@ -6,6 +6,8 @@ const CREATE_DIALOG_URL = new URL("./create-provider-dialog.tsx", import.meta.ur
 const EDIT_DIALOG_URL = new URL("./edit-provider-dialog.tsx", import.meta.url);
 const FORM_FIELDS_URL = new URL("./provider-form-fields.tsx", import.meta.url);
 const MODELS_EDITOR_URL = new URL("./provider-models-editor.tsx", import.meta.url);
+const AUTH_CONFIG_EDITOR_URL = new URL("./provider-auth-config-editor.tsx", import.meta.url);
+const TYPES_URL = new URL("./types.ts", import.meta.url);
 
 test("Create and Edit Provider dialogs use the full-screen shell with header actions", async () => {
   for (const fileUrl of [CREATE_DIALOG_URL, EDIT_DIALOG_URL]) {
@@ -57,4 +59,29 @@ test("Models editor discovers with the current draft and does not select results
   assert.doesNotMatch(source, /setSelectedModelNames\([^)]*result/);
   assert.match(source, /isProviderModelDiscoverySupported\(providerType\)/);
   assert.match(source, /findDiscoveryApiKey\(authConfigs\)/);
+});
+
+test("Models editor explains the provider and ApiKey requirements on the fetch button", async () => {
+  const source = await readFile(MODELS_EDITOR_URL, "utf8");
+
+  assert.match(
+    source,
+    /import \{ Tooltip, TooltipContent, TooltipTrigger \} from "@\/components\/ui\/tooltip"/,
+  );
+  assert.match(source, /<TooltipTrigger asChild>/);
+  assert.match(
+    source,
+    /<TooltipContent[\s\S]*Only OpenAI APIs are supported[\s\S]*ApiKey[\s\S]*<\/TooltipContent>/,
+  );
+});
+
+test("Provider auth config exposes only ApiKey authentication", async () => {
+  const [editorSource, typesSource] = await Promise.all([
+    readFile(AUTH_CONFIG_EDITOR_URL, "utf8"),
+    readFile(TYPES_URL, "utf8"),
+  ]);
+
+  assert.match(typesSource, /export type ProviderAuthType = "ApiKey";/);
+  assert.doesNotMatch(editorSource, /EnvVariable|Environment variable/);
+  assert.match(editorSource, /API key \/ bearer token/);
 });

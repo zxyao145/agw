@@ -45,7 +45,7 @@ public class DbSeederTests
             var model = await context.Models
                 .Include(x => x.Providers)
                 .SingleAsync(x => x.Name == "deepseek-v4-pro", TestContext.Current.CancellationToken);
-            Assert.Equal(4096, model.MaxTokens);
+            Assert.Equal(256_000, model.MaxTokens);
             Assert.Equal(2, model.Providers.Count);
             Assert.All(model.Providers, relation => Assert.Equal(60, relation.RpsLimit));
 

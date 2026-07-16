@@ -9990,8 +9990,7 @@
       },
       "ProviderAuthType": {
         "enum": [
-          "ApiKey",
-          "EnvVariable"
+          "ApiKey"
         ]
       },
       "ProviderCreateRequest": {

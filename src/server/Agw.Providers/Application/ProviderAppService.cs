@@ -149,18 +149,11 @@ public class ProviderAppService : IProviderAppService
 
         return requests.Select(request =>
         {
-            var (apiKey, envKey) = request.AuthType switch
-            {
-                ProviderAuthType.ApiKey => (request.ApiKey, null),
-                ProviderAuthType.EnvVariable => (null, request.EnvKey),
-                _ => (request.ApiKey, request.EnvKey)
-            };
-
             return new ProviderAuthConfig
             {
                 AuthType = request.AuthType,
-                ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
-                EnvName = string.IsNullOrWhiteSpace(envKey) ? null : envKey,
+                ApiKey = string.IsNullOrWhiteSpace(request.ApiKey) ? null : request.ApiKey,
+                EnvName = null,
                 Enable = request.Enable
             };
         }).ToList();

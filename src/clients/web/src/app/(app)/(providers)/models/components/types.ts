@@ -6,7 +6,6 @@ export type ModelDto = {
   id: string;
   name: string;
   description: string | null;
-  maxTokens: number;
   createBy?: string | null;
   createTime?: string | null;
   updateBy?: string | null;

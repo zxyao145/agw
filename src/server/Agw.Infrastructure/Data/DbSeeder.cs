@@ -254,7 +254,7 @@ public class DbSeeder
             {
                 Id = DeepSeekModelId,
                 Name = "deepseek-v4-pro",
-                MaxTokens = 4096,
+                MaxTokens = 256_000,
                 CreateBy = "system",
                 CreateTime = now,
                 UpdateBy = "system",

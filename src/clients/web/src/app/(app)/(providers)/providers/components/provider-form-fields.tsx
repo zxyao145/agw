@@ -121,8 +121,12 @@ export function ProviderFormFields({
         <Tabs defaultValue="auth-configs" className="flex h-full min-h-0 flex-col">
           <div className="shrink-0 border-b px-6 py-3">
             <TabsList className="h-auto">
-              <TabsTrigger value="auth-configs">Auth Configs</TabsTrigger>
-              <TabsTrigger value="models">Models</TabsTrigger>
+              <TabsTrigger className="cursor-pointer" value="auth-configs">
+                Auth Configs
+              </TabsTrigger>
+              <TabsTrigger className="cursor-pointer" value="models">
+                Models
+              </TabsTrigger>
             </TabsList>
           </div>
 
