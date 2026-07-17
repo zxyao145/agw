@@ -1,0 +1,37 @@
+{
+  "name": "@agw/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-platform desktop client for Agw",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "pnpm build && pnpm prepare:renderer && electron .",
+    "lint": "oxlint ./src ./scripts",
+    "fmt": "oxfmt ./src ./scripts *.json *.cjs",
+    "fmt:check": "oxfmt --check ./src ./scripts *.json *.cjs",
+    "test": "tsx --test src/*.test.ts src/**/*.test.ts",
+    "package": "pnpm build && pnpm prepare:resources && electron-forge package",
+    "make": "pnpm build && pnpm prepare:resources && electron-forge make",
+    "release:collect": "node scripts/collect-artifacts.mjs",
+    "prepare:resources": "node scripts/prepare-resources.mjs",
+    "prepare:renderer": "node scripts/prepare-resources.mjs --renderer-only"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "1.0.1"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "7.11.2",
+    "@electron-forge/maker-deb": "7.11.2",
+    "@electron-forge/maker-dmg": "7.11.2",
+    "@electron-forge/maker-squirrel": "7.11.2",
+    "@types/node": "25.5.0",
+    "electron": "43.1.1",
+    "oxfmt": "0.41.0",
+    "oxlint": "1.56.0",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "productName": "Agw Desktop"
+}

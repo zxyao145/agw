@@ -64,3 +64,16 @@ test("waitForExecutionTerminal times out when execution never emits a terminal m
     /Timed out waiting for execution to stop/,
   );
 });
+
+test("buildExecutionHubOptions uses the selected desktop Server and token", async () => {
+  const { buildExecutionHubOptions } = await import("./execution-hub" + ".ts");
+
+  const result = buildExecutionHubOptions({
+    baseUrl: "https://agw.example.test/",
+    token: "agw_remote-token",
+  });
+
+  assert.equal(result.url, "https://agw.example.test/api/hubs/exec");
+  assert.equal(await result.options.accessTokenFactory?.(), "agw_remote-token");
+  assert.equal(result.options.withCredentials, false);
+});

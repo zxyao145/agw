@@ -234,6 +234,25 @@ const CONDITION_KEYS = new Set([
   "minMessages",
 ]);
 
+// connection point style
+const HANDLE_STYLE: React.CSSProperties = {
+  width: 18,
+  height: 18,
+  zIndex: 10,
+  borderWidth: 3,
+  borderColor: "var(--background)",
+};
+
+const HANDLE_IN_STYLE: React.CSSProperties = {
+  ...HANDLE_STYLE,
+  left: "-7px",
+};
+
+const HANDLE_OUT_STYLE: React.CSSProperties = {
+  ...HANDLE_STYLE,
+  right: "-7px",
+};
+
 function DagNode({ id, data, selected }: NodeProps<DagNodeData>) {
   const meta = NODE_META[data.kind];
   const member = data.presentation?.member;
@@ -248,80 +267,84 @@ function DagNode({ id, data, selected }: NodeProps<DagNodeData>) {
   const headerPadding = isInput ? "" : showOpenBlock ? "pr-[4.75rem]" : "pr-9";
 
   return (
-    <Card
-      className={`relative w-[220px] gap-0 overflow-hidden rounded-md border-2 p-0 shadow-sm transition-shadow ${
-        selected
-          ? "border-primary shadow-md"
-          : hasBlockWarning
-            ? "border-amber-400 shadow-amber-100"
-            : "border-border"
-      }`}
-    >
-      {isInput ? null : (
-        <button
-          type="button"
-          title="Delete node"
-          className="nodrag nopan absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded border border-border/70 bg-background/90 text-muted-foreground shadow-sm transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            data.presentation?.onDelete?.(id);
-          }}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      )}
-      {showOpenBlock ? (
-        <button
-          type="button"
-          title="Open block"
-          className="nodrag nopan absolute right-10 top-1.5 z-10 grid h-7 w-7 place-items-center rounded border border-border/70 bg-background/90 text-muted-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            data.presentation?.onOpenBlock?.(id);
-          }}
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-        </button>
-      ) : null}
+    <div className="relative w-[220px]">
       {!isInput && showHandles ? (
         <Handle
           type="target"
           position={Position.Left}
-          className="h-3 w-3 border-2 border-background !bg-sky-600"
+          className="!bg-sky-600"
+          style={HANDLE_IN_STYLE}
         />
       ) : null}
-      <CardHeader className={`px-3 py-2 ${headerPadding} ${meta.tone}`}>
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="grid h-7 w-7 shrink-0 place-items-center rounded border bg-background/80 text-xs font-semibold">
-            {meta.symbol}
-          </div>
-          <div className="min-w-0">
-            <CardTitle className="truncate text-sm">{data.title}</CardTitle>
-            <div className="mt-0.5 text-[10px] uppercase tracking-wide opacity-70">
-              {meta.label}
+      <Card
+        className={`relative w-full gap-0 overflow-hidden rounded-md border-2 p-0 shadow-sm transition-shadow ${
+          selected
+            ? "border-primary shadow-md"
+            : hasBlockWarning
+              ? "border-amber-400 shadow-amber-100"
+              : "border-border"
+        }`}
+      >
+        {isInput ? null : (
+          <button
+            type="button"
+            title="Delete node"
+            className="nodrag nopan absolute right-1.5 top-1.5 z-10 grid h-7 w-7 place-items-center rounded border border-border/70 bg-background/90 text-muted-foreground shadow-sm transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              data.presentation?.onDelete?.(id);
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {showOpenBlock ? (
+          <button
+            type="button"
+            title="Open block"
+            className="nodrag nopan absolute right-10 top-1.5 z-10 grid h-7 w-7 place-items-center rounded border border-border/70 bg-background/90 text-muted-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              data.presentation?.onOpenBlock?.(id);
+            }}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        <CardHeader className={`px-3 py-2 ${headerPadding} ${meta.tone}`}>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="grid h-7 w-7 shrink-0 place-items-center rounded border bg-background/80 text-xs font-semibold">
+              {meta.symbol}
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="truncate text-sm">{data.title}</CardTitle>
+              <div className="mt-0.5 text-[10px] uppercase tracking-wide opacity-70">
+                {meta.label}
+              </div>
             </div>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent className="px-3 py-2 text-xs text-muted-foreground">
-        {isBlock ? (
-          <BlockNodeSummary kind={data.kind} members={members} fallback={meta.body} />
-        ) : member ? (
-          <BlockParticipantSummary member={member} fallback={meta.body} />
-        ) : (
-          meta.body
-        )}
-      </CardContent>
+        </CardHeader>
+        <CardContent className="px-3 py-2 text-xs text-muted-foreground">
+          {isBlock ? (
+            <BlockNodeSummary kind={data.kind} members={members} fallback={meta.body} />
+          ) : member ? (
+            <BlockParticipantSummary member={member} fallback={meta.body} />
+          ) : (
+            meta.body
+          )}
+        </CardContent>
+      </Card>
       {showHandles ? (
         <Handle
           type="source"
           position={Position.Right}
-          className="h-3 w-3 border-2 border-background !bg-emerald-600"
+          className="!bg-emerald-600"
+          style={HANDLE_OUT_STYLE}
         />
       ) : null}
-    </Card>
+    </div>
   );
 }
 

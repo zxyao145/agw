@@ -4,8 +4,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-geist-sans: Arial, Helvetica, sans-serif;
-  --font-geist-mono: "Courier New", Courier, monospace;
+  --font-geist-sans: "Instrument Sans", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-geist-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
 }
 
 @theme inline {
@@ -96,71 +96,71 @@
   --radius-4xl: calc(var(--radius) + 16px);
 
   /* Colors */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
+  --background: #f5f6f8;
+  --foreground: #17191d;
+  --card: #ffffff;
+  --card-foreground: #17191d;
+  --popover: #ffffff;
+  --popover-foreground: #17191d;
+  --primary: #006fee;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f1f3;
+  --secondary-foreground: #17191d;
+  --muted: #f0f1f3;
+  --muted-foreground: #666c77;
+  --accent: #f0f1f3;
+  --accent-foreground: #17191d;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
+  --border: #e4e7ec;
+  --input: #d8dce3;
+  --ring: #006fee;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.705 0.015 286.067);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #17191d;
+  --sidebar-primary: #006fee;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f1f3;
+  --sidebar-accent-foreground: #17191d;
+  --sidebar-border: #e4e7ec;
+  --sidebar-ring: #006fee;
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: #0d0f12;
+  --foreground: #f3f4f6;
+  --card: #121418;
+  --card-foreground: #f3f4f6;
+  --popover: #17191e;
+  --popover-foreground: #f3f4f6;
+  --primary: #338ef7;
+  --primary-foreground: #ffffff;
+  --secondary: #202329;
+  --secondary-foreground: #f3f4f6;
+  --muted: #202329;
+  --muted-foreground: #a0a6b0;
+  --accent: #202329;
+  --accent-foreground: #f3f4f6;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
+  --border: #272a31;
+  --input: #353941;
+  --ring: #338ef7;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.552 0.016 285.938);
+  --sidebar: #121418;
+  --sidebar-foreground: #f3f4f6;
+  --sidebar-primary: #338ef7;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #202329;
+  --sidebar-accent-foreground: #f3f4f6;
+  --sidebar-border: #272a31;
+  --sidebar-ring: #338ef7;
 }
 
 @layer base {
@@ -169,6 +169,207 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Agw Desktop shell — HeroUI V3-inspired semantic surfaces and restrained states. */
+@layer components {
+  .agw-app-shell {
+    @apply flex h-screen min-h-0 w-full flex-col overflow-hidden bg-background text-foreground;
+  }
+
+  .agw-titlebar {
+    -webkit-app-region: drag;
+    @apply flex h-12 min-h-12 select-none items-center gap-2 border-b bg-card/92 px-3 backdrop-blur-xl;
+  }
+
+  .agw-titlebar.platform-darwin {
+    padding-left: 76px;
+  }
+
+  .agw-titlebar.platform-win32,
+  .agw-titlebar.platform-linux {
+    padding-right: 146px;
+  }
+
+  :root[data-agw-desktop="true"][data-agw-platform="darwin"]
+    [data-slot="dialog-content"][data-size="fullscreen"]
+    [data-slot="dialog-header"] {
+    padding-left: 76px;
+  }
+
+  :root[data-agw-desktop="true"][data-agw-platform="win32"]
+    [data-slot="dialog-content"][data-size="fullscreen"]
+    [data-slot="dialog-header"],
+  :root[data-agw-desktop="true"][data-agw-platform="linux"]
+    [data-slot="dialog-content"][data-size="fullscreen"]
+    [data-slot="dialog-header"] {
+    padding-right: 146px;
+  }
+
+  .agw-titlebar-control,
+  .agw-titlebar button,
+  .agw-titlebar a {
+    -webkit-app-region: no-drag;
+  }
+
+  .agw-brand {
+    @apply flex shrink-0 items-center gap-2 whitespace-nowrap px-1.5 text-sm font-semibold;
+  }
+
+  .agw-logo {
+    @apply grid size-6 place-items-center rounded-lg bg-foreground text-[11px] font-semibold text-background;
+  }
+
+  .agw-project-tabs {
+    @apply flex min-w-0 flex-1 items-center gap-1 overflow-hidden;
+  }
+
+  .agw-project-tab {
+    @apply flex h-8 max-w-44 items-center rounded-[9px] border border-transparent text-muted-foreground transition-colors;
+  }
+
+  .agw-project-tab:hover {
+    @apply bg-muted/70 text-foreground;
+  }
+
+  .agw-project-tab.is-active {
+    @apply border-border bg-background text-foreground shadow-xs;
+  }
+
+  .agw-project-tab > a {
+    @apply flex min-w-0 flex-1 items-center gap-2 px-2.5 text-xs font-medium;
+  }
+
+  .agw-project-tab > a > span:nth-child(2) {
+    @apply truncate;
+  }
+
+  .agw-project-tab > button {
+    @apply mr-1 grid size-5 shrink-0 place-items-center rounded-md opacity-45 hover:bg-muted hover:opacity-100;
+  }
+
+  .agw-project-tab > button svg {
+    @apply size-3;
+  }
+
+  .agw-status-dot {
+    @apply size-1.5 shrink-0 rounded-full bg-slate-400;
+  }
+
+  .agw-status-dot.is-running {
+    @apply bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_14%,transparent)];
+  }
+
+  .agw-status-dot.is-waiting-approval {
+    @apply bg-amber-500;
+  }
+
+  .agw-status-dot.is-failed-unread {
+    @apply bg-destructive;
+  }
+
+  .agw-status-dot.is-completed-unread {
+    @apply bg-emerald-500;
+  }
+
+  .agw-titlebar-button {
+    @apply grid size-8 shrink-0 place-items-center rounded-[9px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground;
+  }
+
+  .agw-titlebar-button svg {
+    @apply size-4;
+  }
+
+  .agw-server-pill,
+  .agw-task-button {
+    @apply flex h-8 shrink-0 items-center gap-2 rounded-[10px] border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-muted;
+  }
+
+  .agw-task-button svg {
+    @apply size-3.5 text-muted-foreground;
+  }
+
+  .agw-server-state {
+    @apply size-1.5 rounded-full bg-slate-400;
+  }
+
+  .agw-server-state.is-online {
+    @apply bg-emerald-500 shadow-[0_0_0_3px_color-mix(in_srgb,#10b981_14%,transparent)];
+  }
+
+  .agw-chat-workspace {
+    @apply min-h-0 flex-1 overflow-hidden bg-card px-3 pb-2;
+  }
+
+  .agw-settings-titlebar {
+    @apply gap-3;
+  }
+
+  .agw-back-button {
+    @apply flex h-8 items-center gap-2 rounded-[9px] px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground;
+  }
+
+  .agw-back-button svg {
+    @apply size-4;
+  }
+
+  .agw-titlebar-spacer {
+    @apply flex-1;
+  }
+
+  .agw-settings-workspace {
+    @apply flex min-h-0 flex-1;
+  }
+
+  .agw-settings-nav {
+    @apply w-61 shrink-0 overflow-y-auto border-r bg-card px-2.5 py-4;
+  }
+
+  .agw-settings-nav-heading {
+    @apply mb-4 px-2.5 text-base font-semibold;
+  }
+
+  .agw-settings-nav section {
+    @apply mb-4;
+  }
+
+  .agw-settings-nav h2 {
+    @apply mb-1.5 px-2.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70;
+  }
+
+  .agw-settings-nav section > a {
+    @apply mb-0.5 flex h-8.5 items-center gap-2.5 rounded-lg px-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground;
+  }
+
+  .agw-settings-nav section > a.is-active {
+    @apply bg-muted font-semibold text-foreground;
+  }
+
+  .agw-settings-nav section > a svg {
+    @apply size-4;
+  }
+
+  .agw-settings-main {
+    @apply min-w-0 flex-1 overflow-y-auto px-6 py-4;
+  }
+
+  .agw-settings-main > * {
+    @apply mx-auto;
+  }
+}
+
+@media (max-width: 1080px) {
+  .agw-task-button span {
+    display: none;
+  }
+
+  .agw-settings-nav {
+    width: 210px;
+  }
+
+  .agw-settings-main {
+    padding-inline: 24px;
   }
 }
 

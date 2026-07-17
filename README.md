@@ -80,6 +80,12 @@ Frontend:
 - Tailwind CSS 4
 - Shadcn 4 (Radix UI)
 
+Desktop:
+
+- Electron 43 + Electron Forge
+- Full installers with a current-user Server daemon, or Client-only installers
+- Windows x64, macOS x64/arm64, and Ubuntu x64
+
 ## Usage
 
 Start the backend from the repository root:
@@ -102,6 +108,8 @@ pnpm dev
 After both services are running, open `http://localhost:3000`. The Next.js development server proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30815`.
 
 Production packages embed the static Web UI in ASP.NET Core and serve it from a single server process. See the deployment guide below for details.
+
+Agw Desktop exports the same Web UI into a secure Electron renderer. See [`src/clients/desktop/README.md`](src/clients/desktop/README.md) for its runtime model, package variants, and release workflow.
 
 A typical local workflow is:
 

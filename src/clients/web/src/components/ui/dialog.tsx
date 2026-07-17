@@ -19,6 +19,8 @@ const dialogVariants = cva(
         "2xl": "sm:max-w-[var(--dialog-max-w-2xl)]" /* 896px - Wide content */,
         "3xl": "sm:max-w-[var(--dialog-max-w-3xl)]" /* 1152px - Very wide content */,
         full: "sm:max-w-[calc(100vw-4rem)] sm:max-h-[calc(100vh-4rem)]" /* Full viewport with padding */,
+        fullscreen:
+          "top-0 left-0 flex h-screen max-h-none w-screen max-w-none translate-x-0 translate-y-0 flex-col rounded-none border-0 p-4 sm:max-w-none",
       },
     },
     defaultVariants: {

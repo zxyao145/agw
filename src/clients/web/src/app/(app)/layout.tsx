@@ -4,13 +4,10 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
   Workflow,
   Bot,
-  Package,
   Blocks,
   // Terminal,
-  Server,
   Boxes,
   Cable,
   MessagesSquare,
@@ -18,6 +15,8 @@ import {
   Gauge,
   Settings,
   Box,
+  FolderKanban,
+  Network,
   // Waypoints,
   // Hammer,
 } from "lucide-react";
@@ -30,10 +29,12 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { AppShell } from "@/components/desktop/app-shell";
 import { QueryErrorBoundary } from "@/components/query-error-boundary";
 import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AuthGate } from "@/components/auth-gate";
+import { useDesktopRuntime } from "@/lib/desktop-runtime";
 
 const navItems: SidebarMenuGroupProps[] = [
   {
@@ -66,7 +67,7 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/projects",
         title: "Projects",
         isActive: true,
-        icon: <LayoutDashboard />,
+        icon: <FolderKanban />,
       },
       {
         url: "/jobs",
@@ -96,7 +97,7 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/mcp-tool-servers",
         title: "MCP Tool Servers",
         isActive: true,
-        icon: <Server />,
+        icon: <Network />,
       },
       {
         url: "/skills",
@@ -159,6 +160,7 @@ function getActiveNavLabel(pathname: string): MenuItem | undefined {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const desktop = useDesktopRuntime();
   const activeMenu = getActiveNavLabel(pathname);
   const [sidebarOpen, setSidebarOpen] = React.useState(pathname !== "/chat");
 
@@ -167,6 +169,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setSidebarOpen(false);
     }
   }, [pathname]);
+
+  if (desktop.isDesktop) {
+    return (
+      <AuthGate>
+        <AppShell>
+          <QueryErrorBoundary>{children}</QueryErrorBoundary>
+        </AppShell>
+      </AuthGate>
+    );
+  }
 
   return (
     <AuthGate>

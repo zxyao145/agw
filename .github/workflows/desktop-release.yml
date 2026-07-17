@@ -1,0 +1,124 @@
+name: Desktop Preview Release
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.flavor }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+            arch: x64
+            rid: win-x64
+            flavor: full
+          - platform: windows
+            runner: windows-latest
+            arch: x64
+            rid: win-x64
+            flavor: client
+          - platform: macos
+            runner: macos-15
+            arch: x64
+            rid: osx-x64
+            flavor: full
+          - platform: macos
+            runner: macos-15
+            arch: arm64
+            rid: osx-arm64
+            flavor: full
+          - platform: linux
+            runner: ubuntu-latest
+            arch: x64
+            rid: linux-x64
+            flavor: full
+          - platform: macos
+            runner: macos-15
+            arch: x64
+            rid: osx-x64
+            flavor: client
+          - platform: macos
+            runner: macos-15
+            arch: arm64
+            rid: osx-arm64
+            flavor: client
+          - platform: linux
+            runner: ubuntu-latest
+            arch: x64
+            rid: linux-x64
+            flavor: client
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: src/clients/desktop
+    env:
+      AGW_PACKAGE_FLAVOR: ${{ matrix.flavor }}
+      AGW_TARGET_ARCH: ${{ matrix.arch }}
+      AGW_TARGET_RID: ${{ matrix.rid }}
+      AGW_TARGET_PLATFORM: ${{ matrix.platform == 'macos' && 'darwin' || matrix.platform == 'windows' && 'win32' || 'linux' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            src/clients/web/pnpm-lock.yaml
+            src/clients/desktop/pnpm-lock.yaml
+      - uses: actions/setup-dotnet@v5
+        if: matrix.flavor == 'full'
+        with:
+          dotnet-version: "10.0.x"
+      - name: Install Linux packaging tools
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg
+        working-directory: .
+      - name: Install Web dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: src/clients/web
+      - name: Install Desktop dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test Desktop
+        run: pnpm test
+      - name: Build installer
+        run: pnpm make --arch=${{ matrix.arch }}
+      - name: Collect release artifact
+        run: pnpm release:collect
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agw-${{ matrix.flavor }}-${{ matrix.platform }}-${{ matrix.arch }}
+          path: src/clients/desktop/release-artifacts/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create unsigned Preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${{ github.ref_name }}" artifacts/*
+          --repo "${{ github.repository }}"
+          --title "Agw Desktop ${{ github.ref_name }}"
+          --generate-notes
+          --prerelease

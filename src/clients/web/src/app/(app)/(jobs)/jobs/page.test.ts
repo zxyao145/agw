@@ -80,3 +80,31 @@ test("job request allows the server to generate a blank name", async () => {
   assert.match(source, /name: form\.name\.trim\(\)/);
   assert.doesNotMatch(source, /throw new Error\("Job name is required\."\)/);
 });
+
+test("jobs table changes enabled state only after the Server succeeds", async () => {
+  const source = await readFile(PAGE_URL, "utf8");
+
+  assert.match(
+    source,
+    /<TableHead>Enabled<\/TableHead>[\s\S]{0,120}<TableHead>Status<\/TableHead>/,
+  );
+  assert.match(
+    source,
+    /const \[pendingEnabledJobIds, setPendingEnabledJobIds\] = React\.useState<Set<string>>/,
+  );
+  assert.match(source, /apiPut\(jobEnabledPath,[\s\S]{0,180}body/);
+  assert.match(
+    source,
+    /onSuccess: \(updatedJob\)[\s\S]{0,240}queryClient\.setQueryData<JobDto\[]>\(\["jobs"\]/,
+  );
+  assert.match(source, /onError: \(error\)[\s\S]{0,160}toast\.error\(`Update failed:/);
+  assert.match(
+    source,
+    /onSettled:[\s\S]{0,300}setPendingEnabledJobIds[\s\S]{0,200}delete\(variables\.jobId\)/,
+  );
+  assert.match(
+    source,
+    /<Switch[\s\S]{0,300}checked=\{job\.isEnabled\}[\s\S]{0,300}onCheckedChange=[\s\S]{0,300}disabled=\{pendingEnabledJobIds\.has\(job\.id\)\}/,
+  );
+  assert.doesNotMatch(source, /onMutate:/);
+});

@@ -2,15 +2,46 @@ import type { paths } from "./openapi";
 
 export type ApiMethod = "get" | "post" | "put" | "delete";
 
+export type ApiRuntimeConfig = {
+  baseUrl: string;
+  token: string | null;
+};
+
+const browserApiRuntime: ApiRuntimeConfig = { baseUrl: "", token: null };
+let apiRuntime = browserApiRuntime;
+
 let antiforgeryToken: string | null = null;
 
 export function clearAntiforgeryToken(): void {
   antiforgeryToken = null;
 }
 
+export function configureApiRuntime(config: ApiRuntimeConfig): void {
+  apiRuntime = {
+    baseUrl: config.baseUrl.trim().replace(/\/+$/u, ""),
+    token: config.token,
+  };
+  clearAntiforgeryToken();
+}
+
+export function resetApiRuntime(): void {
+  apiRuntime = browserApiRuntime;
+  clearAntiforgeryToken();
+}
+
+export function getApiRuntime(): ApiRuntimeConfig {
+  return apiRuntime;
+}
+
+function resolveApiUrl(path: string): string {
+  return apiRuntime.baseUrl ? `${apiRuntime.baseUrl}${path}` : path;
+}
+
 async function getAntiforgeryToken(): Promise<string> {
   if (antiforgeryToken) return antiforgeryToken;
-  const response = await fetch("/api/auth/antiforgery", { credentials: "same-origin" });
+  const response = await fetch(resolveApiUrl("/api/auth/antiforgery"), {
+    credentials: apiRuntime.baseUrl ? "omit" : "same-origin",
+  });
   const body = await readResponseBody(response);
   const value = unwrapApiResultEnvelope(body) as { requestToken?: unknown } | undefined;
   if (!response.ok || typeof value?.requestToken !== "string") {
@@ -212,11 +243,15 @@ export async function apiRequest(
   const opts = options ?? {};
 
   const urlWithPath = compilePath(String(path), opts.params?.path);
-  const url = appendQuery(urlWithPath, opts.params?.query);
+  const url = resolveApiUrl(appendQuery(urlWithPath, opts.params?.query));
 
   const headers: HeadersInit = { ...opts.headers };
 
-  if (method !== "get") {
+  if (apiRuntime.token) {
+    (headers as Record<string, string>).Authorization = `Bearer ${apiRuntime.token}`;
+  }
+
+  if (method !== "get" && !apiRuntime.baseUrl) {
     (headers as Record<string, string>)["X-CSRF-TOKEN"] = await getAntiforgeryToken();
   }
 
@@ -224,7 +259,7 @@ export async function apiRequest(
     method: method.toUpperCase(),
     headers,
     signal: opts.signal,
-    credentials: "same-origin",
+    credentials: apiRuntime.baseUrl ? "omit" : "same-origin",
   };
 
   if (opts.body !== undefined) {
@@ -245,7 +280,8 @@ export async function apiRequest(
     if (
       response.status === 401 &&
       typeof window !== "undefined" &&
-      !String(path).startsWith("/api/auth/")
+      !String(path).startsWith("/api/auth/") &&
+      !apiRuntime.baseUrl
     ) {
       const returnUrl = `${window.location.pathname}${window.location.search}`;
       window.location.assign(`/login/?returnUrl=${encodeURIComponent(returnUrl)}`);

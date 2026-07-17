@@ -58,6 +58,17 @@ public class JobSchedulerWakeSignalTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wait);
     }
 
+    [Fact]
+    public async Task NotifyChanged_ReleasesWaiter()
+    {
+        var signal = new JobSchedulerWakeSignal(new TestTimeProvider(UtcNow));
+        var wait = signal.WaitAsync(TestContext.Current.CancellationToken);
+
+        signal.NotifyChanged();
+
+        await wait.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+    }
+
     private static Job CreateJob(
         TriggerType triggerType,
         DateTimeOffset nextRunTime,

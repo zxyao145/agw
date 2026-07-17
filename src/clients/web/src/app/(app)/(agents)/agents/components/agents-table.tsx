@@ -12,13 +12,20 @@ import { formatLocalDateTime } from "@/lib/date-time";
 import type { PagedResult } from "@/lib/pagination";
 
 interface AgentsTableProps {
+  embedded?: boolean;
   agentsQuery: UseQueryResult<PagedResult<AgentDto>, Error>;
   onEdit: (agent: AgentDto) => void;
   onDelete: (agent: AgentDto) => void;
   onExecute: (agent: AgentDto) => void;
 }
 
-export function AgentsTable({ agentsQuery, onEdit, onDelete, onExecute }: AgentsTableProps) {
+export function AgentsTable({
+  embedded = false,
+  agentsQuery,
+  onEdit,
+  onDelete,
+  onExecute,
+}: AgentsTableProps) {
   const agents = agentsQuery.data?.items ?? [];
 
   if (agentsQuery.isLoading) {
@@ -33,7 +40,7 @@ export function AgentsTable({ agentsQuery, onEdit, onDelete, onExecute }: Agents
   }
 
   return (
-    <StaticTable isEmpty={agents.length === 0}>
+    <StaticTable embedded={embedded} isEmpty={agents.length === 0}>
       <Empty>
         <div className="text-sm text-muted-foreground">
           No agents found. Create one to get started.

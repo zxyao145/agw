@@ -6,7 +6,7 @@ import mermaid from "mermaid";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet } from "@/api/client";
-import { TablePagination } from "@/components/table-pagination";
+import { PaginatedTable } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -396,19 +396,7 @@ export default function AgentflowsPage() {
         </div>
       </div>
 
-      <AgentflowsTable
-        agentflows={agentflowsQuery.data?.items || []}
-        isLoading={agentflowsQuery.isLoading}
-        isError={agentflowsQuery.isError}
-        error={agentflowsQuery.error}
-        deleteMutation={deleteAgentflowMutation}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onExecute={handleExecute}
-        onViewMermaid={handleViewMermaid}
-      />
-
-      <TablePagination
+      <PaginatedTable
         pageIndex={pageIndex}
         pageSize={pageSize}
         total={total}
@@ -418,7 +406,20 @@ export default function AgentflowsPage() {
           setPageSize(value);
           setPageIndex(1);
         }}
-      />
+      >
+        <AgentflowsTable
+          embedded
+          agentflows={agentflowsQuery.data?.items || []}
+          isLoading={agentflowsQuery.isLoading}
+          isError={agentflowsQuery.isError}
+          error={agentflowsQuery.error}
+          deleteMutation={deleteAgentflowMutation}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onExecute={handleExecute}
+          onViewMermaid={handleViewMermaid}
+        />
+      </PaginatedTable>
 
       <ExecuteAgentflowDrawer
         open={executeOpen}

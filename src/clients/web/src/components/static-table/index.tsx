@@ -10,9 +10,11 @@ type SlotProps = {
 export function StaticTable({
   isEmpty,
   children,
+  embedded = false,
 }: {
   isEmpty: boolean;
   children: React.ReactNode;
+  embedded?: boolean;
 }) {
   const childrenArray = React.Children.toArray(children) as ReactElement[];
   const empty = childrenArray.find((child) => child.type === Empty);
@@ -40,7 +42,7 @@ export function StaticTable({
   );
 
   return (
-    <div className="rounded-md border">
+    <div className={embedded ? "overflow-hidden" : "overflow-hidden rounded-md border"}>
       <Table className="min-w-240">
         {renderedHeader}
         {body}

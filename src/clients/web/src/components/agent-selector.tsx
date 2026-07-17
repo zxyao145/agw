@@ -40,6 +40,7 @@ export type AgentSelectorProps = {
   onClear?: () => void;
   clearable?: boolean;
   placeholder?: string;
+  size?: "default" | "sm";
 };
 
 export function AgentSelector({
@@ -50,6 +51,7 @@ export function AgentSelector({
   onClear,
   clearable = false,
   placeholder = "Select agent or agentflow",
+  size = "default",
 }: AgentSelectorProps) {
   const agentsQuery = useQuery({
     queryKey: ["agents"],
@@ -107,6 +109,7 @@ export function AgentSelector({
       isLoading={agentsQuery.isLoading || agentflowsQuery.isLoading}
       errorMessage={queryError ? getApiErrorMessage(queryError) : null}
       clearable={clearable}
+      size={size}
     />
   );
 }

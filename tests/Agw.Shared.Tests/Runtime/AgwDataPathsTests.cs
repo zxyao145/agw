@@ -19,6 +19,8 @@ public class AgwDataPathsTests
         Assert.Equal(Path.Combine(paths.Root, "logs"), paths.LogsDirectory);
         Assert.Equal(Path.Combine(paths.Root, "temp"), paths.TempDirectory);
         Assert.Equal(Path.Combine(paths.Root, "keys"), paths.KeysDirectory);
+        Assert.Equal(Path.Combine(paths.Root, "runtime"), paths.RuntimeDirectory);
+        Assert.Equal(Path.Combine(paths.Root, "runtime", "server.json"), paths.ServerRuntimeFile);
     }
 
     [Fact]
@@ -65,6 +67,7 @@ public class AgwDataPathsTests
             Assert.True(Directory.Exists(paths.LogsDirectory));
             Assert.True(Directory.Exists(paths.TempDirectory));
             Assert.True(Directory.Exists(paths.KeysDirectory));
+            Assert.True(Directory.Exists(paths.RuntimeDirectory));
             if (!OperatingSystem.IsWindows())
             {
                 var expected = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;

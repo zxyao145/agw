@@ -34,7 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Eye, Pencil, Trash2 } from "lucide-react";
+import { Eye, MessagesSquare, Pencil, Trash2 } from "lucide-react";
 import { formatLocalDateTime } from "@/lib/date-time";
 
 import { CreateProjectDialog } from "./components/create-project-dialog";
@@ -284,7 +284,7 @@ export default function ProjectsPage() {
       ) : projects.length === 0 ? (
         <div className="text-sm text-muted-foreground">No projects.</div>
       ) : (
-        <div className="rounded-md border">
+        <div className="overflow-hidden rounded-md border">
           <Table>
             <TableHeader className="bg-muted/30">
               <TableRow>
@@ -327,6 +327,17 @@ export default function ProjectsPage() {
                   <TableCell className="text-right">
                     <div className="flex justify-end">
                       <ButtonGroup>
+                        <Button
+                          asChild
+                          variant="ghost"
+                          className="cursor-pointer"
+                          size="icon-sm"
+                          title="Open in chat"
+                        >
+                          <Link href={`/chat/?projectId=${encodeURIComponent(project.id)}`}>
+                            <MessagesSquare className="h-4 w-4" />
+                          </Link>
+                        </Button>
                         <Button
                           asChild
                           variant="ghost"

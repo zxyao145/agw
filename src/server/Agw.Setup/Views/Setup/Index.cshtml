@@ -1,10 +1,13 @@
 @model SetupRequest
 @{
-    ViewData["Title"] = "系统初始化";
+    ViewData["Title"] = "Set up Agw";
 }
 
-<h1>Agw 初始化向导</h1>
-<p>首次运行需要先完成初始化。初始化完成前，所有 API 接口将不可访问。</p>
+<p class="eyebrow">Server foundation</p>
+<h1>Set up your Agw Server</h1>
+<p class="lede">Choose the database and administrator credential for this Server. Desktop will reconnect automatically when setup completes.</p>
+
+<div class="setup-note"><span>●</span><span><b>Stored locally.</b> Configuration, keys, logs, and the default SQLite database live under <code>~/agw</code>.</span></div>
 
 <div asp-validation-summary="ModelOnly" class="error"></div>
 
@@ -12,25 +15,25 @@
     @Html.AntiForgeryToken()
 
     <div class="field">
-        <label asp-for="Provider"></label>
+        <label asp-for="Provider">Database provider</label>
         <select asp-for="Provider">
             <option value="sqlite">SQLite</option>
             <option value="postgres">PostgreSQL</option>
         </select>
-        <div class="hint">后续可扩展更多数据库类型。</div>
+        <div class="hint">SQLite is recommended for a local Desktop installation. Use PostgreSQL for a shared Server.</div>
     </div>
 
     <div class="field">
-        <label asp-for="ConnectionString"></label>
+        <label asp-for="ConnectionString">Connection string</label>
         <input asp-for="ConnectionString" />
-        <div class="hint">示例：SQLite = Data Source=agw.db；PostgreSQL 请填写完整连接字符串。</div>
+        <div class="hint">SQLite example: Data Source=agw.db. PostgreSQL requires a complete connection string.</div>
         <span asp-validation-for="ConnectionString" class="error"></span>
     </div>
 
     <div class="field">
-        <label asp-for="AdminPassword"></label>
-        <input asp-for="AdminPassword" autocomplete="new-password" />
-        <div class="hint">至少 8 个字符。远程访问时使用此密码登录管理界面。</div>
+        <label asp-for="AdminPassword">Administrator password</label>
+        <input asp-for="AdminPassword" type="password" autocomplete="new-password" />
+        <div class="hint">Use at least 8 characters. This password authenticates browser administration sessions.</div>
         <span asp-validation-for="AdminPassword" class="error"></span>
     </div>
 
@@ -39,9 +42,9 @@
         <div class="field">
             <label asp-for="SetupCode"></label>
             <input asp-for="SetupCode" autocomplete="one-time-code" />
-            <div class="hint">输入 Server 启动日志中显示的一次性 Setup Code。</div>
+            <div class="hint">Enter the one-time Setup Code printed in the Server startup log.</div>
         </div>
     }
 
-    <button type="submit" class="button">初始化系统</button>
+    <button type="submit" class="button">Initialize Server</button>
 </form>

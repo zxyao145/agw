@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const COMPONENT_URL = new URL("./searchable-select.tsx", import.meta.url);
+const AGENT_SELECTOR_URL = new URL("../agent-selector.tsx", import.meta.url);
 const POPOVER_URL = new URL("../ui/popover.tsx", import.meta.url);
 
 test("SearchableSelect exposes type-safe single and multiple selection props", async () => {
@@ -48,4 +49,16 @@ test("SearchableSelect keeps its portalled menu scrollable inside modal dialogs"
   const source = await readFile(COMPONENT_URL, "utf8");
 
   assert.match(source, /<Popover modal open=\{open\} onOpenChange=\{handleOpenChange\}>/);
+});
+
+test("AgentSelector forwards the optional Select size to SearchableSelect", async () => {
+  const source = await readFile(COMPONENT_URL, "utf8");
+  const agentSelectorSource = await readFile(AGENT_SELECTOR_URL, "utf8");
+
+  assert.match(source, /size\?: "default" \| "sm"/);
+  assert.match(source, /size = "default"/);
+  assert.match(source, /<Button[\s\S]*size=\{size\}/);
+  assert.match(agentSelectorSource, /size\?: "default" \| "sm"/);
+  assert.match(agentSelectorSource, /size = "default"/);
+  assert.match(agentSelectorSource, /<SearchableSelect[\s\S]*size=\{size\}/);
 });

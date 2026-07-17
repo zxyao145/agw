@@ -8,6 +8,17 @@ import {
 
 import type { AiMessage } from "@/types";
 
+export type ExecutionRuntimeConfig = {
+  baseUrl: string;
+  token: string | null;
+};
+
+let executionRuntime: ExecutionRuntimeConfig = { baseUrl: "", token: null };
+
+export function configureExecutionRuntime(config: ExecutionRuntimeConfig): void {
+  executionRuntime = config;
+}
+
 export type ExecutionUserInput = Pick<AiMessage, "messageId" | "author" | "contents">;
 
 export type ExecutionSetting = {
@@ -42,6 +53,18 @@ export type ExecutionHubHandlers = {
   onError?: (error: Error) => void;
   onClose?: (error?: Error) => void;
 };
+
+export function buildExecutionHubOptions(runtime: ExecutionRuntimeConfig = executionRuntime) {
+  const baseUrl = runtime.baseUrl.replace(/\/+$/u, "");
+  return {
+    url: `${baseUrl}/api/hubs/exec`,
+    options: {
+      transport: HttpTransportType.WebSockets,
+      withCredentials: !baseUrl,
+      ...(runtime.token ? { accessTokenFactory: async () => runtime.token! } : {}),
+    },
+  };
+}
 
 export function buildSettingCommand(setting: ExecutionSetting) {
   return {
@@ -124,13 +147,14 @@ export class ExecutionHubClient {
   private hasActiveTurn = false;
   private readonly turnFinishedWaiters = new Set<() => void>();
 
-  public constructor(handlers: ExecutionHubHandlers) {
+  public constructor(
+    handlers: ExecutionHubHandlers,
+    runtime: ExecutionRuntimeConfig = executionRuntime,
+  ) {
     this.handlers = handlers;
+    const hub = buildExecutionHubOptions(runtime);
     this.connection = new HubConnectionBuilder()
-      .withUrl("/api/hubs/exec", {
-        transport: HttpTransportType.WebSockets,
-        withCredentials: true,
-      })
+      .withUrl(hub.url, hub.options)
       .configureLogging(LogLevel.Warning)
       .build();
 

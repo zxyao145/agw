@@ -46,7 +46,7 @@ for (const pageCase of PAGE_CASES) {
     assert.ok(source.includes(`apiGet("${pageCase.endpoint}"`));
     assert.match(source, /query: \{ pageIndex, pageSize \}/);
     assert.match(source, /placeholderData: keepPreviousData/);
-    assert.match(source, /<TablePagination/);
+    assert.match(source, /<PaginatedTable/);
   });
 
   test(`${pageCase.name} table displays effective update time`, async () => {

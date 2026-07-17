@@ -28,6 +28,11 @@ public sealed class JobSchedulerWakeSignal
         }
     }
 
+    public void NotifyChanged()
+    {
+        _signal.Release();
+    }
+
     public Task WaitAsync(CancellationToken cancellationToken)
     {
         return _signal.WaitAsync(cancellationToken);

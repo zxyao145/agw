@@ -86,7 +86,7 @@ export function TraceTable() {
   };
 
   return (
-    <section className="overflow-hidden rounded-xl border border-stone bg-charcoal">
+    <section className="overflow-hidden rounded-xl border border-stone bg-card">
       <div className="border-b border-stone p-4 sm:p-5">
         <div className="mb-4">
           <h2 className="text-base font-semibold text-light">Execution traces</h2>

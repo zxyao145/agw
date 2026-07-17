@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 
 using Agw.A2A;
 using Agw.A2A.Extensions;
@@ -10,6 +11,7 @@ using Agw.Files;
 using Agw.Files.Api;
 using Agw.Host.Controllers;
 using Agw.Host.Middleware;
+using Agw.Host.Runtime;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
 using Agw.Integrations.Controllers;
@@ -35,6 +37,8 @@ using Bens.Results;
 
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
@@ -52,6 +56,7 @@ using Serilog.Enrichers.OpenTelemetry;
 
 var dataPaths = AgwDataPaths.ResolveFromEnvironment();
 dataPaths.EnsureCreated();
+var contentRootPath = AppContext.BaseDirectory;
 
 if (args.Length == 1 && string.Equals(args[0], "serve", StringComparison.OrdinalIgnoreCase))
 {
@@ -66,13 +71,13 @@ if (await Agw.Host.ServerCommand.TryRunAsync(args, dataPaths))
 if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
     && !string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase))
 {
-    Environment.SetEnvironmentVariable("ASPNETCORE_URLS", "http://127.0.0.1:30815");
+    Environment.SetEnvironmentVariable("ASPNETCORE_URLS", LocalServerEndpointResolver.ResolveDefaultUrl());
 }
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(new ConfigurationBuilder()
-        .SetBasePath(Directory.GetCurrentDirectory())
+        .SetBasePath(contentRootPath)
         .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
         .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true, reloadOnChange: true)
         .Build())
@@ -93,7 +98,11 @@ try
 {
     Log.Information("Starting Agw Host");
 
-    var builder = WebApplication.CreateBuilder(args);
+    var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+    {
+        Args = args,
+        ContentRootPath = contentRootPath,
+    });
 
     builder.Configuration.AddJsonFile(dataPaths.StateFile, optional: true, reloadOnChange: true);
     builder.Services.AddSingleton(dataPaths);
@@ -253,6 +262,19 @@ try
             };
         });
     builder.Services.AddAuthorization();
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("AgwDesktop", policy =>
+        {
+            policy.SetIsOriginAllowed(origin =>
+                LocalTrustedRequest.IsDesktopOrigin(origin)
+                || (builder.Environment.IsDevelopment()
+                    && string.Equals(origin, "http://localhost:3000", StringComparison.OrdinalIgnoreCase)))
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        });
+    });
     builder.Services.AddSignalR(options =>
     {
         options.MaximumReceiveMessageSize = 64 * 1024;
@@ -322,6 +344,7 @@ try
     });
     app.UseMiddleware<ClientClosedRequestMiddleware>();
 
+    app.UseCors("AgwDesktop");
     app.UseMiddleware<InitializationGuardMiddleware>();
     app.UseAuthentication();
     app.UseMiddleware<AgwAuthenticationMiddleware>();
@@ -362,7 +385,39 @@ try
     }
 
     Log.Information("Agw Host configured successfully");
-    app.Run();
+
+    await app.StartAsync();
+    var server = app.Services.GetRequiredService<IServer>();
+    var serverAddresses = server.Features.Get<IServerAddressesFeature>()?.Addresses ?? app.Urls;
+    var serverAddress = serverAddresses
+        .Select(address => Uri.TryCreate(address, UriKind.Absolute, out var uri) ? uri : null)
+        .FirstOrDefault(uri => uri is { Scheme: "http" or "https" })
+        ?? new Uri(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")!.Split(';')[0]);
+    var publicHost = serverAddress.Host is "0.0.0.0" or "[::]" or "::"
+        ? "127.0.0.1"
+        : serverAddress.Host;
+    var publicUrl = new UriBuilder(serverAddress) { Host = publicHost }.Uri.GetLeftPart(UriPartial.Authority);
+    var serverVersion = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
+        ?? "0.0.0-dev";
+    var runtimeStore = new ServerRuntimeDescriptorStore(dataPaths);
+    await runtimeStore.WriteAsync(new ServerRuntimeDescriptor(
+        SchemaVersion: 1,
+        Pid: Environment.ProcessId,
+        BaseUrl: publicUrl,
+        Port: serverAddress.Port,
+        ServerVersion: serverVersion,
+        ApiMajorVersion: 1,
+        StartedAt: app.Services.GetRequiredService<TimeProvider>().GetUtcNow()));
+
+    try
+    {
+        await app.WaitForShutdownAsync();
+    }
+    finally
+    {
+        await runtimeStore.DeleteIfOwnedAsync(Environment.ProcessId);
+    }
 }
 catch (HostAbortedException hae)
 {

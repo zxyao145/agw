@@ -16,6 +16,7 @@ import { getApiErrorMessage } from "@/api/utils";
 import { formatLocalDateTime } from "@/lib/date-time";
 
 interface AgentflowsTableProps {
+  embedded?: boolean;
   agentflows: AgentflowDto[];
   isLoading: boolean;
   isError: boolean;
@@ -28,6 +29,7 @@ interface AgentflowsTableProps {
 }
 
 export function AgentflowsTable({
+  embedded = false,
   agentflows,
   isLoading,
   isError,
@@ -59,7 +61,7 @@ export function AgentflowsTable({
   }
 
   return (
-    <div className="rounded-md border">
+    <div className={embedded ? "overflow-hidden" : "overflow-hidden rounded-md border"}>
       <Table>
         <TableHeader className="bg-muted/30">
           <TableRow>

@@ -26,6 +26,7 @@ type SearchableSelectBaseProps = {
   isLoading?: boolean;
   errorMessage?: string | null;
   clearable?: boolean;
+  size?: "default" | "sm";
 };
 
 type SearchableSelectSingleProps = {
@@ -56,6 +57,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
     isLoading,
     errorMessage,
     clearable = true,
+    size = "default",
   } = props;
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -162,6 +164,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
             id={id}
             type="button"
             variant="outline"
+            size={size}
             className="w-full justify-between gap-2 overflow-hidden font-normal"
             disabled={disabled}
             aria-haspopup="listbox"

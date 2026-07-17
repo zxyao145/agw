@@ -68,3 +68,6 @@
 
 # Shell script
 *.sh text eol=lf
+
+# Extensionless Git hook scripts
+.githooks/pre-commit text eol=lf

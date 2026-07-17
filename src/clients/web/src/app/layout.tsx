@@ -3,6 +3,7 @@ import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { DesktopRuntimeProvider } from "@/lib/desktop-runtime";
 
 import "./globals.css";
 
@@ -27,19 +28,21 @@ export default function RootLayout({
         >
           <TooltipProvider>
             <QueryProvider>
-              {children}
-              <Toaster
-                position="top-center"
-                richColors
-                closeButton
-                style={
-                  {
-                    "--toast-close-button-start": "unset",
-                    "--toast-close-button-end": "0",
-                    "--toast-close-button-transform": "translate(35%, -35%)",
-                  } as React.CSSProperties
-                }
-              />
+              <DesktopRuntimeProvider>
+                {children}
+                <Toaster
+                  position="top-center"
+                  richColors
+                  closeButton
+                  style={
+                    {
+                      "--toast-close-button-start": "unset",
+                      "--toast-close-button-end": "0",
+                      "--toast-close-button-transform": "translate(35%, -35%)",
+                    } as React.CSSProperties
+                  }
+                />
+              </DesktopRuntimeProvider>
             </QueryProvider>
           </TooltipProvider>
         </ThemeProvider>

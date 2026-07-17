@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import { StaticTable } from "@/components/static-table";
-import { TablePagination } from "@/components/table-pagination";
+import { PaginatedTable } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -340,8 +340,18 @@ export default function SkillsPage() {
           Failed to load skills: {getApiErrorMessage(skillsQuery.error)}
         </div>
       ) : (
-        <>
-          <StaticTable isEmpty={skills.length === 0}>
+        <PaginatedTable
+          pageIndex={pageIndex}
+          pageSize={pageSize}
+          total={total}
+          isFetching={skillsQuery.isFetching}
+          onPageIndexChange={setPageIndex}
+          onPageSizeChange={(value) => {
+            setPageSize(value);
+            setPageIndex(1);
+          }}
+        >
+          <StaticTable embedded isEmpty={skills.length === 0}>
             <Empty>
               <div className="text-sm text-muted-foreground">
                 No skills found. Upload a skill archive to get started.
@@ -404,18 +414,7 @@ export default function SkillsPage() {
               ))}
             </TableBody>
           </StaticTable>
-          <TablePagination
-            pageIndex={pageIndex}
-            pageSize={pageSize}
-            total={total}
-            isFetching={skillsQuery.isFetching}
-            onPageIndexChange={setPageIndex}
-            onPageSizeChange={(value) => {
-              setPageSize(value);
-              setPageIndex(1);
-            }}
-          />
-        </>
+        </PaginatedTable>
       )}
 
       <SkillDialog

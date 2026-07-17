@@ -9,6 +9,13 @@ const DATE_TIME_PICKER_URL = new URL(
   import.meta.url,
 );
 
+test("Execution traces uses the shared card surface", async () => {
+  const source = await readFile(TRACE_TABLE_URL, "utf8");
+
+  assert.match(source, /<section className="[^"]*bg-card[^"]*">/);
+  assert.doesNotMatch(source, /bg-charcoal/);
+});
+
 test("date range filters use the shared shadcn date-time picker", async () => {
   const source = await readFile(TRACE_TABLE_URL, "utf8");
 

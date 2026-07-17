@@ -52,9 +52,9 @@ export function VisualAgentflowDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="fixed inset-0 w-screen h-screen max-w-none sm:max-w-none max-h-none m-0 p-4 flex flex-col translate-x-0 translate-y-0 rounded-none border-0"
-        onInteractOutside={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => e.preventDefault()}
+        size="fullscreen"
+        onInteractOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
         showCloseButton={false}
       >
         <DialogHeader className="shrink-0">

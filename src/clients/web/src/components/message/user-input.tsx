@@ -127,7 +127,7 @@ function UserInputRoot({
         </div>
       </div>
       {/* Helper text */}
-      <div className="text-xs text-muted-foreground mt-2 bg-background ">
+      <div className="text-xs text-muted-foreground mt-2">
         {help.length > 0 ? <>{help}</> : "Press Enter for new line • Ctrl/Shift+Enter to send"}
       </div>
     </div>

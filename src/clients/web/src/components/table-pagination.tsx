@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { getPaginationMeta, PAGE_SIZE_OPTIONS } from "@/lib/pagination";
 import {
   Pagination,
@@ -25,7 +27,7 @@ type TablePaginationProps = {
   onPageSizeChange: (pageSize: number) => void;
 };
 
-export function TablePagination({
+function TablePagination({
   pageIndex,
   pageSize,
   total,
@@ -40,7 +42,7 @@ export function TablePagination({
   const pagination = getPaginationMeta(total, pageIndex, pageSize);
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 border-t bg-card px-2 py-1 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
       <span>
         Showing {pagination.start}–{pagination.end} of {total.toLocaleString()}
       </span>
@@ -51,7 +53,11 @@ export function TablePagination({
             value={String(pageSize)}
             onValueChange={(value) => onPageSizeChange(Number(value))}
           >
-            <SelectTrigger size="sm" className="w-20" aria-label="Rows per page">
+            <SelectTrigger
+              size="sm"
+              className="w-18 data-[size=sm]:h-7 rounded"
+              aria-label="Rows per page"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -87,6 +93,18 @@ export function TablePagination({
           </PaginationContent>
         </Pagination>
       </div>
+    </div>
+  );
+}
+
+export function PaginatedTable({
+  children,
+  ...paginationProps
+}: TablePaginationProps & { children: ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-md border bg-card">
+      {children}
+      <TablePagination {...paginationProps} />
     </div>
   );
 }

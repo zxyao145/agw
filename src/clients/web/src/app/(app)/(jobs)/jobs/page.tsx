@@ -97,6 +97,11 @@ type JobRequest = {
   status?: number;
 };
 
+type JobEnabledUpdateRequest = {
+  jobId: string;
+  isEnabled: boolean;
+};
+
 type ProjectDto = {
   id: string;
   name: string;
@@ -114,6 +119,7 @@ type JobDialogProps = {
 };
 
 const jobsPath = "/api/jobs" as never;
+const jobEnabledPath = "/api/jobs/enabled";
 const jobItemPath = "/api/jobs/{id}" as never;
 const jobLogsPath = "/api/jobs/{id}/logs" as never;
 const TRIGGER_TYPE_ONCE = 1;
@@ -324,6 +330,9 @@ export default function JobsPage() {
   const [editingJob, setEditingJob] = React.useState<JobDto | null>(null);
   const [deletingJob, setDeletingJob] = React.useState<JobDto | null>(null);
   const [viewingJob, setViewingJob] = React.useState<JobDto | null>(null);
+  const [pendingEnabledJobIds, setPendingEnabledJobIds] = React.useState<Set<string>>(
+    () => new Set(),
+  );
 
   const jobsQuery = useQuery({
     queryKey: ["jobs"],
@@ -393,6 +402,26 @@ export default function JobsPage() {
     },
   });
 
+  const updateEnabledMutation = useMutation({
+    mutationFn: async (body: JobEnabledUpdateRequest) =>
+      (await apiPut(jobEnabledPath, { body })) as JobDto,
+    onSuccess: (updatedJob) => {
+      queryClient.setQueryData<JobDto[]>(["jobs"], (jobs) =>
+        jobs?.map((job) => (job.id === updatedJob.id ? updatedJob : job)),
+      );
+    },
+    onError: (error) => {
+      toast.error(`Update failed: ${getApiErrorMessage(error)}`);
+    },
+    onSettled: (_data, _error, variables) => {
+      setPendingEnabledJobIds((current) => {
+        const next = new Set(current);
+        next.delete(variables.jobId);
+        return next;
+      });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       return await apiDelete(jobItemPath, {
@@ -430,6 +459,13 @@ export default function JobsPage() {
   const openDeleteDialog = (job: JobDto) => {
     setDeletingJob(job);
     setDeleteOpen(true);
+  };
+
+  const toggleJobEnabled = (job: JobDto, isEnabled: boolean) => {
+    if (pendingEnabledJobIds.has(job.id)) return;
+
+    setPendingEnabledJobIds((current) => new Set(current).add(job.id));
+    updateEnabledMutation.mutate({ jobId: job.id, isEnabled });
   };
 
   const closeCreateDialog = (open: boolean) => {
@@ -529,6 +565,7 @@ export default function JobsPage() {
               <TableHead>Project / Agent</TableHead>
               <TableHead>Trigger</TableHead>
               <TableHead>Next Run</TableHead>
+              <TableHead>Enabled</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-40 text-right">Actions</TableHead>
             </TableRow>
@@ -558,14 +595,22 @@ export default function JobsPage() {
                 <TableCell className="min-w-44 text-sm text-muted-foreground">
                   <div>{formatLocalDateTime(job.nextRunTime)}</div>
                 </TableCell>
+                <TableCell>
+                  <Switch
+                    className="cursor-pointer"
+                    checked={job.isEnabled}
+                    onCheckedChange={(isEnabled) => toggleJobEnabled(job, isEnabled)}
+                    disabled={pendingEnabledJobIds.has(job.id)}
+                    aria-label={`${job.name} enabled`}
+                  />
+                </TableCell>
                 <TableCell className="min-w-52">
                   <div className="flex flex-col items-start gap-2">
                     <Badge variant={getStatusVariant(job.status)}>
                       {getStatusLabel(job.status)}
                     </Badge>
                     <div className="text-xs text-muted-foreground">
-                      {job.isEnabled ? "Enabled" : "Disabled"} · Retry {job.retryCount}/
-                      {job.maxRetryCount}
+                      Retry {job.retryCount}/{job.maxRetryCount}
                     </div>
                     {job.lastError ? (
                       <div className="line-clamp-2 text-xs text-destructive">{job.lastError}</div>

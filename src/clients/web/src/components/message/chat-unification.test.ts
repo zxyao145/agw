@@ -6,7 +6,14 @@ const CHAT_URL = new URL("./chat.tsx", import.meta.url);
 const CHAT_INPUT_URL = new URL("./chat-input.tsx", import.meta.url);
 const SEARCH_FILE_URL = new URL("../../lib/chat/search-file.ts", import.meta.url);
 const EXECUTION_HUB_URL = new URL("../../api/execution-hub.ts", import.meta.url);
-const CHAT_PAGE_URL = new URL("../../app/(app)/(interface)/chat/page.tsx", import.meta.url);
+const EXECUTION_SESSION_MANAGER_URL = new URL(
+  "../../lib/execution-session-manager.ts",
+  import.meta.url,
+);
+const CHAT_WORKSPACE_URL = new URL(
+  "../../app/(app)/(interface)/chat/chat-workspace.tsx",
+  import.meta.url,
+);
 const AGENT_DRAWER_URL = new URL(
   "../../app/(app)/(agents)/agents/components/execute-agent-drawer.tsx",
   import.meta.url,
@@ -18,7 +25,7 @@ const AGENTFLOW_DRAWER_URL = new URL(
 
 test("chat page and execution drawers render the shared Chat container", async () => {
   const [pageSource, agentDrawerSource, agentflowDrawerSource] = await Promise.all([
-    readFile(CHAT_PAGE_URL, "utf8"),
+    readFile(CHAT_WORKSPACE_URL, "utf8"),
     readFile(AGENT_DRAWER_URL, "utf8"),
     readFile(AGENTFLOW_DRAWER_URL, "utf8"),
   ]);
@@ -43,7 +50,7 @@ test("chat page and execution drawers render the shared Chat container", async (
 });
 
 test("chat page keeps the live Chat mounted while the files tab is active", async () => {
-  const pageSource = await readFile(CHAT_PAGE_URL, "utf8");
+  const pageSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
 
   assert.match(
     pageSource,
@@ -51,20 +58,27 @@ test("chat page keeps the live Chat mounted while the files tab is active", asyn
   );
 });
 
-test("shared Chat owns canonical message filtering, grouping, usage, and execution state", async () => {
-  const source = await readFile(CHAT_URL, "utf8");
+test("shared Chat owns canonical message filtering, grouping, usage, and managed execution state", async () => {
+  const [source, managerSource] = await Promise.all([
+    readFile(CHAT_URL, "utf8"),
+    readFile(EXECUTION_SESSION_MANAGER_URL, "utf8"),
+  ]);
 
   assert.match(source, /export interface ChatSessionSeed/);
   assert.match(source, /target: Pick<ChatTargetOption, "id" \| "type"> \| null/);
   assert.match(source, /sessionSeed: ChatSessionSeed/);
-  assert.match(source, /\[interruptAndDispose, sessionSeed\.revision\]/);
+  assert.match(source, /executionSessionManager\.attach/);
+  assert.match(source, /executionClientRef\.current\?\.detach\(\)/);
+  assert.match(source, /\[detachExecution, sessionSeed\.revision\]/);
   assert.match(source, /getClaudeInitCommands\(message\)/);
   assert.match(source, /getMessageTokenUsage\(message\)/);
   assert.match(source, /stripUsageContents\(messages\)/);
   assert.match(source, /<Conversation[\s\S]*?scrollable=\{false\}/);
   assert.doesNotMatch(source, /processMessages=/);
   assert.match(source, /<ChatInput/);
-  assert.match(source, /new ExecutionHubClient/);
+  assert.doesNotMatch(source, /new ExecutionHubClient/);
+  assert.match(managerSource, /new ExecutionHubClient/);
+  assert.match(managerSource, /private readonly entries = new Map/);
 });
 
 test("shared Chat scopes history and merges only the incoming streaming message", async () => {

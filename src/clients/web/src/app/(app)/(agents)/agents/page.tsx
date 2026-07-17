@@ -5,7 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
-import { TablePagination } from "@/components/table-pagination";
+import { PaginatedTable } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@/lib/pagination";
 
@@ -359,14 +359,7 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      <AgentsTable
-        agentsQuery={agentsQuery}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onExecute={handleExecute}
-      />
-
-      <TablePagination
+      <PaginatedTable
         pageIndex={pageIndex}
         pageSize={pageSize}
         total={total}
@@ -376,7 +369,15 @@ export default function AgentsPage() {
           setPageSize(value);
           setPageIndex(1);
         }}
-      />
+      >
+        <AgentsTable
+          embedded
+          agentsQuery={agentsQuery}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onExecute={handleExecute}
+        />
+      </PaginatedTable>
 
       <EditAgentDialog
         open={editOpen}

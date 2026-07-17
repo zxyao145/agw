@@ -6,7 +6,7 @@ import { Link2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
-import { TablePagination } from "@/components/table-pagination";
+import { PaginatedTable } from "@/components/table-pagination";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -360,8 +360,18 @@ export default function McpToolServersPage() {
           Failed to load servers: {getApiErrorMessage(mcpToolServersQuery.error)}
         </div>
       ) : (
-        <>
-          <StaticTable isEmpty={servers.length === 0}>
+        <PaginatedTable
+          pageIndex={pageIndex}
+          pageSize={pageSize}
+          total={total}
+          isFetching={mcpToolServersQuery.isFetching}
+          onPageIndexChange={setPageIndex}
+          onPageSizeChange={(value) => {
+            setPageSize(value);
+            setPageIndex(1);
+          }}
+        >
+          <StaticTable embedded isEmpty={servers.length === 0}>
             <Empty>
               <div className="text-sm text-muted-foreground">
                 No MCP tool servers found. Create one to get started.
@@ -447,18 +457,7 @@ export default function McpToolServersPage() {
               ))}
             </TableBody>
           </StaticTable>
-          <TablePagination
-            pageIndex={pageIndex}
-            pageSize={pageSize}
-            total={total}
-            isFetching={mcpToolServersQuery.isFetching}
-            onPageIndexChange={setPageIndex}
-            onPageSizeChange={(value) => {
-              setPageSize(value);
-              setPageIndex(1);
-            }}
-          />
-        </>
+        </PaginatedTable>
       )}
 
       <McpToolServerDialog

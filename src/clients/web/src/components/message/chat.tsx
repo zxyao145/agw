@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { apiGet } from "@/api/client";
 import {
-  ExecutionHubClient,
   getPendingHumanGate,
   getTurnFinishedStatus,
   type PendingHumanGate,
@@ -40,6 +39,11 @@ import {
 } from "@/lib/token-usage";
 import { createUuidV7 } from "@/lib/uuid";
 import { cn } from "@/lib/utils";
+import { useDesktopRuntime } from "@/lib/desktop-runtime";
+import {
+  executionSessionManager,
+  type ManagedExecutionHandle,
+} from "@/lib/execution-session-manager";
 import type { AiMessage } from "@/types";
 import type { ChatTargetOption } from "@/types/chat-target";
 
@@ -85,8 +89,9 @@ export function Chat({
   onContextIdChange,
   onConversationChange,
   onExecutionError,
-  active = true,
 }: ChatProps) {
+  const desktop = useDesktopRuntime();
+  const executionServerId = desktop.activeProfile?.id ?? "browser";
   const initialHistory = React.useMemo(
     () => prepareChatHistory(sessionSeed.messages),
     [sessionSeed.revision],
@@ -102,7 +107,7 @@ export function Chat({
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
   const conversationScrollRef = React.useRef<HTMLDivElement>(null);
   const userInputRef = React.useRef<UserInputRef | null>(null);
-  const executionClientRef = React.useRef<ExecutionHubClient | null>(null);
+  const executionClientRef = React.useRef<ManagedExecutionHandle | null>(null);
   const configuredSessionRef = React.useRef<string | null>(null);
   const executionGenerationRef = React.useRef(0);
   const pendingTeardownCountRef = React.useRef(0);
@@ -178,20 +183,30 @@ export function Chat({
     }
   }, []);
 
+  const detachExecution = React.useCallback(() => {
+    executionGenerationRef.current += 1;
+    activeStreamingScopeRef.current = null;
+    executionClientRef.current?.detach();
+    executionClientRef.current = null;
+    configuredSessionRef.current = null;
+    setIsExecuting(false);
+    setIsTransitioning(false);
+  }, []);
+
   React.useEffect(() => {
     if (previousTargetKeyRef.current === targetKey) {
       return;
     }
 
     previousTargetKeyRef.current = targetKey;
-    void interruptAndDispose("Execution target changed.");
+    detachExecution();
     setPendingHumanGate(null);
     setClaudeCommands([]);
-  }, [interruptAndDispose, targetKey]);
+  }, [detachExecution, targetKey]);
 
   React.useEffect(() => {
     const preparedHistory = prepareChatHistory(sessionSeed.messages);
-    void interruptAndDispose("Execution session changed.");
+    detachExecution();
     setPendingHumanGate(null);
     autoScrollStateRef.current = {
       shouldAutoScroll: true,
@@ -203,17 +218,13 @@ export function Chat({
     setConversationUsage(sessionSeed.usage);
     setContextId(sessionSeed.contextId);
     userInputRef.current?.setInput("");
-  }, [interruptAndDispose, sessionSeed.revision]);
+  }, [detachExecution, sessionSeed.revision]);
 
   React.useEffect(() => {
-    if (!active) {
-      void interruptAndDispose("Execution drawer closed.");
-    }
-
     return () => {
-      void interruptAndDispose("Chat unmounted.");
+      detachExecution();
     };
-  }, [active, interruptAndDispose]);
+  }, [detachExecution]);
 
   React.useEffect(() => {
     const scrollContainer = conversationScrollRef.current;
@@ -284,6 +295,39 @@ export function Chat({
     [notifyExecutionError, onConversationChange],
   );
 
+  React.useEffect(() => {
+    if (!projectId || !contextId) return;
+    if (executionClientRef.current) return;
+    const key = { serverId: executionServerId, projectId, contextId };
+    if (!executionSessionManager.has(key)) return;
+
+    const generation = executionGenerationRef.current;
+    let client: ManagedExecutionHandle;
+    client = executionSessionManager.attach(key, {
+      onMessage: (message) => applyExecutionMessage(message, generation),
+      onClose: (error) => {
+        if (
+          generation !== executionGenerationRef.current ||
+          executionClientRef.current !== client
+        ) {
+          return;
+        }
+        executionClientRef.current = null;
+        configuredSessionRef.current = null;
+        setIsExecuting(false);
+        setPendingHumanGate(null);
+        if (error) notifyExecutionError(error);
+      },
+    });
+    executionClientRef.current = client;
+    setIsExecuting(["running", "waiting-approval", "detached"].includes(client.getStatus()));
+
+    return () => {
+      if (executionClientRef.current === client) executionClientRef.current = null;
+      client.detach();
+    };
+  }, [applyExecutionMessage, contextId, executionServerId, notifyExecutionError, projectId]);
+
   const handleExecute = React.useCallback(
     async (value: string) => {
       if (isTransitioning) {
@@ -338,7 +382,7 @@ export function Chat({
       };
 
       try {
-        let client = executionClientRef.current;
+        let client: ManagedExecutionHandle;
         const handlers = {
           onMessage: (message: AiMessage) => applyExecutionMessage(message, generation),
           onClose: (error?: Error) => {
@@ -358,12 +402,11 @@ export function Chat({
             }
           },
         };
-        if (!client) {
-          client = new ExecutionHubClient(handlers);
-          executionClientRef.current = client;
-        } else {
-          client.setHandlers(handlers);
-        }
+        client = executionSessionManager.attach(
+          { serverId: executionServerId, projectId, contextId: nextId },
+          handlers,
+        );
+        executionClientRef.current = client;
 
         const configurationKey = JSON.stringify({
           projectId,
@@ -417,6 +460,7 @@ export function Chat({
       applyExecutionMessage,
       contextId,
       environmentVariables,
+      executionServerId,
       isTransitioning,
       notifyExecutionError,
       onContextIdChange,

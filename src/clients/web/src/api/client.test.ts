@@ -15,7 +15,7 @@ test("apiGet unwraps Bens.Results data envelopes", async (t) => {
 });
 
 test("apiPost obtains and attaches an antiforgery token", async (t) => {
-  const { apiPost, clearAntiforgeryToken } = await import("./client" + ".ts");
+  const { apiPost, clearAntiforgeryToken, resetApiRuntime } = await import("./client" + ".ts");
   const originalFetch = globalThis.fetch;
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   clearAntiforgeryToken();
@@ -38,6 +38,7 @@ test("apiPost obtains and attaches an antiforgery token", async (t) => {
   t.after(() => {
     globalThis.fetch = originalFetch;
     clearAntiforgeryToken();
+    resetApiRuntime();
   });
 
   await apiPost("/api/agents" as never, { body: {} } as never);
@@ -52,4 +53,31 @@ test("apiPost obtains and attaches an antiforgery token", async (t) => {
   clearAntiforgeryToken();
   await apiPost("/api/agents" as never, { body: {} } as never);
   assert.equal(requests[2]?.url, "/api/auth/antiforgery");
+});
+
+test("desktop API runtime uses an absolute Server URL and Bearer token without antiforgery", async (t) => {
+  const { apiPost, configureApiRuntime, resetApiRuntime } = await import("./client" + ".ts");
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  configureApiRuntime({ baseUrl: "http://127.0.0.1:30815", token: "agw_desktop-token" });
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    return new Response(JSON.stringify({ code: 0, title: "OK" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    resetApiRuntime();
+  });
+
+  await apiPost("/api/agents" as never, { body: {} } as never);
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.url, "http://127.0.0.1:30815/api/agents");
+  const headers = requests[0]?.init?.headers as Record<string, string> | undefined;
+  assert.equal(headers?.Authorization, "Bearer agw_desktop-token");
+  assert.equal(headers?.["X-CSRF-TOKEN"], undefined);
+  assert.equal(requests[0]?.init?.credentials, "omit");
 });
