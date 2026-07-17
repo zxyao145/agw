@@ -1,3 +1,4 @@
+```plain
 clients/
 ├── web/                            # Next.js
 │   └── src/
@@ -82,3 +83,5 @@ clients/
 ├── pnpm-workspace.yaml
 ├── turbo.json
 └── tsconfig.json
+
+```
