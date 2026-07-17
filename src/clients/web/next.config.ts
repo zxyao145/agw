@@ -30,7 +30,7 @@
 
 // export default nextConfig;
 
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import type { Server } from "node:http";
 import {
   createServer,
@@ -50,6 +50,8 @@ const backendBaseUrl =
 
 const outputMode = process.env.NEXT_OUTPUT_MODE;
 const isStaticExport = outputMode === "export";
+const webRoot = dirname(require.resolve("./package.json"));
+const clientsRoot = resolve(webRoot, "..");
 const codeInspectorOutput = dirname(require.resolve("code-inspector-plugin"));
 const codeInspectorOptions = {
   bundler: "turbopack",
@@ -61,6 +63,8 @@ type CodeInspectorState = {
   port?: number;
   starting?: Promise<number>;
 };
+
+type TurbopackRules = NonNullable<NonNullable<NextConfig["turbopack"]>["rules"]>;
 
 const globalForCodeInspector = globalThis as typeof globalThis & {
   __agwCodeInspector?: CodeInspectorState;
@@ -121,7 +125,10 @@ async function ensureCodeInspectorServer(): Promise<void> {
 }
 
 export default async function getNextConfig(phase: string): Promise<NextConfig> {
-  const inspectorRules = codeInspectorPlugin(codeInspectorOptions);
+  const generatedInspectorRules = codeInspectorPlugin(codeInspectorOptions) as TurbopackRules;
+  const inspectorRules = Object.fromEntries(
+    Object.entries(generatedInspectorRules).map(([pattern, rule]) => [`web/src/${pattern}`, rule]),
+  ) as TurbopackRules;
 
   if (phase === PHASE_DEVELOPMENT_SERVER) {
     await ensureCodeInspectorServer();
@@ -131,6 +138,7 @@ export default async function getNextConfig(phase: string): Promise<NextConfig> 
     output: outputMode === "export" || outputMode === "standalone" ? outputMode : undefined,
     trailingSlash: isStaticExport,
     turbopack: {
+      root: clientsRoot,
       rules: inspectorRules,
     },
   };

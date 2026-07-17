@@ -3,7 +3,7 @@
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { useDesktopRuntime } from "@/lib/desktop-runtime";
+import { useDesktopRuntime } from "@/features/desktop";
 import { getChatRouteRedirect } from "@/lib/chat-route";
 
 export function ChatRouteBoundary({ children }: { children: React.ReactNode }) {

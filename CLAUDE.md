@@ -52,13 +52,21 @@ A typical backend flow is:
 Controller → AppService / RuntimeService → DomainService → IRepository / IUnitOfWork → EF Core
 ```
 
+### Client Workspace (`src/clients/`)
+
+`@agw/web`, `@agw/desktop`, and `@agw/desktop-contracts` share a pnpm Workspace and use Turborepo for task orchestration. Run pnpm commands for these packages from `src/clients/`; one `pnpm install` installs the whole workspace. The Expo mobile app remains a separate npm workspace.
+
 ### Web Client (`src/clients/web/`)
 
 The web client uses Next.js 16 App Router, React 19, Tailwind CSS 4, Radix UI/Shadcn components, React Query, and generated `openapi-fetch` types.
 
-Routes live under `src/app/(app)/`, typed API helpers under `src/api/`, shared UI under `src/components/`, and shared hooks, utilities, and types under `src/hooks/`, `src/lib/`, and `src/types/`.
+Routes live under `src/app/(app)/`, typed API helpers under `src/api/`, Desktop renderer integration under `src/features/desktop/`, shared UI under `src/components/`, and shared hooks, utilities, and types under `src/hooks/`, `src/lib/`, and `src/types/`.
 
 `src/clients/web/next.config.ts` proxies `/api/*` and `/openapi/*` to the backend unless `NEXT_OUTPUT_MODE=export`.
+
+### Desktop Client (`src/clients/desktop/`)
+
+The Electron main and preload entry points are `src/main/index.ts` and `src/preload/index.ts`. The Next.js Web application remains the Desktop renderer; both applications consume the framework-free bridge, runtime, settings, server-profile, and execution contracts from `src/clients/packages/desktop-contracts/`.
 
 ### Mobile Client (`src/clients/mobile/`)
 
@@ -122,27 +130,34 @@ dotnet ef database update \
   -s src/server/Agw.Host
 ```
 
-### Frontend
+### Web and Desktop Clients
 
-Run from `src/clients/web/`:
+Run pnpm commands from `src/clients/`. The single install covers `@agw/web`, `@agw/desktop`, and `@agw/desktop-contracts`:
 
 ```bash
 pnpm install
-pnpm dev
+pnpm dev:web
 pnpm build
-pnpm start
 pnpm lint
-pnpm lint:fix
+pnpm test
 pnpm format
 pnpm format:check
-pnpm gen:openapi
+pnpm gen:api
 ```
 
-The Next.js development server listens on `http://localhost:3000`. Linting and formatting use `oxlint` and `oxfmt`, not ESLint or Prettier.
+For live Desktop renderer development, run `pnpm dev:web` in one terminal, wait for Next.js to be ready, then run `pnpm dev:desktop` in a second terminal. The Next.js development server listens on `http://localhost:3000`. Linting and formatting use `oxlint` and `oxfmt`, not ESLint or Prettier. Turborepo uses its local task cache only; remote caching is disabled.
+
+Use root scripts where available, or run a package-specific Web task with `pnpm exec turbo run <task> --filter=@agw/web`. Package Desktop installers from `src/clients/` with:
+
+```bash
+AGW_PACKAGE_FLAVOR=client pnpm make:desktop
+AGW_PACKAGE_FLAVOR=full pnpm make:desktop
+pnpm make:desktop -- --arch=x64
+```
 
 The frontend proxy target is resolved in this order: `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:30815`.
 
-Regenerate `src/clients/web/src/api/openapi.d.ts` after backend contract changes.
+Regenerate `src/clients/web/src/api/openapi.d.ts` with `pnpm gen:api` after backend contract changes.
 
 After the first clone, configure hooks with `git config core.hooksPath .githooks`. Backend tests use xUnit; mirror production namespaces and prefer names such as `Method_Condition_ExpectedResult`.
 
@@ -195,6 +210,7 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 - Use `src/clients/web/src/api/task-client.ts` for project task, context, and history helpers.
 - Use `src/clients/web/src/api/execution-hub.ts` for SignalR execution flows.
 - Use `src/clients/web/src/api/files.ts` for backend file-management endpoints used by the UI.
+- Keep Electron renderer integration in `src/clients/web/src/features/desktop/` and shared cross-process data shapes in `@agw/desktop-contracts`; do not duplicate bridge or runtime contracts in either application.
 - Keep route-specific UI inside the matching `src/app/(app)/...` segment and shared UI in `src/components/`.
 
 ## Coding Conventions

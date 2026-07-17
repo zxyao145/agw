@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const PICKER_URL = new URL("./desktop-project-picker.tsx", import.meta.url);
+const PICKER_URL = new URL("./project-picker.tsx", import.meta.url);
 
 test("Desktop Project picker is searchable and exposes explicit query states", async () => {
   const source = await readFile(PICKER_URL, "utf8");

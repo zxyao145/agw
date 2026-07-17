@@ -1,16 +1,11 @@
-export type ExecutionSessionKey = {
-  serverId: string;
-  projectId: string;
-  contextId: string;
-};
+import {
+  aggregateExecutionStatus,
+  type ExecutionKeyParts,
+  type ExecutionStatus,
+} from "@agw/desktop-contracts";
 
-export type ExecutionStatus =
-  | "idle"
-  | "running"
-  | "waiting-approval"
-  | "completed-unread"
-  | "failed-unread"
-  | "detached";
+export type ExecutionSessionKey = ExecutionKeyParts;
+export type { ExecutionStatus } from "@agw/desktop-contracts";
 
 type Activity = {
   key: ExecutionSessionKey;
@@ -19,24 +14,8 @@ type Activity = {
   status: ExecutionStatus;
 };
 
-const STATUS_PRIORITY: Record<ExecutionStatus, number> = {
-  idle: 0,
-  "completed-unread": 1,
-  detached: 2,
-  running: 3,
-  "failed-unread": 4,
-  "waiting-approval": 5,
-};
-
 export function getExecutionSessionKey(key: ExecutionSessionKey): string {
   return JSON.stringify([key.serverId, key.projectId, key.contextId]);
-}
-
-export function aggregateExecutionStatus(statuses: ExecutionStatus[]): ExecutionStatus {
-  return statuses.reduce<ExecutionStatus>(
-    (current, status) => (STATUS_PRIORITY[status] > STATUS_PRIORITY[current] ? status : current),
-    "idle",
-  );
 }
 
 export class ExecutionActivityStore {

@@ -59,7 +59,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
-        working-directory: src/clients/desktop
+        working-directory: src/clients
     env:
       AGW_PACKAGE_FLAVOR: ${{ matrix.flavor }}
       AGW_TARGET_ARCH: ${{ matrix.arch }}
@@ -74,9 +74,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: |
-            src/clients/web/pnpm-lock.yaml
-            src/clients/desktop/pnpm-lock.yaml
+          cache-dependency-path: src/clients/pnpm-lock.yaml
       - uses: actions/setup-dotnet@v5
         if: matrix.flavor == 'full'
         with:
@@ -87,17 +85,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fakeroot dpkg
         working-directory: .
-      - name: Install Web dependencies
-        run: pnpm install --frozen-lockfile
-        working-directory: src/clients/web
-      - name: Install Desktop dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Test Desktop
-        run: pnpm test
+        run: pnpm exec turbo run test --filter=@agw/desktop
       - name: Build installer
-        run: pnpm make --arch=${{ matrix.arch }}
+        run: pnpm exec turbo run make --filter=@agw/desktop -- --arch=${{ matrix.arch }}
       - name: Collect release artifact
-        run: pnpm release:collect
+        run: pnpm exec turbo run release:collect --filter=@agw/desktop
       - uses: actions/upload-artifact@v4
         with:
           name: agw-${{ matrix.flavor }}-${{ matrix.platform }}-${{ matrix.arch }}

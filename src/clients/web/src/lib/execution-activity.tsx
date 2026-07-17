@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { useDesktopRuntime } from "@/lib/desktop-runtime";
+import { useDesktopRuntime } from "@/features/desktop/runtime-provider";
 import { executionSessionManager, type ExecutionStatus } from "@/lib/execution-session-manager";
 
 export function useExecutionActivity() {

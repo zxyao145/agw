@@ -21,10 +21,6 @@ const STATUS_PRIORITY: Record<ExecutionStatus, number> = {
   "waiting-approval": 5,
 };
 
-export function getExecutionKey(parts: ExecutionKeyParts): string {
-  return `${parts.serverId}:${parts.projectId}:${parts.contextId}`;
-}
-
 export function aggregateExecutionStatus(statuses: ExecutionStatus[]): ExecutionStatus {
   return statuses.reduce<ExecutionStatus>(
     (current, status) => (STATUS_PRIORITY[status] > STATUS_PRIORITY[current] ? status : current),

@@ -1,0 +1,8 @@
+node_modules/
+.turbo/
+
+!packages/
+!packages/*/
+packages/*/node_modules/
+packages/*/.turbo/
+packages/*/dist/

@@ -1,8 +1,7 @@
 {
-  "name": "web",
+  "name": "@agw/web",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@11.7.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -17,6 +16,7 @@
     "gen:api": "openapi-typescript ./openapi.json -o src/api/openapi.d.ts"
   },
   "dependencies": {
+    "@agw/desktop-contracts": "workspace:*",
     "@chenglou/pretext": "^0.0.5",
     "@microsoft/signalr": "10.0.0",
     "@monaco-editor/react": "^4.7.0",

@@ -1,14 +1,5 @@
-import type { DesktopSettings, PackageFlavor } from "./settings-store";
-import type { LocalServerRuntime } from "./local-server-runtime";
-
-export type DesktopRuntimeState = {
-  isDesktop: true;
-  platform: NodeJS.Platform;
-  packageFlavor: PackageFlavor;
-  settings: DesktopSettings;
-  activeToken: string | null;
-  localServerRuntime: LocalServerRuntime | null;
-};
+import type { DesktopRuntimeState } from "./runtime";
+import type { DesktopSettings } from "./settings";
 
 export type UninstallRequest = {
   deleteServerData: boolean;

@@ -21,18 +21,19 @@ import {
 } from "electron";
 import started from "electron-squirrel-startup";
 
-import type { DesktopRuntimeState, UninstallRequest, UninstallResult } from "./desktop-contract";
+import type {
+  DesktopRuntimeState,
+  DesktopSettings,
+  PackageFlavor,
+  UninstallRequest,
+  UninstallResult,
+} from "@agw/desktop-contracts";
 import { DaemonManager } from "./daemon/daemon-manager";
-import { createLocalDesktopToken } from "./local-token";
-import { readLocalServerRuntime } from "./local-server-runtime";
 import { resolveRendererFile } from "./renderer-path";
-import { resolveServerExecutablePath } from "./server-executable-path";
-import {
-  DesktopSettingsStore,
-  type DesktopSettings,
-  type PackageFlavor,
-  type SecretCodec,
-} from "./settings-store";
+import { createLocalDesktopToken } from "./runtime/local-token";
+import { readLocalServerRuntime } from "./runtime/local-server-runtime";
+import { resolveServerExecutablePath } from "./runtime/server-executable-path";
+import { DesktopSettingsStore, type SecretCodec } from "./settings/settings-store";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -91,13 +92,13 @@ function serverExecutablePath(): string {
 function rendererRoot(): string {
   return app.isPackaged
     ? join(process.resourcesPath, "renderer")
-    : resolve(__dirname, "..", "resources", "renderer");
+    : resolve(__dirname, "..", "..", "resources", "renderer");
 }
 
 function trayIconPath(): string {
   return app.isPackaged
     ? join(process.resourcesPath, "assets", "tray-icon.svg")
-    : resolve(__dirname, "..", "assets", "tray-icon.svg");
+    : resolve(__dirname, "..", "..", "assets", "tray-icon.svg");
 }
 
 function isTrustedRenderer(url: string): boolean {
@@ -164,7 +165,7 @@ function createMainWindow(): BrowserWindow {
     trafficLightPosition: process.platform === "darwin" ? { x: 18, y: 18 } : undefined,
     backgroundColor: "#0b0c0f",
     webPreferences: {
-      preload: join(__dirname, "preload.js"),
+      preload: resolve(__dirname, "..", "preload", "index.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

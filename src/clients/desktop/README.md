@@ -2,6 +2,8 @@
 
 Agw Desktop is the cross-platform Electron shell for the exported Agw Web client. Chat is the only primary workspace; Projects and the remaining administration routes live in Settings.
 
+The Electron entry points are `src/main/index.ts` and `src/preload/index.ts`; the renderer remains the Next.js application in `../web`. Both applications consume bridge, runtime, settings, server-profile, and execution contracts from the workspace package `@agw/desktop-contracts` in `../packages/desktop-contracts`.
+
 ## Runtime model
 
 - The default profile connects to `http://127.0.0.1:30815`.
@@ -14,39 +16,47 @@ Every `server + project + conversation` has an independent SignalR connection. S
 
 ## Develop
 
-Install both client dependency sets:
+Install all client workspace dependencies once from the pnpm Workspace root:
 
 ```bash
-cd src/clients/web && pnpm install
-cd ../desktop && pnpm install
+cd src/clients
+pnpm install
 ```
 
-Run the Web renderer and Desktop shell:
+Run the Web renderer in terminal 1:
 
 ```bash
-cd src/clients/web
-pnpm dev
-
-cd ../desktop
-AGW_RENDERER_URL=http://localhost:3000 pnpm dev
+cd src/clients
+pnpm dev:web
 ```
 
-Useful checks from `src/clients/desktop`:
+After Next.js is ready, run the Desktop shell in terminal 2:
 
 ```bash
-pnpm test
-pnpm lint
-pnpm format:check
+cd src/clients
+pnpm dev:desktop
+```
+
+Common workspace-wide checks from `src/clients` are:
+
+```bash
 pnpm build
+pnpm lint
+pnpm test
+pnpm format
+pnpm format:check
 ```
+
+For a Desktop-only check, use `pnpm exec turbo run <task> --filter=@agw/desktop`.
 
 ## Packages
 
 `AGW_PACKAGE_FLAVOR` selects `full` (default) or `client`. Both variants use the same application identity and are mutually exclusive upgrades.
 
 ```bash
-AGW_PACKAGE_FLAVOR=client pnpm make
-AGW_PACKAGE_FLAVOR=full pnpm make
+AGW_PACKAGE_FLAVOR=client pnpm make:desktop
+AGW_PACKAGE_FLAVOR=full pnpm make:desktop
+pnpm make:desktop -- --arch=x64
 ```
 
 Preview releases contain eight unsigned installers:

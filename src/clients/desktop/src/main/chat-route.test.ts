@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const MAIN_URL = new URL("./main.ts", import.meta.url);
+const MAIN_URL = new URL("./index.ts", import.meta.url);
 
 test("Desktop starts and reopens on the dedicated Chat route", async () => {
   const source = await readFile(MAIN_URL, "utf8");

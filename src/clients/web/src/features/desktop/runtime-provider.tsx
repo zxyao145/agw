@@ -2,6 +2,12 @@
 
 import * as React from "react";
 
+import type {
+  AgwDesktopBridge,
+  DesktopRuntimeState,
+  DesktopSettings,
+  ServerProfile,
+} from "@agw/desktop-contracts";
 import { configureApiRuntime, resetApiRuntime } from "@/api/client";
 import { configureExecutionRuntime } from "@/api/execution-hub";
 import {
@@ -9,26 +15,8 @@ import {
   getActiveServerProfile,
   getEffectiveActiveServerProfile,
   type DesktopConnectionStatus,
-  type DesktopRuntimeState,
-  type DesktopSettings,
   type ServerInfo,
-  type ServerProfile,
-} from "@/lib/desktop-runtime-model";
-
-type UninstallResult = { manualActionRequired: boolean; message: string };
-
-export type AgwDesktopBridge = {
-  getRuntimeState(): Promise<DesktopRuntimeState>;
-  saveSettings(settings: DesktopSettings): Promise<DesktopRuntimeState>;
-  saveToken(profileId: string, token: string): Promise<void>;
-  deleteToken(profileId: string): Promise<void>;
-  provisionLocalToken(): Promise<string>;
-  openSetup(baseUrl: string): Promise<void>;
-  setActiveTaskCount(count: number): Promise<void>;
-  prepareUninstall(request: { deleteServerData: boolean }): Promise<UninstallResult>;
-  showWindow(): Promise<void>;
-  quitDesktop(): Promise<void>;
-};
+} from "./runtime-model";
 
 declare global {
   interface Window {

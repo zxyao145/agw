@@ -1,48 +1,6 @@
-export type ServerProfile = {
-  id: string;
-  kind: "local" | "remote";
-  name: string;
-  baseUrl: string;
-  apiMajorVersion: 1;
-  allowInsecureHttp: boolean;
-};
+import type { DesktopRuntimeState, DesktopSettings, ServerProfile } from "@agw/desktop-contracts";
 
-export type DesktopSettings = {
-  schemaVersion: 1;
-  packageFlavor: "full" | "client";
-  closeBehavior: "minimize-to-tray" | "quit-desktop";
-  profiles: ServerProfile[];
-  activeServerId: string;
-  projectTabsByServer: Record<string, string[]>;
-};
-
-export type DesktopRuntimeState = {
-  isDesktop: true;
-  platform:
-    | "aix"
-    | "android"
-    | "darwin"
-    | "freebsd"
-    | "haiku"
-    | "linux"
-    | "openbsd"
-    | "sunos"
-    | "win32"
-    | "cygwin"
-    | "netbsd";
-  packageFlavor: "full" | "client";
-  settings: DesktopSettings;
-  activeToken: string | null;
-  localServerRuntime: {
-    schemaVersion: 1;
-    pid: number;
-    baseUrl: string;
-    port: number;
-    serverVersion: string;
-    apiMajorVersion: 1;
-    startedAt: string;
-  } | null;
-};
+export type { DesktopRuntimeState, DesktopSettings, ServerProfile } from "@agw/desktop-contracts";
 
 export type ServerInfo = {
   serverVersion: string;

@@ -2,15 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export type LocalServerRuntime = {
-  schemaVersion: 1;
-  pid: number;
-  baseUrl: string;
-  port: number;
-  serverVersion: string;
-  apiMajorVersion: 1;
-  startedAt: string;
-};
+import type { LocalServerRuntime } from "@agw/desktop-contracts";
 
 export function parseLocalServerRuntime(value: string): LocalServerRuntime | null {
   try {

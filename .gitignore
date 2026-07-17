@@ -380,3 +380,4 @@ appsettings.setup.json
 .worktrees/
 .claude/settings.local.json
 **/test-results/*
+.turbo/**/*

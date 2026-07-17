@@ -1,11 +1,6 @@
-export type ServerProfile = {
-  id: string;
-  kind: "local" | "remote";
-  name: string;
-  baseUrl: string;
-  apiMajorVersion: 1;
-  allowInsecureHttp: boolean;
-};
+import type { ServerProfile } from "@agw/desktop-contracts";
+
+export type { ServerProfile } from "@agw/desktop-contracts";
 
 export const DEFAULT_LOCAL_PROFILE: ServerProfile = {
   id: "local",

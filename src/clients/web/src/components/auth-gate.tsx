@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { getAuthSession } from "@/api/auth";
 import { Button } from "@/components/ui/button";
-import { useDesktopRuntime } from "@/lib/desktop-runtime";
+import { useDesktopRuntime } from "@/features/desktop";
 import Link from "next/link";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {

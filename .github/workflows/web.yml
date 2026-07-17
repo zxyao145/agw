@@ -4,11 +4,21 @@ on:
   pull_request:
     paths:
       - "src/clients/web/**"
+      - "src/clients/packages/**"
+      - "src/clients/package.json"
+      - "src/clients/pnpm-workspace.yaml"
+      - "src/clients/pnpm-lock.yaml"
+      - "src/clients/turbo.json"
       - ".github/workflows/web.yml"
   push:
     branches: ["main"]
     paths:
       - "src/clients/web/**"
+      - "src/clients/packages/**"
+      - "src/clients/package.json"
+      - "src/clients/pnpm-workspace.yaml"
+      - "src/clients/pnpm-lock.yaml"
+      - "src/clients/turbo.json"
       - ".github/workflows/web.yml"
 
 jobs:
@@ -16,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: src/clients/web
+        working-directory: src/clients
 
     steps:
       - uses: actions/checkout@v7
@@ -28,14 +38,15 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          cache-dependency-path: src/clients/web/pnpm-lock.yaml
+          cache-dependency-path: src/clients/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
       # - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm format:check
-      - run: pnpm lint
+      - run: pnpm exec turbo run format:check --filter=@agw/web...
+      - run: pnpm exec turbo run lint --filter=@agw/web...
+      - run: pnpm exec turbo run test --filter=@agw/web...
       # - run: pnpm test:e2e
-      - run: pnpm build
+      - run: pnpm exec turbo run build --filter=@agw/web...
 
       # - uses: actions/upload-artifact@v4
       #   if: failure()

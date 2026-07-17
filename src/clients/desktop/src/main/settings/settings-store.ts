@@ -1,23 +1,8 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import {
-  DEFAULT_LOCAL_PROFILE,
-  validateServerProfiles,
-  type ServerProfile,
-} from "./server-profiles";
-
-export type PackageFlavor = "full" | "client";
-export type CloseBehavior = "minimize-to-tray" | "quit-desktop";
-
-export type DesktopSettings = {
-  schemaVersion: 1;
-  packageFlavor: PackageFlavor;
-  closeBehavior: CloseBehavior;
-  profiles: ServerProfile[];
-  activeServerId: string;
-  projectTabsByServer: Record<string, string[]>;
-};
+import type { DesktopSettings, PackageFlavor } from "@agw/desktop-contracts";
+import { DEFAULT_LOCAL_PROFILE, validateServerProfiles } from "./server-profiles";
 
 export type SecretCodec = {
   encrypt(value: string): Buffer;

@@ -3,7 +3,7 @@ import { QueryProvider } from "@/components/query-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { DesktopRuntimeProvider } from "@/lib/desktop-runtime";
+import { DesktopRuntimeProvider } from "@/features/desktop";
 
 import "./globals.css";
 

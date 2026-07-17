@@ -39,7 +39,7 @@ import {
 } from "@/lib/token-usage";
 import { createUuidV7 } from "@/lib/uuid";
 import { cn } from "@/lib/utils";
-import { useDesktopRuntime } from "@/lib/desktop-runtime";
+import { useDesktopRuntime } from "@/features/desktop";
 import {
   executionSessionManager,
   type ManagedExecutionHandle,

@@ -100,16 +100,16 @@ The development backend listens on `http://localhost:30815` by default. On the f
 Start the frontend in another terminal:
 
 ```bash
-cd src/clients/web
+cd src/clients
 pnpm install
-pnpm dev
+pnpm dev:web
 ```
 
-After both services are running, open `http://localhost:3000`. The Next.js development server proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30815`.
+The `src/clients` pnpm Workspace contains `@agw/web`, `@agw/desktop`, and the shared `@agw/desktop-contracts` package, with Turborepo orchestrating their tasks. The Expo mobile app remains a separate npm workspace. After both services are running, open `http://localhost:3000`. The Next.js development server proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30815`.
 
 Production packages embed the static Web UI in ASP.NET Core and serve it from a single server process. See the deployment guide below for details.
 
-Agw Desktop exports the same Web UI into a secure Electron renderer. See [`src/clients/desktop/README.md`](src/clients/desktop/README.md) for its runtime model, package variants, and release workflow.
+Agw Desktop exports the same Web UI into a secure Electron renderer. Web and Desktop share framework-free bridge, runtime, settings, server-profile, and execution contracts through `@agw/desktop-contracts`. See [`src/clients/desktop/README.md`](src/clients/desktop/README.md) for its runtime model, package variants, and release workflow.
 
 A typical local workflow is:
 
@@ -163,7 +163,7 @@ The following screenshots show the main Agw interfaces:
 
 ## Architecture
 
-Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the ASP.NET Core application entry point and assembles the modules. The Web client is located in `src/clients/web`, and the Expo mobile client is in `src/clients/mobile`.
+Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the ASP.NET Core application entry point and assembles the modules. The pnpm Workspace at `src/clients` contains the Web and Electron Desktop applications plus their shared Desktop contracts package, while the Expo mobile client remains separate in `src/clients/mobile`.
 
 A typical backend flow is:
 

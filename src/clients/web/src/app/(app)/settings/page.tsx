@@ -18,8 +18,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatLocalDateTime } from "@/lib/date-time";
-import { useDesktopRuntime } from "@/lib/desktop-runtime";
-import type { ServerProfile } from "@/lib/desktop-runtime-model";
+import { useDesktopRuntime, type ServerProfile } from "@/features/desktop";
 import {
   Dialog,
   DialogContent,

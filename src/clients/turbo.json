@@ -1,0 +1,70 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "ui": "stream",
+  "remoteCache": {
+    "enabled": false
+  },
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "out/**", "dist/**"],
+      "env": ["AGW_*", "BACKEND_API_BASE_URL", "CI", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
+    },
+    "lint": {},
+    "test": {
+      "dependsOn": ["^build"],
+      "env": ["CI", "TZ"]
+    },
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["CI", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
+    },
+    "dev:renderer": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "env": ["AGW_*"]
+    },
+    "format": {
+      "cache": false
+    },
+    "format:check": {},
+    "gen:api": {
+      "cache": false
+    },
+    "prepare:renderer": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
+    },
+    "prepare:resources": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"],
+      "passThroughEnv": ["DOTNET_*", "NUGET_*", "CI"]
+    },
+    "package": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"],
+      "passThroughEnv": ["DOTNET_*", "NUGET_*", "CI"]
+    },
+    "make": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"],
+      "passThroughEnv": ["DOTNET_*", "NUGET_*", "CI"]
+    },
+    "release:collect": {
+      "cache": false,
+      "env": ["AGW_*"]
+    }
+  }
+}

@@ -7,7 +7,7 @@ import {
   getActiveServerProfile,
   getEffectiveActiveServerProfile,
   type DesktopSettings,
-} from "./desktop-runtime-model.ts";
+} from "./runtime-model.ts";
 
 const settings: DesktopSettings = {
   schemaVersion: 1,

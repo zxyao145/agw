@@ -3,10 +3,10 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AgwDesktopBridge,
   DesktopRuntimeState,
+  DesktopSettings,
   UninstallRequest,
   UninstallResult,
-} from "./desktop-contract";
-import type { DesktopSettings } from "./settings-store";
+} from "@agw/desktop-contracts";
 
 const bridge: AgwDesktopBridge = {
   getRuntimeState: () =>

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 interface PackageManifest {
+  main: string;
   scripts: Record<string, string>;
 }
 
@@ -11,6 +12,8 @@ test("dev prepares the bundled renderer before Electron starts", async () => {
   const packageManifest = JSON.parse(
     await readFile(resolve(process.cwd(), "package.json"), "utf8"),
   ) as PackageManifest;
+  assert.equal(packageManifest.main, "dist/main/index.js");
+
   const devCommand = packageManifest.scripts.dev;
   const prepareRendererIndex = devCommand.indexOf("pnpm prepare:renderer");
   const electronIndex = devCommand.indexOf("electron .");

@@ -31,10 +31,6 @@ import { useTheme } from "next-themes";
 import { apiGet } from "@/api/client";
 import { getApiErrorMessage } from "@/api/utils";
 import {
-  DesktopProjectPicker,
-  type DesktopProjectOption,
-} from "@/components/desktop/desktop-project-picker";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -42,12 +38,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useDesktopRuntime } from "@/lib/desktop-runtime";
 import { useExecutionActivity } from "@/lib/execution-activity";
 import type { ExecutionStatus } from "@/lib/execution-session-manager";
 import { buildChatHref } from "@/lib/chat-route";
 import { DEFAULT_PROJECT_ID, normalizeProjectTabs } from "@/lib/project-tabs";
 import { cn } from "@/lib/utils";
+import { useDesktopRuntime } from "../runtime-provider";
+import { DesktopProjectPicker, type DesktopProjectOption } from "./project-picker";
 
 type ProjectSummary = DesktopProjectOption;
 

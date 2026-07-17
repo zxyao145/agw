@@ -29,12 +29,11 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { AppShell } from "@/components/desktop/app-shell";
+import { AppShell, useDesktopRuntime } from "@/features/desktop";
 import { QueryErrorBoundary } from "@/components/query-error-boundary";
 import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AuthGate } from "@/components/auth-gate";
-import { useDesktopRuntime } from "@/lib/desktop-runtime";
 
 const navItems: SidebarMenuGroupProps[] = [
   {
