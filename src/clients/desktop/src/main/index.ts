@@ -52,6 +52,11 @@ let currentSettings: DesktopSettings;
 let settingsStore: DesktopSettingsStore;
 let daemonManager: DaemonManager;
 
+function reportMainProcessError(title: string, error: unknown): void {
+  console.error(title, error);
+  dialog.showErrorBox(title, error instanceof Error ? error.message : String(error));
+}
+
 function readPackageFlavor(): PackageFlavor {
   if (!app.isPackaged) return process.env.AGW_PACKAGE_FLAVOR === "client" ? "client" : "full";
   try {
@@ -141,6 +146,12 @@ function registerStaticProtocol(): void {
   });
 }
 
+async function prepareRendererSession(): Promise<void> {
+  if (!app.isPackaged && process.env.AGW_RENDERER_URL) {
+    await session.defaultSession.clearCache();
+  }
+}
+
 async function loadRenderer(pathname = "/desktop/chat/"): Promise<void> {
   if (!mainWindow) return;
   const developmentUrl = process.env.AGW_RENDERER_URL;
@@ -193,13 +204,13 @@ function rebuildTrayMenu(): void {
   if (!tray) return;
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "Open Agw Chat", click: () => void showWindow("/desktop/chat/") },
+      { label: "Open Agw Chat", click: () => showWindowSafely("/desktop/chat/") },
       {
         label: activeTaskCount === 1 ? "1 active task" : `${activeTaskCount} active tasks`,
         enabled: false,
       },
       { type: "separator" },
-      { label: "Settings", click: () => void showWindow("/settings/") },
+      { label: "Settings", click: () => showWindowSafely("/settings/") },
       { type: "separator" },
       {
         label: "Quit Desktop",
@@ -217,7 +228,7 @@ function createTray(): void {
   if (process.platform === "darwin") image.setTemplateImage(true);
   tray = new Tray(image);
   tray.setToolTip("Agw Desktop");
-  tray.on("click", () => void showWindow("/desktop/chat/"));
+  tray.on("click", () => showWindowSafely("/desktop/chat/"));
   rebuildTrayMenu();
 }
 
@@ -226,6 +237,12 @@ async function showWindow(pathname?: string): Promise<void> {
   if (pathname) await loadRenderer(pathname);
   mainWindow.show();
   mainWindow.focus();
+}
+
+function showWindowSafely(pathname?: string): void {
+  void showWindow(pathname).catch((error) =>
+    reportMainProcessError("Unable to open Agw Desktop", error),
+  );
 }
 
 async function openSetup(baseUrl: string): Promise<void> {
@@ -385,28 +402,33 @@ app.on("before-quit", () => {
   isQuitting = true;
 });
 
-app.on("activate", () => void showWindow());
+app.on("activate", () => showWindowSafely());
 
-void app.whenReady().then(async () => {
-  const flavor = readPackageFlavor();
-  settingsStore = new DesktopSettingsStore(app.getPath("userData"), flavor, createSecretCodec());
-  currentSettings = await settingsStore.load();
-  daemonManager = new DaemonManager(process.platform, serverExecutablePath());
+void app
+  .whenReady()
+  .then(async () => {
+    const flavor = readPackageFlavor();
+    settingsStore = new DesktopSettingsStore(app.getPath("userData"), flavor, createSecretCodec());
+    currentSettings = await settingsStore.load();
+    daemonManager = new DaemonManager(process.platform, serverExecutablePath());
 
-  registerStaticProtocol();
-  registerIpc();
-  mainWindow = createMainWindow();
-  createTray();
+    registerStaticProtocol();
+    registerIpc();
+    mainWindow = createMainWindow();
+    createTray();
+    await prepareRendererSession();
 
-  try {
-    if (flavor === "full" && (await daemonManager.isServerBundled())) await daemonManager.install();
-    if (flavor === "client") await daemonManager.uninstall();
-  } catch (error) {
-    dialog.showErrorBox(
-      "Agw Server daemon",
-      error instanceof Error ? error.message : String(error),
-    );
-  }
+    try {
+      if (flavor === "full" && (await daemonManager.isServerBundled()))
+        await daemonManager.install();
+      if (flavor === "client") await daemonManager.uninstall();
+    } catch (error) {
+      dialog.showErrorBox(
+        "Agw Server daemon",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
 
-  await loadRenderer();
-});
+    await loadRenderer();
+  })
+  .catch((error) => reportMainProcessError("Unable to start Agw Desktop", error));

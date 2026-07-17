@@ -56,9 +56,7 @@ function configureClients(profile: ServerProfile, token: string | null): void {
 
 export function DesktopRuntimeProvider({ children }: { children: React.ReactNode }) {
   const isDesktop = typeof window !== "undefined" && Boolean(window.agwDesktop);
-  const [status, setStatus] = React.useState<DesktopConnectionStatus>(
-    isDesktop ? "loading" : "ready",
-  );
+  const [status, setStatus] = React.useState<DesktopConnectionStatus>("loading");
   const [runtimeState, setRuntimeState] = React.useState<DesktopRuntimeState | null>(null);
   const [serverInfo, setServerInfo] = React.useState<ServerInfo | null>(null);
   const [error, setError] = React.useState<string | null>(null);

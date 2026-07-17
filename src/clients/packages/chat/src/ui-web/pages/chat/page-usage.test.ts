@@ -68,7 +68,7 @@ test("shared chat shows the usage panel only when its container reaches the lg w
   ]);
 
   assert.match(chatSource, /cn\("@container relative h-full min-h-0 w-full overflow-hidden"/);
-  assert.match(chatSource, /<div[\s\S]*?className="h-full w-full overflow-y-auto"/);
+  assert.match(chatSource, /<div[\s\S]*?className="h-full w-full overflow-y-auto/);
   assert.match(chatSource, /<div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">/);
   assert.match(chatSource, /<Conversation[\s\S]*?scrollable=\{false\}/);
   const usageAside = chatAsideSource.match(
@@ -84,6 +84,15 @@ test("shared chat shows the usage panel only when its container reaches the lg w
   assert.match(
     chatSource,
     /<div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center">/,
+  );
+});
+
+test("shared chat hides the native scrollbar without disabling message scrolling", async () => {
+  const chatSource = await readFile(CHAT_COMPONENT_URL, "utf8");
+
+  assert.match(
+    chatSource,
+    /className="h-full w-full overflow-y-auto \[scrollbar-width:none\] \[&::-webkit-scrollbar\]:hidden"/,
   );
 });
 

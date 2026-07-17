@@ -571,7 +571,7 @@ export function Chat({
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
       <div
         ref={conversationScrollRef}
-        className="h-full w-full overflow-y-auto"
+        className="h-full w-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         onScroll={handleConversationScroll}
       >
         <div className="mx-auto flex min-h-full w-full justify-center">

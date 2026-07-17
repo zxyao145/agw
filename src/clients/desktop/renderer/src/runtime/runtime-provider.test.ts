@@ -13,3 +13,10 @@ test("Desktop runtime exposes renderer and platform markers on the document root
   assert.match(source, /delete root\.dataset\.agwDesktop/);
   assert.match(source, /delete root\.dataset\.agwPlatform/);
 });
+
+test("Desktop runtime keeps its initial connection state stable during hydration", async () => {
+  const source = await readFile(RUNTIME_URL, "utf8");
+
+  assert.match(source, /useState<DesktopConnectionStatus>\("loading"\)/);
+  assert.doesNotMatch(source, /isDesktop \? "loading" : "ready"/);
+});
