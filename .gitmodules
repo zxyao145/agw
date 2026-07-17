@@ -1,6 +1,0 @@
-[submodule "src/packages/claude-code-sdk-csharp"]
-	path = src/packages/claude-code-sdk-csharp
-	url = https://github.com/zxyao145/claude-code-sdk-csharp.git
-[submodule "src/packages/codex-sdk-csharp"]
-	path = src/packages/codex-sdk-csharp
-	url = https://github.com/zxyao145/codex-sdk-csharp.git
