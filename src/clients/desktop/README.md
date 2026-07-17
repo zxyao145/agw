@@ -1,8 +1,8 @@
 # Agw Desktop
 
-Agw Desktop is the cross-platform Electron shell for the exported Agw Web client. Chat is the only primary workspace; Projects and the remaining administration routes live in Settings.
+Agw Desktop is the cross-platform Electron application for Agw. It owns an independent Next.js React renderer while reusing business modules from the client workspace packages. Chat is the primary workspace; Projects and the remaining administration routes live in Settings.
 
-The Electron entry points are `src/main/index.ts` and `src/preload/index.ts`; the renderer remains the Next.js application in `../web`. Both applications consume bridge, runtime, settings, server-profile, and execution contracts from the workspace package `@agw/desktop-contracts` in `../packages/desktop-contracts`.
+The Electron entry points are `src/main/index.ts` and `src/preload/index.ts`; the Desktop-owned Next.js application lives in `renderer/`. Its Electron React adapter is `renderer/src/runtime/`, and cross-process contracts remain internal under `src/shared/contracts/`. Desktop and Web do not import, locate, build, or consume artifacts from each other. Both compose reusable business modules from root `../packages/`, and execution state belongs to `@agw/chat`.
 
 ## Runtime model
 
@@ -23,14 +23,7 @@ cd src/clients
 pnpm install
 ```
 
-Run the Web renderer in terminal 1:
-
-```bash
-cd src/clients
-pnpm dev:web
-```
-
-After Next.js is ready, run the Desktop shell in terminal 2:
+Run Desktop and its Renderer together:
 
 ```bash
 cd src/clients
@@ -48,6 +41,8 @@ pnpm format:check
 ```
 
 For a Desktop-only check, use `pnpm exec turbo run <task> --filter=@agw/desktop`.
+
+Shared business UI is not duplicated in Desktop. Web and Desktop each own a thin route shell and independently compose domain packages under `../packages/`.
 
 ## Packages
 

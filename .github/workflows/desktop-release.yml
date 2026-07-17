@@ -90,9 +90,9 @@ jobs:
       - name: Test Desktop
         run: pnpm exec turbo run test --filter=@agw/desktop
       - name: Build installer
-        run: pnpm exec turbo run make --filter=@agw/desktop -- --arch=${{ matrix.arch }}
+        run: pnpm make:desktop -- --arch=${{ matrix.arch }}
       - name: Collect release artifact
-        run: pnpm exec turbo run release:collect --filter=@agw/desktop
+        run: pnpm release:collect
       - uses: actions/upload-artifact@v4
         with:
           name: agw-${{ matrix.flavor }}-${{ matrix.platform }}-${{ matrix.arch }}

@@ -21,9 +21,9 @@ import {
   SidebarMenuSubItem,
   SidebarTrigger,
   SidebarRail,
-} from "@/components/ui/sidebar";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+} from "@agw/components";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@agw/components";
+import { cn } from "@agw/components";
 
 export type MenuLink = { title: string; url: string; icon?: React.ReactNode };
 

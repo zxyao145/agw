@@ -1,87 +1,91 @@
-```plain
+# Client Monorepo Directory Structure
+
+Web and Desktop are independent applications with separate Next.js route shells. They do not import, build, locate, or consume artifacts from each other; reusable infrastructure and business modules live under root `packages`.
+
+```text
 clients/
-├── web/                            # Next.js
+├── web/                              # @agw/web: browser Next.js application
 │   └── src/
-│       └── app/
-│           ├── signin/
-│           │   └── page.tsx        # 引用 auth 模块下 ui-web 中 pages 里面的页面
-│           └── signup/
-│               └── page.tsx        # 引用 auth 模块下 ui-web 中 pages 里面的页面
+│       └── app/                      # thin browser routes, layouts, CSS, shell composition
+│           ├── login/page.tsx        # imports @agw/auth
+│           ├── (app)/
+│           │   ├── (agents)/         # imports @agw/agents
+│           │   ├── (interface)/chat/ # imports @agw/chat
+│           │   ├── (jobs)/           # imports @agw/jobs
+│           │   ├── (overview)/       # imports @agw/observability
+│           │   ├── (providers)/      # imports @agw/providers
+│           │   ├── (tasks)/          # imports @agw/projects
+│           │   ├── integrations/     # imports @agw/integrations
+│           │   ├── settings/         # imports @agw/settings
+│           │   └── skills/           # imports @agw/skills
+│           └── layout.tsx            # composes browser providers
 │
-├── desktop/                        # Electron
-│      └── src/
-│           ├── main/
-│           ├── preload/
-│           └── renderer/
-│               ├── routes/
-│               │   ├── signin.tsx  # 引用 auth 模块下 ui-desktop 中 pages 里面的页面
-│               │   └── signup.tsx  # 引用 auth 模块下 ui-web 中 pages 里面的页面
-│               ├── providers/
-│               ├── composition/
-│               └── platform/ 
+├── desktop/                          # @agw/desktop: independent Electron application
+│   ├── renderer/                     # Desktop-owned Next.js React renderer
+│   │   └── src/
+│   │       ├── app/                  # Desktop route shell importing @agw/* packages
+│   │       └── runtime/              # Electron bridge adapter, shell, connection UI
+│   └── src/
+│       ├── main/                     # Electron main process
+│       ├── preload/                  # whitelisted context bridge
+│       └── shared/contracts/         # internal cross-process data shapes
 │
-├── packages/                       # 按照模块拆分
-│   ├── http-client/                # 通用 HTTP 请求、协议类型和错误处理
-│   │   │   ├── client.ts
-│   │   │   ├── request.ts
-│   │   │   ├── response.ts
-│   │   │   ├── errors.ts
-│   │   │   ├── interceptors.ts
-│   │   │   └── index.ts
-│   │   └── package.json
-│   ├── api/                        # 基于 http-client 和 open api 文档生成的代码、业务 DTO
-│   │
-│   ├── auth/                       # auth 模块，登录状态、Token。
-│   │   ├── src/                    
-│   │   │   ├── schemas/            # auth 模块下的 Zod Schema、验证规则
-│   │   │   ├── types/              # auth 模块下的 TypeScript 类型
-│   │   │   ├── lib/                # auth 模块下的 纯工具函数，下面只有 ts，没有 tsx
-│   │   │   ├── hooks/              # auth 模块下 hooks
-│   │   │   ├── services/           # auth 模块下，负责流程编排和业务逻辑，与平台无关
-│   │   │   ├── adapters/           # 可选，auth 模块下，定义平台差异接口、实现。比如 web、desktop、native 有使用不同的认│   证方式
-│   │   │   ├── ui-web/             # auth 模块下，web 页面、组件。Web + Electron Renderer 都在这里。
-│   │   │   │   ├── pages/          # auth 模块下，ui-web 下面被 clients 复用的页面。
-│   │   │   │   │   ├── signin.tsx
-│   │   │   │   │   └── signup.tsx
-│   │   │   │   └── components/     # auth 模块下，ui-web 下面可被 pages 复用的组件
-│   │   │   │       ├── signin-form.tsx
-│   │   │   │       ├── signin-verify-code-form.tsx
-│   │   │   │       ├── signin-emial-form.tsx
-│   │   │   │       └── signin-totp-form.tsx
-│   │   │   ├── ui-desktop/         # 可选，auth 模块下，desktop 专用的页面、组件。desktop 可以依赖 ui-web。
-│   │   │   │   ├── pages/          # auth 模块下，ui-desktop 下面被 clients 复用的页面。
-│   │   │   │   │   └── desktop-signin.tsx
-│   │   │   │   └── components/     # auth 模块下，ui-desktop 下面可被 pages 复用的组件
-│   │   │   │       └── desktop-signin-form.tsx
-│   │   │   │
-│   │   │   ├── ui-native/          # auth react native 页面、组件
-│   │   │   │   ├── pages/          # auth 模块下，ui-native 下面被 clients 复用的页面。
-│   │   │   │   │   ├── native-signin-page.tsx
-│   │   │   │   │   └── native-signup-page.tsx
-│   │   │   │   └── components/     # auth 模块下，ui-native 下面可被 pages 复用的组件
-│   │   │   │       ├── signin-form.tsx
-│   │   │   │       ├── signin-verify-code-form.tsx
-│   │   │   │       ├── signin-emial-form.tsx
-│   │   │   │       └── signin-totp-form.tsx
-│   │   │   └── state/              # auth 模块下的 Zustand 状态与业务 Store
-│   │   │
-│   │   ├── package.json
-│   │   ├── tsconfig.json
-│   │   └── README.md
-│   │
-│   └── components/             # 与业务无关的基础组件库，比如 Button、Dialog、Select；shadcn/ui 或 HeroUI 的二次封装。
-│       ├── ui-web/             # web 基础组件库
-│   │   │   ├── shadcn/         # shadcn ui
-│   │   │   └── heroui/         # heroui
-│       ├── ui-native/          # react native 基础组件库
-│       └── ui-tokens/          # 颜色、字号、间距、圆角等设计 Token，三端共享设计 Token
+├── packages/
+│   ├── http-client/                  # HTTP primitives, response parsing, transport errors
+│   ├── api/                          # generated OpenAPI types and typed API runtime
+│   ├── components/                   # shared React UI and design tokens
+│   │   └── src/
+│   │       ├── ui-web/
+│   │       │   └── shadcn/
+│   │       └── ui-tokens/
+│   ├── auth/                         # authentication state and Web UI
+│   ├── agents/                       # Agents and Agentflows
+│   ├── projects/                     # Projects, tasks, histories, and file explorer
+│   ├── chat/                         # Chat domain, execution state, SignalR, reusable Chat UI
+│   ├── providers/                    # Providers and models
+│   ├── integrations/                 # plugins, connections, shared capabilities
+│   ├── jobs/                         # scheduled jobs and logs
+│   ├── skills/                       # skill management
+│   ├── observability/                # dashboard and traces
+│   └── settings/                     # Server and account settings
 │
 ├── tools/
 │   └── scripts/
-│
+│       └── check-client-boundaries.mjs
 ├── package.json
 ├── pnpm-workspace.yaml
+├── pnpm-lock.yaml
 ├── turbo.json
-└── tsconfig.json
-
+├── tsconfig.json
+└── tsconfig.react.json
 ```
+
+Domain packages use this shape as needed:
+
+```text
+packages/<domain>/
+├── src/
+│   ├── schemas/          # optional validation schemas
+│   ├── types/            # domain-owned TypeScript types
+│   ├── lib/              # platform-neutral pure TypeScript helpers
+│   ├── hooks/            # reusable React hooks
+│   ├── services/         # application workflows and business coordination
+│   ├── adapters/         # optional platform boundaries
+│   ├── state/            # domain state stores
+│   ├── ui-web/           # React pages/components shared by Web and Electron
+│   │   ├── pages/
+│   │   └── components/
+│   └── index.ts          # public package surface
+├── package.json
+└── tsconfig.json
+```
+
+Rules:
+
+- `web/src/app` imports public `@agw/*` package entry points; business implementations do not live in Web.
+- Packages never import `@agw/web`, `web/src`, or Web's `@/` alias.
+- Web and Desktop never import, locate, build, or depend on each other; both resolve workspace dependencies through root `packages`.
+- `desktop/renderer` is part of `@agw/desktop`, not a separate workspace package. It imports public `@agw/*` package entry points through its own route shell.
+- Desktop builds and packages its own static renderer export. No root tool assembles Desktop from Web artifacts.
+- Electron bridge contracts remain internal to `desktop/src/shared/contracts`; business packages do not depend on them.
+- Mobile continues to use its existing npm workflow and is not a member of this workspace.

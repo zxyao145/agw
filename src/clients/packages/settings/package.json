@@ -1,0 +1,35 @@
+{
+  "name": "@agw/settings",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "oxlint ./src",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "format": "oxfmt ./src *.json",
+    "format:check": "oxfmt --check ./src *.json"
+  },
+  "dependencies": {
+    "@agw/api": "workspace:*",
+    "@agw/auth": "workspace:*",
+    "@agw/components": "workspace:*",
+    "lucide-react": "0.577.0",
+    "sonner": "2.0.7"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "oxfmt": "0.41.0",
+    "oxlint": "1.56.0",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "next": "16.2.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  }
+}

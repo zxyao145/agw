@@ -16,3 +16,5 @@ allowBuilds:
 
 nodeLinker: hoisted
 hoistingLimits: workspaces
+autoInstallPeers: false
+resolvePeersFromWorkspaceRoot: false

@@ -27,7 +27,7 @@ import type {
   PackageFlavor,
   UninstallRequest,
   UninstallResult,
-} from "@agw/desktop-contracts";
+} from "../shared/contracts";
 import { DaemonManager } from "./daemon/daemon-manager";
 import { resolveRendererFile } from "./renderer-path";
 import { createLocalDesktopToken } from "./runtime/local-token";

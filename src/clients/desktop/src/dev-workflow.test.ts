@@ -8,20 +8,17 @@ interface PackageManifest {
   scripts: Record<string, string>;
 }
 
-test("dev prepares the bundled renderer before Electron starts", async () => {
+test("Desktop owns and develops its React renderer independently", async () => {
   const packageManifest = JSON.parse(
     await readFile(resolve(process.cwd(), "package.json"), "utf8"),
   ) as PackageManifest;
   assert.equal(packageManifest.main, "dist/main/index.js");
 
   const devCommand = packageManifest.scripts.dev;
-  const prepareRendererIndex = devCommand.indexOf("pnpm prepare:renderer");
-  const electronIndex = devCommand.indexOf("electron .");
-
-  assert.notEqual(prepareRendererIndex, -1);
-  assert.ok(prepareRendererIndex < electronIndex);
-  assert.equal(
-    packageManifest.scripts["prepare:renderer"],
-    "node scripts/prepare-resources.mjs --renderer-only",
-  );
+  assert.match(devCommand, /node scripts\/dev\.mjs/u);
+  assert.doesNotMatch(devCommand, /prepare:renderer|@agw\/web|web\//u);
+  assert.match(packageManifest.scripts["build:renderer"], /next build renderer/u);
+  assert.match(packageManifest.scripts["dev:renderer"], /next dev renderer/u);
+  assert.match(packageManifest.scripts.build, /build:main[\s\S]*build:renderer/u);
+  assert.equal(packageManifest.scripts["prepare:renderer"], undefined);
 });

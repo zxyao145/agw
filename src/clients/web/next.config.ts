@@ -135,6 +135,20 @@ export default async function getNextConfig(phase: string): Promise<NextConfig> 
   }
 
   const nextConfig: NextConfig = {
+    transpilePackages: [
+      "@agw/agents",
+      "@agw/api",
+      "@agw/auth",
+      "@agw/chat",
+      "@agw/components",
+      "@agw/integrations",
+      "@agw/jobs",
+      "@agw/observability",
+      "@agw/projects",
+      "@agw/providers",
+      "@agw/settings",
+      "@agw/skills",
+    ],
     output: outputMode === "export" || outputMode === "standalone" ? outputMode : undefined,
     trailingSlash: isStaticExport,
     turbopack: {

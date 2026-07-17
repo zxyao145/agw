@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { LocalServerRuntime } from "@agw/desktop-contracts";
+import type { LocalServerRuntime } from "../../shared/contracts";
 
 export function parseLocalServerRuntime(value: string): LocalServerRuntime | null {
   try {

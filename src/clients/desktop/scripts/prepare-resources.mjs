@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { arch, platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const desktopDirectory = resolve(scriptDirectory, "..");
 const repositoryRoot = resolve(desktopDirectory, "..", "..", "..");
-const webDirectory = resolve(repositoryRoot, "src", "clients", "web");
 const resourcesDirectory = resolve(desktopDirectory, "resources");
+const rendererDirectory = resolve(resourcesDirectory, "renderer");
+const rendererOutput = resolve(desktopDirectory, "renderer", "out");
 const flavor = process.env.AGW_PACKAGE_FLAVOR === "client" ? "client" : "full";
-const rendererOnly = process.argv.includes("--renderer-only");
 
 function run(command, args, options = {}) {
   return new Promise((resolvePromise, reject) => {
@@ -33,14 +33,13 @@ function targetRid() {
 }
 
 await mkdir(resourcesDirectory, { recursive: true });
-await run("pnpm", ["build"], {
-  cwd: webDirectory,
-  env: { ...process.env, NEXT_OUTPUT_MODE: "export" },
+await access(resolve(rendererOutput, "index.html")).catch(() => {
+  throw new Error(
+    "Desktop renderer is missing. Run `pnpm build:renderer` from src/clients/desktop.",
+  );
 });
-await rm(resolve(resourcesDirectory, "renderer"), { recursive: true, force: true });
-await cp(resolve(webDirectory, "out"), resolve(resourcesDirectory, "renderer"), {
-  recursive: true,
-});
+await rm(rendererDirectory, { recursive: true, force: true });
+await cp(rendererOutput, rendererDirectory, { recursive: true });
 await writeFile(
   resolve(resourcesDirectory, "package-flavor.json"),
   `${JSON.stringify({ packageFlavor: flavor }, null, 2)}\n`,
@@ -48,27 +47,23 @@ await writeFile(
 );
 
 const serverOutput = resolve(resourcesDirectory, "server");
-if (!rendererOnly) {
-  await rm(serverOutput, { recursive: true, force: true });
-  if (flavor === "full") {
-    await run(
-      "dotnet",
-      [
-        "publish",
-        resolve(repositoryRoot, "src", "server", "Agw.Host", "Agw.Host.csproj"),
-        "-c",
-        "Release",
-        "-r",
-        targetRid(),
-        "--self-contained",
-        "true",
-        "-o",
-        serverOutput,
-      ],
-      { cwd: repositoryRoot },
-    );
-    await cp(resolve(webDirectory, "out"), resolve(serverOutput, "wwwroot"), {
-      recursive: true,
-    });
-  }
+await rm(serverOutput, { recursive: true, force: true });
+if (flavor === "full") {
+  await run(
+    "dotnet",
+    [
+      "publish",
+      resolve(repositoryRoot, "src", "server", "Agw.Host", "Agw.Host.csproj"),
+      "-c",
+      "Release",
+      "-r",
+      targetRid(),
+      "--self-contained",
+      "true",
+      "-o",
+      serverOutput,
+    ],
+    { cwd: repositoryRoot },
+  );
+  await cp(rendererDirectory, resolve(serverOutput, "wwwroot"), { recursive: true });
 }

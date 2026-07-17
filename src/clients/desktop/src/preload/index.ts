@@ -6,7 +6,7 @@ import type {
   DesktopSettings,
   UninstallRequest,
   UninstallResult,
-} from "@agw/desktop-contracts";
+} from "../shared/contracts";
 
 const bridge: AgwDesktopBridge = {
   getRuntimeState: () =>

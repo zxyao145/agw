@@ -15,7 +15,7 @@ module.exports = {
       path.resolve(__dirname, "assets"),
       ...(flavor === "full" ? [path.resolve(__dirname, "resources", "server")] : []),
     ],
-    ignore: [/^\/src($|\/)/, /^\/scripts($|\/)/, /\.test\.(ts|js)$/],
+    ignore: [/^\/src($|\/)/, /^\/scripts($|\/)/, /^\/renderer($|\/)/, /\.test\.(ts|js)$/],
   },
   rebuildConfig: {},
   makers: [

@@ -33,7 +33,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 11.7.0
-      
+
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -41,6 +41,7 @@ jobs:
           cache-dependency-path: src/clients/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
+      - run: pnpm test:boundaries
       # - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec turbo run format:check --filter=@agw/web...
       - run: pnpm exec turbo run lint --filter=@agw/web...

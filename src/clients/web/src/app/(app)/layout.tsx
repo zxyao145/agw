@@ -28,12 +28,11 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { AppShell, useDesktopRuntime } from "@/features/desktop";
-import { QueryErrorBoundary } from "@/components/query-error-boundary";
+} from "@agw/components";
+import { QueryErrorBoundary } from "@agw/components";
 import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { AuthGate } from "@/components/auth-gate";
+import { SidebarProvider } from "@agw/components";
+import { AuthGate } from "@agw/auth";
 
 const navItems: SidebarMenuGroupProps[] = [
   {
@@ -159,7 +158,6 @@ function getActiveNavLabel(pathname: string): MenuItem | undefined {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const desktop = useDesktopRuntime();
   const activeMenu = getActiveNavLabel(pathname);
   const [sidebarOpen, setSidebarOpen] = React.useState(pathname !== "/chat");
 
@@ -168,16 +166,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setSidebarOpen(false);
     }
   }, [pathname]);
-
-  if (desktop.isDesktop) {
-    return (
-      <AuthGate>
-        <AppShell>
-          <QueryErrorBoundary>{children}</QueryErrorBoundary>
-        </AppShell>
-      </AuthGate>
-    );
-  }
 
   return (
     <AuthGate>

@@ -7,8 +7,17 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "out/**", "dist/**"],
-      "env": ["AGW_*", "BACKEND_API_BASE_URL", "CI", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
+      "outputs": []
+    },
+    "@agw/web#build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "out/**"],
+      "env": ["BACKEND_API_BASE_URL", "CI", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
+    },
+    "@agw/desktop#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "renderer/.next/**", "!renderer/.next/cache/**", "renderer/out/**"],
+      "env": ["AGW_*", "CI"]
     },
     "lint": {},
     "test": {
@@ -30,7 +39,7 @@
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true,
-      "env": ["AGW_*"]
+      "env": ["AGW_*", "CI"]
     },
     "format": {
       "cache": false
@@ -38,11 +47,6 @@
     "format:check": {},
     "gen:api": {
       "cache": false
-    },
-    "prepare:renderer": {
-      "dependsOn": ["^build"],
-      "cache": false,
-      "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
     },
     "prepare:resources": {
       "dependsOn": ["^build"],

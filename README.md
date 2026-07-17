@@ -105,11 +105,11 @@ pnpm install
 pnpm dev:web
 ```
 
-The `src/clients` pnpm Workspace contains `@agw/web`, `@agw/desktop`, and the shared `@agw/desktop-contracts` package, with Turborepo orchestrating their tasks. The Expo mobile app remains a separate npm workspace. After both services are running, open `http://localhost:3000`. The Next.js development server proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30815`.
+The `src/clients` pnpm Workspace contains independent `@agw/web` and `@agw/desktop` applications plus shared infrastructure and business domains under `src/clients/packages/`, with Turborepo orchestrating their tasks. Neither application imports, builds, or consumes artifacts from the other. Each application owns its own thin Next.js route shell; reusable business UI comes from `packages/*`. The Expo mobile app remains a separate npm workspace. After the backend and Web are running, open `http://localhost:3001`. Web proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30815`.
 
 Production packages embed the static Web UI in ASP.NET Core and serve it from a single server process. See the deployment guide below for details.
 
-Agw Desktop exports the same Web UI into a secure Electron renderer. Web and Desktop share framework-free bridge, runtime, settings, server-profile, and execution contracts through `@agw/desktop-contracts`. See [`src/clients/desktop/README.md`](src/clients/desktop/README.md) for its runtime model, package variants, and release workflow.
+Agw Desktop owns a secure Electron main/preload implementation and an independent React renderer under `src/clients/desktop/renderer/`. The renderer composes the same business packages as Web, while the Electron bridge contracts remain internal to Desktop under `src/shared/contracts/`. Desktop builds and packages its own static export without locating `web/`. See [`src/clients/desktop/README.md`](src/clients/desktop/README.md) for its runtime model, package variants, and release workflow.
 
 A typical local workflow is:
 

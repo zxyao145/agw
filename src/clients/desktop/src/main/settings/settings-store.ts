@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { DesktopSettings, PackageFlavor } from "@agw/desktop-contracts";
+import type { DesktopSettings, PackageFlavor } from "../../shared/contracts";
 import { DEFAULT_LOCAL_PROFILE, validateServerProfiles } from "./server-profiles";
 
 export type SecretCodec = {

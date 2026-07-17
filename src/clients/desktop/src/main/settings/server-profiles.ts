@@ -1,6 +1,6 @@
-import type { ServerProfile } from "@agw/desktop-contracts";
+import type { ServerProfile } from "../../shared/contracts";
 
-export type { ServerProfile } from "@agw/desktop-contracts";
+export type { ServerProfile } from "../../shared/contracts";
 
 export const DEFAULT_LOCAL_PROFILE: ServerProfile = {
   id: "local",
