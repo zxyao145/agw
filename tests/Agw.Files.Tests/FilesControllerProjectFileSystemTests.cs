@@ -18,8 +18,7 @@ public class FilesControllerProjectFileSystemTests
 
         var result = await controller.ReadAsync(Guid.Empty, "file.txt");
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        Assert.Contains("Project ID is required", badRequest.Value?.ToString(), StringComparison.Ordinal);
+        AssertApiResult(result, "Project ID is required");
     }
 
     [Fact]
@@ -29,8 +28,7 @@ public class FilesControllerProjectFileSystemTests
 
         var result = await controller.SearchAsync(Guid.Empty, "", "query");
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        Assert.Contains("Project ID is required", badRequest.Value?.ToString(), StringComparison.Ordinal);
+        AssertApiResult(result, "Project ID is required");
     }
 
     [Fact]
@@ -40,8 +38,24 @@ public class FilesControllerProjectFileSystemTests
 
         var result = await controller.ReadAsync(Guid.CreateVersion7(), "");
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        Assert.Contains("Path parameter is required", badRequest.Value?.ToString(), StringComparison.Ordinal);
+        AssertApiResult(result, "Path parameter is required");
+    }
+
+    [Fact]
+    public async Task ReadAsync_WhenFileDoesNotExist_ReturnsApiResult()
+    {
+        var controller = CreateController();
+
+        var result = await controller.ReadAsync(Guid.CreateVersion7(), "missing-file.txt");
+
+        AssertApiResult(result, "File not found");
+    }
+
+    private static void AssertApiResult(IActionResult result, string expectedTitle)
+    {
+        Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
+        var title = result.GetType().GetProperty("Title")?.GetValue(result) as string;
+        Assert.Contains(expectedTitle, title, StringComparison.Ordinal);
     }
 
     private static FilesController CreateController()

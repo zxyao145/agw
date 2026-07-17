@@ -1656,9 +1656,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["FileListResponse"];
-            "application/json": components["schemas"]["FileListResponse"];
-            "text/json": components["schemas"]["FileListResponse"];
+            "text/plain": components["schemas"]["ApiResultOfFileListResponse"];
+            "application/json": components["schemas"]["ApiResultOfFileListResponse"];
+            "text/json": components["schemas"]["ApiResultOfFileListResponse"];
           };
         };
         /** @description Bad Request */
@@ -1667,9 +1667,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
         /** @description Not Found */
@@ -1678,9 +1678,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
       };
@@ -1718,9 +1718,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": string;
-            "application/json": string;
-            "text/json": string;
+            "text/plain": components["schemas"]["ApiResultOfstring"];
+            "application/json": components["schemas"]["ApiResultOfstring"];
+            "text/json": components["schemas"]["ApiResultOfstring"];
           };
         };
         /** @description Bad Request */
@@ -1729,9 +1729,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
         /** @description Not Found */
@@ -1740,9 +1740,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
       };
@@ -1780,9 +1780,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": unknown;
-            "application/json": unknown;
-            "text/json": unknown;
+            "text/plain": components["schemas"]["ApiResultOfObject"];
+            "application/json": components["schemas"]["ApiResultOfObject"];
+            "text/json": components["schemas"]["ApiResultOfObject"];
           };
         };
         /** @description Bad Request */
@@ -1791,9 +1791,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
         /** @description Not Found */
@@ -1802,9 +1802,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
       };
@@ -1845,9 +1845,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": unknown;
-            "application/json": unknown;
-            "text/json": unknown;
+            "text/plain": components["schemas"]["ApiResultOfObject"];
+            "application/json": components["schemas"]["ApiResultOfObject"];
+            "text/json": components["schemas"]["ApiResultOfObject"];
           };
         };
         /** @description Bad Request */
@@ -1856,9 +1856,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
         /** @description Not Found */
@@ -1867,9 +1867,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
       };
@@ -1906,9 +1906,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": unknown;
-            "application/json": unknown;
-            "text/json": unknown;
+            "text/plain": components["schemas"]["ApiResultOfObject"];
+            "application/json": components["schemas"]["ApiResultOfObject"];
+            "text/json": components["schemas"]["ApiResultOfObject"];
           };
         };
         /** @description Bad Request */
@@ -1917,9 +1917,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
         /** @description Not Found */
@@ -1928,9 +1928,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
         /** @description Internal Server Error */
@@ -1938,7 +1938,11 @@ export interface paths {
           headers: {
             [name: string]: unknown;
           };
-          content?: never;
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
         };
       };
     };
@@ -1976,9 +1980,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["FileSearchResponse"];
-            "application/json": components["schemas"]["FileSearchResponse"];
-            "text/json": components["schemas"]["FileSearchResponse"];
+            "text/plain": components["schemas"]["ApiResultOfFileSearchResponse"];
+            "application/json": components["schemas"]["ApiResultOfFileSearchResponse"];
+            "text/json": components["schemas"]["ApiResultOfFileSearchResponse"];
           };
         };
         /** @description Bad Request */
@@ -1987,9 +1991,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
         /** @description Not Found */
@@ -1998,9 +2002,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
           };
         };
       };
@@ -4014,6 +4018,20 @@ export interface components {
       title: string;
       detail: null | string;
     };
+    ApiResultOfFileListResponse: {
+      data?: null | components["schemas"]["FileListResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfFileSearchResponse: {
+      data?: null | components["schemas"]["FileSearchResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
     ApiResultOfJob: {
       data?: null | components["schemas"]["Job"];
       /** Format: int32 */
@@ -4086,6 +4104,13 @@ export interface components {
     };
     ApiResultOfOAuthRefreshResponse: {
       data?: null | components["schemas"]["OAuthRefreshResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfObject: {
+      data?: unknown;
       /** Format: int32 */
       code: number;
       title: string;

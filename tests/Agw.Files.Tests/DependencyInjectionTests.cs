@@ -71,13 +71,57 @@ public class DependencyInjectionTests
         }
     }
 
+    [Fact]
+    public async Task ResolveAsync_ProjectWithoutWorkspace_CreatesDefaultWorkspaceDirectory()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var projectId = Guid.CreateVersion7();
+        var projectName = $"agw-files-tests-{Guid.CreateVersion7():N}";
+        var expectedWorkspace = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".agw",
+            projectName);
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddSingleton<IProjectFileSystemConfigurationProvider>(
+                new TestProjectFileSystemConfigurationProvider(null, projectName));
+            services.AddFiles(new ConfigurationBuilder().Build());
+
+            await using var serviceProvider = services.BuildServiceProvider();
+            var resolver = serviceProvider.GetRequiredService<IAgwFileSystemResolver>();
+
+            var fileSystem = await resolver.ResolveAsync(projectId, cancellationToken);
+
+            var localFileSystem = Assert.IsType<LocalFileSystem>(fileSystem);
+            Assert.True(Directory.Exists(expectedWorkspace));
+            Assert.Equal(
+                Path.GetFullPath(expectedWorkspace).TrimEnd(Path.DirectorySeparatorChar)
+                + Path.DirectorySeparatorChar,
+                localFileSystem.NormalizedRoot);
+        }
+        finally
+        {
+            if (Directory.Exists(expectedWorkspace))
+            {
+                Directory.Delete(expectedWorkspace, recursive: true);
+            }
+        }
+    }
+
     private sealed class TestProjectFileSystemConfigurationProvider : IProjectFileSystemConfigurationProvider
     {
-        private readonly string _workspace;
+        private readonly string? _workspace;
+        private readonly string _projectName;
 
-        public TestProjectFileSystemConfigurationProvider(string workspace)
+        public TestProjectFileSystemConfigurationProvider(
+            string? workspace,
+            string projectName = "Test Project")
         {
             _workspace = workspace;
+            _projectName = projectName;
         }
 
         public Task<ProjectFileSystemConfiguration?> GetAsync(
@@ -85,7 +129,7 @@ public class DependencyInjectionTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult<ProjectFileSystemConfiguration?>(
-                new ProjectFileSystemConfiguration("Test Project", _workspace));
+                new ProjectFileSystemConfiguration(_projectName, _workspace));
         }
     }
 }

@@ -110,8 +110,9 @@ public class FilesControllerSearchTests
 
     private static FileSearchResponse GetResponse(IActionResult result)
     {
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        return Assert.IsType<FileSearchResponse>(okResult.Value);
+        Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
+        var data = result.GetType().GetProperty("Data")?.GetValue(result);
+        return Assert.IsType<FileSearchResponse>(data);
     }
 
     private static void AssertResult(FileSearchResult result, string relativePath, string type)

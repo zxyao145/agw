@@ -1,6 +1,7 @@
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
 using Agw.Shared.Configuration;
+using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -32,13 +33,13 @@ public class SetupController : Controller
 
     [HttpGet("")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesApiResult(StatusCodes.Status404NotFound)]
     public IActionResult Index()
     {
         // 初始化后，setup 页面将返回 404
         if (_stateStore.GetSnapshot().IsInitialized)
         {
-            return NotFound();
+            return AgwApiResult.NotFound();
         }
 
         ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
@@ -54,14 +55,14 @@ public class SetupController : Controller
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesApiResult(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Index(SetupRequest request, CancellationToken cancellationToken)
     {
         ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
         if (_stateStore.GetSnapshot().IsInitialized)
         {
-            return NotFound();
+            return AgwApiResult.NotFound();
         }
 
         if (!ModelState.IsValid)

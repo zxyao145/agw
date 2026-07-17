@@ -1,5 +1,8 @@
 using Agw.Files.Api.Dtos;
 using Agw.Files.Application.Files;
+using Agw.Files.Exceptions;
+
+using Bens.Results;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -19,9 +22,9 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("list")]
-    [ProducesResponseType(typeof(FileListResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResult<FileListResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ListAsync(
         [FromQuery, BindRequired] Guid projectId,
         [FromQuery] string? path = "",
@@ -51,13 +54,13 @@ public class FilesController : ControllerBase
                 GitStatus = entry.GitStatus
             })
             .ToList();
-        return Ok(new FileListResponse { Items = items });
+        return ApiResult.Ok(new FileListResponse { Items = items });
     }
 
     [HttpGet("read")]
-    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResult<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ReadAsync(
         [FromQuery, BindRequired] Guid projectId,
         [FromQuery] string? path)
@@ -68,14 +71,14 @@ public class FilesController : ControllerBase
             path,
             RequestCancellationToken);
         return result.Status == FileOperationStatus.Success
-            ? Ok(result.Value)
+            ? ApiResult.Ok(result.Value)
             : MapError(result);
     }
 
     [HttpGet("diff")]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DiffAsync(
         [FromQuery, BindRequired] Guid projectId,
         [FromQuery] string? path)
@@ -92,7 +95,7 @@ public class FilesController : ControllerBase
 
         if (result.Value!.Unchanged)
         {
-            return Ok(new
+            return ApiResult.Ok(new
             {
                 diff = "",
                 message = "No changes detected",
@@ -101,7 +104,7 @@ public class FilesController : ControllerBase
             });
         }
 
-        return Ok(new
+        return ApiResult.Ok(new
         {
             diff = result.Value.Diff,
             unchanged = false
@@ -109,9 +112,9 @@ public class FilesController : ControllerBase
     }
 
     [HttpDelete("delete")]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteAsync(
         [FromQuery, BindRequired] Guid projectId,
         [FromQuery] string? path)
@@ -126,7 +129,7 @@ public class FilesController : ControllerBase
             return MapError(result);
         }
 
-        return Ok(new
+        return ApiResult.Ok(new
         {
             success = result.Value!.Success,
             message = result.Value.Message
@@ -134,10 +137,10 @@ public class FilesController : ControllerBase
     }
 
     [HttpPost("reset")]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> ResetAsync(
         [FromQuery, BindRequired] Guid projectId,
         [FromQuery] string? path)
@@ -152,7 +155,7 @@ public class FilesController : ControllerBase
             return MapError(result);
         }
 
-        return Ok(new
+        return ApiResult.Ok(new
         {
             success = result.Value!.Success,
             message = result.Value.Message
@@ -160,9 +163,9 @@ public class FilesController : ControllerBase
     }
 
     [HttpGet("search")]
-    [ProducesResponseType(typeof(FileSearchResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResult<FileSearchResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SearchAsync(
         [FromQuery, BindRequired] Guid projectId,
         [FromQuery] string? path = "",
@@ -191,7 +194,7 @@ public class FilesController : ControllerBase
                 Type = entry.Type
             })
             .ToList();
-        return Ok(new FileSearchResponse { Results = results });
+        return ApiResult.Ok(new FileSearchResponse { Results = results });
     }
 
     private CancellationToken RequestCancellationToken =>
@@ -211,22 +214,38 @@ public class FilesController : ControllerBase
     {
         if (result.Status == FileOperationStatus.NotFound)
         {
-            return NotFound(new { error = result.Message });
+            return CreateError(
+                FilesErrorCode.ResourceNotFound,
+                result.Message ?? "Resource was not found.",
+                StatusCodes.Status404NotFound,
+                result.Details);
         }
 
         if (result.Status == FileOperationStatus.InvalidRequest)
         {
-            return result.Details == null
-                ? BadRequest(new { error = result.Message })
-                : BadRequest(new { error = result.Message, details = result.Details });
+            return CreateError(
+                FilesErrorCode.InvalidParameter,
+                result.Message ?? "Invalid params.",
+                StatusCodes.Status400BadRequest,
+                result.Details);
         }
 
-        return StatusCode(
+        return CreateError(
+            FilesErrorCode.FileOperationFailed,
+            result.Message ?? "Failed to process file request.",
             StatusCodes.Status500InternalServerError,
-            new
-            {
-                error = result.Message ?? "Failed to process file request",
-                details = result.Details
-            });
+            result.Details);
+    }
+
+    private static IActionResult CreateError(
+        FilesErrorCode code,
+        string title,
+        int statusCode,
+        string? detail)
+    {
+        var result = ApiResult.Fail((int)code, title, statusCode);
+        return string.IsNullOrWhiteSpace(detail)
+            ? result
+            : result.WithDetail(detail);
     }
 }

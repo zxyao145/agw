@@ -56,9 +56,15 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver
             return CreateFallbackLocal();
         }
 
-        var rootPath = !string.IsNullOrWhiteSpace(project.Workspace)
-            ? project.Workspace
+        var hasConfiguredWorkspace = !string.IsNullOrWhiteSpace(project.Workspace);
+        var rootPath = hasConfiguredWorkspace
+            ? project.Workspace!
             : $"~/.agw/{project.Name}";
+
+        if (!hasConfiguredWorkspace)
+        {
+            Directory.CreateDirectory(PathUtil.ExpandTilde(rootPath));
+        }
 
         _logger.LogInformation(
             "Project {ProjectId} is using local workspace: {Path}",
