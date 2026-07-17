@@ -22,7 +22,7 @@ jobs:
         dotnet-version: '10.0.x'
 
     - name: build and test
-      run: ｜
+      run: |
         dotnet build ./Agw.slnx -c Release
         dotnet test ./Agw.slnx -c Release --no-build
 
