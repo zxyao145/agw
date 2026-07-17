@@ -2,7 +2,10 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+
+using Bens.Results;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -29,7 +32,7 @@ public class McpToolServersController : ControllerBase
     public async Task<IActionResult> ListAsync()
     {
         var servers = await _mcpToolServerAppService.ListMcpToolServersAsync();
-        return AgwApiResult.Ok(servers);
+        return ApiResult.Ok(servers);
     }
 
     [HttpGet("paged")]
@@ -43,7 +46,7 @@ public class McpToolServersController : ControllerBase
             pageIndex,
             pageSize,
             cancellationToken);
-        return AgwApiResult.Ok(page);
+        return ApiResult.Ok(page);
     }
 
     [HttpGet("{id:guid}")]
@@ -51,7 +54,7 @@ public class McpToolServersController : ControllerBase
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var server = await _mcpToolServerAppService.GetMcpToolServerAsync(id);
-        return server == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(server);
+        return server == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(server);
     }
 
     [HttpPost]
@@ -74,7 +77,7 @@ public class McpToolServersController : ControllerBase
         };
 
         var created = await _mcpToolServerAppService.CreateMcpToolServerAsync(server, request.AgentIds, user);
-        return AgwApiResult.Ok(created);
+        return ApiResult.Ok(created);
     }
 
     [HttpPut("{id:guid}")]
@@ -99,7 +102,7 @@ public class McpToolServersController : ControllerBase
             },
             user);
 
-        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(updated);
+        return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
@@ -107,7 +110,7 @@ public class McpToolServersController : ControllerBase
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _mcpToolServerAppService.DeleteMcpToolServerAsync(id);
-        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
+        return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 
     [HttpPost("connect")]
@@ -124,12 +127,12 @@ public class McpToolServersController : ControllerBase
                 .Select(x => new McpToolItem(x.Name))
                 .ToList();
 
-            return AgwApiResult.Ok(new McpToolServerConnectResponse("success", toolItems));
+            return ApiResult.Ok(new McpToolServerConnectResponse("success", toolItems));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to connect MCP tool server {McpToolServerId}", request.McpToolServerId);
-            return AgwApiResult.Ok(new McpToolServerConnectResponse("failed", []));
+            return ApiResult.Ok(new McpToolServerConnectResponse("failed", []));
         }
     }
 }

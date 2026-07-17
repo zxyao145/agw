@@ -3,6 +3,8 @@ using Agw.Integrations.Contracts.Management;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 
+using Bens.Results;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Integrations.Controllers;
@@ -26,8 +28,8 @@ public sealed class ConnectionsController : ControllerBase
     {
         var response = await _service.ListAsync(id, cancellationToken);
         return id.HasValue && response.Count == 0
-            ? AgwApiResult.FromError(ErrorCodes.ConnectionNotFound)
-            : AgwApiResult.Ok(response);
+            ? ErrorCodes.ConnectionNotFound.ToApiResult()
+            : ApiResult.Ok(response);
     }
 
     [HttpPost]
@@ -38,7 +40,7 @@ public sealed class ConnectionsController : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
         var response = await _service.CreateAsync(request, user, cancellationToken);
-        return AgwApiResult.Ok(response);
+        return ApiResult.Ok(response);
     }
 
     [HttpPut]
@@ -49,7 +51,7 @@ public sealed class ConnectionsController : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
         var response = await _service.UpdateAsync(request, user, cancellationToken);
-        return AgwApiResult.Ok(response);
+        return ApiResult.Ok(response);
     }
 
     [HttpDelete]
@@ -59,8 +61,8 @@ public sealed class ConnectionsController : ControllerBase
         CancellationToken cancellationToken)
     {
         return await _service.DeleteAsync(id, cancellationToken)
-            ? AgwApiResult.Ok()
-            : AgwApiResult.FromError(ErrorCodes.ConnectionNotFound);
+            ? ApiResult.Ok()
+            : ErrorCodes.ConnectionNotFound.ToApiResult();
     }
 
     [HttpPost("validate")]
@@ -71,6 +73,6 @@ public sealed class ConnectionsController : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
         var response = await _service.ValidateAsync(request.Id, user, cancellationToken);
-        return AgwApiResult.Ok(response);
+        return ApiResult.Ok(response);
     }
 }

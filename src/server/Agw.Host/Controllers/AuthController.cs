@@ -5,6 +5,8 @@ using Agw.Setup.Services;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 
+using Bens.Results;
+
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
@@ -44,7 +46,7 @@ public sealed class AuthController : ControllerBase
     public IActionResult Session()
     {
         var identity = User.Identity;
-        return AgwApiResult.Ok(new SessionResponse(
+        return ApiResult.Ok(new SessionResponse(
             identity?.IsAuthenticated == true,
             identity?.AuthenticationType switch
             {
@@ -62,7 +64,7 @@ public sealed class AuthController : ControllerBase
     public IActionResult Antiforgery()
     {
         var tokens = _antiforgery.GetAndStoreTokens(HttpContext);
-        return AgwApiResult.Ok(new AntiforgeryResponse(tokens.RequestToken));
+        return ApiResult.Ok(new AntiforgeryResponse(tokens.RequestToken));
     }
 
     [HttpPost("login")]
@@ -77,7 +79,7 @@ public sealed class AuthController : ControllerBase
         var now = _timeProvider.GetUtcNow();
         if (_attemptLimiter.IsBlocked(clientKey, now))
         {
-            return AgwApiResult.FromError(ErrorCodes.TooManyAuthenticationAttempts);
+            return ErrorCodes.TooManyAuthenticationAttempts.ToApiResult();
         }
 
         var snapshot = _stateStore.GetSnapshot();
@@ -85,14 +87,14 @@ public sealed class AuthController : ControllerBase
             || _passwordHasher.VerifyHashedPassword(new object(), snapshot.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
         {
             _attemptLimiter.RecordFailure(clientKey, now);
-            return AgwApiResult.FromError(ErrorCodes.InvalidAdminCredentials);
+            return ErrorCodes.InvalidAdminCredentials.ToApiResult();
         }
 
         var identity = new ClaimsIdentity(
             [new Claim(ClaimTypes.Name, "admin"), new Claim("session_version", snapshot.SessionVersion.ToString())],
             CookieScheme);
         await HttpContext.SignInAsync(CookieScheme, new ClaimsPrincipal(identity));
-        return AgwApiResult.Ok();
+        return ApiResult.Ok();
     }
 
     [HttpPost("logout")]
@@ -102,7 +104,7 @@ public sealed class AuthController : ControllerBase
     public async Task<IActionResult> Logout()
     {
         await HttpContext.SignOutAsync(CookieScheme);
-        return AgwApiResult.Ok();
+        return ApiResult.Ok();
     }
 
     [HttpPut("password")]
@@ -113,19 +115,24 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ChangePassword(ChangePasswordRequest request, CancellationToken cancellationToken)
     {
-        if (!IsInteractiveAdmin()) return AgwApiResult.FromError(ErrorCodes.InteractiveAdminRequired);
+        if (!IsInteractiveAdmin()) return ErrorCodes.InteractiveAdminRequired.ToApiResult();
         var snapshot = _stateStore.GetSnapshot();
         if (User.Identity?.AuthenticationType == CookieScheme
             && (snapshot.PasswordHash == null
                 || _passwordHasher.VerifyHashedPassword(new object(), snapshot.PasswordHash, request.CurrentPassword ?? string.Empty) == PasswordVerificationResult.Failed))
         {
-            return AgwApiResult.FromError(ErrorCodes.InvalidAdminCredentials);
+            return ErrorCodes.InvalidAdminCredentials.ToApiResult();
         }
 
-        if (request.NewPassword.Length is < 8 or > 256) return AgwApiResult.BadRequest("Password must be between 8 and 256 characters.");
+        if (request.NewPassword.Length is < 8 or > 256)
+        {
+            return ApiResult.BadRequest(
+                "Password must be between 8 and 256 characters.",
+                ErrorCodes.InvalidParam.Code);
+        }
         await _stateStore.UpdatePasswordAsync(_passwordHasher.HashPassword(new object(), request.NewPassword), cancellationToken);
         await HttpContext.SignOutAsync(CookieScheme);
-        return AgwApiResult.Ok();
+        return ApiResult.Ok();
     }
 
     [HttpGet("tokens")]
@@ -135,8 +142,8 @@ public sealed class AuthController : ControllerBase
     public IActionResult ListTokens()
     {
         return IsInteractiveAdmin()
-            ? AgwApiResult.Ok(_stateStore.GetSnapshot().Tokens)
-            : AgwApiResult.FromError(ErrorCodes.InteractiveAdminRequired);
+            ? ApiResult.Ok(_stateStore.GetSnapshot().Tokens)
+            : ErrorCodes.InteractiveAdminRequired.ToApiResult();
     }
 
     [HttpPost("tokens")]
@@ -148,10 +155,12 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateToken(CreateTokenRequest request, CancellationToken cancellationToken)
     {
-        if (!IsInteractiveAdmin()) return AgwApiResult.FromError(ErrorCodes.InteractiveAdminRequired);
+        if (!IsInteractiveAdmin()) return ErrorCodes.InteractiveAdminRequired.ToApiResult();
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 64)
-            return AgwApiResult.BadRequest("Token name must be between 1 and 64 characters.");
-        return AgwApiResult.Ok(await _stateStore.CreateTokenAsync(request.Name, cancellationToken));
+            return ApiResult.BadRequest(
+                "Token name must be between 1 and 64 characters.",
+                ErrorCodes.InvalidParam.Code);
+        return ApiResult.Ok(await _stateStore.CreateTokenAsync(request.Name, cancellationToken));
     }
 
     [HttpDelete("tokens/{id:guid}")]
@@ -162,10 +171,10 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeToken(Guid id, CancellationToken cancellationToken)
     {
-        if (!IsInteractiveAdmin()) return AgwApiResult.FromError(ErrorCodes.InteractiveAdminRequired);
+        if (!IsInteractiveAdmin()) return ErrorCodes.InteractiveAdminRequired.ToApiResult();
         return await _stateStore.RevokeTokenAsync(id, cancellationToken)
-            ? AgwApiResult.Ok()
-            : AgwApiResult.FromError(ErrorCodes.ApiTokenNotFound);
+            ? ApiResult.Ok()
+            : ErrorCodes.ApiTokenNotFound.ToApiResult();
     }
 
     private bool IsInteractiveAdmin() => User.Identity?.AuthenticationType is CookieScheme or "LocalTrusted";

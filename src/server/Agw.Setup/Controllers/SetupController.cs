@@ -1,6 +1,7 @@
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
 using Agw.Shared.Configuration;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 
 using Microsoft.AspNetCore.Http;
@@ -39,7 +40,7 @@ public class SetupController : Controller
         // 初始化后，setup 页面将返回 404
         if (_stateStore.GetSnapshot().IsInitialized)
         {
-            return AgwApiResult.NotFound();
+            return ErrorCodes.ResourceNotFound.ToApiResult();
         }
 
         ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
@@ -62,7 +63,7 @@ public class SetupController : Controller
         ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
         if (_stateStore.GetSnapshot().IsInitialized)
         {
-            return AgwApiResult.NotFound();
+            return ErrorCodes.ResourceNotFound.ToApiResult();
         }
 
         if (!ModelState.IsValid)

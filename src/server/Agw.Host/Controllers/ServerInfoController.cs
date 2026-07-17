@@ -3,6 +3,8 @@ using System.Reflection;
 using Agw.Setup.Services;
 using Agw.Shared.Results;
 
+using Bens.Results;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Host.Controllers;
@@ -27,7 +29,7 @@ public sealed class ServerInfoController : ControllerBase
         var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
             ?? "0.0.0-dev";
-        return AgwApiResult.Ok(new ServerInfoResponse(version, 1, _stateStore.GetSnapshot().IsInitialized));
+        return ApiResult.Ok(new ServerInfoResponse(version, 1, _stateStore.GetSnapshot().IsInitialized));
     }
 
     public sealed record ServerInfoResponse(string ServerVersion, int ApiMajorVersion, bool Initialized);

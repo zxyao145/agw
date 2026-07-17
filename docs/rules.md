@@ -2,11 +2,14 @@
 
 ## 1. All non-WebSocket JSON API endpoints must use Bens.Results
 
-- All non-WebSocket JSON API endpoints in the backend must return responses wrapped in the `Bens.Results` envelope format. Use `Agw.Shared.Results.AgwApiResult` helpers or the configured Bens.Results boundary mapping.
+- All non-WebSocket JSON API endpoints in the backend must return responses wrapped in the `Bens.Results` envelope format. Return `Bens.Results.ApiResult` directly or use the configured Bens.Results boundary mapping.
 - WebSocket handlers, OAuth redirect callbacks, A2A protocol endpoints, and static file endpoints may keep protocol-specific response formats.
 
 ### Applicable modules
 
+- `Agw.Host`
+- `Agw.Setup`
+- `Agw.Files`
 - `Agw.Agents`
 - `Agw.Providers`
 - `Agw.Projects`
@@ -17,7 +20,9 @@
 
 ### What to do
 
-- Return `AgwApiResult.Ok()`, `AgwApiResult.Ok<T>(data)`, `AgwApiResult.BadRequest(...)`, or the corresponding `ApiResult.*` helpers.
+- Return `ApiResult.Ok()`, `ApiResult.Ok(data)`, `ApiResult.BadRequest(...)`, or another appropriate `ApiResult.*` helper directly.
+- Use `ErrorCode.ToApiResult()` or `AgwException.ToApiResult()` when the response must preserve a shared error code and HTTP status.
+- Use `[ProducesApiResult]` for OpenAPI response metadata where applicable; it does not replace direct `ApiResult` returns.
 - Let `AgwApiExceptionMiddleware` handle `AgwException` mapping automatically.
 
 ### What NOT to do

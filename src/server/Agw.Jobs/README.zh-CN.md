@@ -63,7 +63,7 @@ flowchart LR
 
 #### `JobsEndpointRouteBuilderExtensions`
 
-通过 `MapJobsApi()` 注册 `/api/jobs` 下的 CRUD 和执行日志查询端点。所有响应都使用 `AgwApiResult`，因此客户端收到的是 Bens.Results 响应封装，而不是裸 JSON 模型。
+通过 `MapJobsApi()` 注册 `/api/jobs` 下的 CRUD 和执行日志查询端点。所有响应都直接使用 `ApiResult`，因此客户端收到的是 Bens.Results 响应封装，而不是裸 JSON 模型。
 
 #### `JobAppService`
 

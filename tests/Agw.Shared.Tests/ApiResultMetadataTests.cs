@@ -29,7 +29,7 @@ public class ApiResultMetadataTests
     }
 
     [Fact]
-    public void ControllerActions_ReturningAgwApiResultDeclareProducesApiResult()
+    public void ControllerActions_ReturningApiResultDeclareEnvelopeMetadata()
     {
         var repoRoot = FindRepositoryRoot();
         var backendRoot = Path.Combine(repoRoot, "src", "server");
@@ -53,12 +53,18 @@ public class ApiResultMetadataTests
                     ? matches[i + 1].Index
                     : source.Length;
                 var actionSource = source[match.Index..actionSourceEnd];
-                if (!actionSource.Contains("AgwApiResult.", StringComparison.Ordinal))
+                var returnsApiResult =
+                    actionSource.Contains("ApiResult.", StringComparison.Ordinal)
+                    || actionSource.Contains(".ToApiResult(", StringComparison.Ordinal);
+                if (!returnsApiResult)
                 {
                     continue;
                 }
 
-                if (!attributes.Contains("ProducesApiResult", StringComparison.Ordinal))
+                var hasEnvelopeMetadata =
+                    attributes.Contains("ProducesApiResult", StringComparison.Ordinal)
+                    || attributes.Contains("ProducesResponseType(typeof(ApiResult", StringComparison.Ordinal);
+                if (!hasEnvelopeMetadata)
                 {
                     var relativePath = Path.GetRelativePath(repoRoot, filePath);
                     var methodName = match.Groups["name"].Value;
@@ -68,6 +74,39 @@ public class ApiResultMetadataTests
         }
 
         Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void BackendSource_DoesNotReferenceAgwApiResult()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var backendRoot = Path.Combine(repoRoot, "src", "server");
+        var violations = Directory
+            .EnumerateFiles(backendRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(filePath => File.ReadAllText(filePath).Contains("AgwApiResult", StringComparison.Ordinal))
+            .Select(filePath => Path.GetRelativePath(repoRoot, filePath))
+            .ToArray();
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void RepositoryRules_RequireDirectApiResultUsage()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var ruleFiles = new[]
+        {
+            Path.Combine(repoRoot, "AGENTS.md"),
+            Path.Combine(repoRoot, "CLAUDE.md"),
+            Path.Combine(repoRoot, "docs", "rules.md")
+        };
+
+        foreach (var ruleFile in ruleFiles)
+        {
+            var source = File.ReadAllText(ruleFile);
+            Assert.DoesNotContain("AgwApiResult", source, StringComparison.Ordinal);
+            Assert.Contains("ApiResult.Ok", source, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

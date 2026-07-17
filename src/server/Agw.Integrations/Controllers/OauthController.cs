@@ -2,6 +2,8 @@ using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Shared.Results;
 
+using Bens.Results;
+
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
@@ -37,7 +39,7 @@ public sealed class OAuthController : ControllerBase
             request.ReturnPath,
             User?.Identity?.Name ?? "system",
             cancellationToken);
-        return AgwApiResult.Ok(response);
+        return ApiResult.Ok(response);
     }
 
     [HttpGet("callback")]
@@ -64,7 +66,7 @@ public sealed class OAuthController : ControllerBase
             request.ConnectionId,
             User?.Identity?.Name ?? "system",
             cancellationToken);
-        return AgwApiResult.Ok(response);
+        return ApiResult.Ok(response);
     }
 
     private string BuildCallbackUri()

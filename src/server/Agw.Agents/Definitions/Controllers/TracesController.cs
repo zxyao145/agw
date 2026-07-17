@@ -4,6 +4,8 @@ using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Results;
 
+using Bens.Results;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Agents.Definitions.Controllers;
@@ -43,6 +45,6 @@ public class TracesController : ControllerBase
         };
 
         var result = await _appService.ListAsync(query, cancellationToken);
-        return AgwApiResult.Ok(result);
+        return ApiResult.Ok(result);
     }
 }

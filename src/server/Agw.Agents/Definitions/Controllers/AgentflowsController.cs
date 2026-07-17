@@ -3,7 +3,10 @@ using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+
+using Bens.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -29,7 +32,7 @@ public class AgentflowsController : ControllerBase
     public async Task<IActionResult> ListAsync()
     {
         var agentflows = await _agentflowAppService.ListAsync();
-        return AgwApiResult.Ok(agentflows);
+        return ApiResult.Ok(agentflows);
     }
 
     [HttpGet("paged")]
@@ -40,7 +43,7 @@ public class AgentflowsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var page = await _agentflowAppService.ListPageAsync(pageIndex, pageSize, cancellationToken);
-        return AgwApiResult.Ok(page);
+        return ApiResult.Ok(page);
     }
 
     [HttpGet("{id:guid}")]
@@ -48,7 +51,7 @@ public class AgentflowsController : ControllerBase
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var agentflow = await _agentflowAppService.GetAsync(id);
-        return agentflow == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(agentflow);
+        return agentflow == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(agentflow);
     }
 
     [HttpGet("mermaid/{id:guid}")]
@@ -56,7 +59,7 @@ public class AgentflowsController : ControllerBase
     public async Task<IActionResult> GetMermaidAsync(Guid id)
     {
         var text = await _agentflowRuntimeService.GetMermaidAsync(id);
-        return text == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(text);
+        return text == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(text);
     }
 
     [HttpGet("{id:guid}/nodes")]
@@ -66,11 +69,11 @@ public class AgentflowsController : ControllerBase
         var agentflow = await _agentflowAppService.GetAsync(id);
         if (agentflow == null)
         {
-            return AgwApiResult.NotFound();
+            return ErrorCodes.ResourceNotFound.ToApiResult();
         }
 
         var nodes = await _agentflowAppService.ListNodesAsync(id);
-        return AgwApiResult.Ok(nodes);
+        return ApiResult.Ok(nodes);
     }
 
     [HttpGet("{id:guid}/edges")]
@@ -80,11 +83,11 @@ public class AgentflowsController : ControllerBase
         var agentflow = await _agentflowAppService.GetAsync(id);
         if (agentflow == null)
         {
-            return AgwApiResult.NotFound();
+            return ErrorCodes.ResourceNotFound.ToApiResult();
         }
 
         var edges = await _agentflowAppService.ListEdgesAsync(id);
-        return AgwApiResult.Ok(edges);
+        return ApiResult.Ok(edges);
     }
 
     [HttpPost]
@@ -126,8 +129,10 @@ public class AgentflowsController : ControllerBase
 
         var created = await _agentflowAppService.CreateAsync(agentflow, nodes, edges, user);
         return created == null
-            ? AgwApiResult.BadRequest("Failed to create agentflow (validation failed or referenced resources not found).")
-            : AgwApiResult.Ok(created);
+            ? ApiResult.BadRequest(
+                "Failed to create agentflow (validation failed or referenced resources not found).",
+                ErrorCodes.InvalidParam.Code)
+            : ApiResult.Ok(created);
     }
 
     [HttpPut("{id:guid}")]
@@ -172,7 +177,7 @@ public class AgentflowsController : ControllerBase
             edges,
             user);
 
-        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(updated);
+        return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
@@ -180,6 +185,6 @@ public class AgentflowsController : ControllerBase
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _agentflowAppService.DeleteAsync(id);
-        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
+        return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 }

@@ -171,8 +171,9 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 
 ### Backend API Responses and Exceptions
 
-- All non-WebSocket JSON API endpoints in `Agw.Agents`, `Agw.Providers`, `Agw.Projects`, `Agw.Jobs`, `Agw.Integrations`, `Agw.Skills`, and `Agw.Tools` must return Bens.Results envelopes through `Agw.Shared.Results.AgwApiResult`, `ApiResult` helpers, or the configured boundary mapping.
-- Return helpers such as `AgwApiResult.Ok()`, `AgwApiResult.Ok<T>(data)`, and `AgwApiResult.BadRequest(...)`; let `AgwApiExceptionMiddleware` map `AgwException` automatically.
+- All non-WebSocket JSON API endpoints in backend modules, including `Agw.Host`, `Agw.Setup`, and `Agw.Files`, must return Bens.Results envelopes directly through `Bens.Results.ApiResult` or the configured boundary mapping.
+- Return helpers such as `ApiResult.Ok()`, `ApiResult.Ok(data)`, and `ApiResult.BadRequest(...)`. Use `ErrorCode.ToApiResult()` or `AgwException.ToApiResult()` when mapping shared application errors, and let `AgwApiExceptionMiddleware` map uncaught `AgwException` instances automatically.
+- Use `[ProducesApiResult]` for OpenAPI response metadata where applicable; it does not replace direct `ApiResult` returns.
 - Do not return raw `Ok(...)`, `BadRequest(...)`, `NotFound(...)`, `NoContent()`, or other bare MVC responses from those controllers.
 - WebSocket handlers, OAuth redirect callbacks, A2A protocol endpoints, and static file endpoints may keep protocol-specific response formats.
 

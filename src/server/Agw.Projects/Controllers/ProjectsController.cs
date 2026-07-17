@@ -1,6 +1,9 @@
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+
+using Bens.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -22,7 +25,7 @@ public class ProjectsController : ControllerBase
     public async Task<IActionResult> ListAsync()
     {
         var projects = await _projectAppService.ListAsync();
-        return AgwApiResult.Ok(projects.Select(ProjectResponse.FromDomain).ToArray());
+        return ApiResult.Ok(projects.Select(ProjectResponse.FromDomain).ToArray());
     }
 
     [HttpGet("{id:guid}")]
@@ -31,8 +34,8 @@ public class ProjectsController : ControllerBase
     {
         var project = await _projectAppService.GetAsync(id);
         return project == null
-            ? AgwApiResult.NotFound()
-            : AgwApiResult.Ok(ProjectResponse.FromDomain(project));
+            ? ErrorCodes.ResourceNotFound.ToApiResult()
+            : ApiResult.Ok(ProjectResponse.FromDomain(project));
     }
 
     [HttpPost]
@@ -58,10 +61,12 @@ public class ProjectsController : ControllerBase
             user);
         if (created == null)
         {
-            return AgwApiResult.BadRequest("Failed to create project.");
+            return ApiResult.BadRequest(
+                "Failed to create project.",
+                ErrorCodes.InvalidParam.Code);
         }
 
-        return AgwApiResult.Ok(ProjectResponse.FromDomain(created));
+        return ApiResult.Ok(ProjectResponse.FromDomain(created));
     }
 
     [HttpPut("{id:guid}")]
@@ -93,8 +98,8 @@ public class ProjectsController : ControllerBase
             user);
 
         return updated == null
-            ? AgwApiResult.NotFound()
-            : AgwApiResult.Ok(ProjectResponse.FromDomain(updated));
+            ? ErrorCodes.ResourceNotFound.ToApiResult()
+            : ApiResult.Ok(ProjectResponse.FromDomain(updated));
     }
 
     [HttpDelete("{id:guid}")]
@@ -102,6 +107,6 @@ public class ProjectsController : ControllerBase
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _projectAppService.DeleteAsync(id);
-        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
+        return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 }

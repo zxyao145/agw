@@ -1,6 +1,9 @@
 using Agw.Domain.Services;
 using Agw.Shared.Contracts.Tools;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+
+using Bens.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -25,7 +28,7 @@ public class ToolsController : ControllerBase
     public IActionResult GetAllTools()
     {
         var tools = _toolRegistry.GetAllTools();
-        return AgwApiResult.Ok(tools);
+        return ApiResult.Ok(tools);
     }
 
     /// <summary>
@@ -36,7 +39,7 @@ public class ToolsController : ControllerBase
     public IActionResult GetToolsByCategory()
     {
         var toolsByCategory = _toolRegistry.GetToolsByCategory();
-        return AgwApiResult.Ok(toolsByCategory);
+        return ApiResult.Ok(toolsByCategory);
     }
 
     /// <summary>
@@ -47,6 +50,6 @@ public class ToolsController : ControllerBase
     public IActionResult GetTool(string name)
     {
         var tool = _toolRegistry.GetTool(name);
-        return tool == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(tool);
+        return tool == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(tool);
     }
 }

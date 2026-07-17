@@ -1,6 +1,9 @@
 using Agw.Projects.Application;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+
+using Bens.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,14 +23,14 @@ public class ProjectContextsController : ControllerBase
     [HttpGet]
     [ProducesApiResult(typeof(ProjectContextSummaryResponse[]))]
     public async Task<IActionResult> ListAsync(Guid projectId) =>
-        AgwApiResult.Ok(await _projectContextAppService.ListResponsesAsync(projectId));
+        ApiResult.Ok(await _projectContextAppService.ListResponsesAsync(projectId));
 
     [HttpGet("{contextId}")]
     [ProducesApiResult(typeof(ProjectContextResponse))]
     public async Task<IActionResult> GetAsync(Guid projectId, string contextId)
     {
         var context = await _projectContextAppService.GetResponseAsync(projectId, contextId);
-        return context == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(context);
+        return context == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(context);
     }
 
     [HttpDelete("{contextId}/clear-records")]
@@ -35,7 +38,7 @@ public class ProjectContextsController : ControllerBase
     public async Task<IActionResult> ClearRecordsAsync(Guid projectId, string contextId)
     {
         var result = await _projectContextAppService.ClearRecordsAsync(projectId, contextId);
-        return result.Type == ApplicationResultType.Success ? AgwApiResult.Ok() : AgwApiResult.NotFound();
+        return result.Type == ApplicationResultType.Success ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 
     [HttpPut("{contextId}/title")]
@@ -50,10 +53,14 @@ public class ProjectContextsController : ControllerBase
 
         return result.Type switch
         {
-            ApplicationResultType.Success => AgwApiResult.Ok(),
-            ApplicationResultType.NotFound => AgwApiResult.NotFound(),
-            ApplicationResultType.Invalid => AgwApiResult.BadRequest(result.Error ?? "Invalid request."),
-            _ => AgwApiResult.BadRequest(result.Error ?? "Invalid request.")
+            ApplicationResultType.Success => ApiResult.Ok(),
+            ApplicationResultType.NotFound => ErrorCodes.ResourceNotFound.ToApiResult(),
+            ApplicationResultType.Invalid => ApiResult.BadRequest(
+                result.Error ?? "Invalid request.",
+                ErrorCodes.InvalidParam.Code),
+            _ => ApiResult.BadRequest(
+                result.Error ?? "Invalid request.",
+                ErrorCodes.InvalidParam.Code)
         };
     }
 
@@ -62,7 +69,7 @@ public class ProjectContextsController : ControllerBase
     public async Task<IActionResult> DeleteAllAsync(Guid projectId)
     {
         var result = await _projectContextAppService.DeleteAllAsync(projectId);
-        return result.Type == ApplicationResultType.Success ? AgwApiResult.Ok() : AgwApiResult.NotFound();
+        return result.Type == ApplicationResultType.Success ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 
     [HttpDelete("{contextId}")]
@@ -70,6 +77,6 @@ public class ProjectContextsController : ControllerBase
     public async Task<IActionResult> DeleteAsync(Guid projectId, string contextId)
     {
         var deleted = await _projectContextAppService.DeleteAsync(projectId, contextId);
-        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
+        return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 }

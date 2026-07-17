@@ -1,7 +1,10 @@
 using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+
+using Bens.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,7 +26,7 @@ public class ModelsController : ControllerBase
     public async Task<IActionResult> ListAsync()
     {
         var models = await _service.ListAsync();
-        return AgwApiResult.Ok(models);
+        return ApiResult.Ok(models);
     }
 
     [HttpGet("{id:guid}")]
@@ -31,7 +34,7 @@ public class ModelsController : ControllerBase
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var model = await _service.GetAsync(id);
-        return model == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(model);
+        return model == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(model);
     }
 
     [HttpPost]
@@ -40,7 +43,7 @@ public class ModelsController : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
         var created = await _service.CreateAsync(request, user);
-        return AgwApiResult.Ok(created);
+        return ApiResult.Ok(created);
     }
 
     [HttpPut("{id:guid}")]
@@ -50,7 +53,7 @@ public class ModelsController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
         var updated = await _service.UpdateAsync(id, request, user);
 
-        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(updated);
+        return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
@@ -58,6 +61,6 @@ public class ModelsController : ControllerBase
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _service.DeleteAsync(id);
-        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
+        return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 }

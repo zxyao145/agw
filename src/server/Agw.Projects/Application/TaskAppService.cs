@@ -2,8 +2,10 @@ using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
-using Agw.Shared.Results;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
+
+using Bens.Results;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -89,7 +91,9 @@ public class TaskAppService : ITaskAppService
         var resolvedProjectId = await _projectResolver.ResolveProjectIdAsync(request.ProjectId);
         if (!resolvedProjectId.HasValue)
         {
-            return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Project not found."));
+            return new ExecutionTaskResolutionResult(
+                null,
+                ApiResult.BadRequest("Project not found.", ErrorCodes.InvalidParam.Code));
         }
 
         if (request.Resume)
@@ -99,12 +103,18 @@ public class TaskAppService : ITaskAppService
                 var existingTask = await GetTaskAsync(request.TaskId.Value);
                 if (existingTask == null)
                 {
-                    return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Task not found."));
+                    return new ExecutionTaskResolutionResult(
+                        null,
+                        ApiResult.BadRequest("Task not found.", ErrorCodes.InvalidParam.Code));
                 }
 
                 if (existingTask.ProjectId != resolvedProjectId.Value)
                 {
-                    return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Task does not belong to the supplied projectId."));
+                    return new ExecutionTaskResolutionResult(
+                        null,
+                        ApiResult.BadRequest(
+                            "Task does not belong to the supplied projectId.",
+                            ErrorCodes.InvalidParam.Code));
                 }
 
                 return new ExecutionTaskResolutionResult(existingTask, null);
@@ -112,7 +122,11 @@ public class TaskAppService : ITaskAppService
 
             if (string.IsNullOrWhiteSpace(request.ContextId))
             {
-                return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("ContextId is required when resume is true."));
+                return new ExecutionTaskResolutionResult(
+                    null,
+                    ApiResult.BadRequest(
+                        "ContextId is required when resume is true.",
+                        ErrorCodes.InvalidParam.Code));
             }
 
             var latestTask = await GetLatestTaskByContextAsync(
@@ -121,7 +135,9 @@ public class TaskAppService : ITaskAppService
                 cancellationToken);
             if (latestTask == null)
             {
-                return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("ProjectContext not found."));
+                return new ExecutionTaskResolutionResult(
+                    null,
+                    ApiResult.BadRequest("ProjectContext not found.", ErrorCodes.InvalidParam.Code));
             }
             return new ExecutionTaskResolutionResult(latestTask, null);
         }
@@ -151,7 +167,11 @@ public class TaskAppService : ITaskAppService
 
         if (task.ProjectId != resolvedProjectId.Value)
         {
-            return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Task does not belong to the supplied projectId."));
+            return new ExecutionTaskResolutionResult(
+                null,
+                ApiResult.BadRequest(
+                    "Task does not belong to the supplied projectId.",
+                    ErrorCodes.InvalidParam.Code));
         }
 
         return new ExecutionTaskResolutionResult(task, null);
@@ -206,7 +226,9 @@ public class TaskAppService : ITaskAppService
             cancellationToken);
         if (task == null)
         {
-            return new ExecutionTaskResolutionResult(null, AgwApiResult.BadRequest("Failed to create task."));
+            return new ExecutionTaskResolutionResult(
+                null,
+                ApiResult.BadRequest("Failed to create task.", ErrorCodes.InvalidParam.Code));
         }
 
         return new ExecutionTaskResolutionResult(task, null);

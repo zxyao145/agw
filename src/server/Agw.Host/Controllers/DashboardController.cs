@@ -5,6 +5,8 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Results;
 
+using Bens.Results;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -55,7 +57,7 @@ public class DashboardController : ControllerBase
             await _agentUsageRepository.Queryable.SumAsync(usage => usage.OutputTokenCount),
             await _agentUsageRepository.Queryable.SumAsync(usage => usage.TotalTokenCount));
 
-        return AgwApiResult.Ok(stats);
+        return ApiResult.Ok(stats);
     }
 }
 

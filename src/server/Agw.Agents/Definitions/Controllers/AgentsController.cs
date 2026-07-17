@@ -2,7 +2,10 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+
+using Bens.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -28,7 +31,7 @@ public class AgentsController : ControllerBase
     public async Task<IActionResult> ListAsync()
     {
         var agents = await _agentAppService.ListAgentsAsync();
-        return AgwApiResult.Ok(agents.Select(AgentResponse.FromDomain).ToArray());
+        return ApiResult.Ok(agents.Select(AgentResponse.FromDomain).ToArray());
     }
 
     [HttpGet("paged")]
@@ -39,7 +42,7 @@ public class AgentsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var page = await _agentAppService.ListAgentPageAsync(pageIndex, pageSize, cancellationToken);
-        return AgwApiResult.Ok(new PagedResult<AgentResponse>
+        return ApiResult.Ok(new PagedResult<AgentResponse>
         {
             Items = page.Items.Select(AgentResponse.FromDomain).ToList(),
             Total = page.Total,
@@ -53,7 +56,7 @@ public class AgentsController : ControllerBase
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var agent = await _agentAppService.GetAgentAsync(id);
-        return agent == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(AgentResponse.FromDomain(agent));
+        return agent == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(AgentResponse.FromDomain(agent));
     }
 
     [HttpGet("suggestions")]
@@ -63,7 +66,7 @@ public class AgentsController : ControllerBase
         [FromQuery] Guid agentId)
     {
         var suggestions = await _agentSuggestionAppService.GetSuggestionsAsync(projectId, agentId);
-        return AgwApiResult.Ok(suggestions);
+        return ApiResult.Ok(suggestions);
     }
 
     [HttpPost]
@@ -91,8 +94,8 @@ public class AgentsController : ControllerBase
             request.ConnectionIds,
             user);
         return created == null
-            ? AgwApiResult.BadRequest("Failed to create agent.")
-            : AgwApiResult.Ok(AgentResponse.FromDomain(created));
+            ? ApiResult.BadRequest("Failed to create agent.", ErrorCodes.InvalidParam.Code)
+            : ApiResult.Ok(AgentResponse.FromDomain(created));
     }
 
     [HttpPut("{id:guid}")]
@@ -105,7 +108,7 @@ public class AgentsController : ControllerBase
             request.ToCommand(),
             user);
 
-        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(AgentResponse.FromDomain(updated));
+        return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(AgentResponse.FromDomain(updated));
     }
 
     [HttpDelete("{id:guid}")]
@@ -113,6 +116,6 @@ public class AgentsController : ControllerBase
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _agentAppService.DeleteAgentAsync(id);
-        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
+        return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 }

@@ -1,7 +1,10 @@
 using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+
+using Bens.Results;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,7 +30,7 @@ public class ProvidersController : ControllerBase
     public async Task<IActionResult> ListAsync()
     {
         var providers = await _service.ListAsync();
-        return AgwApiResult.Ok(providers);
+        return ApiResult.Ok(providers);
     }
 
     [HttpGet("{id:guid}")]
@@ -35,7 +38,7 @@ public class ProvidersController : ControllerBase
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var provider = await _service.GetAsync(id);
-        return provider == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(provider);
+        return provider == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(provider);
     }
 
     [HttpPost]
@@ -44,7 +47,7 @@ public class ProvidersController : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
         var created = await _service.CreateAsync(request, user);
-        return AgwApiResult.Ok(created);
+        return ApiResult.Ok(created);
     }
 
     [HttpPost("discover-models")]
@@ -54,7 +57,7 @@ public class ProvidersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _modelDiscoveryService.DiscoverAsync(request, cancellationToken);
-        return AgwApiResult.Ok(result);
+        return ApiResult.Ok(result);
     }
 
     [HttpPut("{id:guid}")]
@@ -64,7 +67,7 @@ public class ProvidersController : ControllerBase
         var user = User?.Identity?.Name ?? "system";
         var updated = await _service.UpdateAsync(id, request, user);
 
-        return updated == null ? AgwApiResult.NotFound() : AgwApiResult.Ok(updated);
+        return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
@@ -72,6 +75,6 @@ public class ProvidersController : ControllerBase
     public async Task<IActionResult> DeleteAsync(Guid id)
     {
         var deleted = await _service.DeleteAsync(id);
-        return deleted ? AgwApiResult.Ok() : AgwApiResult.NotFound();
+        return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 }

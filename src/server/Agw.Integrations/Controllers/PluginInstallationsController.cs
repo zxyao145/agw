@@ -2,6 +2,8 @@ using Agw.Integrations.Application.Management;
 using Agw.Integrations.Contracts.Management;
 using Agw.Shared.Results;
 
+using Bens.Results;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Integrations.Controllers;
@@ -25,6 +27,6 @@ public sealed class PluginInstallationsController : ControllerBase
     {
         var user = User?.Identity?.Name ?? "system";
         var response = await _service.UpsertAsync(request, user, cancellationToken);
-        return AgwApiResult.Ok(response);
+        return ApiResult.Ok(response);
     }
 }
