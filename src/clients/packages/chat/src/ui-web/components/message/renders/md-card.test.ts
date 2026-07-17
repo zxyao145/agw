@@ -44,10 +44,10 @@ test("markdown list item first paragraphs stay on the marker line", () => {
   assert.doesNotMatch(body, /block/);
 });
 
-test("markdown code receives a muted background", () => {
+test("markdown code uses the chat code background", () => {
   const body = getRuleBody(".msg-content-md-code");
 
-  assert.match(body, /bg-\[#e9eaea\]/);
+  assert.match(body, /bg-\[#f4f4f4\]/);
   assert.match(body, /rounded/);
 });
 

@@ -1081,7 +1081,7 @@ export function ChatWorkspace({
             ) : null}
 
             <ColResizeSplit.Right>
-              <Card className="flex min-h-[420px] flex-1 overflow-hidden">
+              <div className="flex justify-center flex-1 overflow-hidden">
                 {hasProjectFileSystem ? (
                   <FileContent
                     selectedFile={selectedFile}
@@ -1096,7 +1096,7 @@ export function ChatWorkspace({
                 ) : (
                   <ProjectRequiredState />
                 )}
-              </Card>
+              </div>
             </ColResizeSplit.Right>
           </ColResizeSplit>
         </TabsContent>

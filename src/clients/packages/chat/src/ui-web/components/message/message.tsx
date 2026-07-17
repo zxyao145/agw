@@ -152,14 +152,14 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
           IsSideRight ? "msg-pos-right" : "msg-pos-left",
           isResult ? "w-full rounded-md p-3 border border-[#e4e4e5] bg-[##fffeff] " : "max-w-full",
           IsSideRight
-            ? "rounded-lg px-2 py-1 bg-primary text-primary-foreground ml-12"
+            ? "rounded-lg px-2 py-1 bg-[#f3f3f4] text-[#17191d] ml-12"
             : // ? "rounded-lg px-2 py-1 bg-[#f3f3f4] ml-24"
               // debug
               // : "bg-secondary mr-12"}`}
               "mr-12",
         )}
       >
-        <div className={`flex items-center gap-2 mb-1 ${IsSideRight ? "justify-end" : ""}`}>
+        <div className={`flex items-center gap-2 ${IsSideRight ? "justify-end" : ""}`}>
           <span
             className={`${isResult ? "text-lg opacity-80 font-semibold mb-4 border-b border-dashed pr-4" : "text-xs opacity-40"}`}
           >
