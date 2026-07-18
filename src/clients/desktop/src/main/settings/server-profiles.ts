@@ -24,15 +24,17 @@ export function normalizeServerUrl(value: string): string {
 
 export function validateServerProfiles(profiles: ServerProfile[]): void {
   const localProfiles = profiles.filter((profile) => profile.kind === "local");
-  const remoteProfiles = profiles.filter((profile) => profile.kind === "remote");
   if (localProfiles.length !== 1 || localProfiles[0]?.id !== "local") {
     throw new Error("Server profiles must contain the local profile.");
   }
-  if (remoteProfiles.length > 1) {
-    throw new Error("Agw Desktop supports at most one remote profile.");
-  }
 
+  const profileIds = new Set<string>();
   for (const profile of profiles) {
+    if (!profile.id.trim() || profileIds.has(profile.id)) {
+      throw new Error("Server profile IDs must be non-empty and unique.");
+    }
+    profileIds.add(profile.id);
+
     const baseUrl = normalizeServerUrl(profile.baseUrl);
     if (profile.kind === "remote" && baseUrl.startsWith("http://") && !profile.allowInsecureHttp) {
       throw new Error("Remote HTTP requires allowInsecureHttp consent.");

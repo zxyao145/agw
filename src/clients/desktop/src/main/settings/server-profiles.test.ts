@@ -24,7 +24,7 @@ test("normalizeServerUrl removes trailing slashes and rejects non-http protocols
   assert.throws(() => normalizeServerUrl("file:///tmp/agw"), /HTTP or HTTPS/);
 });
 
-test("validateServerProfiles allows one local and at most one remote profile", () => {
+test("validateServerProfiles allows one local and multiple remote profiles", () => {
   const remote: ServerProfile = {
     id: "remote-1",
     kind: "remote",
@@ -35,9 +35,16 @@ test("validateServerProfiles allows one local and at most one remote profile", (
   };
 
   assert.doesNotThrow(() => validateServerProfiles([DEFAULT_LOCAL_PROFILE, remote]));
+  assert.doesNotThrow(() =>
+    validateServerProfiles([
+      DEFAULT_LOCAL_PROFILE,
+      remote,
+      { ...remote, id: "remote-2", baseUrl: "https://agw-2.example.test" },
+    ]),
+  );
   assert.throws(
-    () => validateServerProfiles([DEFAULT_LOCAL_PROFILE, remote, { ...remote, id: "remote-2" }]),
-    /one remote/,
+    () => validateServerProfiles([DEFAULT_LOCAL_PROFILE, remote, { ...remote }]),
+    /non-empty and unique/,
   );
 });
 

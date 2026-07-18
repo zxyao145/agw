@@ -1,5 +1,6 @@
 export { AppShell } from "./components/app-shell";
 export { DesktopConnectionGate } from "./desktop-connection-gate";
+export { DesktopWorkspaceBoundary, DesktopWorkspaceErrorState } from "./desktop-workspace-boundary";
 export { DesktopSettingsPage } from "./desktop-settings-page";
 export {
   classifyDesktopConnection,

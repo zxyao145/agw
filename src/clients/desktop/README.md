@@ -10,7 +10,7 @@ The Electron entry points are `src/main/index.ts` and `src/preload/index.ts`; th
 - A Full package installs the bundled self-contained `Agw.Host` as a current-user daemon. A Client package contains no Server.
 - If port 30815 is occupied, Server chooses an available loopback port and publishes it to `~/agw/runtime/server.json`; Desktop validates that descriptor and follows the live process.
 - Desktop uses named Bearer tokens. Local first-run setup is the Server-owned `/setup` Razor page in a sandboxed modal window; after setup, the main process provisions a unique token and encrypts it with the operating system credential store.
-- One optional remote profile is supported. HTTPS is required unless the user explicitly accepts the HTTP warning.
+- Multiple remote profiles are supported. HTTPS is required unless the user explicitly accepts the HTTP warning for a profile.
 
 Every `server + project + conversation` has an independent SignalR connection. Switching Project tabs detaches the visible subscriber without stopping the task. Project status priority is: waiting for approval, failed, running, completed, idle.
 

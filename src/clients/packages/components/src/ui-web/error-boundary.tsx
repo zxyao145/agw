@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./sha
 interface ErrorBoundaryProps {
   children: React.ReactNode;
   fallback?: React.ComponentType<{ error: Error; reset: () => void }>;
+  resetKeys?: readonly unknown[];
 }
 
 interface ErrorBoundaryState {
@@ -28,6 +29,14 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     console.error("ErrorBoundary caught an error:", error, errorInfo);
   }
 
+  componentDidUpdate(previousProps: ErrorBoundaryProps) {
+    if (!this.state.hasError || !resetKeysChanged(previousProps.resetKeys, this.props.resetKeys)) {
+      return;
+    }
+
+    this.reset();
+  }
+
   reset = () => {
     this.setState({ hasError: false, error: null });
   };
@@ -44,6 +53,15 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
     return this.props.children;
   }
+}
+
+function resetKeysChanged(
+  previousKeys?: readonly unknown[],
+  nextKeys?: readonly unknown[],
+): boolean {
+  if (previousKeys === nextKeys) return false;
+  if (!previousKeys || !nextKeys || previousKeys.length !== nextKeys.length) return true;
+  return previousKeys.some((key, index) => !Object.is(key, nextKeys[index]));
 }
 
 function DefaultErrorFallback({ error, reset }: { error: Error; reset: () => void }) {

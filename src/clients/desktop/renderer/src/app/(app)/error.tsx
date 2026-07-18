@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { Button } from "@agw/components";
+import { DesktopWorkspaceErrorState } from "@/runtime";
 
 export default function Error({
   error,
@@ -15,13 +15,5 @@ export default function Error({
     console.error(error);
   }, [error]);
 
-  return (
-    <div className="space-y-3">
-      <h2 className="text-lg font-semibold">Something went wrong</h2>
-      <p className="text-sm text-muted-foreground">
-        An unexpected error occurred while rendering this page.
-      </p>
-      <Button onClick={reset}>Try again</Button>
-    </div>
-  );
+  return <DesktopWorkspaceErrorState error={error} onRetry={reset} />;
 }

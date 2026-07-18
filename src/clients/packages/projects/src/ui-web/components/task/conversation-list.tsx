@@ -349,7 +349,7 @@ export function ConversationList({
                 }}
               >
                 <Trash2 className="h-4 w-4" />
-                Clear All History
+                Delete All History
               </Button>
             )}
 

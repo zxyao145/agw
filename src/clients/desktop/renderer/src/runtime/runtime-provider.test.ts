@@ -20,3 +20,9 @@ test("Desktop runtime keeps its initial connection state stable during hydration
   assert.match(source, /useState<DesktopConnectionStatus>\("loading"\)/);
   assert.doesNotMatch(source, /isDesktop \? "loading" : "ready"/);
 });
+
+test("Desktop reconnects when the active profile token changes", async () => {
+  const source = await readFile(RUNTIME_URL, "utf8");
+
+  assert.match(source, /runtimeState\?\.activeToken === saved\.activeToken/);
+});

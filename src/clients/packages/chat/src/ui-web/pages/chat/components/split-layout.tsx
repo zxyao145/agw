@@ -97,7 +97,7 @@ const ColResizeSplit: ColResizeSplitComponent = ({ children }: ColSplitProps) =>
             {/* Resize handle */}
             <div
               className={cn(
-                "w-1 cursor-col-resize flex items-center justify-center bg-primary/20 transition-colors group",
+                "w-[2px] cursor-col-resize flex items-center justify-center bg-primary/20 transition-colors group",
                 isResizing && "bg-primary/30",
               )}
               onMouseDown={(e) => {

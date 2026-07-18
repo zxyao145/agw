@@ -1,14 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { HardDrive, Save, Server } from "lucide-react";
+import { HardDrive, Save } from "lucide-react";
 import { toast } from "sonner";
 
-import type { ServerProfile } from "@desktop/shared/contracts";
 import { Button } from "@agw/components";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@agw/components";
-import { Input } from "@agw/components";
 import { Label } from "@agw/components";
+import { ServerProfilesPanel } from "./components/server-profiles-panel";
 import { useDesktopRuntime } from "./runtime-provider";
 import {
   Dialog,
@@ -19,31 +18,9 @@ import {
   DialogTitle,
 } from "@agw/components";
 
-function normalizeHttpUrl(value: string): string {
-  const url = new URL(value.trim());
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Server URL must use HTTP or HTTPS.");
-  }
-  url.pathname = url.pathname.replace(/\/+$/u, "");
-  url.search = "";
-  url.hash = "";
-  return url.toString().replace(/\/$/u, "");
-}
-
 function DesktopSettingsPanel() {
   const desktop = useDesktopRuntime();
   const settings = desktop.runtimeState?.settings;
-  const localProfile = settings?.profiles.find((profile) => profile.kind === "local");
-  const savedRemote = settings?.profiles.find((profile) => profile.kind === "remote");
-  const [localUrl, setLocalUrl] = React.useState(localProfile?.baseUrl ?? "http://127.0.0.1:30815");
-  const [remoteEnabled, setRemoteEnabled] = React.useState(Boolean(savedRemote));
-  const [remoteName, setRemoteName] = React.useState(savedRemote?.name ?? "Remote");
-  const [remoteUrl, setRemoteUrl] = React.useState(savedRemote?.baseUrl ?? "https://");
-  const [remoteToken, setRemoteToken] = React.useState("");
-  const [allowInsecureHttp, setAllowInsecureHttp] = React.useState(
-    savedRemote?.allowInsecureHttp ?? false,
-  );
-  const [activeServerId, setActiveServerId] = React.useState(settings?.activeServerId ?? "local");
   const [closeBehavior, setCloseBehavior] = React.useState(
     settings?.closeBehavior ?? "minimize-to-tray",
   );
@@ -53,18 +30,10 @@ function DesktopSettingsPanel() {
 
   React.useEffect(() => {
     if (!settings) return;
-    const nextLocal = settings.profiles.find((profile) => profile.kind === "local");
-    const nextRemote = settings.profiles.find((profile) => profile.kind === "remote");
-    setLocalUrl(nextLocal?.baseUrl ?? "http://127.0.0.1:30815");
-    setRemoteEnabled(Boolean(nextRemote));
-    setRemoteName(nextRemote?.name ?? "Remote");
-    setRemoteUrl(nextRemote?.baseUrl ?? "https://");
-    setAllowInsecureHttp(nextRemote?.allowInsecureHttp ?? false);
-    setActiveServerId(settings.activeServerId);
     setCloseBehavior(settings.closeBehavior);
   }, [settings]);
 
-  if (!settings || !localProfile) {
+  if (!settings) {
     return (
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground">
@@ -77,35 +46,11 @@ function DesktopSettingsPanel() {
   const handleSave = async () => {
     setBusy(true);
     try {
-      const profiles: ServerProfile[] = [{ ...localProfile, baseUrl: normalizeHttpUrl(localUrl) }];
-      if (remoteEnabled) {
-        const normalizedRemoteUrl = normalizeHttpUrl(remoteUrl);
-        if (normalizedRemoteUrl.startsWith("http://") && !allowInsecureHttp) {
-          throw new Error("Remote HTTP requires explicit consent.");
-        }
-        profiles.push({
-          id: "remote",
-          kind: "remote",
-          name: remoteName.trim() || "Remote",
-          baseUrl: normalizedRemoteUrl,
-          apiMajorVersion: 1,
-          allowInsecureHttp,
-        });
-        if (remoteToken.trim()) {
-          await window.agwDesktop?.saveToken("remote", remoteToken.trim());
-        }
-      } else {
-        await window.agwDesktop?.deleteToken("remote");
-      }
-
       await desktop.saveSettings({
         ...settings,
         closeBehavior: closeBehavior as "minimize-to-tray" | "quit-desktop",
-        profiles,
-        activeServerId: remoteEnabled && activeServerId === "remote" ? "remote" : "local",
       });
-      setRemoteToken("");
-      toast.success("Desktop settings saved");
+      toast.success("App settings saved");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to save Desktop settings");
     } finally {
@@ -115,91 +60,6 @@ function DesktopSettingsPanel() {
 
   return (
     <>
-      <Card id="local-server" className="scroll-mt-4">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Server className="h-5 w-5" /> Server connections
-          </CardTitle>
-          <CardDescription>
-            Desktop keeps one local profile and, optionally, one remote profile. Remote HTTP is
-            disabled until you explicitly allow it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-2">
-            <Label htmlFor="active-server">Active Server</Label>
-            <select
-              id="active-server"
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={activeServerId}
-              onChange={(event) => setActiveServerId(event.target.value)}
-            >
-              <option value="local">Local</option>
-              {remoteEnabled ? <option value="remote">{remoteName || "Remote"}</option> : null}
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="local-server-url">Local Server URL</Label>
-            <Input
-              id="local-server-url"
-              value={localUrl}
-              onChange={(event) => setLocalUrl(event.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              The bundled daemon defaults to http://127.0.0.1:30815. Use this field when the local
-              listener is configured differently.
-            </p>
-          </div>
-
-          <label className="flex items-center gap-2 text-sm font-medium">
-            <input
-              type="checkbox"
-              checked={remoteEnabled}
-              onChange={(event) => setRemoteEnabled(event.target.checked)}
-            />
-            Configure a remote Server
-          </label>
-          {remoteEnabled ? (
-            <div className="grid gap-4 rounded-xl border bg-muted/25 p-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="remote-server-name">Name</Label>
-                <Input
-                  id="remote-server-name"
-                  value={remoteName}
-                  onChange={(event) => setRemoteName(event.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="remote-server-url">Server URL</Label>
-                <Input
-                  id="remote-server-url"
-                  value={remoteUrl}
-                  onChange={(event) => setRemoteUrl(event.target.value)}
-                />
-              </div>
-              <div className="grid gap-2 sm:col-span-2">
-                <Label htmlFor="remote-server-token">API token</Label>
-                <Input
-                  id="remote-server-token"
-                  type="password"
-                  value={remoteToken}
-                  placeholder="Leave blank to keep the saved token"
-                  onChange={(event) => setRemoteToken(event.target.value)}
-                />
-              </div>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={allowInsecureHttp}
-                  onChange={(event) => setAllowInsecureHttp(event.target.checked)}
-                />
-                I understand that remote HTTP exposes the API token and traffic on the network.
-              </label>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
       <Card id="appearance" className="scroll-mt-4">
         <CardHeader>
           <CardTitle>Desktop behavior</CardTitle>
@@ -307,17 +167,7 @@ function DesktopSettingsPanel() {
 export function DesktopSettingsPage() {
   return (
     <div className="w-full max-w-4xl space-y-6 py-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-            Desktop & Server
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold">Connections and app</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage Server profiles, close behavior, package details, and uninstall data.
-          </p>
-        </div>
-      </div>
+      <ServerProfilesPanel />
       <DesktopSettingsPanel />
     </div>
   );

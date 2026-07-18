@@ -9,13 +9,16 @@ import {
   Bot,
   Boxes,
   Cable,
+  Check,
+  ChevronDown,
   Clock3,
+  Cloud,
   FolderKanban,
   Gauge,
   GitBranch,
   Info,
   KeyRound,
-  ListChecks,
+  LoaderCircle,
   Moon,
   Network,
   Server,
@@ -37,6 +40,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@agw/components";
+import { Popover, PopoverContent, PopoverTrigger } from "@agw/components";
 import { useExecutionActivity } from "@agw/chat";
 import type { ExecutionStatus } from "@agw/chat";
 import { buildChatHref } from "@agw/chat";
@@ -85,7 +89,7 @@ const SETTINGS_GROUPS = [
     label: "Desktop & Server",
     items: [
       { href: "/settings/", label: "Connections & app", icon: Server },
-      { href: "/settings/#local-server", label: "Local server", icon: KeyRound },
+      // { href: "/settings/#local-server", label: "Local server", icon: KeyRound },
       { href: "/settings/#appearance", label: "Appearance & close", icon: Moon },
       { href: "/settings/#about", label: "About", icon: Info },
     ],
@@ -136,10 +140,14 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const desktop = useDesktopRuntime();
   const activity = useExecutionActivity();
+  const [serverPickerOpen, setServerPickerOpen] = React.useState(false);
   const activeProjectId = searchParams.get("projectId") ?? DEFAULT_PROJECT_ID;
   const serverId = desktop.activeProfile?.id ?? "browser";
+  const runtimeSettings = desktop.runtimeState?.settings;
+  const serverProfiles = runtimeSettings?.profiles ?? [];
+  const activeServerId = runtimeSettings?.activeServerId ?? serverId;
   const projectsQuery = useQuery({
-    queryKey: ["projects"],
+    queryKey: ["projects", serverId],
     queryFn: async () => (await apiGet("/api/projects")) as ProjectSummary[],
   });
   const projects = projectsQuery.data ?? [];
@@ -222,57 +230,71 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     router.push(buildChatHref("/desktop/chat", { projectId, contextId: null }));
   };
 
+  const switchServer = (nextServerId: string) => {
+    setServerPickerOpen(false);
+    if (!runtimeSettings || nextServerId === runtimeSettings.activeServerId) return;
+    router.replace(
+      buildChatHref("/desktop/chat", { projectId: DEFAULT_PROJECT_ID, contextId: null }),
+    );
+    void desktop.saveSettings({ ...runtimeSettings, activeServerId: nextServerId });
+  };
+
   const platform = desktop.runtimeState?.platform ?? "browser";
+  const hasBackgroundConversations = tabs.some((id) => activity.getProjectStatus(id) !== "idle");
   return (
     <div className="agw-app-shell">
       <header className={cn("agw-titlebar", `platform-${platform}`)}>
-        <Link href="/desktop/chat/" className="agw-titlebar-control">
+        <span className="ml-4"></span>
+        {/* <Link href="/desktop/chat/" className="agw-titlebar-control">
           <AppMark label="Agw Chat" />
-        </Link>
+        </Link> */}
         <nav className="agw-project-tabs" aria-label="Open projects">
-          {tabs.map((projectId) => {
-            const status = activity.getProjectStatus(projectId);
-            return (
-              <div
-                key={projectId}
-                className={cn("agw-project-tab", activeProjectId === projectId && "is-active")}
-              >
-                <Link href={buildChatHref("/desktop/chat", { projectId, contextId: null })}>
-                  <StatusDot status={status} />
-                  <span>{projectById.get(projectId)?.name ?? projectId}</span>
-                </Link>
-                {projectId !== DEFAULT_PROJECT_ID ? (
-                  <button
-                    type="button"
-                    aria-label={`Close ${projectId}`}
-                    onClick={() => closeTab(projectId)}
-                  >
-                    <X />
-                  </button>
-                ) : null}
-              </div>
-            );
-          })}
-          <DesktopProjectPicker
-            projects={projects}
-            activeProjectId={activeProjectId}
-            isLoading={projectsQuery.isLoading}
-            errorMessage={projectsQuery.isError ? getApiErrorMessage(projectsQuery.error) : null}
-            onSelect={openProject}
-          />
+          <div className="flex min-w-0 max-w-full items-center gap-1 overflow-hidden">
+            {tabs.map((projectId) => {
+              const status = activity.getProjectStatus(projectId);
+              return (
+                <div
+                  key={projectId}
+                  className={cn("agw-project-tab", activeProjectId === projectId && "is-active")}
+                >
+                  <Link href={buildChatHref("/desktop/chat", { projectId, contextId: null })}>
+                    <StatusDot status={status} />
+                    <span>{projectById.get(projectId)?.name ?? projectId}</span>
+                  </Link>
+                  {projectId !== DEFAULT_PROJECT_ID ? (
+                    <button
+                      type="button"
+                      aria-label={`Close ${projectId}`}
+                      onClick={() => closeTab(projectId)}
+                    >
+                      <X />
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+            <DesktopProjectPicker
+              projects={projects}
+              activeProjectId={activeProjectId}
+              isLoading={projectsQuery.isLoading}
+              errorMessage={projectsQuery.isError ? getApiErrorMessage(projectsQuery.error) : null}
+              onSelect={openProject}
+            />
+          </div>
         </nav>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button type="button" className="agw-task-button agw-titlebar-control">
-              <ListChecks />
-              <span>{activity.activeCount > 0 ? activity.activeCount : "Tasks"}</span>
+              <LoaderCircle className={cn(hasBackgroundConversations && "animate-spin")} />
+              <span>Conversations</span>
+              {activity.activeCount > 0 ? <span>{activity.activeCount}</span> : null}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuLabel>Background tasks</DropdownMenuLabel>
+            <DropdownMenuLabel>Background conversations</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {tabs.some((id) => activity.getProjectStatus(id) !== "idle") ? (
+            {hasBackgroundConversations ? (
               tabs
                 .filter((id) => activity.getProjectStatus(id) !== "idle")
                 .map((id) => (
@@ -287,15 +309,76 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                   </DropdownMenuItem>
                 ))
             ) : (
-              <DropdownMenuItem disabled>No background tasks</DropdownMenuItem>
+              <DropdownMenuItem disabled>No background conversations</DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Link href="/settings/" className="agw-server-pill agw-titlebar-control">
-          <span className={cn("agw-server-state", desktop.status === "ready" && "is-online")} />
-          <span>{desktop.activeProfile?.name ?? "Localhost"}</span>
-        </Link>
+        <Popover open={serverPickerOpen} onOpenChange={setServerPickerOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="agw-server-pill agw-titlebar-control"
+              aria-label="Switch server"
+            >
+              <span className={cn("agw-server-state", desktop.status === "ready" && "is-online")} />
+              <span className="max-w-32 truncate">
+                {desktop.activeProfile?.name ?? "Localhost"}
+              </span>
+              <ChevronDown className="size-3 text-muted-foreground" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            sideOffset={8}
+            className="w-80 rounded-2xl border-border/70 bg-popover/98 p-0 shadow-2xl shadow-black/12 backdrop-blur-xl"
+          >
+            <div className="border-b border-border/70 px-4 py-3">
+              <div className="text-sm font-semibold tracking-tight">Switch server</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                Choose where Desktop connects
+              </div>
+            </div>
+            <div className="max-h-80 overflow-y-auto p-2.5" role="listbox" aria-label="Servers">
+              {serverProfiles.map((profile) => {
+                const active = profile.id === activeServerId;
+                const ProfileIcon = profile.kind === "remote" ? Cloud : Server;
+                return (
+                  <button
+                    key={profile.id}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    className={cn(
+                      "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-colors",
+                      "hover:bg-muted/70 focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40",
+                      active && "bg-primary/8 text-foreground",
+                    )}
+                    onClick={() => switchServer(profile.id)}
+                  >
+                    <span
+                      className={cn(
+                        "grid size-8 shrink-0 place-items-center rounded-[10px] border bg-background text-muted-foreground",
+                        active && "border-primary/25 bg-primary/10 text-primary",
+                      )}
+                    >
+                      <ProfileIcon className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{profile.name}</span>
+                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                        {profile.baseUrl}
+                      </span>
+                    </span>
+                    <span className="grid size-5 shrink-0 place-items-center text-primary">
+                      {active ? <Check className="size-4" /> : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </PopoverContent>
+        </Popover>
         <span className="agw-titlebar-control">
           <ThemeButton />
         </span>

@@ -133,7 +133,8 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
       const nextProfile = getActiveServerProfile(saved.settings);
       if (
         previousProfile?.id === nextProfile.id &&
-        previousProfile.baseUrl === nextProfile.baseUrl
+        previousProfile.baseUrl === nextProfile.baseUrl &&
+        runtimeState?.activeToken === saved.activeToken
       ) {
         setRuntimeState(saved);
         return;

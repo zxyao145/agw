@@ -21,3 +21,11 @@ test("primary colors use the Shadcn neutral theme", () => {
   assert.match(darkTheme, /--primary-foreground: oklch\(0\.205 0 0\);/);
   assert.match(darkTheme, /--ring: oklch\(0\.556 0 0\);/);
 });
+
+test("title-bar interactive controls use a pointer cursor", () => {
+  assert.match(tokensCss, /\.agw-titlebar-button\s*\{\s*@apply[^;]*\bcursor-pointer\b/);
+  assert.match(
+    tokensCss,
+    /\.agw-server-pill,\s*\.agw-task-button\s*\{\s*@apply[^;]*\bcursor-pointer\b/,
+  );
+});
