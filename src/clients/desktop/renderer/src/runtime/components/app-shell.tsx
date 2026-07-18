@@ -413,7 +413,7 @@ function SettingsShell({ children }: { children: React.ReactNode }) {
           <ArrowLeft />
           <span>Back to chat</span>
         </Link>
-        <AppMark label="Settings" />
+        {/* <AppMark label="Settings" /> */}
         <span className="agw-titlebar-spacer" />
         <span className="agw-titlebar-control">
           <ThemeButton />
