@@ -25,8 +25,6 @@ function DesktopSettingsPanel() {
     settings?.closeBehavior ?? "minimize-to-tray",
   );
   const [busy, setBusy] = React.useState(false);
-  const [uninstallOpen, setUninstallOpen] = React.useState(false);
-  const [deleteServerData, setDeleteServerData] = React.useState(false);
 
   React.useEffect(() => {
     if (!settings) return;
@@ -88,29 +86,55 @@ function DesktopSettingsPanel() {
               <option value="quit-desktop">Quit Desktop</option>
             </select>
           </div>
-          <div
-            id="about"
-            className="flex scroll-mt-4 flex-wrap items-center justify-between gap-3 rounded-xl border p-4"
-          >
-            <div>
-              <p className="text-sm font-medium">Package</p>
-              <p className="text-xs text-muted-foreground">
-                {desktop.runtimeState?.packageFlavor === "full"
-                  ? "Full · Desktop and bundled Server daemon"
-                  : "Client · Desktop only"}
-                {desktop.serverInfo ? ` · Server ${desktop.serverInfo.serverVersion}` : ""}
-              </p>
-            </div>
-            <Button variant="destructive" onClick={() => setUninstallOpen(true)}>
-              Uninstall…
-            </Button>
-          </div>
           <div className="flex justify-end">
             <Button disabled={busy} onClick={handleSave}>
               <Save className="h-4 w-4" />
               Save Desktop settings
             </Button>
           </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function DesktopAboutSection() {
+  const desktop = useDesktopRuntime();
+  const [uninstallOpen, setUninstallOpen] = React.useState(false);
+  const [deleteServerData, setDeleteServerData] = React.useState(false);
+
+  return (
+    <section id="about" className="scroll-mt-4 space-y-5">
+      <div className="flex flex-col">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">About</p>
+        <h1 className="mt-1 text-2xl font-semibold">About Agw Desktop</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          View package details and prepare this installation for removal.
+        </p>
+      </div>
+
+      <Card className="gap-0 overflow-hidden py-0">
+        <CardHeader className="border-b py-5">
+          <CardTitle>Package</CardTitle>
+          <CardDescription>
+            {!desktop.runtimeState
+              ? "Loading package details…"
+              : desktop.runtimeState.packageFlavor === "full"
+                ? "Full · Desktop and bundled Server daemon"
+                : "Client · Desktop only"}
+            {desktop.serverInfo ? ` · Server ${desktop.serverInfo.serverVersion}` : ""}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-4 py-5">
+          <div>
+            <p className="text-sm font-medium">Uninstall Agw Desktop</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Unregister the bundled daemon and choose whether to keep Server data.
+            </p>
+          </div>
+          <Button variant="destructive" onClick={() => setUninstallOpen(true)}>
+            Uninstall…
+          </Button>
         </CardContent>
       </Card>
 
@@ -181,6 +205,7 @@ export function DesktopSettingsPage() {
     <div className="w-full max-w-4xl space-y-12 py-6">
       <ServerProfilesPanel />
       <DesktopSettingsPanel />
+      <DesktopAboutSection />
     </div>
   );
 }
