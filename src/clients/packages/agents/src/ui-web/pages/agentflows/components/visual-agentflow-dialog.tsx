@@ -77,6 +77,12 @@ export function VisualAgentflowDialog({
               </DialogDescription>
             </div>
             <div className="flex items-center gap-2">
+              <DialogClose asChild>
+                <Button variant="outline" size="sm" className="cursor-pointer">
+                  Cancel
+                </Button>
+              </DialogClose>
+
               <Button
                 type="button"
                 size="sm"
@@ -86,11 +92,6 @@ export function VisualAgentflowDialog({
               >
                 {builderActionState?.label ?? (editingAgentflow ? "Update" : "Create")}
               </Button>
-              <DialogClose asChild>
-                <Button variant="outline" size="sm" className="cursor-pointer">
-                  <X />
-                </Button>
-              </DialogClose>
             </div>
           </div>
         </DialogHeader>

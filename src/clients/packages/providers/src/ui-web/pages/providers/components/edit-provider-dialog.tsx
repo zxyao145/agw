@@ -196,7 +196,7 @@ export function EditProviderDialog({ provider, open, onOpenChange }: EditProvide
                   </Button>
                 </DialogClose>
                 <Button type="button" size="sm" onClick={handleUpdate} disabled={isDisabled}>
-                  {updateProviderMutation.isPending ? "Saving..." : "Save"}
+                  {updateProviderMutation.isPending ? "Updating..." : "Update"}
                 </Button>
               </div>
             </div>

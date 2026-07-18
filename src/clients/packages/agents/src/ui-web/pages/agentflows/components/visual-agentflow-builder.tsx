@@ -1049,15 +1049,26 @@ export function VisualAgentflowBuilder({
     summaryModelProviderId,
   ]);
 
-  const actionState = React.useMemo<AgentflowBuilderActionState>(
-    () => ({
-      label: isSaving ? "Saving..." : editingAgentflow ? "Update" : "Create",
+  const actionState = React.useMemo<AgentflowBuilderActionState>(() => {
+    let label = "";
+    if (isSaving) {
+      label = editingAgentflow ? "Updating..." : "Creating..."; // "Saving..."
+    } else {
+      label = editingAgentflow ? "Update" : "Create";
+    }
+    return {
+      label: label,
       disabled: isSaving || !agentflowName.trim() || !graphValidation.ok,
       isSaving,
       submit: handleBuild,
-    }),
-    [agentflowName, editingAgentflow, graphValidation.ok, handleBuild, isSaving],
-  );
+    };
+  }, [
+    agentflowName,
+    editingAgentflow,
+    graphValidation.ok,
+    handleBuild,
+    isSaving,
+  ]);
 
   React.useEffect(() => {
     onActionStateChange?.(actionState);
