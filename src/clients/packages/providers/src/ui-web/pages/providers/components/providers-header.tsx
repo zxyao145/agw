@@ -18,7 +18,7 @@ export function ProvidersHeader({ onRefresh, isRefreshing, onCreateClick }: Prov
         <Button variant="outline" onClick={onRefresh} disabled={isRefreshing}>
           Refresh
         </Button>
-        <Button onClick={onCreateClick}>Create provider</Button>
+        <Button onClick={onCreateClick}>Create</Button>
       </div>
     </div>
   );

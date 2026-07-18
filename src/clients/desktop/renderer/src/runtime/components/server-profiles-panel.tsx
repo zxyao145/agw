@@ -137,27 +137,29 @@ export function ServerProfilesPanel() {
   return (
     <>
       <section id="local-server" className="scroll-mt-4 space-y-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-              Desktop & Server
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold">Connections and app</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Manage Server profiles, close behavior, package details, and uninstall data.
-            </p>
+        <div className="flex flex-col ">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
+            Desktop & Server
+          </p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="mt-1 text-2xl font-semibold">Connections and app</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Manage Server profiles, close behavior, package details, and uninstall data.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="icon-sm"
+              className="mt-1 rounded-xl"
+              aria-label="Add remote Server"
+              title="Add remote Server"
+              disabled={!settings || busy}
+              onClick={openAddRemote}
+            >
+              <Plus className="size-5" />
+            </Button>
           </div>
-          <Button
-            type="button"
-            size="icon-lg"
-            className="mt-1 rounded-xl"
-            aria-label="Add remote Server"
-            title="Add remote Server"
-            disabled={!settings || busy}
-            onClick={openAddRemote}
-          >
-            <Plus className="size-5" />
-          </Button>
         </div>
 
         <Card className="gap-0 overflow-hidden py-0">
@@ -263,7 +265,10 @@ export function ServerProfilesPanel() {
                   value={draft.name}
                   autoFocus
                   onChange={(event) =>
-                    setDraft((current) => ({ ...current, name: event.target.value }))
+                    setDraft((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
                   }
                 />
               </div>
@@ -274,7 +279,10 @@ export function ServerProfilesPanel() {
                   value={draft.baseUrl}
                   placeholder={draft.kind === "remote" ? "https://agw.example.com" : undefined}
                   onChange={(event) =>
-                    setDraft((current) => ({ ...current, baseUrl: event.target.value }))
+                    setDraft((current) => ({
+                      ...current,
+                      baseUrl: event.target.value,
+                    }))
                   }
                 />
               </div>
@@ -288,7 +296,10 @@ export function ServerProfilesPanel() {
                       value={draft.token}
                       placeholder={draft.id ? "Leave blank to keep the saved token" : "agw_…"}
                       onChange={(event) =>
-                        setDraft((current) => ({ ...current, token: event.target.value }))
+                        setDraft((current) => ({
+                          ...current,
+                          token: event.target.value,
+                        }))
                       }
                     />
                   </div>

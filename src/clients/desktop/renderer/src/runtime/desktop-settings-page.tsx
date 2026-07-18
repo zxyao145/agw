@@ -59,15 +59,23 @@ function DesktopSettingsPanel() {
   };
 
   return (
-    <>
-      <Card id="appearance" className="scroll-mt-4">
-        <CardHeader>
-          <CardTitle>Desktop behavior</CardTitle>
-          <CardDescription>
-            The Server daemon continues when the Desktop window closes.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <section id="appearance" className="scroll-mt-4 space-y-5">
+      <div className="flex flex-col ">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
+          Appearance & close
+        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="mt-1 text-2xl font-semibold">Desktop behavior</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The Server daemon continues when the Desktop window closes.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <Card className="gap-0 overflow-hidden p-4">
+        <CardContent className="space-y-4 px-0">
           <div className="grid gap-2">
             <Label htmlFor="close-behavior">When closing the window</Label>
             <select
@@ -97,10 +105,12 @@ function DesktopSettingsPanel() {
               Uninstall…
             </Button>
           </div>
-          <Button disabled={busy} onClick={handleSave}>
-            <Save className="h-4 w-4" />
-            Save Desktop settings
-          </Button>
+          <div className="flex justify-end">
+            <Button disabled={busy} onClick={handleSave}>
+              <Save className="h-4 w-4" />
+              Save Desktop settings
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -150,7 +160,9 @@ function DesktopSettingsPanel() {
             <Button
               variant="destructive"
               onClick={async () => {
-                const result = await window.agwDesktop?.prepareUninstall({ deleteServerData });
+                const result = await window.agwDesktop?.prepareUninstall({
+                  deleteServerData,
+                });
                 if (result) toast.info(result.message);
                 setUninstallOpen(false);
               }}
@@ -160,13 +172,13 @@ function DesktopSettingsPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </section>
   );
 }
 
 export function DesktopSettingsPage() {
   return (
-    <div className="w-full max-w-4xl space-y-6 py-6">
+    <div className="w-full max-w-4xl space-y-12 py-6">
       <ServerProfilesPanel />
       <DesktopSettingsPanel />
     </div>

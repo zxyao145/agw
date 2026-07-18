@@ -340,10 +340,7 @@ export default function McpToolServersPage() {
           >
             Refresh
           </Button>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Server
-          </Button>
+          <Button onClick={() => setCreateOpen(true)}>Add Server</Button>
         </div>
       </div>
 

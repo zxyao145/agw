@@ -533,10 +533,7 @@ export default function JobsPage() {
             Refresh
           </Button>
 
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Job
-          </Button>
+          <Button onClick={() => setCreateOpen(true)}>Add Job</Button>
         </div>
       </div>
 

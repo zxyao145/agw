@@ -21,7 +21,7 @@ export function ModelsHeader({ onRefresh, isRefreshing, onCreateClick }: ModelsH
           Refresh
         </Button>
 
-        <Button onClick={onCreateClick}>Create model</Button>
+        <Button onClick={onCreateClick}>Create</Button>
       </div>
     </div>
   );

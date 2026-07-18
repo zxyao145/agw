@@ -88,7 +88,7 @@ export function CreateProjectDialog({
       }
     >
       <DialogTrigger asChild>
-        <Button>Create project</Button>
+        <Button>Create</Button>
       </DialogTrigger>
 
       <DialogContent
