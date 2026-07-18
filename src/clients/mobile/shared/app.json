@@ -3,6 +3,7 @@
     "name": "Agw",
     "slug": "agw",
     "version": "0.0.1",
+    "icon": "./assets/agw-logo@2x.png",
     "scheme": "agw",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

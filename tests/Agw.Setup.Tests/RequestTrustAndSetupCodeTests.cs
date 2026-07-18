@@ -60,6 +60,16 @@ public class RequestTrustAndSetupCodeTests
         Assert.Equal(expected, LocalTrustedRequest.IsSameOrigin(context));
     }
 
+    [Theory]
+    [InlineData("agw://app", true)]
+    [InlineData("agw://app/", true)]
+    [InlineData("https://evil.example.com", false)]
+    [InlineData("agw://evil", false)]
+    public void IsDesktopOrigin_WhenOriginVaries_ReturnsExpected(string origin, bool expected)
+    {
+        Assert.Equal(expected, LocalTrustedRequest.IsDesktopOrigin(origin));
+    }
+
     [Fact]
     public void AuthenticationAttemptLimiter_BlocksAfterFiveFailuresWithinFifteenMinutes()
     {
@@ -95,6 +105,28 @@ public class RequestTrustAndSetupCodeTests
         Assert.False(nextCalled);
     }
 
+    [Fact]
+    public async Task AuthenticationMiddleware_WhenDesktopWebSocketUsesBearerToken_AllowsUpgrade()
+    {
+        var context = new DefaultHttpContext();
+        context.Features.Set<IHttpWebSocketFeature>(new WebSocketFeature());
+        context.Request.Scheme = "http";
+        context.Request.Host = new HostString("localhost", 30815);
+        context.Request.Headers.Origin = "agw://app";
+        context.Request.Headers.Authorization = "Bearer agw_desktop";
+        var nextCalled = false;
+        var middleware = new AgwAuthenticationMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        await middleware.InvokeAsync(context, new StateStoreStub(validToken: "agw_desktop"));
+
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.True(nextCalled);
+    }
+
     private sealed class WebSocketFeature : IHttpWebSocketFeature
     {
         public bool IsWebSocketRequest => true;
@@ -104,6 +136,13 @@ public class RequestTrustAndSetupCodeTests
 
     private sealed class StateStoreStub : IInitializationStateStore
     {
+        private readonly string? _validToken;
+
+        public StateStoreStub(string? validToken = null)
+        {
+            _validToken = validToken;
+        }
+
         public InitializationSnapshot GetSnapshot() => new(true, "hash", 1, []);
 
         public Task PersistAsync(SetupRequest request, string passwordHash, CancellationToken cancellationToken = default) =>
@@ -115,7 +154,7 @@ public class RequestTrustAndSetupCodeTests
         public Task<bool> RevokeTokenAsync(Guid id, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public bool ValidateToken(string token) => false;
+        public bool ValidateToken(string token) => string.Equals(token, _validToken, StringComparison.Ordinal);
 
         public Task UpdatePasswordAsync(string passwordHash, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();

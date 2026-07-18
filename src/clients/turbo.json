@@ -1,0 +1,74 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "ui": "stream",
+  "remoteCache": {
+    "enabled": false
+  },
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@agw/web#build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "out/**"],
+      "env": ["BACKEND_API_BASE_URL", "CI", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
+    },
+    "@agw/desktop#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "renderer/.next/**", "!renderer/.next/cache/**", "renderer/out/**"],
+      "env": ["AGW_*", "CI"]
+    },
+    "lint": {},
+    "test": {
+      "dependsOn": ["^build"],
+      "env": ["CI", "TZ"]
+    },
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["CI", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"]
+    },
+    "dev:renderer": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "env": ["AGW_*", "CI"]
+    },
+    "format": {
+      "cache": false
+    },
+    "format:check": {},
+    "gen:api": {
+      "cache": false
+    },
+    "prepare:resources": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"],
+      "passThroughEnv": ["DOTNET_*", "NUGET_*", "CI"]
+    },
+    "package": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"],
+      "passThroughEnv": ["DOTNET_*", "NUGET_*", "CI"]
+    },
+    "make": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["AGW_*", "BACKEND_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "NEXT_OUTPUT_MODE"],
+      "passThroughEnv": ["DOTNET_*", "NUGET_*", "CI"]
+    },
+    "release:collect": {
+      "cache": false,
+      "env": ["AGW_*"]
+    }
+  }
+}

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { QueryProvider } from "@/components/query-provider";
-import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryProvider } from "@agw/components";
+import { ThemeProvider } from "@agw/components";
+import { Toaster } from "@agw/components";
+import { TooltipProvider } from "@agw/components";
 
 import "./globals.css";
 

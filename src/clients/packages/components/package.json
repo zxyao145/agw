@@ -1,0 +1,58 @@
+{
+  "name": "@agw/components",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./query": "./src/ui-web/query.ts",
+    "./ui-tokens.css": "./src/ui-tokens/tokens.css"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "oxlint ./src",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "format": "oxfmt ./src *.json",
+    "format:check": "oxfmt --check ./src *.json"
+  },
+  "dependencies": {
+    "@radix-ui/react-accordion": "1.2.12",
+    "@radix-ui/react-checkbox": "1.3.3",
+    "@radix-ui/react-collapsible": "1.1.12",
+    "@radix-ui/react-context-menu": "2.2.16",
+    "@radix-ui/react-dialog": "1.1.15",
+    "@radix-ui/react-dropdown-menu": "2.1.16",
+    "@radix-ui/react-label": "2.1.8",
+    "@radix-ui/react-popover": "1.1.15",
+    "@radix-ui/react-radio-group": "1.3.8",
+    "@radix-ui/react-scroll-area": "1.2.10",
+    "@radix-ui/react-select": "2.2.6",
+    "@radix-ui/react-separator": "1.1.8",
+    "@radix-ui/react-slot": "1.2.4",
+    "@radix-ui/react-switch": "1.2.6",
+    "@radix-ui/react-tabs": "1.1.13",
+    "@tanstack/react-query": "5.94.5",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "date-fns": "4.4.0",
+    "lucide-react": "0.577.0",
+    "next-themes": "0.4.6",
+    "radix-ui": "1.6.2",
+    "react-day-picker": "10.0.1",
+    "sonner": "2.0.7",
+    "tailwind-merge": "3.5.0",
+    "vaul": "1.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "oxfmt": "0.41.0",
+    "oxlint": "1.56.0",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "next": "16.2.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  }
+}

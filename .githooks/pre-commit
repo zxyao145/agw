@@ -4,7 +4,7 @@
 set -e
 
 echo "Running dotnet format Agw.slnx..."
-dotnet format Agw.slnx --verify-no-changes 
+dotnet format Agw.slnx --verify-no-changes
 echo "Backend checks passed."
 
 

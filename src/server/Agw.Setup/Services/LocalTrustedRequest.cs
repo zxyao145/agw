@@ -30,4 +30,16 @@ public static class LocalTrustedRequest
         return string.Equals(originUri.Scheme, context.Request.Scheme, StringComparison.OrdinalIgnoreCase)
             && string.Equals(originUri.Authority, context.Request.Host.Value, StringComparison.OrdinalIgnoreCase);
     }
+
+    public static bool IsDesktopOrigin(string origin)
+    {
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri)) return false;
+        return string.Equals(originUri.Scheme, "agw", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(originUri.Host, "app", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrEmpty(originUri.UserInfo)
+            && originUri.Port == -1
+            && originUri.AbsolutePath is "" or "/"
+            && string.IsNullOrEmpty(originUri.Query)
+            && string.IsNullOrEmpty(originUri.Fragment);
+    }
 }

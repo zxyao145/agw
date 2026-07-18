@@ -80,6 +80,12 @@ Frontend:
 - Tailwind CSS 4
 - Shadcn 4 (Radix UI)
 
+Desktop:
+
+- Electron 43 + Electron Forge
+- Full installers with a current-user Server daemon, or Client-only installers
+- Windows x64, macOS x64/arm64, and Ubuntu x64
+
 ## Usage
 
 Start the backend from the repository root:
@@ -94,14 +100,16 @@ The development backend listens on `http://localhost:30815` by default. On the f
 Start the frontend in another terminal:
 
 ```bash
-cd src/clients/web
+cd src/clients
 pnpm install
-pnpm dev
+pnpm dev:web
 ```
 
-After both services are running, open `http://localhost:3000`. The Next.js development server proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30815`.
+The `src/clients` pnpm Workspace contains independent `@agw/web` and `@agw/desktop` applications plus shared infrastructure and business domains under `src/clients/packages/`, with Turborepo orchestrating their tasks. Neither application imports, builds, or consumes artifacts from the other. Each application owns its own thin Next.js route shell; reusable business UI comes from `packages/*`. The Expo mobile app remains a separate npm workspace. After the backend and Web are running, open `http://localhost:3001`. Web proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30815`.
 
 Production packages embed the static Web UI in ASP.NET Core and serve it from a single server process. See the deployment guide below for details.
+
+Agw Desktop owns a secure Electron main/preload implementation and an independent React renderer under `src/clients/desktop/renderer/`. The renderer composes the same business packages as Web, while the Electron bridge contracts remain internal to Desktop under `src/shared/contracts/`. Desktop builds and packages its own static export without locating `web/`. See [`src/clients/desktop/README.md`](src/clients/desktop/README.md) for its runtime model, package variants, and release workflow.
 
 A typical local workflow is:
 
@@ -155,7 +163,7 @@ The following screenshots show the main Agw interfaces:
 
 ## Architecture
 
-Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the ASP.NET Core application entry point and assembles the modules. The Web client is located in `src/clients/web`, and the Expo mobile client is in `src/clients/mobile`.
+Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the ASP.NET Core application entry point and assembles the modules. The pnpm Workspace at `src/clients` contains the Web and Electron Desktop applications plus their shared Desktop contracts package, while the Expo mobile client remains separate in `src/clients/mobile`.
 
 A typical backend flow is:
 

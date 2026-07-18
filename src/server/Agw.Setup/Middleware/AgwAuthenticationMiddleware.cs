@@ -31,9 +31,13 @@ public sealed class AgwAuthenticationMiddleware
             }
         }
 
+        var origin = context.Request.Headers.Origin.ToString();
+        var isAuthenticatedDesktop = context.User.Identity?.AuthenticationType == "Bearer"
+            && LocalTrustedRequest.IsDesktopOrigin(origin);
         if (context.WebSockets.IsWebSocketRequest
             && context.Request.Headers.ContainsKey("Origin")
-            && !LocalTrustedRequest.IsSameOrigin(context))
+            && !LocalTrustedRequest.IsSameOrigin(context)
+            && !isAuthenticatedDesktop)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;

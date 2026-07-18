@@ -36,7 +36,8 @@ public class EndpointExtensionTests
                 ("api/jobs/{id:guid}", "DELETE"),
                 ("api/jobs/{id:guid}", "GET"),
                 ("api/jobs/{id:guid}", "PUT"),
-                ("api/jobs/{id:guid}/logs", "GET")
+                ("api/jobs/{id:guid}/logs", "GET"),
+                ("api/jobs/enabled", "PUT")
             ],
             routes);
     }

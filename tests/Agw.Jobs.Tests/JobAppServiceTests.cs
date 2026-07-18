@@ -63,6 +63,72 @@ public class JobAppServiceTests
         Assert.Equal("job-3-20260715", job!.Name);
     }
 
+    [Fact]
+    public async Task UpdateEnabledAsync_Disable_ChangesOnlyEnabledAndAuditFields()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var fixture = await JobAppServiceFixture.CreateAsync(1, cancellationToken);
+        var original = await fixture.GetJobAsync(fixture.FirstJobId, cancellationToken);
+        var updatedAt = UtcNow.AddMinutes(5);
+        fixture.TimeProvider.SetUtcNow(updatedAt);
+
+        var job = await fixture.Service.UpdateEnabledAsync(
+            new JobEnabledUpdateRequest
+            {
+                JobId = fixture.FirstJobId,
+                IsEnabled = false
+            },
+            "toggle-user");
+
+        Assert.NotNull(job);
+        Assert.False(job!.IsEnabled);
+        Assert.Equal("toggle-user", job.UpdateBy);
+        Assert.Equal(updatedAt, job.UpdateTime);
+        Assert.Equal(original.ProjectId, job.ProjectId);
+        Assert.Equal(original.Name, job.Name);
+        Assert.Equal(original.TriggerType, job.TriggerType);
+        Assert.Equal(original.TriggerValue, job.TriggerValue);
+        Assert.Equal(original.NextRunTime, job.NextRunTime);
+        Assert.Equal(original.Status, job.Status);
+        Assert.Equal(original.RetryCount, job.RetryCount);
+        Assert.Equal(original.MaxRetryCount, job.MaxRetryCount);
+    }
+
+    [Fact]
+    public async Task UpdateEnabledAsync_MissingJob_ReturnsNull()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var fixture = await JobAppServiceFixture.CreateAsync(0, cancellationToken);
+
+        var job = await fixture.Service.UpdateEnabledAsync(
+            new JobEnabledUpdateRequest
+            {
+                JobId = Guid.CreateVersion7(),
+                IsEnabled = false
+            },
+            "toggle-user");
+
+        Assert.Null(job);
+    }
+
+    [Fact]
+    public async Task UpdateEnabledAsync_Enable_WakesScheduler()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var fixture = await JobAppServiceFixture.CreateAsync(1, cancellationToken);
+        var wait = fixture.SchedulerWakeSignal.WaitAsync(cancellationToken);
+
+        await fixture.Service.UpdateEnabledAsync(
+            new JobEnabledUpdateRequest
+            {
+                JobId = fixture.FirstJobId,
+                IsEnabled = true
+            },
+            "toggle-user");
+
+        await wait.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+    }
+
     private static JobCreateRequest CreateRequest(string name)
     {
         return new JobCreateRequest
@@ -85,16 +151,30 @@ public class JobAppServiceTests
             SqliteConnection connection,
             AgwDbContext dbContext,
             JobAppService service,
+            TestTimeProvider timeProvider,
+            JobSchedulerWakeSignal schedulerWakeSignal,
             Guid firstJobId)
         {
             _connection = connection;
             _dbContext = dbContext;
             Service = service;
+            TimeProvider = timeProvider;
+            SchedulerWakeSignal = schedulerWakeSignal;
             FirstJobId = firstJobId;
         }
 
         public JobAppService Service { get; }
+        public TestTimeProvider TimeProvider { get; }
+        public JobSchedulerWakeSignal SchedulerWakeSignal { get; }
         public Guid FirstJobId { get; }
+
+        public async Task<Job> GetJobAsync(Guid id, CancellationToken cancellationToken)
+        {
+            _dbContext.ChangeTracker.Clear();
+            return await _dbContext.Jobs
+                .AsNoTracking()
+                .SingleAsync(job => job.Id == id, cancellationToken);
+        }
 
         public static async Task<JobAppServiceFixture> CreateAsync(
             int jobCount,
@@ -136,6 +216,7 @@ public class JobAppServiceTests
             }
 
             var timeProvider = new TestTimeProvider(UtcNow);
+            var schedulerWakeSignal = new JobSchedulerWakeSignal(timeProvider);
             var service = new JobAppService(
                 new JobRepo(dbContext, timeProvider),
                 new EfRepository<JobLog>(dbContext),
@@ -143,13 +224,15 @@ public class JobAppServiceTests
                 new EfRepository<ProjectContext>(dbContext),
                 new UnitOfWork(dbContext),
                 new JobScheduleCalculator(),
-                new JobSchedulerWakeSignal(timeProvider),
+                schedulerWakeSignal,
                 timeProvider);
 
             return new JobAppServiceFixture(
                 connection,
                 dbContext,
                 service,
+                timeProvider,
+                schedulerWakeSignal,
                 jobs.FirstOrDefault()?.Id ?? Guid.Empty);
         }
 

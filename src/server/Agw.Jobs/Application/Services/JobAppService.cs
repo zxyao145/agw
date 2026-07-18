@@ -156,6 +156,29 @@ public class JobAppService
         return entity;
     }
 
+    public async Task<Job?> UpdateEnabledAsync(JobEnabledUpdateRequest request, string user)
+    {
+        var entity = await _jobTaskRepository.GetByIdAsync(request.JobId);
+        if (entity == null)
+        {
+            return null;
+        }
+
+        entity.IsEnabled = request.IsEnabled;
+        entity.UpdateBy = user;
+        entity.UpdateTime = _timeProvider.GetUtcNow();
+
+        _jobTaskRepository.Update(entity);
+        await _unitOfWork.SaveChangesAsync();
+
+        if (entity.IsEnabled)
+        {
+            _schedulerWakeSignal.NotifyChanged();
+        }
+
+        return entity;
+    }
+
     public async Task<bool> DeleteAsync(Guid id)
     {
         var entity = await _jobTaskRepository.GetByIdAsync(id);

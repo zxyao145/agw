@@ -7,6 +7,7 @@ import type {
   AgwTarget,
 } from "../../../api/agw-api-types";
 import type { AgwLocalConfig } from "../../../config/agw-config";
+import { AgwLogo } from "./agw-logo";
 import { ConfigSettingsPage } from "./config-settings-sheet";
 import {
   DEFAULT_AGENT_LABEL,
@@ -100,7 +101,7 @@ export function HistoryDrawer({
               <Text style={styles.drawerTitle}>Settings</Text>
             </View>
           ) : (
-            <Text style={styles.drawerBrand}>Agw</Text>
+            <AgwLogo labelStyle={styles.drawerBrand} />
           )}
           <IconButton
             color={colors.primary}

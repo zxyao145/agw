@@ -32,6 +32,8 @@ public static class EndpointRouteBuilderExtensions
             .Produces<ApiResult<JobLogResponse[]>>();
         routeGroup.MapPost("jobs", CreateAsync)
             .Produces<ApiResult<Job>>();
+        routeGroup.MapPut("jobs/enabled", UpdateEnabledAsync)
+            .Produces<ApiResult<Job>>();
         routeGroup.MapPut("jobs/{id:guid}", UpdateAsync)
             .Produces<ApiResult<Job>>();
         routeGroup.MapDelete("jobs/{id:guid}", DeleteAsync)
@@ -83,6 +85,18 @@ public static class EndpointRouteBuilderExtensions
     {
         var userName = user.Identity?.Name ?? "system";
         var job = await jobAppService.UpdateAsync(id, request, userName);
+        return job == null
+            ? ErrorCodes.ResourceNotFound.ToApiResult()
+            : ApiResult.Ok(job);
+    }
+
+    private static async Task<HttpResult> UpdateEnabledAsync(
+        JobEnabledUpdateRequest request,
+        JobAppService jobAppService,
+        ClaimsPrincipal user)
+    {
+        var userName = user.Identity?.Name ?? "system";
+        var job = await jobAppService.UpdateEnabledAsync(request, userName);
         return job == null
             ? ErrorCodes.ResourceNotFound.ToApiResult()
             : ApiResult.Ok(job);

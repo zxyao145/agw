@@ -52,13 +52,21 @@ A typical backend flow is:
 Controller → AppService / RuntimeService → DomainService → IRepository / IUnitOfWork → EF Core
 ```
 
+### Client Workspace (`src/clients/`)
+
+`@agw/web`, `@agw/desktop`, and the `@agw/*` packages under `src/clients/packages/` share a pnpm Workspace and use Turborepo for task orchestration. Run pnpm commands from `src/clients/`; one `pnpm install` installs the whole workspace. The Expo mobile app remains a separate npm workspace.
+
 ### Web Client (`src/clients/web/`)
 
 The web client uses Next.js 16 App Router, React 19, Tailwind CSS 4, Radix UI/Shadcn components, React Query, and generated `openapi-fetch` types.
 
-Routes live under `src/app/(app)/`, typed API helpers under `src/api/`, shared UI under `src/components/`, and shared hooks, utilities, and types under `src/hooks/`, `src/lib/`, and `src/types/`.
+`src/app/` contains only Next.js routes, layouts, global CSS, and application-shell composition. Business domains live in `src/clients/packages/` (`agents`, `auth`, `chat`, `integrations`, `jobs`, `observability`, `projects`, `providers`, `settings`, and `skills`); transport and shared UI live in `http-client`, `api`, and `components`. Web routes import public package entry points rather than owning domain implementations.
 
 `src/clients/web/next.config.ts` proxies `/api/*` and `/openapi/*` to the backend unless `NEXT_OUTPUT_MODE=export`.
+
+### Desktop Client (`src/clients/desktop/`)
+
+The Electron main and preload entry points are `src/main/index.ts` and `src/preload/index.ts`. Desktop owns an independent Next.js React renderer under `renderer/`; its Electron bridge adapter lives in `renderer/src/runtime/`, while cross-process data shapes remain internal under `src/shared/contracts/`. Web and Desktop do not import, locate, build, or consume artifacts from each other. Both applications reuse business and infrastructure modules only through root `src/clients/packages/`. Chat owns its execution status model.
 
 ### Mobile Client (`src/clients/mobile/`)
 
@@ -122,27 +130,34 @@ dotnet ef database update \
   -s src/server/Agw.Host
 ```
 
-### Frontend
+### Web and Desktop Clients
 
-Run from `src/clients/web/`:
+Run pnpm commands from `src/clients/`. The single install covers Web, Desktop, and all packages under `src/clients/packages/`:
 
 ```bash
 pnpm install
-pnpm dev
+pnpm dev:web
 pnpm build
-pnpm start
 pnpm lint
-pnpm lint:fix
+pnpm test
 pnpm format
 pnpm format:check
-pnpm gen:openapi
+pnpm gen:api
 ```
 
-The Next.js development server listens on `http://localhost:3000`. Linting and formatting use `oxlint` and `oxfmt`, not ESLint or Prettier.
+Run `pnpm dev:web` for the browser application or `pnpm dev:desktop` for the independent Electron application and its renderer. Web listens on `http://localhost:3001`; the Desktop renderer listens on `http://localhost:3000` during development. Linting and formatting use `oxlint` and `oxfmt`, not ESLint or Prettier. Turborepo uses its local task cache only; remote caching is disabled.
+
+Use root scripts where available, or run a package-specific Web task with `pnpm exec turbo run <task> --filter=@agw/web`. Package Desktop installers from `src/clients/` with:
+
+```bash
+AGW_PACKAGE_FLAVOR=client pnpm make:desktop
+AGW_PACKAGE_FLAVOR=full pnpm make:desktop
+pnpm make:desktop -- --arch=x64
+```
 
 The frontend proxy target is resolved in this order: `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:30815`.
 
-Regenerate `src/clients/web/src/api/openapi.d.ts` after backend contract changes.
+Regenerate `src/clients/packages/api/src/openapi.d.ts` with `pnpm gen:api` after backend contract changes.
 
 After the first clone, configure hooks with `git config core.hooksPath .githooks`. Backend tests use xUnit; mirror production namespaces and prefer names such as `Method_Condition_ExpectedResult`.
 
@@ -190,12 +205,13 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 
 ## Frontend Integration
 
-- Prefer the typed helpers in `src/clients/web/src/api/client.ts` for REST calls.
-- `src/clients/web/src/api/client.ts` unwraps Bens.Results response envelopes before data reaches pages; update this central helper when the backend envelope contract changes.
-- Use `src/clients/web/src/api/task-client.ts` for project task, context, and history helpers.
-- Use `src/clients/web/src/api/execution-hub.ts` for SignalR execution flows.
-- Use `src/clients/web/src/api/files.ts` for backend file-management endpoints used by the UI.
-- Keep route-specific UI inside the matching `src/app/(app)/...` segment and shared UI in `src/components/`.
+- Prefer the typed helpers exported by `@agw/api` from `src/clients/packages/api/src/client.ts` for REST calls. That client unwraps Bens.Results envelopes before data reaches domain packages.
+- Use `@agw/projects` for project tasks, contexts, histories, and file-management flows.
+- Use `@agw/chat` for SignalR execution, Chat state, and reusable React renderer UI.
+- Keep business code inside its owning `src/clients/packages/<domain>/` package; `@agw/web` routes should remain thin composition adapters.
+- Keep platform-neutral UI in `@agw/components`. Desktop-only Electron React adaptation belongs in `desktop/renderer/src/runtime/`, and its cross-process data shapes belong in `desktop/src/shared/contracts/`.
+- Web and Desktop must not import or depend on each other; application dependencies must resolve through root `src/clients/packages/` workspace packages.
+- Packages must not import `@agw/web`, `web/src`, or the Web `@/` alias. Run `pnpm test:boundaries` after changing package boundaries.
 
 ## Coding Conventions
 

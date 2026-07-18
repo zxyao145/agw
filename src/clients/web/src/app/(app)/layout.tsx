@@ -4,13 +4,10 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
   Workflow,
   Bot,
-  Package,
   Blocks,
   // Terminal,
-  Server,
   Boxes,
   Cable,
   MessagesSquare,
@@ -18,6 +15,10 @@ import {
   Gauge,
   Settings,
   Box,
+  FolderKanban,
+  Network,
+  Sparkle,
+  Sparkles,
   // Waypoints,
   // Hammer,
 } from "lucide-react";
@@ -29,11 +30,12 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { QueryErrorBoundary } from "@/components/query-error-boundary";
+  cn,
+} from "@agw/components";
+import { QueryErrorBoundary } from "@agw/components";
 import { AppSidebar, MenuItem, SidebarMenuGroupProps } from "./sidebar";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { AuthGate } from "@/components/auth-gate";
+import { SidebarProvider } from "@agw/components";
+import { AuthGate } from "@agw/auth";
 
 const navItems: SidebarMenuGroupProps[] = [
   {
@@ -66,7 +68,7 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/projects",
         title: "Projects",
         isActive: true,
-        icon: <LayoutDashboard />,
+        icon: <FolderKanban />,
       },
       {
         url: "/jobs",
@@ -96,7 +98,7 @@ const navItems: SidebarMenuGroupProps[] = [
         url: "/mcp-tool-servers",
         title: "MCP Tool Servers",
         isActive: true,
-        icon: <Server />,
+        icon: <Network />,
       },
       {
         url: "/skills",
@@ -121,7 +123,8 @@ const navItems: SidebarMenuGroupProps[] = [
         title: "Models",
         isActive: true,
         // icon: <Blocks />,
-        icon: <Box />,
+        // icon: <Box />,
+        icon: <Sparkles />,
       },
     ],
   },
@@ -159,6 +162,7 @@ function getActiveNavLabel(pathname: string): MenuItem | undefined {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const isChatRoute = pathname === "/chat";
   const activeMenu = getActiveNavLabel(pathname);
   const [sidebarOpen, setSidebarOpen] = React.useState(pathname !== "/chat");
 
@@ -171,6 +175,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGate>
       <SidebarProvider
+        className={cn(isChatRoute && "h-dvh overflow-hidden")}
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
         style={
@@ -179,7 +184,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           } as React.CSSProperties
         }
       >
-        <div className="min-h-screen bg-background text-foreground w-full">
+        <div
+          className={cn(
+            "bg-background text-foreground w-full",
+            isChatRoute ? "h-dvh overflow-hidden" : "min-h-screen",
+          )}
+        >
           {/* <header className="flex h-16 border-b ">
           <div className="flex items-center px-6 w-64">
             <Link href="/projects" className="font-semibold tracking-tight">
@@ -189,12 +199,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header> */}
 
-          <div className="flex min-h-screen w-full overflow-x-hidden">
+          <div
+            className={cn(
+              "flex w-full overflow-x-hidden",
+              isChatRoute ? "h-full min-h-0 overflow-y-hidden" : "min-h-screen",
+            )}
+          >
             <aside className="flex min-h-[calc(100vh-64px)]">
               <AppSidebar menus={navItems} />
             </aside>
 
-            <div className="px-2 flex-1 min-w-0 max-w-full flex flex-col overflow-x-hidden">
+            <div className="px-2 flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden">
               <div className="sticky top-0 z-40 flex items-center gap-3 bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60 py-2">
                 <div className="min-w-0 flex-1">
                   <Breadcrumb>
@@ -217,7 +232,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
 
-              <main className="flex min-w-0 max-w-full flex-1 justify-center overflow-x-hidden">
+              <main
+                className={cn(
+                  "flex min-h-0 min-w-0 max-w-full flex-1 justify-center",
+                  isChatRoute ? "overflow-hidden" : "overflow-x-hidden",
+                )}
+              >
                 <QueryErrorBoundary>{children}</QueryErrorBoundary>
               </main>
             </div>
