@@ -117,3 +117,55 @@ test("desktop API runtime includes antiforgery cookies when no Bearer token is a
   assert.equal(requests[0]?.init?.credentials, "include");
   assert.equal(requests[1]?.init?.credentials, "include");
 });
+
+test("desktop DELETE refreshes stale antiforgery state and retries once", async (t) => {
+  const { apiDelete, configureApiRuntime, resetApiRuntime } = await import("./client" + ".ts");
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  let antiforgeryRequestCount = 0;
+  let deleteRequestCount = 0;
+  configureApiRuntime({ baseUrl: "http://127.0.0.1:30815", token: null });
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    requests.push({ url, init });
+    if (url.endsWith("/api/auth/antiforgery")) {
+      antiforgeryRequestCount += 1;
+      return Response.json({
+        code: 0,
+        title: "OK",
+        data: { requestToken: `csrf-${antiforgeryRequestCount}` },
+      });
+    }
+
+    deleteRequestCount += 1;
+    return deleteRequestCount === 1
+      ? Response.json(
+          { code: 4030003, title: "Antiforgery validation failed.", statusCode: 403 },
+          { status: 403 },
+        )
+      : Response.json({ code: 0, title: "OK" });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    resetApiRuntime();
+  });
+
+  await apiDelete(
+    "/api/projects/{projectId}/contexts/{contextId}" as never,
+    {
+      params: { path: { projectId: "project-1", contextId: "context-1" } },
+    } as never,
+  );
+
+  assert.equal(antiforgeryRequestCount, 2);
+  assert.equal(deleteRequestCount, 2);
+  assert.equal(requests.length, 4);
+  assert.equal(
+    (requests[1]?.init?.headers as Record<string, string> | undefined)?.["X-CSRF-TOKEN"],
+    "csrf-1",
+  );
+  assert.equal(
+    (requests[3]?.init?.headers as Record<string, string> | undefined)?.["X-CSRF-TOKEN"],
+    "csrf-2",
+  );
+});

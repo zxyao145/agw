@@ -66,6 +66,16 @@ async function getAntiforgeryToken(): Promise<string> {
   return antiforgeryToken;
 }
 
+function isAntiforgeryValidationFailure(response: Response, body: unknown): boolean {
+  return (
+    response.status === 403 &&
+    typeof body === "object" &&
+    body !== null &&
+    "code" in body &&
+    body.code === 4030003
+  );
+}
+
 export type PathsWith<M extends ApiMethod> = {
   [P in keyof paths]-?: M extends keyof paths[P] ? P : never;
 }[keyof paths];
@@ -169,63 +179,75 @@ export async function apiRequest(
 
   const urlWithPath = compilePath(String(path), opts.params?.path);
   const url = resolveApiUrl(appendQuery(urlWithPath, opts.params?.query));
+  let retriedAntiforgery = false;
 
-  const headers: HeadersInit = { ...opts.headers };
+  while (true) {
+    const headers: HeadersInit = { ...opts.headers };
 
-  if (apiRuntime.token) {
-    (headers as Record<string, string>).Authorization = `Bearer ${apiRuntime.token}`;
-  }
-
-  if (method !== "get") {
-    (headers as Record<string, string>)["X-CSRF-TOKEN"] = await getAntiforgeryToken();
-  }
-
-  const init: RequestInit = {
-    method: method.toUpperCase(),
-    headers,
-    signal: opts.signal,
-    credentials:
-      apiRuntime.baseUrl && apiRuntime.token
-        ? "omit"
-        : apiRuntime.baseUrl
-          ? "include"
-          : "same-origin",
-  };
-
-  if (opts.body !== undefined) {
-    if (opts.body instanceof FormData) {
-      delete (headers as Record<string, string>)["content-type"];
-      delete (headers as Record<string, string>)["Content-Type"];
-      init.body = opts.body;
-    } else {
-      (headers as Record<string, string>)["content-type"] ??= "application/json";
-      init.body = JSON.stringify(opts.body);
+    if (apiRuntime.token) {
+      (headers as Record<string, string>).Authorization = `Bearer ${apiRuntime.token}`;
     }
-  }
 
-  const response = await fetch(url, init);
-
-  if (!response.ok) {
-    const errBody = await readResponseBody(response);
-    if (
-      response.status === 401 &&
-      typeof window !== "undefined" &&
-      !String(path).startsWith("/api/auth/") &&
-      !apiRuntime.baseUrl
-    ) {
-      const returnUrl = `${window.location.pathname}${window.location.search}`;
-      window.location.assign(`/login/?returnUrl=${encodeURIComponent(returnUrl)}`);
+    if (method !== "get") {
+      (headers as Record<string, string>)["X-CSRF-TOKEN"] = await getAntiforgeryToken();
     }
-    throw new ApiError({
-      status: response.status,
-      statusText: response.statusText,
-      url,
-      body: errBody,
-    });
-  }
 
-  // Some endpoints return 200 with no response body.
-  return unwrapApiResultEnvelope(await readResponseBody(response));
+    const init: RequestInit = {
+      method: method.toUpperCase(),
+      headers,
+      signal: opts.signal,
+      credentials:
+        apiRuntime.baseUrl && apiRuntime.token
+          ? "omit"
+          : apiRuntime.baseUrl
+            ? "include"
+            : "same-origin",
+    };
+
+    if (opts.body !== undefined) {
+      if (opts.body instanceof FormData) {
+        delete (headers as Record<string, string>)["content-type"];
+        delete (headers as Record<string, string>)["Content-Type"];
+        init.body = opts.body;
+      } else {
+        (headers as Record<string, string>)["content-type"] ??= "application/json";
+        init.body = JSON.stringify(opts.body);
+      }
+    }
+
+    const response = await fetch(url, init);
+
+    if (!response.ok) {
+      const errBody = await readResponseBody(response);
+      if (
+        method !== "get" &&
+        !retriedAntiforgery &&
+        isAntiforgeryValidationFailure(response, errBody)
+      ) {
+        clearAntiforgeryToken();
+        retriedAntiforgery = true;
+        continue;
+      }
+      if (
+        response.status === 401 &&
+        typeof window !== "undefined" &&
+        !String(path).startsWith("/api/auth/") &&
+        !apiRuntime.baseUrl
+      ) {
+        const returnUrl = `${window.location.pathname}${window.location.search}`;
+        window.location.assign(`/login/?returnUrl=${encodeURIComponent(returnUrl)}`);
+      }
+      throw new ApiError({
+        status: response.status,
+        statusText: response.statusText,
+        url,
+        body: errBody,
+      });
+    }
+
+    // Some endpoints return 200 with no response body.
+    return unwrapApiResultEnvelope(await readResponseBody(response));
+  }
 }
 
 export function apiGet<P extends PathsWith<"get">>(
