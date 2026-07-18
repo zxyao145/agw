@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3001",
+    "dev": "next dev --port 3001 --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "oxlint ./src",
@@ -74,14 +74,13 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
-    "@code-inspector/core": "1.4.5",
     "@playwright/test": "1.61.1",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "baseline-browser-mapping": "^2.10.10",
-    "code-inspector-plugin": "^1.4.5",
+    "code-inspector-plugin": "2.0.3",
     "openapi-typescript": "^7.13.0",
     "oxfmt": "^0.41.0",
     "oxlint": "^1.56.0",

@@ -1,5 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { codeInspectorPlugin } from "code-inspector-plugin";
 import type { NextConfig } from "next";
 
 const rendererRoot = dirname(fileURLToPath(import.meta.url));
@@ -24,7 +25,16 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: clientsRoot,
   },
-  webpack(config) {
+  webpack(config, { dev }) {
+    if (dev) {
+      config.plugins.push(
+        codeInspectorPlugin({
+          bundler: "webpack",
+          lang: "zh",
+        }),
+      );
+    }
+
     config.resolve.alias = {
       ...config.resolve.alias,
       "next-themes": resolve(desktopRoot, "node_modules", "next-themes"),

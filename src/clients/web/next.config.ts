@@ -1,47 +1,6 @@
-// import type { NextConfig } from "next";
-// const { codeInspectorPlugin } = require("code-inspector-plugin");
-
-// const backendBaseUrl =
-//   process.env.BACKEND_API_BASE_URL ??
-//   process.env.NEXT_PUBLIC_API_BASE_URL ??
-//   "http://localhost:30815";
-
-// const outputMode = process.env.NEXT_OUTPUT_MODE;
-// const isStaticExport = outputMode === "export";
-
-// const nextConfig: NextConfig = {
-//   output: outputMode === "export" || outputMode === "standalone" ? outputMode : undefined,
-//   trailingSlash: isStaticExport,
-//   turbopack: {
-//     rules: codeInspectorPlugin({
-//       bundler: "turbopack",
-//     }),
-//   },
-// };
-
-// if (!isStaticExport) {
-//   nextConfig.rewrites = async () => [
-//     // Proxy backend APIs to avoid CORS in local dev and local app mode.
-//     { source: "/api/:path*", destination: `${backendBaseUrl}/api/:path*` },
-//     // OpenAPI endpoint (Development): /openapi
-//     { source: "/openapi/:path*", destination: `${backendBaseUrl}/openapi/:path*` },
-//   ];
-// }
-
-// export default nextConfig;
-
 import { dirname, resolve } from "node:path";
-import type { Server } from "node:http";
-import {
-  createServer,
-  setProjectRecord,
-  type CodeOptions,
-  type RecordInfo,
-} from "@code-inspector/core";
+import { codeInspectorPlugin } from "code-inspector-plugin";
 import type { NextConfig } from "next";
-import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
-
-const { codeInspectorPlugin } = require("code-inspector-plugin");
 
 const backendBaseUrl =
   process.env.BACKEND_API_BASE_URL ??
@@ -52,119 +11,48 @@ const outputMode = process.env.NEXT_OUTPUT_MODE;
 const isStaticExport = outputMode === "export";
 const webRoot = dirname(require.resolve("./package.json"));
 const clientsRoot = resolve(webRoot, "..");
-const codeInspectorOutput = dirname(require.resolve("code-inspector-plugin"));
-const codeInspectorOptions = {
-  bundler: "turbopack",
-  server: "close",
-} satisfies CodeOptions;
 
-type CodeInspectorState = {
-  server?: Server;
-  port?: number;
-  starting?: Promise<number>;
-};
-
-type TurbopackRules = NonNullable<NonNullable<NextConfig["turbopack"]>["rules"]>;
-
-const globalForCodeInspector = globalThis as typeof globalThis & {
-  __agwCodeInspector?: CodeInspectorState;
-};
-const codeInspectorState =
-  globalForCodeInspector.__agwCodeInspector ?? (globalForCodeInspector.__agwCodeInspector = {});
-
-function createCodeInspectorRecord(): RecordInfo {
-  return { port: 0, entry: "", output: codeInspectorOutput };
-}
-
-function startCodeInspectorServer(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const start = () => {
-      let server: Server;
-      const handleError = (error: NodeJS.ErrnoException) => {
-        if (error.code === "EADDRINUSE") {
-          start();
-          return;
-        }
-        reject(error);
-      };
-
-      server = createServer(
-        (port) => {
-          server.off("error", handleError);
-          codeInspectorState.server = server;
-          codeInspectorState.port = port;
-          server.once("close", () => {
-            if (codeInspectorState.server === server) {
-              codeInspectorState.server = undefined;
-              codeInspectorState.port = undefined;
-              codeInspectorState.starting = undefined;
-            }
-          });
-          resolve(port);
-        },
-        { ...codeInspectorOptions, server: "open" },
-        createCodeInspectorRecord(),
+const nextConfig: NextConfig = {
+  transpilePackages: [
+    "@agw/agents",
+    "@agw/api",
+    "@agw/auth",
+    "@agw/chat",
+    "@agw/components",
+    "@agw/integrations",
+    "@agw/jobs",
+    "@agw/observability",
+    "@agw/projects",
+    "@agw/providers",
+    "@agw/settings",
+    "@agw/skills",
+  ],
+  output: outputMode === "export" || outputMode === "standalone" ? outputMode : undefined,
+  trailingSlash: isStaticExport,
+  turbopack: {
+    root: clientsRoot,
+  },
+  webpack(config, { dev }) {
+    if (dev) {
+      config.plugins.push(
+        codeInspectorPlugin({
+          bundler: "webpack",
+          lang: "zh",
+        }),
       );
-      server.once("error", handleError);
-    };
+    }
 
-    start();
-  });
+    return config;
+  },
+};
+
+if (!isStaticExport) {
+  nextConfig.rewrites = async () => [
+    // Proxy backend APIs to avoid CORS in local dev and local app mode.
+    { source: "/api/:path*", destination: `${backendBaseUrl}/api/:path*` },
+    // OpenAPI endpoint (Development): /openapi
+    { source: "/openapi/:path*", destination: `${backendBaseUrl}/openapi/:path*` },
+  ];
 }
 
-async function ensureCodeInspectorServer(): Promise<void> {
-  if (!codeInspectorState.server?.listening) {
-    codeInspectorState.starting ??= startCodeInspectorServer().catch((error) => {
-      codeInspectorState.starting = undefined;
-      throw error;
-    });
-  }
-
-  const port = codeInspectorState.port ?? (await codeInspectorState.starting);
-  setProjectRecord(createCodeInspectorRecord(), "port", port);
-}
-
-export default async function getNextConfig(phase: string): Promise<NextConfig> {
-  const generatedInspectorRules = codeInspectorPlugin(codeInspectorOptions) as TurbopackRules;
-  const inspectorRules = Object.fromEntries(
-    Object.entries(generatedInspectorRules).map(([pattern, rule]) => [`web/src/${pattern}`, rule]),
-  ) as TurbopackRules;
-
-  if (phase === PHASE_DEVELOPMENT_SERVER) {
-    await ensureCodeInspectorServer();
-  }
-
-  const nextConfig: NextConfig = {
-    transpilePackages: [
-      "@agw/agents",
-      "@agw/api",
-      "@agw/auth",
-      "@agw/chat",
-      "@agw/components",
-      "@agw/integrations",
-      "@agw/jobs",
-      "@agw/observability",
-      "@agw/projects",
-      "@agw/providers",
-      "@agw/settings",
-      "@agw/skills",
-    ],
-    output: outputMode === "export" || outputMode === "standalone" ? outputMode : undefined,
-    trailingSlash: isStaticExport,
-    turbopack: {
-      root: clientsRoot,
-      rules: inspectorRules,
-    },
-  };
-
-  if (!isStaticExport) {
-    nextConfig.rewrites = async () => [
-      // Proxy backend APIs to avoid CORS in local dev and local app mode.
-      { source: "/api/:path*", destination: `${backendBaseUrl}/api/:path*` },
-      // OpenAPI endpoint (Development): /openapi
-      { source: "/openapi/:path*", destination: `${backendBaseUrl}/openapi/:path*` },
-    ];
-  }
-
-  return nextConfig;
-}
+export default nextConfig;
