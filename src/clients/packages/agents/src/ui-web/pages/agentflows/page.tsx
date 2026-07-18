@@ -505,7 +505,7 @@ export default function AgentflowsPage() {
             )}
 
             {mermaidRenderError ? (
-              <pre className="mt-3 max-h-32 overflow-auto rounded-md border bg-background/80 p-3 text-xs whitespace-pre-wrap">
+              <pre className="mt-3 max-h-32 overflow-auto agw-scrollbar rounded-md border bg-background/80 p-3 text-xs whitespace-pre-wrap">
                 Failed to render Mermaid: {mermaidRenderError}
               </pre>
             ) : null}

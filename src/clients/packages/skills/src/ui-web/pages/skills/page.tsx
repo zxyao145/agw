@@ -517,7 +517,7 @@ function SkillDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto pr-1 sm:grid-cols-2">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto agw-scrollbar pr-1 sm:grid-cols-2">
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor={`${mode}-skill-archive`}>
               Archive {mode === "create" ? "(Required)" : "(Optional)"}

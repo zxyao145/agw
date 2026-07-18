@@ -24,7 +24,7 @@ export function HumanGateApproval({ request, onApprove, onReject }: HumanGateApp
   }, [request.requestId]);
 
   return (
-    <div className="pointer-events-auto max-h-[45vh] overflow-auto rounded-md border bg-background/95 p-3 shadow-sm backdrop-blur">
+    <div className="pointer-events-auto max-h-[45vh] overflow-auto agw-scrollbar rounded-md border bg-background/95 p-3 shadow-sm backdrop-blur">
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted">
           <ShieldCheck className="h-4 w-4 text-primary" />

@@ -104,7 +104,7 @@ export default function FileViewer({
               </div>
 
               {/* Code content */}
-              <pre className="flex-1 px-4 py-0.5 whitespace-pre overflow-x-auto">
+              <pre className="flex-1 px-4 py-0.5 whitespace-pre overflow-x-auto agw-scrollbar">
                 <code>{line || " "}</code>
               </pre>
             </div>

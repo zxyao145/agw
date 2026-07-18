@@ -1071,7 +1071,7 @@ export function VisualAgentflowBuilder({
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)_340px]">
-      <aside className="min-h-0 overflow-auto border-r bg-muted/20 p-3">
+      <aside className="min-h-0 overflow-auto agw-scrollbar border-r bg-muted/20 p-3">
         <div className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="agentflowName">Agentflow Name *</Label>
@@ -1175,7 +1175,7 @@ export function VisualAgentflowBuilder({
           <p className="text-sm font-medium">Inspector</p>
           <p className="text-xs text-muted-foreground">Edit selected node or edge.</p>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto p-3">
+        <div className="min-h-0 flex-1 overflow-auto agw-scrollbar p-3">
           {inspectorNode ? (
             <NodeInspector
               node={inspectorNode}

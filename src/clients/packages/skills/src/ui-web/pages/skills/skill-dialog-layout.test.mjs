@@ -14,7 +14,7 @@ test("Create and Edit Skill dialogs keep actions visible while the form body scr
   assert.match(source, /<DialogHeader className="shrink-0">/);
   assert.match(
     source,
-    /className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto pr-1 sm:grid-cols-2"/,
+    /className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto agw-scrollbar pr-1 sm:grid-cols-2"/,
   );
   assert.match(source, /<DialogFooter className="shrink-0">/);
 });

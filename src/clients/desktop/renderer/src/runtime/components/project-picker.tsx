@@ -102,7 +102,11 @@ export function DesktopProjectPicker({
             />
           </div>
 
-          <div className="mt-2 max-h-80 overflow-y-auto" role="listbox" aria-label="Projects">
+          <div
+            className="mt-2 max-h-80 overflow-y-auto agw-scrollbar"
+            role="listbox"
+            aria-label="Projects"
+          >
             {errorMessage ? (
               <div className="rounded-xl border border-destructive/20 bg-destructive/6 px-3 py-3 text-sm text-destructive">
                 {errorMessage}

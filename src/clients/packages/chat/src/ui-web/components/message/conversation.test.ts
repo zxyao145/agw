@@ -78,7 +78,7 @@ test("conversation can delegate scrolling while keeping messages centered", asyn
 
   assert.match(source, /scrollable\?: boolean;/);
   assert.match(source, /scrollable = true,/);
-  assert.match(source, /scrollable && "overflow-y-auto"/);
+  assert.match(source, /scrollable && "overflow-y-auto agw-scrollbar"/);
   assert.match(source, /<div className="mx-auto w-full max-w-225 space-y-4 pb-36">/);
 });
 

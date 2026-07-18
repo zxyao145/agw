@@ -44,7 +44,7 @@ export function PluginInstallationDialog({
 }: PluginInstallationDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg" className="max-h-[90vh] overflow-y-auto">
+      <DialogContent size="lg" className="max-h-[90vh] overflow-y-auto agw-scrollbar">
         <DialogHeader>
           <DialogTitle>Plugin installation</DialogTitle>
           <DialogDescription>

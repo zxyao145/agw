@@ -206,7 +206,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
           ) : isLoading ? (
             <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading...</div>
           ) : (
-            <div className="max-h-64 overflow-auto">
+            <div className="max-h-64 overflow-auto agw-scrollbar">
               {clearable && hasSelection && (
                 <button
                   type="button"

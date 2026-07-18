@@ -262,7 +262,7 @@ export default function Explorer({
         onOnlyDiffChange={onOnlyDiffChange}
       />
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto agw-scrollbar">
         <div className="p-2">
           {error && <ExplorerFileError message={error} />}
 

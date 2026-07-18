@@ -72,7 +72,7 @@ export function ProjectFormFields({
 }: ProjectFormFieldsProps) {
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-1">
-      <div className="overflow-y-auto border-b bg-muted/20 p-4 lg:border-r lg:border-b-0">
+      <div className="overflow-y-auto agw-scrollbar border-b bg-muted/20 p-4 lg:border-r lg:border-b-0">
         <div className="grid gap-5">
           <div className="grid gap-2">
             <Label htmlFor={`${idPrefix}name`}>Name</Label>
@@ -139,7 +139,7 @@ export function ProjectFormFields({
 
       <div className="min-h-0 overflow-hidden bg-background">
         <Tabs defaultValue="skills" className="flex h-full min-h-0 flex-col">
-          <div className="shrink-0 overflow-x-auto border-b px-6 py-3">
+          <div className="shrink-0 overflow-x-auto agw-scrollbar border-b px-6 py-3">
             <TabsList className="h-auto w-max">
               <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="tools">Tools</TabsTrigger>
@@ -149,7 +149,10 @@ export function ProjectFormFields({
             </TabsList>
           </div>
 
-          <TabsContent value="skills" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+          <TabsContent
+            value="skills"
+            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
+          >
             <SkillsPanel
               idPrefix={idPrefix}
               ownerLabel="project"
@@ -159,7 +162,10 @@ export function ProjectFormFields({
             />
           </TabsContent>
 
-          <TabsContent value="tools" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+          <TabsContent
+            value="tools"
+            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
+          >
             <ToolsPanel
               idPrefix={idPrefix}
               ownerLabel="project"
@@ -169,7 +175,10 @@ export function ProjectFormFields({
             />
           </TabsContent>
 
-          <TabsContent value="mcp-tool-servers" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+          <TabsContent
+            value="mcp-tool-servers"
+            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
+          >
             <McpToolServersPanel
               idPrefix={idPrefix}
               ownerLabel="project"
@@ -179,7 +188,10 @@ export function ProjectFormFields({
             />
           </TabsContent>
 
-          <TabsContent value="connections" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+          <TabsContent
+            value="connections"
+            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
+          >
             <ConnectionsPanel
               idPrefix={idPrefix}
               ownerLabel="project"
@@ -191,7 +203,7 @@ export function ProjectFormFields({
 
           <TabsContent
             value="environment-variables"
-            className="m-0 min-h-0 flex-1 overflow-y-auto p-6"
+            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
           >
             <EnvironmentVariablesPanel
               entries={environmentVariables}

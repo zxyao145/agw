@@ -133,7 +133,7 @@ export function SettingsDialog({
         </Button>
       </DialogTrigger>
 
-      <DialogContent size="xl" className="max-h-[90vh] overflow-y-auto">
+      <DialogContent size="xl" className="max-h-[90vh] overflow-y-auto agw-scrollbar">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>Configure settings</DialogDescription>

@@ -128,7 +128,7 @@ export function DiffViewer({
       {/* File viewers */}
       <div className="flex-1 flex overflow-hidden">
         {/* Original side */}
-        <div className="flex-1 overflow-auto border-r border-border">
+        <div className="flex-1 overflow-auto agw-scrollbar border-r border-border">
           <FileViewer
             content={original}
             filePath={filePath}
@@ -140,7 +140,7 @@ export function DiffViewer({
         </div>
 
         {/* Modified side */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto agw-scrollbar">
           <FileViewer
             content={modified}
             filePath={filePath}

@@ -124,7 +124,7 @@ export function AgentFormFields({
 
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-1">
-      <div className="overflow-y-auto border-b bg-muted/20 p-4 lg:border-r lg:border-b-0">
+      <div className="overflow-y-auto agw-scrollbar border-b bg-muted/20 p-4 lg:border-r lg:border-b-0">
         <div className="grid gap-5">
           <div className="grid gap-2">
             <Label htmlFor={`${idPrefix}displayName`}>
@@ -283,7 +283,7 @@ export function AgentFormFields({
 
       <div className="min-h-0 overflow-hidden bg-background">
         <Tabs defaultValue="system-prompt" className="flex h-full min-h-0 flex-col">
-          <div className="shrink-0 overflow-x-auto border-b px-6 py-3">
+          <div className="shrink-0 overflow-x-auto agw-scrollbar border-b px-6 py-3">
             <TabsList className="h-auto w-max">
               <TabsTrigger value="system-prompt">Instructions</TabsTrigger>
               <TabsTrigger value="skills">Skills</TabsTrigger>
@@ -301,7 +301,7 @@ export function AgentFormFields({
 
           <TabsContent
             value="system-prompt"
-            className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6"
+            className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto agw-scrollbar p-6"
           >
             <div>
               <h3 className="font-medium">Instructions</h3>
@@ -323,7 +323,10 @@ export function AgentFormFields({
             />
           </TabsContent>
 
-          <TabsContent value="skills" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+          <TabsContent
+            value="skills"
+            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
+          >
             <SkillsPanel
               idPrefix={idPrefix}
               skillsQuery={skillsQuery}
@@ -340,7 +343,10 @@ export function AgentFormFields({
             />
           </TabsContent>
 
-          <TabsContent value="tools" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+          <TabsContent
+            value="tools"
+            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
+          >
             <ToolsPanel
               idPrefix={idPrefix}
               toolsQuery={toolsQuery}
@@ -357,7 +363,10 @@ export function AgentFormFields({
             />
           </TabsContent>
 
-          <TabsContent value="mcp-tool-servers" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+          <TabsContent
+            value="mcp-tool-servers"
+            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
+          >
             <McpToolServersPanel
               idPrefix={idPrefix}
               mcpToolServersQuery={mcpToolServersQuery}
@@ -374,7 +383,10 @@ export function AgentFormFields({
             />
           </TabsContent>
 
-          <TabsContent value="connections" className="m-0 min-h-0 flex-1 overflow-y-auto p-6">
+          <TabsContent
+            value="connections"
+            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
+          >
             <ConnectionsPanel
               idPrefix={idPrefix}
               connectionOptions={connectionOptions}
@@ -393,7 +405,7 @@ export function AgentFormFields({
 
           <TabsContent
             value="environment-variables"
-            className="m-0 min-h-0 flex-1 overflow-y-auto p-6"
+            className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
           >
             <EnvironmentVariablesPanel
               entries={environmentVariables}

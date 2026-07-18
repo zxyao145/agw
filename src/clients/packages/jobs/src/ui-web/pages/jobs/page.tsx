@@ -826,7 +826,7 @@ function JobDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid max-h-[65vh] grid-cols-1 gap-6 overflow-y-auto pr-1 sm:grid-cols-2">
+        <div className="grid max-h-[65vh] grid-cols-1 gap-6 overflow-y-auto agw-scrollbar pr-1 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor={`${mode}-project-id`}>Project ID</Label>
             <Select
@@ -1089,7 +1089,7 @@ function JobDetailsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 max-h-[65vh] flex-1 space-y-6 overflow-y-auto pr-1">
+        <div className="min-h-0 max-h-[65vh] flex-1 space-y-6 overflow-y-auto agw-scrollbar pr-1">
           {detailLoading && !job ? (
             <div className="text-sm text-muted-foreground">Loading details...</div>
           ) : detailError ? (

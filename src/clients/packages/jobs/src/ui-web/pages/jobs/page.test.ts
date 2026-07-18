@@ -14,7 +14,7 @@ test("job details dialog keeps header and footer fixed while details body scroll
   assert.match(source, /<DialogContent size="2xl" className="max-h-\[90vh\] overflow-hidden">/);
   assert.match(
     source,
-    /<div className="min-h-0 max-h-\[65vh\] flex-1 space-y-6 overflow-y-auto pr-1">/,
+    /<div className="min-h-0 max-h-\[65vh\] flex-1 space-y-6 overflow-y-auto agw-scrollbar pr-1">/,
   );
 });
 

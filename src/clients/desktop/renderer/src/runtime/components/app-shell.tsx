@@ -331,7 +331,11 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                 Choose where Desktop connects
               </div>
             </div>
-            <div className="max-h-80 overflow-y-auto p-2.5" role="listbox" aria-label="Servers">
+            <div
+              className="max-h-80 overflow-y-auto agw-scrollbar p-2.5"
+              role="listbox"
+              aria-label="Servers"
+            >
               {serverProfiles.map((profile) => {
                 const active = profile.id === activeServerId;
                 const ProfileIcon = profile.kind === "remote" ? Cloud : Server;
@@ -411,7 +415,7 @@ function SettingsShell({ children }: { children: React.ReactNode }) {
         </span>
       </header>
       <div className="agw-settings-workspace">
-        <aside className="agw-settings-nav">
+        <aside className="agw-settings-nav overflow-y-auto agw-scrollbar">
           <AgwLogo
             className="agw-settings-nav-heading"
             markClassName="size-8"
@@ -438,7 +442,7 @@ function SettingsShell({ children }: { children: React.ReactNode }) {
             </section>
           ))}
         </aside>
-        <main className="agw-settings-main">{children}</main>
+        <main className="agw-settings-main overflow-y-auto agw-scrollbar">{children}</main>
       </div>
     </div>
   );

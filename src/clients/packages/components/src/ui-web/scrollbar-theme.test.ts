@@ -7,11 +7,15 @@ const tokensCss = readFileSync(new URL("../ui-tokens/tokens.css", import.meta.ur
 test("shared scrollbar class provides thin cross-browser styling", () => {
   assert.match(
     tokensCss,
-    /\.agw-scrollbar\s*\{[^}]*scrollbar-color: var\(--border\) transparent;[^}]*scrollbar-width: var(thin + 2px);/s,
+    /\.agw-scrollbar,[^{]*\{[^}]*scrollbar-color: var\(--border\) transparent;[^}]*scrollbar-width: thin;/s,
   );
-  assert.match(tokensCss, /\.agw-scrollbar::-webkit-scrollbar\s*\{[^}]*width: 0\.75rem;/s);
   assert.match(
     tokensCss,
-    /\.agw-scrollbar::-webkit-scrollbar-thumb\s*\{[^}]*background: var\(--border\);[^}]*border-radius: 9999px;/s,
+    /\.agw-scrollbar::-webkit-scrollbar,[^{]*\{[^}]*height: 0\.75rem;[^}]*width: 0\.75rem;/s,
   );
+  assert.match(
+    tokensCss,
+    /\.agw-scrollbar::-webkit-scrollbar-thumb,[^{]*\{[^}]*background: var\(--border\);[^}]*border-radius: 9999px;/s,
+  );
+  assert.match(tokensCss, /\.prose[^{]*:where\(pre\)[^{]*::-webkit-scrollbar/);
 });

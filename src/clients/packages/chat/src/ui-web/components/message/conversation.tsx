@@ -206,7 +206,7 @@ export function Conversation({
   const visibleMessages = collapseConsecutiveSystemMessages(messages);
 
   return (
-    <div className={cn("min-h-full w-full flex-1", scrollable && "overflow-y-auto")}>
+    <div className={cn("min-h-full w-full flex-1", scrollable && "overflow-y-auto agw-scrollbar")}>
       <div className="mx-auto w-full max-w-225 space-y-4 pb-36">
         {messagesStartRef ? <div ref={messagesStartRef} /> : null}
 

@@ -37,7 +37,7 @@ export default function FileContent({
         ) : (
           <div className="flex flex-col h-full min-h-0">
             <FileHeader file={selectedFile} />
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto agw-scrollbar">
               {isLoadingContent ? (
                 <FileLoading />
               ) : contentError ? (

@@ -16,7 +16,10 @@ type DesktopWorkspaceErrorStateProps = {
 
 export function DesktopWorkspaceErrorState({ error, onRetry }: DesktopWorkspaceErrorStateProps) {
   return (
-    <div className="grid h-full min-h-0 w-full place-items-center overflow-auto p-6" role="alert">
+    <div
+      className="grid h-full min-h-0 w-full place-items-center overflow-auto agw-scrollbar p-6"
+      role="alert"
+    >
       <Card className="w-full max-w-xl border-destructive/25 shadow-lg shadow-black/5">
         <CardHeader className="flex flex-row items-start gap-3 space-y-0">
           <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-destructive/10 text-destructive">

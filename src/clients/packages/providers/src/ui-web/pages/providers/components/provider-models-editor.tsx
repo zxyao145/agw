@@ -166,7 +166,7 @@ export function ProviderModelsEditor({
           <div className="border-b bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {selectedModelNames.length} of {modelOptions.length} selected
           </div>
-          <div className="max-h-[calc(100vh-260px)] divide-y overflow-y-auto">
+          <div className="max-h-[calc(100vh-260px)] divide-y overflow-y-auto agw-scrollbar">
             {modelOptions.map((model, index) => {
               const checkboxId = `${idPrefix}model-${index}`;
               return (

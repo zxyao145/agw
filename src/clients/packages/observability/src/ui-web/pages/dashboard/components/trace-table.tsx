@@ -244,7 +244,7 @@ export function TraceTable() {
                       </TooltipTrigger>
                       <TooltipContent
                         side="top"
-                        className="max-h-80 max-w-[min(40rem,calc(100vw-2rem))] overflow-y-auto whitespace-pre-wrap break-words text-left"
+                        className="max-h-80 max-w-[min(40rem,calc(100vw-2rem))] overflow-y-auto agw-scrollbar whitespace-pre-wrap break-words text-left"
                       >
                         {inputText}
                       </TooltipContent>
@@ -263,7 +263,7 @@ export function TraceTable() {
                         </TooltipTrigger>
                         <TooltipContent
                           side="top"
-                          className="max-h-80 max-w-[min(40rem,calc(100vw-2rem))] overflow-y-auto whitespace-pre-wrap break-words text-left"
+                          className="max-h-80 max-w-[min(40rem,calc(100vw-2rem))] overflow-y-auto agw-scrollbar whitespace-pre-wrap break-words text-left"
                         >
                           {trace.error}
                         </TooltipContent>

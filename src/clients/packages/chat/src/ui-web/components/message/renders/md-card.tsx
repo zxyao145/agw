@@ -12,7 +12,9 @@ const MdCard = ({ mdText }: { mdText: string }) => {
       // 大概率是 code-inspector-plugin 在 dev 下改写了 JSX。
       children={mdText}
       components={{
-        pre: ({ children }) => <pre className="msg-content-md-code">{children}</pre>,
+        pre: ({ children }) => (
+          <pre className="msg-content-md-code overflow-x-auto agw-scrollbar">{children}</pre>
+        ),
         code: ({ children }) => <code className="msg-content-md-code">{children}</code>,
         ol: ({ children }) => <ol className="msg-content-md-ol">{children}</ol>,
         ul: ({ children }) => <ul className="msg-content-md-ul">{children}</ul>,

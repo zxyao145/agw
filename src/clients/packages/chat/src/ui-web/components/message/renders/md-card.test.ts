@@ -58,6 +58,7 @@ test("markdown code blocks keep one visible background layer", () => {
   assert.match(preBody, /p-3/);
   assert.match(nestedCodeBody, /bg-transparent/);
   assert.match(nestedCodeBody, /p-0/);
+  assert.match(mdCardSource, /msg-content-md-code overflow-x-auto agw-scrollbar/);
 });
 
 test("markdown lists collapse parser whitespace between list items and paragraphs", () => {

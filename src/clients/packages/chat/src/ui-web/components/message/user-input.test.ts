@@ -10,7 +10,7 @@ test("suggestion kind badge keeps its content height inside the flex row", () =>
 
 test("composer defaults to one text line with a floating circular action", () => {
   assert.match(source, /rows = 1/);
-  assert.match(source, /maxHeight = "max-h-80"/);
+  assert.match(source, /maxHeight = "max-h-60"/);
   assert.match(source, /\bagw-scrollbar min-h-\[1lh\]/);
   assert.doesNotMatch(source, /\bmin-h-28\b/);
   assert.match(source, /className="[^"]*\brounded-xl\b[^"]*"/);
