@@ -18,8 +18,10 @@ test("Desktop fullscreen Dialog headers reserve native window-control space", as
   assert.match(source, /data-agw-desktop="true"/);
   assert.match(source, /data-agw-platform="darwin"/);
   assert.match(source, /data-size="fullscreen"/);
-  assert.match(source, /padding-left: 76px/);
+  assert.match(source, /padding-left: 100px !important/);
   assert.match(source, /data-agw-platform="win32"/);
   assert.match(source, /data-agw-platform="linux"/);
-  assert.match(source, /padding-right: 146px/);
+  assert.match(source, /padding-right: 146px !important/);
+  assert.match(source, /:is\(button, a, \[role="button"\]\)/);
+  assert.match(source, /-webkit-app-region: no-drag/);
 });

@@ -1065,8 +1065,8 @@ export function VisualAgentflowBuilder({
   }, [actionState, onActionStateChange]);
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)_340px] gap-4">
-      <aside className="min-h-0 overflow-auto rounded-md border bg-muted/20 p-3">
+    <div className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)_340px]">
+      <aside className="min-h-0 overflow-auto border-r bg-muted/20 p-3">
         <div className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="agentflowName">Agentflow Name *</Label>
@@ -1112,7 +1112,7 @@ export function VisualAgentflowBuilder({
         )}
       </aside>
 
-      <section className="relative min-h-0 overflow-hidden rounded-md border bg-background">
+      <section className="relative min-h-0 overflow-hidden bg-background">
         <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
           <ScopeBar
             scope={canvasScope}
@@ -1165,7 +1165,7 @@ export function VisualAgentflowBuilder({
         </ReactFlow>
       </section>
 
-      <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border bg-muted/20">
+      <aside className="flex min-h-0 flex-col overflow-hidden border-l bg-muted/20">
         <div className="border-b p-3">
           <p className="text-sm font-medium">Inspector</p>
           <p className="text-xs text-muted-foreground">Edit selected node or edge.</p>

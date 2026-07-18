@@ -50,5 +50,7 @@ test("Agentflow uses the shared fullscreen Dialog contract", async () => {
   const source = await readFile(DIALOG_URL, "utf8");
 
   assert.match(source, /<DialogContent\s+size="fullscreen"/);
+  assert.match(source, /className="gap-0 p-0"/);
+  assert.match(source, /<DialogHeader className="shrink-0 border-b px-6 py-2">/);
   assert.doesNotMatch(source, /fixed inset-0 w-screen h-screen/);
 });

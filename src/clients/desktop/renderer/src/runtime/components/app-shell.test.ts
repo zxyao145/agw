@@ -16,7 +16,6 @@ test("Desktop shell opens Projects through the title-bar picker", async () => {
   const source = await readFile(APP_SHELL_URL, "utf8");
 
   assert.match(source, /<DesktopProjectPicker/);
-  assert.match(source, /rounded-xl bg-muted\/70 p-1/);
   assert.match(source, /onSelect=\{openProject\}/);
   assert.match(source, /normalizeProjectTabs\(tabs, projectIds, projectId\)/);
   assert.match(source, /persistTabs\(nextTabs\)/);

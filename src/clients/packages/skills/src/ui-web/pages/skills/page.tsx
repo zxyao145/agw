@@ -510,8 +510,8 @@ function SkillDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="2xl" className="max-h-[90vh] overflow-hidden">
-        <DialogHeader>
+      <DialogContent size="2xl" className="flex max-h-[90vh] flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             {mode === "create"
@@ -520,7 +520,7 @@ function SkillDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-6 overflow-y-auto pr-1 sm:grid-cols-2">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto pr-1 sm:grid-cols-2">
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor={`${mode}-skill-archive`}>
               Archive {mode === "create" ? "(Required)" : "(Optional)"}
@@ -612,7 +612,7 @@ function SkillDialog({
           ) : null}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button
             type="button"
             variant="outline"

@@ -56,8 +56,8 @@ export function ProviderFormFields({
   retryModels,
 }: ProviderFormFieldsProps) {
   return (
-    <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden border-t lg:grid-cols-[400px_minmax(0,1fr)] lg:grid-rows-1">
-      <div className="overflow-y-auto border-b bg-muted/20 p-6 lg:border-r lg:border-b-0">
+    <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-1">
+      <div className="overflow-y-auto border-b bg-muted/20 p-4 lg:border-r lg:border-b-0">
         <div className="grid gap-5">
           <div className="grid gap-2">
             <Label htmlFor={`${idPrefix}name`}>Name</Label>

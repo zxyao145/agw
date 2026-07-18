@@ -11,18 +11,22 @@ export function DesktopConnectionGate({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const desktop = useDesktopRuntime();
 
-  if (desktop.status === "ready" || pathname.startsWith("/settings")) return children;
+  if (
+    desktop.status === "ready" ||
+    desktop.status === "authentication-required" ||
+    pathname.startsWith("/settings")
+  ) {
+    return children;
+  }
+
+  if (desktop.status === "loading" || desktop.status === "setup-required") {
+    return <div className="min-h-screen bg-background" />;
+  }
 
   const message =
-    desktop.status === "loading"
-      ? "Connecting to Agw Server…"
-      : desktop.status === "setup-required"
-        ? "Complete Server setup in the Desktop window."
-        : desktop.status === "authentication-required"
-          ? "Add an API token for this Server in Settings."
-          : desktop.status === "incompatible"
-            ? "This Desktop requires Server API major version 1."
-            : desktop.error || "Agw Server is unavailable.";
+    desktop.status === "incompatible"
+      ? "This Desktop requires Server API major version 1."
+      : desktop.error || "Agw Server is unavailable.";
 
   return (
     <div className="grid min-h-screen place-items-center bg-background p-6 text-foreground">

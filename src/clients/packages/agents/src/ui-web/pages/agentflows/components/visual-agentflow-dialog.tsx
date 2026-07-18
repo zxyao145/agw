@@ -1,15 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Button } from "@agw/components";
 import {
+  Button,
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription as UiDialogDescription,
+  DialogDescription,
   DialogHeader,
-  DialogTitle as UiDialogTitle,
+  DialogTitle,
 } from "@agw/components";
+
 import {
   type AgentflowBuilderActionState,
   VisualAgentflowBuilder,
@@ -58,21 +59,22 @@ export function VisualAgentflowDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         size="fullscreen"
+        className="gap-0 p-0"
         onInteractOutside={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
         showCloseButton={false}
       >
-        <DialogHeader className="shrink-0">
+        <DialogHeader className="shrink-0 border-b px-6 py-2">
           <div className="flex items-center justify-between">
             <div>
-              <UiDialogTitle>
+              <DialogTitle>
                 {editingAgentflow ? "Edit Agentflow" : "Visual Agentflow Builder"}
-              </UiDialogTitle>
-              <UiDialogDescription>
+              </DialogTitle>
+              <DialogDescription>
                 {editingAgentflow
                   ? `Editing agentflow: ${editingAgentflow.name}`
                   : "Design a DAG by adding agents, workflow-as-agent nodes, orchestration blocks, human gates, checkpoints, and MAF-aligned edges."}
-              </UiDialogDescription>
+              </DialogDescription>
             </div>
             <div className="flex items-center gap-2">
               <Button

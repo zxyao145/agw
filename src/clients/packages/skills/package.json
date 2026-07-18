@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "oxlint ./src",
+    "test": "node --test src/ui-web/pages/skills/skill-dialog-layout.test.mjs",
     "format": "oxfmt ./src *.json",
     "format:check": "oxfmt --check ./src *.json"
   },

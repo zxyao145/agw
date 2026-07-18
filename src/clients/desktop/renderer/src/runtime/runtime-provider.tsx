@@ -38,6 +38,10 @@ type DesktopRuntimeContextValue = {
 
 const DesktopRuntimeContext = React.createContext<DesktopRuntimeContextValue | null>(null);
 
+type AuthSession = {
+  accessMode?: string;
+};
+
 async function probeServer(profile: ServerProfile, token: string | null): Promise<ServerInfo> {
   const response = await fetch(`${profile.baseUrl.replace(/\/+$/u, "")}/api/server-info`, {
     credentials: "omit",
@@ -46,6 +50,15 @@ async function probeServer(profile: ServerProfile, token: string | null): Promis
   const body = (await response.json()) as { title?: string; data?: ServerInfo };
   if (!response.ok || !body.data) throw new Error(body.title || "Unable to reach Agw Server.");
   return body.data;
+}
+
+async function hasBearerAccess(profile: ServerProfile, token: string): Promise<boolean> {
+  const response = await fetch(`${profile.baseUrl.replace(/\/+$/u, "")}/api/auth/session`, {
+    credentials: "omit",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const body = (await response.json()) as { data?: AuthSession };
+  return response.ok && body.data?.accessMode === "bearer";
 }
 
 function configureClients(profile: ServerProfile, token: string | null): void {
@@ -103,11 +116,17 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
         info = await probeServer(profile, token);
       }
 
+      if (info.initialized && token && !(await hasBearerAccess(profile, token))) {
+        token = null;
+        nextState = { ...nextState, activeToken: null };
+      }
+
       if (info.initialized && profile.kind === "local" && !token) {
         token = await bridge.provisionLocalToken();
         nextState = { ...nextState, activeToken: token };
-        configureClients(profile, token);
       }
+
+      configureClients(profile, token);
 
       setRuntimeState(nextState);
       setServerInfo(info);

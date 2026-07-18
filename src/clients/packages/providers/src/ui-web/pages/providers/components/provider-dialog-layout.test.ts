@@ -13,10 +13,12 @@ test("Create and Edit Provider dialogs use the full-screen shell with header act
   for (const fileUrl of [CREATE_DIALOG_URL, EDIT_DIALOG_URL]) {
     const source = await readFile(fileUrl, "utf8");
 
+    assert.match(source, /<DialogContent\s+size="fullscreen"/);
     assert.match(source, /fixed inset-0 h-screen w-screen max-w-none/);
+    assert.match(source, /className="flex h-full min-h-0 flex-col"/);
     assert.match(source, /showCloseButton=\{false\}/);
     assert.match(source, /onInteractOutside=\{\(event\) => event\.preventDefault\(\)\}/);
-    assert.match(source, /<DialogHeader className="shrink-0 border-b px-6 py-4">/);
+    assert.match(source, /<DialogHeader className="shrink-0 border-b px-6 py-2">/);
     assert.match(source, /<DialogClose asChild>/);
     assert.match(source, /<ProviderFormFields/);
   }

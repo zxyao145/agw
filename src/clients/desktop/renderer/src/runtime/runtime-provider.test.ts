@@ -26,3 +26,12 @@ test("Desktop reconnects when the active profile token changes", async () => {
 
   assert.match(source, /runtimeState\?\.activeToken === saved\.activeToken/);
 });
+
+test("Desktop refreshes an invalid local Bearer token before becoming ready", async () => {
+  const source = await readFile(RUNTIME_URL, "utf8");
+
+  assert.match(source, /\/api\/auth\/session/);
+  assert.match(source, /body\.data\?\.accessMode === "bearer"/);
+  assert.match(source, /profile\.kind === "local" && !token/);
+  assert.match(source, /token = await bridge\.provisionLocalToken\(\)/);
+});

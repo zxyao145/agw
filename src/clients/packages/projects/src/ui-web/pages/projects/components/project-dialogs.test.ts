@@ -22,6 +22,7 @@ test("Create and Edit Project are separate full-screen dialogs with upper-right 
   ] as const) {
     const source = await readSource(url, `${action} Project dialog`);
 
+    assert.match(source, /<DialogContent\s+size="fullscreen"/);
     assert.match(source, /fixed inset-0 h-screen w-screen max-w-none/);
     assert.match(source, /showCloseButton=\{false\}/);
     assert.match(source, /onInteractOutside=\{\(event\) => event\.preventDefault\(\)\}/);

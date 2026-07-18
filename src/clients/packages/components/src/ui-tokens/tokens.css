@@ -181,7 +181,7 @@
   }
 
   .agw-titlebar.platform-darwin {
-    padding-left: 76px;
+    padding-left: 100px;
   }
 
   .agw-titlebar.platform-win32,
@@ -192,7 +192,15 @@
   :root[data-agw-desktop="true"][data-agw-platform="darwin"]
     [data-slot="dialog-content"][data-size="fullscreen"]
     [data-slot="dialog-header"] {
-    padding-left: 76px;
+    padding-left: 100px !important;
+    height: calc(var(--spacing) * 12);
+  }
+  :root[data-agw-desktop="true"]
+    [data-slot="dialog-content"][data-size="fullscreen"]
+    [data-slot="dialog-header"]
+    [data-slot="dialog-description"]
+    {
+      display: none;
   }
 
   :root[data-agw-desktop="true"][data-agw-platform="win32"]
@@ -201,7 +209,14 @@
   :root[data-agw-desktop="true"][data-agw-platform="linux"]
     [data-slot="dialog-content"][data-size="fullscreen"]
     [data-slot="dialog-header"] {
-    padding-right: 146px;
+    padding-right: 146px !important;
+  }
+
+  :root[data-agw-desktop="true"]
+    [data-slot="dialog-content"][data-size="fullscreen"]
+    [data-slot="dialog-header"]
+    :is(button, a, [role="button"]) {
+    -webkit-app-region: no-drag;
   }
 
   .agw-titlebar-control,

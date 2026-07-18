@@ -92,14 +92,15 @@ export function CreateProjectDialog({
       </DialogTrigger>
 
       <DialogContent
+        size="fullscreen"
         className="fixed inset-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 rounded-none border-0 p-0 sm:max-w-none"
         onInteractOutside={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
         showCloseButton={false}
       >
         <div className="flex h-full min-h-0 flex-col">
-          <DialogHeader className="shrink-0 border-b px-6 py-4">
-            <div className="flex items-start justify-between gap-4">
+          <DialogHeader className="shrink-0 border-b px-6 py-2">
+            <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <DialogTitle>Create project</DialogTitle>
                 <DialogDescription className="mt-1">
@@ -112,6 +113,7 @@ export function CreateProjectDialog({
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="cursor-pointer"
                     disabled={createProjectMutation.isPending}
                   >
                     Cancel
@@ -121,6 +123,7 @@ export function CreateProjectDialog({
                   type="button"
                   size="sm"
                   onClick={handleCreate}
+                  className="cursor-pointer"
                   disabled={
                     !normalizedName ||
                     Boolean(extraSettingError) ||

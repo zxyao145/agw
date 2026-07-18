@@ -50,7 +50,12 @@ function resolveApiUrl(path: string): string {
 async function getAntiforgeryToken(): Promise<string> {
   if (antiforgeryToken) return antiforgeryToken;
   const response = await fetch(resolveApiUrl("/api/auth/antiforgery"), {
-    credentials: apiRuntime.baseUrl ? "omit" : "same-origin",
+    credentials:
+      apiRuntime.baseUrl && apiRuntime.token
+        ? "omit"
+        : apiRuntime.baseUrl
+          ? "include"
+          : "same-origin",
   });
   const body = await readResponseBody(response);
   const value = unwrapApiResultEnvelope(body) as { requestToken?: unknown } | undefined;
@@ -171,7 +176,7 @@ export async function apiRequest(
     (headers as Record<string, string>).Authorization = `Bearer ${apiRuntime.token}`;
   }
 
-  if (method !== "get" && !apiRuntime.baseUrl) {
+  if (method !== "get") {
     (headers as Record<string, string>)["X-CSRF-TOKEN"] = await getAntiforgeryToken();
   }
 
@@ -179,7 +184,12 @@ export async function apiRequest(
     method: method.toUpperCase(),
     headers,
     signal: opts.signal,
-    credentials: apiRuntime.baseUrl ? "omit" : "same-origin",
+    credentials:
+      apiRuntime.baseUrl && apiRuntime.token
+        ? "omit"
+        : apiRuntime.baseUrl
+          ? "include"
+          : "same-origin",
   };
 
   if (opts.body !== undefined) {
