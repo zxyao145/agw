@@ -267,8 +267,8 @@ export function ConversationList({
                 key={context.contextId}
                 onClick={() => onContextSelect(context)}
                 className={cn(
-                  "group p-2 rounded-md cursor-pointer transition-colors border",
-                  isActive ? "bg-blue-50" : "bg-card hover:bg-accent/50 border-transparent",
+                  "group p-2 rounded-md cursor-pointer transition-colors",
+                  isActive ? "bg-accent" : "bg-card hover:bg-accent/50",
                 )}
               >
                 <div className="flex items-start">

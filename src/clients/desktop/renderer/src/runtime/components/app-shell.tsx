@@ -266,6 +266,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                   {projectId !== DEFAULT_PROJECT_ID ? (
                     <button
                       type="button"
+                      className="cursor-pointer"
                       aria-label={`Close ${projectId}`}
                       onClick={() => closeTab(projectId)}
                     >
@@ -352,7 +353,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                     role="option"
                     aria-selected={active}
                     className={cn(
-                      "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-colors",
+                      "cursor-pointer group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-colors",
                       "hover:bg-muted/70 focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40",
                       active && "bg-primary/8 text-foreground",
                     )}
