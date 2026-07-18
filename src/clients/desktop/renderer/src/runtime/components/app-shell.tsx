@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@agw/components/query";
 import {
   ArrowLeft,
+  Blocks,
   Bot,
   Boxes,
   Cable,
@@ -55,6 +56,13 @@ const CHAT_PATHS = new Set(["/chat", "/desktop/chat"]);
 
 const SETTINGS_GROUPS = [
   {
+    label: "Operations",
+    items: [
+      { href: "/dashboard/", label: "Overview", icon: Gauge },
+      { href: "/jobs/", label: "Jobs", icon: Clock3 },
+    ],
+  },
+  {
     label: "Workspace",
     items: [
       { href: "/projects/", label: "Projects", icon: FolderKanban },
@@ -73,16 +81,10 @@ const SETTINGS_GROUPS = [
   {
     label: "Capabilities",
     items: [
-      { href: "/skills/", label: "Skills", icon: GitBranch },
+      // { href: "/skills/", label: "Skills", icon: GitBranch },
+      { href: "/skills/", label: "Skills", icon: Blocks },
       { href: "/mcp-tool-servers/", label: "MCP servers", icon: Network },
       { href: "/integrations/", label: "Integrations", icon: Cable },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
-      { href: "/dashboard/", label: "Overview", icon: Gauge },
-      { href: "/jobs/", label: "Jobs", icon: Clock3 },
     ],
   },
   {
@@ -383,7 +385,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
           <ThemeButton />
         </span>
         <Link
-          href="/settings/"
+          href="/dashboard/"
           className="agw-titlebar-button agw-titlebar-control"
           aria-label="Settings"
         >

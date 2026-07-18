@@ -198,9 +198,8 @@
   :root[data-agw-desktop="true"]
     [data-slot="dialog-content"][data-size="fullscreen"]
     [data-slot="dialog-header"]
-    [data-slot="dialog-description"]
-    {
-      display: none;
+    [data-slot="dialog-description"] {
+    display: none;
   }
 
   :root[data-agw-desktop="true"][data-agw-platform="win32"]

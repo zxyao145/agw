@@ -17,6 +17,8 @@ import {
   Box,
   FolderKanban,
   Network,
+  Sparkle,
+  Sparkles,
   // Waypoints,
   // Hammer,
 } from "lucide-react";
@@ -121,7 +123,8 @@ const navItems: SidebarMenuGroupProps[] = [
         title: "Models",
         isActive: true,
         // icon: <Blocks />,
-        icon: <Box />,
+        // icon: <Box />,
+        icon: <Sparkles />,
       },
     ],
   },

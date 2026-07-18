@@ -1062,13 +1062,7 @@ export function VisualAgentflowBuilder({
       isSaving,
       submit: handleBuild,
     };
-  }, [
-    agentflowName,
-    editingAgentflow,
-    graphValidation.ok,
-    handleBuild,
-    isSaving,
-  ]);
+  }, [agentflowName, editingAgentflow, graphValidation.ok, handleBuild, isSaving]);
 
   React.useEffect(() => {
     onActionStateChange?.(actionState);
