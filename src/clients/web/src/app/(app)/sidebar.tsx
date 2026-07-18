@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
 import {
+  AgwLogo,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -57,14 +58,11 @@ export function AppSidebar({ menus }: AppSidebarProps) {
           <SidebarMenu>
             <SidebarMenuItem>
               <div className="flex items-center justify-between group-data-[collapsible=icon]:justify-center">
-                <div className="min-w-0 group-data-[collapsible=icon]:hidden flex items-center justify-between w-full mr-3">
-                  {/* <p className="text-xs uppercase tracking-[0.28em] text-slate-400">
-                    Agw
-                  </p>
-                  <p className="truncate text-sm font-semibold text-black">
-                    Agw-Web
-                  </p> */}
-                  <span>Agw</span>
+                <div className="mr-3 flex min-w-0 w-full items-center justify-between group-data-[collapsible=icon]:hidden">
+                  <AgwLogo
+                    markClassName="size-8"
+                    labelClassName="truncate text-sm font-semibold tracking-tight"
+                  />
                 </div>
 
                 <SidebarTrigger className="-ml-1 group-data-[collapsible=icon]:mx-auto" />

@@ -34,6 +34,7 @@ import { useTheme } from "next-themes";
 import { apiGet } from "@agw/api";
 import { getApiErrorMessage } from "@agw/api";
 import {
+  AgwLogo,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -119,15 +120,6 @@ function ThemeButton() {
     >
       {isDark ? <Sun /> : <Moon />}
     </button>
-  );
-}
-
-function AppMark({ label }: { label: string }) {
-  return (
-    <span className="agw-brand">
-      <span className="agw-logo">A</span>
-      <span>{label}</span>
-    </span>
   );
 }
 
@@ -247,9 +239,6 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     <div className="agw-app-shell">
       <header className={cn("agw-titlebar", `platform-${platform}`)}>
         <span className="ml-4"></span>
-        {/* <Link href="/desktop/chat/" className="agw-titlebar-control">
-          <AppMark label="Agw Chat" />
-        </Link> */}
         <nav className="agw-project-tabs" aria-label="Open projects">
           <div className="flex min-w-0 max-w-full items-center gap-1 overflow-hidden">
             {tabs.map((projectId) => {
@@ -416,7 +405,6 @@ function SettingsShell({ children }: { children: React.ReactNode }) {
           <ArrowLeft />
           <span>Back to chat</span>
         </Link>
-        {/* <AppMark label="Settings" /> */}
         <span className="agw-titlebar-spacer" />
         <span className="agw-titlebar-control">
           <ThemeButton />
@@ -424,7 +412,11 @@ function SettingsShell({ children }: { children: React.ReactNode }) {
       </header>
       <div className="agw-settings-workspace">
         <aside className="agw-settings-nav">
-          <div className="agw-settings-nav-heading">Agw</div>
+          <AgwLogo
+            className="agw-settings-nav-heading"
+            markClassName="size-8"
+            labelClassName="tracking-tight"
+          />
           {SETTINGS_GROUPS.map((group) => (
             <section key={group.label}>
               <h2>{group.label}</h2>

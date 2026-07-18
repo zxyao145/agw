@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { LockKeyhole, Server } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
 
 import { login } from "../../services/auth";
-import { Button } from "@agw/components";
+import { AgwLogo, Button } from "@agw/components";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@agw/components";
 import { Input } from "@agw/components";
 import { Label } from "@agw/components";
@@ -46,10 +46,13 @@ export default function LoginPage() {
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_oklab,var(--border)_45%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--border)_45%,transparent)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(circle_at_center,black,transparent_75%)]" />
       <Card className="relative w-full max-w-md border-border/80 shadow-xl shadow-black/5">
         <CardHeader>
-          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl border bg-muted/60">
-            <Server className="h-5 w-5" />
+          <div className="flex justify-between items-center">
+            <AgwLogo
+              markClassName="size-11"
+              labelClassName="text-base font-semibold tracking-tight"
+            />
+            <CardTitle className="text-2xl">Connect to Agw Server</CardTitle>
           </div>
-          <CardTitle className="text-2xl">Connect to Agw Server</CardTitle>
           <CardDescription>
             Authenticate this browser to manage agents, projects and executions.
           </CardDescription>

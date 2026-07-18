@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { Button } from "@agw/components";
+import { AgwLogo, Button } from "@agw/components";
 import { useDesktopRuntime } from "./runtime-provider";
 
 export function DesktopConnectionGate({ children }: { children: React.ReactNode }) {
@@ -31,6 +31,11 @@ export function DesktopConnectionGate({ children }: { children: React.ReactNode 
   return (
     <div className="grid min-h-screen place-items-center bg-background p-6 text-foreground">
       <div className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-sm">
+        <AgwLogo
+          className="mb-5"
+          markClassName="size-10"
+          labelClassName="text-base font-semibold tracking-tight"
+        />
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
           Server connection
         </p>

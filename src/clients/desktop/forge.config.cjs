@@ -9,6 +9,7 @@ module.exports = {
     executableName: "agw-desktop",
     appBundleId: "com.agw.desktop",
     asar: true,
+    icon: path.resolve(__dirname, "assets", "agw-logo"),
     extraResource: [
       path.resolve(__dirname, "resources", "renderer"),
       path.resolve(__dirname, "resources", "package-flavor.json"),
@@ -24,6 +25,7 @@ module.exports = {
       platforms: ["win32"],
       config: {
         name: "agw_desktop",
+        setupIcon: path.resolve(__dirname, "assets", "agw-logo.ico"),
         setupExe: `Agw-${flavor}-windows-${arch}-Setup.exe`,
       },
     },
@@ -45,6 +47,7 @@ module.exports = {
           genericName: "Agent Gateway",
           maintainer: "Agw",
           homepage: "https://github.com/zxyao145/agw",
+          icon: path.resolve(__dirname, "assets", "agw-logo.png"),
           categories: ["Development", "Utility"],
         },
       },

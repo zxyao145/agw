@@ -3,6 +3,7 @@ export * from "./lib/cn";
 export * from "./lib/date-time";
 export * from "./lib/pagination";
 export * from "./types/timeline";
+export * from "./ui-web/agw-logo";
 export * from "./ui-web/date-time-picker";
 export * from "./ui-web/error-boundary";
 export * from "./ui-web/query-error-boundary";

@@ -44,6 +44,8 @@ protocol.registerSchemesAsPrivileged([
 
 if (started) app.quit();
 
+app.setName("Agw Desktop");
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
@@ -106,6 +108,12 @@ function trayIconPath(): string {
     : resolve(__dirname, "..", "..", "assets", "tray-icon.svg");
 }
 
+function appIconPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, "assets", "agw-logo.png")
+    : resolve(__dirname, "..", "..", "assets", "agw-logo.png");
+}
+
 function isTrustedRenderer(url: string): boolean {
   if (url.startsWith("agw://app/")) return true;
   const developmentUrl = process.env.AGW_RENDERER_URL;
@@ -166,6 +174,7 @@ function createMainWindow(): BrowserWindow {
     height: 920,
     minWidth: 980,
     minHeight: 680,
+    icon: appIconPath(),
     show: false,
     title: "Agw Desktop",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
@@ -407,6 +416,8 @@ app.on("activate", () => showWindowSafely());
 void app
   .whenReady()
   .then(async () => {
+    app.dock?.setIcon(appIconPath());
+
     const flavor = readPackageFlavor();
     settingsStore = new DesktopSettingsStore(app.getPath("userData"), flavor, createSecretCodec());
     currentSettings = await settingsStore.load();
