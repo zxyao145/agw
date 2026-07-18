@@ -169,8 +169,29 @@
   }
 }
 
-/* Agw Desktop shell — HeroUI V3-inspired semantic surfaces and restrained states. */
+/* Shared application component styles. */
 @layer components {
+  .agw-scrollbar {
+    scrollbar-color: var(--border) transparent;
+    scrollbar-width: var(thin + 2px);
+  }
+
+  .agw-scrollbar::-webkit-scrollbar {
+    width: 0.75rem;
+  }
+
+  .agw-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .agw-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--border);
+    background-clip: padding-box;
+    border: 0.125rem solid transparent;
+    border-radius: 9999px;
+  }
+
+  /* Agw Desktop shell — HeroUI V3-inspired semantic surfaces and restrained states. */
   .agw-app-shell {
     @apply flex h-screen min-h-0 w-full flex-col overflow-hidden bg-background text-foreground;
   }

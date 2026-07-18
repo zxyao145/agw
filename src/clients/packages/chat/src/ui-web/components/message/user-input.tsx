@@ -1,6 +1,6 @@
 "use client";
 
-import { Send } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import { Button } from "@agw/components";
 import { Textarea } from "@agw/components";
 import { KeyboardEvent, ReactNode, useRef, useImperativeHandle, forwardRef } from "react";
@@ -101,7 +101,7 @@ function UserInputRoot({
       </div>
       {/* Input area with textarea and action button */}
       <div className="relative">
-        <div className="flex flex-row gap-0 items-end bg-background border rounded-lg pointer-events-auto">
+        <div className="pointer-events-auto relative px-2 pt-2 pb-11 rounded-xl border bg-background shadow-sm">
           <Textarea
             ref={textareaRef}
             value={input}
@@ -109,14 +109,27 @@ function UserInputRoot({
             onKeyDown={onKeyDown}
             placeholder={placeholder}
             rows={rows}
-            className={`${maxHeight} min-h-12 flex-1 resize-none bg-background border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0`}
+            className={`${maxHeight} agw-scrollbar min-h-[1lh] resize-none overflow-x-hidden
+            overflow-y-auto rounded-none 
+            border-0 p-0
+            shadow-none 
+            focus-visible:ring-0 
+            focus-visible:ring-offset-0`}
             disabled={isExecuting}
           />
 
           {/* Action button - comment mode or regular send */}
-          <Button className="cursor-pointer m-2" onClick={handleClick} disabled={isDisabled}>
-            {sender.length > 0 ? <>{sender}</> : <Send className="w-5 h-5" />}
-          </Button>
+          <div className="absolute left-2 right-2 bottom-2 flex justify-between">
+            <div></div>
+            <Button
+              size="icon-sm"
+              className="rounded-full"
+              onClick={handleClick}
+              disabled={isDisabled}
+            >
+              {sender.length > 0 ? <>{sender}</> : <ArrowUp className="size-5" />}
+            </Button>
+          </div>
         </div>
       </div>
       {/* Helper text */}
@@ -228,7 +241,7 @@ function UserInputContainer({
   onStop,
   placeholder = "Type your message...",
   rows = 1,
-  maxHeight = "max-h-50",
+  maxHeight = "max-h-60",
   children,
   onSuggestion,
   inputRef,

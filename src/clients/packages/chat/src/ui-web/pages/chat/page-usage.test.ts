@@ -85,15 +85,14 @@ test("shared chat shows the usage panel only when its container reaches the lg w
     chatSource,
     /<div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center">/,
   );
+  assert.match(chatSource, /className="relative min-h-30 min-w-0 max-w-5xl flex-1/);
 });
 
-test("shared chat hides the native scrollbar without disabling message scrolling", async () => {
+test("shared chat uses the shared scrollbar without disabling message scrolling", async () => {
   const chatSource = await readFile(CHAT_COMPONENT_URL, "utf8");
 
-  assert.match(
-    chatSource,
-    /className="h-full w-full overflow-y-auto \[scrollbar-width:none\] \[&::-webkit-scrollbar\]:hidden"/,
-  );
+  assert.match(chatSource, /className="h-full w-full overflow-y-auto agw-scrollbar"/);
+  assert.doesNotMatch(chatSource, /scrollbar-width:none|webkit-scrollbar\]:hidden/);
 });
 
 test("shared chat does not render the usage panel without visible messages", async () => {

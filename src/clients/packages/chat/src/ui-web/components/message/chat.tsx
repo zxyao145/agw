@@ -571,7 +571,7 @@ export function Chat({
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
       <div
         ref={conversationScrollRef}
-        className="h-full w-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="h-full w-full overflow-y-auto agw-scrollbar"
         onScroll={handleConversationScroll}
       >
         <div className="mx-auto flex min-h-full w-full justify-center">
@@ -590,7 +590,7 @@ export function Chat({
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center">
-        <div className="relative h-30 min-w-0 max-w-5xl flex-1 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-6">
+        <div className="relative min-h-30 min-w-0 max-w-5xl flex-1 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-6">
           {/* 用户确认 */}
           {pendingHumanGate ? (
             <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
