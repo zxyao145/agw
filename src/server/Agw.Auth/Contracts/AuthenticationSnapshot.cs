@@ -1,7 +1,6 @@
-namespace Agw.Setup.Contracts;
+namespace Agw.Auth.Contracts;
 
-public record InitializationSnapshot(
-    bool IsInitialized,
+public sealed record AuthenticationSnapshot(
     string? PasswordHash,
     int SessionVersion,
     IReadOnlyList<ApiTokenSummary> Tokens);

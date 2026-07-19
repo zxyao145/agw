@@ -1,3 +1,5 @@
+using Agw.Auth.Application;
+using Agw.Auth.Security;
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
 using Agw.Shared.Configuration;
@@ -38,7 +40,7 @@ public class SetupController : Controller
     public IActionResult Index()
     {
         // 初始化后，setup 页面将返回 404
-        if (_stateStore.GetSnapshot().IsInitialized)
+        if (_stateStore.IsInitialized)
         {
             return ErrorCodes.ResourceNotFound.ToApiResult();
         }
@@ -61,7 +63,7 @@ public class SetupController : Controller
     public async Task<IActionResult> Index(SetupRequest request, CancellationToken cancellationToken)
     {
         ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
-        if (_stateStore.GetSnapshot().IsInitialized)
+        if (_stateStore.IsInitialized)
         {
             return ErrorCodes.ResourceNotFound.ToApiResult();
         }

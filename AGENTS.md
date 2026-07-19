@@ -18,18 +18,19 @@ Agw.Data/            # Persisted entities, EF configurations, repository abstrac
 Agw.Infrastructure/  # EF Core DbContext, repositories, migrations, and seeding
 Agw.Shared/          # Shared contracts, exceptions, results, and utilities
 Agw.A2A/             # A2A protocol types, discovery, communication endpoints, and route builders
+Agw.Auth/            # Administrator Cookie/Bearer authentication, LocalTrusted, CSRF, and authorization guards
 Agw.Agents/          # Agent definitions, agentflows, MCP tools, and runtime execution services
 Agw.Files/           # File and workspace APIs, path security, request validation, and error mapping
 Agw.Integrations/    # Plugin catalog, installations, connections, credentials, OAuth, MCP, and connection-bound tools
 Agw.Jobs/            # Scheduled jobs, project leases, execution logs, and hosted scheduling
 Agw.Providers/       # LLM models, providers, model-provider links, and auth configuration
-Agw.Setup/           # First-run setup, initialization state, and API-key guard middleware
+Agw.Setup/           # First-run setup, initialization state, and the combined server-state persistence adapter
 Agw.Skills/          # Skill archive validation, storage, and agent-skill relations
 Agw.Projects/         # Projects, project tasks, task records, contexts, and task APIs
 Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registry
 ```
 
-`Agw.slnx` is the root solution and includes the backend projects and tests. `src/server/server.sln` includes backend projects only. The root solution includes test projects for A2A, Agents, Files, Host, Integrations, Jobs, Projects, Setup, Shared, Skills, and Tools.
+`Agw.slnx` is the root solution and includes the backend projects and tests. `src/server/server.sln` includes backend projects only. The root solution includes test projects for A2A, Agents, Auth, Files, Host, Integrations, Jobs, Projects, Setup, Shared, Skills, and Tools.
 
 ### Module Layering
 
@@ -77,6 +78,7 @@ The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients
 ### Runtime Entry Points and Services
 
 - `src/server/Agw.Host/Program.cs`: bootstraps logging, OpenTelemetry, dependency injection, OpenAPI/Scalar, websockets, static files, module registration, and database seeding.
+- `src/server/Agw.Auth/Extensions/DependencyInjection.cs`: registers administrator Cookie authentication, antiforgery, authorization, password hashing, login throttling, and scoped current-user access; `UseAgwAuth()` fixes the custom authentication middleware order.
 - `src/server/Agw.Agents/Execution/README.md`: documents the SignalR command boundary, reusable runtimes, turn lifecycle, message flow, and command extension model.
 - `src/server/Agw.Agents/Execution/Agents/AgentRuntimeService.cs`: builds `AIAgent` instances from persisted agents, hydrates provider configuration, selects enabled auth configuration, attaches registered and MCP tools, and supports OpenAI, Anthropic, Claude Code, and Codex-backed execution through Microsoft.Agents.AI integrations.
 - `src/server/Agw.Agents/Execution/Agentflows/AgentflowRuntimeService.cs`: executes persisted DAG workflows compiled by `AgentflowWorkflowCompiler`, including Agent, Workflow-as-Agent, HumanGate, Concurrent, GroupChat, Handoff, and Magentic nodes.
@@ -186,7 +188,7 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 
 ### Backend API Responses and Exceptions
 
-- All non-WebSocket JSON API endpoints in backend modules, including `Agw.Host`, `Agw.Setup`, and `Agw.Files`, must return Bens.Results envelopes directly through `Bens.Results.ApiResult` or the configured boundary mapping.
+- All non-WebSocket JSON API endpoints in backend modules, including `Agw.Auth`, `Agw.Host`, `Agw.Setup`, and `Agw.Files`, must return Bens.Results envelopes directly through `Bens.Results.ApiResult` or the configured boundary mapping.
 - Return helpers such as `ApiResult.Ok()`, `ApiResult.Ok(data)`, and `ApiResult.BadRequest(...)`. Use `ErrorCode.ToApiResult()` or `AgwException.ToApiResult()` when mapping shared application errors, and let `AgwApiExceptionMiddleware` map uncaught `AgwException` instances automatically.
 - Use `[ProducesApiResult]` for OpenAPI response metadata where applicable; it does not replace direct `ApiResult` returns.
 - Do not return raw `Ok(...)`, `BadRequest(...)`, `NotFound(...)`, `NoContent()`, or other bare MVC responses from those controllers.

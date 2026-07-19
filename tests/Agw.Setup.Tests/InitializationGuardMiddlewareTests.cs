@@ -1,6 +1,6 @@
-using Agw.Setup.Contracts;
 using Agw.Setup.Middleware;
-using Agw.Setup.Services;
+using Agw.Shared.Configuration;
+using Agw.Shared.Runtime;
 
 using Microsoft.AspNetCore.Http;
 
@@ -51,27 +51,10 @@ public class InitializationGuardMiddlewareTests
         Assert.Equal("/setup", context.Response.Headers.Location);
     }
 
-    private sealed class UninitializedStateStore : IInitializationStateStore
+    private sealed class UninitializedStateStore : IServerInitializationState
     {
-        public InitializationSnapshot GetSnapshot() => new(false, string.Empty, 0, []);
-
-        public Task PersistAsync(
-            SetupRequest request,
-            string passwordHash,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<CreatedApiToken> CreateTokenAsync(
-            string name,
-            CancellationToken cancellationToken = default) => throw new NotImplementedException();
-
-        public Task<bool> RevokeTokenAsync(
-            Guid id,
-            CancellationToken cancellationToken = default) => throw new NotImplementedException();
-
-        public bool ValidateToken(string token) => false;
-
-        public Task UpdatePasswordAsync(
-            string passwordHash,
-            CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public bool IsInitialized => false;
+        public DatabaseProvider DatabaseProvider => DatabaseProvider.Sqlite;
+        public string DatabaseConnectionString => string.Empty;
     }
 }

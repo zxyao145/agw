@@ -1,8 +1,12 @@
+using Agw.Auth.Application;
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 using Agw.Testing;
+
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 using Xunit;
 
@@ -29,8 +33,8 @@ public class JsonInitializationStateStoreTests
             }, "hashed-password", TestContext.Current.CancellationToken);
 
             var reloadedStore = new JsonInitializationStateStore(paths, TimeProvider);
-            var reloaded = reloadedStore.GetSnapshot();
-            Assert.True(reloaded.IsInitialized);
+            var reloaded = reloadedStore.GetAuthenticationSnapshot();
+            Assert.True(reloadedStore.IsInitialized);
             Assert.Equal("hashed-password", reloaded.PasswordHash);
             Assert.Equal(1, reloaded.SessionVersion);
             Assert.Equal(DatabaseProvider.Sqlite, reloadedStore.DatabaseProvider);
@@ -71,7 +75,7 @@ public class JsonInitializationStateStoreTests
             Assert.Equal(UtcNow, created.CreatedAt);
             Assert.True(store.ValidateToken(created.Token));
             Assert.DoesNotContain(created.Token, await File.ReadAllTextAsync(paths.StateFile, TestContext.Current.CancellationToken));
-            Assert.Single(store.GetSnapshot().Tokens);
+            Assert.Single(store.GetAuthenticationSnapshot().Tokens);
         }
         finally
         {
@@ -98,6 +102,70 @@ public class JsonInitializationStateStoreTests
 
             Assert.True(revoked);
             Assert.False(store.ValidateToken(created.Token));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AuthenticationWrites_WhenLoadingSchemaVersionOne_PreserveDatabaseConfiguration()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            await File.WriteAllTextAsync(
+                paths.StateFile,
+                """
+                {
+                  "schemaVersion": 1,
+                  "isInitialized": true,
+                  "database": {
+                    "provider": "postgres",
+                    "connectionString": "Host=db;Database=agw"
+                  },
+                  "passwordHash": "old-hash",
+                  "sessionVersion": 3,
+                  "tokens": []
+                }
+                """,
+                TestContext.Current.CancellationToken);
+            var store = new JsonInitializationStateStore(paths, TimeProvider);
+
+            var token = await store.CreateTokenAsync("Automation", TestContext.Current.CancellationToken);
+            await store.UpdatePasswordAsync("new-hash", TestContext.Current.CancellationToken);
+            var reloaded = new JsonInitializationStateStore(paths, TimeProvider);
+
+            Assert.Equal(DatabaseProvider.Postgres, reloaded.DatabaseProvider);
+            Assert.Equal("Host=db;Database=agw", reloaded.DatabaseConnectionString);
+            Assert.Equal("new-hash", reloaded.GetAuthenticationSnapshot().PasswordHash);
+            Assert.True(reloaded.ValidateToken(token.Token));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AddSetup_ResolvesAllStateInterfacesToSameAdapter()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton(paths);
+            services.AddSingleton(TimeProvider);
+            services.AddSetup(new ConfigurationBuilder().Build());
+            using var provider = services.BuildServiceProvider();
+
+            var setupState = provider.GetRequiredService<IInitializationStateStore>();
+            var authenticationState = provider.GetRequiredService<IAuthenticationStateStore>();
+            var serverState = provider.GetRequiredService<IServerInitializationState>();
+
+            Assert.Same(setupState, authenticationState);
+            Assert.Same(setupState, serverState);
         }
         finally
         {

@@ -1,3 +1,4 @@
+using Agw.Auth.Application;
 using Agw.Setup.Contracts;
 using Agw.Setup.Controllers;
 using Agw.Setup.Services;
@@ -54,26 +55,12 @@ public sealed class SetupControllerTests
 
     private sealed class InitializedStateStore : IInitializationStateStore
     {
-        public InitializationSnapshot GetSnapshot() => new(true, null, 0, []);
+        public bool IsInitialized => true;
 
         public Task PersistAsync(
             SetupRequest request,
             string passwordHash,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<CreatedApiToken> CreateTokenAsync(
-            string name,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<bool> RevokeTokenAsync(
-            Guid id,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public bool ValidateToken(string token) => false;
-
-        public Task UpdatePasswordAsync(
-            string passwordHash,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class StubSetupInitializationService : ISetupInitializationService

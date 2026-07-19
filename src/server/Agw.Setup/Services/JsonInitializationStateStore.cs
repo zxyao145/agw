@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
@@ -10,7 +12,10 @@ using Agw.Shared.Runtime;
 
 namespace Agw.Setup.Services;
 
-public sealed class JsonInitializationStateStore : IInitializationStateStore, IServerInitializationState
+public sealed class JsonInitializationStateStore :
+    IInitializationStateStore,
+    IAuthenticationStateStore,
+    IServerInitializationState
 {
     private readonly AgwDataPaths _paths;
     private readonly TimeProvider _timeProvider;
@@ -25,11 +30,10 @@ public sealed class JsonInitializationStateStore : IInitializationStateStore, IS
         _state = Load(paths.StateFile);
     }
 
-    public InitializationSnapshot GetSnapshot()
+    public AuthenticationSnapshot GetAuthenticationSnapshot()
     {
         var state = _state;
-        return new InitializationSnapshot(
-            state.IsInitialized,
+        return new AuthenticationSnapshot(
             state.PasswordHash,
             state.SessionVersion,
             state.Tokens.Select(ToSummary).ToArray());

@@ -8,6 +8,7 @@
 ### Applicable modules
 
 - `Agw.Host`
+- `Agw.Auth`
 - `Agw.Setup`
 - `Agw.Files`
 - `Agw.Agents`

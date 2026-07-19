@@ -37,6 +37,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Agw.A2A\Agw.A2A.csproj" />
+    <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Infrastructure\Agw.Infrastructure.csproj" />
     <ProjectReference Include="..\Agw.Setup\Agw.Setup.csproj" />
   </ItemGroup>

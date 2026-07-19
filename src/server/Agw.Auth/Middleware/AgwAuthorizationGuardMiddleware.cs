@@ -1,8 +1,8 @@
-using Agw.Setup.Services;
+using Agw.Shared.Runtime;
 
 using Microsoft.AspNetCore.Http;
 
-namespace Agw.Setup.Middleware;
+namespace Agw.Auth.Middleware;
 
 public sealed class AgwAuthorizationGuardMiddleware
 {
@@ -22,13 +22,13 @@ public sealed class AgwAuthorizationGuardMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext context, IInitializationStateStore stateStore)
+    public async Task InvokeAsync(HttpContext context, IServerInitializationState initializationState)
     {
         var path = context.Request.Path;
         var isProtectedProtocol = path.StartsWithSegments("/api") || path.StartsWithSegments("/a2a");
         var isAnonymousPath = AnonymousApiPaths.Any(value => path.StartsWithSegments(value));
 
-        if (!isProtectedProtocol || isAnonymousPath || !stateStore.GetSnapshot().IsInitialized
+        if (!isProtectedProtocol || isAnonymousPath || !initializationState.IsInitialized
             || context.User.Identity?.IsAuthenticated == true)
         {
             await _next(context);

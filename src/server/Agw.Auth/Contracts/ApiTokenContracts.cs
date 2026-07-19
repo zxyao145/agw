@@ -1,4 +1,4 @@
-namespace Agw.Setup.Contracts;
+namespace Agw.Auth.Contracts;
 
 public sealed record ApiTokenSummary(Guid Id, string Name, string Prefix, DateTimeOffset CreatedAt);
 

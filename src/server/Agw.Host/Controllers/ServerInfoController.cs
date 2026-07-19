@@ -1,7 +1,7 @@
 using System.Reflection;
 
-using Agw.Setup.Services;
 using Agw.Shared.Results;
+using Agw.Shared.Runtime;
 
 using Bens.Results;
 
@@ -14,11 +14,11 @@ namespace Agw.Host.Controllers;
 [Tags("agw-server")]
 public sealed class ServerInfoController : ControllerBase
 {
-    private readonly IInitializationStateStore _stateStore;
+    private readonly IServerInitializationState _initializationState;
 
-    public ServerInfoController(IInitializationStateStore stateStore)
+    public ServerInfoController(IServerInitializationState initializationState)
     {
-        _stateStore = stateStore;
+        _initializationState = initializationState;
     }
 
     [HttpGet]
@@ -29,7 +29,7 @@ public sealed class ServerInfoController : ControllerBase
         var version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
             ?? "0.0.0-dev";
-        return ApiResult.Ok(new ServerInfoResponse(version, 1, _stateStore.GetSnapshot().IsInitialized));
+        return ApiResult.Ok(new ServerInfoResponse(version, 1, _initializationState.IsInitialized));
     }
 
     public sealed record ServerInfoResponse(string ServerVersion, int ApiMajorVersion, bool Initialized);

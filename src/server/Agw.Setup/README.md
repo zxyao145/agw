@@ -1,6 +1,6 @@
 # Agw.Setup
 
-`Agw.Setup` owns first-run initialization and the single-administrator authentication state for Agw Server.
+`Agw.Setup` owns first-run initialization and the persisted Server bootstrap document.
 
 ## Initialization
 
@@ -8,17 +8,11 @@ Before initialization, normal UI requests redirect to `/setup`; APIs return 403 
 
 Direct loopback setup is trusted. Setup through a domain or forwarded request additionally requires the one-time Setup Code printed by the Server at startup.
 
-The resulting `server-state.json` lives below the Agw data directory, not the application directory. It contains database settings, a password hash, a session version, and hashed API Token metadata. It never stores Token plaintext.
+The resulting `server-state.json` lives below the Agw data directory, not the application directory. `JsonInitializationStateStore` is the single persistence Adapter for initialization, runtime database settings, and the [`Agw.Auth`](../Agw.Auth/README.md) authentication state seam. It preserves the existing combined schema and never stores Token plaintext.
 
-## Authentication
+## Authentication handoff
 
-- Direct loopback requests with a localhost Host and no forwarding headers are locally trusted.
-- Remote Web access signs in with the administrator password and receives an HttpOnly, SameSite=Strict cookie.
-- Desktop, Mobile, and automation clients use named `Authorization: Bearer agw_...` Tokens.
-- Unsafe Cookie/local browser requests require the `X-CSRF-TOKEN` antiforgery header.
-- Token management is available only to Cookie or locally trusted administrator sessions.
-
-The old `X-API-Key` setting is intentionally not supported or migrated.
+Setup hashes and persists the initial administrator password as part of the atomic bootstrap write. Login, Cookie and Bearer authentication, `LocalTrusted`, CSRF, Token management, and authorization protection are owned by `Agw.Auth`. The old `X-API-Key` setting is intentionally not supported or migrated.
 
 ## Recovery
 

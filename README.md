@@ -211,18 +211,23 @@ flowchart BT
     end
 
     subgraph Support
+        Agw.Auth[Agw.Auth]
         Agw.Setup[Agw.Setup]
     end
 
     Agw.Shared 
 
     Agw.Data --> Agw.Shared
-    Agw.Shared --> Core
+    Agw.Auth --> Agw.Shared
+    Agw.Setup --> Agw.Auth
+    Agw.Setup --> Agw.Infrastructure
+    Agw.Setup --> Agw.Shared
+    Core --> Agw.Shared
 
-    Core --> Agw.Infrastructure
-    Support --> Agw.Infrastructure
-
-    Agw.Infrastructure --> Agw.Host
+    Agw.Infrastructure --> Core
+    Agw.Host --> Agw.Auth
+    Agw.Host --> Agw.Setup
+    Agw.Host --> Agw.Infrastructure
 
 
     %% styles

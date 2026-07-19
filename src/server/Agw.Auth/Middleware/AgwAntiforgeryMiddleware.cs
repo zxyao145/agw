@@ -1,7 +1,9 @@
+using Agw.Auth.Application;
+
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Http;
 
-namespace Agw.Setup.Middleware;
+namespace Agw.Auth.Middleware;
 
 public sealed class AgwAntiforgeryMiddleware
 {
@@ -20,7 +22,7 @@ public sealed class AgwAntiforgeryMiddleware
             StringComparison.OrdinalIgnoreCase);
         var requiresValidation = context.Request.Path.StartsWithSegments("/api")
             && method is "POST" or "PUT" or "PATCH" or "DELETE"
-            && context.User.Identity?.AuthenticationType is "AgwCookie" or "LocalTrusted"
+            && context.User.Identity?.AuthenticationType is AgwAuthDefaults.CookieScheme or AgwAuthDefaults.LocalTrustedScheme
             && !context.WebSockets.IsWebSocketRequest
             && !isExecutionHubNegotiate;
 

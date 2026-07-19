@@ -2,9 +2,10 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Security.Claims;
 
-using Agw.Setup.Contracts;
-using Agw.Setup.Middleware;
-using Agw.Setup.Services;
+using Agw.Auth.Application;
+using Agw.Auth.Contracts;
+using Agw.Auth.Middleware;
+using Agw.Auth.Security;
 using Agw.Shared;
 
 using Microsoft.AspNetCore.Http;
@@ -12,9 +13,9 @@ using Microsoft.AspNetCore.Http.Features;
 
 using Xunit;
 
-namespace Agw.Setup.Tests;
+namespace Agw.Auth.Tests;
 
-public class RequestTrustAndSetupCodeTests
+public sealed class AuthenticationMiddlewareTests
 {
     [Fact]
     public void IsLocalTrusted_WhenLoopbackHasNoForwardingHeaders_ReturnsTrue()
@@ -35,17 +36,6 @@ public class RequestTrustAndSetupCodeTests
         context.Request.Headers["X-Forwarded-Host"] = "agw.example.com";
 
         Assert.False(LocalTrustedRequest.IsLocalTrusted(context));
-    }
-
-    [Fact]
-    public void Consume_WhenCodeIsUsedTwice_OnlyFirstAttemptSucceeds()
-    {
-        var service = new SetupCodeService("ABCD-EFGH-IJKL");
-
-        Assert.True(service.Matches("ABCD-EFGH-IJKL"));
-        Assert.True(service.Consume("ABCD-EFGH-IJKL"));
-        Assert.False(service.Matches("ABCD-EFGH-IJKL"));
-        Assert.False(service.Consume("ABCD-EFGH-IJKL"));
     }
 
     [Theory]
@@ -85,14 +75,71 @@ public class RequestTrustAndSetupCodeTests
     }
 
     [Fact]
-    public async Task AuthenticationMiddleware_WhenLocalTrustedWebSocketHasCrossSiteOrigin_RejectsUpgrade()
+    public async Task InvokeAsync_ValidBearerToken_CreatesBearerPrincipal()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Headers.Authorization = "Bearer agw_desktop";
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask);
+
+        await middleware.InvokeAsync(context, new StateStoreStub("agw_desktop"));
+
+        Assert.True(context.User.Identity?.IsAuthenticated);
+        Assert.Equal(AgwAuthDefaults.BearerScheme, context.User.Identity?.AuthenticationType);
+        Assert.Equal(Constants.AdminUserName, context.User.Identity?.Name);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_InvalidBearerToken_DoesNotCreatePrincipalForRemoteRequest()
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.1");
+        context.Request.Host = new HostString("agw.example.com");
+        context.Request.Headers.Authorization = "Bearer agw_invalid";
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask);
+
+        await middleware.InvokeAsync(context, new StateStoreStub("agw_valid"));
+
+        Assert.False(context.User.Identity?.IsAuthenticated);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_InvalidBearerTokenOnLoopback_FallsBackToLocalTrustedPrincipal()
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Loopback;
+        context.Request.Host = new HostString("localhost", 5015);
+        context.Request.Headers.Authorization = "Bearer agw_invalid";
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask);
+
+        await middleware.InvokeAsync(context, new StateStoreStub("agw_valid"));
+
+        Assert.Equal(AgwAuthDefaults.LocalTrustedScheme, context.User.Identity?.AuthenticationType);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_LocalTrustedRequest_CreatesLocalTrustedPrincipal()
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Loopback;
+        context.Request.Host = new HostString("localhost", 5015);
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask);
+
+        await middleware.InvokeAsync(context, new StateStoreStub());
+
+        Assert.Equal(AgwAuthDefaults.LocalTrustedScheme, context.User.Identity?.AuthenticationType);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_LocalTrustedWebSocketWithCrossSiteOrigin_RejectsUpgrade()
     {
         var context = new DefaultHttpContext();
         context.Features.Set<IHttpWebSocketFeature>(new WebSocketFeature());
         context.Request.Scheme = "http";
         context.Request.Host = new HostString("localhost", 5015);
         context.Request.Headers.Origin = "https://evil.example.com";
-        context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, Constants.AdminUserName)], "LocalTrusted"));
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.Name, Constants.AdminUserName)],
+            AgwAuthDefaults.LocalTrustedScheme));
         var nextCalled = false;
         var middleware = new AgwAuthenticationMiddleware(_ =>
         {
@@ -107,7 +154,7 @@ public class RequestTrustAndSetupCodeTests
     }
 
     [Fact]
-    public async Task AuthenticationMiddleware_WhenDesktopWebSocketUsesBearerToken_AllowsUpgrade()
+    public async Task InvokeAsync_DesktopWebSocketWithBearerToken_AllowsUpgrade()
     {
         var context = new DefaultHttpContext();
         context.Features.Set<IHttpWebSocketFeature>(new WebSocketFeature());
@@ -122,7 +169,7 @@ public class RequestTrustAndSetupCodeTests
             return Task.CompletedTask;
         });
 
-        await middleware.InvokeAsync(context, new StateStoreStub(validToken: "agw_desktop"));
+        await middleware.InvokeAsync(context, new StateStoreStub("agw_desktop"));
 
         Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
         Assert.True(nextCalled);
@@ -135,7 +182,7 @@ public class RequestTrustAndSetupCodeTests
         public Task<WebSocket> AcceptAsync(WebSocketAcceptContext context) => throw new NotImplementedException();
     }
 
-    private sealed class StateStoreStub : IInitializationStateStore
+    private sealed class StateStoreStub : IAuthenticationStateStore
     {
         private readonly string? _validToken;
 
@@ -144,20 +191,20 @@ public class RequestTrustAndSetupCodeTests
             _validToken = validToken;
         }
 
-        public InitializationSnapshot GetSnapshot() => new(true, "hash", 1, []);
+        public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 1, []);
 
-        public Task PersistAsync(SetupRequest request, string passwordHash, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public Task<CreatedApiToken> CreateTokenAsync(
+            string name,
+            CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public Task<CreatedApiToken> CreateTokenAsync(string name, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
-
-        public Task<bool> RevokeTokenAsync(Guid id, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+        public Task<bool> RevokeTokenAsync(
+            Guid id,
+            CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
         public bool ValidateToken(string token) => string.Equals(token, _validToken, StringComparison.Ordinal);
 
-        public Task UpdatePasswordAsync(string passwordHash, CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+        public Task UpdatePasswordAsync(
+            string passwordHash,
+            CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }
 }

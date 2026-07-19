@@ -1,4 +1,4 @@
-using Agw.Setup.Services;
+using Agw.Shared.Runtime;
 
 using Microsoft.AspNetCore.Http;
 
@@ -15,12 +15,11 @@ public class InitializationGuardMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext context, IInitializationStateStore stateStore)
+    public async Task InvokeAsync(HttpContext context, IServerInitializationState initializationState)
     {
-        var snapshot = stateStore.GetSnapshot();
         var path = context.Request.Path;
 
-        if (!snapshot.IsInitialized)
+        if (!initializationState.IsInitialized)
         {
             if (path.StartsWithSegments("/api/server-info")
                 || path.StartsWithSegments("/api/health/live")

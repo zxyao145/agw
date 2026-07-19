@@ -1,7 +1,7 @@
 using System.Security.Claims;
 
-using Agw.Setup.Contracts;
-using Agw.Setup.Services;
+using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Shared;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
@@ -10,25 +10,24 @@ using Bens.Results;
 
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Agw.Host.Controllers;
+namespace Agw.Auth.Api;
 
 [ApiController]
 [Route("api/auth")]
 public sealed class AuthController : ControllerBase
 {
-    public const string CookieScheme = "AgwCookie";
-
-    private readonly IInitializationStateStore _stateStore;
+    private readonly IAuthenticationStateStore _stateStore;
     private readonly IPasswordHasher<object> _passwordHasher;
     private readonly IAntiforgery _antiforgery;
     private readonly AuthenticationAttemptLimiter _attemptLimiter;
     private readonly TimeProvider _timeProvider;
 
     public AuthController(
-        IInitializationStateStore stateStore,
+        IAuthenticationStateStore stateStore,
         IPasswordHasher<object> passwordHasher,
         IAntiforgery antiforgery,
         AuthenticationAttemptLimiter attemptLimiter,
@@ -51,9 +50,9 @@ public sealed class AuthController : ControllerBase
             identity?.IsAuthenticated == true,
             identity?.AuthenticationType switch
             {
-                "LocalTrusted" => "localTrusted",
-                CookieScheme => "cookie",
-                "Bearer" => "bearer",
+                AgwAuthDefaults.LocalTrustedScheme => "localTrusted",
+                AgwAuthDefaults.CookieScheme => "cookie",
+                AgwAuthDefaults.BearerScheme => "bearer",
                 _ => "anonymous"
             },
             1));
@@ -83,7 +82,7 @@ public sealed class AuthController : ControllerBase
             return ErrorCodes.TooManyAuthenticationAttempts.ToApiResult();
         }
 
-        var snapshot = _stateStore.GetSnapshot();
+        var snapshot = _stateStore.GetAuthenticationSnapshot();
         if (snapshot.PasswordHash == null
             || _passwordHasher.VerifyHashedPassword(new object(), snapshot.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
         {
@@ -92,9 +91,12 @@ public sealed class AuthController : ControllerBase
         }
 
         var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, Constants.AdminUserName), new Claim("session_version", snapshot.SessionVersion.ToString())],
-            CookieScheme);
-        await HttpContext.SignInAsync(CookieScheme, new ClaimsPrincipal(identity));
+            [
+                new Claim(ClaimTypes.Name, Constants.AdminUserName),
+                new Claim(AgwAuthDefaults.SessionVersionClaimType, snapshot.SessionVersion.ToString())
+            ],
+            AgwAuthDefaults.CookieScheme);
+        await HttpContext.SignInAsync(AgwAuthDefaults.CookieScheme, new ClaimsPrincipal(identity));
         return ApiResult.Ok();
     }
 
@@ -104,7 +106,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Logout()
     {
-        await HttpContext.SignOutAsync(CookieScheme);
+        await HttpContext.SignOutAsync(AgwAuthDefaults.CookieScheme);
         return ApiResult.Ok();
     }
 
@@ -117,10 +119,13 @@ public sealed class AuthController : ControllerBase
     public async Task<IActionResult> ChangePassword(ChangePasswordRequest request, CancellationToken cancellationToken)
     {
         if (!IsInteractiveAdmin()) return ErrorCodes.InteractiveAdminRequired.ToApiResult();
-        var snapshot = _stateStore.GetSnapshot();
-        if (User.Identity?.AuthenticationType == CookieScheme
+        var snapshot = _stateStore.GetAuthenticationSnapshot();
+        if (User.Identity?.AuthenticationType == AgwAuthDefaults.CookieScheme
             && (snapshot.PasswordHash == null
-                || _passwordHasher.VerifyHashedPassword(new object(), snapshot.PasswordHash, request.CurrentPassword ?? string.Empty) == PasswordVerificationResult.Failed))
+                || _passwordHasher.VerifyHashedPassword(
+                    new object(),
+                    snapshot.PasswordHash,
+                    request.CurrentPassword ?? string.Empty) == PasswordVerificationResult.Failed))
         {
             return ErrorCodes.InvalidAdminCredentials.ToApiResult();
         }
@@ -131,8 +136,10 @@ public sealed class AuthController : ControllerBase
                 "Password must be between 8 and 256 characters.",
                 ErrorCodes.InvalidParam.Code);
         }
-        await _stateStore.UpdatePasswordAsync(_passwordHasher.HashPassword(new object(), request.NewPassword), cancellationToken);
-        await HttpContext.SignOutAsync(CookieScheme);
+        await _stateStore.UpdatePasswordAsync(
+            _passwordHasher.HashPassword(new object(), request.NewPassword),
+            cancellationToken);
+        await HttpContext.SignOutAsync(AgwAuthDefaults.CookieScheme);
         return ApiResult.Ok();
     }
 
@@ -143,7 +150,7 @@ public sealed class AuthController : ControllerBase
     public IActionResult ListTokens()
     {
         return IsInteractiveAdmin()
-            ? ApiResult.Ok(_stateStore.GetSnapshot().Tokens)
+            ? ApiResult.Ok(_stateStore.GetAuthenticationSnapshot().Tokens)
             : ErrorCodes.InteractiveAdminRequired.ToApiResult();
     }
 
@@ -178,11 +185,6 @@ public sealed class AuthController : ControllerBase
             : ErrorCodes.ApiTokenNotFound.ToApiResult();
     }
 
-    private bool IsInteractiveAdmin() => User.Identity?.AuthenticationType is CookieScheme or "LocalTrusted";
-
-    public sealed record LoginRequest(string Password);
-    public sealed record ChangePasswordRequest(string? CurrentPassword, string NewPassword);
-    public sealed record CreateTokenRequest(string Name);
-    public sealed record SessionResponse(bool Authenticated, string AccessMode, int ApiMajorVersion);
-    public sealed record AntiforgeryResponse(string? RequestToken);
+    private bool IsInteractiveAdmin() =>
+        User.Identity?.AuthenticationType is AgwAuthDefaults.CookieScheme or AgwAuthDefaults.LocalTrustedScheme;
 }

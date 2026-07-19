@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Backend projects live in the repository-relative `src/server/` directory: `Agw.Host` is the ASP.NET Core entry point, `Agw.Setup` contains setup Razor/UI services, `Agw.Infrastructure` owns EF Core persistence, and domain modules such as `Agw.Agents`, `Agw.Projects`, `Agw.Skills`, `Agw.Tools`, and `Agw.Integrations` keep feature code isolated. Web client code is in `src/clients/web`, with app routes under `src/app/(app)`, typed API helpers in `src/api`, and shared UI/utilities in `src/components`, `src/hooks`, and `src/lib`. Tests are in `tests/Agw.*.Tests`; project documentation is under `docs/`. Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated.
+Backend projects live in the repository-relative `src/server/` directory: `Agw.Host` is the ASP.NET Core entry point, `Agw.Auth` owns administrator authentication and authorization, `Agw.Setup` contains setup Razor/UI services and the combined server-state persistence Adapter, `Agw.Infrastructure` owns EF Core persistence, and domain modules such as `Agw.Agents`, `Agw.Projects`, `Agw.Skills`, `Agw.Tools`, and `Agw.Integrations` keep feature code isolated. Web client code is in `src/clients/web`, with app routes under `src/app/(app)`, typed API helpers in `src/api`, and shared UI/utilities in `src/components`, `src/hooks`, and `src/lib`. Tests are in `tests/Agw.*.Tests`; project documentation is under `docs/`. Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated.
 
 ## Build, Test, and Development Commands
 

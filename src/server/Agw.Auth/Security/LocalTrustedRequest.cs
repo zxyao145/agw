@@ -2,7 +2,7 @@ using System.Net;
 
 using Microsoft.AspNetCore.Http;
 
-namespace Agw.Setup.Services;
+namespace Agw.Auth.Security;
 
 public static class LocalTrustedRequest
 {

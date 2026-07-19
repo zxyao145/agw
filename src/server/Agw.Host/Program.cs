@@ -7,9 +7,11 @@ using Agw.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.Execution.Transport.SignalR;
+using Agw.Auth.Api;
+using Agw.Auth.Extensions;
+using Agw.Auth.Security;
 using Agw.Files;
 using Agw.Files.Api;
-using Agw.Host.Controllers;
 using Agw.Host.Middleware;
 using Agw.Host.Runtime;
 using Agw.Infrastructure;
@@ -35,7 +37,6 @@ using Agw.Tools;
 
 using Bens.Results;
 
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -165,6 +166,7 @@ try
         .AddApplicationPart(typeof(FilesController).Assembly)
         .AddApplicationPart(typeof(SkillsController).Assembly)
         .AddApplicationPart(typeof(SetupController).Assembly)
+        .AddApplicationPart(typeof(AuthController).Assembly)
         .AddApplicationPart(typeof(OAuthController).Assembly)
         .AddApplicationPart(typeof(ToolsController).Assembly)
         ;
@@ -220,48 +222,6 @@ try
     builder.Services.AddApiResult();
     builder.Services.AddHttpClient();
     builder.Services.AddSingleton<IocUtil>();
-    builder.Services.AddAntiforgery(options =>
-    {
-        options.HeaderName = "X-CSRF-TOKEN";
-        options.Cookie.Name = "agw.antiforgery";
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Strict;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-    });
-    builder.Services.AddAuthentication(AuthController.CookieScheme)
-        .AddCookie(AuthController.CookieScheme, options =>
-        {
-            options.Cookie.Name = "agw.session";
-            options.Cookie.HttpOnly = true;
-            options.Cookie.SameSite = SameSiteMode.Strict;
-            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-            options.ExpireTimeSpan = TimeSpan.FromHours(12);
-            options.SlidingExpiration = true;
-            options.Events = new CookieAuthenticationEvents
-            {
-                OnRedirectToLogin = context =>
-                {
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    return Task.CompletedTask;
-                },
-                OnRedirectToAccessDenied = context =>
-                {
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    return Task.CompletedTask;
-                },
-                OnValidatePrincipal = context =>
-                {
-                    var store = context.HttpContext.RequestServices.GetRequiredService<IInitializationStateStore>();
-                    var expected = store.GetSnapshot().SessionVersion.ToString();
-                    if (!string.Equals(context.Principal?.FindFirst("session_version")?.Value, expected, StringComparison.Ordinal))
-                    {
-                        context.RejectPrincipal();
-                    }
-                    return Task.CompletedTask;
-                }
-            };
-        });
-    builder.Services.AddAuthorization();
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("AgwDesktop", policy =>
@@ -304,6 +264,7 @@ try
         .AddSkills(builder.Configuration)
         .AddProjects(builder.Configuration)
         .AddTools(builder.Configuration)
+        .AddAuth()
         .AddSetup(builder.Configuration)
         .AddIntegrations(builder.Configuration)
         ;
@@ -316,8 +277,8 @@ try
     // Seed database on startup after initialization has been completed.
     using (var scope = app.Services.CreateScope())
     {
-        var stateStore = scope.ServiceProvider.GetRequiredService<IInitializationStateStore>();
-        if (stateStore.GetSnapshot().IsInitialized)
+        var initializationState = scope.ServiceProvider.GetRequiredService<IServerInitializationState>();
+        if (initializationState.IsInitialized)
         {
             var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
             await seeder.SeedAsync();
@@ -346,10 +307,7 @@ try
 
     app.UseCors("AgwDesktop");
     app.UseMiddleware<InitializationGuardMiddleware>();
-    app.UseAuthentication();
-    app.UseMiddleware<AgwAuthenticationMiddleware>();
-    app.UseMiddleware<AgwAntiforgeryMiddleware>();
-    app.UseMiddleware<AgwAuthorizationGuardMiddleware>();
+    app.UseAgwAuth();
     app.UseDefaultFiles();
     app.UseStaticFiles();
     app.UseRouting();
@@ -368,9 +326,9 @@ try
         options.Transports = HttpTransportType.WebSockets;
     }).RequireAuthorization();
     app.MapGet("/api/health/live", () => Results.Ok(new { status = "live" }));
-    app.MapGet("/api/health/ready", async (IInitializationStateStore stateStore, AgwDbContext dbContext) =>
+    app.MapGet("/api/health/ready", async (IServerInitializationState initializationState, AgwDbContext dbContext) =>
     {
-        if (!stateStore.GetSnapshot().IsInitialized || !await dbContext.Database.CanConnectAsync())
+        if (!initializationState.IsInitialized || !await dbContext.Database.CanConnectAsync())
         {
             return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
@@ -379,7 +337,7 @@ try
     app.MapFallbackToFile("404.html");
 
     var setupCodeService = app.Services.GetRequiredService<SetupCodeService>();
-    if (!app.Services.GetRequiredService<IInitializationStateStore>().GetSnapshot().IsInitialized)
+    if (!app.Services.GetRequiredService<IServerInitializationState>().IsInitialized)
     {
         Log.Warning("Agw remote setup code: {SetupCode}", setupCodeService.CurrentCode);
     }
