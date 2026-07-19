@@ -1,3 +1,4 @@
+using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -42,7 +43,7 @@ public class ProjectsController : ControllerBase
     [ProducesApiResult(typeof(ProjectResponse))]
     public async Task<IActionResult> CreateAsync([FromBody] ProjectCreateRequest request)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var project = new Project
         {
             Name = request.Name,
@@ -73,7 +74,7 @@ public class ProjectsController : ControllerBase
     [ProducesApiResult(typeof(ProjectResponse))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ProjectUpdateRequest request)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
 
         var updated = await _projectAppService.UpdateAsync(
             id,

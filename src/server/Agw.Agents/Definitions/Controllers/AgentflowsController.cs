@@ -94,7 +94,7 @@ public class AgentflowsController : ControllerBase
     [ProducesApiResult(typeof(Agentflow))]
     public async Task<IActionResult> CreateAsync([FromBody] AgentflowCreateRequest request)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var agentflow = new Agentflow
         {
             Name = request.Name,
@@ -139,7 +139,7 @@ public class AgentflowsController : ControllerBase
     [ProducesApiResult(typeof(Agentflow))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentflowUpdateRequest request)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var nodes = request.Nodes
             .Select(x => new AgentflowNode
             {

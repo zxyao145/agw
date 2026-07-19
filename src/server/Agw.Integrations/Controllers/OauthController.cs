@@ -1,5 +1,6 @@
 using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Contracts.OAuth;
+using Agw.Shared;
 using Agw.Shared.Results;
 
 using Bens.Results;
@@ -37,7 +38,7 @@ public sealed class OAuthController : ControllerBase
             request.ConnectionId,
             BuildCallbackUri(),
             request.ReturnPath,
-            User?.Identity?.Name ?? "system",
+            User?.Identity?.Name ?? Constants.AdminUserName,
             cancellationToken);
         return ApiResult.Ok(response);
     }
@@ -51,7 +52,7 @@ public sealed class OAuthController : ControllerBase
             Request.Query["code"].ToString(),
             Request.Query["error"].ToString(),
             BuildCallbackUri(),
-            User?.Identity?.Name ?? "system",
+            User?.Identity?.Name ?? Constants.AdminUserName,
             cancellationToken);
         return Redirect(result.RedirectPath);
     }
@@ -64,7 +65,7 @@ public sealed class OAuthController : ControllerBase
     {
         var response = await _refreshService.RefreshAsync(
             request.ConnectionId,
-            User?.Identity?.Name ?? "system",
+            User?.Identity?.Name ?? Constants.AdminUserName,
             cancellationToken);
         return ApiResult.Ok(response);
     }

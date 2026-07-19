@@ -132,7 +132,7 @@ public partial class AgentRuntimeService
                     agent.Id,
                     agent.Name,
                     providerSessionId,
-                    "system",
+                    Constants.AdminUserName,
                     CancellationToken.None);
             }
             catch (Exception ex)

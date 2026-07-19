@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 
 using Agw.Projects.Domain.Services;
+using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Utils;
@@ -32,7 +33,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         new DefaultJsonTypeInfoResolver())
     };
 
-    private const string DefaultUser = "system";
+    private const string DefaultUser = Constants.AdminUserName;
     private const string HistoryScopeMetadataKey = "historyScope";
 
     private readonly IServiceScopeFactory _serviceScopeFactory;

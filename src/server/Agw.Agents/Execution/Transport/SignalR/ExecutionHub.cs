@@ -38,7 +38,7 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
             Context.ConnectionAborted));
     }
 
-    private string CurrentUser => Context.User?.Identity?.Name ?? "system";
+    private string CurrentUser => Context.User?.Identity?.Name ?? Constants.AdminUserName;
 
     private static async Task InvokeAsync(Func<Task> action)
     {

@@ -73,7 +73,7 @@ public class AgentsController : ControllerBase
     [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> CreateAsync([FromBody] AgentCreateRequest request)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var agent = new Agent
         {
             DisplayName = request.DisplayName,
@@ -102,7 +102,7 @@ public class AgentsController : ControllerBase
     [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var updated = await _agentAppService.UpdateAgentAsync(
             id,
             request.ToCommand(),

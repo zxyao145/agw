@@ -1,5 +1,6 @@
 using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
+using Agw.Shared;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
@@ -41,7 +42,7 @@ public class ModelsController : ControllerBase
     [ProducesApiResult(typeof(LlmModel))]
     public async Task<IActionResult> CreateAsync([FromBody] ModelCreateRequest request)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var created = await _service.CreateAsync(request, user);
         return ApiResult.Ok(created);
     }
@@ -50,7 +51,7 @@ public class ModelsController : ControllerBase
     [ProducesApiResult(typeof(LlmModel))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ModelUpdateRequest request)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var updated = await _service.UpdateAsync(id, request, user);
 
         return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);

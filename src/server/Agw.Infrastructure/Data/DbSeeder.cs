@@ -1,6 +1,7 @@
 using System.IO.Compression;
 
 using Agw.Agents.ExternalAgents;
+using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
@@ -140,9 +141,9 @@ public class DbSeeder
             Description = definition.Description,
             Workspace = workspace,
             ExtraSetting = definition.ExtraSetting,
-            CreateBy = "system",
+            CreateBy = Constants.AdminUserName,
             CreateTime = now,
-            UpdateBy = "system",
+            UpdateBy = Constants.AdminUserName,
             UpdateTime = now
         };
     }
@@ -179,9 +180,9 @@ public class DbSeeder
             Description = definition.Description,
             Extra = definition.Extra,
 
-            CreateBy = "system",
+            CreateBy = Constants.AdminUserName,
             CreateTime = now,
-            UpdateBy = "system",
+            UpdateBy = Constants.AdminUserName,
             UpdateTime = now
         };
     }
@@ -198,9 +199,9 @@ public class DbSeeder
                 ProviderType = ProviderType.OpenAIChatCompletions,
                 Endpoint = "https://api.deepseek.com",
                 Description = "DeepSeek OpenAI Compatible",
-                CreateBy = "system",
+                CreateBy = Constants.AdminUserName,
                 CreateTime = now,
-                UpdateBy = "system",
+                UpdateBy = Constants.AdminUserName,
                 UpdateTime = now
             },
             new Provider
@@ -210,9 +211,9 @@ public class DbSeeder
                 ProviderType = ProviderType.Anthropic,
                 Endpoint = "https://api.deepseek.com/anthropic",
                 Description = "DeepSeek Anthropic Compatible",
-                CreateBy = "system",
+                CreateBy = Constants.AdminUserName,
                 CreateTime = now,
-                UpdateBy = "system",
+                UpdateBy = Constants.AdminUserName,
                 UpdateTime = now
             },
         };
@@ -255,9 +256,9 @@ public class DbSeeder
                 Id = DeepSeekModelId,
                 Name = "deepseek-v4-pro",
                 MaxTokens = 256_000,
-                CreateBy = "system",
+                CreateBy = Constants.AdminUserName,
                 CreateTime = now,
-                UpdateBy = "system",
+                UpdateBy = Constants.AdminUserName,
                 UpdateTime = now
             };
             _context.Models.Add(model);
@@ -296,9 +297,9 @@ public class DbSeeder
             ModelId = modelId,
             ProviderId = providerId,
             RpsLimit = 60,
-            CreateBy = "system",
+            CreateBy = Constants.AdminUserName,
             CreateTime = now,
-            UpdateBy = "system",
+            UpdateBy = Constants.AdminUserName,
             UpdateTime = now
         };
         _context.ModelProviders.Add(relation);
@@ -346,9 +347,9 @@ public class DbSeeder
                 {
                     "diff", "file_edit", "glob", "grep", "ls", "read_file", "write_file", "git_clone", "bash"
                 }),
-                CreateBy = "system",
+                CreateBy = Constants.AdminUserName,
                 CreateTime = now,
-                UpdateBy = "system",
+                UpdateBy = Constants.AdminUserName,
                 UpdateTime = now
             },
             new Agent
@@ -472,9 +473,9 @@ public class DbSeeder
                     "task_create", "task_get", "task_list", "task_output", "task_stop", "task_update",
                     "web_fetch", "web_search"
                 }),
-                CreateBy = "system",
+                CreateBy = Constants.AdminUserName,
                 CreateTime = now,
-                UpdateBy = "system",
+                UpdateBy = Constants.AdminUserName,
                 UpdateTime = now
             },
             new Agent
@@ -504,9 +505,9 @@ public class DbSeeder
                     """,
                 ModelProviderId = modelProviderId,
                 Type = AgentType.System,
-                CreateBy = "system",
+                CreateBy = Constants.AdminUserName,
                 CreateTime = now,
-                UpdateBy = "system",
+                UpdateBy = Constants.AdminUserName,
                 UpdateTime = now
             }
         ];
@@ -525,9 +526,9 @@ public class DbSeeder
                 Name = DefaultSkillName,
                 Description = "小红书技能集合",
                 ContentPath = DefaultSkillContentPath,
-                CreateBy = "system",
+                CreateBy = Constants.AdminUserName,
                 CreateTime = now,
-                UpdateBy = "system",
+                UpdateBy = Constants.AdminUserName,
                 UpdateTime = now
             };
             _context.Skills.Add(skill);
@@ -537,7 +538,7 @@ public class DbSeeder
         {
             skill.Name = DefaultSkillName;
             skill.ContentPath = DefaultSkillContentPath;
-            skill.UpdateBy = "system";
+            skill.UpdateBy = Constants.AdminUserName;
             skill.UpdateTime = _timeProvider.GetUtcNow();
         }
 
@@ -591,9 +592,9 @@ public class DbSeeder
                 4. 取搜索结果中的第一个 POI 作为最终结果。
                 5. 输出 POI 的名称、地址、经纬度（如有）以及与景点的关联。
                 """,
-            CreateBy = "system",
+            CreateBy = Constants.AdminUserName,
             CreateTime = now,
-            UpdateBy = "system",
+            UpdateBy = Constants.AdminUserName,
             UpdateTime = now,
             Nodes =
             [
@@ -603,9 +604,9 @@ public class DbSeeder
                     Kind = AgentflowNodeKind.Input,
                     Name = "Input",
                     PositionJson = "{\"x\":12,\"y\":10.9481361426256}",
-                    CreateBy = "system",
+                    CreateBy = Constants.AdminUserName,
                     CreateTime = now,
-                    UpdateBy = "system",
+                    UpdateBy = Constants.AdminUserName,
                     UpdateTime = now
                 },
                 new AgentflowNode
@@ -623,9 +624,9 @@ public class DbSeeder
 
                         只需要返回正文，不要返回其他的任何信息。
                         """,
-                    CreateBy = "system",
+                    CreateBy = Constants.AdminUserName,
                     CreateTime = now,
-                    UpdateBy = "system",
+                    UpdateBy = Constants.AdminUserName,
                     UpdateTime = now
                 },
                 new AgentflowNode
@@ -635,9 +636,9 @@ public class DbSeeder
                     RelateId = agents["location-extractor"].Id,
                     Name = "location-extractor",
                     PositionJson = "{\"x\":652,\"y\":12}",
-                    CreateBy = "system",
+                    CreateBy = Constants.AdminUserName,
                     CreateTime = now,
-                    UpdateBy = "system",
+                    UpdateBy = Constants.AdminUserName,
                     UpdateTime = now
                 },
                 new AgentflowNode
@@ -647,9 +648,9 @@ public class DbSeeder
                     RelateId = agents["amap-poi-search"].Id,
                     Name = "amap-poi-search",
                     PositionJson = "{\"x\":972,\"y\":12}",
-                    CreateBy = "system",
+                    CreateBy = Constants.AdminUserName,
                     CreateTime = now,
-                    UpdateBy = "system",
+                    UpdateBy = Constants.AdminUserName,
                     UpdateTime = now
                 }
             ],
@@ -661,9 +662,9 @@ public class DbSeeder
                     SourceNodeId = "input",
                     TargetNodeId = "0-1784023077088-4wxgi0",
                     Kind = AgentflowEdgeKind.FanOut,
-                    CreateBy = "system",
+                    CreateBy = Constants.AdminUserName,
                     CreateTime = now,
-                    UpdateBy = "system",
+                    UpdateBy = Constants.AdminUserName,
                     UpdateTime = now
                 },
                 new AgentflowEdge
@@ -672,9 +673,9 @@ public class DbSeeder
                     SourceNodeId = "0-1784023077088-4wxgi0",
                     TargetNodeId = "0-1784023208474-g5q65g",
                     Kind = AgentflowEdgeKind.Direct,
-                    CreateBy = "system",
+                    CreateBy = Constants.AdminUserName,
                     CreateTime = now,
-                    UpdateBy = "system",
+                    UpdateBy = Constants.AdminUserName,
                     UpdateTime = now
                 },
                 new AgentflowEdge
@@ -683,9 +684,9 @@ public class DbSeeder
                     SourceNodeId = "0-1784023208474-g5q65g",
                     TargetNodeId = "0-1784030849721-zid7yj",
                     Kind = AgentflowEdgeKind.Direct,
-                    CreateBy = "system",
+                    CreateBy = Constants.AdminUserName,
                     CreateTime = now,
-                    UpdateBy = "system",
+                    UpdateBy = Constants.AdminUserName,
                     UpdateTime = now
                 }
             ]

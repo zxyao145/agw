@@ -1,3 +1,4 @@
+using Agw.Shared;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
@@ -63,7 +64,7 @@ public class SkillsController : ControllerBase
     {
         try
         {
-            var user = User?.Identity?.Name ?? "system";
+            var user = User?.Identity?.Name ?? Constants.AdminUserName;
             var skill = new Skill
             {
                 Name = request.Name,
@@ -87,7 +88,7 @@ public class SkillsController : ControllerBase
     {
         try
         {
-            var user = User?.Identity?.Name ?? "system";
+            var user = User?.Identity?.Name ?? Constants.AdminUserName;
             var updated = await _skillAppService.UpdateAsync(id, request.Name, request.Description, request.Archive, user);
             return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(Map(updated));
         }

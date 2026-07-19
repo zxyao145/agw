@@ -1,7 +1,6 @@
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Providers;
-using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Runtime;
 
 using Microsoft.EntityFrameworkCore;
@@ -90,65 +89,6 @@ public class DbSeederTests
             Assert.Contains(agentflow.Nodes, node => node.RelateId == GeneralAgentId);
             Assert.Contains(agentflow.Nodes, node => node.RelateId == LocationExtractorAgentId);
             Assert.Contains(agentflow.Nodes, node => node.RelateId == AmapPoiSearchAgentId);
-        }
-        finally
-        {
-            Directory.Delete(paths.Root, recursive: true);
-        }
-    }
-
-    [Fact]
-    public async Task SeedAsync_LegacyDefaultSkill_UpdatesRecordAndPreservesLegacyContent()
-    {
-        var paths = CreatePaths();
-        try
-        {
-            var options = new DbContextOptionsBuilder<AgwDbContext>()
-                .UseSqlite($"Data Source={Path.Combine(paths.Root, "seed.db")}")
-                .UseSnakeCaseNamingConvention()
-                .Options;
-            await using var context = new AgwDbContext(options);
-            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-
-            var now = TimeProvider.System.GetUtcNow();
-            context.Skills.Add(new Skill
-            {
-                Id = SkillId,
-                Name = "xiaohongshu-skills",
-                Description = "小红书技能集合",
-                ContentPath = "skills/xiaohongshu-skills",
-                CreateBy = "system",
-                CreateTime = now,
-                UpdateBy = "system",
-                UpdateTime = now
-            });
-            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-            var legacyDirectory = Path.Combine(paths.SkillsDirectory, "xiaohongshu-skills");
-            var legacySkillMarkdown = Path.Combine(legacyDirectory, "SKILL.md");
-            Directory.CreateDirectory(legacyDirectory);
-            await File.WriteAllTextAsync(
-                legacySkillMarkdown,
-                "---\nname: xiaohongshu-skills\n---\n",
-                TestContext.Current.CancellationToken);
-
-            var seeder = new DbSeeder(context, NullLogger<DbSeeder>.Instance, TimeProvider.System, paths);
-            await seeder.SeedAsync();
-
-            var skill = await context.Skills.SingleAsync(TestContext.Current.CancellationToken);
-            Assert.Equal(SkillId, skill.Id);
-            Assert.Equal("xhs-explore", skill.Name);
-            Assert.Equal("skills/xhs-explore", skill.ContentPath);
-
-            var newSkillMarkdown = Path.Combine(paths.SkillsDirectory, "xhs-explore", "SKILL.md");
-            Assert.True(File.Exists(newSkillMarkdown));
-            Assert.Contains(
-                "name: xhs-explore",
-                await File.ReadAllTextAsync(newSkillMarkdown, TestContext.Current.CancellationToken));
-            Assert.True(File.Exists(legacySkillMarkdown));
-            Assert.Contains(
-                "name: xiaohongshu-skills",
-                await File.ReadAllTextAsync(legacySkillMarkdown, TestContext.Current.CancellationToken));
         }
         finally
         {

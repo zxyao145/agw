@@ -2,6 +2,7 @@ using System.Security.Claims;
 
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
+using Agw.Shared;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 
@@ -91,7 +92,7 @@ public sealed class AuthController : ControllerBase
         }
 
         var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, "admin"), new Claim("session_version", snapshot.SessionVersion.ToString())],
+            [new Claim(ClaimTypes.Name, Constants.AdminUserName), new Claim("session_version", snapshot.SessionVersion.ToString())],
             CookieScheme);
         await HttpContext.SignInAsync(CookieScheme, new ClaimsPrincipal(identity));
         return ApiResult.Ok();

@@ -5,6 +5,7 @@ using System.Security.Claims;
 using Agw.Setup.Contracts;
 using Agw.Setup.Middleware;
 using Agw.Setup.Services;
+using Agw.Shared;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -91,7 +92,7 @@ public class RequestTrustAndSetupCodeTests
         context.Request.Scheme = "http";
         context.Request.Host = new HostString("localhost", 5015);
         context.Request.Headers.Origin = "https://evil.example.com";
-        context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "admin")], "LocalTrusted"));
+        context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, Constants.AdminUserName)], "LocalTrusted"));
         var nextCalled = false;
         var middleware = new AgwAuthenticationMiddleware(_ =>
         {

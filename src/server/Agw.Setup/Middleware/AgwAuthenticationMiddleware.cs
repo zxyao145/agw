@@ -1,6 +1,7 @@
 using System.Security.Claims;
 
 using Agw.Setup.Services;
+using Agw.Shared;
 
 using Microsoft.AspNetCore.Http;
 
@@ -49,7 +50,7 @@ public sealed class AgwAuthenticationMiddleware
     private static ClaimsPrincipal CreatePrincipal(string authenticationType, int sessionVersion)
     {
         var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, "admin"), new Claim("session_version", sessionVersion.ToString())],
+            [new Claim(ClaimTypes.Name, Constants.AdminUserName), new Claim("session_version", sessionVersion.ToString())],
             authenticationType);
         return new ClaimsPrincipal(identity);
     }

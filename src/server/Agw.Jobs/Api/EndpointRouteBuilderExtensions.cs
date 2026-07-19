@@ -2,6 +2,7 @@ using System.Security.Claims;
 
 using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
+using Agw.Shared;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
@@ -72,7 +73,7 @@ public static class EndpointRouteBuilderExtensions
         JobAppService jobAppService,
         ClaimsPrincipal user)
     {
-        var userName = user.Identity?.Name ?? "system";
+        var userName = user.Identity?.Name ?? Constants.AdminUserName;
         var job = await jobAppService.CreateAsync(request, userName);
         return ApiResult.Ok(job);
     }
@@ -83,7 +84,7 @@ public static class EndpointRouteBuilderExtensions
         JobAppService jobAppService,
         ClaimsPrincipal user)
     {
-        var userName = user.Identity?.Name ?? "system";
+        var userName = user.Identity?.Name ?? Constants.AdminUserName;
         var job = await jobAppService.UpdateAsync(id, request, userName);
         return job == null
             ? ErrorCodes.ResourceNotFound.ToApiResult()
@@ -95,7 +96,7 @@ public static class EndpointRouteBuilderExtensions
         JobAppService jobAppService,
         ClaimsPrincipal user)
     {
-        var userName = user.Identity?.Name ?? "system";
+        var userName = user.Identity?.Name ?? Constants.AdminUserName;
         var job = await jobAppService.UpdateEnabledAsync(request, userName);
         return job == null
             ? ErrorCodes.ResourceNotFound.ToApiResult()

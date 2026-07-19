@@ -1,5 +1,6 @@
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Contracts.Management;
+using Agw.Shared;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 
@@ -38,7 +39,7 @@ public sealed class ConnectionsController : ControllerBase
         [FromBody] ConnectionCreateRequest request,
         CancellationToken cancellationToken)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var response = await _service.CreateAsync(request, user, cancellationToken);
         return ApiResult.Ok(response);
     }
@@ -49,7 +50,7 @@ public sealed class ConnectionsController : ControllerBase
         [FromBody] ConnectionUpdateRequest request,
         CancellationToken cancellationToken)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var response = await _service.UpdateAsync(request, user, cancellationToken);
         return ApiResult.Ok(response);
     }
@@ -71,7 +72,7 @@ public sealed class ConnectionsController : ControllerBase
         [FromBody] ConnectionValidateRequest request,
         CancellationToken cancellationToken)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var response = await _service.ValidateAsync(request.Id, user, cancellationToken);
         return ApiResult.Ok(response);
     }

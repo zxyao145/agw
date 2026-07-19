@@ -61,7 +61,7 @@ public class McpToolServersController : ControllerBase
     [ProducesApiResult(typeof(McpServer))]
     public async Task<IActionResult> CreateAsync([FromBody] McpToolServerCreateRequest request)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var server = new McpServer
         {
             Name = request.Name,
@@ -84,7 +84,7 @@ public class McpToolServersController : ControllerBase
     [ProducesApiResult(typeof(McpServer))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] McpToolServerUpdateRequest request)
     {
-        var user = User?.Identity?.Name ?? "system";
+        var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var updated = await _mcpToolServerAppService.UpdateMcpToolServerAsync(
             id,
             server =>
