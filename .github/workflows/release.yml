@@ -1,0 +1,292 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the Docker image and create a GitHub Release
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: Stable release tag in vX.Y.Z format; required when publishing
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      image_name: ${{ steps.release.outputs.image_name }}
+      image_tags: ${{ steps.release.outputs.image_tags }}
+      publish: ${{ steps.release.outputs.publish }}
+      release_tag: ${{ steps.release.outputs.release_tag }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Resolve release metadata
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANUAL_PUBLISH: ${{ inputs.publish || false }}
+          MANUAL_RELEASE_TAG: ${{ inputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          publish=false
+          release_tag=""
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "tag" ]]; then
+            publish=true
+            release_tag="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$MANUAL_PUBLISH" == "true" ]]; then
+            publish=true
+            release_tag="$MANUAL_RELEASE_TAG"
+          fi
+
+          if [[ "$publish" == "true" ]]; then
+            if [[ ! "$release_tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              echo "Release tag must use stable vX.Y.Z format." >&2
+              exit 2
+            fi
+
+            if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]] && \
+              git show-ref --verify --quiet "refs/tags/$release_tag"; then
+              tagged_commit="$(git rev-list -n 1 "refs/tags/$release_tag")"
+              if [[ "$tagged_commit" != "$GITHUB_SHA" ]]; then
+                echo "$release_tag already points to $tagged_commit instead of $GITHUB_SHA." >&2
+                exit 2
+              fi
+            fi
+
+            if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "GitHub Release $release_tag already exists." >&2
+              exit 2
+            fi
+            version="${release_tag#v}"
+          else
+            version="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+
+          image_name="ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          short_sha="${GITHUB_SHA:0:12}"
+          if [[ "$publish" == "true" ]]; then
+            IFS=. read -r major minor _patch <<< "$version"
+            image_tags=$(printf '%s\n' \
+              "$image_name:$version" \
+              "$image_name:$major.$minor" \
+              "$image_name:$major" \
+              "$image_name:latest" \
+              "$image_name:sha-$short_sha")
+          else
+            image_tags="$image_name:ci-$short_sha"
+          fi
+
+          {
+            echo "image_name=$image_name"
+            echo "publish=$publish"
+            echo "release_tag=$release_tag"
+            echo "version=$version"
+            echo "image_tags<<EOF"
+            echo "$image_tags"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  desktop-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/clients
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: src/clients/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:boundaries
+      - run: pnpm exec turbo run test --filter=@agw/desktop
+
+  docker-build:
+    if: needs.metadata.outputs.publish != 'true'
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Build loadable Docker images
+        env:
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+          DOCKER_PLATFORMS: linux/amd64,linux/arm64
+          DOCKER_PUSH: "false"
+          IMAGE_NAME: ${{ needs.metadata.outputs.image_name }}:ci-${{ github.sha }}
+          IMAGE_TAGS: ${{ needs.metadata.outputs.image_tags }}
+          PUBLISH_MODE: docker
+        run: ./publish.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agw-docker-${{ needs.metadata.outputs.version }}
+          path: artifacts/publish/docker/*.tar
+          if-no-files-found: error
+          retention-days: 7
+
+  docker-publish:
+    if: needs.metadata.outputs.publish == 'true'
+    needs: [metadata, desktop-build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish Docker manifest
+        env:
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+          DOCKER_PLATFORMS: linux/amd64,linux/arm64
+          DOCKER_PUSH: "true"
+          IMAGE_NAME: ${{ needs.metadata.outputs.image_name }}:${{ needs.metadata.outputs.version }}
+          IMAGE_TAGS: ${{ needs.metadata.outputs.image_tags }}
+          PUBLISH_MODE: docker
+        run: ./publish.sh
+      - name: Verify published platforms
+        run: >-
+          docker buildx imagetools inspect
+          "${{ needs.metadata.outputs.image_name }}:${{ needs.metadata.outputs.version }}"
+
+  desktop-build:
+    needs: [metadata, desktop-test]
+    name: Desktop ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.flavor }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+            arch: x64
+            flavor: full
+          - platform: windows
+            runner: windows-latest
+            arch: x64
+            flavor: client
+          - platform: macos
+            runner: macos-15
+            arch: x64
+            flavor: full
+          - platform: macos
+            runner: macos-15
+            arch: arm64
+            flavor: full
+          - platform: macos
+            runner: macos-15
+            arch: x64
+            flavor: client
+          - platform: macos
+            runner: macos-15
+            arch: arm64
+            flavor: client
+          - platform: linux
+            runner: ubuntu-latest
+            arch: x64
+            flavor: full
+          - platform: linux
+            runner: ubuntu-latest
+            arch: x64
+            flavor: client
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: src/clients
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: src/clients/pnpm-lock.yaml
+      - uses: actions/setup-dotnet@v5
+        if: matrix.flavor == 'full'
+        with:
+          dotnet-version: "10.0.x"
+      - name: Install Linux packaging tools
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg
+      - run: pnpm install --frozen-lockfile
+      - name: Build installer
+        run: >-
+          pnpm release:desktop --
+          --flavor ${{ matrix.flavor }}
+          --arch ${{ matrix.arch }}
+          --version ${{ needs.metadata.outputs.version }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agw-desktop-${{ matrix.flavor }}-${{ matrix.platform }}-${{ matrix.arch }}
+          path: src/clients/desktop/release-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    if: needs.metadata.outputs.publish == 'true'
+    needs: [metadata, docker-publish, desktop-build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: agw-desktop-*
+          path: artifacts
+          merge-multiple: true
+      - name: Create GitHub Release and attach installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' files < <(
+            find artifacts -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' \) \
+              -print0 | sort -z
+          )
+          if [[ "${#files[@]}" -ne 8 ]]; then
+            echo "Expected 8 Desktop installers, found ${#files[@]}." >&2
+            exit 2
+          fi
+
+          tag_options=()
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            tag_options+=(--verify-tag)
+          else
+            tag_options+=(--target "$GITHUB_SHA")
+          fi
+
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Agw $RELEASE_TAG" \
+            --generate-notes \
+            "${tag_options[@]}" \
+            "${files[@]}"

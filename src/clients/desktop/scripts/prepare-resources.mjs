@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { arch, platform } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,13 @@ const resourcesDirectory = resolve(desktopDirectory, "resources");
 const rendererDirectory = resolve(resourcesDirectory, "renderer");
 const rendererOutput = resolve(desktopDirectory, "renderer", "out");
 const flavor = process.env.AGW_PACKAGE_FLAVOR === "client" ? "client" : "full";
+const packageManifest = JSON.parse(
+  await readFile(resolve(desktopDirectory, "package.json"), "utf8"),
+);
+const releaseVersion = process.env.AGW_RELEASE_VERSION || packageManifest.version;
+if (!/^\d+\.\d+\.\d+$/u.test(releaseVersion)) {
+  throw new Error(`AGW_RELEASE_VERSION must use X.Y.Z format, received ${releaseVersion}.`);
+}
 
 function run(command, args, options = {}) {
   return new Promise((resolvePromise, reject) => {
@@ -60,6 +67,7 @@ if (flavor === "full") {
       targetRid(),
       "--self-contained",
       "true",
+      `-p:Version=${releaseVersion}`,
       "-o",
       serverOutput,
     ],

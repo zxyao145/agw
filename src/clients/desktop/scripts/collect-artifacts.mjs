@@ -1,6 +1,7 @@
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { arch, platform } from "node:os";
 import { extname, resolve } from "node:path";
+import packageManifest from "../package.json" with { type: "json" };
 
 const desktopDirectory = resolve(import.meta.dirname, "..");
 const makeDirectory = resolve(desktopDirectory, "out", "make");
@@ -8,6 +9,10 @@ const releaseDirectory = resolve(desktopDirectory, "release-artifacts");
 const flavor = process.env.AGW_PACKAGE_FLAVOR === "client" ? "client" : "full";
 const targetArch = process.env.AGW_TARGET_ARCH || arch();
 const targetPlatform = process.env.AGW_TARGET_PLATFORM || platform();
+const releaseVersion = process.env.AGW_RELEASE_VERSION || packageManifest.version;
+if (!/^\d+\.\d+\.\d+$/u.test(releaseVersion)) {
+  throw new Error(`AGW_RELEASE_VERSION must use X.Y.Z format, received ${releaseVersion}.`);
+}
 const platformName =
   targetPlatform === "darwin" ? "macos" : targetPlatform === "win32" ? "windows" : "linux";
 const supportedExtensions = new Set([".dmg", ".exe", ".deb"]);
@@ -34,7 +39,7 @@ const extension = extname(installers[0]).toLowerCase();
 const suffix = extension === ".exe" ? "-Setup" : "";
 const output = resolve(
   releaseDirectory,
-  `Agw-${flavor}-${platformName}-${targetArch}${suffix}${extension}`,
+  `Agw-${releaseVersion}-${flavor}-${platformName}-${targetArch}${suffix}${extension}`,
 );
 await cp(installers[0], output);
 console.log(output);

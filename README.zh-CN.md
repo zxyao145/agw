@@ -16,7 +16,7 @@ Agw 是一个面向个人用户和小型研发团队的、自托管的后台工�
 
 ### 多 Agent 协作流程（Agentflow）
 
-适合相对明确、可拆分的知识工作，例如：
+适合相对明确、可拆分的工作，例如：
 
 ```
 资料收集 Agent
@@ -83,6 +83,12 @@ Frontend:
 - Tailwind CSS 4
 - Shadcn 4 （Radix UI）
 
+Desktop:
+
+- Electron 43 + Electron Forge
+- 提供包含当前用户级 Server daemon 的 Full 安装包，以及仅客户端的 Client 安装包
+- 支持 Windows x64、macOS x64/arm64 和 Ubuntu x64
+
 ## 使用
 
 在仓库根目录启动后端：
@@ -97,14 +103,16 @@ dotnet run --project src/server/Agw.Host
 在另一个终端启动前端：
 
 ```bash
-cd src/clients/web
+cd src/clients
 pnpm install
-pnpm dev
+pnpm dev:web
 ```
 
-两个服务都启动后，打开 `http://localhost:3000`。Next.js 开发服务器会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:30815`。
+`src/clients` 是 Web、Desktop 和 `src/clients/packages/` 下共享包的 pnpm Workspace，由 Turborepo 统一编排任务；一次 `pnpm install` 即可安装整个 Workspace。Web 与 Desktop 各自拥有独立的 Next.js 应用，不会互相导入、构建或消费对方的产物，业务和基础设施模块通过根目录下的 `packages/*` 复用。Expo 移动端仍是单独的 npm Workspace。后端和 Web 都启动后，打开 `http://localhost:3001`。Web 会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:30815`。
 
 生产发布包会把静态 Web UI 嵌入 ASP.NET Core，由单一 Server 进程提供服务，详见下方部署指南。
+
+Agw Desktop 在 `src/clients/desktop/` 下拥有独立的 Electron main/preload 实现和 React renderer。Renderer 复用与 Web 相同的业务包，Electron bridge contract 则保留在 Desktop 内部的 `src/shared/contracts/`。Desktop 会自行构建静态导出，不依赖 `web/` 的产物。运行模型、安装包类型和发布流程详见 [`src/clients/desktop/README.md`](src/clients/desktop/README.md)。
 
 典型本地使用流程：
 
@@ -117,6 +125,91 @@ pnpm dev
 ### 项目 Workspace
 
 每个 `Project.Workspace` 都必须是 Agw Server 进程可见的目录。文件 API、Git、Claude Code 和 Codex 使用同一棵本地工作树。需要使用网络存储时，应先通过操作系统或容器平台完成挂载，再把挂载路径配置为 Workspace；Agw 不提供应用内 SFTP 后端。已经使用过的 Workspace 发生变化后，需要重启 Server。
+
+## 开发
+
+请先安装 .NET 10 SDK、Node.js 24 和 pnpm 11.7.0。只有构建容器镜像时才需要安装带 Buildx 的 Docker。首次克隆仓库后，配置 Git hooks，并安装后端和客户端依赖：
+
+```bash
+git config core.hooksPath .githooks
+dotnet restore Agw.slnx
+
+cd src/clients
+pnpm install
+```
+
+在仓库根目录以热重载模式运行后端，再在另一个终端从 `src/clients` 启动 Web：
+
+```bash
+dotnet watch --project src/server/Agw.Host
+```
+
+```bash
+cd src/clients
+pnpm dev:web
+```
+
+如果开发 Desktop，请保持后端运行，并在 `src/clients` 下执行 `pnpm dev:desktop`。Desktop renderer 使用 `http://localhost:3000`，不需要同时启动 Web 开发服务器。
+
+提交改动前，运行主要校验命令：
+
+```bash
+# 仓库根目录
+dotnet build Agw.slnx
+dotnet test Agw.slnx
+dotnet format Agw.slnx --verify-no-changes
+
+# src/clients
+pnpm build
+pnpm lint
+pnpm test
+pnpm fmt:check
+```
+
+修改后端 API contract 后，需要在 `src/clients` 下执行 `pnpm gen:api`，重新生成类型化客户端。聚焦测试命令、编码约定、EF Core migration 命令和 package 级任务详见[开发指南](docs/1.Development.md)。
+
+## 调试
+
+- **后端：** 在 .NET 调试器中使用 `http` 或 `https` launch profile 启动 `src/server/Agw.Host`。两个 profile 都会设置 `ASPNETCORE_ENVIRONMENT=Development`，此时可以访问仅在开发环境开放的 OpenAPI 和 Scalar 端点。Server 日志同时输出到控制台和 `$AGW_DATA_DIR/logs/application-*.log`；未设置 `AGW_DATA_DIR` 时位于 `~/agw/logs/`。
+- **Web：** 执行 `pnpm dev:web`，通过浏览器开发者工具调试客户端代码和网络请求，并在 Next.js 终端查看服务端输出。需要连接其他后端时，可执行 `BACKEND_API_BASE_URL=http://host:port pnpm dev:web`。
+- **Desktop：** 执行 `pnpm dev:desktop`。Electron main/preload 日志输出到启动终端，renderer 可以通过 Electron DevTools 检查；开发环境 renderer 使用 `http://localhost:3000`。
+- **聚焦测试：** 后端可执行 `dotnet test tests/<Project> --filter "FullyQualifiedName~MethodName"`；客户端可在 `src/clients` 下执行 `pnpm exec turbo run test --filter=@agw/web`，并按需替换 package filter。
+
+## 发布
+
+生成发布产物前，请先运行上述校验命令。本地 Server 和容器构建由仓库根目录下的 `publish.sh` 驱动：
+
+```bash
+# 为单个 runtime 生成 self-contained Server 压缩包
+PUBLISH_MODE=portable APP_VERSION=0.1.0 RIDS=linux-x64 ./publish.sh
+
+# 为单个平台生成可由 docker load 导入的镜像压缩包
+PUBLISH_MODE=docker \
+APP_VERSION=0.1.0 \
+IMAGE_NAME=agw:0.1.0 \
+DOCKER_PLATFORMS=linux/amd64 \
+./publish.sh
+```
+
+产物写入 `artifacts/publish/`。不设置 `RIDS` 或 `DOCKER_PLATFORMS` 时会构建默认平台矩阵；使用 `PUBLISH_MODE=all` 可同时构建可移植 Server 包和 Docker 镜像。
+
+使用 Node.js 24，在 `src/clients` 下构建 Desktop 安装包：
+
+```bash
+pnpm release:desktop -- --flavor full --arch x64 --version 0.1.0
+pnpm release:desktop -- --flavor client --arch x64 --version 0.1.0
+```
+
+安装包输出到 `src/clients/desktop/release-artifacts/`。Windows 和 Linux 目前支持 x64，macOS 支持 x64 和 arm64。`full` 包含 Server，`client` 则连接已有的 Server。
+
+正式稳定版通过 `vX.Y.Z` tag 发布，例如：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+[发布工作流](.github/workflows/release.yml)会将 Linux amd64/arm64 镜像发布到 GHCR，并创建包含全部 Desktop 安装包的 GitHub Release。手动运行工作流时，只有启用 `publish` 并提供稳定版 `release_tag` 才会正式发布；`main` 分支和默认手动运行只生成临时产物。镜像导入、Registry 发布、数据目录、反向代理和升级流程详见[部署指南](docs/4.Deployment.md)。
 
 ## 界面截图
 
@@ -158,7 +251,7 @@ pnpm dev
 
 ## 架构
 
-Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；Web 客户端位于 `src/clients/web`，Expo 移动客户端位于 `src/clients/mobile`。
+Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；`src/clients` pnpm Workspace 包含 Web、Electron Desktop 以及共享 package，Expo 移动客户端位于 `src/clients/mobile`。
 
 典型的后端流程如下：
 

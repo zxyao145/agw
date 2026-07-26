@@ -3,7 +3,7 @@
     <File Path=".editorconfig" />
     <File Path=".gitignore" />
     <File Path="CLAUDE.md" />
-    <File Path="Dockerfile.publish" />
+    <File Path="Dockerfile" />
     <File Path="publish.sh" />
     <File Path="README.md" />
     <File Path="README.zh-CN.md" />

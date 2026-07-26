@@ -1,6 +1,6 @@
 services:
   agw:
-    image: agw/agw-server:latest
+    image: ghcr.io/zxyao145/agw:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:30815:8080"

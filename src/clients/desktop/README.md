@@ -46,21 +46,25 @@ Shared business UI is not duplicated in Desktop. Web and Desktop each own a thin
 
 ## Packages
 
-`AGW_PACKAGE_FLAVOR` selects `full` (default) or `client`. Both variants use the same application identity and are mutually exclusive upgrades.
+`AGW_PACKAGE_FLAVOR` selects `full` (default) or `client`. Both variants use the same application identity and are mutually exclusive upgrades. Release packaging requires Node.js 24, matching GitHub Actions. Run the cross-platform wrapper from `src/clients`; it clears stale maker output, injects the release version, validates the bundled Server, and collects one installer under `desktop/release-artifacts/`.
 
 ```bash
-AGW_PACKAGE_FLAVOR=client pnpm make:desktop
-AGW_PACKAGE_FLAVOR=full pnpm make:desktop
-pnpm make:desktop -- --arch=x64
+pnpm release:desktop -- --flavor full --arch x64 --version 0.1.0
+pnpm release:desktop -- --flavor client --arch x64 --version 0.1.0
+# On macOS, --arch arm64 is also supported.
 ```
 
-Preview releases contain eight unsigned installers:
+Direct `pnpm make:desktop` remains available for development packaging and defaults to the version in `desktop/package.json`.
+
+Releases contain eight unsigned installers:
 
 - Windows x64: Full and Client Squirrel Setup EXEs
 - macOS x64 and arm64: Full and Client DMGs
 - Ubuntu x64: Full and Client DEBs
 
-On a Git tag matching `desktop-v*`, `.github/workflows/desktop-release.yml` builds those artifacts and publishes a prerelease. V1 intentionally has no automatic updater and no code signing.
+Installer names use `Agw-{version}-{full|client}-{platform}-{arch}` with `-Setup.exe`, `.dmg`, or `.deb` as appropriate.
+
+`.github/workflows/release.yml` builds the complete matrix on every push to `main`, stable `vX.Y.Z` tag, and manual run. Main and default manual runs keep the installers as temporary Actions artifacts. A stable tag publishes them on the matching GitHub Release; a manual run publishes only when `publish` is enabled and `release_tag` contains a stable `vX.Y.Z` value. V1 intentionally has no automatic updater, code signing, or notarization.
 
 ## Close and uninstall behavior
 

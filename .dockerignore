@@ -5,5 +5,8 @@
 **/node_modules
 **/.next
 **/out
+src/clients/desktop/dist
+src/clients/desktop/release-artifacts
+src/clients/desktop/resources
 artifacts
 TestResults
