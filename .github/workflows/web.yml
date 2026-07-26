@@ -1,4 +1,4 @@
-name: Web CI
+name: Web Build
 
 on:
   pull_request:
