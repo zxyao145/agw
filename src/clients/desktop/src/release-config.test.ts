@@ -18,6 +18,7 @@ interface ForgeConfig {
 
 const forgeConfig = require(resolve(process.cwd(), "forge.config.cjs")) as ForgeConfig;
 const packageManifest = require(resolve(process.cwd(), "package.json")) as {
+  author: string;
   devDependencies: Record<string, string>;
 };
 
@@ -26,6 +27,10 @@ test("Deb maker targets the packaged Linux executable", () => {
 
   assert.ok(debMaker);
   assert.equal(debMaker.config?.options?.bin, forgeConfig.packagerConfig.executableName);
+});
+
+test("Electron package declares its required author metadata", () => {
+  assert.equal(packageManifest.author, "Agw");
 });
 
 test("Squirrel maker installs its Windows installer backend directly", () => {
