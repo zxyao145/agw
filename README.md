@@ -2,6 +2,9 @@
 
 [中文文档](README.zh-CN.md) | [Documentation](README.md)
 
+[![Desktop Release](https://img.shields.io/github/v/release/zxyao145/agw?include_prereleases=true&sort=date&display_name=tag&label=Desktop&logo=github)](https://github.com/zxyao145/agw/releases)
+[![Server Docker Image](https://img.shields.io/github/v/release/zxyao145/agw?include_prereleases=true&sort=date&display_name=tag&label=Server%20Image&logo=docker)](https://github.com/zxyao145/agw/pkgs/container/agw)
+
 Agw is a self-hosted backend engineering agent hub for individuals and small R&D teams, as well as an AaaS (Agent as a Service) platform and agent gateway. It lets users work with multiple agents from a single UI:
 
 - Create custom agents
@@ -84,7 +87,7 @@ Desktop:
 
 - Electron 43 + Electron Forge
 - Full installers with a current-user Server daemon, or Client-only installers
-- Windows x64, macOS x64/arm64, and Ubuntu x64
+- Windows x64 Setup and portable Client packages, macOS x64/arm64 DMGs, and Ubuntu x64 DEBs
 
 ## Usage
 
@@ -197,7 +200,28 @@ pnpm release:desktop -- --flavor full --arch x64 --version 0.1.0
 pnpm release:desktop -- --flavor client --arch x64 --version 0.1.0
 ```
 
-The installer is collected under `src/clients/desktop/release-artifacts/`. Windows and Linux currently support x64; macOS supports x64 and arm64. The `full` flavor bundles the Server, while `client` connects to an existing Server.
+Desktop artifacts are collected under `src/clients/desktop/release-artifacts/`. Windows and Linux currently support x64; macOS supports x64 and arm64.
+
+The `flavor` identifies what is included:
+
+- `full`: Desktop plus a bundled self-contained Server installed as a current-user daemon.
+- `client`: Desktop only. It connects to an existing Server. On Windows, this flavor is available as both a Setup EXE and a portable ZIP; extract the ZIP and run `agw-desktop.exe` without installing it.
+
+GitHub Release Asset names use this format:
+
+```text
+Agw-Desktop-{version}-{flavor}-{platform}-{arch}{variant}.{extension}
+```
+
+`version` omits the leading `v`; `platform` is `windows`, `macos`, or `linux`; and `arch` is `x64` or `arm64`. Windows uses the `-Setup.exe` variant, while the portable Client uses `-Portable.zip`. DMG and DEB assets have no variant suffix. Examples:
+
+```text
+Agw-Desktop-0.2.0-preview.1-full-windows-x64-Setup.exe
+Agw-Desktop-0.2.0-preview.1-client-windows-x64-Portable.zip
+Agw-Desktop-0.2.0-preview.1-client-macos-arm64.dmg
+```
+
+The same release publishes the multi-platform Server image as `ghcr.io/zxyao145/agw:{version}` for `linux/amd64` and `linux/arm64`.
 
 For an official stable release, push a `vX.Y.Z` tag, for example:
 
@@ -206,7 +230,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The [release workflow](.github/workflows/release.yml) publishes Linux amd64/arm64 images to GHCR and creates a GitHub Release containing all Desktop installers. A manual workflow run can publish by enabling `publish` and supplying a stable `release_tag`; otherwise runs on `main` and manual runs produce temporary artifacts only. See the [Deployment Guide](docs/4.Deployment.md) for image loading, registry publishing, data directories, reverse proxies, and upgrades.
+The [release workflow](.github/workflows/release.yml) publishes Linux amd64/arm64 images to GHCR and creates a GitHub Release containing all Desktop assets. A manual release requires a valid `release_tag`. The [Desktop build workflow](.github/workflows/build-desktop.yml) builds temporary Desktop assets on pushes to `main` and manual runs. See the [Deployment Guide](docs/4.Deployment.md) for image loading, registry publishing, data directories, reverse proxies, and upgrades.
 
 ## Screenshots
 

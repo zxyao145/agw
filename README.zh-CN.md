@@ -2,6 +2,9 @@
 
 [中文文档](README.zh-CN.md) | [Documentation](README.md)
 
+[![Desktop Release](https://img.shields.io/github/v/release/zxyao145/agw?include_prereleases=true&sort=date&display_name=tag&label=Desktop&logo=github)](https://github.com/zxyao145/agw/releases)
+[![Server Docker Image](https://img.shields.io/github/v/release/zxyao145/agw?include_prereleases=true&sort=date&display_name=tag&label=Server%20Image&logo=docker)](https://github.com/zxyao145/agw/pkgs/container/agw)
+
 Agw 是一个面向个人用户和小型研发团队的、自托管的后台工程 Agent 中心，也是一个 AaaS (Agent as a Service) 平台和 Agent Gateway。用户可以在一个 UI 中，同时操作多个 Agent：
 - 自定义创建 Agent
 - 集成外部的 Agent（例如 Claude Code、Codex）。
@@ -87,7 +90,7 @@ Desktop:
 
 - Electron 43 + Electron Forge
 - 提供包含当前用户级 Server daemon 的 Full 安装包，以及仅客户端的 Client 安装包
-- 支持 Windows x64、macOS x64/arm64 和 Ubuntu x64
+- 提供 Windows x64 安装包和便携版 Client、macOS x64/arm64 DMG，以及 Ubuntu x64 DEB
 
 ## 使用
 
@@ -200,7 +203,28 @@ pnpm release:desktop -- --flavor full --arch x64 --version 0.1.0
 pnpm release:desktop -- --flavor client --arch x64 --version 0.1.0
 ```
 
-安装包输出到 `src/clients/desktop/release-artifacts/`。Windows 和 Linux 目前支持 x64，macOS 支持 x64 和 arm64。`full` 包含 Server，`client` 则连接已有的 Server。
+Desktop 产物输出到 `src/clients/desktop/release-artifacts/`。Windows 和 Linux 目前支持 x64，macOS 支持 x64 和 arm64。
+
+`flavor` 表示安装包包含的内容：
+
+- `full`：包含 Desktop 和自包含的 Server；Server 会安装为当前用户级 daemon。
+- `client`：仅包含 Desktop，需要连接已有的 Server。在 Windows 上同时提供 Setup EXE 和 portable ZIP；ZIP 解压后直接运行 `agw-desktop.exe`，无需安装。
+
+GitHub Release 中的 Assets 按以下格式命名：
+
+```text
+Agw-Desktop-{version}-{flavor}-{platform}-{arch}{variant}.{extension}
+```
+
+`version` 不包含开头的 `v`；`platform` 为 `windows`、`macos` 或 `linux`；`arch` 为 `x64` 或 `arm64`。Windows 安装包使用 `-Setup.exe`，便携版 Client 使用 `-Portable.zip`；DMG 和 DEB 没有 variant 后缀。例如：
+
+```text
+Agw-Desktop-0.2.0-preview.1-full-windows-x64-Setup.exe
+Agw-Desktop-0.2.0-preview.1-client-windows-x64-Portable.zip
+Agw-Desktop-0.2.0-preview.1-client-macos-arm64.dmg
+```
+
+同一个 Release 还会发布 `linux/amd64` 和 `linux/arm64` 的 Server 镜像，名称为 `ghcr.io/zxyao145/agw:{version}`。
 
 正式稳定版通过 `vX.Y.Z` tag 发布，例如：
 
@@ -209,7 +233,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-[发布工作流](.github/workflows/release.yml)会将 Linux amd64/arm64 镜像发布到 GHCR，并创建包含全部 Desktop 安装包的 GitHub Release。手动运行工作流时，只有启用 `publish` 并提供稳定版 `release_tag` 才会正式发布；`main` 分支和默认手动运行只生成临时产物。镜像导入、Registry 发布、数据目录、反向代理和升级流程详见[部署指南](docs/4.Deployment.md)。
+[发布工作流](.github/workflows/release.yml)会将 Linux amd64/arm64 镜像发布到 GHCR，并创建包含全部 Desktop Assets 的 GitHub Release。手动发布必须提供合法的 `release_tag`。[Desktop 构建工作流](.github/workflows/build-desktop.yml)会在推送到 `main` 或手动运行时生成临时 Desktop 产物。镜像导入、Registry 发布、数据目录、反向代理和升级流程详见[部署指南](docs/4.Deployment.md)。
 
 ## 界面截图
 

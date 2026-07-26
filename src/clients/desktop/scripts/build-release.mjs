@@ -143,13 +143,22 @@ if (options.flavor === "client" && (serverIsBundled || packagedServerIsBundled))
 }
 
 const releaseDirectory = resolve(desktopDirectory, "release-artifacts");
-const artifacts = await readdir(releaseDirectory);
-if (artifacts.length !== 1) {
-  throw new Error(`Expected one collected Desktop installer, found ${artifacts.length}.`);
-}
-
 const expectedPrefix = `Agw-Desktop-${options.version}-${options.flavor}-${target.platformName}-${options.arch}`;
-if (!artifacts[0].startsWith(expectedPrefix)) {
-  throw new Error(`Unexpected Desktop installer name: ${artifacts[0]}.`);
+const expectedArtifacts =
+  hostPlatform() === "win32"
+    ? options.flavor === "client"
+      ? [`${expectedPrefix}-Portable.zip`, `${expectedPrefix}-Setup.exe`]
+      : [`${expectedPrefix}-Setup.exe`]
+    : hostPlatform() === "darwin"
+      ? [`${expectedPrefix}.dmg`]
+      : [`${expectedPrefix}.deb`];
+const artifacts = (await readdir(releaseDirectory)).sort();
+if (
+  artifacts.length !== expectedArtifacts.length ||
+  artifacts.some((artifact, index) => artifact !== expectedArtifacts[index])
+) {
+  throw new Error(
+    `Unexpected Desktop artifacts: expected ${expectedArtifacts.join(", ")}, found ${artifacts.join(", ")}.`,
+  );
 }
-console.log(resolve(releaseDirectory, artifacts[0]));
+for (const artifact of artifacts) console.log(resolve(releaseDirectory, artifact));

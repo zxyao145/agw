@@ -207,7 +207,7 @@ jobs:
           pattern: agw-desktop-*
           path: artifacts
           merge-multiple: true
-      - name: Create GitHub Release and attach installers
+      - name: Create GitHub Release and attach Desktop assets
         env:
           GH_TOKEN: ${{ github.token }}
           PRERELEASE: ${{ needs.metadata.outputs.prerelease }}
@@ -216,11 +216,13 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -d '' files < <(
-            find artifacts -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' \) \
+            find artifacts -type f \( \
+              -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.zip' \
+            \) \
               -print0 | sort -z
           )
-          if [[ "${#files[@]}" -ne 8 ]]; then
-            echo "Expected 8 Desktop installers, found ${#files[@]}." >&2
+          if [[ "${#files[@]}" -ne 9 ]]; then
+            echo "Expected 9 Desktop assets, found ${#files[@]}." >&2
             exit 2
           fi
 

@@ -59,5 +59,13 @@ module.exports = {
         },
       },
     },
+    ...(flavor === "client"
+      ? [
+          {
+            name: "@electron-forge/maker-zip",
+            platforms: ["win32"],
+          },
+        ]
+      : []),
   ],
 };

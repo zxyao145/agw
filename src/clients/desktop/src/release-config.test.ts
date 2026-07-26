@@ -8,6 +8,7 @@ interface ForgeConfig {
   };
   makers: Array<{
     name: string;
+    platforms?: string[];
     config?: {
       options?: {
         bin?: string;
@@ -16,7 +17,22 @@ interface ForgeConfig {
   }>;
 }
 
-const forgeConfig = require(resolve(process.cwd(), "forge.config.cjs")) as ForgeConfig;
+const forgeConfigPath = resolve(process.cwd(), "forge.config.cjs");
+
+function loadForgeConfig(flavor: "full" | "client"): ForgeConfig {
+  const originalFlavor = process.env.AGW_PACKAGE_FLAVOR;
+  process.env.AGW_PACKAGE_FLAVOR = flavor;
+  delete require.cache[require.resolve(forgeConfigPath)];
+  try {
+    return require(forgeConfigPath) as ForgeConfig;
+  } finally {
+    if (originalFlavor === undefined) delete process.env.AGW_PACKAGE_FLAVOR;
+    else process.env.AGW_PACKAGE_FLAVOR = originalFlavor;
+    delete require.cache[require.resolve(forgeConfigPath)];
+  }
+}
+
+const forgeConfig = loadForgeConfig("full");
 const packageManifest = require(resolve(process.cwd(), "package.json")) as {
   author: string;
   devDependencies: Record<string, string>;
@@ -36,4 +52,20 @@ test("Electron package declares its required author metadata", () => {
 test("Squirrel maker installs its Windows installer backend directly", () => {
   assert.equal(packageManifest.devDependencies["electron-winstaller"], "5.4.4");
   assert.doesNotThrow(() => require.resolve("electron-winstaller", { paths: [process.cwd()] }));
+});
+
+test("Client flavor adds a Windows portable ZIP", () => {
+  const clientZipMaker = loadForgeConfig("client").makers.find(
+    (maker) => maker.name === "@electron-forge/maker-zip",
+  );
+  const fullZipMaker = forgeConfig.makers.find(
+    (maker) => maker.name === "@electron-forge/maker-zip",
+  );
+
+  assert.deepEqual(clientZipMaker?.platforms, ["win32"]);
+  assert.equal(fullZipMaker, undefined);
+  assert.equal(packageManifest.devDependencies["@electron-forge/maker-zip"], "7.11.2");
+  assert.doesNotThrow(() =>
+    require.resolve("@electron-forge/maker-zip", { paths: [process.cwd()] }),
+  );
 });

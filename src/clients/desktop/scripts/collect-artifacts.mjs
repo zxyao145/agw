@@ -21,7 +21,7 @@ if (
 }
 const platformName =
   targetPlatform === "darwin" ? "macos" : targetPlatform === "win32" ? "windows" : "linux";
-const supportedExtensions = new Set([".dmg", ".exe", ".deb"]);
+const supportedExtensions = new Set([".deb", ".dmg", ".exe", ".zip"]);
 
 async function findInstallers(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -35,17 +35,22 @@ async function findInstallers(directory) {
 }
 
 const installers = await findInstallers(makeDirectory);
-if (installers.length !== 1) {
-  throw new Error(`Expected one installer in ${makeDirectory}, found ${installers.length}.`);
+const expectedArtifactCount = targetPlatform === "win32" && flavor === "client" ? 2 : 1;
+if (installers.length !== expectedArtifactCount) {
+  throw new Error(
+    `Expected ${expectedArtifactCount} Desktop artifact(s) in ${makeDirectory}, found ${installers.length}.`,
+  );
 }
 
 await rm(releaseDirectory, { recursive: true, force: true });
 await mkdir(releaseDirectory, { recursive: true });
-const extension = extname(installers[0]).toLowerCase();
-const suffix = extension === ".exe" ? "-Setup" : "";
-const output = resolve(
-  releaseDirectory,
-  `Agw-Desktop-${releaseVersion}-${flavor}-${platformName}-${targetArch}${suffix}${extension}`,
-);
-await cp(installers[0], output);
-console.log(output);
+for (const installer of installers) {
+  const extension = extname(installer).toLowerCase();
+  const suffix = extension === ".exe" ? "-Setup" : extension === ".zip" ? "-Portable" : "";
+  const output = resolve(
+    releaseDirectory,
+    `Agw-Desktop-${releaseVersion}-${flavor}-${platformName}-${targetArch}${suffix}${extension}`,
+  );
+  await cp(installer, output);
+  console.log(output);
+}

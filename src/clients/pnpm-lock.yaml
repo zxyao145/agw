@@ -87,6 +87,9 @@ importers:
       '@electron-forge/maker-squirrel':
         specifier: 7.11.2
         version: 7.11.2
+      '@electron-forge/maker-zip':
+        specifier: 7.11.2
+        version: 7.11.2
       '@tailwindcss/postcss':
         specifier: 4.2.2
         version: 4.2.2
@@ -952,6 +955,10 @@ packages:
 
   '@electron-forge/maker-squirrel@7.11.2':
     resolution: {integrity: sha512-4CILo57ZDEQH1mJxjhYCSXuv+WaU7oPq67KqiTLEUOEzmiPg9u9/z7FXE34H/Tn5aKWN3dy+ngAETzv6iERCGg==}
+    engines: {node: '>= 16.4.0'}
+
+  '@electron-forge/maker-zip@7.11.2':
+    resolution: {integrity: sha512-FWnOm2MORX/nt8psnEtID3Vnt8Blby1NkzjU3KjXBPF9kave71C3lI8KbBbCeKKyTQ/S00i2FiglKdRWQ1WNTw==}
     engines: {node: '>= 16.4.0'}
 
   '@electron-forge/plugin-base@7.11.2':
@@ -3783,6 +3790,10 @@ packages:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
 
+  cross-zip@4.0.1:
+    resolution: {integrity: sha512-n63i0lZ0rvQ6FXiGQ+/JFCKAUyPFhLQYJIqKaa+tSJtfKeULF/IDNDAbdnSIxgS4NTuw2b0+lj8LzfITuq+ZxQ==}
+    engines: {node: '>=12.10'}
+
   cssesc@3.0.0:
     resolution: {integrity: sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==}
     engines: {node: '>=4'}
@@ -6532,6 +6543,16 @@ snapshots:
       fs-extra: 10.0.0
     optionalDependencies:
       electron-winstaller: 5.4.4
+    transitivePeerDependencies:
+      - supports-color
+
+  '@electron-forge/maker-zip@7.11.2':
+    dependencies:
+      '@electron-forge/maker-base': 7.11.2
+      '@electron-forge/shared-types': 7.11.2
+      cross-zip: 4.0.1
+      fs-extra: 10.0.0
+      got: 11.8.5
     transitivePeerDependencies:
       - supports-color
 
@@ -9430,6 +9451,8 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.1
+
+  cross-zip@4.0.1: {}
 
   cssesc@3.0.0: {}
 
