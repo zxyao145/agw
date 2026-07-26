@@ -2,8 +2,8 @@
 
 [中文文档](README.zh-CN.md) | [Documentation](README.md)
 
-[![Desktop Release](https://img.shields.io/github/v/release/zxyao145/agw?include_prereleases=true&sort=date&display_name=tag&label=Desktop&logo=github)](https://github.com/zxyao145/agw/releases)
-[![Server Docker Image](https://img.shields.io/github/v/release/zxyao145/agw?include_prereleases=true&sort=date&display_name=tag&label=Server%20Image&logo=docker)](https://github.com/zxyao145/agw/pkgs/container/agw)
+[![Desktop Release](https://img.shields.io/github/v/release/zxyao145/agw?sort=date&display_name=tag&label=Desktop&logo=github)](https://github.com/zxyao145/agw/releases)
+[![Server Docker Image](https://img.shields.io/github/v/release/zxyao145/agw?sort=date&display_name=tag&label=Server%20Image&logo=docker)](https://github.com/zxyao145/agw/pkgs/container/agw)
 
 Agw is a self-hosted backend engineering agent hub for individuals and small R&D teams, as well as an AaaS (Agent as a Service) platform and agent gateway. It lets users work with multiple agents from a single UI:
 
