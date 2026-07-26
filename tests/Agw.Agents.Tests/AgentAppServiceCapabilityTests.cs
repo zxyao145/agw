@@ -419,7 +419,14 @@ public class AgentAppServiceCapabilityTests
 
     private sealed class TestUnitOfWork : IUnitOfWork
     {
-        public Task<int> SaveChangesAsync() => Task.FromResult(0);
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
+
+        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+
+        public void Dispose()
+        {
+        }
     }
 
     private sealed class TestTool : IAgwTool

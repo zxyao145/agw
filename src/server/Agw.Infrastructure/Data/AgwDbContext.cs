@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Data.Encryption;
+using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
@@ -13,7 +14,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Agw.Infrastructure.Data;
 
-public class AgwDbContext : DbContext
+public class AgwDbContext : EFContext
 {
     private static readonly IEncryptedDataProtector DefaultEncryptedDataProtector =
         new DataProtectionEncryptedDataProtector(new EphemeralDataProtectionProvider());
@@ -96,6 +97,7 @@ public class AgwDbContext : DbContext
         base.OnModelCreating(modelBuilder);
         ConfigureVersion7GuidKeys(modelBuilder);
         EncryptedEntityMetadata.Validate(modelBuilder);
+        modelBuilder.ApplySoftDeleteQueryFilters();
     }
 
     internal void DecryptMaterializedEntity(object entity)

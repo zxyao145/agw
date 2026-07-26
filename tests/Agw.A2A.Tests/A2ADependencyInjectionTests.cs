@@ -209,7 +209,14 @@ public class A2ADependencyInjectionTests
 
     private sealed class UnitOfWorkStub : IUnitOfWork
     {
-        public Task<int> SaveChangesAsync() =>
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(0);
+
+        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+
+        public void Dispose()
+        {
+        }
     }
 }

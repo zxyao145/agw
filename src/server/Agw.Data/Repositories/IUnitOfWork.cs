@@ -1,6 +1,7 @@
 namespace Agw.Shared.Data.Repositories;
 
-public interface IUnitOfWork
+public interface IUnitOfWork : IDisposable
 {
-    Task<int> SaveChangesAsync();
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default);
 }

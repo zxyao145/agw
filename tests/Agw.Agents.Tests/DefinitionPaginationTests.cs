@@ -133,7 +133,7 @@ public class DefinitionPaginationTests
             new EfRepository<Skill>(database.Context),
             new EfRepository<Agent>(database.Context),
             new EfRepository<AgentSkillRelation>(database.Context),
-            new UnitOfWork(database.Context),
+            database.Context,
             new SkillDomainService(TimeProvider.System),
             AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), "agw-pagination-tests"), Path.GetTempPath()),
             NullLogger<SkillAppService>.Instance);
@@ -157,7 +157,7 @@ public class DefinitionPaginationTests
             new EfRepository<AgentMcpServerRelation>(dbContext),
             new EfRepository<Skill>(dbContext),
             new EfRepository<AgentSkillRelation>(dbContext),
-            new UnitOfWork(dbContext),
+            dbContext,
             new AgentDomainService(TimeProvider.System));
     }
 

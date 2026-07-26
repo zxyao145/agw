@@ -452,7 +452,7 @@ public sealed class OAuthAppServiceTests
             IRepository<IntegrationConnection> connectionRepository = new EfRepository<IntegrationConnection>(dbContext);
             IRepository<ConnectionCredential> connectionCredentialRepository =
                 new EfRepository<ConnectionCredential>(dbContext);
-            IUnitOfWork unitOfWork = new UnitOfWork(dbContext);
+            IUnitOfWork unitOfWork = dbContext;
             var reader = new ConnectionCredentialReader(
                 installationCredentialRepository,
                 connectionCredentialRepository);

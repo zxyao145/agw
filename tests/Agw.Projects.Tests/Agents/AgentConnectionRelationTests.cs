@@ -210,7 +210,7 @@ public class AgentConnectionRelationTests
             new EfRepository<AgentMcpServerRelation>(dbContext),
             new EfRepository<Skill>(dbContext),
             new EfRepository<AgentSkillRelation>(dbContext),
-            new UnitOfWork(dbContext),
+            dbContext,
             new AgentDomainService(TimeProvider.System));
     }
 }

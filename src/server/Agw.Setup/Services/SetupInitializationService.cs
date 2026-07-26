@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
@@ -19,6 +20,9 @@ public class SetupInitializationService : ISetupInitializationService
     private readonly AgwDataPaths _paths;
     private readonly TimeProvider _timeProvider;
     private readonly IEncryptedDataProtector _encryptedDataProtector;
+    private readonly EntityCreatorInterceptor _entityCreatorInterceptor;
+    private readonly EntityModifierInterceptor _entityModifierInterceptor;
+    private readonly EntitySoftDeleteInterceptor _entitySoftDeleteInterceptor;
 
     public SetupInitializationService(
         IInitializationStateStore stateStore,
@@ -26,7 +30,10 @@ public class SetupInitializationService : ISetupInitializationService
         IPasswordHasher<object> passwordHasher,
         AgwDataPaths paths,
         TimeProvider timeProvider,
-        IEncryptedDataProtector encryptedDataProtector)
+        IEncryptedDataProtector encryptedDataProtector,
+        EntityCreatorInterceptor entityCreatorInterceptor,
+        EntityModifierInterceptor entityModifierInterceptor,
+        EntitySoftDeleteInterceptor entitySoftDeleteInterceptor)
     {
         _stateStore = stateStore;
         _loggerFactory = loggerFactory;
@@ -34,6 +41,9 @@ public class SetupInitializationService : ISetupInitializationService
         _paths = paths;
         _timeProvider = timeProvider;
         _encryptedDataProtector = encryptedDataProtector;
+        _entityCreatorInterceptor = entityCreatorInterceptor;
+        _entityModifierInterceptor = entityModifierInterceptor;
+        _entitySoftDeleteInterceptor = entitySoftDeleteInterceptor;
     }
 
     public async Task InitializeAsync(SetupRequest request, CancellationToken cancellationToken = default)
@@ -50,6 +60,10 @@ public class SetupInitializationService : ISetupInitializationService
             SetupCode = request.SetupCode
         };
         ConfigureDatabaseProvider(dbOptions, resolvedRequest);
+        dbOptions.AddInterceptors(
+            _entityCreatorInterceptor,
+            _entityModifierInterceptor,
+            _entitySoftDeleteInterceptor);
 
         await using var context = new AgwDbContext(dbOptions.Options, _encryptedDataProtector);
         var seeder = new DbSeeder(context, _loggerFactory.CreateLogger<DbSeeder>(), _timeProvider, _paths);

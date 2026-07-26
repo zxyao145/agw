@@ -421,7 +421,7 @@ public class ProviderAppServiceTests
             new EfRepository<Provider>(dbContext),
             new EfRepository<LlmModel>(dbContext),
             new EfRepository<ModelProviderRelation>(dbContext),
-            new UnitOfWork(dbContext),
+            dbContext,
             new ProviderDomainService(TimeProvider.System),
             new ModelDomainService(TimeProvider.System),
             new ModelProviderDomainService(TimeProvider.System),

@@ -333,7 +333,7 @@ public class ProjectAppServiceTests
             new EfRepository<ProjectConnectionRelation>(dbContext),
             new EfRepository<Connection>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
-            new UnitOfWork(dbContext),
+            dbContext,
             new ProjectDomainService(TimeProvider.System),
             new ProjectResolver(projectRepository));
     }

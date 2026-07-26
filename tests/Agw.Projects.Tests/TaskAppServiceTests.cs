@@ -173,7 +173,7 @@ public class TaskAppServiceTests
         var taskExecutionAppService = new TaskExecutionAppService(
             new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
-            new UnitOfWork(dbContext),
+            dbContext,
             new Domain.Services.TaskRecordDomainService(),
             new ProjectResolver(projectRepository),
             TimeProvider.System);

@@ -332,13 +332,13 @@ public class ProjectContextsControllerTests
             new EfRepository<TaskRecord>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
-            new UnitOfWork(dbContext),
+            dbContext,
             new ProjectResolver(projectRepository),
             new TaskRecordDomainService(),
             new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
                 new EfRepository<ProjectContext>(dbContext),
-                new UnitOfWork(dbContext),
+                dbContext,
                 TimeProvider.System),
             TimeProvider.System);
     }

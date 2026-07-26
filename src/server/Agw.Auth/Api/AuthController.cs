@@ -92,6 +92,7 @@ public sealed class AuthController : ControllerBase
 
         var identity = new ClaimsIdentity(
             [
+                new Claim(ClaimTypes.NameIdentifier, Constants.AdminUserId),
                 new Claim(ClaimTypes.Name, Constants.AdminUserName),
                 new Claim(AgwAuthDefaults.SessionVersionClaimType, snapshot.SessionVersion.ToString())
             ],

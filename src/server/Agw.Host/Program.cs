@@ -12,6 +12,7 @@ using Agw.Auth.Extensions;
 using Agw.Auth.Security;
 using Agw.Files;
 using Agw.Files.Api;
+using Agw.Host.Data;
 using Agw.Host.Middleware;
 using Agw.Host.Runtime;
 using Agw.Infrastructure;
@@ -27,6 +28,7 @@ using Agw.Providers;
 using Agw.Setup.Controllers;
 using Agw.Setup.Middleware;
 using Agw.Setup.Services;
+using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 using Agw.Shared.Runtime;
@@ -268,6 +270,10 @@ try
         .AddSetup(builder.Configuration)
         .AddIntegrations(builder.Configuration)
         ;
+
+    // 数据库 AuditUserId 提供者
+    builder.Services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();
+
 
     builder.Services.AddHybridCache();
 

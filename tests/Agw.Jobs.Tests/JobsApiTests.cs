@@ -139,7 +139,8 @@ public class JobsApiTests
             builder.Services.AddScoped<JobRepo>();
             builder.Services.AddScoped<IRepository<Job>>(serviceProvider =>
                 serviceProvider.GetRequiredService<JobRepo>());
-            builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+            builder.Services.AddScoped<IUnitOfWork>(serviceProvider =>
+                serviceProvider.GetRequiredService<AgwDbContext>());
             builder.Services.AddSingleton<JobScheduleCalculator>();
             builder.Services.AddSingleton<JobSchedulerWakeSignal>();
             builder.Services.AddScoped<JobAppService>();

@@ -162,13 +162,13 @@ public class ProjectTraceCleanupTests
             new EfRepository<TaskRecord>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
-            new UnitOfWork(dbContext),
+            dbContext,
             new ProjectResolver(projectRepository),
             new TaskRecordDomainService(),
             new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
                 new EfRepository<ProjectContext>(dbContext),
-                new UnitOfWork(dbContext),
+                dbContext,
                 TimeProvider.System),
             TimeProvider.System);
     }
@@ -185,7 +185,7 @@ public class ProjectTraceCleanupTests
             new EfRepository<ProjectConnectionRelation>(dbContext),
             new EfRepository<Connection>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
-            new UnitOfWork(dbContext),
+                dbContext,
             new ProjectDomainService(TimeProvider.System),
             new ProjectResolver(projectRepository));
     }

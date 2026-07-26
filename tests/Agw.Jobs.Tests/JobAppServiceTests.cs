@@ -222,7 +222,7 @@ public class JobAppServiceTests
                 new EfRepository<JobLog>(dbContext),
                 new EfRepository<TaskRecord>(dbContext),
                 new EfRepository<ProjectContext>(dbContext),
-                new UnitOfWork(dbContext),
+                dbContext,
                 new JobScheduleCalculator(),
                 schedulerWakeSignal,
                 timeProvider);

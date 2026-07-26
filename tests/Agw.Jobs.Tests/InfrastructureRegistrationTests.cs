@@ -1,12 +1,17 @@
 using Agw.Infrastructure;
 using Agw.Infrastructure.Configuration;
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Jobs;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Configuration;
+using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 
 using Medallion.Threading;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -40,6 +45,52 @@ public class InfrastructureRegistrationTests
     }
 
     [Fact]
+    public void AddInfrastructure_RegistersAuditInterceptorsAndUsesDbContextAsUnitOfWork()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Provider"] = "sqlite" })
+            .Build();
+        var services = new ServiceCollection();
+
+        services.AddInfrastructure(configuration);
+
+        Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(EntityCreatorInterceptor)
+            && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(EntityModifierInterceptor)
+            && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(EntitySoftDeleteInterceptor)
+            && descriptor.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(services, descriptor =>
+            descriptor.ServiceType == typeof(IUnitOfWork)
+            && descriptor.ImplementationFactory is not null);
+    }
+
+    [Fact]
+    public void AddInfrastructure_ResolvesDbContextAndUnitOfWorkToTheSameScopedInstance()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Provider"] = "sqlite" })
+            .Build();
+        var services = new ServiceCollection();
+
+        services.AddInfrastructure(configuration);
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(AgwDataPaths.Resolve("registration-test", "/tmp"));
+        services.AddScoped<IEntityAuditUserIdProvider>(_ => new TestAuditUserIdProvider());
+
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+
+        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        Assert.Same(dbContext, unitOfWork);
+    }
+
+    [Fact]
     public void AddInfrastructure_BindsDatabaseSettings()
     {
         var configuration = new ConfigurationBuilder()
@@ -56,6 +107,11 @@ public class InfrastructureRegistrationTests
         using var serviceProvider = services.BuildServiceProvider();
         var settings = serviceProvider.GetRequiredService<IOptions<DatabaseSettings>>().Value;
         Assert.Equal(DatabaseProvider.Postgres, settings.Provider);
+    }
+
+    private sealed class TestAuditUserIdProvider : IEntityAuditUserIdProvider
+    {
+        public string GetUserId() => "test-user";
     }
 
     [Fact]

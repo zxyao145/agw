@@ -76,7 +76,7 @@ public class ModelProviderAppServiceTests
                 new EfRepository<Agentflow>(deleteContext));
             var service = new ModelProviderAppService(
                 new EfRepository<ModelProviderRelation>(deleteContext),
-                new UnitOfWork(deleteContext),
+                deleteContext,
                 new ModelProviderDomainService(TimeProvider.System),
                 usageGuard);
 

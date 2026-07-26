@@ -205,7 +205,7 @@ public class TaskStoreTests
         new(
             new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
-            new UnitOfWork(dbContext),
+            dbContext,
             TimeProvider.System);
 
     private static AgentTask CreateTask(

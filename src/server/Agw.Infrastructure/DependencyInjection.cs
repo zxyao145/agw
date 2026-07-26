@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Scheduling;
@@ -58,6 +59,9 @@ public static class DependencyInjection
         services.Configure<DatabaseSettings>(configuration.GetSection(DatabaseSettings.SectionName));
         services.Configure<DistributedLockSettings>(
             configuration.GetSection(DistributedLockSettings.SectionName));
+        services.AddScoped<EntityCreatorInterceptor>();
+        services.AddScoped<EntityModifierInterceptor>();
+        services.AddScoped<EntitySoftDeleteInterceptor>();
         services.AddDbContext<AgwDbContext>((serviceProvider, options) =>
         {
             var settings = serviceProvider
@@ -72,18 +76,24 @@ public static class DependencyInjection
             };
 
             ConfigureDatabaseProvider(options, settings);
+            options.AddInterceptors(
+                serviceProvider.GetRequiredService<EntityCreatorInterceptor>(),
+                serviceProvider.GetRequiredService<EntityModifierInterceptor>(),
+                serviceProvider.GetRequiredService<EntitySoftDeleteInterceptor>());
             options.ReplaceService<IMigrationsModelDiffer, NoForeignKeyModelDiffer>();
         });
 
         // Register database seeder
         services.AddScoped<DbSeeder>();
 
-        services.AddScoped<DbContext, AgwDbContext>();
+        services.AddScoped<DbContext>(serviceProvider =>
+            serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<JobRepo>();
         services.AddScoped<IRepository<Job>, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
         services.AddScoped<IJobStore, JobRepo>(sp => sp.GetRequiredService<JobRepo>());
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IUnitOfWork>(serviceProvider =>
+            serviceProvider.GetRequiredService<AgwDbContext>());
 
         services.AddSingleton<InMemoryProjectExecutionLock>();
         services.AddSingleton<Func<DistributedLockProvider, string, IDistributedLockProvider>>(_ =>

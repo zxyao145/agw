@@ -335,7 +335,7 @@ public class TaskExecutionAppServiceTests
         return new TaskExecutionAppService(
             new EfRepository<ProjectContext>(dbContext),
             new EfRepository<TaskRecord>(dbContext),
-            new UnitOfWork(dbContext),
+            dbContext,
             new TaskRecordDomainService(),
             new ProjectResolver(projectRepository),
             TimeProvider.System);

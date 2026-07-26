@@ -425,10 +425,17 @@ public class AgentAppServiceUpdateTests
     {
         public int SaveCount { get; private set; }
 
-        public Task<int> SaveChangesAsync()
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
             SaveCount++;
             return Task.FromResult(0);
+        }
+
+        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+
+        public void Dispose()
+        {
         }
     }
 }

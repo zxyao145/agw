@@ -57,7 +57,7 @@ public class TaskSessionBindingServiceTests
         var service = new TaskSessionBindingService(
             new EfRepository<TaskSessionBinding>(dbContext),
             new EfRepository<ProjectContext>(dbContext),
-            new UnitOfWork(dbContext),
+            dbContext,
             TimeProvider.System);
 
         await service.UpsertAsync(
@@ -134,7 +134,7 @@ public class TaskSessionBindingServiceTests
         var service = new TaskSessionBindingService(
             new EfRepository<TaskSessionBinding>(dbContext),
             new EfRepository<ProjectContext>(dbContext),
-            new UnitOfWork(dbContext),
+                dbContext,
             TimeProvider.System);
 
         await service.UpsertAsync(
@@ -205,7 +205,7 @@ public class TaskSessionBindingServiceTests
                     var service = new TaskSessionBindingService(
                         new EfRepository<TaskSessionBinding>(dbContext),
                         new EfRepository<ProjectContext>(dbContext),
-                        new UnitOfWork(dbContext),
+            dbContext,
                         TimeProvider.System);
 
                     return await service.UpsertAsync(
