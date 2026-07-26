@@ -1,5 +1,6 @@
 using System.ClientModel;
 
+using Agw.Agents.Execution.Agents.AIContextProviders;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -62,8 +63,11 @@ public partial class AgentRuntimeService
                     project,
                     capabilities.PluginSkills)
                 .ConfigureAwait(false);
+            var contextProviders = CreateContextProviders(
+                agentDefinition,
+                project,
+                skillsProvider);
 
-            string workspace = project.GetMustWorkspace();
             aiAgent = provider.ProviderType switch
             {
                 ProviderType.OpenAIChatCompletions => CreateOpenAiAgent(
@@ -72,16 +76,14 @@ public partial class AgentRuntimeService
                     provider,
                     authConfig,
                     tools,
-                    skillsProvider,
-                    workspace),
+                    contextProviders),
                 ProviderType.Anthropic => CreateAnthropicAgent(
                     agentDefinition,
                     model,
                     provider,
                     authConfig,
                     tools,
-                    skillsProvider,
-                    workspace),
+                    contextProviders),
                 _ => throw new AgwException(
                     ErrorCodes.UnsupportedProviderType,
                     $"Provider type '{provider.ProviderType}' is not supported")
@@ -119,8 +121,7 @@ public partial class AgentRuntimeService
         Provider provider,
         ProviderAuthConfig authConfig,
         IList<AITool>? tools,
-        AIContextProvider? skillsProvider,
-        string? workspace)
+        IReadOnlyList<AIContextProvider>? contextProviders)
     {
         var apiKey = ResolveApiKey(authConfig);
         var credential = new ApiKeyCredential(apiKey);
@@ -135,18 +136,14 @@ public partial class AgentRuntimeService
             Name = agentDefinition.Name,
             Description = agentDefinition.Description,
             ChatHistoryProvider = _chatHistoryProvider,
+            AIContextProviders = contextProviders,
             ChatOptions = new ChatOptions
             {
                 ModelId = model.Name,
-                Instructions = AgentRuntimeServiceUtil.BuildInstructions(agentDefinition.SystemPrompt, workspace),
+                Instructions = AgentRuntimeServiceUtil.BuildInstructions(agentDefinition.SystemPrompt),
                 Tools = tools
             }
         };
-
-        if (skillsProvider != null)
-        {
-            agentOptions.AIContextProviders = [skillsProvider];
-        }
 
         return chatCompletionClient.AsAIAgent(agentOptions)
             .AsBuilder()
@@ -160,8 +157,7 @@ public partial class AgentRuntimeService
         Provider provider,
         ProviderAuthConfig authConfig,
         IList<AITool>? tools,
-        AIContextProvider? skillsProvider,
-        string? workspace)
+        IReadOnlyList<AIContextProvider>? contextProviders)
     {
         var anthropicClientOptions = new ClientOptions
         {
@@ -174,23 +170,41 @@ public partial class AgentRuntimeService
             Name = agentDefinition.Name,
             Description = agentDefinition.Description,
             ChatHistoryProvider = _chatHistoryProvider,
+            AIContextProviders = contextProviders,
             ChatOptions = new ChatOptions
             {
                 ModelId = model.Name,
-                Instructions = AgentRuntimeServiceUtil.BuildInstructions(agentDefinition.SystemPrompt, workspace),
+                Instructions = AgentRuntimeServiceUtil.BuildInstructions(agentDefinition.SystemPrompt),
                 Tools = tools
             }
         };
-
-        if (skillsProvider != null)
-        {
-            agentOptions.AIContextProviders = [skillsProvider];
-        }
 
         return client.AsAIAgent(agentOptions)
             .AsBuilder()
             .UseOpenTelemetry(sourceName: provider.Name, configure: cfg => cfg.EnableSensitiveData = true)
             .Build();
+    }
+
+    private IReadOnlyList<AIContextProvider>? CreateContextProviders(
+        Agent agent,
+        Project project,
+        AIContextProvider? skillsProvider)
+    {
+        var providers = new List<AIContextProvider>();
+        if (_instructionsSources.Count > 0)
+        {
+            providers.Add(new AgwContextProvider(
+                agent,
+                project,
+                _instructionsSources));
+        }
+
+        if (skillsProvider != null)
+        {
+            providers.Add(skillsProvider);
+        }
+
+        return providers.Count == 0 ? null : providers;
     }
 
     private string ResolveApiKey(ProviderAuthConfig authConfig)

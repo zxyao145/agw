@@ -20,19 +20,17 @@ namespace Agw.Agents.Tests;
 public class AgentRuntimeServiceCompositionTests
 {
     [Fact]
-    public void BuildInstructions_WhenPromptAndWorkspaceProvided_AppendsWorkspaceInstruction()
+    public void BuildInstructions_WhenPromptProvided_ReturnsPrompt()
     {
-        var instructions = AgentRuntimeServiceUtil.BuildInstructions("System prompt", "/tmp/workspace");
+        var instructions = AgentRuntimeServiceUtil.BuildInstructions("System prompt");
 
-        Assert.Contains("System prompt", instructions, StringComparison.Ordinal);
-        Assert.Contains("default workspace or working directory", instructions, StringComparison.Ordinal);
-        Assert.Contains("/tmp/workspace", instructions, StringComparison.Ordinal);
+        Assert.Equal("System prompt", instructions);
     }
 
     [Fact]
     public void BuildInstructions_WhenPromptMissing_UsesDefaultPrompt()
     {
-        var instructions = AgentRuntimeServiceUtil.BuildInstructions("   ", null);
+        var instructions = AgentRuntimeServiceUtil.BuildInstructions("   ");
 
         Assert.Equal("You are a helpful agent.", instructions);
     }
@@ -339,6 +337,7 @@ public class AgentRuntimeServiceCompositionTests
             agentAppService: null!,
             projectAppService: null!,
             capabilityComposer: null!,
+            instructionsSources: [],
             chatHistoryProvider: null!,
             providerSessionState: null!,
             taskSessionBindingService: null!,

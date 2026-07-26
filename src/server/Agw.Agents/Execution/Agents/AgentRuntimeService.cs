@@ -1,4 +1,5 @@
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Execution.Agents.AIContextProviders.InstructionsExtensions;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
@@ -17,6 +18,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly AgentAppService _agentAppService;
     private readonly IProjectAppService _projectAppService;
     private readonly AgentCapabilityComposer _capabilityComposer;
+    private readonly IReadOnlyList<IAgentInstructionsSource> _instructionsSources;
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
     private readonly ITaskSessionBindingService _taskSessionBindingService;
@@ -30,6 +32,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         AgentAppService agentAppService,
         IProjectAppService projectAppService,
         AgentCapabilityComposer capabilityComposer,
+        IEnumerable<IAgentInstructionsSource> instructionsSources,
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
         ITaskSessionBindingService taskSessionBindingService,
@@ -44,6 +47,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _agentAppService = agentAppService;
         _projectAppService = projectAppService;
         _capabilityComposer = capabilityComposer;
+        _instructionsSources = instructionsSources.ToArray();
         _chatHistoryProvider = chatHistoryProvider;
         _providerSessionState = providerSessionState;
         _taskSessionBindingService = taskSessionBindingService;

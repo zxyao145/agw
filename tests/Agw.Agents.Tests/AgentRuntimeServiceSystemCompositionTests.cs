@@ -4,6 +4,8 @@ using System.Reflection;
 
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.AIContextProviders;
+using Agw.Agents.Execution.Agents.AIContextProviders.InstructionsExtensions;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Domain.Services;
@@ -114,6 +116,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         var project = new Project
         {
             Id = Guid.CreateVersion7(),
+            Workspace = Path.Combine(root, "workspace"),
             Tools = """["project_direct","shared"]""",
             EnvironmentVariables = new Dictionary<string, string>
             {
@@ -218,6 +221,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             Assert.NotNull(aiAgent);
             var agentOptions = FindInObjectGraph<ChatClientAgentOptions>(aiAgent!);
             var chatOptions = Assert.IsType<ChatOptions>(agentOptions.ChatOptions);
+            Assert.Equal("You are a helpful agent.", chatOptions.Instructions);
             Assert.NotNull(chatOptions.Tools);
             Assert.Equal(
                 new[]
@@ -246,7 +250,14 @@ public class AgentRuntimeServiceSystemCompositionTests
             }
 
             Assert.NotNull(agentOptions.AIContextProviders);
-            var skillsProvider = Assert.Single(agentOptions.AIContextProviders.OfType<AgentSkillsProvider>());
+            var contextProviders = agentOptions.AIContextProviders.ToArray();
+            Assert.Equal(2, contextProviders.Length);
+            var instructionsProvider = Assert.IsType<AgwContextProvider>(contextProviders[0]);
+            var skillsProvider = Assert.IsType<AgentSkillsProvider>(contextProviders[1]);
+            var instructionsContext = await instructionsProvider.InvokingAsync(
+                new AIContextProvider.InvokingContext(aiAgent, null, new AIContext()),
+                cancellationToken);
+            Assert.Contains(project.Workspace, instructionsContext.Instructions, StringComparison.Ordinal);
             var providerStrings = CollectStringsInObjectGraph(skillsProvider);
             Assert.Contains(Path.Combine(root, "agent-skill"), providerStrings);
             Assert.Contains(Path.Combine(root, "project-skill"), providerStrings);
@@ -336,6 +347,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 connectionCapabilityResolver,
                 mcpToolMaterializer,
                 NullLogger<AgentCapabilityComposer>.Instance),
+            instructionsSources: [new ProjectInstructionsSource()],
             chatHistoryProvider: null!,
             providerSessionState: null!,
             taskSessionBindingService: null!,

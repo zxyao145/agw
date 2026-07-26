@@ -105,6 +105,7 @@ public class AgentRuntimeServiceSummaryTests
             agentAppService: null!,
             projectAppService: null!,
             capabilityComposer: null!,
+            instructionsSources: [],
             chatHistoryProvider: null!,
             providerSessionState: null!,
             taskSessionBindingService: null!,

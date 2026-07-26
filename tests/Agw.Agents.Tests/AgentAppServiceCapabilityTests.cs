@@ -286,6 +286,7 @@ public class AgentAppServiceCapabilityTests
                 connectionCapabilityResolver: null!,
                 mcpToolMaterializer: null!,
                 NullLogger<AgentCapabilityComposer>.Instance),
+            instructionsSources: [],
             chatHistoryProvider: null!,
             providerSessionState: null!,
             taskSessionBindingService: null!,
