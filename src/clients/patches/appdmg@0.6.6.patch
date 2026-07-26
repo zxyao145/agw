@@ -1,0 +1,51 @@
+diff --git a/lib/hdiutil.js b/lib/hdiutil.js
+index 6403dc7..9277cd6 100644
+--- a/lib/hdiutil.js
++++ b/lib/hdiutil.js
+@@ -5,3 +5,5 @@
+ const util = require('./util')
+-
++
++const attachedDevices = new Map()
++
+ exports.convert = function (source, format, target, cb) {
+@@ -56,4 +58,7 @@ exports.attach = function (path, cb) {
+     const m = /\s+(\/Volumes\/.+)$/m.exec(res.stdout)
++    const d = /^(\/dev\/disk\d+)\s/m.exec(res.stdout)
+     if (m === null) return cb(new Error('Failed to mount image'))
+-
++
++    if (d !== null) attachedDevices.set(m[1], d[1])
++
+     cb(null, m[1])
+@@ -63,4 +68,6 @@ exports.attach = function (path, cb) {
+ exports.detach = function (path, cb) {
+-  const args = ['detach', path]
+-
++  const device = attachedDevices.get(path)
++  const target = device || path
++  const args = ['detach', target]
++
+   let attempts = 0
+@@ -71,8 +78,19 @@ exports.detach = function (path, cb) {
+         util.sh('hdiutil', args, attemptDetach)
+       }, 1000 * Math.pow(2, attempts - 1))
+     } else {
+-      cb(err)
++      if (!err || !device) {
++        attachedDevices.delete(path)
++        return cb(err)
++      }
++
++      util.pathExists(device, function (existsErr, exists) {
++        if (!existsErr && !exists) {
++          attachedDevices.delete(path)
++          return cb(null)
++        }
++        cb(err)
++      })
+     }
+   }
+-
++
+   util.sh('hdiutil', args, attemptDetach)

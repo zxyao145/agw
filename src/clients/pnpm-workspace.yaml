@@ -6,6 +6,9 @@ packages:
 overrides:
   "@electron/rebuild": 4.0.2
 
+patchedDependencies:
+  appdmg@0.6.6: patches/appdmg@0.6.6.patch
+
 allowBuilds:
   "@code-inspector/core": true
   electron: true

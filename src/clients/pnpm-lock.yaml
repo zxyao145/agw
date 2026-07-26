@@ -7,6 +7,9 @@ settings:
 overrides:
   '@electron/rebuild': 4.0.2
 
+patchedDependencies:
+  appdmg@0.6.6: 639faee71dc9ef2601a39b59426d2902f239f20e788fddc72b1852747224ebf5
+
 importers:
 
   .:
@@ -9167,7 +9170,7 @@ snapshots:
 
   ansi-styles@6.2.3: {}
 
-  appdmg@0.6.6:
+  appdmg@0.6.6(patch_hash=639faee71dc9ef2601a39b59426d2902f239f20e788fddc72b1852747224ebf5):
     dependencies:
       async: 1.5.2
       ds-store: 0.1.6
@@ -9762,7 +9765,7 @@ snapshots:
       debug: 4.4.3(supports-color@10.2.2)
       minimist: 1.2.8
     optionalDependencies:
-      appdmg: 0.6.6
+      appdmg: 0.6.6(patch_hash=639faee71dc9ef2601a39b59426d2902f239f20e788fddc72b1852747224ebf5)
     transitivePeerDependencies:
       - supports-color
     optional: true
