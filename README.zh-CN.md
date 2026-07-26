@@ -172,7 +172,7 @@ pnpm fmt:check
 
 - **后端：** 在 .NET 调试器中使用 `http` 或 `https` launch profile 启动 `src/server/Agw.Host`。两个 profile 都会设置 `ASPNETCORE_ENVIRONMENT=Development`，此时可以访问仅在开发环境开放的 OpenAPI 和 Scalar 端点。Server 日志同时输出到控制台和 `$AGW_DATA_DIR/logs/application-*.log`；未设置 `AGW_DATA_DIR` 时位于 `~/agw/logs/`。
 - **Web：** 执行 `pnpm dev:web`，通过浏览器开发者工具调试客户端代码和网络请求，并在 Next.js 终端查看服务端输出。需要连接其他后端时，可执行 `BACKEND_API_BASE_URL=http://host:port pnpm dev:web`。
-- **Desktop：** 执行 `pnpm dev:desktop`。Electron main/preload 日志输出到启动终端，renderer 可以通过 Electron DevTools 检查；开发环境 renderer 使用 `http://localhost:3000`。
+- **Desktop：** 执行 `pnpm dev:desktop`。Electron main process 和构建输出显示在启动终端，preload 与 renderer 代码可通过 Electron DevTools 检查；开发环境 renderer 使用 `http://localhost:3000`。
 - **聚焦测试：** 后端可执行 `dotnet test tests/<Project> --filter "FullyQualifiedName~MethodName"`；客户端可在 `src/clients` 下执行 `pnpm exec turbo run test --filter=@agw/web`，并按需替换 package filter。
 
 ## 发布

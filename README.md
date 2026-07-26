@@ -123,6 +123,91 @@ A typical local workflow is:
 
 Each `Project.Workspace` must be a directory visible to the Agw Server process. The file API, Git operations, Claude Code, and Codex use the same local working tree. To use network storage, mount it through the operating system or container platform first and configure the mount path as the Workspace; Agw does not provide an application-level SFTP backend. Restart the Server after changing a Workspace that has already been used.
 
+## Development
+
+Install the .NET 10 SDK, Node.js 24, and pnpm 11.7.0. Docker with Buildx is needed only when building container images. After cloning the repository, configure the Git hooks and install both backend and client dependencies:
+
+```bash
+git config core.hooksPath .githooks
+dotnet restore Agw.slnx
+
+cd src/clients
+pnpm install
+```
+
+Run the backend with hot reload from the repository root, then start Web from `src/clients` in another terminal:
+
+```bash
+dotnet watch --project src/server/Agw.Host
+```
+
+```bash
+cd src/clients
+pnpm dev:web
+```
+
+To develop Desktop instead of Web, keep the backend running and use `pnpm dev:desktop` from `src/clients`. The Desktop renderer runs on `http://localhost:3000`; it does not require the Web development server.
+
+Run the main verification commands before submitting a change:
+
+```bash
+# Repository root
+dotnet build Agw.slnx
+dotnet test Agw.slnx
+dotnet format Agw.slnx --verify-no-changes
+
+# src/clients
+pnpm build
+pnpm lint
+pnpm test
+pnpm fmt:check
+```
+
+After changing a backend API contract, run `pnpm gen:api` from `src/clients` to regenerate the typed client. See the [Development Guide](docs/1.Development.md) for focused test commands, code conventions, EF Core migration commands, and package-specific tasks.
+
+## Debugging
+
+- **Backend:** Start `src/server/Agw.Host` with the `http` or `https` launch profile in a .NET debugger. Both profiles set `ASPNETCORE_ENVIRONMENT=Development`; the Development-only OpenAPI and Scalar endpoints are then available from the backend. Server logs are written to the console and to `$AGW_DATA_DIR/logs/application-*.log`, or `~/agw/logs/` when `AGW_DATA_DIR` is not set.
+- **Web:** Run `pnpm dev:web`, use the browser developer tools for client code and network requests, and inspect the Next.js terminal for server-side output. To target another backend, start Web with `BACKEND_API_BASE_URL=http://host:port pnpm dev:web`.
+- **Desktop:** Run `pnpm dev:desktop`. Main-process logs and build output appear in the terminal; preload and renderer code can be inspected with Electron DevTools. The development renderer uses `http://localhost:3000`.
+- **Focused tests:** Use `dotnet test tests/<Project> --filter "FullyQualifiedName~MethodName"` for a backend test, or `pnpm exec turbo run test --filter=@agw/web` (replace the package filter as needed) from `src/clients`.
+
+## Publishing
+
+Run the verification commands above before producing artifacts. Local Server and container builds are driven by `publish.sh` from the repository root:
+
+```bash
+# Self-contained Server archive for one runtime
+PUBLISH_MODE=portable APP_VERSION=0.1.0 RIDS=linux-x64 ./publish.sh
+
+# Loadable Docker archive for one platform
+PUBLISH_MODE=docker \
+APP_VERSION=0.1.0 \
+IMAGE_NAME=agw:0.1.0 \
+DOCKER_PLATFORMS=linux/amd64 \
+./publish.sh
+```
+
+Artifacts are written below `artifacts/publish/`. Omit `RIDS` or `DOCKER_PLATFORMS` to build the default platform matrices, or use `PUBLISH_MODE=all` to build both portable Server packages and Docker images.
+
+Build a Desktop release installer from `src/clients` with Node.js 24:
+
+```bash
+pnpm release:desktop -- --flavor full --arch x64 --version 0.1.0
+pnpm release:desktop -- --flavor client --arch x64 --version 0.1.0
+```
+
+The installer is collected under `src/clients/desktop/release-artifacts/`. Windows and Linux currently support x64; macOS supports x64 and arm64. The `full` flavor bundles the Server, while `client` connects to an existing Server.
+
+For an official stable release, push a `vX.Y.Z` tag, for example:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The [release workflow](.github/workflows/release.yml) publishes Linux amd64/arm64 images to GHCR and creates a GitHub Release containing all Desktop installers. A manual workflow run can publish by enabling `publish` and supplying a stable `release_tag`; otherwise runs on `main` and manual runs produce temporary artifacts only. See the [Deployment Guide](docs/4.Deployment.md) for image loading, registry publishing, data directories, reverse proxies, and upgrades.
+
 ## Screenshots
 
 The following screenshots show the main Agw interfaces:
