@@ -1,0 +1,137 @@
+name: Desktop Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Optional build version in X.Y.Z or X.Y.Z-{preview|alpha|beta}.N format
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: Desktop build version
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Resolve build version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${INPUT_VERSION:-0.0.${GITHUB_RUN_NUMBER}}"
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(preview|alpha|beta)\.(0|[1-9][0-9]*))?$ ]]; then
+            echo "Version must use X.Y.Z or X.Y.Z-{preview|alpha|beta}.N format." >&2
+            exit 2
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  desktop-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/clients
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: src/clients/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:boundaries
+      - run: pnpm exec turbo run test --filter=@agw/desktop
+
+  desktop-build:
+    needs: [metadata, desktop-test]
+    name: Desktop ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.flavor }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+            arch: x64
+            flavor: full
+          - platform: windows
+            runner: windows-latest
+            arch: x64
+            flavor: client
+          - platform: macos
+            runner: macos-15
+            arch: x64
+            flavor: full
+          - platform: macos
+            runner: macos-15
+            arch: arm64
+            flavor: full
+          - platform: macos
+            runner: macos-15
+            arch: x64
+            flavor: client
+          - platform: macos
+            runner: macos-15
+            arch: arm64
+            flavor: client
+          - platform: linux
+            runner: ubuntu-latest
+            arch: x64
+            flavor: full
+          - platform: linux
+            runner: ubuntu-latest
+            arch: x64
+            flavor: client
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: src/clients
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: src/clients/pnpm-lock.yaml
+      - uses: actions/setup-dotnet@v5
+        if: matrix.flavor == 'full'
+        with:
+          dotnet-version: "10.0.x"
+      - name: Install Linux packaging tools
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg
+      - run: pnpm install --frozen-lockfile
+      - name: Build installer
+        run: >-
+          pnpm release:desktop --
+          --flavor ${{ matrix.flavor }}
+          --arch ${{ matrix.arch }}
+          --version ${{ needs.metadata.outputs.version }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agw-desktop-${{ matrix.flavor }}-${{ matrix.platform }}-${{ matrix.arch }}
+          path: src/clients/desktop/release-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
