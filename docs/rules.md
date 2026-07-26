@@ -105,14 +105,7 @@ Direct `new HttpClient()` causes socket exhaustion and DNS staleness. `IHttpClie
 - Do not introduce new explicit `throw new ArgumentException`, `InvalidOperationException`, `NotSupportedException`, `HttpRequestException`, or protocol-specific exceptions for expected backend application failures.
 - Preserve boundary-specific behavior by translating `AgwException` at the boundary. For example, A2A internals throw `AgwException`, while `AgwA2AJsonRpcProcessor` maps it to A2A JSON-RPC errors.
 
-## 7. Backend HTTP Clients
-
-- Do not instantiate `HttpClient` directly in backend code.
-- Use `IHttpClientFactory`, typically through constructor injection or `IocUtil.GetSingletonRequiredService<IHttpClientFactory>()` where that repository pattern already applies.
-- Create short-lived clients with `httpClientFactory.CreateClient()`.
-- Do not hold a directly constructed `HttpClient` as a singleton field.
-
-## 8. Backend Service Registration and Boundaries
+## 7. Backend Service Registration and Boundaries
 
 - Register new backend services in the relevant module `DependencyInjection.cs` or extension method and ensure `Agw.Host/Program.cs` composes the module.
 - `Agw.Integrations` treats `IPluginCatalog` as the source of truth for plugin, connector, authentication, capability-source, and bundled Skill definitions; definitions are code/content assets and are not EF entities.

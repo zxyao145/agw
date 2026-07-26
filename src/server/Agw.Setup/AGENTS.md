@@ -1,33 +1,28 @@
-# Repository Guidelines
+# Agw.Setup Guidelines
 
-## Project Structure & Module Organization
+These instructions supplement the repository-root `AGENTS.md` for work under `Agw.Setup`.
 
-Backend projects live in the repository-relative `src/server/` directory: `Agw.Host` is the ASP.NET Core entry point, `Agw.Auth` owns administrator authentication and authorization, `Agw.Setup` contains setup Razor/UI services and the combined server-state persistence Adapter, `Agw.Infrastructure` owns EF Core persistence, and domain modules such as `Agw.Agents`, `Agw.Projects`, `Agw.Skills`, `Agw.Tools`, and `Agw.Integrations` keep feature code isolated. Web client code is in `src/clients/web`, with app routes under `src/app/(app)`, typed API helpers in `src/api`, and shared UI/utilities in `src/components`, `src/hooks`, and `src/lib`. Tests are in `tests/Agw.*.Tests`; project documentation is under `docs/`. Treat `bin/`, `obj/`, `.next/`, `node_modules/`, and `TestResults/` as generated.
+## Module Boundary
 
-## Build, Test, and Development Commands
+`Agw.Setup` owns first-run setup, initialization guards, setup-code validation, and the combined `server-state.json` persistence adapter. `Agw.Auth` owns login, Cookie and Bearer authentication, `LocalTrusted`, CSRF, token management, and authorization.
 
-Run backend commands from the repo root:
+`JsonInitializationStateStore` implements both the setup state contract and the `Agw.Auth` authentication-state seam so the combined document continues to use one lock and atomic replacement. Do not introduce a second writer or split authentication state into static configuration.
 
-- `dotnet restore Agw.slnx` restores backend dependencies.
-- `dotnet build Agw.slnx` compiles all solution projects.
-- `dotnet test Agw.slnx` runs the normal xUnit suite.
-- `dotnet run --project src/server/Agw.Host` starts the API host, usually on `http://localhost:30815`.
-- `dotnet format` applies .NET formatting.
+## API and Security
 
-For Web client work, run commands in `src/clients/web`: `pnpm install`, `pnpm dev`, `pnpm build`, `pnpm lint`, and `pnpm format:check`.
+- Setup JSON endpoints return Bens.Results envelopes and use shared `AgwException` error codes.
+- Direct loopback setup may be trusted; forwarded or domain setup requires the one-time Setup Code.
+- Never persist administrator password or API Token plaintext. Never return stored password/token hashes or protected credential payloads.
+- Preserve the existing `server-state.json` schema unless a coordinated compatibility change is explicitly requested.
 
-## Coding Style & Naming Conventions
+## Verification
 
-Use 4-space indentation for C#. Follow standard .NET naming: `PascalCase` for types and members, `camelCase` for locals and parameters, and `I` prefixes for interfaces. Keep API contracts in module-local `Contracts/` folders and name controllers with the `Controller` suffix. Prefer async methods for I/O and constructor injection for services. Frontend files use TypeScript, React function components, and kebab-case filenames. Do not edit generated artifacts unless the task explicitly requires it.
+Run commands from the repository root:
 
-## Testing Guidelines
+```bash
+dotnet build Agw.slnx
+dotnet test tests/Agw.Setup.Tests/Agw.Setup.Tests.csproj
+dotnet test tests/Agw.Auth.Tests/Agw.Auth.Tests.csproj
+```
 
-Backend tests use xUnit. Mirror production namespaces where practical and prefer method names like `Method_Condition_ExpectedResult`. Run `dotnet test Agw.slnx` before completing backend changes.
-
-## Commit & Pull Request Guidelines
-
-Use Conventional Commits, consistent with recent history: `feat(chat): add share url button`, `fix(a2a): resolve runtime service injection`, or `chore: dotnet format`. Keep PRs focused. Include a summary, linked issue when relevant, testing notes, migration impact, and screenshots for UI changes.
-
-## Security & Configuration Tips
-
-Keep secrets out of `appsettings*.json` and frontend env files; prefer environment-variable overrides. Do not add or apply EF Core migrations automatically. Reuse `AgwException` and centralized `ErrorCodes` for intentional backend errors.
+Changes to the shared setup/auth state seam normally require both focused test projects.

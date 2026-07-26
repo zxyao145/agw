@@ -96,14 +96,15 @@ flowchart LR
     end
 ```
 
-The module is split into the following layers:
+The implementation spans these areas:
 
 - `Domain/Plugins`: immutable catalog definition models.
 - `Application/Management`: catalog projection, installation configuration, Connection CRUD, validation, secret mutation, and status transitions.
 - `Application/OAuth`: authorization start, callback, token exchange, subject resolution, and refresh.
+- `Application/Credentials`: scoped reads of decrypted installation and Connection credential values.
 - `Application/Capabilities`: runtime Connection resolution, Native/MCP tool creation, bundled Skill references, warnings, and leases.
 - `Infrastructure/Plugins`: the built-in Plugin Catalog.
-- `Infrastructure/Credentials`: Data Protection based secret protection.
+- `Agw.Infrastructure/Data/Encryption`: shared `[Encrypted]` database-field persistence.
 - `Mcp`: transport-neutral MCP descriptors, materialization, and resource ownership.
 - `Tools`: Native providers, currently GitHub.
 
@@ -314,7 +315,7 @@ sequenceDiagram
     UI->>API: POST authorize-start(connectionId, returnPath)
     API->>App: StartAsync
     App->>DB: Resolve Connection + enabled Installation
-    App->>DP: Decrypt Client Secret when required
+    App->>DB: Read decrypted Client Secret when required
     App->>DP: Protect state(ConnectionId, PKCE verifier, returnPath), 10 min
     App->>DB: status = PendingAuthorization
     App-->>UI: authorizationUrl
@@ -324,8 +325,9 @@ sequenceDiagram
     App->>DP: Validate and unprotect state
     App->>Provider: Exchange code (+ PKCE / client auth)
     App->>Provider: Resolve subject from user info, token response, or ID token
-    App->>DP: Protect access/refresh/ID tokens
-    App->>DB: Store tokens, subject, status = Ready
+    App->>DB: Set access/refresh/ID token credential values
+    DB->>DP: Encrypt marked fields during SaveChanges
+    App->>DB: Store subject, status = Ready
     API-->>UI: Redirect to validated local return path
 ```
 
@@ -439,12 +441,12 @@ At Agent creation:
 
 ## Credential security
 
-All installation secrets, API Keys, AK/SK values, OAuth access tokens, refresh tokens, and ID tokens use encrypted-value storage only.
+All installation secrets, API Keys, AK/SK values, OAuth access tokens, refresh tokens, and ID tokens use encrypted database fields. Credential entity `Value` properties carry the shared `[Encrypted]` marker.
 
-`DataProtectionConnectionCredentialProtector` uses ASP.NET Core Data Protection with the purpose:
+`AgwDbContext` encrypts marked properties during `SaveChanges` and restores plaintext only in tracked entities. Its materialization interceptor decrypts marked properties when rows are loaded. `DataProtectionEncryptedDataProtector` uses an entity-specific ASP.NET Core Data Protection purpose:
 
 ```text
-Agw.Integrations.ConnectionCredential.v1
+Agw.DatabaseFieldEncryption / v1 / entity/{table}/{entityId}
 ```
 
 Write path:
@@ -452,16 +454,17 @@ Write path:
 ```text
 API SecretValue
   -> schema validation
-  -> IDataProtector.Protect
-  -> ProtectedValue column
+  -> credential Value
+  -> AgwDbContext encrypted-property processor
+  -> ciphertext in the database
 ```
 
 Read path:
 
 ```text
-Credential slot
-  -> database row
-  -> IDataProtector.Unprotect
+Database ciphertext
+  -> AgwDbContext materialization interceptor
+  -> decrypted credential Value
   -> scoped provider/MCP invocation
 ```
 
@@ -749,7 +752,7 @@ dotnet test Agw.slnx
 Regenerate the Web OpenAPI artifacts after changing response/request contracts:
 
 ```bash
-cd src/clients/web
+cd src/clients
 pnpm gen:api
 pnpm lint
 pnpm build
@@ -762,7 +765,7 @@ pnpm build
 - [Connection management](Application/Management/ConnectionAppService.cs)
 - [Installation management](Application/Management/PluginInstallationAppService.cs)
 - [OAuth flow](Application/OAuth/OAuthAuthorizationAppService.cs)
-- [Credential protection](Infrastructure/Credentials/DataProtectionConnectionCredentialProtector.cs)
+- [Database field encryption](../Agw.Infrastructure/Data/Encryption/DataProtectionEncryptedDataProtector.cs)
 - [Runtime capability resolution](Application/Capabilities/ConnectionCapabilityResolver.cs)
 - [MCP materialization](Mcp/McpToolMaterializer.cs)
 - [Plugin Skill metadata](Application/Capabilities/PluginSkillMetadataReader.cs)

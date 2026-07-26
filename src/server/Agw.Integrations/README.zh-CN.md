@@ -19,7 +19,7 @@
 | 尽量晚地解析凭据 | Native 和 Plugin MCP 工具在每次调用时创建新的 DI Scope，并读取最新的加密凭据；轮换凭据不需要重建 Plugin 定义。 |
 | 默认关闭、不降级暴露 | 只有 `Ready` Connection 才能贡献工具和内建 Skill。定义、配置或凭据有问题时会整体跳过该 Connection，并产生结构化 Warning。 |
 | 显式管理资源生命周期 | MCP Client、Transport 和能力资源由异步 Lease 持有，并在发现结束、调用结束或 Agent 释放时关闭。 |
-| 不暴露秘密 | JSON API 对 Secret 字段只返回 `configured: true/false`，不会返回明文、数据库中的 ProtectedValue 或第三方 Token。 |
+| 不暴露秘密 | JSON API 对 Secret 字段只返回 `configured: true/false`，不会返回明文、数据库密文或第三方 Token。 |
 
 ## 当前范围
 
@@ -96,14 +96,15 @@ flowchart LR
     end
 ```
 
-模块内部按以下职责划分：
+实现涉及以下职责区域：
 
 - `Domain/Plugins`：不可变的 Catalog 定义模型。
 - `Application/Management`：Catalog 投影、Installation 配置、Connection CRUD、本地校验、Secret 变更和状态流转。
 - `Application/OAuth`：授权开始、Callback、Token Exchange、Subject 解析和 Refresh。
+- `Application/Credentials`：在 Scope 内读取已解密的 Installation 与 Connection Credential Value。
 - `Application/Capabilities`：运行时 Connection 解析、Native/MCP 工具创建、Plugin Skill 引用、Warning 和 Lease。
 - `Infrastructure/Plugins`：内建 Plugin Catalog。
-- `Infrastructure/Credentials`：基于 Data Protection 的秘密保护。
+- `Agw.Infrastructure/Data/Encryption`：共享的 `[Encrypted]` 数据库字段持久化。
 - `Mcp`：与 EF 无关的 MCP Descriptor、工具物化和资源管理。
 - `Tools`：Native Provider，目前只有 GitHub。
 
@@ -262,7 +263,7 @@ EF Model 声明了导航与级联关系，但当前 Integration Migration 有意
 | `Unverified` | 配置已经存在，但创建或变更后还没有完成本地校验。 |
 | `Ready` | 必填配置存在、加密凭据可解密且没有过期；OAuth Callback 成功也会直接进入 Ready。 |
 | `Expired` | 本地校验或运行时检查发现凭据已过期。 |
-| `Invalid` | ProtectedValue 无法解密、本地数据无效、Token Exchange 失败或 Refresh 失败。 |
+| `Invalid` | 加密值无法解密、本地数据无效、Token Exchange 失败或 Refresh 失败。 |
 | `Disabled` | Connection 自身被禁用。 |
 | `DefinitionUnavailable` | 当前 Catalog 已经无法解析对应 Plugin、Connector 或 Auth Scheme。 |
 
@@ -314,7 +315,7 @@ sequenceDiagram
     UI->>API: POST authorize-start(connectionId, returnPath)
     API->>App: StartAsync
     App->>DB: 解析 Connection 和启用的 Installation
-    App->>DP: 必要时解密 Client Secret
+    App->>DB: 必要时读取已解密的 Client Secret
     App->>DP: 保护 state(ConnectionId, PKCE verifier, returnPath)，有效期 10 分钟
     App->>DB: status = PendingAuthorization
     App-->>UI: authorizationUrl
@@ -324,8 +325,9 @@ sequenceDiagram
     App->>DP: 校验并解密 state
     App->>Provider: 用 Code 换 Token（含 PKCE / Client Auth）
     App->>Provider: 从 UserInfo、Token Response 或 ID Token 解析 Subject
-    App->>DP: 加密 Access/Refresh/ID Token
-    App->>DB: 保存 Token、Subject，status = Ready
+    App->>DB: 设置 Access/Refresh/ID Token Credential Value
+    DB->>DP: SaveChanges 时加密标记字段
+    App->>DB: 保存 Subject，status = Ready
     API-->>UI: 重定向到已校验的本地 Return Path
 ```
 
@@ -439,12 +441,12 @@ description: Use connected GitHub tools to inspect and work with repositories.
 
 ## Credential 安全
 
-Installation Secret、API Key、AK/SK、OAuth Access Token、Refresh Token 和 ID Token 全部只支持 Encrypted Value 存储。
+Installation Secret、API Key、AK/SK、OAuth Access Token、Refresh Token 和 ID Token 全部使用加密数据库字段存储。Credential 实体的 `Value` 属性通过共享 `[Encrypted]` 标记声明。
 
-`DataProtectionConnectionCredentialProtector` 使用 ASP.NET Core Data Protection，Purpose 为：
+`AgwDbContext` 在 `SaveChanges` 时加密这些属性，并只在被跟踪的实体中恢复明文；物化拦截器在读取数据库行时完成解密。`DataProtectionEncryptedDataProtector` 使用按实体隔离的 ASP.NET Core Data Protection Purpose：
 
 ```text
-Agw.Integrations.ConnectionCredential.v1
+Agw.DatabaseFieldEncryption / v1 / entity/{table}/{entityId}
 ```
 
 写入流程：
@@ -452,16 +454,17 @@ Agw.Integrations.ConnectionCredential.v1
 ```text
 API SecretValue
   -> Schema 校验
-  -> IDataProtector.Protect
-  -> ProtectedValue 字段
+  -> Credential Value
+  -> AgwDbContext 加密属性处理器
+  -> 数据库密文
 ```
 
 读取流程：
 
 ```text
-Credential Slot
-  -> 数据库记录
-  -> IDataProtector.Unprotect
+数据库密文
+  -> AgwDbContext 物化拦截器
+  -> 已解密的 Credential Value
   -> 当前 Scope 内的 Provider/MCP 调用
 ```
 
@@ -749,7 +752,7 @@ dotnet test Agw.slnx
 如果修改了 API Request/Response，还需要重新生成 Web OpenAPI 文件：
 
 ```bash
-cd src/clients/web
+cd src/clients
 pnpm gen:api
 pnpm lint
 pnpm build
@@ -762,7 +765,7 @@ pnpm build
 - [Connection 管理](Application/Management/ConnectionAppService.cs)
 - [Installation 管理](Application/Management/PluginInstallationAppService.cs)
 - [OAuth 流程](Application/OAuth/OAuthAuthorizationAppService.cs)
-- [Credential 加密](Infrastructure/Credentials/DataProtectionConnectionCredentialProtector.cs)
+- [数据库字段加密](../Agw.Infrastructure/Data/Encryption/DataProtectionEncryptedDataProtector.cs)
 - [运行时能力解析](Application/Capabilities/ConnectionCapabilityResolver.cs)
 - [MCP 工具物化](Mcp/McpToolMaterializer.cs)
 - [Plugin Skill 元数据](Application/Capabilities/PluginSkillMetadataReader.cs)

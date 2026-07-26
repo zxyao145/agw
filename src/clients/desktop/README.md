@@ -36,8 +36,8 @@ Common workspace-wide checks from `src/clients` are:
 pnpm build
 pnpm lint
 pnpm test
-pnpm format
-pnpm format:check
+pnpm fmt
+pnpm fmt:check
 ```
 
 For a Desktop-only check, use `pnpm exec turbo run <task> --filter=@agw/desktop`.

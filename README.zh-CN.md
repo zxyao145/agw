@@ -251,7 +251,7 @@ git push origin v0.1.0
 
 ## 架构
 
-Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；`src/clients` pnpm Workspace 包含 Web、Electron Desktop 以及共享 package，Expo 移动客户端位于 `src/clients/mobile`。
+Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；`src/clients` pnpm Workspace 包含 Web、Electron Desktop 以及共享业务和基础设施 package，Expo 移动客户端位于 `src/clients/mobile`。
 
 典型的后端流程如下：
 

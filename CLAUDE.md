@@ -34,24 +34,13 @@ Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registr
 
 ### Module Layering
 
-Each backend module follows lightweight Clean Architecture layering:
+Backend modules use lightweight layering:
 
 ```text
 Api → Application → Domain ← Infrastructure
 ```
 
-- `Api`: controllers, DTOs, routing, and validation.
-- `Application`: use cases, workflows, and service coordination.
-- `Domain`: entities and value objects only.
-- `Infrastructure`: repositories, EF Core access, and external API implementations.
-
-Dependencies must point inward. Domain objects are intentionally anemic and contain only data; put business behavior in Application-layer services such as AppServices, RuntimeServices, or DomainServices. Domain must not depend on other layers.
-
-A typical backend flow is:
-
-```text
-Controller → AppService / RuntimeService → DomainService → IRepository / IUnitOfWork → EF Core
-```
+Api owns protocol adapters; Application owns use cases and business behavior; Domain contains data-only entities and value objects; Infrastructure implements persistence and external adapters. Dependencies point inward. A typical flow is `Controller → AppService / RuntimeService → DomainService → IRepository / IUnitOfWork → EF Core`.
 
 ### Client Workspace (`src/clients/`)
 
@@ -61,45 +50,24 @@ Controller → AppService / RuntimeService → DomainService → IRepository / I
 
 The web client uses Next.js 16 App Router, React 19, Tailwind CSS 4, Radix UI/Shadcn components, React Query, and generated `openapi-fetch` types.
 
-`src/app/` contains only Next.js routes, layouts, global CSS, and application-shell composition. Business domains live in `src/clients/packages/` (`agents`, `auth`, `chat`, `integrations`, `jobs`, `observability`, `projects`, `providers`, `settings`, and `skills`); transport and shared UI live in `http-client`, `api`, and `components`. Web routes import public package entry points rather than owning domain implementations.
+`src/clients/web/src/app/` contains only Next.js routes, layouts, global CSS, and application-shell composition. Business domains live in `src/clients/packages/` (`agents`, `auth`, `chat`, `integrations`, `jobs`, `observability`, `projects`, `providers`, `settings`, and `skills`); transport and shared UI live in `http-client`, `api`, and `components`. Web routes import public package entry points rather than owning domain implementations.
 
 `src/clients/web/next.config.ts` proxies `/api/*` and `/openapi/*` to the backend unless `NEXT_OUTPUT_MODE=export`.
 
 ### Desktop Client (`src/clients/desktop/`)
 
-The Electron main and preload entry points are `src/main/index.ts` and `src/preload/index.ts`. Desktop owns an independent Next.js React renderer under `renderer/`; its Electron bridge adapter lives in `renderer/src/runtime/`, while cross-process data shapes remain internal under `src/shared/contracts/`. Web and Desktop do not import, locate, build, or consume artifacts from each other. Both applications reuse business and infrastructure modules only through root `src/clients/packages/`. Chat owns its execution status model.
+The Electron entry points are `src/clients/desktop/src/main/index.ts` and `src/clients/desktop/src/preload/index.ts`. Desktop owns an independent Next.js React renderer under `src/clients/desktop/renderer/`; its Electron bridge adapter lives in `src/clients/desktop/renderer/src/runtime/`, while cross-process data shapes remain internal under `src/clients/desktop/src/shared/contracts/`. Web and Desktop do not import, locate, build, or consume artifacts from each other. Both applications reuse business and infrastructure modules only through root `src/clients/packages/`. Chat owns its execution status model.
 
 ### Mobile Client (`src/clients/mobile/`)
 
 The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients/mobile/AGENTS.md`, run mobile npm commands from `shared/`, and do not hand-maintain generated native projects.
 
-## Key Runtime Components
+## Deeper Documentation
 
-### Runtime Entry Points and Services
-
-- `src/server/Agw.Host/Program.cs`: bootstraps logging, OpenTelemetry, dependency injection, OpenAPI/Scalar, websockets, static files, module registration, and database seeding.
-- `src/server/Agw.Auth/Extensions/DependencyInjection.cs`: registers administrator Cookie authentication, antiforgery, authorization, password hashing, login throttling, and scoped current-user access; `UseAgwAuth()` fixes the custom authentication middleware order.
-- `src/server/Agw.Agents/Execution/README.md`: documents the SignalR command boundary, reusable runtimes, turn lifecycle, message flow, and command extension model.
-- `src/server/Agw.Agents/Execution/Agents/AgentRuntimeService.cs`: builds `AIAgent` instances from persisted agents, hydrates provider configuration, selects enabled auth configuration, attaches registered and MCP tools, and supports OpenAI, Anthropic, Claude Code, and Codex-backed execution through Microsoft.Agents.AI integrations.
-- `src/server/Agw.Agents/Execution/Agentflows/AgentflowRuntimeService.cs`: executes persisted DAG workflows compiled by `AgentflowWorkflowCompiler`, including Agent, Workflow-as-Agent, HumanGate, Concurrent, GroupChat, Handoff, and Magentic nodes.
-- `src/server/Agw.Jobs/Scheduling/Coordination/JobHostedService.cs`: prefetches persistent jobs into an in-memory priority queue, serializes execution per project, and coordinates execution through `IProjectExecutionLock`.
-- `src/server/Agw.Tools/ToolRegistryService.cs`: discovers `[AiTool]` methods and `IAgwTool` implementations, caches metadata, and creates `AITool` instances through `AgwToolFactory`.
-- `src/server/Agw.Skills/Application/SkillAppService.cs`: validates uploaded skill archives, rewrites `SKILL.md` metadata, and stores extracted skills below `AgwDataPaths.SkillsDirectory`.
-- `src/server/Agw.Projects/Application/TaskAppService.cs`: resolves logical tasks from project contexts and task records for execution and history queries.
-- `src/server/Agw.Files/Application/Storage/Resolver/ProjectScopedFileSystemResolver.cs`: resolves `Project.Workspace` to a host-visible local file system and caches `CachedEntry` values by Project ID.
-- `src/server/Agw.Integrations/Application/Capabilities/ConnectionCapabilityResolver.cs`: resolves ready Connection-bound Native/MCP tools, bundled Skills, warnings, and leases; OAuth controllers and Native providers remain boundary adapters.
-- `src/server/Agw.Shared/Exceptions/ErrorCodes.cs`: is the central catalog for backend `AgwException` error codes and HTTP status mapping.
-
-### Important Domain Concepts
-
-- `Agent`: persisted AI agent configuration with prompt, runtime type, model-provider linkage, tool bindings, and optional skill assignments.
-- `Agentflow`: persisted multi-agent DAG with nodes, edges, and execution blocks.
-- `McpToolServer`: MCP server configuration for stdio, HTTP, or SSE transport.
-- `LlmModel`, `Provider`, `ModelProvider`, `ProviderAuthConfig`: provider and model catalog plus authentication configuration.
-- `Skill`: uploaded skill archive with validated `SKILL.md` metadata and agent-skill relations.
-- `Project`, `ProjectContext`, `TaskRecord`, `TaskProjection`: host-visible workspace configuration, conversation grouping, persisted execution records, and logical task views reconstructed from those records.
-- `Job`, `JobLog`: scheduled background execution and per-run logging.
-- `PluginDefinition`, `PluginInstallation`, `Connection`, and their credential entities: static integration capabilities, platform configuration, Agent-selectable external accounts or endpoints, and protected or environment-referenced secrets.
+- [`docs/2.Architecture.md`](docs/2.Architecture.md): module responsibilities, runtime boundaries, client packages, and domain relationships.
+- [`src/server/Agw.Agents/Execution/README.md`](src/server/Agw.Agents/Execution/README.md): SignalR commands, runtimes, turn lifecycle, and extension points.
+- [`src/server/Agw.Files/README.zh-CN.md`](src/server/Agw.Files/README.zh-CN.md): workspace resolution, path security, file APIs, and Git behavior.
+- [`src/clients/desktop/README.md`](src/clients/desktop/README.md): Desktop runtime, packaging, server profiles, and security boundaries.
 
 ## Build, Run, and Test
 
@@ -142,8 +110,8 @@ pnpm dev:web
 pnpm build
 pnpm lint
 pnpm test
-pnpm format
-pnpm format:check
+pnpm fmt
+pnpm fmt:check
 pnpm gen:api
 ```
 
@@ -169,7 +137,7 @@ On the first backend run, open `http://localhost:30815/setup` to choose the data
 
 Remote web access uses the administrator session cookie. Desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API tokens. The legacy `X-API-Key` setting is not supported.
 
-Primary backend settings live in `src/server/Agw.Host/appsettings.json` under `Database`, `DistributedLock`, `OpenTelemetry`, and `SystemInitialization`.
+Primary backend settings live in `src/server/Agw.Host/appsettings.json` under `Database`, `DistributedLock`, and `OpenTelemetry`.
 
 Configuration guidance:
 
@@ -178,7 +146,7 @@ Configuration guidance:
 - `DistributedLock:Provider` supports `inmemory` and `postgres`; null or missing follows `Database:Provider`.
 - When `DistributedLock:ConnectionString` is empty, a PostgreSQL lock reuses `Database:ConnectionString`.
 - `OpenTelemetry:OtlpEndpoint` defaults to `http://localhost:4317`.
-- `SystemInitialization` controls first-run initialization and API-token state.
+- First-run and authentication state, including API Tokens, live in `server-state.json` through the `Agw.Setup` persistence adapter; do not reintroduce static `SystemInitialization` configuration.
 - Keep secrets out of `appsettings*.json` and frontend environment files; prefer environment-variable overrides.
 - All backend projects target `.NET 10.0` and use nullable reference types, implicit usings, central package management, and code-style enforcement during builds.
 
@@ -188,10 +156,8 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 
 ### Backend API Responses and Exceptions
 
-- All non-WebSocket JSON API endpoints in backend modules, including `Agw.Auth`, `Agw.Host`, `Agw.Setup`, and `Agw.Files`, must return Bens.Results envelopes directly through `Bens.Results.ApiResult` or the configured boundary mapping.
-- Return helpers such as `ApiResult.Ok()`, `ApiResult.Ok(data)`, and `ApiResult.BadRequest(...)`. Use `ErrorCode.ToApiResult()` or `AgwException.ToApiResult()` when mapping shared application errors, and let `AgwApiExceptionMiddleware` map uncaught `AgwException` instances automatically.
-- Use `[ProducesApiResult]` for OpenAPI response metadata where applicable; it does not replace direct `ApiResult` returns.
-- Do not return raw `Ok(...)`, `BadRequest(...)`, `NotFound(...)`, `NoContent()`, or other bare MVC responses from those controllers.
+- All non-WebSocket JSON endpoints return Bens.Results envelopes through `ApiResult` helpers or the configured boundary mapping; do not return bare MVC results.
+- Use `ErrorCode.ToApiResult()` or `AgwException.ToApiResult()` for shared errors, and let `AgwApiExceptionMiddleware` map uncaught `AgwException` values. `[ProducesApiResult]` supplies metadata only.
 - WebSocket handlers, OAuth redirect callbacks, A2A protocol endpoints, and static file endpoints may keep protocol-specific response formats.
 
 ### A2A
@@ -211,7 +177,7 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 - Use `@agw/projects` for project tasks, contexts, histories, and file-management flows.
 - Use `@agw/chat` for SignalR execution, Chat state, and reusable React renderer UI.
 - Keep business code inside its owning `src/clients/packages/<domain>/` package; `@agw/web` routes should remain thin composition adapters.
-- Keep platform-neutral UI in `@agw/components`. Desktop-only Electron React adaptation belongs in `desktop/renderer/src/runtime/`, and its cross-process data shapes belong in `desktop/src/shared/contracts/`.
+- Keep platform-neutral UI in `@agw/components`. Desktop-only Electron React adaptation belongs in `src/clients/desktop/renderer/src/runtime/`, and its cross-process data shapes belong in `src/clients/desktop/src/shared/contracts/`.
 - Web and Desktop must not import or depend on each other; application dependencies must resolve through root `src/clients/packages/` workspace packages.
 - Packages must not import `@agw/web`, `web/src`, or the Web `@/` alias. Run `pnpm test:boundaries` after changing package boundaries.
 
@@ -225,6 +191,7 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 - Do not use C# primary constructors. Declare explicit constructors and backing fields or properties.
 - Keep request and response DTOs in `Contracts/` folders inside the owning module.
 - Controller class names must end with `Controller`.
+- Persisted auditable entities use the shared `BaseEntity` and audit interfaces. Keep audit stamping and `ISoftDelete` handling in the registered EF Core interceptors instead of adding module-specific persistence paths.
 
 ### Date and Time
 

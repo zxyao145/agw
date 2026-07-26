@@ -2,7 +2,7 @@
 
 `file-explorer` is a reusable frontend module for browsing a workspace, viewing file content or git diff output, and attaching line comments to files or diff sides.
 
-It is designed to be reusable across pages, but it is still intentionally aligned with the current Agw file API in [`@agw/projects`](../../api/files.ts). In practice, this means it is a reusable "workspace/code explorer", not a storage-agnostic file manager.
+It is designed to be reusable across pages, but it is still intentionally aligned with the current Agw file API in [`@agw/projects`](../../../services/files.ts). In practice, this means it is a reusable "workspace/code explorer", not a storage-agnostic file manager.
 
 ## Exports
 
@@ -33,6 +33,7 @@ Left-panel file tree for:
 
 ```ts
 {
+  projectId: string;
   rootDirectory: string;
   onlyDiff: boolean;
   recursiveMode: boolean;
@@ -119,7 +120,7 @@ This separation is intentional:
 
 ## API Assumptions
 
-This module currently depends on [`@agw/projects`](../../api/files.ts) for:
+This module currently depends on [`@agw/projects`](../../../services/files.ts) for:
 
 - `listFiles`
 - `readFile`
@@ -241,4 +242,4 @@ What it still does not try to abstract:
 - git-specific concepts such as diff mode and reset-to-head
 - page-specific handling of saved comments
 
-That boundary is intentional for now.
+That boundary is intentional.

@@ -248,7 +248,7 @@ The following screenshots show the main Agw interfaces:
 
 ## Architecture
 
-Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the ASP.NET Core application entry point and assembles the modules. The pnpm Workspace at `src/clients` contains the Web and Electron Desktop applications plus their shared Desktop contracts package, while the Expo mobile client remains separate in `src/clients/mobile`.
+Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the ASP.NET Core application entry point and assembles the modules. The pnpm Workspace at `src/clients` contains the Web and Electron Desktop applications plus shared business and infrastructure packages, while the Expo mobile client remains separate in `src/clients/mobile`.
 
 A typical backend flow is:
 

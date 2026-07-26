@@ -112,7 +112,7 @@ flowchart LR
 | `NextRunTime` | 下一次执行时间，由服务端计算 |
 | `Status` / `IsEnabled` | 调度状态和总开关 |
 | `RetryCount` / `MaxRetryCount` | 当前失败重试次数和允许的最大重试次数 |
-| `LastError` | 最近一次执行错误 |
+| `LastError` | 上一次执行错误 |
 
 `JobStatus` 包含三个值：`Pending = 1`、`Running = 2`、`Paused = 3`。
 
@@ -201,15 +201,15 @@ builder.Services
 
 ### 通过 Web UI 使用
 
-启动后端和 Web 客户端后，打开 `http://localhost:3000/jobs`。页面支持创建、查看、编辑、删除 Job，以及查看最近执行记录。
+启动后端和 Web 客户端后，打开 `http://localhost:3001/jobs`。页面支持创建、查看、编辑、删除 Job，以及查看执行记录。
 
 ```bash
 # 仓库根目录
 dotnet run --project src/server/Agw.Host
 
-# 另一个终端，从 Web 客户端目录运行
-cd src/clients/web
-pnpm dev
+# 另一个终端，从客户端 Workspace 根目录运行
+cd src/clients
+pnpm dev:web
 ```
 
 Web 客户端会把 `/api/*` 代理到后端；默认后端地址是 `http://localhost:30815`。
