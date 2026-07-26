@@ -7,6 +7,7 @@ overrides:
   "@electron/rebuild": 4.0.2
 
 patchedDependencies:
+  # Detach DMGs by their stable /dev/diskN device when the /Volumes path disappears on macOS runners.
   appdmg@0.6.6: patches/appdmg@0.6.6.patch
 
 allowBuilds:
