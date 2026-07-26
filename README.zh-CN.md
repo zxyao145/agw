@@ -283,68 +283,86 @@ Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是 ASP.N
 Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUnitOfWork -> EF Core
 ```
 
-模块介绍：
+模块介绍（仅展示仓库内项目的直接引用；`A --> B` 表示 A 引用 B）：
 
 ```mermaid
-flowchart BT
-    Agw.Host
-    Agw.Infrastructure
-
-    subgraph Core
-        direction BT
-        Agw.Jobs
-        Agw.A2A
-        Agw.Agents
-        Agw.Providers
-        Agw.Skills
-        Agw.Tools
-        Agw.Files
-        Agw.Integrations
-        Agw.Projects
-
-        %% Relationships
-        Agw.Agents --> Agw.Jobs
-        Agw.Agents --> Agw.A2A
-
-
-        Agw.Providers --> Agw.Agents
-        Agw.Skills --> Agw.Agents
-        Agw.Tools --> Agw.Agents
-        Agw.Integrations --> Agw.Agents
-        Agw.Files --> Agw.Agents
-
-
-        Agw.Projects --> Agw.Agents
-        Agw.Projects --> Agw.Jobs
-        Agw.Projects --> Agw.A2A
-        Agw.Files --> Agw.Projects
-        Agw.Files --> Agw.Tools
-
+flowchart TB
+    subgraph Composition["组合根"]
+        HOST["Agw.Host"]
     end
 
-    subgraph Support
-        Agw.Auth[Agw.Auth]
-        Agw.Setup[Agw.Setup]
+    subgraph Boundaries["协议与引导"]
+        direction LR
+        A2A["Agw.A2A"]
+        AUTH["Agw.Auth"]
+        SETUP["Agw.Setup"]
     end
 
-    Agw.Shared 
+    subgraph Adapters["技术适配器"]
+        INFRA["Agw.Infrastructure"]
+    end
 
-    Agw.Data --> Agw.Shared
-    Agw.Auth --> Agw.Shared
-    Agw.Setup --> Agw.Auth
-    Agw.Setup --> Agw.Infrastructure
-    Agw.Setup --> Agw.Shared
-    Core --> Agw.Shared
+    subgraph Core["业务模块"]
+        direction LR
+        AGENTS["Agw.Agents"]
+        JOBS["Agw.Jobs"]
+        PROJECTS["Agw.Projects"]
+        PROVIDERS["Agw.Providers"]
+        INTEGRATIONS["Agw.Integrations"]
+        SKILLS["Agw.Skills"]
+        TOOLS["Agw.Tools"]
+        FILES["Agw.Files"]
+    end
 
-    Agw.Infrastructure --> Core
-    Agw.Host --> Agw.Auth
-    Agw.Host --> Agw.Setup
-    Agw.Host --> Agw.Infrastructure
+    subgraph Foundation["基础层"]
+        direction LR
+        SHARED["Agw.Shared"]
+        DATA["Agw.Data"]
+    end
 
+    HOST --> A2A
+    HOST --> AUTH
+    HOST --> INFRA
+    HOST --> SETUP
 
-    %% styles
-    style Core fill:none,stroke:#333,stroke-dasharray: 5 5
-    style Support fill:none,stroke:#333,stroke-dasharray: 5 5
+    SETUP --> AUTH
+    SETUP --> INFRA
+    SETUP --> SHARED
+
+    A2A --> AGENTS
+    A2A --> PROJECTS
+
+    INFRA --> AGENTS
+    INFRA --> INTEGRATIONS
+    INFRA --> PROVIDERS
+    INFRA --> PROJECTS
+    INFRA --> SKILLS
+    INFRA --> JOBS
+
+    SKILLS --> AGENTS
+    SKILLS --> SHARED
+    JOBS --> AGENTS
+    JOBS --> PROJECTS
+    JOBS --> SHARED
+
+    AGENTS --> FILES
+    AGENTS --> INTEGRATIONS
+    AGENTS --> PROVIDERS
+    AGENTS --> TOOLS
+    AGENTS --> SHARED
+
+    PROJECTS --> FILES
+    PROJECTS --> SHARED
+    TOOLS --> FILES
+    TOOLS --> SHARED
+
+    AUTH --> SHARED
+    INTEGRATIONS --> SHARED
+    PROVIDERS --> SHARED
+
+    %% 仅用于布局：让基础层保持在业务模块下方。
+    FILES ~~~ SHARED
+    SHARED --> DATA
 ```
 
 - Agw.Providers  
