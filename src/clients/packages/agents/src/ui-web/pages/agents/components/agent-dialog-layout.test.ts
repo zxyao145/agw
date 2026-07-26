@@ -45,10 +45,10 @@ test("Agent dialogs cannot close or reopen through Dialog while their mutation i
   assert.match(pageSource, /if \(updateAgentMutation\.isPending\) \{\s*return;\s*\}/);
 });
 
-test("Agent form uses a responsive 400px metadata column and six configuration tabs", async () => {
+test("Agent form uses a responsive 360px metadata column and six configuration tabs", async () => {
   const source = await readFile(FORM_FIELDS_URL, "utf8");
 
-  assert.match(source, /lg:grid-cols-\[400px_minmax\(0,1fr\)\]/);
+  assert.match(source, /lg:grid-cols-\[360px_minmax\(0,1fr\)\]/);
   assert.match(source, /<TabsTrigger value="system-prompt">Instructions<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="skills">Skills<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="tools">Tools<\/TabsTrigger>/);

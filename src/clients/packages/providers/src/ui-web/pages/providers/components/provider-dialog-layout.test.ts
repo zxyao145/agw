@@ -24,10 +24,10 @@ test("Create and Edit Provider dialogs use the full-screen shell with header act
   }
 });
 
-test("Provider form uses a responsive 400px metadata column and two tabs", async () => {
+test("Provider form uses a responsive 360px metadata column and two tabs", async () => {
   const source = await readFile(FORM_FIELDS_URL, "utf8");
 
-  assert.match(source, /lg:grid-cols-\[400px_minmax\(0,1fr\)\]/);
+  assert.match(source, /lg:grid-cols-\[360px_minmax\(0,1fr\)\]/);
   assert.match(source, /<Tabs defaultValue="auth-configs"/);
   assert.match(source, /<TabsTrigger[^>]*value="auth-configs">\s*Auth Configs\s*<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger[^>]*value="models">\s*Models\s*<\/TabsTrigger>/);

@@ -59,10 +59,10 @@ test("Project dialogs cannot close or reopen through Dialog while their mutation
   assert.match(pageSource, /if \(updateProjectMutation\.isPending\) \{\s*return;\s*\}/);
 });
 
-test("Project form has the 400px metadata column and exactly five shared capability tabs", async () => {
+test("Project form has the 360px metadata column and exactly five shared capability tabs", async () => {
   const source = await readSource(FORM_FIELDS_URL, "Project form fields");
 
-  assert.match(source, /lg:grid-cols-\[400px_minmax\(0,1fr\)\]/);
+  assert.match(source, /lg:grid-cols-\[360px_minmax\(0,1fr\)\]/);
   assert.match(source, /<Tabs defaultValue="skills"/);
   assert.equal(source.match(/<TabsTrigger value=/g)?.length, 5);
   assert.match(source, /<TabsTrigger value="skills">Skills<\/TabsTrigger>/);
