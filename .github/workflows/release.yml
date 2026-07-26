@@ -68,10 +68,6 @@ jobs:
               fi
             fi
 
-            if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "GitHub Release $release_tag already exists." >&2
-              exit 2
-            fi
             version="${release_tag#v}"
           else
             version="0.0.${GITHUB_RUN_NUMBER}"
@@ -301,10 +297,22 @@ jobs:
             release_options+=(--prerelease)
           fi
 
-          gh release create "$RELEASE_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Agw $RELEASE_TAG" \
-            --generate-notes \
-            "${tag_options[@]}" \
-            "${release_options[@]}" \
-            "${files[@]}"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber \
+              "${files[@]}"
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Agw $RELEASE_TAG" \
+              --draft=false \
+              --prerelease="$PRERELEASE"
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Agw $RELEASE_TAG" \
+              --generate-notes \
+              "${tag_options[@]}" \
+              "${release_options[@]}" \
+              "${files[@]}"
+          fi
