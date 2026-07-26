@@ -47,6 +47,7 @@ module.exports = {
       platforms: ["linux"],
       config: {
         options: {
+          bin: "agw-desktop",
           name: "agw-desktop",
           version: releaseVersion,
           productName: "Agw Desktop",

@@ -10,8 +10,14 @@ const flavor = process.env.AGW_PACKAGE_FLAVOR === "client" ? "client" : "full";
 const targetArch = process.env.AGW_TARGET_ARCH || arch();
 const targetPlatform = process.env.AGW_TARGET_PLATFORM || platform();
 const releaseVersion = process.env.AGW_RELEASE_VERSION || packageManifest.version;
-if (!/^\d+\.\d+\.\d+$/u.test(releaseVersion)) {
-  throw new Error(`AGW_RELEASE_VERSION must use X.Y.Z format, received ${releaseVersion}.`);
+if (
+  !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(preview|alpha|beta)\.(0|[1-9]\d*))?$/u.test(
+    releaseVersion,
+  )
+) {
+  throw new Error(
+    `AGW_RELEASE_VERSION must use X.Y.Z or X.Y.Z-{preview|alpha|beta}.N format, received ${releaseVersion}.`,
+  );
 }
 const platformName =
   targetPlatform === "darwin" ? "macos" : targetPlatform === "win32" ? "windows" : "linux";

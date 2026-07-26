@@ -12,7 +12,7 @@ on:
         default: false
         type: boolean
       release_tag:
-        description: Stable release tag in vX.Y.Z format; required when publishing
+        description: Release tag in vX.Y.Z or vX.Y.Z-{preview|alpha|beta}.N format; required when publishing
         required: false
         type: string
 
@@ -25,6 +25,7 @@ jobs:
     outputs:
       image_name: ${{ steps.release.outputs.image_name }}
       image_tags: ${{ steps.release.outputs.image_tags }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
       publish: ${{ steps.release.outputs.publish }}
       release_tag: ${{ steps.release.outputs.release_tag }}
       version: ${{ steps.release.outputs.version }}
@@ -53,8 +54,8 @@ jobs:
           fi
 
           if [[ "$publish" == "true" ]]; then
-            if [[ ! "$release_tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-              echo "Release tag must use stable vX.Y.Z format." >&2
+            if [[ ! "$release_tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(preview|alpha|beta)\.(0|[1-9][0-9]*))?$ ]]; then
+              echo "Release tag must use vX.Y.Z or vX.Y.Z-{preview|alpha|beta}.N format." >&2
               exit 2
             fi
 
@@ -76,9 +77,14 @@ jobs:
             version="0.0.${GITHUB_RUN_NUMBER}"
           fi
 
+          prerelease=false
+          if [[ "$version" == *-* ]]; then
+            prerelease=true
+          fi
+
           image_name="ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
           short_sha="${GITHUB_SHA:0:12}"
-          if [[ "$publish" == "true" ]]; then
+          if [[ "$publish" == "true" && "$prerelease" == "false" ]]; then
             IFS=. read -r major minor _patch <<< "$version"
             image_tags=$(printf '%s\n' \
               "$image_name:$version" \
@@ -86,12 +92,17 @@ jobs:
               "$image_name:$major" \
               "$image_name:latest" \
               "$image_name:sha-$short_sha")
+          elif [[ "$publish" == "true" ]]; then
+            image_tags=$(printf '%s\n' \
+              "$image_name:$version" \
+              "$image_name:sha-$short_sha")
           else
             image_tags="$image_name:ci-$short_sha"
           fi
 
           {
             echo "image_name=$image_name"
+            echo "prerelease=$prerelease"
             echo "publish=$publish"
             echo "release_tag=$release_tag"
             echo "version=$version"
@@ -264,6 +275,7 @@ jobs:
       - name: Create GitHub Release and attach installers
         env:
           GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.metadata.outputs.prerelease }}
           RELEASE_TAG: ${{ needs.metadata.outputs.release_tag }}
         shell: bash
         run: |
@@ -284,9 +296,15 @@ jobs:
             tag_options+=(--target "$GITHUB_SHA")
           fi
 
+          release_options=()
+          if [[ "$PRERELEASE" == "true" ]]; then
+            release_options+=(--prerelease)
+          fi
+
           gh release create "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "Agw $RELEASE_TAG" \
             --generate-notes \
             "${tag_options[@]}" \
+            "${release_options[@]}" \
             "${files[@]}"

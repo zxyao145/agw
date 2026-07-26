@@ -27,7 +27,7 @@ function parseArguments(arguments_) {
     const value = separator === -1 ? arguments_[index + 1] : argument.slice(separator + 1);
     if (!["--flavor", "--arch", "--version"].includes(name) || !value) {
       throw new Error(
-        "Usage: pnpm release:desktop -- --flavor full|client --arch x64|arm64 --version X.Y.Z",
+        "Usage: pnpm release:desktop -- --flavor full|client --arch x64|arm64 --version X.Y.Z[-{preview|alpha|beta}.N]",
       );
     }
     options[name.slice(2)] = value;
@@ -81,8 +81,14 @@ const options = parseArguments(process.argv.slice(2));
 if (!["full", "client"].includes(options.flavor)) {
   throw new Error(`Desktop release flavor must be full or client, received ${options.flavor}.`);
 }
-if (!/^\d+\.\d+\.\d+$/u.test(options.version)) {
-  throw new Error(`Desktop release version must use X.Y.Z format, received ${options.version}.`);
+if (
+  !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(preview|alpha|beta)\.(0|[1-9]\d*))?$/u.test(
+    options.version,
+  )
+) {
+  throw new Error(
+    `Desktop release version must use X.Y.Z or X.Y.Z-{preview|alpha|beta}.N format, received ${options.version}.`,
+  );
 }
 
 const target = targetFor(hostPlatform(), options.arch);

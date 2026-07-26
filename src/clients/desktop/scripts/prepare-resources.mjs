@@ -15,8 +15,14 @@ const packageManifest = JSON.parse(
   await readFile(resolve(desktopDirectory, "package.json"), "utf8"),
 );
 const releaseVersion = process.env.AGW_RELEASE_VERSION || packageManifest.version;
-if (!/^\d+\.\d+\.\d+$/u.test(releaseVersion)) {
-  throw new Error(`AGW_RELEASE_VERSION must use X.Y.Z format, received ${releaseVersion}.`);
+if (
+  !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(preview|alpha|beta)\.(0|[1-9]\d*))?$/u.test(
+    releaseVersion,
+  )
+) {
+  throw new Error(
+    `AGW_RELEASE_VERSION must use X.Y.Z or X.Y.Z-{preview|alpha|beta}.N format, received ${releaseVersion}.`,
+  );
 }
 
 function run(command, args, options = {}) {
