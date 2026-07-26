@@ -114,6 +114,7 @@ public class SkillsController : ControllerBase
             skill.Name,
             skill.Description,
             skill.ContentPath,
+            detail.IsBuiltIn,
             detail.AgentIds,
             skill.CreateTime,
             skill.CreateBy,

@@ -20,6 +20,7 @@ export type SkillDto = {
   id: string;
   name: string;
   description: string;
+  isBuiltIn?: boolean;
   agentIds: string[];
 };
 

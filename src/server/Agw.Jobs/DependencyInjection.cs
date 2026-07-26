@@ -1,4 +1,6 @@
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Jobs.Application.Services;
+using Agw.Jobs.Application.Skills;
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
@@ -18,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<JobAttemptRunner>();
         services.AddSingleton<JobSchedulerWakeSignal>();
         services.AddSingleton<JobScheduleCalculator>();
+        services.AddSingleton<IAgentSkillRegistration, JobManagementSkillRegistration>();
         services.AddScoped<JobAppService>();
         return services;
     }

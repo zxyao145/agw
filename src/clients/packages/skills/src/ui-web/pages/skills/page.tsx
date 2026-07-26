@@ -8,13 +8,13 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from "@agw/components/query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { LockKeyhole, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@agw/api";
 import { StaticTable } from "@agw/components";
 import { PaginatedTable } from "@agw/components";
-import { Button } from "@agw/components";
+import { Badge, Button } from "@agw/components";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +38,7 @@ type SkillDto = {
   name: string;
   description: string;
   contentPath: string;
+  isBuiltIn: boolean;
   agentIds: string[];
   createTime?: string | null;
   createBy?: string | null;
@@ -378,34 +379,47 @@ export default function SkillsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="max-w-sm font-mono text-xs break-all text-muted-foreground">
-                    {skill.contentPath}
+                    {skill.isBuiltIn ? (
+                      <Badge variant="secondary" className="font-sans font-medium">
+                        Class-based
+                      </Badge>
+                    ) : (
+                      skill.contentPath
+                    )}
                   </TableCell>
                   <TableCell className="min-w-40 text-sm text-muted-foreground">
                     {formatLocalDateTime(skill.updateTime ?? skill.createTime)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <ButtonGroup>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => openEditDialog(skill)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleDelete(skill)}
-                          disabled={deleteMutation.isPending}
-                          className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </ButtonGroup>
-                    </div>
+                    {skill.isBuiltIn ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <LockKeyhole className="h-3.5 w-3.5" />
+                        Managed by Agw
+                      </span>
+                    ) : (
+                      <div className="flex justify-end gap-2">
+                        <ButtonGroup>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => openEditDialog(skill)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => handleDelete(skill)}
+                            disabled={deleteMutation.isPending}
+                            className="cursor-pointer text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </ButtonGroup>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

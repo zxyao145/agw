@@ -10338,6 +10338,7 @@
           "name",
           "description",
           "contentPath",
+          "isBuiltIn",
           "agentIds",
           "createTime",
           "createBy",
@@ -10358,6 +10359,9 @@
           },
           "contentPath": {
             "type": "string"
+          },
+          "isBuiltIn": {
+            "type": "boolean"
           },
           "agentIds": {
             "type": "array",

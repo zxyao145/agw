@@ -98,6 +98,7 @@ public static class ErrorCodes
     public static readonly ErrorCode ConnectionAliasImmutable = new(409_0009, "Connection alias cannot be changed.", HttpStatusCode.Conflict);
     public static readonly ErrorCode IntegrationToolNameConflict = new(409_0010, "Integration capability tool name conflicts with another source.", HttpStatusCode.Conflict);
     public static readonly ErrorCode ModelProviderInUse = new(409_0011, "The model provider is currently in use.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode BuiltInSkillImmutable = new(409_0012, "Built-in skills cannot be updated or deleted.", HttpStatusCode.Conflict);
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(429_0001, "Too many authentication attempts.", HttpStatusCode.TooManyRequests);
 

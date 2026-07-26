@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Agents.AIContextProviders;
 using Agw.Agents.Execution.Agents.AIContextProviders.InstructionsExtensions;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -66,6 +67,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         var agentSkillId = Guid.CreateVersion7();
         var projectSkillId = Guid.CreateVersion7();
         var connectionId = Guid.CreateVersion7();
+        var classSkillRegistration = new TestSkillRegistration();
 
         dbContext.Models.Add(new LlmModel { Id = modelId, Name = "test-model" });
         dbContext.Providers.Add(new Provider
@@ -109,6 +111,13 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Name = "project-skill",
                 Description = "project skill",
                 ContentPath = "project-skill",
+            },
+            new Skill
+            {
+                Id = classSkillRegistration.Id,
+                Name = classSkillRegistration.Name,
+                Description = classSkillRegistration.Description,
+                ContentPath = string.Empty,
             });
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -130,6 +139,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             ProjectSkillRelations =
             [
                 new ProjectSkillRelation { SkillId = projectSkillId },
+                new ProjectSkillRelation { SkillId = classSkillRegistration.Id },
             ],
             ProjectConnectionRelations =
             [
@@ -156,6 +166,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             AgentSkillRelations =
             [
                 new AgentSkillRelation { SkillId = agentSkillId },
+                new AgentSkillRelation { SkillId = classSkillRegistration.Id },
             ],
             AgentConnectionRelations =
             [
@@ -194,7 +205,8 @@ public class AgentRuntimeServiceSystemCompositionTests
             toolRegistry,
             AgwDataPaths.Resolve(root, root),
             connectionResolver,
-            mcpMaterializer);
+            mcpMaterializer,
+            [classSkillRegistration]);
         var request = new CreateAiAgentRequest
         {
             Agent = agent,
@@ -263,6 +275,8 @@ public class AgentRuntimeServiceSystemCompositionTests
             Assert.Contains(Path.Combine(root, "project-skill"), providerStrings);
             Assert.Contains(pluginSkillDirectory, providerStrings);
             Assert.DoesNotContain(overriddenPluginSkillDirectory, providerStrings);
+            Assert.Equal(1, classSkillRegistration.CreateCount);
+            Assert.Single(TraverseObjectGraph(skillsProvider).OfType<TestClassSkill>());
             var pluginFileSource = TraverseObjectGraph(skillsProvider)
                 .OfType<AgentFileSkillsSource>()
                 .Single(source => CollectStringsInObjectGraph(source).Contains(pluginSkillDirectory));
@@ -313,6 +327,95 @@ public class AgentRuntimeServiceSystemCompositionTests
         }
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task CreateSkillsProviderAsync_ClassSkillSelection_UsesAgentOrProjectRelationOnce(
+        bool agentSelected,
+        bool projectSelected)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"agw-class-skill-selection-{Guid.CreateVersion7():N}");
+        Directory.CreateDirectory(root);
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var dbOptions = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(dbOptions);
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        var registration = new TestSkillRegistration();
+        dbContext.Skills.Add(new Skill
+        {
+            Id = registration.Id,
+            Name = registration.Name,
+            Description = registration.Description,
+            ContentPath = string.Empty,
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Workspace = root,
+            ProjectSkillRelations = projectSelected
+                ? [new ProjectSkillRelation { SkillId = registration.Id }]
+                : [],
+        };
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "system-agent",
+            Type = AgentType.System,
+            AgentSkillRelations = agentSelected
+                ? [new AgentSkillRelation { SkillId = registration.Id }]
+                : [],
+        };
+        var runtimeService = CreateRuntimeService(
+            CreateAgentAppService(dbContext),
+            new TestProjectAppService(project),
+            CreateToolRegistry(),
+            AgwDataPaths.Resolve(root, root),
+            new TestConnectionCapabilityResolver(CreateResolution(
+                [],
+                new TrackingResource())),
+            new TestMcpToolMaterializer(),
+            [registration]);
+        var method = typeof(AgentRuntimeService).GetMethod(
+            "CreateSkillsProviderAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            [typeof(Agent), typeof(Project), typeof(IReadOnlyList<PluginSkillReference>)]);
+
+        try
+        {
+            Assert.NotNull(method);
+            var providerTask = Assert.IsType<Task<AIContextProvider?>>(method.Invoke(
+                runtimeService,
+                [agent, project, Array.Empty<PluginSkillReference>()]));
+            var provider = await providerTask;
+
+            if (!agentSelected && !projectSelected)
+            {
+                Assert.Null(provider);
+                Assert.Equal(0, registration.CreateCount);
+                return;
+            }
+
+            var skillsProvider = Assert.IsType<AgentSkillsProvider>(provider);
+            Assert.Equal(1, registration.CreateCount);
+            Assert.Single(TraverseObjectGraph(skillsProvider).OfType<TestClassSkill>());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static AgentAppService CreateAgentAppService(AgwDbContext dbContext)
     {
         return new AgentAppService(
@@ -336,7 +439,8 @@ public class AgentRuntimeServiceSystemCompositionTests
         ToolRegistryService toolRegistry,
         AgwDataPaths dataPaths,
         IConnectionCapabilityResolver connectionCapabilityResolver,
-        IMcpToolMaterializer mcpToolMaterializer)
+        IMcpToolMaterializer mcpToolMaterializer,
+        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null)
     {
         return new AgentRuntimeService(
             appService,
@@ -360,7 +464,8 @@ public class AgentRuntimeServiceSystemCompositionTests
                 providerSessionState: null!,
                 usageRecorder: null!,
                 NullLogger<UsageTrackingMiddleware>.Instance),
-            summaryService: null!);
+            summaryService: null!,
+            skillRegistrations: skillRegistrations);
     }
 
     private static ToolRegistryService CreateToolRegistry(params string[] toolNames)
@@ -512,6 +617,35 @@ public class AgentRuntimeServiceSystemCompositionTests
             return ValueTask.CompletedTask;
         }
     }
+
+#pragma warning disable MAAI001
+
+    private sealed class TestSkillRegistration : IAgentSkillRegistration
+    {
+        public Guid Id { get; } = Guid.Parse("11111111-1111-1111-8888-000000000002");
+
+        public string Name => "job-management";
+
+        public string Description => "Manage jobs.";
+
+        public int CreateCount { get; private set; }
+
+        public AgentSkill Create(Guid projectId)
+        {
+            CreateCount++;
+            return new TestClassSkill();
+        }
+    }
+
+    private sealed class TestClassSkill : AgentClassSkill<TestClassSkill>
+    {
+        public override AgentSkillFrontmatter Frontmatter { get; } =
+            new("job-management", "Manage jobs.");
+
+        protected override string Instructions => "Manage jobs in the current project.";
+    }
+
+#pragma warning restore MAAI001
 
     private sealed class TestTool : IAgwTool
     {

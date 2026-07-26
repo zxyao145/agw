@@ -1,0 +1,37 @@
+using Agw.Agents.Execution.Agents.Skills;
+using Agw.Agents.Execution.Turns;
+
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Agw.Jobs.Application.Skills;
+
+#pragma warning disable MAAI001
+
+public sealed class JobManagementSkillRegistration : IAgentSkillRegistration
+{
+    public static readonly Guid SkillId = Guid.Parse("11111111-1111-1111-8888-000000000002");
+
+    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IRuntimeTurnContextAccessor _turnContextAccessor;
+
+    public JobManagementSkillRegistration(
+        IServiceScopeFactory serviceScopeFactory,
+        IRuntimeTurnContextAccessor turnContextAccessor)
+    {
+        _serviceScopeFactory = serviceScopeFactory;
+        _turnContextAccessor = turnContextAccessor;
+    }
+
+    public Guid Id => SkillId;
+
+    public string Name => "job-management";
+
+    public string Description =>
+        "Manage scheduled jobs in the current project, including listing, inspecting, creating, updating, and deleting jobs.";
+
+    public AgentSkill Create(Guid projectId) =>
+        new JobManagementSkill(projectId, _serviceScopeFactory, _turnContextAccessor);
+}
+
+#pragma warning restore MAAI001

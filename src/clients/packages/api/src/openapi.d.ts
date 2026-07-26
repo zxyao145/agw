@@ -5073,6 +5073,7 @@ export interface components {
       name: string;
       description: string;
       contentPath: string;
+      isBuiltIn: boolean;
       agentIds: string[];
       /** Format: date-time */
       createTime: string;

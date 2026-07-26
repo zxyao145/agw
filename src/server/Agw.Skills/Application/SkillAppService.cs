@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
@@ -16,7 +17,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Agw.Skills.Application;
 
-public sealed record SkillDetails(Skill Skill, IReadOnlyList<Guid> AgentIds);
+public sealed record SkillDetails(
+    Skill Skill,
+    IReadOnlyList<Guid> AgentIds,
+    bool IsBuiltIn);
 
 public class SkillAppService
 {
@@ -27,6 +31,7 @@ public class SkillAppService
     private readonly SkillDomainService _skillDomainService;
     private readonly AgwDataPaths _dataPaths;
     private readonly ILogger<SkillAppService> _logger;
+    private readonly IReadOnlySet<Guid> _builtInSkillIds;
 
     public SkillAppService(
         IRepository<Skill> skillRepository,
@@ -35,7 +40,8 @@ public class SkillAppService
         IUnitOfWork unitOfWork,
         SkillDomainService skillDomainService,
         AgwDataPaths dataPaths,
-        ILogger<SkillAppService> logger)
+        ILogger<SkillAppService> logger,
+        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null)
     {
         _skillRepository = skillRepository;
         _agentRepository = agentRepository;
@@ -44,6 +50,9 @@ public class SkillAppService
         _skillDomainService = skillDomainService;
         _dataPaths = dataPaths;
         _logger = logger;
+        _builtInSkillIds = (skillRegistrations ?? [])
+            .Select(registration => registration.Id)
+            .ToHashSet();
     }
 
     public async Task<IReadOnlyList<SkillDetails>> ListAsync()
@@ -83,7 +92,7 @@ public class SkillAppService
         }
 
         var agentIds = await GetSkillAgentIdsAsync(skill.Id);
-        return new SkillDetails(skill, agentIds);
+        return new SkillDetails(skill, agentIds, _builtInSkillIds.Contains(skill.Id));
     }
 
     public async Task<SkillDetails> CreateAsync(Skill skill, IFormFile archive, string user)
@@ -106,7 +115,7 @@ public class SkillAppService
         ReplaceDirectory(targetDirectory, preparedDirectory.DirectoryPath);
 
         _logger.LogInformation("Created skill {SkillName} at {SkillPath}", skill.Name, targetDirectory);
-        return await GetAsync(skill.Id) ?? new SkillDetails(skill, []);
+        return await GetAsync(skill.Id) ?? new SkillDetails(skill, [], false);
     }
 
     public async Task<SkillDetails?> UpdateAsync(Guid id, string name, string description, IFormFile? archive, string user)
@@ -116,6 +125,8 @@ public class SkillAppService
         {
             return null;
         }
+
+        EnsureMutable(existing.Id);
 
         var normalizedName = name.Trim();
         if (!string.Equals(existing.Name, normalizedName, StringComparison.Ordinal) && archive == null)
@@ -169,6 +180,8 @@ public class SkillAppService
             return false;
         }
 
+        EnsureMutable(existing.Id);
+
         var relations = await _agentSkillRelationRepository.ListAsync(x => x.SkillId == id);
         foreach (var relation in relations)
         {
@@ -202,8 +215,19 @@ public class SkillAppService
             .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)g.Select(x => x.AgentId).ToList());
 
         return skills
-            .Select(skill => new SkillDetails(skill, map.GetValueOrDefault(skill.Id, [])))
+            .Select(skill => new SkillDetails(
+                skill,
+                map.GetValueOrDefault(skill.Id, []),
+                _builtInSkillIds.Contains(skill.Id)))
             .ToList();
+    }
+
+    private void EnsureMutable(Guid skillId)
+    {
+        if (_builtInSkillIds.Contains(skillId))
+        {
+            throw new AgwException(ErrorCodes.BuiltInSkillImmutable);
+        }
     }
 
     private async Task<IReadOnlyList<Guid>> GetSkillAgentIdsAsync(Guid skillId)

@@ -1,6 +1,7 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.AIContextProviders.InstructionsExtensions;
 using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
 using Agw.Files.Abstracts;
@@ -28,6 +29,8 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly ObservabilityMiddleware _observabilityMiddleware;
     private readonly UsageTrackingMiddleware _usageTrackingMiddleware;
     private readonly IAgentTurnSummaryService _summaryService;
+    private readonly IReadOnlyDictionary<Guid, IAgentSkillRegistration> _skillRegistrations;
+
     public AgentRuntimeService(
         AgentAppService agentAppService,
         IProjectAppService projectAppService,
@@ -42,7 +45,8 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         ILogger<AgentRuntimeService> logger,
         ObservabilityMiddleware observabilityMiddleware,
         UsageTrackingMiddleware usageTrackingMiddleware,
-        IAgentTurnSummaryService summaryService)
+        IAgentTurnSummaryService summaryService,
+        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null)
     {
         _agentAppService = agentAppService;
         _projectAppService = projectAppService;
@@ -58,5 +62,8 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _observabilityMiddleware = observabilityMiddleware;
         _usageTrackingMiddleware = usageTrackingMiddleware;
         _summaryService = summaryService;
+        _skillRegistrations = (skillRegistrations ?? [])
+            .GroupBy(registration => registration.Id)
+            .ToDictionary(group => group.Key, group => group.First());
     }
 }

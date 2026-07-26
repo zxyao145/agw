@@ -39,7 +39,13 @@ public partial class AgentRuntimeService
             .Select(relation => relation.SkillId)
             .Concat(project.ProjectSkillRelations.Select(relation => relation.SkillId));
         var skills = await _agentAppService.ListSkillsAsync(skillIds);
+        var classSkillRegistrations = skills
+            .Select(skill => _skillRegistrations.GetValueOrDefault(skill.Id))
+            .Where(registration => registration != null)
+            .Cast<IAgentSkillRegistration>()
+            .ToArray();
         var userSkillPaths = skills
+            .Where(skill => !_skillRegistrations.ContainsKey(skill.Id))
             .Select(GetSkillAbsolutePath)
             .Where(Directory.Exists)
             .Distinct(StringComparer.Ordinal)
@@ -81,12 +87,14 @@ public partial class AgentRuntimeService
             pluginSkillPaths.Add(skillDirectory);
         }
 
-        if (userSkillPaths.Length == 0 && pluginSkillPaths.Count == 0)
+        if (classSkillRegistrations.Length == 0 &&
+            userSkillPaths.Length == 0 &&
+            pluginSkillPaths.Count == 0)
         {
             if (agent.AgentSkillRelations.Count > 0 || project.ProjectSkillRelations.Count > 0 || pluginSkills.Count > 0)
             {
                 _logger.LogWarning(
-                    "Agent {AgentId} has skill references configured but no valid skill directories were found.",
+                    "Agent {AgentId} has skill references configured but no valid skill sources were found.",
                     agent.Id);
             }
 
@@ -95,6 +103,11 @@ public partial class AgentRuntimeService
 
         var builder = new AgentSkillsProviderBuilder()
             .UsePromptTemplate(SkillsInstructionPrompt);
+        foreach (var registration in classSkillRegistrations)
+        {
+            builder.UseSkill(registration.Create(project.Id));
+        }
+
         if (userSkillPaths.Length > 0)
         {
             builder.UseFileSkills(

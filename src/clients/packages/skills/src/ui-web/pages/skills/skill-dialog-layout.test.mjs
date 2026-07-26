@@ -18,3 +18,12 @@ test("Create and Edit Skill dialogs keep actions visible while the form body scr
   );
   assert.match(source, /<DialogFooter className="shrink-0">/);
 });
+
+test("Built-in class skills are labeled and cannot be edited or deleted", async () => {
+  const source = await readFile(PAGE_URL, "utf8");
+
+  assert.match(source, /skill\.isBuiltIn \? \(/);
+  assert.match(source, />\s*Class-based\s*<\/Badge>/);
+  assert.match(source, /Managed by Agw/);
+  assert.match(source, /skill\.isBuiltIn[\s\S]*openEditDialog\(skill\)/);
+});

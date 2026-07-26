@@ -21,6 +21,7 @@ public sealed record SkillResponse(
     string Name,
     string Description,
     string ContentPath,
+    bool IsBuiltIn,
     IReadOnlyList<Guid> AgentIds,
     DateTimeOffset CreateTime,
     string? CreateBy,
