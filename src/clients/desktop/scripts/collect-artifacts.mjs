@@ -45,7 +45,7 @@ const extension = extname(installers[0]).toLowerCase();
 const suffix = extension === ".exe" ? "-Setup" : "";
 const output = resolve(
   releaseDirectory,
-  `Agw-${releaseVersion}-${flavor}-${platformName}-${targetArch}${suffix}${extension}`,
+  `Agw-Desktop-${releaseVersion}-${flavor}-${platformName}-${targetArch}${suffix}${extension}`,
 );
 await cp(installers[0], output);
 console.log(output);

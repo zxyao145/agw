@@ -148,7 +148,7 @@ if (artifacts.length !== 1) {
   throw new Error(`Expected one collected Desktop installer, found ${artifacts.length}.`);
 }
 
-const expectedPrefix = `Agw-${options.version}-${options.flavor}-${target.platformName}-${options.arch}`;
+const expectedPrefix = `Agw-Desktop-${options.version}-${options.flavor}-${target.platformName}-${options.arch}`;
 if (!artifacts[0].startsWith(expectedPrefix)) {
   throw new Error(`Unexpected Desktop installer name: ${artifacts[0]}.`);
 }
