@@ -92,7 +92,9 @@ if (
 }
 
 const target = targetFor(hostPlatform(), options.arch);
-const pnpmCommand = hostPlatform() === "win32" ? "pnpm.cmd" : "pnpm";
+const isWindows = hostPlatform() === "win32";
+const pnpmCommand = isWindows ? process.env.ComSpec || "cmd.exe" : "pnpm";
+const pnpmArguments = isWindows ? ["/d", "/s", "/c", "pnpm.cmd"] : [];
 const environment = {
   ...process.env,
   AGW_PACKAGE_FLAVOR: options.flavor,
@@ -104,8 +106,8 @@ const environment = {
 
 await rm(resolve(desktopDirectory, "out", "make"), { recursive: true, force: true });
 await rm(resolve(desktopDirectory, "release-artifacts"), { recursive: true, force: true });
-await run(pnpmCommand, ["make", `--arch=${options.arch}`], environment);
-await run(pnpmCommand, ["release:collect"], environment);
+await run(pnpmCommand, [...pnpmArguments, "make", `--arch=${options.arch}`], environment);
+await run(pnpmCommand, [...pnpmArguments, "release:collect"], environment);
 
 const serverExecutable = resolve(
   desktopDirectory,
