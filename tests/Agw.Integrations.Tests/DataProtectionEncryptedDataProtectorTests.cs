@@ -71,6 +71,33 @@ public class DataProtectionEncryptedDataProtectorTests
             protector.Unprotect("another_table", entityId, protectedValue));
     }
 
+    [Fact]
+    public void PersistedProvider_RecreatedWithStableApplicationName_RoundTrips()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"agw-data-protection-{Guid.CreateVersion7():N}");
+        var keysDirectory = new DirectoryInfo(Path.Combine(root, "keys"));
+        keysDirectory.Create();
+
+        try
+        {
+            var firstProvider = AgwDataProtectionConfiguration.CreatePersistedProvider(keysDirectory);
+            var firstProtector = new DataProtectionEncryptedDataProtector(firstProvider);
+            var entityId = Guid.CreateVersion7();
+            var protectedValue = firstProtector.Protect("provider_auth_config", entityId, "secret");
+
+            var secondProvider = AgwDataProtectionConfiguration.CreatePersistedProvider(keysDirectory);
+            var secondProtector = new DataProtectionEncryptedDataProtector(secondProvider);
+
+            Assert.Equal(
+                "secret",
+                secondProtector.Unprotect("provider_auth_config", entityId, protectedValue));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("plaintext")]
     [InlineData("agwenc:v2:payload")]

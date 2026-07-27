@@ -1,5 +1,7 @@
 using Agw.Infrastructure.Configuration;
+using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared.Configuration;
+using Agw.Shared.Runtime;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -25,7 +27,13 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
         var options = new DbContextOptionsBuilder<AgwDbContext>();
         ConfigureDatabaseProvider(options, settings);
 
-        return new AgwDbContext(options.Options);
+        var dataPaths = AgwDataPaths.ResolveFromEnvironment();
+        dataPaths.EnsureCreated();
+        var dataProtectionProvider = AgwDataProtectionConfiguration.CreatePersistedProvider(
+            new DirectoryInfo(dataPaths.KeysDirectory));
+        var encryptedDataProtector = new DataProtectionEncryptedDataProtector(dataProtectionProvider);
+
+        return new AgwDbContext(options.Options, encryptedDataProtector);
     }
 
     private static IConfiguration BuildConfiguration()

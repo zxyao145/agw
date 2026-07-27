@@ -17,6 +17,7 @@ using Agw.Host.Middleware;
 using Agw.Host.Runtime;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Encryption;
 using Agw.Integrations.Controllers;
 using Agw.Integrations.Extensions;
 using Agw.Jobs;
@@ -110,7 +111,10 @@ try
     builder.Configuration.AddJsonFile(dataPaths.StateFile, optional: true, reloadOnChange: true);
     builder.Services.AddSingleton(dataPaths);
     builder.Services.AddSingleton(TimeProvider.System);
-    builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(dataPaths.KeysDirectory));
+    builder.Services
+        .AddDataProtection()
+        .ConfigureAgwApplication()
+        .PersistKeysToFileSystem(new DirectoryInfo(dataPaths.KeysDirectory));
 
     // Use Serilog for logging
     builder.Host.UseSerilog();
