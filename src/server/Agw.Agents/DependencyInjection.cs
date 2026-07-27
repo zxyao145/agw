@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.AIContextProviders.InstructionsExtensions;
 using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Runtimes;
@@ -34,6 +35,11 @@ public static class DependencyInjection
         services.AddScoped<AgentCapabilityComposer>();
         services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
         services.AddScoped<IAgentRuntimeService, AgentRuntimeService>();
+        services.AddSingleton<IRemoteSkillClient, RemoteSkillHttpClient>();
+        services.AddSingleton<IRemoteSkillContentResolver, RemoteSkillContentResolver>();
+        services.AddHttpClient(
+            RemoteSkillHttpClient.HttpClientName,
+            client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();
         services.AddScoped<IAgentTurnSummaryService, AgentTurnSummaryService>();
         services.AddScoped<IRuntimeFactory, RuntimeFactory>();

@@ -69,6 +69,10 @@ public static class ErrorCodes
     public static readonly ErrorCode GitHubRepositoryInvalid = new(400_0064, "The GitHub repository owner or name is invalid.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode GitHubClonePathInvalid = new(400_0065, "The clone destination must be a relative path inside the project workspace.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode ProviderModelDiscoveryApiKeyRequired = new(400_0066, "An API key is required to discover provider models.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode SkillKindInvalid = new(400_0067, "Skill kind is invalid.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode RemoteSkillUrlRequired = new(400_0068, "Remote skill URL is required.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode RemoteSkillUrlInvalid = new(400_0069, "Remote skill URL must be an absolute HTTP or HTTPS URL no longer than 2048 characters.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode RemoteSkillArchiveNotAllowed = new(400_0070, "Remote skills cannot include an archive.", HttpStatusCode.BadRequest);
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode AuthenticationRequired = new(401_0003, "Authentication is required.", HttpStatusCode.Unauthorized);
@@ -98,6 +102,8 @@ public static class ErrorCodes
     public static readonly ErrorCode ConnectionAliasImmutable = new(409_0009, "Connection alias cannot be changed.", HttpStatusCode.Conflict);
     public static readonly ErrorCode IntegrationToolNameConflict = new(409_0010, "Integration capability tool name conflicts with another source.", HttpStatusCode.Conflict);
     public static readonly ErrorCode ModelProviderInUse = new(409_0011, "The model provider is currently in use.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode BuiltInSkillImmutable = new(409_0012, "Built-in skills cannot be updated or deleted.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode RemoteSkillIdentityChanged = new(409_0013, "Remote skill name no longer matches the configured skill.", HttpStatusCode.Conflict);
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(429_0001, "Too many authentication attempts.", HttpStatusCode.TooManyRequests);
 
@@ -123,6 +129,7 @@ public static class ErrorCodes
     public static readonly ErrorCode GitHubCloneFailed = new(500_0022, "GitHub clone failed.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode EncryptedDataInvalid = new(500_0023, "Stored encrypted data is invalid.", HttpStatusCode.InternalServerError);
     public static readonly ErrorCode EncryptedModelInvalid = new(500_0024, "Encrypted entity model configuration is invalid.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode RemoteSkillConfigurationInvalid = new(500_0025, "Stored remote skill configuration is invalid.", HttpStatusCode.InternalServerError);
 
     public static readonly ErrorCode UnsupportedTransportType = new(501_0001, "Transport type is not supported.", HttpStatusCode.NotImplemented);
     public static readonly ErrorCode UnsupportedAgentType = new(501_0002, "Agent type is not supported.", HttpStatusCode.NotImplemented);
@@ -135,4 +142,6 @@ public static class ErrorCodes
     public static readonly ErrorCode GitHubBadResponseStatusCode = new(502_0001, "GitHub returned a bad response status code.", HttpStatusCode.BadGateway);
     public static readonly ErrorCode OAuthProviderRequestFailed = new(502_0002, "OAuth provider request failed.", HttpStatusCode.BadGateway);
     public static readonly ErrorCode ProviderModelDiscoveryFailed = new(502_0003, "Provider model discovery failed.", HttpStatusCode.BadGateway);
+    public static readonly ErrorCode RemoteSkillFetchFailed = new(502_0004, "Failed to fetch the remote skill.", HttpStatusCode.BadGateway);
+    public static readonly ErrorCode RemoteSkillResponseInvalid = new(502_0005, "The remote skill ZIP archive is invalid.", HttpStatusCode.BadGateway);
 }

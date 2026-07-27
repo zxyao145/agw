@@ -210,15 +210,15 @@ function UserInputSuggestions({ suggestions, onSelect }: UserInputSuggestionsPro
               </ItemTitle>
               {suggestion.description && (
                 <ItemDescription>
-                  <div className="flex item-start">
+                  <span className="flex item-start">
                     {suggestion.kind ? (
                       <Badge className="px-1.5 h-fit self-start text-xs leading-none border-0 mr-2">
                         {suggestion.kind}
                       </Badge>
                     ) : null}
 
-                    <p className="text-[11px]">{suggestion.description}</p>
-                  </div>
+                    <span className="text-[11px]">{suggestion.description}</span>
+                  </span>
                 </ItemDescription>
               )}
             </ItemContent>

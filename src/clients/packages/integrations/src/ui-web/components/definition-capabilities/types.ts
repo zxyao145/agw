@@ -20,6 +20,9 @@ export type SkillDto = {
   id: string;
   name: string;
   description: string;
+  kind?: "BuiltIn" | "Local" | "Remote";
+  remoteUrl?: string | null;
+  isBuiltIn?: boolean;
   agentIds: string[];
 };
 

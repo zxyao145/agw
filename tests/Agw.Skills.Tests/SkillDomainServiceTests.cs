@@ -27,6 +27,39 @@ public class SkillDomainServiceTests
         Assert.Equal(UtcNow, skill.CreateTime);
     }
 
+    [Fact]
+    public void PrepareForCreate_RemoteSkill_LeavesContentPathEmpty()
+    {
+        var skill = new Skill
+        {
+            Name = "expense-report",
+            Description = "Validate expense submissions.",
+            Kind = SkillKind.Remote,
+            RemoteUrl = "https://example.com/skill",
+        };
+
+        _service.PrepareForCreate(skill, "tester");
+
+        Assert.Equal(SkillKind.Remote, skill.Kind);
+        Assert.Equal(string.Empty, skill.ContentPath);
+    }
+
+    [Fact]
+    public void PrepareForCreate_BuiltInSkill_ThrowsAgwException()
+    {
+        var skill = new Skill
+        {
+            Name = "agw-job",
+            Description = "Manage jobs.",
+            Kind = SkillKind.BuiltIn,
+        };
+
+        var exception = Assert.Throws<AgwException>(() =>
+            _service.PrepareForCreate(skill, "tester"));
+
+        Assert.Equal(ErrorCodes.SkillKindInvalid.Code, exception.Code);
+    }
+
     [Theory]
     [InlineData("Expense-Report")]
     [InlineData("expense_report")]

@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
@@ -23,6 +24,7 @@ public class SetupInitializationService : ISetupInitializationService
     private readonly EntityCreatorInterceptor _entityCreatorInterceptor;
     private readonly EntityModifierInterceptor _entityModifierInterceptor;
     private readonly EntitySoftDeleteInterceptor _entitySoftDeleteInterceptor;
+    private readonly IReadOnlyList<IAgentSkillRegistration> _skillRegistrations;
 
     public SetupInitializationService(
         IInitializationStateStore stateStore,
@@ -33,7 +35,8 @@ public class SetupInitializationService : ISetupInitializationService
         IEncryptedDataProtector encryptedDataProtector,
         EntityCreatorInterceptor entityCreatorInterceptor,
         EntityModifierInterceptor entityModifierInterceptor,
-        EntitySoftDeleteInterceptor entitySoftDeleteInterceptor)
+        EntitySoftDeleteInterceptor entitySoftDeleteInterceptor,
+        IEnumerable<IAgentSkillRegistration> skillRegistrations)
     {
         _stateStore = stateStore;
         _loggerFactory = loggerFactory;
@@ -44,6 +47,7 @@ public class SetupInitializationService : ISetupInitializationService
         _entityCreatorInterceptor = entityCreatorInterceptor;
         _entityModifierInterceptor = entityModifierInterceptor;
         _entitySoftDeleteInterceptor = entitySoftDeleteInterceptor;
+        _skillRegistrations = skillRegistrations.ToArray();
     }
 
     public async Task InitializeAsync(SetupRequest request, CancellationToken cancellationToken = default)
@@ -66,7 +70,12 @@ public class SetupInitializationService : ISetupInitializationService
             _entitySoftDeleteInterceptor);
 
         await using var context = new AgwDbContext(dbOptions.Options, _encryptedDataProtector);
-        var seeder = new DbSeeder(context, _loggerFactory.CreateLogger<DbSeeder>(), _timeProvider, _paths);
+        var seeder = new DbSeeder(
+            context,
+            _loggerFactory.CreateLogger<DbSeeder>(),
+            _timeProvider,
+            _paths,
+            _skillRegistrations);
         await seeder.SeedAsync();
 
         var passwordHash = _passwordHasher.HashPassword(new object(), request.AdminPassword);

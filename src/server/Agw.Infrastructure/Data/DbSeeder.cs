@@ -1,5 +1,6 @@
 using System.IO.Compression;
 
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
@@ -62,17 +63,20 @@ public class DbSeeder
     private readonly ILogger<DbSeeder> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly AgwDataPaths _dataPaths;
+    private readonly IReadOnlyList<IAgentSkillRegistration> _skillRegistrations;
 
     public DbSeeder(
         AgwDbContext context,
         ILogger<DbSeeder> logger,
         TimeProvider timeProvider,
-        AgwDataPaths dataPaths)
+        AgwDataPaths dataPaths,
+        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null)
     {
         _context = context;
         _logger = logger;
         _timeProvider = timeProvider;
         _dataPaths = dataPaths;
+        _skillRegistrations = (skillRegistrations ?? []).ToArray();
     }
 
     /// <summary>
@@ -92,6 +96,7 @@ public class DbSeeder
             var providers = await SeedProvidersAsync();
             var defaultModelProvider = await SeedDefaultModelAsync(providers);
             var agents = await SeedDefaultAgentsAsync(defaultModelProvider.Id);
+            await SeedBuiltInClassSkillsAsync();
             var skill = await SeedDefaultSkillAsync();
             await SeedAgentSkillRelationAsync(agents["amap-poi-search"].Id, skill.Id);
             await SeedDefaultAgentflowAsync(agents);
@@ -525,7 +530,9 @@ public class DbSeeder
                 Id = XhsExploreSkillId,
                 Name = DefaultSkillName,
                 Description = "小红书技能集合",
+                Kind = SkillKind.Local,
                 ContentPath = DefaultSkillContentPath,
+                RemoteUrl = null,
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
@@ -534,16 +541,87 @@ public class DbSeeder
             _context.Skills.Add(skill);
         }
         else if (skill.Id == XhsExploreSkillId &&
-                 (skill.Name != DefaultSkillName || skill.ContentPath != DefaultSkillContentPath))
+                 (skill.Name != DefaultSkillName ||
+                  skill.Kind != SkillKind.Local ||
+                  skill.ContentPath != DefaultSkillContentPath ||
+                  skill.RemoteUrl != null))
         {
             skill.Name = DefaultSkillName;
+            skill.Kind = SkillKind.Local;
             skill.ContentPath = DefaultSkillContentPath;
+            skill.RemoteUrl = null;
             skill.UpdateBy = Constants.AdminUserName;
             skill.UpdateTime = _timeProvider.GetUtcNow();
         }
 
         EnsureDefaultSkillContent();
         return skill;
+    }
+
+    private async Task SeedBuiltInClassSkillsAsync()
+    {
+        foreach (var registration in _skillRegistrations)
+        {
+            var existingById = await _context.Skills
+                .FirstOrDefaultAsync(skill => skill.Id == registration.Id);
+            if (existingById == null)
+            {
+                var nameConflict = await _context.Skills
+                    .FirstOrDefaultAsync(skill => skill.Name == registration.Name);
+                if (nameConflict != null)
+                {
+                    _logger.LogWarning(
+                        "Built-in class skill {SkillName} was not seeded because the name is already used by skill {SkillId}",
+                        registration.Name,
+                        nameConflict.Id);
+                    continue;
+                }
+
+                var now = _timeProvider.GetUtcNow();
+                _context.Skills.Add(new Skill
+                {
+                    Id = registration.Id,
+                    Name = registration.Name,
+                    Description = registration.Description,
+                    Kind = SkillKind.BuiltIn,
+                    ContentPath = string.Empty,
+                    RemoteUrl = null,
+                    CreateBy = Constants.AdminUserName,
+                    CreateTime = now,
+                    UpdateBy = Constants.AdminUserName,
+                    UpdateTime = now,
+                });
+                continue;
+            }
+
+            if (existingById.Name == registration.Name &&
+                existingById.Description == registration.Description &&
+                existingById.Kind == SkillKind.BuiltIn &&
+                existingById.RemoteUrl == null &&
+                string.IsNullOrEmpty(existingById.ContentPath))
+            {
+                continue;
+            }
+
+            var conflictingName = await _context.Skills.AnyAsync(
+                skill => skill.Id != registration.Id && skill.Name == registration.Name);
+            if (conflictingName)
+            {
+                _logger.LogWarning(
+                    "Built-in class skill {SkillId} metadata was not updated because name {SkillName} is already in use",
+                    registration.Id,
+                    registration.Name);
+                continue;
+            }
+
+            existingById.Name = registration.Name;
+            existingById.Description = registration.Description;
+            existingById.Kind = SkillKind.BuiltIn;
+            existingById.ContentPath = string.Empty;
+            existingById.RemoteUrl = null;
+            existingById.UpdateBy = Constants.AdminUserName;
+            existingById.UpdateTime = _timeProvider.GetUtcNow();
+        }
     }
 
     private async Task SeedAgentSkillRelationAsync(Guid agentId, Guid skillId)

@@ -1,9 +1,11 @@
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Repositories;
+using Agw.Infrastructure.Skills;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Configuration;
@@ -106,6 +108,7 @@ public static class DependencyInjection
                     $"Distributed lock provider '{provider}' is not supported.")
             });
         services.AddSingleton<IProjectExecutionLock, ProjectExecutionLockRouter>();
+        services.AddSingleton<IRemoteSkillRefreshLock, RemoteSkillRefreshLockRouter>();
 
         return services;
     }

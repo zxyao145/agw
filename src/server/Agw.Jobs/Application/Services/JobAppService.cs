@@ -52,9 +52,33 @@ public class JobAppService
             .ToList();
     }
 
+    public async Task<IReadOnlyList<Job>> ListByProjectAsync(
+        Guid projectId,
+        CancellationToken cancellationToken = default)
+    {
+        var jobs = await _jobTaskRepository.Queryable
+            .Where(job => job.ProjectId == projectId)
+            .ToListAsync(cancellationToken);
+
+        return jobs
+            .OrderBy(job => job.NextRunTime)
+            .ToList();
+    }
+
     public Task<Job?> GetAsync(Guid id)
     {
         return _jobTaskRepository.GetByIdAsync(id);
+    }
+
+    public Task<Job?> GetByProjectAsync(
+        Guid id,
+        Guid projectId,
+        CancellationToken cancellationToken = default)
+    {
+        return _jobTaskRepository.Queryable
+            .SingleOrDefaultAsync(
+                job => job.Id == id && job.ProjectId == projectId,
+                cancellationToken);
     }
 
     public async Task<IReadOnlyList<JobLogResponse>> ListLogsAsync(Guid jobId, CancellationToken cancellationToken = default)
@@ -136,7 +160,45 @@ public class JobAppService
             return null;
         }
 
+        return await UpdateEntityAsync(
+            entity,
+            request,
+            user,
+            recalculateSchedule: true);
+    }
+
+    public async Task<Job?> UpdateByProjectAsync(
+        Guid id,
+        Guid projectId,
+        JobUpdateRequest request,
+        string user,
+        bool recalculateSchedule,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await GetByProjectAsync(id, projectId, cancellationToken);
+        if (entity == null)
+        {
+            return null;
+        }
+
+        request.ProjectId = projectId;
+        return await UpdateEntityAsync(
+            entity,
+            request,
+            user,
+            recalculateSchedule,
+            cancellationToken);
+    }
+
+    private async Task<Job> UpdateEntityAsync(
+        Job entity,
+        JobUpdateRequest request,
+        string user,
+        bool recalculateSchedule,
+        CancellationToken cancellationToken = default)
+    {
         var now = _timeProvider.GetUtcNow();
+        var nextRunTime = entity.NextRunTime;
         entity.ProjectId = request.ProjectId;
         entity.AgentType = request.AgentType;
         entity.AgentId = request.AgentId;
@@ -149,10 +211,12 @@ public class JobAppService
         entity.Status = request.Status;
         entity.UpdateBy = user;
         entity.UpdateTime = now;
-        entity.NextRunTime = ResolveNextRunTime(entity, now);
+        entity.NextRunTime = recalculateSchedule
+            ? ResolveNextRunTime(entity, now)
+            : nextRunTime;
 
         _jobTaskRepository.Update(entity);
-        await _unitOfWork.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         return entity;
     }
 
@@ -190,6 +254,22 @@ public class JobAppService
         _jobTaskRepository.Remove(entity);
         await _unitOfWork.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<Job?> DeleteByProjectAsync(
+        Guid id,
+        Guid projectId,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await GetByProjectAsync(id, projectId, cancellationToken);
+        if (entity == null)
+        {
+            return null;
+        }
+
+        _jobTaskRepository.Remove(entity);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return entity;
     }
 
     private async Task<string> ResolveNameAsync(string? requestedName, DateTimeOffset now)

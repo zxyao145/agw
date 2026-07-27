@@ -4016,6 +4016,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "Kind": {
+                    "$ref": "#/components/schemas/SkillKind"
+                  },
                   "Name": {
                     "type": "string"
                   },
@@ -4024,6 +4027,9 @@
                   },
                   "Archive": {
                     "$ref": "#/components/schemas/IFormFile"
+                  },
+                  "RemoteUrl": {
+                    "type": "string"
                   }
                 }
               }
@@ -4172,6 +4178,9 @@
                   },
                   "Archive": {
                     "$ref": "#/components/schemas/IFormFile"
+                  },
+                  "RemoteUrl": {
+                    "type": "string"
                   }
                 }
               }
@@ -10337,7 +10346,10 @@
           "id",
           "name",
           "description",
+          "kind",
           "contentPath",
+          "remoteUrl",
+          "isBuiltIn",
           "agentIds",
           "createTime",
           "createBy",
@@ -10356,8 +10368,20 @@
           "description": {
             "type": "string"
           },
+          "kind": {
+            "$ref": "#/components/schemas/SkillKind"
+          },
           "contentPath": {
             "type": "string"
+          },
+          "remoteUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isBuiltIn": {
+            "type": "boolean"
           },
           "agentIds": {
             "type": "array",
@@ -10608,6 +10632,13 @@
             }
           }
         }
+      },
+      "SkillKind": {
+        "enum": [
+          "BuiltIn",
+          "Local",
+          "Remote"
+        ]
       }
     }
   },

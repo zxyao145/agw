@@ -1,8 +1,11 @@
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Runtime;
 
+using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -18,6 +21,7 @@ public class DbSeederTests
     private static readonly Guid AgentflowId = Guid.Parse("11111111-1111-1111-7777-000000000001");
     private static readonly Guid ModelProviderId = Guid.Parse("11111111-1111-1111-5555-000000000001");
     private static readonly Guid SkillId = Guid.Parse("11111111-1111-1111-8888-000000000001");
+    private static readonly Guid JobManagementSkillId = Guid.Parse("11111111-1111-1111-8888-000000000002");
 
     [Fact]
     public async Task SeedAsync_NewDatabase_CreatesDefaultDefinitionsAndRemainsIdempotent()
@@ -30,7 +34,12 @@ public class DbSeederTests
                 .UseSnakeCaseNamingConvention()
                 .Options;
             await using var context = new AgwDbContext(options);
-            var seeder = new DbSeeder(context, NullLogger<DbSeeder>.Instance, TimeProvider.System, paths);
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                [new TestSkillRegistration()]);
 
             await seeder.SeedAsync();
             await seeder.SeedAsync();
@@ -67,10 +76,25 @@ public class DbSeederTests
             var skill = await context.Skills
                 .SingleAsync(x => x.Name == "xhs-explore", TestContext.Current.CancellationToken);
             Assert.Equal(SkillId, skill.Id);
+            Assert.Equal(SkillKind.Local, skill.Kind);
             Assert.Equal("skills/xhs-explore", skill.ContentPath);
+            Assert.Null(skill.RemoteUrl);
             Assert.True(await context.AgentSkillRelations.AnyAsync(
                 x => x.AgentId == AmapPoiSearchAgentId && x.SkillId == skill.Id,
                 TestContext.Current.CancellationToken));
+
+            var builtInSkill = await context.Skills.SingleAsync(
+                x => x.Id == JobManagementSkillId,
+                TestContext.Current.CancellationToken);
+            Assert.Equal("agw-job", builtInSkill.Name);
+            Assert.Equal(SkillKind.BuiltIn, builtInSkill.Kind);
+            Assert.Equal(string.Empty, builtInSkill.ContentPath);
+            Assert.Null(builtInSkill.RemoteUrl);
+            Assert.Equal(
+                1,
+                await context.Skills.CountAsync(
+                    x => x.Id == JobManagementSkillId,
+                    TestContext.Current.CancellationToken));
 
             var skillMarkdown = Path.Combine(paths.SkillsDirectory, "xhs-explore", "SKILL.md");
             Assert.True(File.Exists(skillMarkdown));
@@ -96,11 +120,115 @@ public class DbSeederTests
         }
     }
 
+    [Fact]
+    public async Task SeedAsync_LegacyJobManagementSkill_RenamesFixedBuiltInSkill()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "legacy-skill.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            context.Skills.Add(new Skill
+            {
+                Id = JobManagementSkillId,
+                Name = "job-management",
+                Description = "Legacy job skill",
+                Kind = SkillKind.BuiltIn,
+                ContentPath = string.Empty,
+            });
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                [new TestSkillRegistration()]);
+
+            await seeder.SeedAsync();
+
+            var skill = await context.Skills.SingleAsync(
+                x => x.Id == JobManagementSkillId,
+                TestContext.Current.CancellationToken);
+            Assert.Equal("agw-job", skill.Name);
+            Assert.Equal("Manage jobs.", skill.Description);
+            Assert.Equal(SkillKind.BuiltIn, skill.Kind);
+            Assert.False(await context.Skills.AnyAsync(
+                x => x.Name == "job-management",
+                TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SeedAsync_ClassSkillNameOwnedByUser_PreservesUserSkillAndSkipsBuiltIn()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "conflict.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            var userSkillId = Guid.CreateVersion7();
+            context.Skills.Add(new Skill
+            {
+                Id = userSkillId,
+                Name = "agw-job",
+                Description = "User-owned skill",
+                Kind = SkillKind.Local,
+                ContentPath = "skills/agw-job",
+            });
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                [new TestSkillRegistration()]);
+
+            await seeder.SeedAsync();
+
+            var skill = await context.Skills.SingleAsync(
+                x => x.Name == "agw-job",
+                TestContext.Current.CancellationToken);
+            Assert.Equal(userSkillId, skill.Id);
+            Assert.Equal("User-owned skill", skill.Description);
+            Assert.Equal(SkillKind.Local, skill.Kind);
+            Assert.False(await context.Skills.AnyAsync(
+                x => x.Id == JobManagementSkillId,
+                TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
     private static AgwDataPaths CreatePaths()
     {
         var root = Path.Combine(Path.GetTempPath(), $"agw-seeder-{Guid.CreateVersion7():N}");
         var paths = AgwDataPaths.Resolve(root, "/unused");
         paths.EnsureCreated();
         return paths;
+    }
+
+    private sealed class TestSkillRegistration : IAgentSkillRegistration
+    {
+        public Guid Id => JobManagementSkillId;
+
+        public string Name => "agw-job";
+
+        public string Description => "Manage jobs.";
+
+        public AgentSkill Create(Guid projectId) => throw new NotSupportedException();
     }
 }
