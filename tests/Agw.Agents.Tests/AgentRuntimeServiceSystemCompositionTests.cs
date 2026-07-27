@@ -300,7 +300,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(rulesField);
             var approvalRules = Assert.IsAssignableFrom<
-                IReadOnlyList<Func<FunctionCallContent, ValueTask<bool>>>>(rulesField.GetValue(approvalAgent));
+                IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>>>(rulesField.GetValue(approvalAgent));
             Assert.Same(AgentSkillsProvider.AllToolsAutoApprovalRule, Assert.Single(approvalRules));
             Assert.DoesNotContain(ToolApprovalAgent.AllToolsAutoApprovalRule, approvalRules);
 
