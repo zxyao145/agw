@@ -253,9 +253,9 @@ public class SkillAppService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Created remote skill {SkillName} from {RemoteUrl}",
+            "Created remote skill {SkillName} from {RemoteLocation}",
             skill.Name,
-            skill.RemoteUrl);
+            GetRemoteLocationForLogging(skill.RemoteUrl));
         return await GetAsync(skill.Id) ?? new SkillDetails(skill, [], false);
     }
 
@@ -365,11 +365,23 @@ public class SkillAppService
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         _logger.LogInformation(
-            "Updated remote skill {SkillId} ({SkillName}) from {RemoteUrl}",
+            "Updated remote skill {SkillId} ({SkillName}) from {RemoteLocation}",
             existing.Id,
             existing.Name,
-            existing.RemoteUrl);
+            GetRemoteLocationForLogging(existing.RemoteUrl));
         return await GetAsync(existing.Id);
+    }
+
+    private static string GetRemoteLocationForLogging(string remoteUrl)
+    {
+        var uriBuilder = new UriBuilder(remoteUrl)
+        {
+            UserName = string.Empty,
+            Password = string.Empty,
+            Query = string.Empty,
+            Fragment = string.Empty,
+        };
+        return uriBuilder.Uri.AbsoluteUri;
     }
 
     private async Task<bool> DeleteCoreAsync(

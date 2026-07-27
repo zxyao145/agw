@@ -11,7 +11,7 @@ using Agw.Skills.Application;
 using Agw.Testing;
 
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 
 namespace Agw.Skills.Tests;
 
@@ -53,6 +53,27 @@ public class SkillAppServiceRemoteTests
         Assert.Equal(
             "Complete skill instructions.",
             RemoteSkillDefinitionSerializer.Deserialize(cache.ContentJson)?.Instructions);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RemoteSkill_RedactsCredentialsFromLog()
+    {
+        await using var fixture = new TestFixture(CreateDefinition());
+
+        await fixture.Service.CreateAsync(
+            new Skill { Kind = SkillKind.Remote },
+            archive: null,
+            "remote-admin",
+            "https://user:password@example.com/skills/expense-report?token=secret#fragment",
+            TestContext.Current.CancellationToken);
+
+        var message = Assert.Single(fixture.Logger.Messages);
+        Assert.Contains("https://example.com/skills/expense-report", message);
+        Assert.DoesNotContain("user", message);
+        Assert.DoesNotContain("password", message);
+        Assert.DoesNotContain("token", message);
+        Assert.DoesNotContain("secret", message);
+        Assert.DoesNotContain("fragment", message);
     }
 
     [Fact]
@@ -232,6 +253,7 @@ public class SkillAppServiceRemoteTests
                 caches ?? [],
                 entity => entity.SkillId);
             RefreshLock = new TestRemoteSkillRefreshLock();
+            Logger = new TestLogger<SkillAppService>();
             Service = new SkillAppService(
                 SkillRepository,
                 new TestRepository<Agent>([], entity => entity.Id),
@@ -240,7 +262,7 @@ public class SkillAppServiceRemoteTests
                 new TestUnitOfWork(),
                 new SkillDomainService(new TestTimeProvider(UtcNow)),
                 dataPaths,
-                NullLogger<SkillAppService>.Instance,
+                Logger,
                 new TestRemoteSkillClient(definition),
                 RefreshLock,
                 new TestTimeProvider(UtcNow));
@@ -254,11 +276,30 @@ public class SkillAppServiceRemoteTests
 
         public TestRemoteSkillRefreshLock RefreshLock { get; }
 
+        public TestLogger<SkillAppService> Logger { get; }
+
         public ValueTask DisposeAsync()
         {
             Directory.Delete(_root, recursive: true);
             return ValueTask.CompletedTask;
         }
+    }
+
+    public sealed class TestLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Messages.Add(formatter(state, exception));
     }
 
     private sealed class TestRemoteSkillClient : IRemoteSkillClient
