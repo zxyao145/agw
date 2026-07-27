@@ -21,3 +21,10 @@ test("composer defaults to one text line with a floating circular action", () =>
   assert.match(source, /size="icon-sm"[\s\S]*?className="rounded-full"/);
   assert.match(source, /<ArrowUp className="size-5" \/>/);
 });
+
+test("suggestion descriptions use phrasing elements inside ItemDescription", () => {
+  assert.match(source, /<ItemDescription>[\s\S]*?<span className="flex item-start">/);
+  assert.match(source, /<span className="text-\[11px\]">\{suggestion\.description\}<\/span>/);
+  assert.doesNotMatch(source, /<ItemDescription>[\s\S]*?<div className="flex item-start">/);
+  assert.doesNotMatch(source, /<ItemDescription>[\s\S]*?<p className="text-\[11px\]">/);
+});
