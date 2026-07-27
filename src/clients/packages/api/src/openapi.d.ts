@@ -3332,9 +3332,11 @@ export interface paths {
       requestBody: {
         content: {
           "multipart/form-data": {
+            Kind?: components["schemas"]["SkillKind"];
             Name?: string;
             Description?: string;
             Archive?: components["schemas"]["IFormFile"];
+            RemoteUrl?: string;
           };
         };
       };
@@ -3444,6 +3446,7 @@ export interface paths {
             Name?: string;
             Description?: string;
             Archive?: components["schemas"]["IFormFile"];
+            RemoteUrl?: string;
           };
         };
       };
@@ -5072,7 +5075,9 @@ export interface components {
       id: string;
       name: string;
       description: string;
+      kind: components["schemas"]["SkillKind"];
       contentPath: string;
+      remoteUrl: null | string;
       isBuiltIn: boolean;
       agentIds: string[];
       /** Format: date-time */
@@ -5148,6 +5153,8 @@ export interface components {
         [key: string]: number | string;
       };
     };
+    /** @enum {unknown} */
+    SkillKind: "BuiltIn" | "Local" | "Remote";
   };
   responses: never;
   parameters: never;

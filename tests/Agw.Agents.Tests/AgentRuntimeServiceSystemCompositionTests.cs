@@ -66,6 +66,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         var projectMcpServerId = Guid.CreateVersion7();
         var agentSkillId = Guid.CreateVersion7();
         var projectSkillId = Guid.CreateVersion7();
+        var remoteSkillId = Guid.CreateVersion7();
         var connectionId = Guid.CreateVersion7();
         var classSkillRegistration = new TestSkillRegistration();
 
@@ -103,6 +104,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Id = agentSkillId,
                 Name = "agent-skill",
                 Description = "agent skill",
+                Kind = SkillKind.Local,
                 ContentPath = "agent-skill",
             },
             new Skill
@@ -110,13 +112,24 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Id = projectSkillId,
                 Name = "project-skill",
                 Description = "project skill",
+                Kind = SkillKind.Local,
                 ContentPath = "project-skill",
+            },
+            new Skill
+            {
+                Id = remoteSkillId,
+                Name = "remote-skill",
+                Description = "remote skill",
+                Kind = SkillKind.Remote,
+                ContentPath = string.Empty,
+                RemoteUrl = "https://example.test/remote-skill",
             },
             new Skill
             {
                 Id = classSkillRegistration.Id,
                 Name = classSkillRegistration.Name,
                 Description = classSkillRegistration.Description,
+                Kind = SkillKind.BuiltIn,
                 ContentPath = string.Empty,
             });
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -139,6 +152,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             ProjectSkillRelations =
             [
                 new ProjectSkillRelation { SkillId = projectSkillId },
+                new ProjectSkillRelation { SkillId = remoteSkillId },
                 new ProjectSkillRelation { SkillId = classSkillRegistration.Id },
             ],
             ProjectConnectionRelations =
@@ -179,6 +193,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             "Shared");
         var mcpMaterializer = new TestMcpToolMaterializer();
         var connectionResource = new TrackingResource();
+        var remoteSkillResolver = new TestRemoteSkillContentResolver();
         var connectionResolver = new TestConnectionCapabilityResolver(CreateResolution(
             pluginSkills:
             [
@@ -206,7 +221,8 @@ public class AgentRuntimeServiceSystemCompositionTests
             AgwDataPaths.Resolve(root, root),
             connectionResolver,
             mcpMaterializer,
-            [classSkillRegistration]);
+            [classSkillRegistration],
+            remoteSkillResolver);
         var request = new CreateAiAgentRequest
         {
             Agent = agent,
@@ -277,6 +293,11 @@ public class AgentRuntimeServiceSystemCompositionTests
             Assert.DoesNotContain(overriddenPluginSkillDirectory, providerStrings);
             Assert.Equal(1, classSkillRegistration.CreateCount);
             Assert.Single(TraverseObjectGraph(skillsProvider).OfType<TestClassSkill>());
+            var remoteSkill = Assert.Single(
+                TraverseObjectGraph(skillsProvider).OfType<RemoteAgentSkill>());
+            var remoteContent = await remoteSkill.GetContentAsync(cancellationToken);
+            Assert.Contains("remote instructions", remoteContent, StringComparison.Ordinal);
+            Assert.Equal([remoteSkillId], remoteSkillResolver.ResolvedSkillIds);
             var pluginFileSource = TraverseObjectGraph(skillsProvider)
                 .OfType<AgentFileSkillsSource>()
                 .Single(source => CollectStringsInObjectGraph(source).Contains(pluginSkillDirectory));
@@ -355,6 +376,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             Id = registration.Id,
             Name = registration.Name,
             Description = registration.Description,
+            Kind = SkillKind.BuiltIn,
             ContentPath = string.Empty,
         });
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -440,7 +462,8 @@ public class AgentRuntimeServiceSystemCompositionTests
         AgwDataPaths dataPaths,
         IConnectionCapabilityResolver connectionCapabilityResolver,
         IMcpToolMaterializer mcpToolMaterializer,
-        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null)
+        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null,
+        IRemoteSkillContentResolver? remoteSkillContentResolver = null)
     {
         return new AgentRuntimeService(
             appService,
@@ -465,7 +488,8 @@ public class AgentRuntimeServiceSystemCompositionTests
                 usageRecorder: null!,
                 NullLogger<UsageTrackingMiddleware>.Instance),
             summaryService: null!,
-            skillRegistrations: skillRegistrations);
+            skillRegistrations: skillRegistrations,
+            remoteSkillContentResolver: remoteSkillContentResolver);
     }
 
     private static ToolRegistryService CreateToolRegistry(params string[] toolNames)
@@ -624,7 +648,7 @@ public class AgentRuntimeServiceSystemCompositionTests
     {
         public Guid Id { get; } = Guid.Parse("11111111-1111-1111-8888-000000000002");
 
-        public string Name => "job-management";
+        public string Name => "agw-job";
 
         public string Description => "Manage jobs.";
 
@@ -640,9 +664,26 @@ public class AgentRuntimeServiceSystemCompositionTests
     private sealed class TestClassSkill : AgentClassSkill<TestClassSkill>
     {
         public override AgentSkillFrontmatter Frontmatter { get; } =
-            new("job-management", "Manage jobs.");
+            new("agw-job", "Manage jobs.");
 
         protected override string Instructions => "Manage jobs in the current project.";
+    }
+
+    private sealed class TestRemoteSkillContentResolver : IRemoteSkillContentResolver
+    {
+        public List<Guid> ResolvedSkillIds { get; } = [];
+
+        public Task<RemoteSkillDefinition> ResolveAsync(
+            Guid skillId,
+            CancellationToken cancellationToken = default)
+        {
+            ResolvedSkillIds.Add(skillId);
+            return Task.FromResult(new RemoteSkillDefinition(
+                "remote-skill",
+                "remote skill",
+                "remote instructions",
+                ["remote"]));
+        }
     }
 
 #pragma warning restore MAAI001

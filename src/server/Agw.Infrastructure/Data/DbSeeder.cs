@@ -530,7 +530,9 @@ public class DbSeeder
                 Id = XhsExploreSkillId,
                 Name = DefaultSkillName,
                 Description = "小红书技能集合",
+                Kind = SkillKind.Local,
                 ContentPath = DefaultSkillContentPath,
+                RemoteUrl = null,
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
@@ -539,10 +541,15 @@ public class DbSeeder
             _context.Skills.Add(skill);
         }
         else if (skill.Id == XhsExploreSkillId &&
-                 (skill.Name != DefaultSkillName || skill.ContentPath != DefaultSkillContentPath))
+                 (skill.Name != DefaultSkillName ||
+                  skill.Kind != SkillKind.Local ||
+                  skill.ContentPath != DefaultSkillContentPath ||
+                  skill.RemoteUrl != null))
         {
             skill.Name = DefaultSkillName;
+            skill.Kind = SkillKind.Local;
             skill.ContentPath = DefaultSkillContentPath;
+            skill.RemoteUrl = null;
             skill.UpdateBy = Constants.AdminUserName;
             skill.UpdateTime = _timeProvider.GetUtcNow();
         }
@@ -576,7 +583,9 @@ public class DbSeeder
                     Id = registration.Id,
                     Name = registration.Name,
                     Description = registration.Description,
+                    Kind = SkillKind.BuiltIn,
                     ContentPath = string.Empty,
+                    RemoteUrl = null,
                     CreateBy = Constants.AdminUserName,
                     CreateTime = now,
                     UpdateBy = Constants.AdminUserName,
@@ -587,6 +596,8 @@ public class DbSeeder
 
             if (existingById.Name == registration.Name &&
                 existingById.Description == registration.Description &&
+                existingById.Kind == SkillKind.BuiltIn &&
+                existingById.RemoteUrl == null &&
                 string.IsNullOrEmpty(existingById.ContentPath))
             {
                 continue;
@@ -605,7 +616,9 @@ public class DbSeeder
 
             existingById.Name = registration.Name;
             existingById.Description = registration.Description;
+            existingById.Kind = SkillKind.BuiltIn;
             existingById.ContentPath = string.Empty;
+            existingById.RemoteUrl = null;
             existingById.UpdateBy = Constants.AdminUserName;
             existingById.UpdateTime = _timeProvider.GetUtcNow();
         }

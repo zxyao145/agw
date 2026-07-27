@@ -30,6 +30,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly UsageTrackingMiddleware _usageTrackingMiddleware;
     private readonly IAgentTurnSummaryService _summaryService;
     private readonly IReadOnlyDictionary<Guid, IAgentSkillRegistration> _skillRegistrations;
+    private readonly IRemoteSkillContentResolver? _remoteSkillContentResolver;
 
     public AgentRuntimeService(
         AgentAppService agentAppService,
@@ -46,7 +47,8 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         ObservabilityMiddleware observabilityMiddleware,
         UsageTrackingMiddleware usageTrackingMiddleware,
         IAgentTurnSummaryService summaryService,
-        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null)
+        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null,
+        IRemoteSkillContentResolver? remoteSkillContentResolver = null)
     {
         _agentAppService = agentAppService;
         _projectAppService = projectAppService;
@@ -65,5 +67,6 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _skillRegistrations = (skillRegistrations ?? [])
             .GroupBy(registration => registration.Id)
             .ToDictionary(group => group.Key, group => group.First());
+        _remoteSkillContentResolver = remoteSkillContentResolver;
     }
 }

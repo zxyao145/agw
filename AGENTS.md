@@ -157,7 +157,7 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 ### Backend API Responses and Exceptions
 
 - All non-WebSocket JSON endpoints return Bens.Results envelopes through `ApiResult` helpers or the configured boundary mapping; do not return bare MVC results.
-- Use `ErrorCode.ToApiResult()` or `AgwException.ToApiResult()` for shared errors, and let `AgwApiExceptionMiddleware` map uncaught `AgwException` values. `[ProducesApiResult]` supplies metadata only.
+- Return `ApiResult.Ok(...)` or another appropriate `ApiResult.*` helper directly. Use `ErrorCode.ToApiResult()` or `AgwException.ToApiResult()` for shared errors, and let `AgwApiExceptionMiddleware` map uncaught `AgwException` values. `[ProducesApiResult]` supplies metadata only.
 - WebSocket handlers, OAuth redirect callbacks, A2A protocol endpoints, and static file endpoints may keep protocol-specific response formats.
 
 ### A2A

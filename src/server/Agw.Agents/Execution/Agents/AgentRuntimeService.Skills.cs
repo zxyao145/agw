@@ -45,11 +45,25 @@ public partial class AgentRuntimeService
             .Cast<IAgentSkillRegistration>()
             .ToArray();
         var userSkillPaths = skills
-            .Where(skill => !_skillRegistrations.ContainsKey(skill.Id))
+            .Where(skill =>
+                skill.Kind == SkillKind.Local &&
+                !_skillRegistrations.ContainsKey(skill.Id))
             .Select(GetSkillAbsolutePath)
             .Where(Directory.Exists)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+        var remoteSkills = _remoteSkillContentResolver == null
+            ? []
+            : skills
+                .Where(skill =>
+                    skill.Kind == SkillKind.Remote &&
+                    !_skillRegistrations.ContainsKey(skill.Id))
+                .Select(skill => new RemoteAgentSkill(
+                    skill.Id,
+                    skill.Name,
+                    skill.Description,
+                    _remoteSkillContentResolver))
+                .ToArray();
         var userSkillNames = skills
             .Select(skill => skill.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -89,6 +103,7 @@ public partial class AgentRuntimeService
 
         if (classSkillRegistrations.Length == 0 &&
             userSkillPaths.Length == 0 &&
+            remoteSkills.Length == 0 &&
             pluginSkillPaths.Count == 0)
         {
             if (agent.AgentSkillRelations.Count > 0 || project.ProjectSkillRelations.Count > 0 || pluginSkills.Count > 0)
@@ -117,6 +132,11 @@ public partial class AgentRuntimeService
                     AllowedScriptExtensions = [.. LocalSkillScriptRunner.SupportedScriptExtensions],
                 },
                 LocalSkillScriptRunner.RunAsync);
+        }
+
+        if (remoteSkills.Length > 0)
+        {
+            builder.UseSkills(remoteSkills);
         }
 
         if (pluginSkillPaths.Count > 0)

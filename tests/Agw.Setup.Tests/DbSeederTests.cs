@@ -76,7 +76,9 @@ public class DbSeederTests
             var skill = await context.Skills
                 .SingleAsync(x => x.Name == "xhs-explore", TestContext.Current.CancellationToken);
             Assert.Equal(SkillId, skill.Id);
+            Assert.Equal(SkillKind.Local, skill.Kind);
             Assert.Equal("skills/xhs-explore", skill.ContentPath);
+            Assert.Null(skill.RemoteUrl);
             Assert.True(await context.AgentSkillRelations.AnyAsync(
                 x => x.AgentId == AmapPoiSearchAgentId && x.SkillId == skill.Id,
                 TestContext.Current.CancellationToken));
@@ -84,8 +86,10 @@ public class DbSeederTests
             var builtInSkill = await context.Skills.SingleAsync(
                 x => x.Id == JobManagementSkillId,
                 TestContext.Current.CancellationToken);
-            Assert.Equal("job-management", builtInSkill.Name);
+            Assert.Equal("agw-job", builtInSkill.Name);
+            Assert.Equal(SkillKind.BuiltIn, builtInSkill.Kind);
             Assert.Equal(string.Empty, builtInSkill.ContentPath);
+            Assert.Null(builtInSkill.RemoteUrl);
             Assert.Equal(
                 1,
                 await context.Skills.CountAsync(
@@ -117,6 +121,52 @@ public class DbSeederTests
     }
 
     [Fact]
+    public async Task SeedAsync_LegacyJobManagementSkill_RenamesFixedBuiltInSkill()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "legacy-skill.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            context.Skills.Add(new Skill
+            {
+                Id = JobManagementSkillId,
+                Name = "job-management",
+                Description = "Legacy job skill",
+                Kind = SkillKind.BuiltIn,
+                ContentPath = string.Empty,
+            });
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                [new TestSkillRegistration()]);
+
+            await seeder.SeedAsync();
+
+            var skill = await context.Skills.SingleAsync(
+                x => x.Id == JobManagementSkillId,
+                TestContext.Current.CancellationToken);
+            Assert.Equal("agw-job", skill.Name);
+            Assert.Equal("Manage jobs.", skill.Description);
+            Assert.Equal(SkillKind.BuiltIn, skill.Kind);
+            Assert.False(await context.Skills.AnyAsync(
+                x => x.Name == "job-management",
+                TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task SeedAsync_ClassSkillNameOwnedByUser_PreservesUserSkillAndSkipsBuiltIn()
     {
         var paths = CreatePaths();
@@ -132,9 +182,10 @@ public class DbSeederTests
             context.Skills.Add(new Skill
             {
                 Id = userSkillId,
-                Name = "job-management",
+                Name = "agw-job",
                 Description = "User-owned skill",
-                ContentPath = "skills/job-management",
+                Kind = SkillKind.Local,
+                ContentPath = "skills/agw-job",
             });
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             var seeder = new DbSeeder(
@@ -147,10 +198,11 @@ public class DbSeederTests
             await seeder.SeedAsync();
 
             var skill = await context.Skills.SingleAsync(
-                x => x.Name == "job-management",
+                x => x.Name == "agw-job",
                 TestContext.Current.CancellationToken);
             Assert.Equal(userSkillId, skill.Id);
             Assert.Equal("User-owned skill", skill.Description);
+            Assert.Equal(SkillKind.Local, skill.Kind);
             Assert.False(await context.Skills.AnyAsync(
                 x => x.Id == JobManagementSkillId,
                 TestContext.Current.CancellationToken));
@@ -173,7 +225,7 @@ public class DbSeederTests
     {
         public Guid Id => JobManagementSkillId;
 
-        public string Name => "job-management";
+        public string Name => "agw-job";
 
         public string Description => "Manage jobs.";
 

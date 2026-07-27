@@ -39,6 +39,7 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
             .SetBasePath(hostDirectory ?? Directory.GetCurrentDirectory())
             .AddJsonFile("appsettings.json", optional: true)
             .AddJsonFile($"appsettings.{environment}.json", optional: true)
+            .AddEnvironmentVariables()
             .Build();
     }
 

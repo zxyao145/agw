@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Controllers;
+using Agw.Agents.Execution.Agents.Skills;
 using Agw.Domain.Services.Skills;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -133,10 +134,14 @@ public class DefinitionPaginationTests
             new EfRepository<Skill>(database.Context),
             new EfRepository<Agent>(database.Context),
             new EfRepository<AgentSkillRelation>(database.Context),
+            new EfRepository<RemoteSkillCache>(database.Context),
             database.Context,
             new SkillDomainService(TimeProvider.System),
             AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), "agw-pagination-tests"), Path.GetTempPath()),
-            NullLogger<SkillAppService>.Instance);
+            NullLogger<SkillAppService>.Instance,
+            new TestRemoteSkillClient(),
+            new TestRemoteSkillRefreshLock(),
+            TimeProvider.System);
 
         var result = await service.ListPageAsync(1, 10, cancellationToken);
         var listed = Assert.Single(result.Items);
@@ -159,6 +164,24 @@ public class DefinitionPaginationTests
             new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
             new AgentDomainService(TimeProvider.System));
+    }
+
+    private sealed class TestRemoteSkillClient : IRemoteSkillClient
+    {
+        public string NormalizeUrl(string? remoteUrl) => throw new NotSupportedException();
+
+        public Task<RemoteSkillDefinition> FetchAsync(
+            string remoteUrl,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class TestRemoteSkillRefreshLock : IRemoteSkillRefreshLock
+    {
+        public Task<IAsyncDisposable> AcquireAsync(
+            Guid skillId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class TestDatabase : IAsyncDisposable

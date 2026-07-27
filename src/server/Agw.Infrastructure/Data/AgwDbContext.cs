@@ -59,6 +59,7 @@ public class AgwDbContext : EFContext
     public DbSet<AgentConnectionRelation> AgentConnectionRelations => Set<AgentConnectionRelation>();
 
     public DbSet<Skill> Skills => Set<Skill>();
+    public DbSet<RemoteSkillCache> RemoteSkillCaches => Set<RemoteSkillCache>();
     public DbSet<AgentSkillRelation> AgentSkillRelations => Set<AgentSkillRelation>();
 
     public DbSet<McpServer> McpToolServers => Set<McpServer>();

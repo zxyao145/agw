@@ -10,6 +10,7 @@ namespace Agw.Jobs.Application.Skills;
 
 public sealed class JobManagementSkillRegistration : IAgentSkillRegistration
 {
+    public const string SkillName = "agw-job";
     public static readonly Guid SkillId = Guid.Parse("11111111-1111-1111-8888-000000000002");
 
     private readonly IServiceScopeFactory _serviceScopeFactory;
@@ -25,7 +26,7 @@ public sealed class JobManagementSkillRegistration : IAgentSkillRegistration
 
     public Guid Id => SkillId;
 
-    public string Name => "job-management";
+    public string Name => SkillName;
 
     public string Description =>
         "Manage scheduled jobs in the current project, including listing, inspecting, creating, updating, and deleting jobs.";

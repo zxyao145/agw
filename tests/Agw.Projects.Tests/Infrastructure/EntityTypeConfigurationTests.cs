@@ -38,7 +38,29 @@ public class EntityTypeConfigurationTests
             typeof(ProviderAuthConfig),
             typeof(LlmModel),
             typeof(ModelProviderRelation),
-            typeof(Skill));
+            typeof(Skill),
+            typeof(RemoteSkillCache));
+    }
+
+    [Fact]
+    public void RemoteSkillCache_UsesSkillPrimaryKeyAndCascadeDelete()
+    {
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite("Data Source=:memory:")
+            .Options;
+        using var context = new AgwDbContext(options);
+        var entityType = context.Model.FindEntityType(typeof(RemoteSkillCache));
+
+        Assert.NotNull(entityType);
+        Assert.Equal(
+            nameof(RemoteSkillCache.SkillId),
+            Assert.Single(entityType.FindPrimaryKey()!.Properties).Name);
+        var foreignKey = Assert.Single(entityType.GetForeignKeys());
+        Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
+        Assert.Equal(typeof(Skill), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal(
+            2048,
+            entityType.FindProperty(nameof(RemoteSkillCache.SourceUrl))!.GetMaxLength());
     }
 
     [Fact]
@@ -97,7 +119,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(28, entityTypes.Length);
+        Assert.Equal(29, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 

@@ -60,18 +60,26 @@ public class SkillsController : ControllerBase
     [Consumes("multipart/form-data")]
     [RequestFormLimits(MultipartBodyLengthLimit = 104857600)]
     [ProducesApiResult(typeof(SkillResponse))]
-    public async Task<IActionResult> CreateAsync([FromForm] SkillCreateRequest request)
+    public async Task<IActionResult> CreateAsync(
+        [FromForm] SkillCreateRequest request,
+        CancellationToken cancellationToken)
     {
         try
         {
             var user = User?.Identity?.Name ?? Constants.AdminUserName;
             var skill = new Skill
             {
+                Kind = request.Kind,
                 Name = request.Name,
                 Description = request.Description,
             };
 
-            var created = await _skillAppService.CreateAsync(skill, request.Archive, user);
+            var created = await _skillAppService.CreateAsync(
+                skill,
+                request.Archive,
+                user,
+                request.RemoteUrl,
+                cancellationToken);
             return ApiResult.Ok(Map(created));
         }
         catch (AgwException ex)
@@ -84,12 +92,22 @@ public class SkillsController : ControllerBase
     [Consumes("multipart/form-data")]
     [RequestFormLimits(MultipartBodyLengthLimit = 104857600)]
     [ProducesApiResult(typeof(SkillResponse))]
-    public async Task<IActionResult> UpdateAsync(Guid id, [FromForm] SkillUpdateRequest request)
+    public async Task<IActionResult> UpdateAsync(
+        Guid id,
+        [FromForm] SkillUpdateRequest request,
+        CancellationToken cancellationToken)
     {
         try
         {
             var user = User?.Identity?.Name ?? Constants.AdminUserName;
-            var updated = await _skillAppService.UpdateAsync(id, request.Name, request.Description, request.Archive, user);
+            var updated = await _skillAppService.UpdateAsync(
+                id,
+                request.Name,
+                request.Description,
+                request.Archive,
+                user,
+                request.RemoteUrl,
+                cancellationToken);
             return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(Map(updated));
         }
         catch (AgwException ex)
@@ -100,9 +118,11 @@ public class SkillsController : ControllerBase
 
     [HttpDelete("{id:guid}")]
     [ProducesApiResult]
-    public async Task<IActionResult> DeleteAsync(Guid id)
+    public async Task<IActionResult> DeleteAsync(
+        Guid id,
+        CancellationToken cancellationToken)
     {
-        var deleted = await _skillAppService.DeleteAsync(id);
+        var deleted = await _skillAppService.DeleteAsync(id, cancellationToken);
         return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 
@@ -113,7 +133,9 @@ public class SkillsController : ControllerBase
             skill.Id,
             skill.Name,
             skill.Description,
+            skill.Kind,
             skill.ContentPath,
+            skill.RemoteUrl,
             detail.IsBuiltIn,
             detail.AgentIds,
             skill.CreateTime,

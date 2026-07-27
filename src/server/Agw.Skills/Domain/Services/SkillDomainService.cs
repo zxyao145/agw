@@ -24,10 +24,17 @@ public partial class SkillDomainService
         ArgumentNullException.ThrowIfNull(skill);
 
         Validate(skill.Name, skill.Description);
+        if (skill.Kind == SkillKind.BuiltIn)
+        {
+            throw new AgwException(ErrorCodes.SkillKindInvalid);
+        }
+
         skill.Id = skill.Id == Guid.Empty ? Guid.CreateVersion7() : skill.Id;
         skill.CreateBy = user;
         skill.CreateTime = _timeProvider.GetUtcNow();
-        skill.ContentPath = BuildContentPath(skill.Name);
+        skill.ContentPath = skill.Kind == SkillKind.Local
+            ? BuildContentPath(skill.Name)
+            : string.Empty;
     }
 
     public void ApplyUpdate(Skill skill, string name, string description, string user)
@@ -37,7 +44,9 @@ public partial class SkillDomainService
         Validate(name, description);
         skill.Name = name.Trim();
         skill.Description = description.Trim();
-        skill.ContentPath = BuildContentPath(skill.Name);
+        skill.ContentPath = skill.Kind == SkillKind.Local
+            ? BuildContentPath(skill.Name)
+            : string.Empty;
         skill.UpdateBy = user;
         skill.UpdateTime = _timeProvider.GetUtcNow();
     }

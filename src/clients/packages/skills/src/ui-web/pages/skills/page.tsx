@@ -8,11 +8,11 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from "@agw/components/query";
-import { LockKeyhole, Pencil, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, LockKeyhole, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@agw/api";
-import { StaticTable } from "@agw/components";
+import { StaticTable, Tooltip, TooltipContent, TooltipTrigger } from "@agw/components";
 import { PaginatedTable } from "@agw/components";
 import { Badge, Button } from "@agw/components";
 import {
@@ -26,6 +26,7 @@ import {
 import { Empty } from "@agw/components";
 import { Input } from "@agw/components";
 import { Label } from "@agw/components";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@agw/components";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@agw/components";
 import { Textarea } from "@agw/components";
 import { getApiErrorMessage } from "@agw/api";
@@ -37,7 +38,9 @@ type SkillDto = {
   id: string;
   name: string;
   description: string;
+  kind: SkillKind;
   contentPath: string;
+  remoteUrl?: string | null;
   isBuiltIn: boolean;
   agentIds: string[];
   createTime?: string | null;
@@ -46,10 +49,14 @@ type SkillDto = {
   updateBy?: string | null;
 };
 
+type SkillKind = "BuiltIn" | "Local" | "Remote";
+
 type SkillFormState = {
+  kind: Exclude<SkillKind, "BuiltIn">;
   name: string;
   description: string;
   archive: File | null;
+  remoteUrl: string;
 };
 
 type SkillDialogProps = {
@@ -68,17 +75,21 @@ const SKILL_NAME_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function createDefaultFormState(): SkillFormState {
   return {
+    kind: "Local",
     name: "",
     description: "",
     archive: null,
+    remoteUrl: "",
   };
 }
 
 function createEditFormState(skill: SkillDto): SkillFormState {
   return {
+    kind: skill.kind === "Remote" ? "Remote" : "Local",
     name: skill.name,
     description: skill.description,
     archive: null,
+    remoteUrl: skill.remoteUrl ?? "",
   };
 }
 
@@ -100,6 +111,25 @@ function validateSkillForm(
 ): void {
   const name = form.name.trim();
   const description = form.description.trim();
+
+  if (form.kind === "Remote") {
+    if (form.archive) {
+      throw new Error("Remote skills cannot include a zip archive.");
+    }
+
+    let remoteUrl: URL;
+    try {
+      remoteUrl = new URL(form.remoteUrl.trim());
+    } catch {
+      throw new Error("Remote skill URL must be an absolute HTTP or HTTPS URL.");
+    }
+
+    if (remoteUrl.protocol !== "http:" && remoteUrl.protocol !== "https:") {
+      throw new Error("Remote skill URL must be an absolute HTTP or HTTPS URL.");
+    }
+
+    return;
+  }
 
   if (!name) {
     throw new Error("Skill name is required.");
@@ -142,11 +172,18 @@ function buildSkillFormData(
   validateSkillForm(form, mode, currentSkill);
 
   const data = new FormData();
-  data.append("Name", form.name.trim());
-  data.append("Description", form.description.trim());
+  if (mode === "create") {
+    data.append("Kind", form.kind);
+  }
 
-  if (form.archive) {
-    data.append("Archive", form.archive);
+  if (form.kind === "Remote") {
+    data.append("RemoteUrl", form.remoteUrl.trim());
+  } else {
+    data.append("Name", form.name.trim());
+    data.append("Description", form.description.trim());
+    if (form.archive) {
+      data.append("Archive", form.archive);
+    }
   }
 
   if (mode === "edit" && currentSkill) {
@@ -312,7 +349,7 @@ export default function SkillsPage() {
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">Skills</h1>
           <p className="text-sm text-muted-foreground">
-            Upload, assign, update, and remove reusable skills for agents.
+            Create, assign, update, and remove reusable skills for agents.
           </p>
         </div>
 
@@ -352,14 +389,15 @@ export default function SkillsPage() {
           <StaticTable embedded isEmpty={skills.length === 0}>
             <Empty>
               <div className="text-sm text-muted-foreground">
-                No skills found. Upload a skill archive to get started.
+                No skills found. Add a local or remote skill to get started.
               </div>
             </Empty>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Kind</TableHead>
                 <TableHead>Description</TableHead>
-                <TableHead>Content Path</TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead>Updated</TableHead>
                 <TableHead className="w-32 text-right">Actions</TableHead>
               </TableRow>
@@ -373,16 +411,38 @@ export default function SkillsPage() {
                       Created {formatLocalDateTime(skill.createTime)}
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={skill.kind === "Remote" ? "outline" : "secondary"}
+                      className="font-medium"
+                    >
+                      {skill.kind === "BuiltIn"
+                        ? "Built-in"
+                        : skill.kind === "Remote"
+                          ? "Remote"
+                          : "Local"}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="max-w-md">
                     <div className="line-clamp-3 text-sm text-muted-foreground">
                       {skill.description}
                     </div>
                   </TableCell>
                   <TableCell className="max-w-sm font-mono text-xs break-all text-muted-foreground">
-                    {skill.isBuiltIn ? (
+                    {skill.kind === "BuiltIn" || skill.isBuiltIn ? (
                       <Badge variant="secondary" className="font-sans font-medium">
                         Class-based
                       </Badge>
+                    ) : skill.kind === "Remote" && skill.remoteUrl ? (
+                      <a
+                        href={skill.remoteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex max-w-full items-center gap-1.5 hover:text-foreground"
+                      >
+                        <span className="truncate">{skill.remoteUrl}</span>
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                      </a>
                     ) : (
                       skill.contentPath
                     )}
@@ -391,10 +451,15 @@ export default function SkillsPage() {
                     {formatLocalDateTime(skill.updateTime ?? skill.createTime)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {skill.isBuiltIn ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <LockKeyhole className="h-3.5 w-3.5" />
-                        Managed by Agw
+                    {skill.kind === "BuiltIn" || skill.isBuiltIn ? (
+                      <span className="flex justify-end items-center gap-1.5 text-xs text-muted-foreground">
+                        {/* <LockKeyhole className="h-3.5 w-3.5" /> */}
+                        <Tooltip>
+                          <TooltipTrigger>-</TooltipTrigger>
+                          <TooltipContent>
+                            <p>Managed by Agw</p>
+                          </TooltipContent>
+                        </Tooltip>
                       </span>
                     ) : (
                       <div className="flex justify-end gap-2">
@@ -479,7 +544,8 @@ function DeleteSkillDialog({
           <DialogTitle>Delete skill</DialogTitle>
           <DialogDescription>
             Are you sure you want to delete skill &quot;{deletingSkill?.name}
-            &quot;? This will remove its database record and skill directory.
+            &quot;? This will remove its database record
+            {deletingSkill?.kind === "Local" ? " and local skill directory" : ""}.
           </DialogDescription>
         </DialogHeader>
 
@@ -525,102 +591,194 @@ function SkillDialog({
         <DialogHeader className="shrink-0">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {mode === "create"
-              ? "Upload a zipped skill package. Agent associations are managed from the Agents page."
-              : "Update skill metadata and archive contents. Agent associations are managed from the Agents page."}
+            {form.kind === "Remote"
+              ? "Load a read-only skill package from an HTTP endpoint. Agent associations are managed from the Agents page."
+              : mode === "create"
+                ? "Upload a zipped skill package. Agent associations are managed from the Agents page."
+                : "Update skill metadata and archive contents. Agent associations are managed from the Agents page."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto agw-scrollbar pr-1 sm:grid-cols-2">
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor={`${mode}-skill-archive`}>
-              Archive {mode === "create" ? "(Required)" : "(Optional)"}
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {mode === "create"
-                ? "Upload a .zip file containing a skill directory with SKILL.md."
-                : "Leave empty to keep the current archive. Upload a new .zip if you rename the skill."}
-            </p>
-
-            <Input
-              key={fileInputKey}
-              id={`${mode}-skill-archive`}
-              type="file"
-              accept=".zip,application/zip"
-              onChange={(event) =>
-                setForm((current) => {
-                  const archive = event.target.files?.[0] ?? null;
-                  if (mode !== "create" || !archive) {
-                    return {
-                      ...current,
-                      archive,
-                    };
-                  }
-
-                  const previousDefaultName = current.archive
-                    ? buildDefaultSkillNameFromFileName(current.archive.name)
-                    : "";
-                  const nextDefaultName = buildDefaultSkillNameFromFileName(archive.name);
-                  const shouldUpdateName =
-                    !current.name.trim() || current.name === previousDefaultName;
-
-                  return {
-                    ...current,
-                    archive,
-                    name: shouldUpdateName && nextDefaultName ? nextDefaultName : current.name,
-                  };
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor={`${mode}-skill-name`}>Name</Label>
-            <p className="text-xs text-muted-foreground">
-              Lowercase letters, numbers, and single hyphens only.
-            </p>
-            <Input
-              id={`${mode}-skill-name`}
-              value={form.name}
-              placeholder="example-skill"
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  name: event.target.value,
-                }))
-              }
-              disabled={mode === "edit"}
-            />
-          </div>
-
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor={`${mode}-skill-description`}>Description</Label>
-            <p className="text-xs text-muted-foreground">
-              If the frontmatter in SKILL.md does not include a &quot;description&quot; field, the
-              value of this field will be used.
-            </p>
-            <Textarea
-              id={`${mode}-skill-description`}
-              rows={4}
-              value={form.description}
-              placeholder="Describe what this skill provides."
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  description: event.target.value,
-                }))
-              }
-            />
-          </div>
-
-          {mode === "edit" && currentSkill ? (
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-scroll [scrollbar-gutter:stable] agw-scrollbar pr-1 sm:grid-cols-2">
+          {mode === "create" ? (
             <div className="space-y-2 sm:col-span-2">
-              <Label>Current Content Path</Label>
-              <div className="rounded-md border bg-muted/30 px-3 py-2 font-mono text-xs break-all text-muted-foreground">
-                {currentSkill.contentPath}
+              <Label htmlFor="create-skill-kind">Kind</Label>
+              <Select
+                value={form.kind}
+                onValueChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    kind: value as SkillFormState["kind"],
+                    archive: null,
+                  }))
+                }
+              >
+                <SelectTrigger id="create-skill-kind" className="w-full cursor-pointer">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem className="cursor-pointer" value="Local">
+                    Local
+                  </SelectItem>
+                  <SelectItem className="cursor-pointer" value="Remote">
+                    Remote
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Local skills upload a zip archive. Remote skills download a zip archive from an HTTP
+                URL.
+              </p>
+            </div>
+          ) : currentSkill ? (
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Kind</Label>
+              <div>
+                <Badge variant={currentSkill.kind === "Remote" ? "outline" : "secondary"}>
+                  {currentSkill.kind}
+                </Badge>
               </div>
             </div>
           ) : null}
+
+          {form.kind === "Local" ? (
+            <>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${mode}-skill-archive`}>
+                  Archive {mode === "create" ? "(Required)" : "(Optional)"}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {mode === "create"
+                    ? "Upload a .zip file containing a skill directory with SKILL.md."
+                    : "Leave empty to keep the current archive. Upload a new .zip if you rename the skill."}
+                </p>
+
+                <Input
+                  key={fileInputKey}
+                  id={`${mode}-skill-archive`}
+                  type="file"
+                  accept=".zip,application/zip"
+                  onChange={(event) =>
+                    setForm((current) => {
+                      const archive = event.target.files?.[0] ?? null;
+                      if (mode !== "create" || !archive) {
+                        return {
+                          ...current,
+                          archive,
+                        };
+                      }
+
+                      const previousDefaultName = current.archive
+                        ? buildDefaultSkillNameFromFileName(current.archive.name)
+                        : "";
+                      const nextDefaultName = buildDefaultSkillNameFromFileName(archive.name);
+                      const shouldUpdateName =
+                        !current.name.trim() || current.name === previousDefaultName;
+
+                      return {
+                        ...current,
+                        archive,
+                        name: shouldUpdateName && nextDefaultName ? nextDefaultName : current.name,
+                      };
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${mode}-skill-name`}>Name</Label>
+                <p className="text-xs text-muted-foreground">
+                  Lowercase letters, numbers, and single hyphens only.
+                </p>
+                <Input
+                  id={`${mode}-skill-name`}
+                  value={form.name}
+                  placeholder="example-skill"
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  disabled={mode === "edit"}
+                />
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${mode}-skill-description`}>Description</Label>
+                <p className="text-xs text-muted-foreground">
+                  If the frontmatter in SKILL.md does not include a &quot;description&quot; field,
+                  the value of this field will be used.
+                </p>
+                <Textarea
+                  id={`${mode}-skill-description`}
+                  rows={4}
+                  value={form.description}
+                  placeholder="Describe what this skill provides."
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              {mode === "edit" && currentSkill ? (
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Current Content Path</Label>
+                  <div className="rounded-md border bg-muted/30 px-3 py-2 font-mono text-xs break-all text-muted-foreground">
+                    {currentSkill.contentPath}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${mode}-skill-remote-url`}>Remote URL</Label>
+                <p className="text-xs text-muted-foreground">
+                  Agw performs an unauthenticated GET and expects a zip archive containing one
+                  SKILL.md file.
+                </p>
+                <Input
+                  id={`${mode}-skill-remote-url`}
+                  type="url"
+                  maxLength={2048}
+                  value={form.remoteUrl}
+                  placeholder="https://example.com/skills/expense-report.zip"
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      remoteUrl: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              {mode === "edit" && currentSkill ? (
+                <>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="edit-skill-name">Name</Label>
+                    <Input id="edit-skill-name" value={currentSkill.name} readOnly disabled />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="edit-skill-description">Description</Label>
+                    <Textarea
+                      id="edit-skill-description"
+                      rows={4}
+                      value={currentSkill.description}
+                      readOnly
+                      disabled
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Name and description are synchronized from the remote response when you save.
+                    </p>
+                  </div>
+                </>
+              ) : null}
+            </>
+          )}
         </div>
 
         <DialogFooter className="shrink-0">

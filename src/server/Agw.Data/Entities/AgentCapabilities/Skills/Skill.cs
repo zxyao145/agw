@@ -13,5 +13,7 @@ public class Skill : BaseEntity, IAggregateRoot
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public SkillKind Kind { get; set; } = SkillKind.Local;
     public string ContentPath { get; set; } = string.Empty;
+    public string? RemoteUrl { get; set; }
 }

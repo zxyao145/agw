@@ -33,7 +33,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
     }
 
     public override AgentSkillFrontmatter Frontmatter { get; } = new(
-        "job-management",
+        JobManagementSkillRegistration.SkillName,
         "Manage scheduled jobs in the current project. Use when asked to list, inspect, create, modify, enable, disable, or delete jobs.");
 
     protected override string Instructions =>

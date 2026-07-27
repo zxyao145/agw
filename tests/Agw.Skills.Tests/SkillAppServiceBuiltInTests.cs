@@ -32,18 +32,23 @@ public class SkillAppServiceBuiltInTests
             var skill = new Skill
             {
                 Id = BuiltInSkillId,
-                Name = "job-management",
+                Name = "agw-job",
                 Description = "Manage jobs.",
+                Kind = SkillKind.BuiltIn,
                 ContentPath = string.Empty,
             };
             var service = new SkillAppService(
                 new TestRepository<Skill>([skill], entity => entity.Id),
                 new TestRepository<Agent>([], entity => entity.Id),
                 new TestRepository<AgentSkillRelation>([], _ => Guid.Empty),
+                new TestRepository<RemoteSkillCache>([], entity => entity.SkillId),
                 new TestUnitOfWork(),
                 new SkillDomainService(TimeProvider.System),
                 dataPaths,
                 NullLogger<SkillAppService>.Instance,
+                new TestRemoteSkillClient(),
+                new TestRemoteSkillRefreshLock(),
+                TimeProvider.System,
                 [new TestSkillRegistration()]);
 
             var details = Assert.Single(await service.ListAsync());
@@ -56,11 +61,14 @@ public class SkillAppServiceBuiltInTests
                     "renamed",
                     "Changed",
                     archive: null,
-                    "test-user"));
+                    "test-user",
+                    cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.BuiltInSkillImmutable.Code, updateException.Code);
 
             var deleteException = await Assert.ThrowsAsync<AgwException>(() =>
-                service.DeleteAsync(BuiltInSkillId));
+                service.DeleteAsync(
+                    BuiltInSkillId,
+                    TestContext.Current.CancellationToken));
             Assert.Equal(ErrorCodes.BuiltInSkillImmutable.Code, deleteException.Code);
         }
         finally
@@ -73,11 +81,29 @@ public class SkillAppServiceBuiltInTests
     {
         public Guid Id => BuiltInSkillId;
 
-        public string Name => "job-management";
+        public string Name => "agw-job";
 
         public string Description => "Manage jobs.";
 
         public AgentSkill Create(Guid projectId) => throw new NotSupportedException();
+    }
+
+    private sealed class TestRemoteSkillClient : IRemoteSkillClient
+    {
+        public string NormalizeUrl(string? remoteUrl) => throw new NotSupportedException();
+
+        public Task<RemoteSkillDefinition> FetchAsync(
+            string remoteUrl,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class TestRemoteSkillRefreshLock : IRemoteSkillRefreshLock
+    {
+        public Task<IAsyncDisposable> AcquireAsync(
+            Guid skillId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class TestUnitOfWork : IUnitOfWork

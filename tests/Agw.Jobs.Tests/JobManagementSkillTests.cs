@@ -34,7 +34,7 @@ public class JobManagementSkillTests
         await using var fixture = await JobManagementSkillFixture.CreateAsync();
         var skill = fixture.CreateSkill(Guid.CreateVersion7());
 
-        Assert.Equal("job-management", skill.Frontmatter.Name);
+        Assert.Equal("agw-job", skill.Frontmatter.Name);
         Assert.Contains("scheduled jobs", skill.Frontmatter.Description, StringComparison.OrdinalIgnoreCase);
 
         var resource = await skill.GetResourceAsync(
