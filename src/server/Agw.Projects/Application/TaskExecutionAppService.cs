@@ -12,25 +12,25 @@ namespace Agw.Projects.Application;
 
 public class TaskExecutionAppService
 {
-    private readonly IRepository<ProjectContext> _contextRepository;
-    private readonly IRepository<TaskRecord> _recordRepository;
+    private readonly IRepository<ProjectConversation> _contextRepository;
+    private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly TaskRecordDomainService _taskRecordDomainService;
+    private readonly ProjectConversationChatHistoryDomainService _chatHistoryDomainService;
     private readonly ProjectResolver _projectResolver;
     private readonly TimeProvider _timeProvider;
 
     public TaskExecutionAppService(
-        IRepository<ProjectContext> contextRepository,
-        IRepository<TaskRecord> recordRepository,
+        IRepository<ProjectConversation> contextRepository,
+        IRepository<ProjectConversationChatHistory> recordRepository,
         IUnitOfWork unitOfWork,
-        TaskRecordDomainService taskRecordDomainService,
+        ProjectConversationChatHistoryDomainService chatHistoryDomainService,
         ProjectResolver projectResolver,
         TimeProvider timeProvider)
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
         _unitOfWork = unitOfWork;
-        _taskRecordDomainService = taskRecordDomainService;
+        _chatHistoryDomainService = chatHistoryDomainService;
         _projectResolver = projectResolver;
         _timeProvider = timeProvider;
     }
@@ -58,12 +58,12 @@ public class TaskExecutionAppService
         }
 
         var contextIds = contexts.Select(context => context.Id).ToHashSet();
-        var records = await _recordRepository.ListAsync(record => contextIds.Contains(record.ProjectContextId));
+        var records = await _recordRepository.ListAsync(record => contextIds.Contains(record.ConversationId));
         var contextById = contexts.ToDictionary(context => context.Id);
 
         return records
             .GroupBy(record => record.TaskId)
-            .Select(group => TaskExecutionMapper.ToTask(contextById[group.First().ProjectContextId], group.ToList()))
+            .Select(group => TaskExecutionMapper.ToTask(contextById[group.First().ConversationId], group.ToList()))
             .OrderByDescending(task => task.UpdateTime ?? task.CreateTime)
             .Select(TaskExecutionMapper.ToSummary)
             .ToList();
@@ -83,7 +83,7 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var context = await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
+        var context = await _contextRepository.GetByIdAsync(records[0].ConversationId);
         if (context == null || context.ProjectId != project.Id)
         {
             return null;
@@ -146,10 +146,10 @@ public class TaskExecutionAppService
             : request.Title.Trim();
 
         var context = await GetOrCreateContextAsync(project.Id, contextId, request.JobId, title, user, now);
-        var record = new TaskRecord
+        var record = new ProjectConversationChatHistory
         {
             Id = Guid.CreateVersion7(),
-            ProjectContextId = context.Id,
+            ConversationId = context.Id,
             TaskId = taskId,
             JobId = request.JobId,
             Status = initialStatus,
@@ -222,10 +222,10 @@ public class TaskExecutionAppService
         return ApplicationResult.Success();
     }
 
-    public async Task<TaskRecord?> GetLatestRecordAsync(Guid taskId)
+    public async Task<ProjectConversationChatHistory?> GetLatestRecordAsync(Guid taskId)
     {
         var records = await GetOrderedRecordsByTaskIdAsync(taskId);
-        return _taskRecordDomainService.GetLatest(records);
+        return _chatHistoryDomainService.GetLatest(records);
     }
 
     public Task<TaskProjection?> MarkSucceededAsync(Guid id, string user) =>
@@ -236,7 +236,7 @@ public class TaskExecutionAppService
 
     private async Task<TaskProjection?> MarkTaskAsync(Guid id, TaskExecutionStatus status, string? errorMessage, string user)
     {
-        var records = _taskRecordDomainService.Order(
+        var records = _chatHistoryDomainService.Order(
             await _recordRepository.Queryable
                 .Where(record => record.TaskId == id)
                 .ToListAsync());
@@ -245,7 +245,7 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var context = await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
+        var context = await _contextRepository.GetByIdAsync(records[0].ConversationId);
         if (context == null)
         {
             return null;
@@ -277,7 +277,7 @@ public class TaskExecutionAppService
     /// <summary>
     /// 获取或创建项目上下文，并复用及规范化 SQLite 中仅 GUID 大小写不同的旧记录。
     /// </summary>
-    private async Task<ProjectContext> GetOrCreateContextAsync(
+    private async Task<ProjectConversation> GetOrCreateContextAsync(
         Guid projectId,
         string contextId,
         Guid? jobId,
@@ -318,7 +318,7 @@ public class TaskExecutionAppService
             return context;
         }
 
-        context = new ProjectContext
+        context = new ProjectConversation
         {
             Id = Guid.CreateVersion7(),
             ProjectId = projectId,
@@ -334,7 +334,7 @@ public class TaskExecutionAppService
         return context;
     }
 
-    private async Task<ProjectContext?> GetContextByTaskAsync(Guid projectId, Guid taskId)
+    private async Task<ProjectConversation?> GetContextByTaskAsync(Guid projectId, Guid taskId)
     {
         var records = await _recordRepository.ListAsync(record => record.TaskId == taskId);
         if (records.Count == 0)
@@ -342,7 +342,7 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var context = await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
+        var context = await _contextRepository.GetByIdAsync(records[0].ConversationId);
         return context != null && context.ProjectId == projectId ? context : null;
     }
 
@@ -354,7 +354,7 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var context = await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
+        var context = await _contextRepository.GetByIdAsync(records[0].ConversationId);
         return context == null ? null : TaskExecutionMapper.ToTask(context, records);
     }
 
@@ -366,20 +366,20 @@ public class TaskExecutionAppService
             return [];
         }
 
-        var contextIds = records.Select(record => record.ProjectContextId).ToHashSet();
+        var contextIds = records.Select(record => record.ConversationId).ToHashSet();
         var contexts = await _contextRepository.ListAsync(context => contextIds.Contains(context.Id));
         var contextById = contexts.ToDictionary(context => context.Id);
 
         return records
             .GroupBy(record => record.TaskId)
-            .Where(group => contextById.ContainsKey(group.First().ProjectContextId))
-            .Select(group => TaskExecutionMapper.ToTask(contextById[group.First().ProjectContextId], group.ToList()))
+            .Where(group => contextById.ContainsKey(group.First().ConversationId))
+            .Select(group => TaskExecutionMapper.ToTask(contextById[group.First().ConversationId], group.ToList()))
             .ToList();
     }
 
-    private async Task<IReadOnlyList<TaskRecord>> GetOrderedRecordsByTaskIdAsync(Guid taskId)
+    private async Task<IReadOnlyList<ProjectConversationChatHistory>> GetOrderedRecordsByTaskIdAsync(Guid taskId)
     {
         var records = await _recordRepository.ListAsync(record => record.TaskId == taskId);
-        return _taskRecordDomainService.Order(records);
+        return _chatHistoryDomainService.Order(records);
     }
 }

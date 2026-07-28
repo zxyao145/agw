@@ -10,7 +10,7 @@ namespace Agw.Projects.Application;
 
 public static class TaskExecutionMapper
 {
-    public static TaskProjection ToTask(ProjectContext context, IReadOnlyList<TaskRecord> records)
+    public static TaskProjection ToTask(ProjectConversation context, IReadOnlyList<ProjectConversationChatHistory> records)
     {
         var orderedRecords = records
             .OrderBy(record => record.CreateTime)
@@ -56,7 +56,7 @@ public static class TaskExecutionMapper
 
     public static TaskExecutionSnapshot ToSnapshot(
         TaskProjection task,
-        IReadOnlyList<TaskRecord> records,
+        IReadOnlyList<ProjectConversationChatHistory> records,
         IReadOnlyList<AgwMessage>? messages)
     {
         return new TaskExecutionSnapshot(
@@ -76,7 +76,7 @@ public static class TaskExecutionMapper
             messages);
     }
 
-    public static IEnumerable<AgwMessage> ToAiMessages(TaskRecord record)
+    public static IEnumerable<AgwMessage> ToAiMessages(ProjectConversationChatHistory record)
     {
         var message = record.ToChatMessage()?.ToAiMessage();
         if (message != null)
@@ -85,16 +85,16 @@ public static class TaskExecutionMapper
         }
     }
 
-    public static int CountMessages(IEnumerable<TaskRecord> records) =>
+    public static int CountMessages(IEnumerable<ProjectConversationChatHistory> records) =>
         records.Sum(CountMessages);
 
-    private static int CountMessages(TaskRecord record) =>
+    private static int CountMessages(ProjectConversationChatHistory record) =>
         record.ToChatMessage() == null ? 0 : 1;
 
     private static DateTimeOffset? GetStartedTime(TaskProjection task) =>
         task.Status == TaskExecutionStatus.Pending ? null : task.CreateTime;
 
-    private static string GetInputText(TaskRecord? record)
+    private static string GetInputText(ProjectConversationChatHistory? record)
     {
         if (record?.ToChatMessage()?.Role != ChatRole.User)
         {

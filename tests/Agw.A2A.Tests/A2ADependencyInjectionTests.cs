@@ -91,8 +91,8 @@ public class A2ADependencyInjectionTests
         services.AddLogging();
         services.AddScoped<IAgentRuntimeService, FakeAgentRuntimeService>();
         services.AddScoped<IRepository<Agent>, RepositoryStub<Agent>>();
-        services.AddScoped<IRepository<ProjectContext>, RepositoryStub<ProjectContext>>();
-        services.AddScoped<IRepository<TaskRecord>, RepositoryStub<TaskRecord>>();
+        services.AddScoped<IRepository<ProjectConversation>, RepositoryStub<ProjectConversation>>();
+        services.AddScoped<IRepository<ProjectConversationChatHistory>, RepositoryStub<ProjectConversationChatHistory>>();
         services.AddScoped<IUnitOfWork, UnitOfWorkStub>();
         services.AddA2A(new ConfigurationManager());
         return services;

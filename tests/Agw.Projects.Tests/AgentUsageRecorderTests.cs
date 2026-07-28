@@ -55,7 +55,7 @@ public class AgentUsageRecorderTests
             Assert.Equal(30, usage.TotalTokenCount);
             Assert.Equal(4, usage.CachedInputTokenCount);
             Assert.Equal(5, usage.ReasoningTokenCount);
-            Assert.Empty(await verifyContext.ProjectContexts.ToListAsync(cancellationToken));
+            Assert.Empty(await verifyContext.ProjectConversations.ToListAsync(cancellationToken));
         }
         finally
         {

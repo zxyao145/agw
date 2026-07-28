@@ -23,7 +23,7 @@ public static class DependencyInjection
         services.AddScoped<TaskExecutionAppService>();
         services.AddScoped<ProjectContextAppService>();
         services.AddScoped<ProjectResolver>();
-        services.AddScoped<TaskRecordDomainService>();
+        services.AddScoped<ProjectConversationChatHistoryDomainService>();
 
         services.AddSingleton<EfCoreChatHistoryProvider>();
         services.AddSingleton<ChatHistoryProvider>(sp =>

@@ -21,18 +21,20 @@ public class TaskProjectionModelTests
     }
 
     [Fact]
-    public void ProjectContext_HasUniqueProjectContextIdIndex()
+    public void ProjectConversation_HasExpectedTableAndUniqueProjectContextIdIndex()
     {
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite("DataSource=:memory:")
+            .UseSnakeCaseNamingConvention()
             .Options;
 
         using var dbContext = new AgwDbContext(options);
-        var entityType = dbContext.Model.FindEntityType(typeof(ProjectContext));
+        var entityType = dbContext.Model.FindEntityType(typeof(ProjectConversation));
         Assert.NotNull(entityType);
+        Assert.Equal("project_conversation", entityType.GetTableName());
 
-        var projectIdProperty = entityType.FindProperty(nameof(ProjectContext.ProjectId));
-        var contextIdProperty = entityType.FindProperty(nameof(ProjectContext.ContextId));
+        var projectIdProperty = entityType.FindProperty(nameof(ProjectConversation.ProjectId));
+        var contextIdProperty = entityType.FindProperty(nameof(ProjectConversation.ContextId));
         Assert.NotNull(projectIdProperty);
         Assert.NotNull(contextIdProperty);
 
@@ -43,10 +45,11 @@ public class TaskProjectionModelTests
     }
 
     [Fact]
-    public void TaskSessionBinding_HasUniqueProjectContextAgentIndex()
+    public void TaskSessionBinding_HasUniqueProjectConversationAgentIndex()
     {
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite("DataSource=:memory:")
+            .UseSnakeCaseNamingConvention()
             .Options;
 
         using var dbContext = new AgwDbContext(options);
@@ -55,12 +58,13 @@ public class TaskProjectionModelTests
 
         Assert.Null(entityType.FindProperty("TaskId"));
 
-        var contextIdProperty = entityType.FindProperty(nameof(TaskSessionBinding.ProjectContextId));
+        var contextIdProperty = entityType.FindProperty(nameof(TaskSessionBinding.ProjectConversationId));
         var agentIdProperty = entityType.FindProperty(nameof(TaskSessionBinding.AgentId));
         var externalAgentNameProperty = entityType.FindProperty(nameof(TaskSessionBinding.ExternalAgentName));
         Assert.NotNull(contextIdProperty);
         Assert.NotNull(agentIdProperty);
         Assert.NotNull(externalAgentNameProperty);
+        Assert.Equal("project_conversation_id", contextIdProperty.GetColumnName());
 
         var bindingIndex = entityType.GetIndexes().Single(index =>
             index.Properties.SequenceEqual([contextIdProperty, agentIdProperty, externalAgentNameProperty]));
@@ -69,20 +73,23 @@ public class TaskProjectionModelTests
     }
 
     [Fact]
-    public void TaskRecord_HasContextConversationSequenceIndex()
+    public void ProjectConversationChatHistory_HasExpectedTableColumnAndConversationSequenceIndex()
     {
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite("DataSource=:memory:")
+            .UseSnakeCaseNamingConvention()
             .Options;
 
         using var dbContext = new AgwDbContext(options);
-        var entityType = dbContext.Model.FindEntityType(typeof(TaskRecord));
+        var entityType = dbContext.Model.FindEntityType(typeof(ProjectConversationChatHistory));
         Assert.NotNull(entityType);
+        Assert.Equal("project_conversation_chat_history", entityType.GetTableName());
 
-        var contextIdProperty = entityType.FindProperty(nameof(TaskRecord.ProjectContextId));
-        var conversationSequenceProperty = entityType.FindProperty(nameof(TaskRecord.ConversationSequence));
+        var contextIdProperty = entityType.FindProperty(nameof(ProjectConversationChatHistory.ConversationId));
+        var conversationSequenceProperty = entityType.FindProperty(nameof(ProjectConversationChatHistory.ConversationSequence));
         Assert.NotNull(contextIdProperty);
         Assert.NotNull(conversationSequenceProperty);
+        Assert.Equal("project_conversation_id", contextIdProperty.GetColumnName());
 
         Assert.Contains(
             entityType.GetIndexes(),

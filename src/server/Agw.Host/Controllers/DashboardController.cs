@@ -18,26 +18,26 @@ public class DashboardController : ControllerBase
 {
     private readonly IRepository<Job> _jobRepository;
     private readonly IRepository<Project> _projectRepository;
-    private readonly IRepository<ProjectContext> _projectContextRepository;
+    private readonly IRepository<ProjectConversation> _projectConversationRepository;
     private readonly IRepository<AgentUsage> _agentUsageRepository;
-    private readonly IRepository<TaskRecord> _taskRecordRepository;
+    private readonly IRepository<ProjectConversationChatHistory> _chatHistoryRepository;
     private readonly IRepository<Agent> _agentRepository;
     private readonly IRepository<Agentflow> _agentflowRepository;
 
     public DashboardController(
         IRepository<Job> jobRepository,
         IRepository<Project> projectRepository,
-        IRepository<ProjectContext> projectContextRepository,
+        IRepository<ProjectConversation> projectConversationRepository,
         IRepository<AgentUsage> agentUsageRepository,
-        IRepository<TaskRecord> taskRecordRepository,
+        IRepository<ProjectConversationChatHistory> chatHistoryRepository,
         IRepository<Agent> agentRepository,
         IRepository<Agentflow> agentflowRepository)
     {
         _jobRepository = jobRepository;
         _projectRepository = projectRepository;
-        _projectContextRepository = projectContextRepository;
+        _projectConversationRepository = projectConversationRepository;
         _agentUsageRepository = agentUsageRepository;
-        _taskRecordRepository = taskRecordRepository;
+        _chatHistoryRepository = chatHistoryRepository;
         _agentRepository = agentRepository;
         _agentflowRepository = agentflowRepository;
     }
@@ -49,8 +49,8 @@ public class DashboardController : ControllerBase
         var stats = new DashboardStatsResponse(
             await _jobRepository.Queryable.CountAsync(),
             await _projectRepository.Queryable.CountAsync(),
-            await _projectContextRepository.Queryable.CountAsync(),
-            await _taskRecordRepository.Queryable.CountAsync(),
+            await _projectConversationRepository.Queryable.CountAsync(),
+            await _chatHistoryRepository.Queryable.CountAsync(),
             await _agentRepository.Queryable.CountAsync(),
             await _agentflowRepository.Queryable.CountAsync(),
             await _agentUsageRepository.Queryable.SumAsync(usage => usage.InputTokenCount),

@@ -32,8 +32,8 @@ public class AgentUsageModelTests
         Assert.Contains(indexes, properties => properties.SequenceEqual([nameof(AgentUsage.AgentName)]));
         Assert.Contains(indexes, properties => properties.SequenceEqual([nameof(AgentUsage.RecordedAt)]));
 
-        var projectContextType = dbContext.Model.FindEntityType(typeof(ProjectContext));
-        Assert.NotNull(projectContextType);
-        Assert.Null(projectContextType.FindComplexProperty("Usage"));
+        var projectConversationType = dbContext.Model.FindEntityType(typeof(ProjectConversation));
+        Assert.NotNull(projectConversationType);
+        Assert.Null(projectConversationType.FindComplexProperty("Usage"));
     }
 }

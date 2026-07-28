@@ -29,7 +29,7 @@ public class TaskSessionBindingServiceTests
         }
 
         var projectId = Guid.CreateVersion7();
-        var projectContextId = Guid.CreateVersion7();
+        var projectConversationId = Guid.CreateVersion7();
         var agentId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
@@ -41,9 +41,9 @@ public class TaskSessionBindingServiceTests
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
-            seedContext.ProjectContexts.Add(new ProjectContext
+            seedContext.ProjectConversations.Add(new ProjectConversation
             {
-                Id = projectContextId,
+                Id = projectConversationId,
                 ProjectId = projectId,
                 ContextId = "context-1",
                 Title = "Binding Context",
@@ -56,7 +56,7 @@ public class TaskSessionBindingServiceTests
         await using var dbContext = new AgwDbContext(options);
         var service = new TaskSessionBindingService(
             new EfRepository<TaskSessionBinding>(dbContext),
-            new EfRepository<ProjectContext>(dbContext),
+            new EfRepository<ProjectConversation>(dbContext),
             dbContext,
             TimeProvider.System);
 
@@ -78,10 +78,10 @@ public class TaskSessionBindingServiceTests
             cancellationToken);
 
         var bindings = await dbContext.Set<TaskSessionBinding>()
-            .Where(binding => binding.ProjectContextId == projectContextId)
+            .Where(binding => binding.ProjectConversationId == projectConversationId)
             .ToListAsync(cancellationToken);
         var binding = Assert.Single(bindings);
-        Assert.Equal(projectContextId, binding.ProjectContextId);
+        Assert.Equal(projectConversationId, binding.ProjectConversationId);
         Assert.Equal(agentId, binding.AgentId);
         Assert.Equal("codex", binding.ExternalAgentName);
         Assert.Equal("22222222-2222-2222-2222-222222222222", binding.ProviderSessionId);
@@ -106,7 +106,7 @@ public class TaskSessionBindingServiceTests
         }
 
         var projectId = Guid.CreateVersion7();
-        var projectContextId = Guid.CreateVersion7();
+        var projectConversationId = Guid.CreateVersion7();
         var agentId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
@@ -118,9 +118,9 @@ public class TaskSessionBindingServiceTests
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
-            seedContext.ProjectContexts.Add(new ProjectContext
+            seedContext.ProjectConversations.Add(new ProjectConversation
             {
-                Id = projectContextId,
+                Id = projectConversationId,
                 ProjectId = projectId,
                 ContextId = "context-1",
                 Title = "Binding Context",
@@ -133,7 +133,7 @@ public class TaskSessionBindingServiceTests
         await using var dbContext = new AgwDbContext(options);
         var service = new TaskSessionBindingService(
             new EfRepository<TaskSessionBinding>(dbContext),
-            new EfRepository<ProjectContext>(dbContext),
+            new EfRepository<ProjectConversation>(dbContext),
                 dbContext,
             TimeProvider.System);
 
@@ -149,7 +149,7 @@ public class TaskSessionBindingServiceTests
         var binding = await service.GetAsync(projectId, "context-1", agentId, "CODEX", cancellationToken);
 
         Assert.NotNull(binding);
-        Assert.Equal(projectContextId, binding!.ProjectContextId);
+        Assert.Equal(projectConversationId, binding!.ProjectConversationId);
         Assert.Equal("11111111-1111-1111-1111-111111111111", binding.ProviderSessionId);
     }
 
@@ -172,7 +172,7 @@ public class TaskSessionBindingServiceTests
             }
 
             var projectId = Guid.CreateVersion7();
-            var projectContextId = Guid.CreateVersion7();
+            var projectConversationId = Guid.CreateVersion7();
             var agentId = Guid.CreateVersion7();
             await using (var seedContext = new AgwDbContext(options))
             {
@@ -184,9 +184,9 @@ public class TaskSessionBindingServiceTests
                     CreateBy = "tester",
                     CreateTime = TimeProvider.System.GetUtcNow()
                 });
-                seedContext.ProjectContexts.Add(new ProjectContext
+                seedContext.ProjectConversations.Add(new ProjectConversation
                 {
-                    Id = projectContextId,
+                    Id = projectConversationId,
                     ProjectId = projectId,
                     ContextId = "context-1",
                     Title = "Binding Context",
@@ -204,7 +204,7 @@ public class TaskSessionBindingServiceTests
                     await using var dbContext = new AgwDbContext(options);
                     var service = new TaskSessionBindingService(
                         new EfRepository<TaskSessionBinding>(dbContext),
-                        new EfRepository<ProjectContext>(dbContext),
+                        new EfRepository<ProjectConversation>(dbContext),
             dbContext,
                         TimeProvider.System);
 
@@ -224,7 +224,7 @@ public class TaskSessionBindingServiceTests
 
             await using var verifyContext = new AgwDbContext(options);
             var bindings = await verifyContext.TaskSessionBindings
-                .Where(binding => binding.ProjectContextId == projectContextId
+                .Where(binding => binding.ProjectConversationId == projectConversationId
                     && binding.AgentId == agentId
                     && binding.ExternalAgentName == "codex")
                 .ToListAsync(cancellationToken);

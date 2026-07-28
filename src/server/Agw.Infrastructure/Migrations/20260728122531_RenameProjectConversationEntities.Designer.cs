@@ -3,6 +3,7 @@ using System;
 using Agw.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Agw.Infrastructure.Migrations
 {
     [DbContext(typeof(AgwDbContext))]
-    partial class LlmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260728122531_RenameProjectConversationEntities")]
+    partial class RenameProjectConversationEntities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
@@ -342,8 +345,7 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("system_prompt");
 
                     b.Property<string>("Tools")
-                        .IsRequired()
-                        .HasMaxLength(16000)
+                        .HasMaxLength(4000)
                         .HasColumnType("TEXT")
                         .HasColumnName("tools");
 
@@ -411,42 +413,6 @@ namespace Agw.Infrastructure.Migrations
                         .HasDatabaseName("ix_agent_mcp_server_relation_mcp_tool_server_id");
 
                     b.ToTable("agent_mcp_server_relation", (string)null);
-                });
-
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSessionStateEntry", b =>
-                {
-                    b.Property<Guid>("ProjectContextId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_context_id");
-
-                    b.Property<Guid>("AgentId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_id");
-
-                    b.Property<string>("AgentflowNodeId")
-                        .HasMaxLength(512)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agentflow_node_id");
-
-                    b.Property<string>("SerializedSession")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("serialized_session");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("ProjectContextId", "AgentId", "AgentflowNodeId")
-                        .HasName("pk_agent_session_state");
-
-                    b.HasIndex("AgentId")
-                        .HasDatabaseName("ix_agent_session_state_agent_id");
-
-                    b.HasIndex("UpdatedAt")
-                        .HasDatabaseName("ix_agent_session_state_updated_at");
-
-                    b.ToTable("agent_session_state", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSkillRelation", b =>
@@ -1090,8 +1056,7 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("name");
 
                     b.Property<string>("Tools")
-                        .IsRequired()
-                        .HasMaxLength(16000)
+                        .HasMaxLength(4000)
                         .HasColumnType("TEXT")
                         .HasColumnName("tools");
 
@@ -1306,45 +1271,6 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("project_mcp_server_relation", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectMemoryEntry", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("content");
-
-                    b.Property<string>("Path")
-                        .IsRequired()
-                        .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("path");
-
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_id");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_project_memory");
-
-                    b.HasIndex("UpdatedAt")
-                        .HasDatabaseName("ix_project_memory_updated_at");
-
-                    b.HasIndex("ProjectId", "Path")
-                        .IsUnique()
-                        .HasDatabaseName("ix_project_memory_project_id_path");
-
-                    b.ToTable("project_memory", (string)null);
-                });
-
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectSkillRelation", b =>
                 {
                     b.Property<Guid>("ProjectId")
@@ -1420,7 +1346,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("task_session_binding", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.AgwAiModel", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.LlmModel", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1816,27 +1742,6 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("McpToolServer");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSessionStateEntry", b =>
-                {
-                    b.HasOne("Agw.Shared.Data.Entities.Agents.Agent", "Agent")
-                        .WithMany()
-                        .HasForeignKey("AgentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_agent_session_state_agent_agent_id");
-
-                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectContext", "ProjectContext")
-                        .WithMany()
-                        .HasForeignKey("ProjectContextId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_agent_session_state_project_context_project_context_id");
-
-                    b.Navigation("Agent");
-
-                    b.Navigation("ProjectContext");
-                });
-
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSkillRelation", b =>
                 {
                     b.HasOne("Agw.Shared.Data.Entities.Agents.Agent", "Agent")
@@ -1981,7 +1886,7 @@ namespace Agw.Infrastructure.Migrations
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.ModelProviderRelation", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Providers.AgwAiModel", "Model")
+                    b.HasOne("Agw.Shared.Data.Entities.Providers.LlmModel", "Model")
                         .WithMany("Providers")
                         .HasForeignKey("ModelId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2076,7 +1981,7 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("ChatHistories");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.AgwAiModel", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.LlmModel", b =>
                 {
                     b.Navigation("Providers");
                 });

@@ -37,8 +37,8 @@ public class ProjectContextAppServiceTests
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip", jobId));
-            seedContext.TaskRecords.AddRange(
+            seedContext.ProjectConversations.Add(CreateContext(contextId, projectId, "context-1", "Trip", jobId));
+            seedContext.ProjectConversationChatHistories.AddRange(
                 CreateRecord(contextId, firstTaskId, 0, "Tokyo trip", TaskExecutionStatus.Succeeded),
                 CreateRecord(contextId, secondTaskId, 0, "Hotels", TaskExecutionStatus.Running));
             await seedContext.SaveChangesAsync(cancellationToken);
@@ -76,24 +76,24 @@ public class ProjectContextAppServiceTests
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.AddRange(
+            seedContext.ProjectConversations.AddRange(
                 CreateContext(transientContextId, projectId, "pending-context", "New Chat"),
                 CreateContext(emptyTitledContextId, projectId, "empty-titled-context", "Queued run"),
                 CreateContext(persistedContextId, projectId, "persisted-context", "Persisted"));
-            seedContext.TaskRecords.AddRange(
-                new TaskRecord
+            seedContext.ProjectConversationChatHistories.AddRange(
+                new ProjectConversationChatHistory
                 {
                     Id = Guid.CreateVersion7(),
-                    ProjectContextId = transientContextId,
+                    ConversationId = transientContextId,
                     TaskId = Guid.CreateVersion7(),
                     Status = TaskExecutionStatus.Running,
                     CreateTime = TimeProvider.System.GetUtcNow(),
                     UpdateTime = TimeProvider.System.GetUtcNow()
                 },
-                new TaskRecord
+                new ProjectConversationChatHistory
                 {
                     Id = Guid.CreateVersion7(),
-                    ProjectContextId = emptyTitledContextId,
+                    ConversationId = emptyTitledContextId,
                     TaskId = Guid.CreateVersion7(),
                     Status = TaskExecutionStatus.Running,
                     CreateTime = TimeProvider.System.GetUtcNow(),
@@ -146,14 +146,14 @@ public class ProjectContextAppServiceTests
         {
             var requestedContext = CreateContext(contextId, projectId, "context-1", "Trip", jobId);
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.AddRange(
+            seedContext.ProjectConversations.AddRange(
                 requestedContext,
                 CreateContext(otherContextId, projectId, "context-2", "Other"));
             seedContext.AgentUsages.AddRange(
                 CreateUsage(projectId, "context-1", "planner", 8, 15, 23, 3, 2),
                 CreateUsage(projectId, "context-1", "$summary", 2, 5, 7, 1, 3),
                 CreateUsage(projectId, "context-2", "other", 100, 100, 200, 100, 100));
-            seedContext.TaskRecords.AddRange(
+            seedContext.ProjectConversationChatHistories.AddRange(
                 CreateRecord(contextId, firstTaskId, 0, "Tokyo trip", TaskExecutionStatus.Succeeded),
                 CreateRecord(contextId, secondTaskId, 0, "Hotels", TaskExecutionStatus.Succeeded),
                 CreateRecord(otherContextId, otherTaskId, 0, "Wrong context", TaskExecutionStatus.Succeeded));
@@ -238,8 +238,8 @@ public class ProjectContextAppServiceTests
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
-            seedContext.TaskRecords.AddRange(
+            seedContext.ProjectConversations.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
+            seedContext.ProjectConversationChatHistories.AddRange(
                 CreateRecord(contextId, firstTaskId, 2, "third", TaskExecutionStatus.Succeeded, now),
                 CreateRecord(contextId, secondTaskId, 0, "first", TaskExecutionStatus.Succeeded, now.AddSeconds(1)),
                 CreateRecord(contextId, firstTaskId, 1, "second", TaskExecutionStatus.Succeeded, now.AddSeconds(2)));
@@ -273,7 +273,7 @@ public class ProjectContextAppServiceTests
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.AddRange(
+            seedContext.ProjectConversations.AddRange(
                 CreateContext(contextId, projectId, "context-1", "Trip"),
                 CreateContext(otherContextId, projectId, "context-2", "Other"));
             seedContext.AgentUsages.Add(CreateUsage(
@@ -285,7 +285,7 @@ public class ProjectContextAppServiceTests
                 30,
                 4,
                 5));
-            seedContext.TaskRecords.AddRange(
+            seedContext.ProjectConversationChatHistories.AddRange(
                 CreateRecord(contextId, Guid.CreateVersion7(), 0, "Delete me", TaskExecutionStatus.Succeeded),
                 CreateRecord(otherContextId, Guid.CreateVersion7(), 0, "Keep me", TaskExecutionStatus.Succeeded));
             await seedContext.SaveChangesAsync(cancellationToken);
@@ -299,10 +299,10 @@ public class ProjectContextAppServiceTests
         }
 
         await using var assertContext = new AgwDbContext(options);
-        var remainingContext = Assert.Single(assertContext.ProjectContexts);
+        var remainingContext = Assert.Single(assertContext.ProjectConversations);
         Assert.Equal("context-2", remainingContext.ContextId);
-        var remainingRecord = Assert.Single(assertContext.TaskRecords);
-        Assert.Equal(otherContextId, remainingRecord.ProjectContextId);
+        var remainingRecord = Assert.Single(assertContext.ProjectConversationChatHistories);
+        Assert.Equal(otherContextId, remainingRecord.ConversationId);
         Assert.Single(assertContext.AgentUsages);
     }
 
@@ -321,7 +321,7 @@ public class ProjectContextAppServiceTests
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
+            seedContext.ProjectConversations.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -351,7 +351,7 @@ public class ProjectContextAppServiceTests
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.AddRange(
+            seedContext.ProjectConversations.AddRange(
                 CreateContext(firstContextId, projectId, "context-1", "Trip"),
                 CreateContext(secondContextId, projectId, "context-2", "Plan"));
             seedContext.AgentUsages.Add(CreateUsage(
@@ -393,9 +393,9 @@ public class ProjectContextAppServiceTests
         var contextId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            var projectContext = CreateContext(contextId, projectId, "context-1", "Trip");
+            var projectConversation = CreateContext(contextId, projectId, "context-1", "Trip");
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.Add(projectContext);
+            seedContext.ProjectConversations.Add(projectConversation);
             seedContext.AgentUsages.Add(CreateUsage(
                 projectId,
                 "context-1",
@@ -405,7 +405,7 @@ public class ProjectContextAppServiceTests
                 30,
                 4,
                 5));
-            seedContext.TaskRecords.Add(CreateRecord(
+            seedContext.ProjectConversationChatHistories.Add(CreateRecord(
                 contextId,
                 Guid.CreateVersion7(),
                 0,
@@ -414,7 +414,7 @@ public class ProjectContextAppServiceTests
             seedContext.TaskSessionBindings.Add(new TaskSessionBinding
             {
                 Id = Guid.CreateVersion7(),
-                ProjectContextId = contextId,
+                ProjectConversationId = contextId,
                 AgentId = Guid.CreateVersion7(),
                 ExternalAgentName = "codex",
                 ProviderSessionId = Guid.CreateVersion7().Normalize(),
@@ -430,9 +430,9 @@ public class ProjectContextAppServiceTests
         var result = await service.ClearRecordsAsync(projectId, "context-1");
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
-        Assert.Empty(await dbContext.TaskRecords.ToListAsync(cancellationToken));
+        Assert.Empty(await dbContext.ProjectConversationChatHistories.ToListAsync(cancellationToken));
         Assert.Empty(await dbContext.TaskSessionBindings.ToListAsync(cancellationToken));
-        Assert.Single(await dbContext.ProjectContexts.ToListAsync(cancellationToken));
+        Assert.Single(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
     }
 
@@ -451,8 +451,8 @@ public class ProjectContextAppServiceTests
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
-            seedContext.TaskRecords.Add(CreateRecord(
+            seedContext.ProjectConversations.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
+            seedContext.ProjectConversationChatHistories.Add(CreateRecord(
                 contextId,
                 Guid.CreateVersion7(),
                 0,
@@ -495,7 +495,7 @@ public class ProjectContextAppServiceTests
         CreateTime = TimeProvider.System.GetUtcNow()
     };
 
-    private static ProjectContext CreateContext(
+    private static ProjectConversation CreateContext(
         Guid id,
         Guid projectId,
         string contextId,
@@ -535,7 +535,7 @@ public class ProjectContextAppServiceTests
             ReasoningTokenCount = reasoningTokenCount
         };
 
-    private static TaskRecord CreateRecord(
+    private static ProjectConversationChatHistory CreateRecord(
         Guid contextId,
         Guid taskId,
         long sequence,
@@ -543,7 +543,7 @@ public class ProjectContextAppServiceTests
         TaskExecutionStatus status) =>
         CreateRecord(contextId, taskId, sequence, text, status, TimeProvider.System.GetUtcNow());
 
-    private static TaskRecord CreateRecord(
+    private static ProjectConversationChatHistory CreateRecord(
         Guid contextId,
         Guid taskId,
         long sequence,
@@ -552,7 +552,7 @@ public class ProjectContextAppServiceTests
         DateTimeOffset createTime) => new()
         {
             Id = Guid.CreateVersion7(),
-            ProjectContextId = contextId,
+            ConversationId = contextId,
             TaskId = taskId,
             Status = status,
             ConversationSequence = sequence,
@@ -592,16 +592,16 @@ public class ProjectContextAppServiceTests
         var projectRepository = new EfRepository<Project>(dbContext);
 
         return new ProjectContextAppService(
-            new EfRepository<ProjectContext>(dbContext),
-            new EfRepository<TaskRecord>(dbContext),
+            new EfRepository<ProjectConversation>(dbContext),
+            new EfRepository<ProjectConversationChatHistory>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             new ProjectResolver(projectRepository),
-            new TaskRecordDomainService(),
+            new ProjectConversationChatHistoryDomainService(),
             taskSessionBindingService ?? new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
-                new EfRepository<ProjectContext>(dbContext),
+                new EfRepository<ProjectConversation>(dbContext),
                 dbContext,
                 TimeProvider.System),
             TimeProvider.System);
@@ -630,10 +630,10 @@ public class ProjectContextAppServiceTests
             throw new NotSupportedException();
 
         public Task DeleteByContextAsync(
-            Guid projectContextId,
+            Guid projectConversationId,
             CancellationToken cancellationToken = default)
         {
-            DeletedContextIds.Add(projectContextId);
+            DeletedContextIds.Add(projectConversationId);
             return Task.CompletedTask;
         }
     }

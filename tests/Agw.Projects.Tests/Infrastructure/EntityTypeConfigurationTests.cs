@@ -136,9 +136,9 @@ public class EntityTypeConfigurationTests
             typeof(ProjectSkillRelation),
             typeof(ProjectMcpServerRelation),
             typeof(ProjectConnectionRelation),
-            typeof(ProjectContext),
+            typeof(ProjectConversation),
             typeof(TaskSessionBinding),
-            typeof(TaskRecord));
+            typeof(ProjectConversationChatHistory));
     }
 
     [Fact]

@@ -220,8 +220,8 @@ public class JobAppServiceTests
             var service = new JobAppService(
                 new JobRepo(dbContext, timeProvider),
                 new EfRepository<JobLog>(dbContext),
-                new EfRepository<TaskRecord>(dbContext),
-                new EfRepository<ProjectContext>(dbContext),
+                new EfRepository<ProjectConversationChatHistory>(dbContext),
+                new EfRepository<ProjectConversation>(dbContext),
                 dbContext,
                 new JobScheduleCalculator(),
                 schedulerWakeSignal,

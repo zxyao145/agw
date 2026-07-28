@@ -17,14 +17,14 @@ public class TaskStore : ITaskStore
     private const string SnapshotMetadataKey = "agentTask";
     private const string SystemUser = "a2a";
 
-    private readonly IRepository<ProjectContext> _contextRepository;
-    private readonly IRepository<TaskRecord> _recordRepository;
+    private readonly IRepository<ProjectConversation> _contextRepository;
+    private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
 
     public TaskStore(
-        IRepository<ProjectContext> contextRepository,
-        IRepository<TaskRecord> recordRepository,
+        IRepository<ProjectConversation> contextRepository,
+        IRepository<ProjectConversationChatHistory> recordRepository,
         IUnitOfWork unitOfWork,
         TimeProvider timeProvider)
     {
@@ -78,14 +78,14 @@ public class TaskStore : ITaskStore
             ? contexts
             : contexts.Where(context => context.ContextId == request.ContextId.Trim()).ToList();
         var contextIds = filteredContexts.Select(context => context.Id).ToHashSet();
-        var allRecords = await _recordRepository.ListAsync(record => contextIds.Contains(record.ProjectContextId));
+        var allRecords = await _recordRepository.ListAsync(record => contextIds.Contains(record.ConversationId));
         var contextById = filteredContexts.ToDictionary(context => context.Id);
 
         var persistedTasks = new List<AgentTask>();
         foreach (var recordGroup in allRecords.GroupBy(record => record.TaskId))
         {
             var records = recordGroup.ToList();
-            var task = TaskExecutionMapper.ToTask(contextById[records[0].ProjectContextId], records);
+            var task = TaskExecutionMapper.ToTask(contextById[records[0].ConversationId], records);
             var agentTask = TryReadSnapshot(records) ?? BuildFallbackTask(task);
             if (!MatchesStatus(agentTask, request.Status))
             {
@@ -141,7 +141,7 @@ public class TaskStore : ITaskStore
         var now = _timeProvider.GetUtcNow();
         var statusTimestampUtc = task.Status?.Timestamp ?? now;
         var records = await _recordRepository.ListAsync(record => record.TaskId == taskGuid);
-        var existingContext = records.Count == 0 ? null : await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
+        var existingContext = records.Count == 0 ? null : await _contextRepository.GetByIdAsync(records[0].ConversationId);
         var existingTask = existingContext == null || records.Count == 0
             ? null
             : TaskExecutionMapper.ToTask(existingContext, records);
@@ -156,7 +156,7 @@ public class TaskStore : ITaskStore
 
         if (existingTask == null)
         {
-            existingContext = new ProjectContext
+            existingContext = new ProjectConversation
             {
                 Id = Guid.CreateVersion7(),
                 ProjectId = ProjectDefaults.A2AId,
@@ -184,10 +184,10 @@ public class TaskStore : ITaskStore
             _recordRepository.Remove(record);
         }
 
-        await _recordRepository.AddAsync(new TaskRecord
+        await _recordRepository.AddAsync(new ProjectConversationChatHistory
         {
             Id = Guid.CreateVersion7(),
-            ProjectContextId = existingContext!.Id,
+            ConversationId = existingContext!.Id,
             TaskId = taskGuid,
             JobId = null,
             Status = coarseStatus,
@@ -212,7 +212,7 @@ public class TaskStore : ITaskStore
             return null;
         }
 
-        var context = await _contextRepository.GetByIdAsync(records[0].ProjectContextId);
+        var context = await _contextRepository.GetByIdAsync(records[0].ConversationId);
         return context == null ? null : TaskExecutionMapper.ToTask(context, records);
     }
 
@@ -223,7 +223,7 @@ public class TaskStore : ITaskStore
             [SnapshotMetadataKey] = JsonSerializer.SerializeToElement(task)
         };
 
-    private static AgentTask? TryReadSnapshot(IEnumerable<TaskRecord> records)
+    private static AgentTask? TryReadSnapshot(IEnumerable<ProjectConversationChatHistory> records)
     {
         foreach (var record in records)
         {

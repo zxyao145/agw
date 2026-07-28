@@ -6,11 +6,11 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Domain.Services;
 
-public static class TaskRecordChatMessageExtensions
+public static class ProjectConversationChatHistoryChatMessageExtensions
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public static ChatMessage? ToChatMessage(this TaskRecord record)
+    public static ChatMessage? ToChatMessage(this ProjectConversationChatHistory record)
     {
         if (string.IsNullOrWhiteSpace(record.ConversationPayload))
         {
@@ -20,7 +20,7 @@ public static class TaskRecordChatMessageExtensions
         return JsonSerializer.Deserialize<ChatMessage>(record.ConversationPayload, JsonOptions);
     }
 
-    public static string GetText(this TaskRecord record)
+    public static string GetText(this ProjectConversationChatHistory record)
     {
         return string.Concat(
             record.ToChatMessage()?.Contents

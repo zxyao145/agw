@@ -256,7 +256,7 @@ public class JobManagementSkillTests
                 }));
         Assert.Equal(ErrorCodes.InteractiveAdminRequired.Code, createException.Code);
 
-        using var wrongProjectContext = fixture.PushInteractiveContext(
+        using var wrongProjectConversation = fixture.PushInteractiveContext(
             Guid.CreateVersion7(),
             "wrong-project-user");
         var updateException = await Assert.ThrowsAsync<AgwException>(() =>
@@ -426,8 +426,8 @@ public class JobManagementSkillTests
                     serviceProvider.GetRequiredService<DbContext>(),
                     serviceProvider.GetRequiredService<TimeProvider>()));
             services.AddScoped<IRepository<JobLog>, EfRepository<JobLog>>();
-            services.AddScoped<IRepository<TaskRecord>, EfRepository<TaskRecord>>();
-            services.AddScoped<IRepository<ProjectContext>, EfRepository<ProjectContext>>();
+            services.AddScoped<IRepository<ProjectConversationChatHistory>, EfRepository<ProjectConversationChatHistory>>();
+            services.AddScoped<IRepository<ProjectConversation>, EfRepository<ProjectConversation>>();
             services.AddScoped<JobAppService>();
             var serviceProvider = services.BuildServiceProvider();
 

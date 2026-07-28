@@ -328,16 +328,16 @@ public class ProjectContextsControllerTests
         var projectRepository = new EfRepository<Project>(dbContext);
 
         return new ProjectContextAppService(
-            new EfRepository<ProjectContext>(dbContext),
-            new EfRepository<TaskRecord>(dbContext),
+            new EfRepository<ProjectConversation>(dbContext),
+            new EfRepository<ProjectConversationChatHistory>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             new ProjectResolver(projectRepository),
-            new TaskRecordDomainService(),
+            new ProjectConversationChatHistoryDomainService(),
             new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
-                new EfRepository<ProjectContext>(dbContext),
+                new EfRepository<ProjectConversation>(dbContext),
                 dbContext,
                 TimeProvider.System),
             TimeProvider.System);

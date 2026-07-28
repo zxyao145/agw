@@ -4,19 +4,19 @@ using Agw.Shared.Extensions;
 
 namespace Agw.Projects.Domain.Services;
 
-public class TaskRecordDomainService
+public class ProjectConversationChatHistoryDomainService
 {
-    public IReadOnlyList<TaskRecord> Order(IEnumerable<TaskRecord> records) =>
+    public IReadOnlyList<ProjectConversationChatHistory> Order(IEnumerable<ProjectConversationChatHistory> records) =>
         records
             .OrderBy(r => r.ConversationSequence ?? long.MinValue)
             .ThenBy(r => r.CreateTime)
             .ThenBy(r => r.UpdateTime ?? r.CreateTime)
             .ToList();
 
-    public TaskRecord? GetLatest(IEnumerable<TaskRecord> records) =>
+    public ProjectConversationChatHistory? GetLatest(IEnumerable<ProjectConversationChatHistory> records) =>
         Order(records).LastOrDefault();
 
-    public Dictionary<string, List<TaskRecord>> GroupByTaskId(IEnumerable<TaskRecord> records) =>
+    public Dictionary<string, List<ProjectConversationChatHistory>> GroupByTaskId(IEnumerable<ProjectConversationChatHistory> records) =>
         Order(records)
             .GroupBy(record => record.TaskId.Normalize(), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
@@ -24,7 +24,7 @@ public class TaskRecordDomainService
     public TaskProjection? FindTask(
         string taskId,
         IReadOnlyList<TaskProjection> tasks,
-        IReadOnlyList<TaskRecord> records)
+        IReadOnlyList<ProjectConversationChatHistory> records)
     {
         if (string.IsNullOrWhiteSpace(taskId) || tasks.Count == 0)
         {

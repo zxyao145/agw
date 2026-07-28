@@ -4,7 +4,7 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Domain.Services;
 
-public static class TaskRecordMetadataFactory
+public static class ProjectConversationChatHistoryMetadataFactory
 {
     public static Dictionary<string, JsonElement>? FromMessage(ChatMessage message)
     {

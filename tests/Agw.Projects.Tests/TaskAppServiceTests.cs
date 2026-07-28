@@ -77,14 +77,14 @@ public class TaskAppServiceTests
         Assert.NotNull(task);
         Assert.Null(task!.JobId);
         Assert.Equal("hello world", task.Title);
-        Assert.NotNull(await dbContext.ProjectContexts.SingleOrDefaultAsync(cancellationToken));
-        Assert.NotNull(await dbContext.TaskRecords.SingleOrDefaultAsync(
+        Assert.NotNull(await dbContext.ProjectConversations.SingleOrDefaultAsync(cancellationToken));
+        Assert.NotNull(await dbContext.ProjectConversationChatHistories.SingleOrDefaultAsync(
             record => record.TaskId == task.TaskId,
             cancellationToken));
     }
 
     [Fact]
-    public async Task ResolveTaskAsync_WhenResumeUsesContextId_ReturnsLatestTaskInProjectContext()
+    public async Task ResolveTaskAsync_WhenResumeUsesContextId_ReturnsLatestTaskInProjectConversation()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
 
@@ -115,7 +115,7 @@ public class TaskAppServiceTests
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
-            seedContext.ProjectContexts.Add(new ProjectContext
+            seedContext.ProjectConversations.Add(new ProjectConversation
             {
                 Id = contextRowId,
                 ProjectId = projectId,
@@ -126,20 +126,20 @@ public class TaskAppServiceTests
                 UpdateBy = "tester",
                 UpdateTime = TimeProvider.System.GetUtcNow().AddMinutes(-1)
             });
-            seedContext.TaskRecords.AddRange(
-                new TaskRecord
+            seedContext.ProjectConversationChatHistories.AddRange(
+                new ProjectConversationChatHistory
                 {
                     Id = Guid.CreateVersion7(),
-                    ProjectContextId = contextRowId,
+                    ConversationId = contextRowId,
                     TaskId = oldTaskId,
                     Status = TaskExecutionStatus.Succeeded,
                     CreateTime = TimeProvider.System.GetUtcNow().AddMinutes(-2),
                     UpdateTime = TimeProvider.System.GetUtcNow().AddMinutes(-2)
                 },
-                new TaskRecord
+                new ProjectConversationChatHistory
                 {
                     Id = Guid.CreateVersion7(),
-                    ProjectContextId = contextRowId,
+                    ConversationId = contextRowId,
                     TaskId = latestTaskId,
                     Status = TaskExecutionStatus.Running,
                     CreateTime = TimeProvider.System.GetUtcNow().AddMinutes(-1),
@@ -171,16 +171,16 @@ public class TaskAppServiceTests
     {
         var projectRepository = new EfRepository<Project>(dbContext);
         var taskExecutionAppService = new TaskExecutionAppService(
-            new EfRepository<ProjectContext>(dbContext),
-            new EfRepository<TaskRecord>(dbContext),
+            new EfRepository<ProjectConversation>(dbContext),
+            new EfRepository<ProjectConversationChatHistory>(dbContext),
             dbContext,
-            new Domain.Services.TaskRecordDomainService(),
+            new Domain.Services.ProjectConversationChatHistoryDomainService(),
             new ProjectResolver(projectRepository),
             TimeProvider.System);
 
         return new TaskAppService(
-            new EfRepository<ProjectContext>(dbContext),
-            new EfRepository<TaskRecord>(dbContext),
+            new EfRepository<ProjectConversation>(dbContext),
+            new EfRepository<ProjectConversationChatHistory>(dbContext),
             new ProjectResolver(projectRepository),
             taskExecutionAppService);
     }

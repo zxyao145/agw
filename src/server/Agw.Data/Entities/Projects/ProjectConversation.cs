@@ -5,9 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Projects;
 
-[Table("project_context")]
-[EntityTypeConfiguration(typeof(ProjectContextConfiguration))]
-public class ProjectContext : BaseEntity
+[Table("project_conversation")]
+[EntityTypeConfiguration(typeof(ProjectConversationConfiguration))]
+public class ProjectConversation : BaseEntity
 {
     public Guid Id { get; set; }
 
@@ -23,5 +23,6 @@ public class ProjectContext : BaseEntity
     public virtual Project? Project { get; set; }
 
     [JsonIgnore]
-    public virtual ICollection<TaskRecord> Records { get; set; } = new List<TaskRecord>();
+    public virtual ICollection<ProjectConversationChatHistory> ChatHistories { get; set; } =
+        new List<ProjectConversationChatHistory>();
 }

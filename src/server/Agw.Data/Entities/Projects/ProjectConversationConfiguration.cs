@@ -3,9 +3,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Agw.Shared.Data.Entities.Projects;
 
-public class ProjectContextConfiguration : IEntityTypeConfiguration<ProjectContext>
+public class ProjectConversationConfiguration : IEntityTypeConfiguration<ProjectConversation>
 {
-    public void Configure(EntityTypeBuilder<ProjectContext> builder)
+    public void Configure(EntityTypeBuilder<ProjectConversation> builder)
     {
         builder.HasKey(e => e.Id);
         builder.Property(e => e.JobId);
@@ -18,7 +18,7 @@ public class ProjectContextConfiguration : IEntityTypeConfiguration<ProjectConte
         builder.HasIndex(e => e.UpdateTime);
 
         builder.HasOne(e => e.Project)
-            .WithMany(project => project.Contexts)
+            .WithMany(project => project.Conversations)
             .HasForeignKey(e => e.ProjectId)
             .OnDelete(DeleteBehavior.Cascade);
     }
