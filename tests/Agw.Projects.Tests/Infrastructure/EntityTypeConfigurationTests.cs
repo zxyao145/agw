@@ -36,7 +36,7 @@ public class EntityTypeConfigurationTests
         AssertConfigured(
             typeof(Provider),
             typeof(ProviderAuthConfig),
-            typeof(LlmModel),
+            typeof(AgwAiModel),
             typeof(ModelProviderRelation),
             typeof(Skill),
             typeof(RemoteSkillCache));

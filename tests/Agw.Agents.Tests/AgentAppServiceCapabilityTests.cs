@@ -261,7 +261,7 @@ public class AgentAppServiceCapabilityTests
             agentConnectionRelationRepository ?? new TestRepository<AgentConnectionRelation>(),
             connectionRepository ?? new TestRepository<Connection>(),
             new TestRepository<ModelProviderRelation>(),
-            new TestRepository<LlmModel>(),
+            new TestRepository<AgwAiModel>(),
             new TestRepository<Provider>(),
             mcpServerRepository ?? new TestRepository<McpServer>(mcpServers),
             agentMcpRelationRepository ?? new TestRepository<AgentMcpServerRelation>(agentMcpRelations),

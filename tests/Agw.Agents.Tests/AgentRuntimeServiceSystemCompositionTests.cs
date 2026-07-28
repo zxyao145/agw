@@ -70,7 +70,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         var connectionId = Guid.CreateVersion7();
         var classSkillRegistration = new TestSkillRegistration();
 
-        dbContext.Models.Add(new LlmModel { Id = modelId, Name = "test-model" });
+        dbContext.Models.Add(new AgwAiModel { Id = modelId, Name = "test-model" });
         dbContext.Providers.Add(new Provider
         {
             Id = providerId,
@@ -445,7 +445,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             new EfRepository<AgentConnectionRelation>(dbContext),
             new EfRepository<Connection>(dbContext),
             new EfRepository<ModelProviderRelation>(dbContext),
-            new EfRepository<LlmModel>(dbContext),
+            new EfRepository<AgwAiModel>(dbContext),
             new EfRepository<Provider>(dbContext),
             new EfRepository<McpServer>(dbContext),
             new EfRepository<AgentMcpServerRelation>(dbContext),

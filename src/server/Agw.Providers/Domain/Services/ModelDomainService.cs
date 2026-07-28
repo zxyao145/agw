@@ -11,14 +11,14 @@ public class ModelDomainService
         _timeProvider = timeProvider;
     }
 
-    public void PrepareForCreate(LlmModel model, string user)
+    public void PrepareForCreate(AgwAiModel model, string user)
     {
         model.Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id;
         model.CreateBy = user;
         model.CreateTime = _timeProvider.GetUtcNow();
     }
 
-    public void ApplyUpdate(LlmModel model, Action<LlmModel> updateAction, string user)
+    public void ApplyUpdate(AgwAiModel model, Action<AgwAiModel> updateAction, string user)
     {
         updateAction(model);
         model.UpdateBy = user;

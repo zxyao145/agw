@@ -2238,17 +2238,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel[]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel[]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel[]"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel[]"
                 }
               }
             }
@@ -2285,17 +2285,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel"
                 }
               }
             }
@@ -2325,17 +2325,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel"
                 }
               }
             }
@@ -2383,17 +2383,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfLlmModel"
+                  "$ref": "#/components/schemas/ApiResultOfAgwAiModel"
                 }
               }
             }
@@ -5315,7 +5315,7 @@
           }
         }
       },
-      "ApiResultOfLlmModel": {
+      "ApiResultOfAgwAiModel": {
         "required": [
           "code",
           "title",
@@ -5330,7 +5330,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/LlmModel"
+                "$ref": "#/components/schemas/AgwAiModel"
               }
             ]
           },
@@ -5349,7 +5349,7 @@
           }
         }
       },
-      "ApiResultOfLlmModel[]": {
+      "ApiResultOfAgwAiModel[]": {
         "required": [
           "code",
           "title",
@@ -5364,7 +5364,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/LlmModel"
+              "$ref": "#/components/schemas/AgwAiModel"
             }
           },
           "code": {
@@ -6602,7 +6602,7 @@
           }
         }
       },
-      "LlmModel": {
+      "AgwAiModel": {
         "required": [
           "id",
           "name",
@@ -7156,7 +7156,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/LlmModel"
+                "$ref": "#/components/schemas/AgwAiModel"
               }
             ]
           },

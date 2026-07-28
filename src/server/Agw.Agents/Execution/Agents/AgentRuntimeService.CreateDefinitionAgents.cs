@@ -117,7 +117,7 @@ public partial class AgentRuntimeService
 
     private AIAgent CreateOpenAiAgent(
         Agent agentDefinition,
-        LlmModel model,
+        AgwAiModel model,
         Provider provider,
         ProviderAuthConfig authConfig,
         IList<AITool>? tools,
@@ -153,7 +153,7 @@ public partial class AgentRuntimeService
 
     private AIAgent CreateAnthropicAgent(
         Agent agentDefinition,
-        LlmModel model,
+        AgwAiModel model,
         Provider provider,
         ProviderAuthConfig authConfig,
         IList<AITool>? tools,

@@ -1343,7 +1343,7 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("task_session_binding", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.LlmModel", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.AgwAiModel", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1883,7 +1883,7 @@ namespace Agw.Infrastructure.Migrations
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.ModelProviderRelation", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Providers.LlmModel", "Model")
+                    b.HasOne("Agw.Shared.Data.Entities.Providers.AgwAiModel", "Model")
                         .WithMany("Providers")
                         .HasForeignKey("ModelId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -1978,7 +1978,7 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("Records");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.LlmModel", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.AgwAiModel", b =>
                 {
                     b.Navigation("Providers");
                 });

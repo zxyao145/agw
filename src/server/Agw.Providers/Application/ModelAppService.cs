@@ -7,12 +7,12 @@ namespace Agw.Providers.Application;
 
 public class ModelAppService : IModelAppService
 {
-    private readonly IRepository<LlmModel> _modelRepository;
+    private readonly IRepository<AgwAiModel> _modelRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ModelDomainService _modelDomainService;
 
     public ModelAppService(
-        IRepository<LlmModel> modelRepository,
+        IRepository<AgwAiModel> modelRepository,
         IUnitOfWork unitOfWork,
         ModelDomainService modelDomainService)
     {
@@ -21,13 +21,13 @@ public class ModelAppService : IModelAppService
         _modelDomainService = modelDomainService;
     }
 
-    public Task<IReadOnlyList<LlmModel>> ListAsync() => _modelRepository.ListAsync();
+    public Task<IReadOnlyList<AgwAiModel>> ListAsync() => _modelRepository.ListAsync();
 
-    public Task<LlmModel?> GetAsync(Guid id) => _modelRepository.GetByIdAsync(id);
+    public Task<AgwAiModel?> GetAsync(Guid id) => _modelRepository.GetByIdAsync(id);
 
-    public async Task<LlmModel> CreateAsync(ModelCreateRequest request, string user)
+    public async Task<AgwAiModel> CreateAsync(ModelCreateRequest request, string user)
     {
-        var model = new LlmModel
+        var model = new AgwAiModel
         {
             Name = request.Name,
             Description = request.Description,
@@ -40,7 +40,7 @@ public class ModelAppService : IModelAppService
         return model;
     }
 
-    public async Task<LlmModel?> UpdateAsync(Guid id, ModelUpdateRequest request, string user)
+    public async Task<AgwAiModel?> UpdateAsync(Guid id, ModelUpdateRequest request, string user)
     {
         var existing = await _modelRepository.GetByIdAsync(id);
         if (existing == null)

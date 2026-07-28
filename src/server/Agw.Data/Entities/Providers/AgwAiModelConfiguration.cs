@@ -3,9 +3,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Agw.Shared.Data.Entities.Providers;
 
-public class LlmModelConfiguration : IEntityTypeConfiguration<LlmModel>
+public class AgwAiModelConfiguration : IEntityTypeConfiguration<AgwAiModel>
 {
-    public void Configure(EntityTypeBuilder<LlmModel> builder)
+    public void Configure(EntityTypeBuilder<AgwAiModel> builder)
     {
         builder.HasKey(e => e.Id);
         builder.HasIndex(e => e.Name).IsUnique();

@@ -40,7 +40,7 @@ public class ModelProviderAppServiceTests
                 CreateBy = "seed",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
-            setupContext.Models.Add(new LlmModel
+            setupContext.Models.Add(new AgwAiModel
             {
                 Id = modelId,
                 Name = "model",

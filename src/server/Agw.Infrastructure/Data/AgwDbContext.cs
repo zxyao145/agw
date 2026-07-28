@@ -52,7 +52,7 @@ public class AgwDbContext : EFContext
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ProviderAuthConfig> ProviderAuthConfigs => Set<ProviderAuthConfig>();
 
-    public DbSet<LlmModel> Models => Set<LlmModel>();
+    public DbSet<AgwAiModel> Models => Set<AgwAiModel>();
     public DbSet<ModelProviderRelation> ModelProviders => Set<ModelProviderRelation>();
 
     public DbSet<Agent> Agents => Set<Agent>();

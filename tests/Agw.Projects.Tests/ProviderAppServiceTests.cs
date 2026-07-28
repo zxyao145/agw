@@ -32,7 +32,7 @@ public class ProviderAppServiceTests
         await using (var setupContext = new AgwDbContext(options))
         {
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
-            setupContext.Models.Add(new LlmModel
+            setupContext.Models.Add(new AgwAiModel
             {
                 Id = Guid.CreateVersion7(),
                 Name = "existing-model",
@@ -419,7 +419,7 @@ public class ProviderAppServiceTests
     {
         return new ProviderAppService(
             new EfRepository<Provider>(dbContext),
-            new EfRepository<LlmModel>(dbContext),
+            new EfRepository<AgwAiModel>(dbContext),
             new EfRepository<ModelProviderRelation>(dbContext),
             dbContext,
             new ProviderDomainService(TimeProvider.System),
@@ -447,7 +447,7 @@ public class ProviderAppServiceTests
         CreateTime = TimeProvider.System.GetUtcNow()
     };
 
-    private static LlmModel CreateModel(string name) => new()
+    private static AgwAiModel CreateModel(string name) => new()
     {
         Id = Guid.CreateVersion7(),
         Name = name,

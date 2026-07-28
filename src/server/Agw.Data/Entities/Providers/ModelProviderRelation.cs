@@ -20,6 +20,6 @@ public class ModelProviderRelation : BaseEntity, IAggregateRoot
     public decimal CacheWrite { get; set; }
     public int RpsLimit { get; set; }
 
-    public LlmModel? Model { get; set; }
+    public AgwAiModel? Model { get; set; }
     public Provider? Provider { get; set; }
 }

@@ -256,7 +256,7 @@ public class DbSeeder
         if (model == null)
         {
             _logger.LogInformation("Seeding LLM Model: deepseek-v4-pro");
-            model = new LlmModel
+            model = new AgwAiModel
             {
                 Id = DeepSeekModelId,
                 Name = "deepseek-v4-pro",

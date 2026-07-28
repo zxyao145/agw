@@ -10,7 +10,7 @@ namespace Agw.Providers.Application;
 public class ProviderAppService : IProviderAppService
 {
     private readonly IRepository<Provider> _providerRepository;
-    private readonly IRepository<LlmModel> _modelRepository;
+    private readonly IRepository<AgwAiModel> _modelRepository;
     private readonly IRepository<ModelProviderRelation> _modelProviderRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProviderDomainService _providerDomainService;
@@ -20,7 +20,7 @@ public class ProviderAppService : IProviderAppService
 
     public ProviderAppService(
         IRepository<Provider> providerRepository,
-        IRepository<LlmModel> modelRepository,
+        IRepository<AgwAiModel> modelRepository,
         IRepository<ModelProviderRelation> modelProviderRepository,
         IUnitOfWork unitOfWork,
         ProviderDomainService providerDomainService,
@@ -187,7 +187,7 @@ public class ProviderAppService : IProviderAppService
                 continue;
             }
 
-            var model = new LlmModel
+            var model = new AgwAiModel
             {
                 Name = modelName,
                 Description = null,

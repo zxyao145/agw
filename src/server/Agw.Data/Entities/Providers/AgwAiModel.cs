@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Agw.Shared.Data.Entities.Providers;
 
 [Table("model")]
-[EntityTypeConfiguration(typeof(LlmModelConfiguration))]
-public class LlmModel : BaseEntity, IAggregateRoot
+[EntityTypeConfiguration(typeof(AgwAiModelConfiguration))]
+public class AgwAiModel : BaseEntity, IAggregateRoot
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;

@@ -339,7 +339,7 @@ public class AgentAppServiceUpdateTests
             connectionRelationRepository ?? new TestRepository<AgentConnectionRelation>(),
             new TestRepository<Connection>(),
             new TestRepository<ModelProviderRelation>(modelProviders, item => item.Id),
-            new TestRepository<LlmModel>(),
+            new TestRepository<AgwAiModel>(),
             new TestRepository<Provider>(),
             new TestRepository<McpServer>(),
             mcpRelationRepository ?? new TestRepository<AgentMcpServerRelation>(),

@@ -43,7 +43,7 @@ public class SummaryChatClientFactoryTests
                 }
             ]
         };
-        var model = new LlmModel { Id = Guid.CreateVersion7(), Name = "test-model" };
+        var model = new AgwAiModel { Id = Guid.CreateVersion7(), Name = "test-model" };
         var modelProvider = new ModelProviderRelation
         {
             Id = Guid.CreateVersion7(),
@@ -58,7 +58,7 @@ public class SummaryChatClientFactoryTests
             null!,
             null!,
             new EfRepository<ModelProviderRelation>(dbContext),
-            new EfRepository<LlmModel>(dbContext),
+            new EfRepository<AgwAiModel>(dbContext),
             new EfRepository<Provider>(dbContext),
             null!,
             null!,

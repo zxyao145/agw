@@ -23,7 +23,7 @@ public class ModelsController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesApiResult(typeof(LlmModel[]))]
+    [ProducesApiResult(typeof(AgwAiModel[]))]
     public async Task<IActionResult> ListAsync()
     {
         var models = await _service.ListAsync();
@@ -31,7 +31,7 @@ public class ModelsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [ProducesApiResult(typeof(LlmModel))]
+    [ProducesApiResult(typeof(AgwAiModel))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
         var model = await _service.GetAsync(id);
@@ -39,7 +39,7 @@ public class ModelsController : ControllerBase
     }
 
     [HttpPost]
-    [ProducesApiResult(typeof(LlmModel))]
+    [ProducesApiResult(typeof(AgwAiModel))]
     public async Task<IActionResult> CreateAsync([FromBody] ModelCreateRequest request)
     {
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
@@ -48,7 +48,7 @@ public class ModelsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [ProducesApiResult(typeof(LlmModel))]
+    [ProducesApiResult(typeof(AgwAiModel))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ModelUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? Constants.AdminUserName;

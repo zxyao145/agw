@@ -15,7 +15,7 @@ namespace Agw.Agents.Definitions.Agents;
 
 public sealed record AgentModelRuntimeConfiguration(
     ModelProviderRelation ModelProvider,
-    LlmModel Model,
+    AgwAiModel Model,
     Provider Provider);
 
 public class AgentAppService
@@ -35,7 +35,7 @@ public class AgentAppService
     private readonly IRepository<AgentConnectionRelation> _agentConnectionRelationRepository;
     private readonly IRepository<Connection> _connectionRepository;
     private readonly IRepository<ModelProviderRelation> _modelProviderRepository;
-    private readonly IRepository<LlmModel> _modelRepository;
+    private readonly IRepository<AgwAiModel> _modelRepository;
     private readonly IRepository<Provider> _providerRepository;
     private readonly IRepository<McpServer> _mcpToolServerRepository;
     private readonly IRepository<AgentMcpServerRelation> _agentMcpToolServerRepository;
@@ -49,7 +49,7 @@ public class AgentAppService
         IRepository<AgentConnectionRelation> agentConnectionRelationRepository,
         IRepository<Connection> connectionRepository,
         IRepository<ModelProviderRelation> modelProviderRepository,
-        IRepository<LlmModel> modelRepository,
+        IRepository<AgwAiModel> modelRepository,
         IRepository<Provider> providerRepository,
         IRepository<McpServer> mcpToolServerRepository,
         IRepository<AgentMcpServerRelation> agentMcpToolServerRepository,

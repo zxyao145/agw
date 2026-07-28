@@ -156,7 +156,7 @@ public class DefinitionPaginationTests
             new EfRepository<AgentConnectionRelation>(dbContext),
             new EfRepository<Connection>(dbContext),
             new EfRepository<ModelProviderRelation>(dbContext),
-            new EfRepository<LlmModel>(dbContext),
+            new EfRepository<AgwAiModel>(dbContext),
             new EfRepository<Provider>(dbContext),
             new EfRepository<McpServer>(dbContext),
             new EfRepository<AgentMcpServerRelation>(dbContext),

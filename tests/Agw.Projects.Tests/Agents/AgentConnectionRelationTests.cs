@@ -156,7 +156,7 @@ public class AgentConnectionRelationTests
             var modelProviderId = Guid.CreateVersion7();
             await using (var seedContext = new AgwDbContext(options))
             {
-                seedContext.Models.Add(new LlmModel { Id = modelId, Name = "test-model" });
+                seedContext.Models.Add(new AgwAiModel { Id = modelId, Name = "test-model" });
                 seedContext.Providers.Add(new Provider
                 {
                     Id = providerId,
@@ -204,7 +204,7 @@ public class AgentConnectionRelationTests
             new EfRepository<AgentConnectionRelation>(dbContext),
             new EfRepository<Connection>(dbContext),
             new EfRepository<ModelProviderRelation>(dbContext),
-            new EfRepository<LlmModel>(dbContext),
+            new EfRepository<AgwAiModel>(dbContext),
             new EfRepository<Provider>(dbContext),
             new EfRepository<McpServer>(dbContext),
             new EfRepository<AgentMcpServerRelation>(dbContext),

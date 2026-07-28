@@ -2961,9 +2961,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfLlmModel[]"];
-            "application/json": components["schemas"]["ApiResultOfLlmModel[]"];
-            "text/json": components["schemas"]["ApiResultOfLlmModel[]"];
+            "text/plain": components["schemas"]["ApiResultOfAgwAiModel[]"];
+            "application/json": components["schemas"]["ApiResultOfAgwAiModel[]"];
+            "text/json": components["schemas"]["ApiResultOfAgwAiModel[]"];
           };
         };
       };
@@ -2990,9 +2990,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfLlmModel"];
-            "application/json": components["schemas"]["ApiResultOfLlmModel"];
-            "text/json": components["schemas"]["ApiResultOfLlmModel"];
+            "text/plain": components["schemas"]["ApiResultOfAgwAiModel"];
+            "application/json": components["schemas"]["ApiResultOfAgwAiModel"];
+            "text/json": components["schemas"]["ApiResultOfAgwAiModel"];
           };
         };
       };
@@ -3027,9 +3027,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfLlmModel"];
-            "application/json": components["schemas"]["ApiResultOfLlmModel"];
-            "text/json": components["schemas"]["ApiResultOfLlmModel"];
+            "text/plain": components["schemas"]["ApiResultOfAgwAiModel"];
+            "application/json": components["schemas"]["ApiResultOfAgwAiModel"];
+            "text/json": components["schemas"]["ApiResultOfAgwAiModel"];
           };
         };
       };
@@ -3057,9 +3057,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfLlmModel"];
-            "application/json": components["schemas"]["ApiResultOfLlmModel"];
-            "text/json": components["schemas"]["ApiResultOfLlmModel"];
+            "text/plain": components["schemas"]["ApiResultOfAgwAiModel"];
+            "application/json": components["schemas"]["ApiResultOfAgwAiModel"];
+            "text/json": components["schemas"]["ApiResultOfAgwAiModel"];
           };
         };
       };
@@ -4095,15 +4095,15 @@ export interface components {
       title: string;
       detail: null | string;
     };
-    ApiResultOfLlmModel: {
-      data?: null | components["schemas"]["LlmModel"];
+    ApiResultOfAgwAiModel: {
+      data?: null | components["schemas"]["AgwAiModel"];
       /** Format: int32 */
       code: number;
       title: string;
       detail: null | string;
     };
-    "ApiResultOfLlmModel[]": {
-      data?: null | components["schemas"]["LlmModel"][];
+    "ApiResultOfAgwAiModel[]": {
+      data?: null | components["schemas"]["AgwAiModel"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -4543,7 +4543,7 @@ export interface components {
       isEnabled: boolean;
       status: components["schemas"]["JobStatus"];
     };
-    LlmModel: {
+    AgwAiModel: {
       /** Format: uuid */
       id: string;
       name: string;
@@ -4701,7 +4701,7 @@ export interface components {
       cacheWrite: number | string;
       /** Format: int32 */
       rpsLimit: number;
-      model?: null | components["schemas"]["LlmModel"];
+      model?: null | components["schemas"]["AgwAiModel"];
       provider?: null | components["schemas"]["Provider"];
       /** Format: date-time */
       createTime: string;
