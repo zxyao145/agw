@@ -7,7 +7,12 @@ import {
 } from "@microsoft/signalr";
 
 import type { AiMessage } from "@agw/api";
-import { parseHumanInteractionQuestions, type HumanInteractionQuestion } from "./human-interaction";
+import {
+  parseHumanInteractionModeChange,
+  parseHumanInteractionQuestions,
+  type HumanInteractionModeChange,
+  type HumanInteractionQuestion,
+} from "./human-interaction";
 
 export type ExecutionRuntimeConfig = {
   baseUrl: string;
@@ -22,10 +27,14 @@ export function configureExecutionRuntime(config: ExecutionRuntimeConfig): void 
 
 export type ExecutionUserInput = Pick<AiMessage, "messageId" | "author" | "contents">;
 
+export type PermissionMode = "fullAccess" | "alwaysAsk" | "allowSameArguments";
+export type AgentMode = "plan" | "execute";
+
 export type ExecutionSetting = {
   projectId: string;
   contextId: string;
   environmentVariables?: Record<string, string> | null;
+  permissionMode?: PermissionMode;
 };
 
 export type ExecutionTarget = {
@@ -52,6 +61,7 @@ export type PendingHumanGate = {
   arguments?: string;
   interactionKind?: string;
   questions?: HumanInteractionQuestion[];
+  modeChange?: HumanInteractionModeChange;
 };
 
 export type TurnFinishedStatus = "completed" | "interrupted" | "failed";
@@ -82,7 +92,35 @@ export function buildSettingCommand(setting: ExecutionSetting) {
     ...(setting.environmentVariables === undefined
       ? {}
       : { environmentVariables: setting.environmentVariables }),
+    ...(setting.permissionMode === undefined ? {} : { permissionMode: setting.permissionMode }),
   };
+}
+
+export function buildSetModeCommand(agentId: string, mode: AgentMode) {
+  return {
+    type: "SetModeCommand" as const,
+    agentId,
+    mode,
+  };
+}
+
+export function buildSetPermissionModeCommand(permissionMode: PermissionMode) {
+  return {
+    type: "SetPermissionModeCommand" as const,
+    permissionMode,
+  };
+}
+
+export function getAgentMode(message: AiMessage): AgentMode | null {
+  const type = message.additionalProperties?.type;
+  if (type !== "mode-status" && type !== "tool-mode-status") return null;
+  const mode = message.additionalProperties?.mode;
+  return mode === "plan" || mode === "execute" ? mode : null;
+}
+
+export function isModeControlMessage(message: AiMessage): boolean {
+  const type = message.additionalProperties?.type;
+  return type === "mode-status" || type === "mode-change-failed";
 }
 
 export function buildExecCommand(request: ExecutionRequest) {
@@ -121,6 +159,10 @@ export function getPendingHumanGate(message: AiMessage): PendingHumanGate | null
       interactionKind === "questions"
         ? (parseHumanInteractionQuestions(properties.payload) ?? undefined)
         : undefined;
+    const modeChange =
+      interactionKind === "mode-change"
+        ? (parseHumanInteractionModeChange(properties.payload) ?? undefined)
+        : undefined;
     return {
       requestType: "human-interaction",
       requestId,
@@ -133,6 +175,7 @@ export function getPendingHumanGate(message: AiMessage): PendingHumanGate | null
       toolName: readString(properties.toolName),
       callId: readString(properties.callId),
       ...(questions ? { questions } : {}),
+      ...(modeChange ? { modeChange } : {}),
     };
   }
 
@@ -227,6 +270,14 @@ export class ExecutionHubClient {
       this.finishActiveTurn();
       throw error;
     }
+  }
+
+  public async setMode(agentId: string, mode: AgentMode): Promise<void> {
+    await this.dispatch(buildSetModeCommand(agentId, mode));
+  }
+
+  public async setPermissionMode(permissionMode: PermissionMode): Promise<void> {
+    await this.dispatch(buildSetPermissionModeCommand(permissionMode));
   }
 
   public async interrupt(reason?: string): Promise<void> {

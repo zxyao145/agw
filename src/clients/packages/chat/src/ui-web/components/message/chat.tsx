@@ -6,9 +6,13 @@ import { toast } from "sonner";
 
 import { apiGet } from "@agw/api";
 import {
+  getAgentMode,
   getPendingHumanGate,
   getTurnFinishedStatus,
+  isModeControlMessage,
+  type AgentMode,
   type PendingHumanGate,
+  type PermissionMode,
 } from "../../../services/execution-hub";
 import { clearProjectContextRecords } from "@agw/projects";
 import { ChatAside } from "./chat-aside";
@@ -76,6 +80,15 @@ function prepareChatHistory(messages: AiMessage[]) {
   };
 }
 
+function getLatestAgentMode(messages: AiMessage[]): AgentMode {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const mode = getAgentMode(messages[index]);
+    if (mode) return mode;
+  }
+
+  return "plan";
+}
+
 /**
  * Shared chat container that owns session state, execution, message rendering, and input.
  * 共享聊天容器，拥有会话状态、执行、消息渲染和输入。
@@ -102,7 +115,13 @@ export function Chat({
   const [claudeCommands, setClaudeCommands] = React.useState<string[]>(initialHistory.commands);
   const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(sessionSeed.usage);
   const [contextId, setContextId] = React.useState<string | null>(sessionSeed.contextId);
+  const [permissionMode, setPermissionMode] = React.useState<PermissionMode>("fullAccess");
+  const [agentMode, setAgentMode] = React.useState<AgentMode>(() =>
+    getLatestAgentMode(sessionSeed.messages),
+  );
   const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
+  const contextIdRef = React.useRef<string | null>(sessionSeed.contextId);
+  const announcedContextIdRef = React.useRef<string | null>(sessionSeed.contextId);
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
   const messagesStartRef = React.useRef<HTMLDivElement>(null!);
   const conversationScrollRef = React.useRef<HTMLDivElement>(null);
@@ -112,6 +131,7 @@ export function Chat({
   const executionGenerationRef = React.useRef(0);
   const pendingTeardownCountRef = React.useRef(0);
   const activeStreamingScopeRef = React.useRef<string | null>(null);
+  const confirmedAgentModeRef = React.useRef<AgentMode>(agentMode);
   const autoScrollStateRef = React.useRef<AutoScrollState>({
     shouldAutoScroll: true,
     scrollHeight: 0,
@@ -202,6 +222,8 @@ export function Chat({
     detachExecution();
     setPendingHumanGate(null);
     setClaudeCommands([]);
+    confirmedAgentModeRef.current = "plan";
+    setAgentMode("plan");
   }, [detachExecution, targetKey]);
 
   React.useEffect(() => {
@@ -217,6 +239,11 @@ export function Chat({
     setClaudeCommands(preparedHistory.commands);
     setConversationUsage(sessionSeed.usage);
     setContextId(sessionSeed.contextId);
+    contextIdRef.current = sessionSeed.contextId;
+    announcedContextIdRef.current = sessionSeed.contextId;
+    const nextAgentMode = getLatestAgentMode(sessionSeed.messages);
+    confirmedAgentModeRef.current = nextAgentMode;
+    setAgentMode(nextAgentMode);
     userInputRef.current?.setInput("");
   }, [detachExecution, sessionSeed.revision]);
 
@@ -247,6 +274,22 @@ export function Chat({
     (message: AiMessage, generation: number) => {
       if (generation !== executionGenerationRef.current) {
         return;
+      }
+
+      if (message.additionalProperties?.type === "mode-change-failed") {
+        setAgentMode(confirmedAgentModeRef.current);
+        const detail = message.contents.find(
+          (content) => typeof content.content === "string",
+        )?.content;
+        toast.error(typeof detail === "string" ? detail : "Failed to change agent mode");
+        return;
+      }
+
+      const nextAgentMode = getAgentMode(message);
+      if (nextAgentMode) {
+        confirmedAgentModeRef.current = nextAgentMode;
+        setAgentMode(nextAgentMode);
+        if (isModeControlMessage(message)) return;
       }
 
       const initCommands = getClaudeInitCommands(message);
@@ -336,6 +379,95 @@ export function Chat({
     };
   }, [applyExecutionMessage, contextId, executionServerId, notifyExecutionError, projectId]);
 
+  const ensureConfiguredClient = React.useCallback(
+    async (
+      nextContextId: string,
+      generation: number,
+      nextPermissionMode: PermissionMode = permissionMode,
+    ): Promise<ManagedExecutionHandle | null> => {
+      if (!projectId) {
+        throw new Error("Please select a project");
+      }
+
+      let client = executionClientRef.current;
+      if (!client) {
+        let attachedClient!: ManagedExecutionHandle;
+        attachedClient = executionSessionManager.attach(
+          { serverId: executionServerId, projectId, contextId: nextContextId },
+          {
+            onMessage: (message) => applyExecutionMessage(message, generation),
+            onClose: (error) => {
+              if (
+                generation !== executionGenerationRef.current ||
+                executionClientRef.current !== attachedClient
+              ) {
+                return;
+              }
+
+              executionClientRef.current = null;
+              configuredSessionRef.current = null;
+              activeStreamingScopeRef.current = null;
+              setIsExecuting(false);
+              setPendingHumanGate(null);
+              if (error) notifyExecutionError(error);
+            },
+          },
+        );
+        client = attachedClient;
+        executionClientRef.current = client;
+      }
+
+      const configurationKey = JSON.stringify({
+        projectId,
+        contextId: nextContextId,
+        environmentVariables,
+      });
+      if (configuredSessionRef.current !== configurationKey) {
+        await client.configure({
+          projectId,
+          contextId: nextContextId,
+          environmentVariables,
+          permissionMode: nextPermissionMode,
+        });
+        if (
+          generation !== executionGenerationRef.current ||
+          executionClientRef.current !== client
+        ) {
+          return null;
+        }
+        configuredSessionRef.current = configurationKey;
+      }
+
+      return generation === executionGenerationRef.current && executionClientRef.current === client
+        ? client
+        : null;
+    },
+    [
+      applyExecutionMessage,
+      environmentVariables,
+      executionServerId,
+      notifyExecutionError,
+      permissionMode,
+      projectId,
+    ],
+  );
+
+  const ensureContextId = React.useCallback(
+    (announce: boolean) => {
+      const nextContextId = contextIdRef.current ?? createUuidV7();
+      if (contextIdRef.current == null) {
+        contextIdRef.current = nextContextId;
+        setContextId(nextContextId);
+      }
+      if (announce && announcedContextIdRef.current !== nextContextId) {
+        announcedContextIdRef.current = nextContextId;
+        onContextIdChange?.(nextContextId);
+      }
+      return nextContextId;
+    },
+    [onContextIdChange],
+  );
+
   const handleExecute = React.useCallback(
     async (value: string) => {
       if (isTransitioning) {
@@ -357,11 +489,7 @@ export function Chat({
         return;
       }
 
-      const nextId = contextId ?? createUuidV7();
-      if (!contextId) {
-        setContextId(nextId);
-        onContextIdChange?.(nextId);
-      }
+      const nextId = ensureContextId(true);
 
       const userMessage = createUserTextMessage(trimmedValue);
       const firstContent = userMessage.contents[0];
@@ -390,56 +518,10 @@ export function Chat({
       };
 
       try {
-        let client: ManagedExecutionHandle;
-        const handlers = {
-          onMessage: (message: AiMessage) => applyExecutionMessage(message, generation),
-          onClose: (error?: Error) => {
-            if (generation !== executionGenerationRef.current) {
-              return;
-            }
-
-            configuredSessionRef.current = null;
-            if (executionClientRef.current === client) {
-              executionClientRef.current = null;
-            }
-            activeStreamingScopeRef.current = null;
-            setIsExecuting(false);
-            setPendingHumanGate(null);
-            if (error) {
-              reportExecutionErrorOnce(error);
-            }
-          },
-        };
-        client = executionSessionManager.attach(
-          { serverId: executionServerId, projectId, contextId: nextId },
-          handlers,
-        );
-        executionClientRef.current = client;
-
-        const configurationKey = JSON.stringify({
-          projectId,
-          contextId: nextId,
-          environmentVariables,
-        });
-        if (configuredSessionRef.current !== configurationKey) {
-          await client.configure({
-            projectId,
-            contextId: nextId,
-            environmentVariables,
-          });
-          if (
-            generation !== executionGenerationRef.current ||
-            executionClientRef.current !== client
-          ) {
-            return;
-          }
-          configuredSessionRef.current = configurationKey;
-        }
-
-        if (
-          generation !== executionGenerationRef.current ||
-          executionClientRef.current !== client
-        ) {
+        const client = await ensureConfiguredClient(nextId, generation);
+        if (!client) {
+          activeStreamingScopeRef.current = null;
+          setIsExecuting(false);
           return;
         }
         await client.execute({
@@ -465,17 +547,74 @@ export function Chat({
       }
     },
     [
-      applyExecutionMessage,
-      contextId,
-      environmentVariables,
-      executionServerId,
+      ensureConfiguredClient,
+      ensureContextId,
       isTransitioning,
       notifyExecutionError,
-      onContextIdChange,
       onConversationChange,
       projectId,
       target,
     ],
+  );
+
+  const handlePermissionModeChange = React.useCallback(
+    (nextPermissionMode: PermissionMode) => {
+      const previousPermissionMode = permissionMode;
+      setPermissionMode(nextPermissionMode);
+      if (!projectId) return;
+
+      const nextContextId = ensureContextId(false);
+      const generation = executionGenerationRef.current;
+      setIsTransitioning(true);
+      const currentClient = executionClientRef.current;
+      const clientPromise = currentClient
+        ? Promise.resolve(currentClient)
+        : ensureConfiguredClient(nextContextId, generation, nextPermissionMode);
+      void clientPromise
+        .then(async (client) => {
+          if (!client) return;
+          await client.setPermissionMode(nextPermissionMode);
+          if (
+            generation === executionGenerationRef.current &&
+            nextPermissionMode === "fullAccess"
+          ) {
+            setPendingHumanGate((current) =>
+              current?.requestType === "tool-approval" ? null : current,
+            );
+          }
+        })
+        .catch((error) => {
+          if (generation !== executionGenerationRef.current) return;
+          setPermissionMode(previousPermissionMode);
+          notifyExecutionError(error);
+        })
+        .finally(() => {
+          if (generation === executionGenerationRef.current) setIsTransitioning(false);
+        });
+    },
+    [ensureConfiguredClient, ensureContextId, notifyExecutionError, permissionMode, projectId],
+  );
+
+  const handleAgentModeChange = React.useCallback(
+    (nextAgentMode: AgentMode) => {
+      if (!projectId || !target || target.type !== "agent") {
+        toast.error("Please select a mode-capable agent");
+        return;
+      }
+
+      const previousAgentMode = agentMode;
+      setAgentMode(nextAgentMode);
+      const nextContextId = ensureContextId(false);
+      const generation = executionGenerationRef.current;
+      void ensureConfiguredClient(nextContextId, generation)
+        .then((client) => client?.setMode(target.id, nextAgentMode))
+        .catch((error) => {
+          if (generation !== executionGenerationRef.current) return;
+          setAgentMode(previousAgentMode);
+          notifyExecutionError(error);
+        });
+    },
+    [agentMode, ensureConfiguredClient, ensureContextId, notifyExecutionError, projectId, target],
   );
 
   const handleInterrupt = React.useCallback(() => {
@@ -546,6 +685,8 @@ export function Chat({
     setClaudeCommands([]);
     setConversationUsage(EMPTY_TOKEN_USAGE);
     setContextId(null);
+    contextIdRef.current = null;
+    announcedContextIdRef.current = null;
     userInputRef.current?.setInput("");
     onContextIdChange?.(null);
 
@@ -628,6 +769,7 @@ export function Chat({
             <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
               <HumanGateApproval
                 request={floatingHumanGate}
+                permissionMode={permissionMode}
                 onApprove={(approvalScope, responseText, responseData) =>
                   submitHumanGateResponse(true, responseText, approvalScope, responseData)
                 }
@@ -648,6 +790,10 @@ export function Chat({
             onScrollToTop={handleScrollToTop}
             projectId={projectId}
             commandSource={commandSource}
+            permissionMode={permissionMode}
+            agentMode={agentMode}
+            onPermissionModeChange={handlePermissionModeChange}
+            onAgentModeChange={handleAgentModeChange}
             placeholder={placeholder}
             userInputRef={userInputRef}
           />

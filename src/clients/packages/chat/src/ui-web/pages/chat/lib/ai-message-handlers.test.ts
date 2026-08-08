@@ -216,3 +216,21 @@ test("history removes init and control messages and restores the latest valid co
     commands: ["new"],
   });
 });
+
+test("history hides persisted control snapshots", () => {
+  const modeStatus = {
+    messageId: "mode-control",
+    role: "system",
+    contents: [{ type: "TextContent", content: "" }],
+    additionalProperties: {
+      type: "tool-mode-status",
+      mode: "execute",
+      presentation: "control",
+    },
+  };
+
+  assert.deepEqual(prepareClaudeHistory([modeStatus]), {
+    messages: [],
+    commands: [],
+  });
+});

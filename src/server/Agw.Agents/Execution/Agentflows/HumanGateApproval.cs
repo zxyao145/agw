@@ -24,6 +24,8 @@ public sealed record HumanGateApprovalDecision(
 
 public interface IHumanGateApprovalHandler
 {
+    bool RequiresHumanResponse(HumanGateApprovalRequest request) => true;
+
     ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
         HumanGateApprovalRequest request,
         CancellationToken cancellationToken);

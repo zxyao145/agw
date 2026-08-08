@@ -279,7 +279,11 @@ public sealed class AgentRuntime : RuntimeBase
                 foreach (var approval in approvals)
                 {
                     var request = ToolApprovalSupport.CreateRequest(approval, "standalone", Agent.Name);
-                    yield return ToolApprovalSupport.CreateMessage(request);
+                    if (approvalHandler.RequiresHumanResponse(request))
+                    {
+                        yield return ToolApprovalSupport.CreateMessage(request);
+                    }
+
                     var decision = await approvalHandler.WaitForApprovalAsync(request, cancellationToken);
                     approvalResponses.Add(ToolApprovalSupport.CreateResponse(approval, decision));
                 }

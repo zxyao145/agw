@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
@@ -9,6 +10,7 @@ using Agw.Files.Abstracts;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 
 
@@ -21,13 +23,29 @@ public sealed record RuntimeStartRequest(
     TaskProjection Task,
     ExecCommand Command,
     RuntimeBase? CurrentRuntime,
-    RuntimeTurnContext TurnContext);
+    RuntimeTurnContext TurnContext)
+{
+    public string? RequestedMode { get; init; }
+}
 
 public interface IRuntimeFactory
 {
     Task<RuntimeStartResult> StartAsync(
         RuntimeStartRequest request,
         CancellationToken cancellationToken);
+
+    Task SetModeAsync(
+        RuntimeBase runtime,
+        string mode,
+        CancellationToken cancellationToken) =>
+        Task.FromException(new AgwException(
+            ErrorCodes.InvalidParam,
+            "The runtime factory does not support mode changes."));
+
+    Task SetPermissionModeAsync(
+        RuntimeBase runtime,
+        PermissionMode permissionMode,
+        CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 public sealed class RuntimeFactory : IRuntimeFactory
@@ -80,7 +98,21 @@ public sealed class RuntimeFactory : IRuntimeFactory
                         return default;
                     }
 
+                    if (!string.IsNullOrWhiteSpace(request.RequestedMode))
+                    {
+                        await _agentRuntimeService.SetModeAsync(
+                            session,
+                            request.RequestedMode,
+                            cancellationToken);
+                    }
+
+                    var permissionState = new PermissionModeState(
+                        request.TurnContext.Settings.PermissionMode);
+                    permissionState.Register(session.Session);
                     var coordinator = new HumanGateApprovalCoordinator(request.TurnContext.PendingHumanGateChanged);
+                    var approvalHandler = new PermissionAwareApprovalHandler(
+                        coordinator,
+                        permissionState);
                     return StartTurn(
                         session,
                         request.TurnContext,
@@ -93,10 +125,15 @@ public sealed class RuntimeFactory : IRuntimeFactory
                         ct => ExecuteAgentAsync(
                             session,
                             request.Command,
-                            coordinator,
+                            approvalHandler,
                             request.TurnContext.MessageSink,
                             ct),
-                        coordinator.TrySubmitAsync);
+                        coordinator.TrySubmitAsync,
+                        (mode, _) =>
+                        {
+                            approvalHandler.SetPermissionMode(mode);
+                            return ValueTask.CompletedTask;
+                        });
                 }
             case AgentRuntimeType.Agentflow:
                 {
@@ -111,7 +148,12 @@ public sealed class RuntimeFactory : IRuntimeFactory
                             _agentflowRuntimeService);
                     }
 
+                    var permissionState = new PermissionModeState(
+                        request.TurnContext.Settings.PermissionMode);
                     var coordinator = new HumanGateApprovalCoordinator(request.TurnContext.PendingHumanGateChanged);
+                    var approvalHandler = new PermissionAwareApprovalHandler(
+                        coordinator,
+                        permissionState);
                     return StartTurn(
                         session,
                         request.TurnContext,
@@ -120,10 +162,16 @@ public sealed class RuntimeFactory : IRuntimeFactory
                         ct => ExecuteAgentflowAsync(
                             session,
                             request.Command,
-                            coordinator,
+                            approvalHandler,
+                            permissionState,
                             request.TurnContext.MessageSink,
                             ct),
-                        coordinator.TrySubmitAsync);
+                        coordinator.TrySubmitAsync,
+                        (mode, _) =>
+                        {
+                            approvalHandler.SetPermissionMode(mode);
+                            return ValueTask.CompletedTask;
+                        });
                 }
             default:
                 executionCts.Dispose();
@@ -136,6 +184,42 @@ public sealed class RuntimeFactory : IRuntimeFactory
         if (runtime == null) return null;
         await runtime.DisposeAsync();
         return null;
+    }
+
+    public Task SetModeAsync(
+        RuntimeBase runtime,
+        string mode,
+        CancellationToken cancellationToken)
+    {
+        if (runtime is not AgentRuntime agentRuntime)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "The current execution target does not support mode changes.");
+        }
+
+        return _agentRuntimeService.SetModeAsync(agentRuntime, mode, cancellationToken);
+    }
+
+    public Task SetPermissionModeAsync(
+        RuntimeBase runtime,
+        PermissionMode permissionMode,
+        CancellationToken cancellationToken)
+    {
+        if (runtime is AgentRuntime agentRuntime)
+        {
+            return _agentRuntimeService.SetPermissionModeAsync(
+                agentRuntime,
+                permissionMode,
+                cancellationToken);
+        }
+
+        if (runtime is AgentflowRuntime agentflowRuntime)
+        {
+            agentflowRuntime.SetPermissionMode(permissionMode);
+        }
+
+        return Task.CompletedTask;
     }
 
     private async Task ExecuteAgentAsync(
@@ -178,13 +262,18 @@ public sealed class RuntimeFactory : IRuntimeFactory
         AgentflowRuntime runtime,
         ExecCommand command,
         IHumanGateApprovalHandler humanGateApprovalHandler,
+        PermissionModeState permissionState,
         IExecutionMessageSink sink,
         CancellationToken cancellationToken)
     {
         using var interactionScope = _humanInteractionContextAccessor.Push(
             new ExecutionHumanInteractionChannel(humanGateApprovalHandler, sink));
         await TurnPipeline.RunAsync(
-            runtime.ExecuteStreamingAsync(command, humanGateApprovalHandler, cancellationToken),
+            runtime.ExecuteStreamingAsync(
+                command,
+                humanGateApprovalHandler,
+                permissionState,
+                cancellationToken),
             command.Stream,
             sink,
             cancellationToken);
@@ -196,7 +285,8 @@ public sealed class RuntimeFactory : IRuntimeFactory
         CancellationTokenSource executionCts,
         Action interruptAction,
         Func<CancellationToken, Task> executeAsync,
-        Func<HumanResponseCommand, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null)
+        Func<HumanResponseCommand, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
+        Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null)
     {
         var activeTurn = runtime.StartTurn(
             turnContext,
@@ -204,7 +294,8 @@ public sealed class RuntimeFactory : IRuntimeFactory
             executionCts,
             interruptAction,
             executeAsync,
-            submitHumanResponseAsync);
+            submitHumanResponseAsync,
+            setPermissionModeAsync);
         return new RuntimeStartResult(runtime, activeTurn);
     }
 
@@ -257,13 +348,20 @@ public sealed class RuntimeFactory : IRuntimeFactory
             _sink = sink;
         }
 
+        public bool RequiresHumanResponse(HumanGateApprovalRequest request) =>
+            _inner.RequiresHumanResponse(request);
+
         public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
             HumanGateApprovalRequest request,
             CancellationToken cancellationToken)
         {
-            await _sink.WriteAsync(
-                ToolApprovalSupport.CreateMessage(request),
-                cancellationToken);
+            if (RequiresHumanResponse(request))
+            {
+                await _sink.WriteAsync(
+                    ToolApprovalSupport.CreateMessage(request),
+                    cancellationToken);
+            }
+
             return await _inner.WaitForApprovalAsync(request, cancellationToken);
         }
     }

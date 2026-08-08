@@ -7,10 +7,6 @@ namespace Agw.Agents.Execution.Agents.Tools;
 
 internal static class ToolStateSnapshots
 {
-    private static readonly IReadOnlySet<string> ModeToolNames = new HashSet<string>(
-        ["mode_set", "mode_get"],
-        StringComparer.OrdinalIgnoreCase);
-
     private static readonly IReadOnlySet<string> BackgroundAgentToolNames = new HashSet<string>(
         [
             "background_agents_start_task",
@@ -22,7 +18,7 @@ internal static class ToolStateSnapshots
         ],
         StringComparer.OrdinalIgnoreCase);
 
-    public static async ValueTask<IReadOnlyList<ChatMessage>> CreateAsync(
+    public static ValueTask<IReadOnlyList<ChatMessage>> CreateAsync(
         AIAgent agent,
         AgentSession session,
         IEnumerable<ChatMessage> turnMessages,
@@ -32,17 +28,6 @@ internal static class ToolStateSnapshots
 
         var usedToolNames = GetCompletedToolNames(turnMessages);
         var messages = new List<ChatMessage>();
-
-        var modeProvider = agent.GetService<AgentModeProvider>();
-        if (modeProvider != null && HasToolName(usedToolNames, ModeToolNames))
-        {
-            var mode = await modeProvider
-                .GetModeAsync(session, cancellationToken)
-                .ConfigureAwait(false);
-            messages.Add(CreateMessage(
-                ToolMessageTypes.ModeStatus,
-                new AdditionalPropertiesDictionary { ["mode"] = mode }));
-        }
 
         var backgroundProvider = agent.GetService<BackgroundAgentsProvider>();
         if (backgroundProvider != null && HasToolName(usedToolNames, BackgroundAgentToolNames))
@@ -62,7 +47,27 @@ internal static class ToolStateSnapshots
                 }));
         }
 
-        return messages;
+        return ValueTask.FromResult<IReadOnlyList<ChatMessage>>(messages);
+    }
+
+    public static async ValueTask<ChatMessage> CreateModeAsync(
+        AgentModeProvider provider,
+        AgentSession session,
+        string toolName,
+        string callId,
+        CancellationToken cancellationToken)
+    {
+        var mode = await provider
+            .GetModeAsync(session, cancellationToken)
+            .ConfigureAwait(false);
+        return CreateMessage(
+            ToolMessageTypes.ModeStatus,
+            new AdditionalPropertiesDictionary
+            {
+                ["toolName"] = toolName,
+                ["callId"] = callId,
+                ["mode"] = mode
+            });
     }
 
     public static async ValueTask<ChatMessage> CreateTodoAsync(

@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Commands.Hitl;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Turns;
 
 namespace Agw.Agents.Execution.Runtimes;
@@ -6,6 +7,7 @@ namespace Agw.Agents.Execution.Runtimes;
 public abstract class RuntimeBase : IAsyncDisposable
 {
     private readonly object _lock = new();
+    private readonly Dictionary<string, Func<CancellationToken, Task>> _afterTurnActions = new(StringComparer.Ordinal);
     private ActiveTurn? _activeTurn;
     private Task _whenIdle = Task.CompletedTask;
     private bool _disposed;
@@ -29,7 +31,8 @@ public abstract class RuntimeBase : IAsyncDisposable
         CancellationTokenSource executionCts,
         Action interruptAction,
         Func<CancellationToken, Task> executeAsync,
-        Func<HumanResponseCommand, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null)
+        Func<HumanResponseCommand, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
+        Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null)
     {
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var executionTask = RunAfterRegistrationAsync(
@@ -42,7 +45,8 @@ public abstract class RuntimeBase : IAsyncDisposable
             executionTask,
             executionCts,
             interruptAction,
-            submitHumanResponseAsync);
+            submitHumanResponseAsync,
+            setPermissionModeAsync);
         if (!TryStartTurn(activeTurn))
         {
             executionCts.Cancel();
@@ -63,7 +67,7 @@ public abstract class RuntimeBase : IAsyncDisposable
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_activeTurn is { IsCompleted: false })
+            if (_activeTurn != null)
             {
                 return false;
             }
@@ -85,6 +89,25 @@ public abstract class RuntimeBase : IAsyncDisposable
         }
     }
 
+    public bool TryScheduleAfterTurn(
+        string key,
+        Func<CancellationToken, Task> action)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(action);
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_activeTurn == null)
+            {
+                return false;
+            }
+
+            _afterTurnActions[key] = action;
+            return true;
+        }
+    }
+
     public void RequestInterrupt()
     {
         ActiveTurn?.RequestInterrupt();
@@ -95,6 +118,14 @@ public abstract class RuntimeBase : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         return ActiveTurn?.TrySubmitHumanResponseAsync(command, cancellationToken)
+            ?? ValueTask.FromResult(false);
+    }
+
+    public ValueTask<bool> TrySetActivePermissionModeAsync(
+        PermissionMode permissionMode,
+        CancellationToken cancellationToken)
+    {
+        return ActiveTurn?.TrySetPermissionModeAsync(permissionMode, cancellationToken)
             ?? ValueTask.FromResult(false);
     }
 
@@ -128,11 +159,39 @@ public abstract class RuntimeBase : IAsyncDisposable
         finally
         {
             await turn.DisposeAsync();
-            lock (_lock)
+            var completed = false;
+            while (!completed)
             {
-                if (ReferenceEquals(_activeTurn, turn))
+                Func<CancellationToken, Task>[] actions;
+                lock (_lock)
                 {
-                    _activeTurn = null;
+                    if (!ReferenceEquals(_activeTurn, turn))
+                    {
+                        actions = [];
+                        completed = true;
+                    }
+                    else if (_afterTurnActions.Count == 0)
+                    {
+                        _activeTurn = null;
+                        actions = [];
+                        completed = true;
+                    }
+                    else
+                    {
+                        actions = _afterTurnActions.Values.ToArray();
+                        _afterTurnActions.Clear();
+                    }
+                }
+
+                foreach (var action in actions)
+                {
+                    try
+                    {
+                        await action(CancellationToken.None);
+                    }
+                    catch (Exception)
+                    {
+                    }
                 }
             }
 

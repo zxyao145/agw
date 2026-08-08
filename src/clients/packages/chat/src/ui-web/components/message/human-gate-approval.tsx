@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, ShieldCheck, X } from "lucide-react";
 
 import type { PendingHumanGate } from "../../../services/execution-hub";
+import type { PermissionMode } from "../../../services/execution-hub";
 import { Button } from "@agw/components";
 import { Badge } from "@agw/components";
 import { Textarea } from "@agw/components";
@@ -11,6 +12,7 @@ import { HumanInteractionPanel } from "./human-interaction-panel";
 
 type HumanGateApprovalProps = {
   request: PendingHumanGate;
+  permissionMode?: PermissionMode;
   onApprove: (
     approvalScope: "once" | "always-tool" | "always-arguments",
     responseText?: string,
@@ -19,7 +21,12 @@ type HumanGateApprovalProps = {
   onReject: (responseText?: string) => void;
 };
 
-export function HumanGateApproval({ request, onApprove, onReject }: HumanGateApprovalProps) {
+export function HumanGateApproval({
+  request,
+  permissionMode,
+  onApprove,
+  onReject,
+}: HumanGateApprovalProps) {
   const [responseText, setResponseText] = React.useState("");
   const mode = request.mode.toLowerCase();
   const expectsInput = mode === "input";
@@ -37,6 +44,10 @@ export function HumanGateApproval({ request, onApprove, onReject }: HumanGateApp
         onCancel={() => onReject()}
       />
     );
+  }
+
+  if (isToolApproval && permissionMode === "fullAccess") {
+    return null;
   }
 
   return (
@@ -89,7 +100,17 @@ export function HumanGateApproval({ request, onApprove, onReject }: HumanGateApp
           <X className="h-4 w-4" />
           Reject
         </Button>
-        {isToolApproval ? (
+        {isToolApproval && permissionMode === "alwaysAsk" ? (
+          <Button type="button" size="sm" onClick={() => onApprove("once")}>
+            <Check className="h-4 w-4" />
+            Allow once
+          </Button>
+        ) : isToolApproval && permissionMode === "allowSameArguments" ? (
+          <Button type="button" size="sm" onClick={() => onApprove("always-arguments")}>
+            <Check className="h-4 w-4" />
+            Allow same arguments
+          </Button>
+        ) : isToolApproval ? (
           <>
             <Button type="button" variant="outline" size="sm" onClick={() => onApprove("once")}>
               <Check className="h-4 w-4" />

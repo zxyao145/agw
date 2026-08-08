@@ -2,6 +2,9 @@ using System.Text.Json;
 
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
+using Agw.Agents.Execution.Commands.Mode;
+using Agw.Agents.Execution.Commands.Permission;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
@@ -54,6 +57,48 @@ public class ExecutionCommandRegistrationTests
 
         Assert.Throws<AgwException>(() =>
             provider.GetRequiredService<IOptions<JsonHubProtocolOptions>>().Value);
+    }
+
+    [Fact]
+    public void AddExecutionCommands_RegistersSetModeCommand()
+    {
+        var services = new ServiceCollection();
+        services.AddExecutionCommands();
+        using var provider = services.BuildServiceProvider();
+        var options = provider
+            .GetRequiredService<IOptions<JsonHubProtocolOptions>>()
+            .Value
+            .PayloadSerializerOptions;
+
+        var command = JsonSerializer.Deserialize<AgentRunCommand>(
+            """
+            { "type": "SetModeCommand", "agentId": "0190c7e9-19f3-7fb5-8c16-21b70989f001", "mode": "plan" }
+            """,
+            options);
+
+        var setMode = Assert.IsType<SetModeCommand>(command);
+        Assert.Equal("plan", setMode.Mode);
+    }
+
+    [Fact]
+    public void AddExecutionCommands_RegistersSetPermissionModeCommand()
+    {
+        var services = new ServiceCollection();
+        services.AddExecutionCommands();
+        using var provider = services.BuildServiceProvider();
+        var options = provider
+            .GetRequiredService<IOptions<JsonHubProtocolOptions>>()
+            .Value
+            .PayloadSerializerOptions;
+
+        var command = JsonSerializer.Deserialize<AgentRunCommand>(
+            """
+            { "type": "SetPermissionModeCommand", "permissionMode": "allowSameArguments" }
+            """,
+            options);
+
+        var setPermissionMode = Assert.IsType<SetPermissionModeCommand>(command);
+        Assert.Equal(PermissionMode.AllowSameArguments, setPermissionMode.PermissionMode);
     }
 
     [Fact]

@@ -13,11 +13,13 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         Guid projectId,
         string? contextId,
         IReadOnlyDictionary<string, string> environmentVariables,
+        PermissionMode? permissionMode,
         bool resume)
     {
         ProjectId = projectId;
         ContextId = contextId;
         _environmentVariables = environmentVariables;
+        PermissionMode = permissionMode;
         Resume = resume;
     }
 
@@ -26,6 +28,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     public string? ContextId { get; }
 
     public IReadOnlyDictionary<string, string> EnvironmentVariables => _environmentVariables;
+
+    public PermissionMode? PermissionMode { get; }
 
     public bool Resume { get; }
 
@@ -37,11 +41,20 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             command.ContextId,
             new ReadOnlyDictionary<string, string>(
                 new Dictionary<string, string>(command.EnvironmentVariables)),
+            command.PermissionMode,
             command.Resume);
     }
 
     public static ExecutionSettings CreateDefault() =>
         FromCommand(new SettingCommand(ProjectDefaults.DefaultBuiltInId));
+
+    public ExecutionSettings WithPermissionMode(PermissionMode permissionMode) =>
+        new(
+            ProjectId,
+            ContextId,
+            _environmentVariables,
+            permissionMode,
+            Resume);
 
     public bool Equals(ExecutionSettings? other)
     {
@@ -53,6 +66,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         return other != null
                && ProjectId == other.ProjectId
                && string.Equals(ContextId, other.ContextId, StringComparison.Ordinal)
+               && PermissionMode == other.PermissionMode
                && Resume == other.Resume
                && EnvironmentVariablesEqual(_environmentVariables, other._environmentVariables);
     }
@@ -64,6 +78,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         var hash = new HashCode();
         hash.Add(ProjectId);
         hash.Add(ContextId, StringComparer.Ordinal);
+        hash.Add(PermissionMode);
         hash.Add(Resume);
         foreach (var (key, value) in _environmentVariables.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
@@ -78,7 +93,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         new(
             ProjectId,
             new Dictionary<string, string>(_environmentVariables),
-            ContextId)
+            ContextId,
+            PermissionMode)
         {
             Resume = Resume,
         };

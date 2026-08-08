@@ -14,11 +14,13 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public SettingCommand(
         Guid projectId,
         Dictionary<string, string>? environmentVariables = null,
-        string? contextId = null)
+        string? contextId = null,
+        PermissionMode? permissionMode = null)
     {
         ProjectId = projectId;
         ContextId = contextId;
         EnvironmentVariables = environmentVariables ?? new Dictionary<string, string>();
+        PermissionMode = permissionMode;
     }
 
     public Guid ProjectId { get; set; }
@@ -30,6 +32,8 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         get => _environmentVariables;
         set => _environmentVariables = value ?? new Dictionary<string, string>();
     }
+
+    public PermissionMode? PermissionMode { get; set; }
 
     [JsonIgnore]
     public bool Resume { get; set; }
@@ -48,6 +52,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
 
         return left.ProjectId == right.ProjectId
                && string.Equals(left.ContextId, right.ContextId, StringComparison.Ordinal)
+               && left.PermissionMode == right.PermissionMode
                && EnvironmentVariablesEqual(left.EnvironmentVariables, right.EnvironmentVariables);
     }
 
@@ -61,6 +66,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         HashCode.Combine(
             ProjectId,
             ContextId,
+            PermissionMode,
             GetEnvironmentVariablesHashCode(EnvironmentVariables));
 
     private static bool EnvironmentVariablesEqual(

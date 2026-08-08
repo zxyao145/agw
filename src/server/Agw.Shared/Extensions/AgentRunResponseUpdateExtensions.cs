@@ -97,7 +97,12 @@ public static class AgentRunResponseUpdateExtensions
     private static AgwContent CreateFunctionResultContent(FunctionResultContent result, AdditionalPropertiesDictionary props)
     {
         props["callId"] = result.CallId;
-        var content = result.Result == null ? "" : JsonUtil.Serialize(result.Result);
+        var content = result.Result switch
+        {
+            null => "",
+            string text => text,
+            _ => JsonUtil.Serialize(result.Result)
+        };
         return new AgwFunctionResultContent { Content = content, AdditionalProperties = props };
     }
 }

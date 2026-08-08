@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 
 import { Button } from "@agw/components";
 import type { PendingHumanGate } from "../../../services/execution-hub";
+import { HumanInteractionModeChange } from "./human-interaction-mode-change";
 import { HumanInteractionQuestions } from "./human-interaction-questions";
 
 type HumanInteractionPanelProps = {
@@ -19,6 +20,17 @@ export function HumanInteractionPanel({
   onSubmit,
   onCancel,
 }: HumanInteractionPanelProps) {
+  if (request.modeChange) {
+    return (
+      <HumanInteractionModeChange
+        request={{ ...request, modeChange: request.modeChange }}
+        embedded={embedded}
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+      />
+    );
+  }
+
   if (request.questions) {
     return (
       <HumanInteractionQuestions

@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.AgwMsgVm;
 
 using Microsoft.Extensions.AI;
@@ -15,7 +16,8 @@ public interface IAgentflowRuntimeService
         Guid? taskId = null,
         IHumanGateApprovalHandler? humanGateApprovalHandler = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        Guid? conversationId = null);
+        Guid? conversationId = null,
+        PermissionMode? permissionMode = null);
 
     Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,

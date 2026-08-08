@@ -22,6 +22,7 @@ public sealed class ModeToolBlock : IToolBlock
             {
                 DefaultMode = context.DefaultMode
             }));
+        contribution.ContextProviders.Add(new ModeSetHumanInteractionProvider());
         return ValueTask.FromResult(contribution);
     }
 }

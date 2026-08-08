@@ -1,6 +1,7 @@
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
+using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 
@@ -29,7 +30,18 @@ public sealed class AgentflowRuntime : RuntimeBase
         ExecCommand command,
         IHumanGateApprovalHandler humanGateApprovalHandler,
         CancellationToken cancellationToken) =>
-        _runtimeService.ExecuteStreamingAsync(
+        ExecuteStreamingAsync(
+            command,
+            humanGateApprovalHandler,
+            new PermissionModeState(_settings.PermissionMode),
+            cancellationToken);
+
+    internal IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+        ExecCommand command,
+        IHumanGateApprovalHandler humanGateApprovalHandler,
+        PermissionModeState permissionState,
+        CancellationToken cancellationToken) =>
+        _runtimeService.ExecuteStreamingWithPermissionStateAsync(
             _agentflowId,
             AgwMessageUtil.ExtractInputText(command.Input),
             cancellationToken,
@@ -38,5 +50,11 @@ public sealed class AgentflowRuntime : RuntimeBase
             _task.TaskId,
             humanGateApprovalHandler,
             _settings.EnvironmentVariables,
-            _task.ProjectConversationId);
+            _task.ProjectConversationId,
+            permissionState);
+
+    internal void SetPermissionMode(PermissionMode permissionMode)
+    {
+        _settings.PermissionMode = permissionMode;
+    }
 }

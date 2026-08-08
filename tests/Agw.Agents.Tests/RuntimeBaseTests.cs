@@ -74,6 +74,37 @@ public class RuntimeBaseTests
     }
 
     [Fact]
+    public async Task TryScheduleAfterTurn_SameKeyRunsOnlyLatestActionBeforeIdle()
+    {
+        await using var runtime = new TestRuntime();
+        using var cts = new CancellationTokenSource();
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var applied = new List<string>();
+        runtime.TryStartTurn(new ActiveTurn(completion.Task, cts));
+
+        Assert.True(runtime.TryScheduleAfterTurn(
+            "mode",
+            _ =>
+            {
+                applied.Add("plan");
+                return Task.CompletedTask;
+            }));
+        Assert.True(runtime.TryScheduleAfterTurn(
+            "mode",
+            _ =>
+            {
+                applied.Add("execute");
+                return Task.CompletedTask;
+            }));
+
+        completion.SetResult();
+        await runtime.WhenIdleAsync();
+
+        Assert.Equal(["execute"], applied);
+        Assert.False(runtime.TryScheduleAfterTurn("mode", _ => Task.CompletedTask));
+    }
+
+    [Fact]
     public async Task StartTurn_ExecutionTask_UsesTurnContextScope()
     {
         await using var runtime = new TestRuntime();

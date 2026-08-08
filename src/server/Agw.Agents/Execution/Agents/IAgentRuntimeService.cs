@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Exceptions;
 
 using Microsoft.Agents.AI;
 
@@ -55,6 +56,19 @@ public interface IAgentRuntimeService
         TaskProjection task,
         SettingCommand settings,
         CancellationToken cancellationToken = default);
+
+    Task SetModeAsync(
+        AgentRuntime runtime,
+        string mode,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException(new AgwException(
+            ErrorCodes.InvalidParam,
+            "The Agent runtime service does not support mode changes."));
+
+    Task SetPermissionModeAsync(
+        AgentRuntime runtime,
+        PermissionMode permissionMode,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
 
     IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgentRuntime session,

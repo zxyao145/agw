@@ -71,6 +71,35 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
         return ValueTask.FromResult(submitted);
     }
 
+    public int ApprovePendingToolRequests()
+    {
+        var approvedCount = 0;
+        foreach (var (requestId, pending) in _pending.ToArray())
+        {
+            if (pending.Request.ToolApprovalRequest == null ||
+                !_pending.TryRemove(requestId, out _))
+            {
+                continue;
+            }
+
+            if (pending.Source.TrySetResult(new HumanGateApprovalDecision(
+                    pending.Request.RequestId,
+                    Approved: true,
+                    ResponseText: null,
+                    ApprovalScope: "always-tool")))
+            {
+                approvedCount++;
+            }
+        }
+
+        if (approvedCount > 0)
+        {
+            _pendingChanged?.Invoke(null);
+        }
+
+        return approvedCount;
+    }
+
     public void CancelAll()
     {
         foreach (var (requestId, pending) in _pending.ToArray())

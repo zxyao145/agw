@@ -3,8 +3,16 @@ import test from "node:test";
 
 import {
   getHumanInteractionQuestionResult,
+  parseHumanInteractionModeChange,
   parseHumanInteractionQuestionResult,
 } from "./human-interaction";
+
+test("parseHumanInteractionModeChange accepts supported modes only", () => {
+  assert.deepEqual(parseHumanInteractionModeChange({ mode: "execute" }), { mode: "execute" });
+  assert.deepEqual(parseHumanInteractionModeChange({ mode: "plan" }), { mode: "plan" });
+  assert.equal(parseHumanInteractionModeChange({ mode: "review" }), null);
+  assert.equal(parseHumanInteractionModeChange(null), null);
+});
 
 test("parseHumanInteractionQuestionResult preserves question order and answers", () => {
   const result = parseHumanInteractionQuestionResult(

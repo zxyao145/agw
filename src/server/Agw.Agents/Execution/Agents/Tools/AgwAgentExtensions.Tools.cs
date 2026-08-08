@@ -84,6 +84,15 @@ public static class AgwAgentExtensions
                 runStreamingFunc: todoStateSnapshotMiddleware.RunStreamingAsync);
         }
 
+        var modeProvider = capabilities.ContextProviders.OfType<AgentModeProvider>().FirstOrDefault();
+        if (modeProvider != null)
+        {
+            var modeStateSnapshotMiddleware = new ModeStateSnapshotMiddleware(modeProvider);
+            agentBuilder.Use(
+                runFunc: modeStateSnapshotMiddleware.RunAsync,
+                runStreamingFunc: modeStateSnapshotMiddleware.RunStreamingAsync);
+        }
+
         if (capabilities.ToolWarnings.Count > 0)
         {
             var warningMiddleware = new ToolWarningMiddleware(
