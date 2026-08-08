@@ -42,6 +42,8 @@ internal class WebFetchTool : IAgwTool
 
     public string Category => "Web";
 
+    public bool AllowInPlanMode => true;
+
     [Description(
         """
         Fetches content from a specified URL and processes it using the provided prompt.

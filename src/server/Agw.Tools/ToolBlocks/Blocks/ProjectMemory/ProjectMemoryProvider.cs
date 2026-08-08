@@ -65,9 +65,6 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         InvokingContext context,
         CancellationToken cancellationToken = default)
     {
-        await _fileStore.CreateDirectoryAsync(string.Empty, cancellationToken)
-            .ConfigureAwait(false);
-
         var result = new AIContext
         {
             Instructions = Instructions,

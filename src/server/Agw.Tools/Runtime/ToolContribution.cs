@@ -29,6 +29,12 @@ public sealed class ToolContribution : IAsyncDisposable
     public List<AITool> Tools { get; } = [];
 
     /// <summary>
+    /// Gets the trusted Tool names that may be exposed while the Agent is in Plan mode.
+    /// </summary>
+    public HashSet<string> PlanModeAllowedToolNames { get; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Gets the providers that contribute invocation-specific instructions, messages, tools, or state.
     /// </summary>
     public List<AIContextProvider> ContextProviders { get; } = [];

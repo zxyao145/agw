@@ -162,6 +162,8 @@ internal class AskUserQuestionTool : IAgwTool
 
     public string Category => "Interaction";
 
+    public bool AllowInPlanMode => true;
+
     [Description(
         """
         Asks the user multiple choice questions to gather information, clarify ambiguity,

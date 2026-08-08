@@ -251,6 +251,10 @@ public class ToolRegistryService
                 }
 
                 result.Tools.Add(tool);
+                if (IsAllowedInPlanMode(name))
+                {
+                    result.PlanModeAllowedToolNames.Add(tool.Name);
+                }
             }
 
             return result;
@@ -556,6 +560,7 @@ public class ToolRegistryService
         ToolContribution contribution)
     {
         destination.Tools.AddRange(contribution.Tools);
+        destination.PlanModeAllowedToolNames.UnionWith(contribution.PlanModeAllowedToolNames);
         destination.ContextProviders.AddRange(contribution.ContextProviders);
         destination.LoopEvaluators.AddRange(contribution.LoopEvaluators);
         destination.AutoApprovalRules.AddRange(contribution.AutoApprovalRules);
@@ -566,6 +571,17 @@ public class ToolRegistryService
         }
 
         destination.AddResource(contribution);
+    }
+
+    private bool IsAllowedInPlanMode(string name)
+    {
+        if (_toolInstances.TryGetValue(name, out var tool))
+        {
+            return tool.AllowInPlanMode;
+        }
+
+        return _methods.TryGetValue(name, out var method) &&
+            method.GetCustomAttribute<AiToolAttribute>()?.AllowInPlanMode == true;
     }
 
     private static MethodInfo? ResolveExecuteMethod(Type toolType)

@@ -53,6 +53,8 @@ public sealed class BackgroundAgentsToolBlock : IToolBlock
         }
 
         var contribution = new ToolContribution();
+        contribution.PlanModeAllowedToolNames.UnionWith(
+            ["background_agents_get_task_results", "background_agents_get_all_tasks"]);
         contribution.ContextProviders.Add(new BackgroundAgentsProvider(backgroundAgents));
         foreach (var agent in backgroundAgents)
         {

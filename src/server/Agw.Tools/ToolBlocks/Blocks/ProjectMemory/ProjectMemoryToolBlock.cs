@@ -87,6 +87,12 @@ public sealed class ProjectMemoryToolBlock : IToolBlock
                 ErrorCodes.InvalidParam,
                 $"Project Memory storage '{storage}' is not supported.")
         };
+        contribution.PlanModeAllowedToolNames.UnionWith(
+            [
+                ProjectMemoryProvider.ReadFileToolName,
+                ProjectMemoryProvider.LsToolName,
+                ProjectMemoryProvider.GrepToolName
+            ]);
         contribution.ContextProviders.Add(new ProjectMemoryProvider(
             store,
             _applicationLock,

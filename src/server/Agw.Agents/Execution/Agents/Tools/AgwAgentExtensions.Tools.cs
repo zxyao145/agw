@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Agents.AIContextProviders.PlanMode;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Utils;
 
@@ -29,16 +30,32 @@ public static class AgwAgentExtensions
             Tools = capabilities.Tools.Count == 0 ? null : capabilities.Tools.ToList(),
             MaxOutputTokens = definition.MaxOutputTokens
         };
+        var modeProvider = capabilities.ContextProviders.OfType<AgentModeProvider>().FirstOrDefault();
         var contextProviders = capabilities.ContextProviders.ToList();
         if (definition.CompactionProvider != null)
         {
             contextProviders.Add(definition.CompactionProvider);
         }
 
+        if (modeProvider != null)
+        {
+            contextProviders.Add(new PlanModeToolGuardProvider(
+                modeProvider,
+                capabilities.PlanModeAllowedToolNames,
+                loggerFactory.CreateLogger<PlanModeToolGuardProvider>()));
+        }
+
         var chatClientBuilder = chatClient.AsBuilder()
             .UseApprovalResponseBinding(loggerFactory)
             .UseApprovalNotRequiredFunctionBypassing()
-            .UseFunctionInvocation(loggerFactory)
+            .UseFunctionInvocation(loggerFactory);
+        if (modeProvider != null)
+        {
+            chatClientBuilder.Use(static innerClient =>
+                new PlanModeToolVisibilityChatClient(innerClient));
+        }
+
+        chatClientBuilder
             .UseMessageInjection()
             .Use(static innerClient => new FunctionResultOrderingChatClient(innerClient))
             .UsePerServiceCallChatHistoryPersistence()
@@ -84,7 +101,6 @@ public static class AgwAgentExtensions
                 runStreamingFunc: todoStateSnapshotMiddleware.RunStreamingAsync);
         }
 
-        var modeProvider = capabilities.ContextProviders.OfType<AgentModeProvider>().FirstOrDefault();
         if (modeProvider != null)
         {
             var modeStateSnapshotMiddleware = new ModeStateSnapshotMiddleware(modeProvider);

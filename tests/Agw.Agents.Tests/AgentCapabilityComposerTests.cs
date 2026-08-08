@@ -65,6 +65,7 @@ public class AgentCapabilityComposerTests
             supportsHostedWebSearch: false);
 
         Assert.Empty(composition.ToolWarnings);
+        Assert.Equal(["web_search"], composition.PlanModeAllowedToolNames);
         var warning = Assert.Single(composition.ToolInvocationWarnings);
         Assert.Equal("web_search", warning.Key);
         Assert.Contains("using local search", warning.Value);
@@ -153,6 +154,7 @@ public class AgentCapabilityComposerTests
         Assert.Equal(
             ["generate_guid", "independent_tool", "personal__repo", "work__repo"],
             composition.Tools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal));
+        Assert.Equal(["generate_guid"], composition.PlanModeAllowedToolNames);
         Assert.Single(composition.Warnings);
         var warningEvent = Assert.Single(activity.Events, item => item.Name == "agw.integration.warning");
         Assert.Contains(
@@ -205,6 +207,7 @@ public class AgentCapabilityComposerTests
 
         Assert.Empty(composition.Tools);
         Assert.Empty(composition.ContextProviders);
+        Assert.Empty(composition.PlanModeAllowedToolNames);
         Assert.Empty(resolver.Calls);
         Assert.Empty(materializer.Calls);
     }
@@ -315,6 +318,7 @@ public class AgentCapabilityComposerTests
             cancellationToken);
 
         Assert.Equal("test_block_tool", Assert.Single(composition.Tools).Name);
+        Assert.Equal(["test_block_tool"], composition.PlanModeAllowedToolNames);
     }
 
     private static AgentCapabilityComposer CreateComposer(
@@ -484,6 +488,7 @@ public class AgentCapabilityComposerTests
         {
             var contribution = new ToolContribution();
             contribution.Tools.Add(CreateTool("test_block_tool"));
+            contribution.PlanModeAllowedToolNames.Add("test_block_tool");
             return ValueTask.FromResult(contribution);
         }
     }

@@ -29,6 +29,13 @@ public sealed class ProjectMemoryToolBlockTests
         var provider = Assert.IsType<ProjectMemoryProvider>(
             Assert.Single(contribution.ContextProviders));
         Assert.Empty(provider.StateKeys);
+        Assert.Equal(
+            [
+                ProjectMemoryProvider.GrepToolName,
+                ProjectMemoryProvider.LsToolName,
+                ProjectMemoryProvider.ReadFileToolName
+            ],
+            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal));
         Assert.Empty(contribution.Warnings);
     }
 

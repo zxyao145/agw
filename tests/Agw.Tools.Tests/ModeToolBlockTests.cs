@@ -33,6 +33,23 @@ public sealed class ModeToolBlockTests
     }
 
     [Fact]
+    public async Task MaterializeAsync_PlanModeUsesRestrictedInstructionsAndMarksControlToolsAllowed()
+    {
+        var materialized = await MaterializeAsync();
+        await using var contribution = materialized.Contribution;
+
+        Assert.Equal(
+            ["mode_get", "mode_set"],
+            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal));
+        Assert.Contains("prepare a decision-complete plan", materialized.Context.Instructions);
+        Assert.Contains("Do not execute shell commands", materialized.Context.Instructions);
+        Assert.Contains("Todo tools may be used", materialized.Context.Instructions);
+        Assert.Contains("Present the proposed plan in chat", materialized.Context.Instructions);
+        Assert.DoesNotContain("Create a todo list", materialized.Context.Instructions);
+        Assert.DoesNotContain("write the plan", materialized.Context.Instructions);
+    }
+
+    [Fact]
     public async Task ModeSet_BeforeHumanConfirmation_RemainsPendingThenChangesMode()
     {
         var materialized = await MaterializeAsync();
@@ -151,7 +168,8 @@ public sealed class ModeToolBlockTests
             modeProvider,
             Assert.IsAssignableFrom<AIFunction>(functions["mode_set"]),
             Assert.IsAssignableFrom<AIFunction>(functions["mode_get"]),
-            session);
+            session,
+            aiContext);
     }
 
     private static ServiceProvider CreateServices(IHumanInteractionChannel channel) =>
@@ -180,7 +198,8 @@ public sealed class ModeToolBlockTests
         AgentModeProvider ModeProvider,
         AIFunction ModeSet,
         AIFunction ModeGet,
-        AgentSession Session);
+        AgentSession Session,
+        AIContext Context);
 
     private sealed class TestContextAccessor : IHumanInteractionContextAccessor
     {

@@ -41,6 +41,17 @@ public sealed class ProjectMemoryProviderTests
     }
 
     [Fact]
+    public async Task InvokingAsync_MissingMemory_DoesNotCreateDirectory()
+    {
+        var store = new RecordingEmptyAgentFileStore();
+
+        var context = await InvokeProviderAsync(CreateProvider(store));
+
+        Assert.NotNull(context.Tools);
+        Assert.Equal(0, store.CreateDirectoryCallCount);
+    }
+
+    [Fact]
     public async Task WriteAsync_NewProviderInstanceReadsSharedMemoryAndIndex()
     {
         var store = new InMemoryAgentFileStore();
@@ -233,6 +244,53 @@ public sealed class ProjectMemoryProviderTests
         {
             await Task.Yield();
             yield return new ChatResponseUpdate(ChatRole.Assistant, "done");
+        }
+    }
+
+    private sealed class RecordingEmptyAgentFileStore : AgentFileStore
+    {
+        public int CreateDirectoryCallCount { get; private set; }
+
+        public override Task WriteAsync(
+            string path,
+            string content,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public override Task<string?> ReadAsync(
+            string path,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+
+        public override Task<bool> DeleteAsync(
+            string path,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        public override Task<IReadOnlyList<FileStoreEntry>> ListChildrenAsync(
+            string directory,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<FileStoreEntry>>([]);
+
+        public override Task<bool> FileExistsAsync(
+            string path,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+
+        public override Task<IReadOnlyList<FileSearchResult>> SearchAsync(
+            string directory,
+            string regexPattern,
+            string? globPattern = null,
+            bool recursive = false,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<FileSearchResult>>([]);
+
+        public override Task CreateDirectoryAsync(
+            string path,
+            CancellationToken cancellationToken = default)
+        {
+            CreateDirectoryCallCount++;
+            return Task.CompletedTask;
         }
     }
 }

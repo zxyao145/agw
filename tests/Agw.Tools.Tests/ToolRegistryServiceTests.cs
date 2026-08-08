@@ -49,6 +49,55 @@ public class ToolRegistryServiceTests
     }
 
     [Fact]
+    public async Task MaterializeAsync_IndependentTools_MarksOnlyTrustedPlanToolsAllowed()
+    {
+        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider);
+
+        await using var contribution = await registry.MaterializeAsync(
+            [
+                new AskUserQuestionToolDefinition(),
+                new BashToolDefinition(),
+                new DiffToolDefinition(),
+                new GenerateGuidToolDefinition(),
+                new GitCloneToolDefinition(),
+                new PowerShellToolDefinition(),
+                new WebFetchToolDefinition()
+            ],
+            CreateMaterializationContext(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ["ask_user_question", "diff", "generate_guid", "web_fetch"],
+            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WebSearchMaterialization_LocalOrHosted_MarksToolAllowedInPlan(bool hosted)
+    {
+        var context = CreateMaterializationContext();
+        context = new ToolMaterializationContext
+        {
+            Agent = context.Agent,
+            Project = context.Project,
+            Workspace = context.Workspace,
+            DefaultMode = context.DefaultMode,
+            SupportsHostedWebSearch = hosted
+        };
+
+        await using var contribution = await new WebSearchContextualTool().MaterializeAsync(
+            new WebSearchToolDefinition(),
+            context,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(["web_search"], contribution.PlanModeAllowedToolNames);
+    }
+
+    [Fact]
     public void RemovedLocalTools_AreNotRegistered()
     {
         var services = new ServiceCollection();

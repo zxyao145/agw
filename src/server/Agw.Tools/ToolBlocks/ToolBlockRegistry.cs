@@ -142,6 +142,7 @@ public sealed class ToolBlockRegistry
         ToolContribution contribution)
     {
         destination.Tools.AddRange(contribution.Tools);
+        destination.PlanModeAllowedToolNames.UnionWith(contribution.PlanModeAllowedToolNames);
         destination.ContextProviders.AddRange(contribution.ContextProviders);
         destination.LoopEvaluators.AddRange(contribution.LoopEvaluators);
         destination.AutoApprovalRules.AddRange(contribution.AutoApprovalRules);
