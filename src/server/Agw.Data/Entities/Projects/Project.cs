@@ -23,7 +23,7 @@ public class Project : BaseEntity, IAggregateRoot
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
 
     [JsonIgnore]
-    public ICollection<ProjectContext> Contexts { get; set; } = new List<ProjectContext>();
+    public ICollection<ProjectConversation> Conversations { get; set; } = new List<ProjectConversation>();
 
     public ICollection<ProjectSkillRelation> ProjectSkillRelations { get; set; } = new List<ProjectSkillRelation>();
     public ICollection<ProjectMcpServerRelation> ProjectMcpToolServers { get; set; } = new List<ProjectMcpServerRelation>();

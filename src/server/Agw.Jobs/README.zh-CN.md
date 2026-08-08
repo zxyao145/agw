@@ -56,7 +56,7 @@ flowchart LR
     Executor --> Projects["TaskExecutionAppService"]
     Executor --> AgentRuntime["AgentRuntimeService"]
     Executor --> FlowRuntime["AgentflowRuntimeService"]
-    Projects --> TaskData[("ProjectContext / TaskRecord")]
+    Projects --> TaskData[("ProjectConversation / ProjectConversationChatHistory")]
 ```
 
 ### 主要组件
@@ -135,7 +135,7 @@ stateDiagram-v2
 
 ### `JobLog`
 
-进入执行阶段的每次尝试都会写入一条日志，包含开始/结束时间、成功状态、尝试序号和错误信息。数据库实体还保存内部 `TaskId`，查询 API 会通过 `TaskRecord` 和 `ProjectContext` 将它转换为对外的 `ContextId`，不会直接暴露 `TaskId`。
+进入执行阶段的每次尝试都会写入一条日志，包含开始/结束时间、成功状态、尝试序号和错误信息。数据库实体还保存内部 `TaskId`，查询 API 会通过 `ProjectConversationChatHistory` 和 `ProjectConversation` 将它转换为对外的 `ContextId`，不会直接暴露 `TaskId`。
 
 ## 核心数据流
 

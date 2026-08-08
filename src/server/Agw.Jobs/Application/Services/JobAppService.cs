@@ -15,8 +15,8 @@ public class JobAppService
 {
     private readonly IRepository<Job> _jobTaskRepository;
     private readonly IRepository<JobLog> _jobExecutionLogRepository;
-    private readonly IRepository<TaskRecord> _taskRecordRepository;
-    private readonly IRepository<ProjectContext> _projectContextRepository;
+    private readonly IRepository<ProjectConversationChatHistory> _chatHistoryRepository;
+    private readonly IRepository<ProjectConversation> _projectConversationRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly JobScheduleCalculator _jobScheduleCalculator;
     private readonly JobSchedulerWakeSignal _schedulerWakeSignal;
@@ -25,8 +25,8 @@ public class JobAppService
     public JobAppService(
         IRepository<Job> jobTaskRepository,
         IRepository<JobLog> jobExecutionLogRepository,
-        IRepository<TaskRecord> taskRecordRepository,
-        IRepository<ProjectContext> projectContextRepository,
+        IRepository<ProjectConversationChatHistory> chatHistoryRepository,
+        IRepository<ProjectConversation> projectConversationRepository,
         IUnitOfWork unitOfWork,
         JobScheduleCalculator jobScheduleCalculator,
         JobSchedulerWakeSignal schedulerWakeSignal,
@@ -34,8 +34,8 @@ public class JobAppService
     {
         _jobTaskRepository = jobTaskRepository;
         _jobExecutionLogRepository = jobExecutionLogRepository;
-        _taskRecordRepository = taskRecordRepository;
-        _projectContextRepository = projectContextRepository;
+        _chatHistoryRepository = chatHistoryRepository;
+        _projectConversationRepository = projectConversationRepository;
         _unitOfWork = unitOfWork;
         _jobScheduleCalculator = jobScheduleCalculator;
         _schedulerWakeSignal = schedulerWakeSignal;
@@ -93,20 +93,20 @@ public class JobAppService
         }
 
         var taskIds = logs.Select(log => log.TaskId).ToHashSet();
-        var taskRecords = await _taskRecordRepository.Queryable
+        var chatHistories = await _chatHistoryRepository.Queryable
             .AsNoTracking()
             .Where(record => taskIds.Contains(record.TaskId))
             .ToListAsync(cancellationToken);
-        var contextIds = taskRecords.Select(record => record.ProjectContextId).ToHashSet();
-        var contexts = await _projectContextRepository.Queryable
+        var contextIds = chatHistories.Select(record => record.ConversationId).ToHashSet();
+        var contexts = await _projectConversationRepository.Queryable
             .AsNoTracking()
             .Where(context => contextIds.Contains(context.Id))
             .ToListAsync(cancellationToken);
-        var contextIdByTaskId = taskRecords
+        var contextIdByTaskId = chatHistories
             .GroupBy(record => record.TaskId)
             .ToDictionary(
                 group => group.Key,
-                group => contexts.FirstOrDefault(context => context.Id == group.First().ProjectContextId)?.ContextId);
+                group => contexts.FirstOrDefault(context => context.Id == group.First().ConversationId)?.ContextId);
 
         return logs
             .OrderByDescending(log => log.StartTime)

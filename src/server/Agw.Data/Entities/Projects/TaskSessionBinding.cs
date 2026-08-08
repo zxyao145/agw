@@ -10,9 +10,9 @@ public class TaskSessionBinding : BaseEntity
 {
     public Guid Id { get; set; }
 
-    public Guid ProjectContextId { get; set; }
+    public Guid ProjectConversationId { get; set; }
 
-    public ProjectContext? ProjectContext { get; set; }
+    public ProjectConversation? ProjectConversation { get; set; }
 
     public Guid AgentId { get; set; }
 

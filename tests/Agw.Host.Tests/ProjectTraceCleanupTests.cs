@@ -24,8 +24,8 @@ public class ProjectTraceCleanupTests
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
-        await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
-        var service = CreateProjectContextService(dbContext);
+        await SeedProjectConversationsAndTracesAsync(dbContext, projectId, cancellationToken);
+        var service = CreateProjectConversationService(dbContext);
 
         await service.ClearRecordsAsync(projectId, "context-1");
 
@@ -40,8 +40,8 @@ public class ProjectTraceCleanupTests
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
-        await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
-        var service = CreateProjectContextService(dbContext);
+        await SeedProjectConversationsAndTracesAsync(dbContext, projectId, cancellationToken);
+        var service = CreateProjectConversationService(dbContext);
 
         await service.DeleteAsync(projectId, "context-1");
 
@@ -57,9 +57,9 @@ public class ProjectTraceCleanupTests
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
         var otherProjectId = Guid.CreateVersion7();
-        await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
-        await SeedProjectContextsAndTracesAsync(dbContext, otherProjectId, cancellationToken, "other-");
-        var service = CreateProjectContextService(dbContext);
+        await SeedProjectConversationsAndTracesAsync(dbContext, projectId, cancellationToken);
+        await SeedProjectConversationsAndTracesAsync(dbContext, otherProjectId, cancellationToken, "other-");
+        var service = CreateProjectConversationService(dbContext);
 
         await service.DeleteAllAsync(projectId);
 
@@ -76,8 +76,8 @@ public class ProjectTraceCleanupTests
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
         var otherProjectId = Guid.CreateVersion7();
-        await SeedProjectContextsAndTracesAsync(dbContext, projectId, cancellationToken);
-        await SeedProjectContextsAndTracesAsync(dbContext, otherProjectId, cancellationToken, "other-");
+        await SeedProjectConversationsAndTracesAsync(dbContext, projectId, cancellationToken);
+        await SeedProjectConversationsAndTracesAsync(dbContext, otherProjectId, cancellationToken, "other-");
         var service = CreateProjectService(dbContext);
 
         await service.DeleteAsync(projectId);
@@ -107,7 +107,7 @@ public class ProjectTraceCleanupTests
         return dbContext;
     }
 
-    private static async Task SeedProjectContextsAndTracesAsync(
+    private static async Task SeedProjectConversationsAndTracesAsync(
         AgwDbContext dbContext,
         Guid projectId,
         CancellationToken cancellationToken,
@@ -121,16 +121,16 @@ public class ProjectTraceCleanupTests
             CreateBy = "tester",
             CreateTime = TimeProvider.System.GetUtcNow(),
         });
-        dbContext.ProjectContexts.AddRange(
-            CreateProjectContext(projectId, $"{contextPrefix}context-1"),
-            CreateProjectContext(projectId, $"{contextPrefix}context-2"));
+        dbContext.ProjectConversations.AddRange(
+            CreateProjectConversation(projectId, $"{contextPrefix}context-1"),
+            CreateProjectConversation(projectId, $"{contextPrefix}context-2"));
         dbContext.AgentflowNodeExecutionTraces.AddRange(
             CreateTrace(projectId, $"{contextPrefix}context-1"),
             CreateTrace(projectId, $"{contextPrefix}context-2"));
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private static ProjectContext CreateProjectContext(Guid projectId, string contextId) => new()
+    private static ProjectConversation CreateProjectConversation(Guid projectId, string contextId) => new()
     {
         Id = Guid.CreateVersion7(),
         ProjectId = projectId,
@@ -154,20 +154,20 @@ public class ProjectTraceCleanupTests
         Status = AgentflowNodeExecutionStatus.Succeeded,
     };
 
-    private static ProjectContextAppService CreateProjectContextService(AgwDbContext dbContext)
+    private static ProjectContextAppService CreateProjectConversationService(AgwDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
         return new ProjectContextAppService(
-            new EfRepository<ProjectContext>(dbContext),
-            new EfRepository<TaskRecord>(dbContext),
+            new EfRepository<ProjectConversation>(dbContext),
+            new EfRepository<ProjectConversationChatHistory>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             new ProjectResolver(projectRepository),
-            new TaskRecordDomainService(),
+            new ProjectConversationChatHistoryDomainService(),
             new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
-                new EfRepository<ProjectContext>(dbContext),
+                new EfRepository<ProjectConversation>(dbContext),
                 dbContext,
                 TimeProvider.System),
             TimeProvider.System);

@@ -13,14 +13,14 @@ namespace Agw.Projects.Application;
 
 public class TaskAppService : ITaskAppService
 {
-    private readonly IRepository<ProjectContext> _contextRepository;
-    private readonly IRepository<TaskRecord> _recordRepository;
+    private readonly IRepository<ProjectConversation> _contextRepository;
+    private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
     private readonly ProjectResolver _projectResolver;
     private readonly TaskExecutionAppService _taskExecutionAppService;
 
     public TaskAppService(
-        IRepository<ProjectContext> contextRepository,
-        IRepository<TaskRecord> recordRepository,
+        IRepository<ProjectConversation> contextRepository,
+        IRepository<ProjectConversationChatHistory> recordRepository,
         ProjectResolver projectResolver,
         TaskExecutionAppService taskExecutionAppService)
     {
@@ -70,7 +70,7 @@ public class TaskAppService : ITaskAppService
             }
             var existInProject = await _recordRepository.Queryable
                 .AnyAsync(
-                r => r.TaskId == taskId && r.ProjectContext != null && r.ProjectContext.ProjectId == project.Id,
+                r => r.TaskId == taskId && r.ProjectConversation != null && r.ProjectConversation.ProjectId == project.Id,
                 cancellationToken
                 );
             return existInProject;
@@ -193,7 +193,7 @@ public class TaskAppService : ITaskAppService
             return null;
         }
 
-        var records = await _recordRepository.ListAsync(record => record.ProjectContextId == context.Id);
+        var records = await _recordRepository.ListAsync(record => record.ConversationId == context.Id);
         if (records.Count == 0)
         {
             return null;

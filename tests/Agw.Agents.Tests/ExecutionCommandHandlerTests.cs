@@ -195,7 +195,7 @@ public class ExecutionCommandHandlerTests
         Assert.Equal(turnContext.Task.ProjectId, turnContext.ProjectId);
         Assert.Equal(turnContext.Target.AgentId, turnContext.AgentId);
         Assert.Equal(turnContext.ProjectId, context.ProjectId);
-        Assert.Equal(turnContext.ProjectContextId, context.ProjectContextId);
+        Assert.Equal(turnContext.ProjectConversationId, context.ProjectConversationId);
         Assert.Equal(turnContext.AgentId, context.AgentId);
         Assert.Equal("user", context.UserName);
     }
@@ -229,7 +229,7 @@ public class ExecutionCommandHandlerTests
         new()
         {
             TaskId = Guid.CreateVersion7(),
-            ProjectContextId = Guid.CreateVersion7(),
+            ProjectConversationId = Guid.CreateVersion7(),
             ProjectId = Guid.CreateVersion7(),
             ContextId = contextId,
             Title = "test",

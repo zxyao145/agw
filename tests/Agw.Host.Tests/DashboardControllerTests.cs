@@ -66,7 +66,7 @@ public class DashboardControllerTests
             Name = "Deleted project",
             CreateTime = TimeProvider.System.GetUtcNow()
         });
-        dbContext.ProjectContexts.Add(new ProjectContext
+        dbContext.ProjectConversations.Add(new ProjectConversation
         {
             Id = Guid.CreateVersion7(),
             ProjectId = projectId,
@@ -80,7 +80,7 @@ public class DashboardControllerTests
         dbContext.Projects.Remove(await dbContext.Projects.SingleAsync(cancellationToken));
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        Assert.Empty(await dbContext.ProjectContexts.ToListAsync(cancellationToken));
+        Assert.Empty(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
         var stats = ReadStats(await CreateController(dbContext).GetStats());
         Assert.Equal(30L, ReadLongProperty(stats, "UsageTotalTokenCount"));
@@ -111,9 +111,9 @@ public class DashboardControllerTests
         return new DashboardController(
             new EfRepository<Job>(dbContext),
             new EfRepository<Project>(dbContext),
-            new EfRepository<ProjectContext>(dbContext),
+            new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
-            new EfRepository<TaskRecord>(dbContext),
+            new EfRepository<ProjectConversationChatHistory>(dbContext),
             new EfRepository<Agent>(dbContext),
             new EfRepository<Agentflow>(dbContext));
     }

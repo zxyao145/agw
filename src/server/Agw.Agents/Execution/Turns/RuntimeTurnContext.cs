@@ -34,7 +34,7 @@ public sealed record RuntimeTurnContext
 
     public Guid ProjectId => Task.ProjectId;
 
-    public Guid ProjectContextId => Task.ProjectContextId;
+    public Guid ProjectConversationId => Task.ProjectConversationId;
 
     public string ContextId => Task.ContextId;
 

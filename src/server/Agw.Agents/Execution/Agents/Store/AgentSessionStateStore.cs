@@ -106,9 +106,9 @@ public sealed class AgentSessionStateStore
         {
             _logger.LogWarning(
                 exception,
-                "Agent session state deserialization failed for project context {ProjectContextId}, " +
+                "Agent session state deserialization failed for project conversation {ProjectConversationId}, " +
                 "agent {AgentId}, and node {AgentflowNodeId}. A new session will be created.",
-                sessionScope.ProjectContextId,
+                sessionScope.ProjectConversationId,
                 sessionScope.AgentId,
                 sessionScope.AgentflowNodeId);
             return await aiAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
@@ -137,9 +137,9 @@ public sealed class AgentSessionStateStore
             return;
         }
 
-        var projectContextId = await ResolveProjectContextIdAsync(sessionScope, cancellationToken)
+        var projectConversationId = await ResolveProjectConversationIdAsync(sessionScope, cancellationToken)
             .ConfigureAwait(false);
-        if (!projectContextId.HasValue)
+        if (!projectConversationId.HasValue)
         {
             _logger.LogWarning(
                 "Agent session state was not saved because project {ProjectId} context {ContextId} does not exist.",
@@ -150,7 +150,7 @@ public sealed class AgentSessionStateStore
 
         await using var mutationLease = await _applicationLock!
             .AcquireAsync(
-                $"agent-session:{projectContextId.Value:D}:{sessionScope.AgentId:D}:" +
+                $"agent-session:{projectConversationId.Value:D}:{sessionScope.AgentId:D}:" +
                 (sessionScope.AgentflowNodeId ?? string.Empty),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -159,7 +159,7 @@ public sealed class AgentSessionStateStore
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
         var entry = await dbContext.Set<AgentSessionStateEntry>()
             .SingleOrDefaultAsync(
-                item => item.ProjectContextId == projectContextId.Value &&
+                item => item.ProjectConversationId == projectConversationId.Value &&
                     item.AgentId == sessionScope.AgentId &&
                     item.AgentflowNodeId == sessionScope.AgentflowNodeId,
                 cancellationToken)
@@ -168,7 +168,7 @@ public sealed class AgentSessionStateStore
         {
             entry = new AgentSessionStateEntry
             {
-                ProjectContextId = projectContextId.Value,
+                ProjectConversationId = projectConversationId.Value,
                 AgentId = sessionScope.AgentId,
                 AgentflowNodeId = sessionScope.AgentflowNodeId ?? string.Empty
             };
@@ -211,9 +211,9 @@ public sealed class AgentSessionStateStore
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
-        var projectContextId = await ResolveProjectContextIdAsync(sessionScope, cancellationToken)
+        var projectConversationId = await ResolveProjectConversationIdAsync(sessionScope, cancellationToken)
             .ConfigureAwait(false);
-        if (!projectContextId.HasValue)
+        if (!projectConversationId.HasValue)
         {
             return string.Empty;
         }
@@ -222,7 +222,7 @@ public sealed class AgentSessionStateStore
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
         return await dbContext.Set<AgentSessionStateEntry>()
             .AsNoTracking()
-            .Where(item => item.ProjectContextId == projectContextId.Value &&
+            .Where(item => item.ProjectConversationId == projectConversationId.Value &&
                 item.AgentId == sessionScope.AgentId &&
                 item.AgentflowNodeId == sessionScope.AgentflowNodeId)
             .Select(item => item.SerializedSession)
@@ -230,23 +230,23 @@ public sealed class AgentSessionStateStore
             .ConfigureAwait(false) ?? string.Empty;
     }
 
-    internal async Task<Guid?> ResolveProjectContextIdAsync(
+    internal async Task<Guid?> ResolveProjectConversationIdAsync(
         AgentSessionStateScope sessionScope,
         CancellationToken cancellationToken)
     {
-        if (sessionScope.ProjectContextId != Guid.Empty)
+        if (sessionScope.ProjectConversationId != Guid.Empty)
         {
-            return sessionScope.ProjectContextId;
+            return sessionScope.ProjectConversationId;
         }
 
-        return await ResolveProjectContextIdAsync(
+        return await ResolveProjectConversationIdAsync(
                 sessionScope.ProjectId,
                 sessionScope.ContextId,
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
-    internal async Task<Guid?> ResolveProjectContextIdAsync(
+    internal async Task<Guid?> ResolveProjectConversationIdAsync(
         Guid projectId,
         string contextId,
         CancellationToken cancellationToken)
@@ -258,7 +258,7 @@ public sealed class AgentSessionStateStore
 
         await using var scope = _serviceScopeFactory!.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-        return await dbContext.Set<Agw.Shared.Data.Entities.Projects.ProjectContext>()
+        return await dbContext.Set<Agw.Shared.Data.Entities.Projects.ProjectConversation>()
             .AsNoTracking()
             .Where(context =>
                 context.ProjectId == projectId &&

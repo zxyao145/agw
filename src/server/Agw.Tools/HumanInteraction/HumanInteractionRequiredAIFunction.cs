@@ -14,7 +14,8 @@ public sealed class HumanInteractionRequiredAIFunction : DelegatingAIFunction
         IHumanInteractionProtocol protocol)
         : base(innerFunction)
     {
-        _protocol = protocol ?? throw new ArgumentNullException(nameof(protocol));
+        ArgumentNullException.ThrowIfNull(protocol);
+        _protocol = protocol;
     }
 
     protected override async ValueTask<object?> InvokeCoreAsync(

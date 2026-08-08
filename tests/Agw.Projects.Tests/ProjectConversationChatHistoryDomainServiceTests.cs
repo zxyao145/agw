@@ -5,16 +5,16 @@ using Agw.Shared.Extensions;
 
 namespace Agw.Projects.Tests;
 
-public class TaskRecordDomainServiceTests
+public class ProjectConversationChatHistoryDomainServiceTests
 {
-    private readonly TaskRecordDomainService _service = new();
+    private readonly ProjectConversationChatHistoryDomainService _service = new();
 
     [Fact]
     public void Order_SortsBySequenceThenTimestamps()
     {
         var records = new[]
         {
-            new TaskRecord
+            new ProjectConversationChatHistory
             {
                 Id = Guid.CreateVersion7(),
                 TaskId = Guid.CreateVersion7(),
@@ -22,14 +22,14 @@ public class TaskRecordDomainServiceTests
                 CreateTime = new DateTimeOffset(2024, 1, 1, 3, 0, 0, TimeSpan.Zero),
                 UpdateTime = new DateTimeOffset(2024, 1, 1, 3, 0, 1, TimeSpan.Zero),
             },
-            new TaskRecord
+            new ProjectConversationChatHistory
             {
                 Id = Guid.CreateVersion7(),
                 TaskId = Guid.CreateVersion7(),
                 ConversationSequence = null,
                 CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
             },
-            new TaskRecord
+            new ProjectConversationChatHistory
             {
                 Id = Guid.CreateVersion7(),
                 TaskId = Guid.CreateVersion7(),
@@ -47,14 +47,14 @@ public class TaskRecordDomainServiceTests
     [Fact]
     public void GetLatest_ReturnsLastOrderedRecord()
     {
-        var first = new TaskRecord
+        var first = new ProjectConversationChatHistory
         {
             Id = Guid.CreateVersion7(),
             TaskId = Guid.CreateVersion7(),
             ConversationSequence = 1,
             CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
         };
-        var second = new TaskRecord
+        var second = new ProjectConversationChatHistory
         {
             Id = Guid.CreateVersion7(),
             TaskId = Guid.CreateVersion7(),
@@ -73,21 +73,21 @@ public class TaskRecordDomainServiceTests
         var taskIdA = Guid.CreateVersion7();
         var taskIdB = Guid.CreateVersion7();
 
-        var earlier = new TaskRecord
+        var earlier = new ProjectConversationChatHistory
         {
             Id = Guid.CreateVersion7(),
             TaskId = taskIdA,
             ConversationSequence = 1,
             CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
         };
-        var later = new TaskRecord
+        var later = new ProjectConversationChatHistory
         {
             Id = Guid.CreateVersion7(),
             TaskId = taskIdA,
             ConversationSequence = 2,
             CreateTime = new DateTimeOffset(2024, 1, 1, 2, 0, 0, TimeSpan.Zero),
         };
-        var other = new TaskRecord
+        var other = new ProjectConversationChatHistory
         {
             Id = Guid.CreateVersion7(),
             TaskId = taskIdB,
@@ -128,14 +128,14 @@ public class TaskRecordDomainServiceTests
         var newerTask = new TaskProjection { TaskId = Guid.CreateVersion7(), ContextId = "context-b" };
         var records = new[]
         {
-            new TaskRecord
+            new ProjectConversationChatHistory
             {
                 Id = Guid.CreateVersion7(),
                 TaskId = olderTask.TaskId,
                 CreateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
                 UpdateTime = new DateTimeOffset(2024, 1, 1, 1, 0, 0, TimeSpan.Zero),
             },
-            new TaskRecord
+            new ProjectConversationChatHistory
             {
                 Id = Guid.CreateVersion7(),
                 TaskId = newerTask.TaskId,

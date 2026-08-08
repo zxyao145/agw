@@ -11,12 +11,12 @@ public class TaskSessionBindingConfiguration : IEntityTypeConfiguration<TaskSess
         builder.Property(e => e.ExternalAgentName).IsRequired().HasMaxLength(200);
         builder.Property(e => e.ProviderSessionId).IsRequired().HasMaxLength(200);
 
-        builder.HasIndex(e => new { e.ProjectContextId, e.AgentId, e.ExternalAgentName }).IsUnique();
+        builder.HasIndex(e => new { e.ProjectConversationId, e.AgentId, e.ExternalAgentName }).IsUnique();
         builder.HasIndex(e => new { e.ExternalAgentName, e.ProviderSessionId });
 
-        builder.HasOne(e => e.ProjectContext)
+        builder.HasOne(e => e.ProjectConversation)
             .WithMany()
-            .HasForeignKey(e => e.ProjectContextId)
+            .HasForeignKey(e => e.ProjectConversationId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

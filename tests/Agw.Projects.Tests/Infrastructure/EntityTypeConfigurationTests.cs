@@ -76,24 +76,32 @@ public class EntityTypeConfigurationTests
     }
 
     [Fact]
-    public void AgentSessionState_UsesProjectContextAgentAndNodeCompositeKey()
+    public void AgentSessionState_UsesProjectConversationAgentAndNodeCompositeKey()
     {
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite("Data Source=:memory:")
+            .UseSnakeCaseNamingConvention()
             .Options;
         using var context = new AgwDbContext(options);
 
-        var primaryKey = context.Model
-            .FindEntityType(typeof(AgentSessionStateEntry))!
-            .FindPrimaryKey()!;
+        var entityType = context.Model.FindEntityType(typeof(AgentSessionStateEntry))!;
+        var primaryKey = entityType.FindPrimaryKey()!;
+        var projectConversationIdProperty = entityType.FindProperty(
+            nameof(AgentSessionStateEntry.ProjectConversationId))!;
 
         Assert.Equal(
             [
-                nameof(AgentSessionStateEntry.ProjectContextId),
+                nameof(AgentSessionStateEntry.ProjectConversationId),
                 nameof(AgentSessionStateEntry.AgentId),
                 nameof(AgentSessionStateEntry.AgentflowNodeId)
             ],
             primaryKey.Properties.Select(property => property.Name));
+        Assert.Equal("project_conversation_id", projectConversationIdProperty.GetColumnName());
+
+        var conversationForeignKey = Assert.Single(
+            entityType.GetForeignKeys(),
+            foreignKey => foreignKey.Properties.SequenceEqual([projectConversationIdProperty]));
+        Assert.Equal(typeof(ProjectConversation), conversationForeignKey.PrincipalEntityType.ClrType);
     }
 
     [Fact]
@@ -136,9 +144,9 @@ public class EntityTypeConfigurationTests
             typeof(ProjectSkillRelation),
             typeof(ProjectMcpServerRelation),
             typeof(ProjectConnectionRelation),
-            typeof(ProjectContext),
+            typeof(ProjectConversation),
             typeof(TaskSessionBinding),
-            typeof(TaskRecord));
+            typeof(ProjectConversationChatHistory));
     }
 
     [Fact]

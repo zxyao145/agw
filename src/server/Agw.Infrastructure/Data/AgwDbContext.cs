@@ -76,10 +76,10 @@ public class AgwDbContext : EFContext
     public DbSet<ProjectSkillRelation> ProjectSkillRelations => Set<ProjectSkillRelation>();
     public DbSet<ProjectMcpServerRelation> ProjectMcpToolServers => Set<ProjectMcpServerRelation>();
     public DbSet<ProjectConnectionRelation> ProjectConnectionRelations => Set<ProjectConnectionRelation>();
-    public DbSet<ProjectContext> ProjectContexts => Set<ProjectContext>();
+    public DbSet<ProjectConversation> ProjectConversations => Set<ProjectConversation>();
     public DbSet<AgentUsage> AgentUsages => Set<AgentUsage>();
     public DbSet<TaskSessionBinding> TaskSessionBindings => Set<TaskSessionBinding>();
-    public DbSet<TaskRecord> TaskRecords => Set<TaskRecord>();
+    public DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories => Set<ProjectConversationChatHistory>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobLog> JobLogs => Set<JobLog>();
 

@@ -6,14 +6,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Projects;
 
-[Table("project_task_record")]
-[EntityTypeConfiguration(typeof(TaskRecordConfiguration))]
-public class TaskRecord
+[Table("project_conversation_chat_history")]
+[EntityTypeConfiguration(typeof(ProjectConversationChatHistoryConfiguration))]
+public class ProjectConversationChatHistory
 {
     public Guid Id { get; set; }
 
-    public Guid ProjectContextId { get; set; }
-
+    public Guid ConversationId { get; set; }
 
     public Guid TaskId { get; set; }
 
@@ -43,5 +42,5 @@ public class TaskRecord
     public DateTimeOffset CreateTime { get; set; }
     public DateTimeOffset? UpdateTime { get; set; }
 
-    [JsonIgnore] public virtual ProjectContext? ProjectContext { get; set; }
+    [JsonIgnore] public virtual ProjectConversation? ProjectConversation { get; set; }
 }

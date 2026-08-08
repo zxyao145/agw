@@ -146,20 +146,20 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
-        var projectContext = await dbContext.Set<ProjectContext>()
+        var projectConversation = await dbContext.Set<ProjectConversation>()
             .AsNoTracking()
             .SingleOrDefaultAsync(
                 context => context.ProjectId == state.ProjectId && context.ContextId == state.ContextId,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (projectContext == null)
+        if (projectConversation == null)
         {
             return [];
         }
 
-        var records = await dbContext.Set<TaskRecord>()
+        var records = await dbContext.Set<ProjectConversationChatHistory>()
             .AsNoTracking()
-            .Where(record => record.ProjectContextId == projectContext.Id
+            .Where(record => record.ConversationId == projectConversation.Id
                 && record.ConversationPayload != null)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -288,26 +288,26 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         var now = _timeProvider.GetUtcNow();
         var firstUserText = ExtractFirstText(persistableMessages.FirstOrDefault(message => message.Role == ChatRole.User));
-        var projectContext = await dbContext.Set<ProjectContext>()
+        var projectConversation = await dbContext.Set<ProjectConversation>()
             .SingleOrDefaultAsync(
                 x => x.ProjectId == projectId && x.ContextId == contextId,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (projectContext == null && Guid.TryParse(contextId, out _))
+        if (projectConversation == null && Guid.TryParse(contextId, out _))
         {
-            projectContext = await dbContext.Set<ProjectContext>()
+            projectConversation = await dbContext.Set<ProjectConversation>()
                 .Where(x => x.ProjectId == projectId && x.ContextId.ToLower() == contextId)
                 .FirstOrDefaultAsync(cancellationToken)
                 .ConfigureAwait(false);
-            if (projectContext != null)
+            if (projectConversation != null)
             {
-                projectContext.ContextId = contextId;
+                projectConversation.ContextId = contextId;
             }
         }
 
-        if (projectContext == null)
+        if (projectConversation == null)
         {
-            projectContext = new ProjectContext
+            projectConversation = new ProjectConversation
             {
                 Id = Guid.CreateVersion7(),
                 ProjectId = projectId,
@@ -318,26 +318,26 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 UpdateBy = DefaultUser,
                 UpdateTime = now
             };
-            dbContext.Set<ProjectContext>().Add(projectContext);
+            dbContext.Set<ProjectConversation>().Add(projectConversation);
         }
         else
         {
             var titleFromUser = TaskTitleFactory.Create(firstUserText);
             if (
-                string.Equals(projectContext.Title, TaskTitleFactory.DefaultTitle, StringComparison.Ordinal)
+                string.Equals(projectConversation.Title, TaskTitleFactory.DefaultTitle, StringComparison.Ordinal)
                 && !string.Equals(titleFromUser, TaskTitleFactory.DefaultTitle, StringComparison.Ordinal))
             {
-                projectContext.Title = titleFromUser;
+                projectConversation.Title = titleFromUser;
             }
 
-            projectContext.UpdateBy = DefaultUser;
-            projectContext.UpdateTime = now;
+            projectConversation.UpdateBy = DefaultUser;
+            projectConversation.UpdateTime = now;
         }
 
         var taskId = Guid.CreateVersion7();
 
-        var nextSequence = await dbContext.Set<TaskRecord>()
-            .Where(x => x.ProjectContextId == projectContext.Id)
+        var nextSequence = await dbContext.Set<ProjectConversationChatHistory>()
+            .Where(x => x.ConversationId == projectConversation.Id)
             .Select(x => x.ConversationSequence)
             .MaxAsync(cancellationToken)
             .ConfigureAwait(false) ?? -1;
@@ -347,10 +347,10 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             // user input
             nextSequence++;
 
-            dbContext.Set<TaskRecord>().Add(new TaskRecord
+            dbContext.Set<ProjectConversationChatHistory>().Add(new ProjectConversationChatHistory
             {
                 Id = Guid.CreateVersion7(),
-                ProjectContextId = projectContext.Id,
+                ConversationId = projectConversation.Id,
                 TaskId = taskId,
                 Status = TaskExecutionStatus.Succeeded,
                 AgentName = message.AuthorName,
@@ -382,7 +382,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             content is not TextContent textContent ||
             !string.IsNullOrWhiteSpace(textContent.Text));
 
-    private static bool HasHistoryScope(TaskRecord record, string? historyScope)
+    private static bool HasHistoryScope(ProjectConversationChatHistory record, string? historyScope)
     {
         string? recordScope = null;
         if (record.Metadata?.TryGetValue(HistoryScopeMetadataKey, out var scopeElement) == true &&
@@ -398,7 +398,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         ChatMessage message,
         string? historyScope)
     {
-        var metadata = TaskRecordMetadataFactory.FromMessage(message);
+        var metadata = ProjectConversationChatHistoryMetadataFactory.FromMessage(message);
         if (historyScope == null)
         {
             return metadata;
@@ -428,7 +428,11 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             if (functionCalls.Count > 0)
             {
                 var toolMessageEnd = index + 1;
-                while (toolMessageEnd < allMessages.Count && allMessages[toolMessageEnd].Role == ChatRole.Tool)
+                while (toolMessageEnd < allMessages.Count &&
+                       (allMessages[toolMessageEnd].Role == ChatRole.Tool ||
+                        toolMessageEnd >= messages.Count &&
+                        allMessages[toolMessageEnd].GetAgentRequestMessageSourceType() ==
+                        AgentRequestMessageSourceType.AIContextProvider))
                 {
                     toolMessageEnd++;
                 }

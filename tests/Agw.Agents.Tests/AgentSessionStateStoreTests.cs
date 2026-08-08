@@ -186,30 +186,30 @@ public class AgentSessionStateStoreTests
     [Fact]
     public void Scope_DifferentAgentsAndNodes_UseDifferentCacheKeys()
     {
-        var projectContextId = Guid.CreateVersion7();
+        var projectConversationId = Guid.CreateVersion7();
         var projectId = Guid.CreateVersion7();
         var firstAgentId = Guid.CreateVersion7();
         var secondAgentId = Guid.CreateVersion7();
 
         var standalone = new AgentSessionStateScope(
-            projectContextId,
+            projectConversationId,
             projectId,
             "context-1",
             firstAgentId);
         var firstNode = new AgentSessionStateScope(
-            projectContextId,
+            projectConversationId,
             projectId,
             "context-1",
             firstAgentId,
             "flow-a:node-a");
         var secondNode = new AgentSessionStateScope(
-            projectContextId,
+            projectConversationId,
             projectId,
             "context-1",
             firstAgentId,
             "flow-a:node-b");
         var secondAgent = new AgentSessionStateScope(
-            projectContextId,
+            projectConversationId,
             projectId,
             "context-1",
             secondAgentId);
@@ -235,7 +235,7 @@ public class AgentSessionStateStoreTests
         await using var serviceProvider = services.BuildServiceProvider();
 
         var projectId = Guid.CreateVersion7();
-        var projectContextId = Guid.CreateVersion7();
+        var projectConversationId = Guid.CreateVersion7();
         var agentId = Guid.CreateVersion7();
         await using (var serviceScope = serviceProvider.CreateAsyncScope())
         {
@@ -252,9 +252,9 @@ public class AgentSessionStateStoreTests
                 Name = "session-state-agent",
                 DisplayName = "Session State Agent"
             });
-            dbContext.ProjectContexts.Add(new ProjectContext
+            dbContext.ProjectConversations.Add(new ProjectConversation
             {
-                Id = projectContextId,
+                Id = projectConversationId,
                 ProjectId = projectId,
                 ContextId = "context-1",
                 Title = "Context"
@@ -269,18 +269,18 @@ public class AgentSessionStateStoreTests
         var aiAgent = new TestAIAgent();
         var session = await aiAgent.CreateSessionAsync(TestContext.Current.CancellationToken);
         var standaloneScope = new AgentSessionStateScope(
-            projectContextId,
+            projectConversationId,
             projectId,
             "context-1",
             agentId);
         var nodeScope = new AgentSessionStateScope(
-            projectContextId,
+            projectConversationId,
             projectId,
             "context-1",
             agentId,
             "flow-a:node-a");
         var concurrentScope = new AgentSessionStateScope(
-            projectContextId,
+            projectConversationId,
             projectId,
             "context-1",
             agentId,
@@ -314,7 +314,7 @@ public class AgentSessionStateStoreTests
             .ToListAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(3, entries.Count);
-        Assert.All(entries, entry => Assert.Equal(projectContextId, entry.ProjectContextId));
+        Assert.All(entries, entry => Assert.Equal(projectConversationId, entry.ProjectConversationId));
         Assert.All(entries, entry => Assert.Equal(agentId, entry.AgentId));
         Assert.Equal(
             [string.Empty, "flow-a:concurrent", "flow-a:node-a"],

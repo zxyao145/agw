@@ -4,7 +4,7 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Tests;
 
-public class TaskRecordMetadataFactoryTests
+public class ProjectConversationChatHistoryMetadataFactoryTests
 {
     [Fact]
     public void FromMessage_CopiesTargetMetadataFromTextContent()
@@ -22,7 +22,7 @@ public class TaskRecordMetadataFactoryTests
                 }
             ]);
 
-        var metadata = TaskRecordMetadataFactory.FromMessage(message);
+        var metadata = ProjectConversationChatHistoryMetadataFactory.FromMessage(message);
 
         Assert.NotNull(metadata);
         Assert.Equal("agentflow", metadata!["targetType"].GetString());

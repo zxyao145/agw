@@ -29,10 +29,10 @@ public partial class AgentRuntimeService
 
         Guid projectId = task.ProjectId;
         var resolvedContextId = ContextIdUtil.ResolveContextId(task.ContextId);
-        var conversationId = task.ProjectContextId != Guid.Empty
-            ? task.ProjectContextId
+        var conversationId = task.ProjectConversationId != Guid.Empty
+            ? task.ProjectConversationId
             : await _sessionStateStore
-                .ResolveProjectContextIdAsync(projectId, resolvedContextId, cancellationToken)
+                .ResolveProjectConversationIdAsync(projectId, resolvedContextId, cancellationToken)
                 .ConfigureAwait(false) ?? Guid.Empty;
         var sessionScope = new AgentSessionStateScope(
             conversationId,

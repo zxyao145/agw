@@ -12,24 +12,24 @@ namespace Agw.Projects.Application;
 
 public class ProjectContextAppService
 {
-    private readonly IRepository<ProjectContext> _contextRepository;
-    private readonly IRepository<TaskRecord> _recordRepository;
+    private readonly IRepository<ProjectConversation> _contextRepository;
+    private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
     private readonly IRepository<AgentflowTrace> _traceRepository;
     private readonly IRepository<AgentUsage> _usageRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectResolver _projectResolver;
-    private readonly TaskRecordDomainService _taskRecordDomainService;
+    private readonly ProjectConversationChatHistoryDomainService _chatHistoryDomainService;
     private readonly ITaskSessionBindingService _taskSessionBindingService;
     private readonly TimeProvider _timeProvider;
 
     public ProjectContextAppService(
-        IRepository<ProjectContext> contextRepository,
-        IRepository<TaskRecord> recordRepository,
+        IRepository<ProjectConversation> contextRepository,
+        IRepository<ProjectConversationChatHistory> recordRepository,
         IRepository<AgentflowTrace> traceRepository,
         IRepository<AgentUsage> usageRepository,
         IUnitOfWork unitOfWork,
         ProjectResolver projectResolver,
-        TaskRecordDomainService taskRecordDomainService,
+        ProjectConversationChatHistoryDomainService chatHistoryDomainService,
         ITaskSessionBindingService taskSessionBindingService,
         TimeProvider timeProvider)
     {
@@ -39,7 +39,7 @@ public class ProjectContextAppService
         _usageRepository = usageRepository;
         _unitOfWork = unitOfWork;
         _projectResolver = projectResolver;
-        _taskRecordDomainService = taskRecordDomainService;
+        _chatHistoryDomainService = chatHistoryDomainService;
         _taskSessionBindingService = taskSessionBindingService;
         _timeProvider = timeProvider;
     }
@@ -59,9 +59,9 @@ public class ProjectContextAppService
         }
 
         var contextIds = contexts.Select(context => context.Id).ToHashSet();
-        var records = await _recordRepository.ListAsync(record => contextIds.Contains(record.ProjectContextId));
+        var records = await _recordRepository.ListAsync(record => contextIds.Contains(record.ConversationId));
         var recordsByContextId = records
-            .GroupBy(record => record.ProjectContextId)
+            .GroupBy(record => record.ConversationId)
             .ToDictionary(group => group.Key, group => group.ToList());
 
         return contexts
@@ -96,14 +96,14 @@ public class ProjectContextAppService
 
     public async Task<ApplicationResult> ClearRecordsAsync(Guid projectId, string contextId)
     {
-        var context = await GetProjectContextAsync(projectId, contextId);
+        var context = await GetProjectConversationAsync(projectId, contextId);
         if (context == null)
         {
             return ApplicationResult.NotFound();
         }
 
         await _recordRepository.Queryable
-            .Where(record => record.ProjectContextId == context.Id)
+            .Where(record => record.ConversationId == context.Id)
             .ExecuteDeleteAsync();
         await _traceRepository.Queryable
             .Where(trace => trace.ProjectId == context.ProjectId && trace.ContextId == context.ContextId)
@@ -122,7 +122,7 @@ public class ProjectContextAppService
             return ApplicationResult.Invalid("title is required.");
         }
 
-        var context = await GetProjectContextAsync(projectId, contextId);
+        var context = await GetProjectConversationAsync(projectId, contextId);
         if (context == null)
         {
             return ApplicationResult.NotFound();
@@ -164,14 +164,14 @@ public class ProjectContextAppService
 
     public async Task<bool> DeleteAsync(Guid projectId, string contextId)
     {
-        var context = await GetProjectContextAsync(projectId, contextId);
+        var context = await GetProjectConversationAsync(projectId, contextId);
         if (context == null)
         {
             return false;
         }
 
         await _recordRepository.Queryable
-            .Where(record => record.ProjectContextId == context.Id)
+            .Where(record => record.ConversationId == context.Id)
             .ExecuteDeleteAsync();
         await _traceRepository.Queryable
             .Where(trace => trace.ProjectId == context.ProjectId && trace.ContextId == context.ContextId)
@@ -184,9 +184,9 @@ public class ProjectContextAppService
         return true;
     }
 
-    private async Task<ProjectContextResponse> ToResponseAsync(ProjectContext context)
+    private async Task<ProjectContextResponse> ToResponseAsync(ProjectConversation context)
     {
-        var records = await _recordRepository.ListAsync(record => record.ProjectContextId == context.Id);
+        var records = await _recordRepository.ListAsync(record => record.ConversationId == context.Id);
         var orderedTasks = records
             .GroupBy(record => record.TaskId)
             .Select(group => TaskExecutionMapper.ToTask(context, group.ToList()))
@@ -194,7 +194,7 @@ public class ProjectContextAppService
             .ThenBy(task => task.UpdateTime ?? task.CreateTime)
             .ThenBy(task => task.TaskId)
             .ToList();
-        var messages = _taskRecordDomainService.Order(records)
+        var messages = _chatHistoryDomainService.Order(records)
             .SelectMany(TaskExecutionMapper.ToAiMessages)
             .ToList();
         var latestTask = GetLatestTask(orderedTasks);
@@ -214,7 +214,7 @@ public class ProjectContextAppService
             messages);
     }
 
-    private async Task<ProjectContextUsage> GetUsageAsync(ProjectContext context) =>
+    private async Task<ProjectContextUsage> GetUsageAsync(ProjectConversation context) =>
         await _usageRepository.Queryable
             .Where(usage => usage.ProjectId == context.ProjectId && usage.ContextId == context.ContextId)
             .GroupBy(_ => 1)
@@ -229,8 +229,8 @@ public class ProjectContextAppService
             .SingleOrDefaultAsync() ?? new ProjectContextUsage();
 
     private static ProjectContextSummaryResponse ToSummaryResponse(
-        ProjectContext context,
-        IReadOnlyList<TaskRecord> records)
+        ProjectConversation context,
+        IReadOnlyList<ProjectConversationChatHistory> records)
     {
         var tasks = records
             .GroupBy(record => record.TaskId)
@@ -255,7 +255,7 @@ public class ProjectContextAppService
     /// <summary>
     /// 在解析项目标识后，使用规范化 context ID 查询持久化项目上下文。
     /// </summary>
-    private async Task<ProjectContext?> GetProjectContextAsync(Guid projectId, string contextId)
+    private async Task<ProjectConversation?> GetProjectConversationAsync(Guid projectId, string contextId)
     {
         if (string.IsNullOrWhiteSpace(contextId))
         {

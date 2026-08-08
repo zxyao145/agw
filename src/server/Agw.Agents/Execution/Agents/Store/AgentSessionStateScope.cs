@@ -6,20 +6,20 @@ namespace Agw.Agents.Execution.Agents.Store;
 public sealed class AgentSessionStateScope
 {
     public AgentSessionStateScope(
-        Guid projectContextId,
+        Guid projectConversationId,
         Guid projectId,
         string contextId,
         Guid agentId,
         string? agentflowNodeId = null)
     {
-        ProjectContextId = projectContextId;
+        ProjectConversationId = projectConversationId;
         ProjectId = projectId;
         ContextId = contextId.Trim();
         AgentId = agentId;
         AgentflowNodeId = agentflowNodeId?.Trim() ?? string.Empty;
     }
 
-    public Guid ProjectContextId { get; }
+    public Guid ProjectConversationId { get; }
 
     public Guid ProjectId { get; }
 

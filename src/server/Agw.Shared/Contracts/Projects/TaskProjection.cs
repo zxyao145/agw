@@ -9,7 +9,7 @@ public sealed class TaskProjection
 {
     public Guid TaskId { get; init; }
 
-    public Guid ProjectContextId { get; init; }
+    public Guid ProjectConversationId { get; init; }
 
     public Guid ProjectId { get; init; }
 
