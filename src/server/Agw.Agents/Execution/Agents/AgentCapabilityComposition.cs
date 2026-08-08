@@ -1,22 +1,49 @@
 using Agw.Integrations.Application.Capabilities;
 
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Agents;
 
-internal sealed class AgentCapabilityComposition : IAsyncDisposable
+/// <summary>
+/// Represents the capabilities materialized for one Agent runtime.
+/// 表示为一次 Agent 运行时物化得到的 Capability 集合。
+/// </summary>
+/// <remarks>
+/// Carries the composed tools, plugin skills, context providers, loop evaluators,
+/// approval rules, and warnings consumed while the final Agent is assembled.
+/// 保存最终组装 Agent 时使用的工具、Plugin Skill、Context Provider、Loop Evaluator、
+/// 审批规则和警告信息。
+/// This composition owns the underlying resource lease and must be disposed with the Agent
+/// to release Tool, Tool Block, Connection, and MCP resources.
+/// 该组合对象拥有底层资源租约，必须随 Agent 一同释放，以清理 Tool、Tool Block、
+/// Connection 和 MCP 创建的资源。
+/// </remarks>
+public sealed class AgentCapabilityComposition : IAsyncDisposable
 {
     private readonly AgentResourceLease _lease;
+    private readonly List<AIContextProvider> _contextProviders;
+    private readonly List<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> _autoApprovalRules;
 
-    public AgentCapabilityComposition(
+    internal AgentCapabilityComposition(
         IReadOnlyList<AITool> tools,
         IReadOnlyList<PluginSkillReference> pluginSkills,
         IReadOnlyList<ConnectionCapabilityWarning> warnings,
+        IReadOnlyList<AIContextProvider> contextProviders,
+        IReadOnlyList<LoopEvaluator> loopEvaluators,
+        IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> autoApprovalRules,
+        IReadOnlyList<string> toolWarnings,
+        IReadOnlyDictionary<string, string> toolInvocationWarnings,
         AgentResourceLease lease)
     {
         Tools = tools;
         PluginSkills = pluginSkills;
         Warnings = warnings;
+        _contextProviders = contextProviders.ToList();
+        LoopEvaluators = loopEvaluators;
+        _autoApprovalRules = autoApprovalRules.ToList();
+        ToolWarnings = toolWarnings;
+        ToolInvocationWarnings = toolInvocationWarnings;
         _lease = lease;
     }
 
@@ -25,6 +52,35 @@ internal sealed class AgentCapabilityComposition : IAsyncDisposable
     public IReadOnlyList<PluginSkillReference> PluginSkills { get; }
 
     public IReadOnlyList<ConnectionCapabilityWarning> Warnings { get; }
+
+    public IReadOnlyList<AIContextProvider> ContextProviders => _contextProviders;
+
+    public IReadOnlyList<LoopEvaluator> LoopEvaluators { get; }
+
+    public IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> AutoApprovalRules =>
+        _autoApprovalRules;
+
+    public IReadOnlyList<string> ToolWarnings { get; }
+
+    public IReadOnlyDictionary<string, string> ToolInvocationWarnings { get; }
+
+    public void AddContextProvider(AIContextProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        _contextProviders.Add(provider);
+    }
+
+    public void AddAutoApprovalRule(Func<ToolAutoApprovalRuleContext, ValueTask<bool>> rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        _autoApprovalRules.Add(rule);
+    }
+
+    public void AddResource(IDisposable resource)
+    {
+        ArgumentNullException.ThrowIfNull(resource);
+        _lease.Add(resource);
+    }
 
     public ValueTask DisposeAsync()
     {
@@ -42,6 +98,13 @@ internal sealed class AgentResourceLease : IAsyncDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
         _resources.Add(resource);
+    }
+
+    public void Add(IDisposable resource)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        _resources.Add(new DisposableResource(resource));
     }
 
     public async ValueTask DisposeAsync()
@@ -67,6 +130,22 @@ internal sealed class AgentResourceLease : IAsyncDisposable
         if (failure != null)
         {
             throw failure;
+        }
+    }
+
+    private sealed class DisposableResource : IAsyncDisposable
+    {
+        private IDisposable? _resource;
+
+        public DisposableResource(IDisposable resource)
+        {
+            _resource = resource;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Interlocked.Exchange(ref _resource, null)?.Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 }

@@ -5,17 +5,16 @@ import {
   EnvironmentVariablesPanel,
   McpToolServersPanel,
   SkillsPanel,
-  ToolsPanel,
   type ConnectionOption,
   type EnvironmentVariableEntry,
   type McpToolServerDto,
   type SkillDto,
-  type ToolInfo,
 } from "@agw/integrations";
 import { Input } from "@agw/components";
 import { Label } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { Textarea } from "@agw/components";
+import { ToolsPanel, type ToolInfo, type ToolValueObject } from "@agw/tools";
 
 export interface ProjectFormFieldsProps {
   name: string;
@@ -32,14 +31,14 @@ export interface ProjectFormFieldsProps {
   selectedSkillIds: string[];
   connectionOptions: ConnectionOption[];
   selectedConnectionIds: string[];
-  selectedTools: string[];
+  tools: ToolValueObject[];
+  setTools: (value: ToolValueObject[]) => void;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
   toggleSkill: (skillId: string) => void;
   toggleConnection: (connectionId: string) => void;
-  toggleTool: (toolName: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
   idPrefix?: string;
 }
@@ -59,14 +58,14 @@ export function ProjectFormFields({
   selectedSkillIds,
   connectionOptions,
   selectedConnectionIds,
-  selectedTools,
+  tools,
+  setTools,
   skillsQuery,
   toolsQuery,
   mcpToolServersQuery,
   selectedMcpToolServerIds,
   toggleSkill,
   toggleConnection,
-  toggleTool,
   toggleMcpToolServer,
   idPrefix = "",
 }: ProjectFormFieldsProps) {
@@ -141,8 +140,8 @@ export function ProjectFormFields({
         <Tabs defaultValue="skills" className="flex h-full min-h-0 flex-col">
           <div className="shrink-0 overflow-x-auto agw-scrollbar border-b px-6 py-3">
             <TabsList className="h-auto w-max">
-              <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="tools">Tools</TabsTrigger>
+              <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
               <TabsTrigger value="connections">Connections</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
@@ -167,11 +166,12 @@ export function ProjectFormFields({
             className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
           >
             <ToolsPanel
+              scope="project"
               idPrefix={idPrefix}
               ownerLabel="project"
               toolsQuery={toolsQuery}
-              selectedTools={selectedTools}
-              toggleTool={toggleTool}
+              values={tools}
+              setValues={setTools}
             />
           </TabsContent>
 

@@ -1,7 +1,7 @@
 using A2A;
 
 using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;

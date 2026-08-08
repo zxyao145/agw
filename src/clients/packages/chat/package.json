@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./math.css": "./src/math.css"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -19,9 +20,12 @@
     "@agw/projects": "workspace:*",
     "@microsoft/signalr": "10.0.0",
     "fuse.js": "7.1.0",
+    "katex": "0.18.1",
     "lucide-react": "0.577.0",
     "react-markdown": "10.1.0",
+    "rehype-katex": "7.0.1",
     "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0",
     "sonner": "2.0.7"
   },
   "devDependencies": {

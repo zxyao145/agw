@@ -1,3 +1,5 @@
+import type { ToolValueObject } from "@agw/tools";
+
 const RESERVED_WINDOWS_FOLDER_NAMES = new Set([
   "CON",
   "PRN",
@@ -104,7 +106,7 @@ export function normalizeProjectExtraSettings(value: string): string | null {
 }
 
 interface ProjectCapabilitiesInput {
-  selectedTools: string[];
+  tools: ToolValueObject[];
   selectedSkillIds: string[];
   selectedMcpToolServerIds: string[];
   selectedConnectionIds: string[];
@@ -112,14 +114,14 @@ interface ProjectCapabilitiesInput {
 }
 
 export function serializeProjectCapabilities({
-  selectedTools,
+  tools,
   selectedSkillIds,
   selectedMcpToolServerIds,
   selectedConnectionIds,
   environmentVariables,
 }: ProjectCapabilitiesInput) {
   return {
-    tools: JSON.stringify(selectedTools),
+    tools,
     skillIds: selectedSkillIds,
     mcpToolServerIds: selectedMcpToolServerIds,
     connectionIds: selectedConnectionIds,
@@ -128,7 +130,7 @@ export function serializeProjectCapabilities({
 }
 
 interface ProjectCapabilityResponse {
-  tools?: string | null;
+  tools?: ToolValueObject[] | null;
   projectSkillRelations?: Array<{ skillId: string }> | null;
   projectMcpToolServers?: Array<{ mcpToolServerId: string }> | null;
   projectConnectionRelations?: Array<{ connectionId: string }> | null;
@@ -136,17 +138,8 @@ interface ProjectCapabilityResponse {
 }
 
 export function toProjectCapabilityFormState(project: ProjectCapabilityResponse) {
-  let selectedTools: string[] = [];
-  try {
-    const tools = project.tools ? JSON.parse(project.tools) : [];
-    selectedTools =
-      Array.isArray(tools) && tools.every((tool) => typeof tool === "string") ? tools : [];
-  } catch {
-    selectedTools = [];
-  }
-
   return {
-    selectedTools,
+    tools: project.tools ?? [],
     selectedSkillIds: project.projectSkillRelations?.map((relation) => relation.skillId) ?? [],
     selectedMcpToolServerIds:
       project.projectMcpToolServers?.map((relation) => relation.mcpToolServerId) ?? [],

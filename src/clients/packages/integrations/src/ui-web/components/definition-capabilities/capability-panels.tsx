@@ -8,7 +8,7 @@ import { EnvironmentVariablesEditor } from "./environment-variables-editor";
 import type { EnvironmentVariableEntry } from "./environment-variables";
 import { SelectedItemsList } from "./selected-items-list";
 import { buildSelectedSkillItems } from "./selection-items";
-import type { ConnectionOption, McpToolServerDto, SkillDto, ToolInfo } from "./types";
+import type { ConnectionOption, McpToolServerDto, SkillDto } from "./types";
 
 interface SharedPanelProps {
   idPrefix?: string;
@@ -89,81 +89,6 @@ export function SkillsPanel({
         items={selectedSkills}
         emptyLabel="No skills selected"
         onRemove={toggleSkill}
-        readOnly={disabled}
-      />
-    </div>
-  );
-}
-
-interface ToolsPanelProps extends SharedPanelProps {
-  toolsQuery: UseQueryResult<ToolInfo[], Error>;
-  selectedTools: string[];
-  toggleTool: (toolName: string) => void;
-  disabled?: boolean;
-  notice?: React.ReactNode;
-}
-
-export function ToolsPanel({
-  idPrefix = "",
-  ownerLabel = "agent",
-  toolsQuery,
-  selectedTools,
-  toggleTool,
-  disabled = false,
-  notice,
-}: ToolsPanelProps) {
-  const toolOptions = React.useMemo<SearchableSelectOption[]>(
-    () =>
-      (toolsQuery.data ?? [])
-        .map((tool) => ({
-          value: tool.name,
-          title: tool.name,
-          subtitle: tool.description,
-          group: tool.category.trim() || "Uncategorized",
-        }))
-        .sort((left, right) => (left.group ?? "").localeCompare(right.group ?? "")),
-    [toolsQuery.data],
-  );
-  const selectedToolItems = selectedTools.map((toolName) => {
-    const tool = toolsQuery.data?.find((candidate) => candidate.name === toolName);
-    return {
-      id: toolName,
-      title: toolName,
-      description: tool ? [tool.category, tool.description].filter(Boolean).join(" · ") : undefined,
-    };
-  });
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="font-medium">Tools</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Give the {ownerLabel} access to registered application tools.
-        </p>
-      </div>
-      {notice}
-      <SearchableSelect
-        multiple
-        id={`${idPrefix}tools`}
-        ariaLabel="Tools"
-        value={selectedTools}
-        onValueChange={(values) => applySelectionChange(selectedTools, values, toggleTool)}
-        options={toolOptions}
-        placeholder="Select tools..."
-        selectionText={
-          selectedTools.length > 0
-            ? `${selectedTools.length} tool${selectedTools.length === 1 ? "" : "s"} selected`
-            : undefined
-        }
-        searchPlaceholder="Search tools..."
-        disabled={disabled}
-        isLoading={toolsQuery.isLoading}
-        clearable={false}
-      />
-      <SelectedItemsList
-        items={selectedToolItems}
-        emptyLabel="No tools selected"
-        onRemove={toggleTool}
         readOnly={disabled}
       />
     </div>

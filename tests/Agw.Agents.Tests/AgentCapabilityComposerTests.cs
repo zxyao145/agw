@@ -3,18 +3,22 @@ using System.Reflection;
 
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Mcp;
-using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
+using Agw.Tools.ContextualTools.WebSearch;
+using Agw.Tools.Runtime;
+using Agw.Tools.ToolBlocks;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +30,46 @@ namespace Agw.Agents.Tests;
 
 public class AgentCapabilityComposerTests
 {
+    [Fact]
+    public async Task ComposeAsync_LocalWebSearch_RegistersInvocationWarning()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync(cancellationToken);
+        using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var toolRegistry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            [new WebSearchContextualTool()],
+            new ToolBlockRegistry([]));
+        var composer = CreateComposer(
+            database.Context,
+            toolRegistry,
+            new StubConnectionCapabilityResolver(
+                (_, _, _) => CreateResolution()),
+            new StubMcpToolMaterializer(
+                (_, _, _) => CreateToolLease([], [])));
+        var agent = new Agent
+        {
+            Type = AgentType.System,
+            Tools =
+            [
+                new ToolValue { Definition = new WebSearchToolDefinition() }
+            ]
+        };
+
+        await using var composition = await composer.ComposeAsync(
+            agent,
+            new Project { Id = Guid.CreateVersion7() },
+            new Dictionary<string, string>(),
+            cancellationToken,
+            supportsHostedWebSearch: false);
+
+        Assert.Empty(composition.ToolWarnings);
+        var warning = Assert.Single(composition.ToolInvocationWarnings);
+        Assert.Equal("web_search", warning.Key);
+        Assert.Contains("using local search", warning.Value);
+    }
+
     [Fact]
     public async Task ComposeAsync_SystemAgent_DedupesConnectionsAndMergesAllCapabilitySources()
     {
@@ -62,13 +106,16 @@ public class AgentCapabilityComposerTests
             (_, _, _) => CreateToolLease([CreateTool("independent_tool")], [mcpResource]));
         var composer = CreateComposer(
             database.Context,
-            CreateToolRegistry("stateless"),
+            CreateToolRegistry(),
             resolver,
             materializer);
         var agent = new Agent
         {
             Type = AgentType.System,
-            Tools = """["stateless"]""",
+            Tools =
+            [
+                new ToolValue { Definition = new GenerateGuidToolDefinition() }
+            ],
             AgentConnectionRelations =
             [
                 new AgentConnectionRelation { ConnectionId = firstConnectionId },
@@ -104,7 +151,7 @@ public class AgentCapabilityComposerTests
             new[] { firstConnectionId, secondConnectionId }.OrderBy(id => id),
             Assert.Single(resolver.Calls).ConnectionIds.OrderBy(id => id));
         Assert.Equal(
-            ["independent_tool", "personal__repo", "stateless", "work__repo"],
+            ["generate_guid", "independent_tool", "personal__repo", "work__repo"],
             composition.Tools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal));
         Assert.Single(composition.Warnings);
         var warningEvent = Assert.Single(activity.Events, item => item.Name == "agw.integration.warning");
@@ -157,6 +204,7 @@ public class AgentCapabilityComposerTests
             cancellationToken);
 
         Assert.Empty(composition.Tools);
+        Assert.Empty(composition.ContextProviders);
         Assert.Empty(resolver.Calls);
         Assert.Empty(materializer.Calls);
     }
@@ -210,17 +258,20 @@ public class AgentCapabilityComposerTests
         await using var database = await TestDatabase.CreateAsync(cancellationToken);
         var resource = new TrackingResource();
         var resolver = new StubConnectionCapabilityResolver((_, _, _) => CreateResolution(
-            nativeTools: [CreateTool("duplicate")],
+            nativeTools: [CreateTool(ToolDefinitionNames.Bash)],
             resource: resource));
         var composer = CreateComposer(
             database.Context,
-            CreateToolRegistry("duplicate"),
+            CreateToolRegistry(),
             resolver,
             new StubMcpToolMaterializer((_, _, _) => CreateToolLease([], [])));
         var agent = new Agent
         {
             Type = AgentType.System,
-            Tools = """["duplicate"]""",
+            Tools =
+            [
+                new ToolValue { Definition = new BashToolDefinition() }
+            ],
             AgentConnectionRelations =
             [
                 new AgentConnectionRelation { ConnectionId = Guid.CreateVersion7() },
@@ -237,18 +288,50 @@ public class AgentCapabilityComposerTests
         Assert.True(resource.Disposed);
     }
 
+    [Fact]
+    public async Task ComposeAsync_ToolBlockContribution_MaterializesMemberTool()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync(cancellationToken);
+        var composer = CreateComposer(
+            database.Context,
+            CreateToolRegistry(),
+            new StubConnectionCapabilityResolver((_, _, _) => CreateResolution()),
+            new StubMcpToolMaterializer((_, _, _) => CreateToolLease([], [])),
+            [new TestToolBlock()]);
+        var agent = new Agent
+        {
+            Type = AgentType.System,
+            Tools =
+            [
+                new ToolBlockValue { Definition = new TestToolBlockDefinition() }
+            ],
+        };
+
+        await using var composition = await composer.ComposeAsync(
+            agent,
+            new Project { Id = Guid.CreateVersion7() },
+            new Dictionary<string, string>(),
+            cancellationToken);
+
+        Assert.Equal("test_block_tool", Assert.Single(composition.Tools).Name);
+    }
+
     private static AgentCapabilityComposer CreateComposer(
         AgwDbContext dbContext,
         ToolRegistryService toolRegistry,
         IConnectionCapabilityResolver resolver,
-        IMcpToolMaterializer materializer)
+        IMcpToolMaterializer materializer,
+        IEnumerable<IToolBlock>? toolBlocks = null)
     {
         return new AgentCapabilityComposer(
             CreateAgentAppService(dbContext),
             toolRegistry,
             resolver,
             materializer,
-            NullLogger<AgentCapabilityComposer>.Instance);
+            new ToolBlockRegistry(toolBlocks ?? []),
+            NullLogger<AgentCapabilityComposer>.Instance,
+            [new ProjectInstructionsSource()]);
     }
 
     private static AgentAppService CreateAgentAppService(AgwDbContext dbContext)
@@ -268,17 +351,11 @@ public class AgentCapabilityComposerTests
             new AgentDomainService(TimeProvider.System));
     }
 
-    private static ToolRegistryService CreateToolRegistry(params string[] toolNames)
+    private static ToolRegistryService CreateToolRegistry()
     {
-        var registry = new ToolRegistryService(
+        return new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             new ServiceCollection().BuildServiceProvider());
-        foreach (var toolName in toolNames)
-        {
-            registry.RegisterTool(new TestTool(toolName));
-        }
-
-        return registry;
     }
 
     private static AITool CreateTool(string name)
@@ -386,18 +463,29 @@ public class AgentCapabilityComposerTests
         }
     }
 
-    private sealed class TestTool : IAgwTool
+    private sealed record TestToolBlockDefinition : ToolBlockDefinition<EmptyToolOptions>
     {
-        public TestTool(string name)
+        public override string GetDefinitionName() => "test-block";
+    }
+
+    private sealed class TestToolBlock : IToolBlock
+    {
+        public ToolBlockDescriptor Descriptor { get; } = new(
+            "test-block",
+            "Test Block",
+            "Contributes one test tool.",
+            ToolBlockScope.Agent | ToolBlockScope.Project,
+            ["test_block_tool"]);
+
+        public ValueTask<ToolContribution> MaterializeAsync(
+            ToolBlockDefinition definition,
+            ToolMaterializationContext context,
+            CancellationToken cancellationToken)
         {
-            Name = name;
+            var contribution = new ToolContribution();
+            contribution.Tools.Add(CreateTool("test_block_tool"));
+            return ValueTask.FromResult(contribution);
         }
-
-        public string Name { get; }
-
-        public string Description => Name;
-
-        public AITool ToAITool() => CreateTool(Name);
     }
 
     private sealed class TestDatabase : IAsyncDisposable

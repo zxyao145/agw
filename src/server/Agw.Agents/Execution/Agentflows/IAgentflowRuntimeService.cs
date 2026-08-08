@@ -14,7 +14,8 @@ public interface IAgentflowRuntimeService
         string? contextId = null,
         Guid? taskId = null,
         IHumanGateApprovalHandler? humanGateApprovalHandler = null,
-        IReadOnlyDictionary<string, string>? environmentVariables = null);
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
+        Guid? conversationId = null);
 
     Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,

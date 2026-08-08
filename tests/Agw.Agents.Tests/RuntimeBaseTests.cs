@@ -1,8 +1,11 @@
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
+using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data;
 
 namespace Agw.Agents.Tests;
 
@@ -75,8 +78,17 @@ public class RuntimeBaseTests
     {
         await using var runtime = new TestRuntime();
         var accessor = new RuntimeTurnContextAccessor();
+        var projectId = Guid.CreateVersion7();
         var context = new RuntimeTurnContext(
-            new SettingCommand(Guid.CreateVersion7()),
+            ExecutionSettings.FromCommand(new SettingCommand(projectId)),
+            new TaskProjection
+            {
+                TaskId = Guid.CreateVersion7(),
+                ProjectId = projectId,
+                ContextId = "context",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+            },
+            new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
             "user",
             "/workspace",
             new NullSink());

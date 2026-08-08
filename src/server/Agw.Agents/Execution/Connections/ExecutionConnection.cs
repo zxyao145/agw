@@ -1,25 +1,19 @@
 using Agw.Agents.Execution.Commands;
-using Agw.Agents.Execution.Contracts;
-using Agw.Agents.Execution.Runtimes;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
+using Agw.Agents.Execution.Commands.Abstracts;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Connections;
 
-public sealed class ExecutionConnection : IAsyncDisposable
+internal sealed class ExecutionConnection : IAsyncDisposable
 {
-    internal const string BusyMessage = "The previous session is currently in progress, please wait and execute again.";
-
     private readonly string _connectionId;
     private readonly AsyncServiceScope _scope;
     private readonly ExecutionCommandDispatcher _dispatcher;
+    private readonly ExecutionConnectionContext _context;
     private readonly SemaphoreSlim _commandGate = new(1, 1);
     private readonly ILogger _logger;
-    private volatile bool _waitingForHuman;
     private volatile bool _attached = true;
     private int _disposed;
 
@@ -28,32 +22,18 @@ public sealed class ExecutionConnection : IAsyncDisposable
         string userName,
         AsyncServiceScope scope,
         ExecutionCommandDispatcher dispatcher,
-        IExecutionMessageSink messageSink,
-        CancellationToken hostToken,
+        ExecutionConnectionContext context,
         ILogger logger)
     {
         _connectionId = connectionId;
         UserName = userName;
         _scope = scope;
         _dispatcher = dispatcher;
-        MessageSink = messageSink;
-        HostToken = hostToken;
+        _context = context;
         _logger = logger;
     }
 
     public string UserName { get; }
-
-    internal SettingCommand? Settings { get; set; }
-
-    internal TaskProjection? ResolvedTask { get; set; }
-
-    internal RuntimeBase? Runtime { get; set; }
-
-    internal ExecutionTarget? Target { get; set; }
-
-    internal IExecutionMessageSink MessageSink { get; }
-
-    internal CancellationToken HostToken { get; }
 
     internal bool IsAttached => _attached;
 
@@ -64,7 +44,7 @@ public sealed class ExecutionConnection : IAsyncDisposable
         try
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-            await _dispatcher.DispatchAsync(command, this, cancellationToken);
+            await _dispatcher.DispatchAsync(command, _context, cancellationToken);
         }
         finally
         {
@@ -79,11 +59,7 @@ public sealed class ExecutionConnection : IAsyncDisposable
         try
         {
             _attached = false;
-            hasActiveTurn = Runtime is { HasActiveTurn: true };
-            if (hasActiveTurn && _waitingForHuman)
-            {
-                Runtime!.RequestInterrupt();
-            }
+            hasActiveTurn = _context.PrepareForDetach();
         }
         finally
         {
@@ -106,62 +82,26 @@ public sealed class ExecutionConnection : IAsyncDisposable
             return;
         }
 
-        RuntimeBase? runtime;
         await _commandGate.WaitAsync(CancellationToken.None);
         try
         {
             _attached = false;
-            runtime = Runtime;
-            Runtime = null;
+            await _context.DisposeAsync();
         }
         finally
         {
             _commandGate.Release();
         }
 
-        if (runtime != null)
-        {
-            await runtime.DisposeAsync();
-        }
-
         _commandGate.Dispose();
         await _scope.DisposeAsync();
     }
-
-    internal void SetWaitingForHuman(bool waitingForHuman) =>
-        _waitingForHuman = waitingForHuman;
-
-    internal async Task ReplaceRuntimeAsync()
-    {
-        if (Runtime == null)
-        {
-            return;
-        }
-
-        await Runtime.DisposeAsync();
-        Runtime = null;
-        Target = null;
-        _waitingForHuman = false;
-    }
-
-    internal Task SendErrorAsync(string message) =>
-        MessageSink.WriteAsync(
-            CreateMessage(new AgwErrorContent { Content = message }),
-            CancellationToken.None).AsTask();
-
-    internal Task SendSystemMessageAsync(string message) =>
-        MessageSink.WriteAsync(
-            CreateMessage(new AgwTextContent { Content = message }),
-            CancellationToken.None).AsTask();
 
     private async Task DisposeWhenIdleAsync(Action remove)
     {
         try
         {
-            if (Runtime != null)
-            {
-                await Runtime.WhenIdleAsync();
-            }
+            await _context.WhenIdleAsync();
         }
         finally
         {
@@ -179,7 +119,7 @@ public sealed class ExecutionConnection : IAsyncDisposable
         {
             _logger.LogError(
                 exception,
-                "Failed to dispose SignalR execution connection {ConnectionId}.",
+                "Failed to dispose execution connection {ConnectionId}.",
                 _connectionId);
         }
         finally
@@ -187,13 +127,4 @@ public sealed class ExecutionConnection : IAsyncDisposable
             remove();
         }
     }
-
-    private static AgwMessage CreateMessage(AgwContent content) =>
-        new(
-            Guid.CreateVersion7().ToString("D"),
-            Constants.DefaultAgentAuthor,
-            AiRole.System,
-            [content]);
 }
-
-internal readonly record struct ExecutionTarget(Guid AgentId, AgentRuntimeType AgentType);

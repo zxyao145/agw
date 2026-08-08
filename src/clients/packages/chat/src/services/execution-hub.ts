@@ -7,6 +7,7 @@ import {
 } from "@microsoft/signalr";
 
 import type { AiMessage } from "@agw/api";
+import { parseHumanInteractionQuestions, type HumanInteractionQuestion } from "./human-interaction";
 
 export type ExecutionRuntimeConfig = {
   baseUrl: string;
@@ -38,12 +39,19 @@ export type ExecutionRequest = ExecutionTarget & {
 };
 
 export type PendingHumanGate = {
+  requestType: "human-gate" | "tool-approval" | "human-interaction";
   requestId: string;
-  nodeId: string;
+  nodeId?: string;
   nodeName?: string;
   mode: string;
   prompt: string;
   inputPreview?: string;
+  toolName?: string;
+  callId?: string;
+  streamingScopeId?: string;
+  arguments?: string;
+  interactionKind?: string;
+  questions?: HumanInteractionQuestion[];
 };
 
 export type TurnFinishedStatus = "completed" | "interrupted" | "failed";
@@ -100,21 +108,51 @@ function readString(value: unknown): string | undefined {
 }
 
 export function getPendingHumanGate(message: AiMessage): PendingHumanGate | null {
-  if (message.additionalProperties?.type !== "human-gate-request") return null;
-  const requestId = readString(message.additionalProperties.requestId);
-  const nodeId = readString(message.additionalProperties.nodeId);
-  if (!requestId || !nodeId) return null;
+  const properties = message.additionalProperties;
+  if (!properties) return null;
+  const requestType = properties.type;
+  const requestId = readString(properties.requestId);
+  if (!requestId) return null;
+
+  if (requestType === "human-interaction-request") {
+    const interactionKind = readString(properties.interactionKind);
+    if (!interactionKind) return null;
+    const questions =
+      interactionKind === "questions"
+        ? (parseHumanInteractionQuestions(properties.payload) ?? undefined)
+        : undefined;
+    return {
+      requestType: "human-interaction",
+      requestId,
+      mode: "interaction",
+      interactionKind,
+      prompt:
+        readString(properties.prompt) ??
+        readString(message.contents[0]?.content) ??
+        "The agent needs your input to continue.",
+      toolName: readString(properties.toolName),
+      callId: readString(properties.callId),
+      ...(questions ? { questions } : {}),
+    };
+  }
+
+  if (requestType !== "human-gate-request" && requestType !== "tool-approval-request") return null;
+  const nodeId = readString(properties.nodeId);
+  if (!nodeId) return null;
 
   return {
+    requestType: requestType === "tool-approval-request" ? "tool-approval" : "human-gate",
     requestId,
     nodeId,
-    nodeName: readString(message.additionalProperties.nodeName),
-    mode: readString(message.additionalProperties.mode) ?? "approval",
+    nodeName: readString(properties.nodeName),
+    mode: readString(properties.mode) ?? "approval",
     prompt:
-      readString(message.additionalProperties.prompt) ??
+      readString(properties.prompt) ??
       readString(message.contents[0]?.content) ??
       "Human approval is required to continue.",
-    inputPreview: readString(message.additionalProperties.inputPreview),
+    inputPreview: readString(properties.inputPreview),
+    toolName: readString(properties.toolName),
+    arguments: readString(properties.arguments),
   };
 }
 
@@ -218,6 +256,8 @@ export class ExecutionHubClient {
     requestId: string;
     approved: boolean;
     responseText?: string | null;
+    approvalScope?: "once" | "always-tool" | "always-arguments";
+    responseData?: unknown;
   }): Promise<void> {
     await this.dispatch({ type: "HumanResponseCommand", ...args });
   }

@@ -6,7 +6,7 @@ using A2A;
 using Agw.A2A.Extensions;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;

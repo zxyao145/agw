@@ -58,6 +58,7 @@ public class PowerShellToolResult
     public List<string> Warnings { get; set; } = [];
 }
 
+[Obsolete("Use BuiltIn ShellTool instead")]
 internal class PowerShellTool : IAgwTool
 {
     private const int DefaultTimeoutMs = 120_000;

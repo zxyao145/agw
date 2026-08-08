@@ -1,5 +1,6 @@
 using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Commands.Exec;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 
@@ -36,5 +37,6 @@ public sealed class AgentflowRuntime : RuntimeBase
             _task.ContextId,
             _task.TaskId,
             humanGateApprovalHandler,
-            _settings.EnvironmentVariables);
+            _settings.EnvironmentVariables,
+            _task.ProjectContextId);
 }

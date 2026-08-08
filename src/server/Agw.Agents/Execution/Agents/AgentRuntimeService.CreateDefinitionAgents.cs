@@ -1,7 +1,8 @@
 using System.ClientModel;
 
-using Agw.Agents.Execution.Agents.AIContextProviders;
-using Agw.Agents.Execution.Agents.Utils;
+using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Tools;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
@@ -15,7 +16,6 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 using OpenAI;
-using OpenAI.Chat;
 
 namespace Agw.Agents.Execution.Agents;
 
@@ -24,8 +24,11 @@ public partial class AgentRuntimeService
     private async Task<AIAgent?> CreateDefinitionAgentAsync(
         Agent agentDefinition,
         Project project,
+        Guid conversationId,
         IReadOnlyDictionary<string, string> environmentVariables,
-        CancellationToken cancellationToken)
+        string defaultMode,
+        CancellationToken cancellationToken,
+        int backgroundDepth = 0)
     {
         if (!agentDefinition.ModelProviderId.HasValue)
         {
@@ -49,58 +52,97 @@ public partial class AgentRuntimeService
         }
 
         var authConfig = authConfigs[Random.Shared.Next(authConfigs.Count)];
+        var supportsHostedWebSearch = provider.ProviderType == ProviderType.OpenAIResponses;
+        Func<IReadOnlyList<Guid>, CancellationToken, ValueTask<IReadOnlyList<AIAgent>>>?
+            backgroundAgentFactory = backgroundDepth == 0
+                ? (ids, token) => CreateBackgroundAgentsAsync(
+                    ids,
+                    agentDefinition.Id,
+                    project,
+                    conversationId,
+                    environmentVariables,
+                    defaultMode,
+                    token)
+                : null;
         var capabilities = await _capabilityComposer
-            .ComposeAsync(agentDefinition, project, environmentVariables, cancellationToken)
+            .ComposeAsync(
+                agentDefinition,
+                project,
+                environmentVariables,
+                cancellationToken,
+                supportsHostedWebSearch,
+                defaultMode,
+                backgroundAgentFactory,
+                conversationId)
             .ConfigureAwait(false);
         AIAgent? aiAgent = null;
         try
         {
-            IList<AITool>? tools = capabilities.Tools.Count > 0
-                ? capabilities.Tools.ToList()
-                : null;
             var skillsProvider = await CreateSkillsProviderAsync(
                     agentDefinition,
                     project,
                     capabilities.PluginSkills)
                 .ConfigureAwait(false);
-            var contextProviders = CreateContextProviders(
-                agentDefinition,
-                project,
-                skillsProvider);
-
-            aiAgent = provider.ProviderType switch
+            if (skillsProvider != null)
             {
-                ProviderType.OpenAIChatCompletions => CreateOpenAiAgent(
-                    agentDefinition,
+                capabilities.AddResource(skillsProvider);
+                capabilities.AddContextProvider(skillsProvider);
+                capabilities.AddAutoApprovalRule(AgentSkillsProvider.ReadOnlyToolsAutoApprovalRule);
+            }
+
+            var chatClient = provider.ProviderType switch
+            {
+                ProviderType.OpenAIChatCompletions => CreateOpenAiChatClient(
                     model,
                     provider,
-                    authConfig,
-                    tools,
-                    contextProviders),
-                ProviderType.Anthropic => CreateAnthropicAgent(
-                    agentDefinition,
+                    authConfig),
+                ProviderType.OpenAIResponses => CreateOpenAiResponsesChatClient(
                     model,
                     provider,
-                    authConfig,
-                    tools,
-                    contextProviders),
+                    authConfig),
+                ProviderType.Anthropic => CreateAnthropicChatClient(
+                    model,
+                    provider,
+                    authConfig),
                 _ => throw new AgwException(
                     ErrorCodes.UnsupportedProviderType,
                     $"Provider type '{provider.ProviderType}' is not supported")
             };
 
-            aiAgent = aiAgent.AsBuilder()
-                .UseToolApproval(new ToolApprovalAgentOptions
-                {
-                    AutoApprovalRules = [AgentSkillsProvider.AllToolsAutoApprovalRule],
-                })
-                .Use(
-                    runFunc: _observabilityMiddleware.LogRunMiddleware,
-                    runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware)
+            _logger.LogInformation("Creating definition agent {AgentName}", agentDefinition.Name);
+
+            aiAgent = chatClient.AsAgwAgent(
+                    new ResolvedAgentDefinition
+                    {
+                        Id = agentDefinition.Id.ToString("N"),
+                        Name = agentDefinition.Name,
+                        Description = agentDefinition.Description,
+                        SystemPrompt = agentDefinition.SystemPrompt,
+                        ModelId = model.Name,
+                        OpenTelemetrySourceName = provider.Name,
+                        ChatHistoryProvider = _chatHistoryProvider
+                    },
+                    capabilities,
+                    _loggerFactory,
+                    _services);
+            var agentBuilder = aiAgent
+                .AsBuilder()
                 .Use(
                     runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
                     runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware)
-                .Build();
+                .Use(
+                    runFunc: _observabilityMiddleware.LogRunMiddleware,
+                    runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware);
+            if (backgroundDepth > 0)
+            {
+                var approvalMiddleware = new BackgroundAgentApprovalMiddleware(
+                    _humanInteractionContextAccessor);
+                agentBuilder.Use(
+                    runFunc: approvalMiddleware.RejectNewApprovalAsync,
+                    runStreamingFunc: approvalMiddleware.RejectNewApprovalStreamingAsync);
+            }
+
+            aiAgent = agentBuilder.Build();
             return new ResourceOwningAIAgent(aiAgent, capabilities);
         }
         catch
@@ -114,14 +156,11 @@ public partial class AgentRuntimeService
             throw;
         }
     }
-
-    private AIAgent CreateOpenAiAgent(
-        Agent agentDefinition,
+    
+    private IChatClient CreateOpenAiChatClient(
         AgwAiModel model,
         Provider provider,
-        ProviderAuthConfig authConfig,
-        IList<AITool>? tools,
-        IReadOnlyList<AIContextProvider>? contextProviders)
+        ProviderAuthConfig authConfig)
     {
         var apiKey = ResolveApiKey(authConfig);
         var credential = new ApiKeyCredential(apiKey);
@@ -131,33 +170,13 @@ public partial class AgentRuntimeService
         };
         var client = new OpenAIClient(credential, options);
         var chatCompletionClient = client.GetChatClient(model.Name);
-        var agentOptions = new ChatClientAgentOptions
-        {
-            Name = agentDefinition.Name,
-            Description = agentDefinition.Description,
-            ChatHistoryProvider = _chatHistoryProvider,
-            AIContextProviders = contextProviders,
-            ChatOptions = new ChatOptions
-            {
-                ModelId = model.Name,
-                Instructions = AgentRuntimeServiceUtil.BuildInstructions(agentDefinition.SystemPrompt),
-                Tools = tools
-            }
-        };
-
-        return chatCompletionClient.AsAIAgent(agentOptions)
-            .AsBuilder()
-            .UseOpenTelemetry(sourceName: provider.Name, configure: cfg => cfg.EnableSensitiveData = true)
-            .Build();
+        return chatCompletionClient.AsIChatClient();
     }
-
-    private AIAgent CreateAnthropicAgent(
-        Agent agentDefinition,
+    
+    private IChatClient CreateAnthropicChatClient(
         AgwAiModel model,
         Provider provider,
-        ProviderAuthConfig authConfig,
-        IList<AITool>? tools,
-        IReadOnlyList<AIContextProvider>? contextProviders)
+        ProviderAuthConfig authConfig)
     {
         var anthropicClientOptions = new ClientOptions
         {
@@ -165,51 +184,106 @@ public partial class AgentRuntimeService
             BaseUrl = provider.Endpoint
         };
         var client = new AnthropicClient(anthropicClientOptions);
-        var agentOptions = new ChatClientAgentOptions
-        {
-            Name = agentDefinition.Name,
-            Description = agentDefinition.Description,
-            ChatHistoryProvider = _chatHistoryProvider,
-            AIContextProviders = contextProviders,
-            ChatOptions = new ChatOptions
-            {
-                ModelId = model.Name,
-                Instructions = AgentRuntimeServiceUtil.BuildInstructions(agentDefinition.SystemPrompt),
-                Tools = tools
-            }
-        };
-
-        return client.AsAIAgent(agentOptions)
-            .AsBuilder()
-            .UseOpenTelemetry(sourceName: provider.Name, configure: cfg => cfg.EnableSensitiveData = true)
-            .Build();
+        return client.AsIChatClient(model.Name);
     }
 
-    private IReadOnlyList<AIContextProvider>? CreateContextProviders(
-        Agent agent,
-        Project project,
-        AIContextProvider? skillsProvider)
+    private IChatClient CreateOpenAiResponsesChatClient(
+        AgwAiModel model,
+        Provider provider,
+        ProviderAuthConfig authConfig)
     {
-        var providers = new List<AIContextProvider>();
-        if (_instructionsSources.Count > 0)
+        var apiKey = ResolveApiKey(authConfig);
+        var credential = new ApiKeyCredential(apiKey);
+        var options = new OpenAIClientOptions
         {
-            providers.Add(new AgwContextProvider(
-                agent,
-                project,
-                _instructionsSources));
-        }
-
-        if (skillsProvider != null)
-        {
-            providers.Add(skillsProvider);
-        }
-
-        return providers.Count == 0 ? null : providers;
+            Endpoint = new Uri(provider.Endpoint),
+        };
+        var client = new OpenAIClient(credential, options);
+#pragma warning disable OPENAI001
+        return client.GetResponsesClient().AsIChatClient(model.Name);
+#pragma warning restore OPENAI001
     }
 
     private string ResolveApiKey(ProviderAuthConfig authConfig)
     {
         return authConfig.ApiKey!;
+    }
+
+    private async ValueTask<IReadOnlyList<AIAgent>> CreateBackgroundAgentsAsync(
+        IReadOnlyList<Guid> agentIds,
+        Guid parentAgentId,
+        Project project,
+        Guid conversationId,
+        IReadOnlyDictionary<string, string> environmentVariables,
+        string defaultMode,
+        CancellationToken cancellationToken)
+    {
+        var agents = new List<AIAgent>();
+        try
+        {
+            foreach (var agentId in agentIds.Where(id => id != parentAgentId).Distinct())
+            {
+                var definition = await _agentAppService.GetAgentAsync(agentId);
+                if (definition == null)
+                {
+                    continue;
+                }
+
+                AIAgent? agent;
+                if (definition.Type == AgentType.System)
+                {
+                    agent = await CreateDefinitionAgentAsync(
+                            definition,
+                            project,
+                            conversationId,
+                            environmentVariables,
+                            defaultMode,
+                            cancellationToken,
+                            backgroundDepth: 1)
+                        .ConfigureAwait(false);
+                }
+                else if (definition.Type == AgentType.External)
+                {
+                    var request = new CreateAiAgentRequest
+                    {
+                        Agent = definition,
+                        ProjectId = project.Id,
+                        ConversationId = conversationId,
+                        EnvironmentVariables = environmentVariables,
+                        Resume = false,
+                    };
+                    if (!TryCreateExternalAgent(
+                            request,
+                            project,
+                            environmentVariables,
+                            out agent,
+                            isBackground: true))
+                    {
+                        continue;
+                    }
+                }
+                else
+                {
+                    continue;
+                }
+
+                if (agent != null)
+                {
+                    agents.Add(agent);
+                }
+            }
+
+            return agents;
+        }
+        catch
+        {
+            foreach (var agent in agents)
+            {
+                await DisposeAgentWithoutThrowingAsync(agent).ConfigureAwait(false);
+            }
+
+            throw;
+        }
     }
 
     private static async ValueTask DisposeAgentWithoutThrowingAsync(AIAgent agent)

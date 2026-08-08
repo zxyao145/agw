@@ -59,7 +59,7 @@ test("Project dialogs cannot close or reopen through Dialog while their mutation
   assert.match(pageSource, /if \(updateProjectMutation\.isPending\) \{\s*return;\s*\}/);
 });
 
-test("Project form has the 360px metadata column and exactly five shared capability tabs", async () => {
+test("Project form has the 360px metadata column and one combined Tools tab", async () => {
   const source = await readSource(FORM_FIELDS_URL, "Project form fields");
 
   assert.match(source, /lg:grid-cols-\[360px_minmax\(0,1fr\)\]/);
@@ -79,12 +79,14 @@ test("Project form has the 360px metadata column and exactly five shared capabil
   assert.doesNotMatch(source, /dialogPortalContainer/);
 });
 
-test("Project dialogs serialize all five capabilities into Create and Update payloads", async () => {
+test("Project dialogs serialize the unified Tools value and remaining capabilities", async () => {
   for (const url of [CREATE_DIALOG_URL, EDIT_DIALOG_URL]) {
     const source = await readSource(url, "Project dialog");
 
     assert.match(source, /serializeProjectCapabilities\(\{/);
-    assert.match(source, /selectedTools/);
+    assert.match(source, /\btools,/);
+    assert.doesNotMatch(source, /toolBlocks/);
+    assert.doesNotMatch(source, /selectedTools/);
     assert.match(source, /selectedSkillIds/);
     assert.match(source, /selectedMcpToolServerIds/);
     assert.match(source, /selectedConnectionIds/);
@@ -96,7 +98,7 @@ test("Projects page backfills Edit capabilities and resets every Create capabili
   const source = await readSource(PAGE_URL, "Projects page");
 
   assert.match(source, /toProjectCapabilityFormState\(project\)/);
-  assert.match(source, /setSelectedTools\(\[\]\)/);
+  assert.match(source, /setTools\(\[\]\)/);
   assert.match(source, /setSelectedSkillIds\(\[\]\)/);
   assert.match(source, /setSelectedMcpToolServerIds\(\[\]\)/);
   assert.match(source, /setSelectedConnectionIds\(\[\]\)/);

@@ -98,7 +98,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Host
 ```
 
-The development backend listens on `http://localhost:30815` by default. On the first run, open `http://localhost:30815/setup` to choose the database provider, connection string, and administrator password. All runtime data is stored in an `agw` directory under the current user's home directory. Setup through a domain name also requires the one-time setup code printed in the server startup logs.
+The development backend listens on `http://localhost:30816` by default. On the first run, open `http://localhost:30816/setup` to choose the database provider, connection string, and administrator password. All runtime data is stored in an `agw` directory under the current user's home directory. Setup through a domain name also requires the one-time setup code printed in the server startup logs.
 
 Start the frontend in another terminal:
 
@@ -108,7 +108,7 @@ pnpm install
 pnpm dev:web
 ```
 
-The `src/clients` pnpm Workspace contains independent `@agw/web` and `@agw/desktop` applications plus shared infrastructure and business domains under `src/clients/packages/`, with Turborepo orchestrating their tasks. Neither application imports, builds, or consumes artifacts from the other. Each application owns its own thin Next.js route shell; reusable business UI comes from `packages/*`. The Expo mobile app remains a separate npm workspace. After the backend and Web are running, open `http://localhost:3001`. Web proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30815`.
+The `src/clients` pnpm Workspace contains independent `@agw/web` and `@agw/desktop` applications plus shared infrastructure and business domains under `src/clients/packages/`, with Turborepo orchestrating their tasks. Neither application imports, builds, or consumes artifacts from the other. Each application owns its own thin Next.js route shell; reusable business UI comes from `packages/*`. The Expo mobile app remains a separate npm workspace. After the backend and Web are running, open `http://localhost:3001`. Web proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30816`.
 
 Production packages embed the static Web UI in ASP.NET Core and serve it from a single server process. See the deployment guide below for details.
 

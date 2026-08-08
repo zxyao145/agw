@@ -1,4 +1,5 @@
 using Agw.Integrations.Application.OAuth;
+using Agw.Integrations.Contracts.OAuth;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
 
@@ -8,6 +9,8 @@ namespace Agw.Integrations.Tests;
 
 public sealed class OAuthStateProtectorTests
 {
+    private const string CallbackUri = "https://agw.test/api/integrations/oauth/callback";
+
     [Fact]
     public void Protect_ValidState_IsOpaqueAndRoundTrips()
     {
@@ -15,7 +18,12 @@ public sealed class OAuthStateProtectorTests
         var service = CreateService(new TestTimeProvider(now));
         var connectionId = Guid.CreateVersion7();
 
-        var protectedState = service.Protect(connectionId, "verifier-secret", "/integrations/callback?from=settings");
+        var protectedState = service.Protect(
+            connectionId,
+            "verifier-secret",
+            "/integrations/callback?from=settings",
+            CallbackUri,
+            OAuthCompletionTarget.Desktop);
 
         Assert.DoesNotContain(connectionId.ToString(), protectedState, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("verifier-secret", protectedState, StringComparison.Ordinal);
@@ -25,13 +33,20 @@ public sealed class OAuthStateProtectorTests
         Assert.Equal(connectionId, state.ConnectionId);
         Assert.Equal("verifier-secret", state.PkceVerifier);
         Assert.Equal("/integrations/callback?from=settings", state.ReturnPath);
+        Assert.Equal(CallbackUri, state.CallbackUri);
+        Assert.Equal(OAuthCompletionTarget.Desktop, state.CompletionTarget);
     }
 
     [Fact]
     public void TryUnprotect_TamperedState_ReturnsFalse()
     {
         var service = CreateService(new TestTimeProvider(DateTimeOffset.UtcNow));
-        var protectedState = service.Protect(Guid.CreateVersion7(), "verifier", "/integrations");
+        var protectedState = service.Protect(
+            Guid.CreateVersion7(),
+            "verifier",
+            "/integrations",
+            CallbackUri,
+            OAuthCompletionTarget.Web);
         var replacement = protectedState[^1] == 'A' ? 'B' : 'A';
         var tamperedState = protectedState[..^1] + replacement;
 
@@ -44,7 +59,12 @@ public sealed class OAuthStateProtectorTests
     {
         var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 7, 15, 8, 0, 0, TimeSpan.Zero));
         var service = CreateService(timeProvider);
-        var protectedState = service.Protect(Guid.CreateVersion7(), "verifier", "/integrations");
+        var protectedState = service.Protect(
+            Guid.CreateVersion7(),
+            "verifier",
+            "/integrations",
+            CallbackUri,
+            OAuthCompletionTarget.Web);
 
         timeProvider.SetUtcNow(timeProvider.GetUtcNow().AddMinutes(11));
 
@@ -65,7 +85,12 @@ public sealed class OAuthStateProtectorTests
         var service = CreateService(new TestTimeProvider(DateTimeOffset.UtcNow));
 
         var exception = Assert.Throws<AgwException>(() =>
-            service.Protect(Guid.CreateVersion7(), "verifier", returnPath));
+            service.Protect(
+                Guid.CreateVersion7(),
+                "verifier",
+                returnPath,
+                CallbackUri,
+                OAuthCompletionTarget.Web));
 
         Assert.Equal(ErrorCodes.OAuthReturnPathInvalid.Code, exception.Code);
     }

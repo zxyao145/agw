@@ -17,6 +17,7 @@
     "@agw/api": "workspace:*",
     "@agw/components": "workspace:*",
     "@agw/integrations": "workspace:*",
+    "@agw/tools": "workspace:*",
     "lucide-react": "0.577.0",
     "sonner": "2.0.7"
   },

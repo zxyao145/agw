@@ -5,7 +5,9 @@ using System.Text.Json;
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
 using Agw.Shared;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 
@@ -145,6 +147,58 @@ public class EfCoreChatHistoryProviderTests
             seedContext.TaskRecords.AddRange(
                 CreateRecord(projectContextId, Guid.CreateVersion7(), 0, "normal", jsonOptions),
                 CreateRecord(projectContextId, Guid.CreateVersion7(), 1, CreateResultMessage("summary"), jsonOptions));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
+            jsonOptions);
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+
+        var messages = await InvokeProvideChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokingContext(new FakeAgent(), session, []),
+            cancellationToken);
+
+        Assert.Equal(["normal"], messages.Select(message => message.Text));
+    }
+
+    [Fact]
+    public async Task ProvideChatHistoryAsync_WhenContextContainsToolBlockState_ExcludesItFromModelHistory()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
+            seedContext.TaskRecords.AddRange(
+                CreateRecord(projectContextId, Guid.CreateVersion7(), 0, "normal", jsonOptions),
+                CreateRecord(
+                    projectContextId,
+                    Guid.CreateVersion7(),
+                    1,
+                    CreateToolBlockMessage(ToolMessageTypes.TodoSnapshot),
+                    jsonOptions));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -315,6 +369,175 @@ public class EfCoreChatHistoryProviderTests
             message => Assert.Equal("continue", message.Text));
         Assert.DoesNotContain(messages.SelectMany(message => message.Contents), content =>
             content is FunctionResultContent { CallId: "orphaned-call" });
+    }
+
+    [Fact]
+    public async Task ProvideChatHistoryAsync_WhenFunctionCallsArePartiallyCompleted_RemovesCallsWithoutResults()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
+            seedContext.TaskRecords.AddRange(
+                CreateRecord(
+                    projectContextId,
+                    Guid.CreateVersion7(),
+                    0,
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        [
+                            new TextContent("working"),
+                            new FunctionCallContent(
+                                "matched-call",
+                                "read_file",
+                                new Dictionary<string, object?>()),
+                            new FunctionCallContent(
+                                "missing-call",
+                                "write_file",
+                                new Dictionary<string, object?>())
+                        ]),
+                    jsonOptions),
+                CreateRecord(
+                    projectContextId,
+                    Guid.CreateVersion7(),
+                    1,
+                    new ChatMessage(
+                        ChatRole.Tool,
+                        [new FunctionResultContent("matched-call", "matched result")]),
+                    jsonOptions),
+                CreateRecord(
+                    projectContextId,
+                    Guid.CreateVersion7(),
+                    2,
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        [new FunctionCallContent(
+                            "interrupted-call",
+                            "read_file",
+                            new Dictionary<string, object?>())]),
+                    jsonOptions),
+                CreateRecord(
+                    projectContextId,
+                    Guid.CreateVersion7(),
+                    3,
+                    new ChatMessage(ChatRole.User, "continue"),
+                    jsonOptions));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
+            jsonOptions);
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+
+        var messages = (await InvokeProvideChatHistoryAsync(
+                provider,
+                new ChatHistoryProvider.InvokingContext(new FakeAgent(), session, []),
+                cancellationToken))
+            .ToList();
+
+        Assert.Collection(
+            messages,
+            message =>
+            {
+                Assert.Equal("working", Assert.IsType<TextContent>(message.Contents[0]).Text);
+                Assert.Equal(
+                    "matched-call",
+                    Assert.IsType<FunctionCallContent>(message.Contents[1]).CallId);
+                Assert.Equal(2, message.Contents.Count);
+            },
+            message => Assert.Equal(
+                "matched-call",
+                Assert.IsType<FunctionResultContent>(Assert.Single(message.Contents)).CallId),
+            message => Assert.Equal("continue", message.Text));
+        Assert.DoesNotContain(
+            messages.SelectMany(message => message.Contents).OfType<FunctionCallContent>(),
+            content => content.CallId is "missing-call" or "interrupted-call");
+    }
+
+    [Fact]
+    public async Task ProvideChatHistoryAsync_WhenCurrentRequestCompletesPersistedFunctionCall_PreservesFunctionCall()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
+            seedContext.TaskRecords.Add(CreateRecord(
+                projectContextId,
+                Guid.CreateVersion7(),
+                0,
+                new ChatMessage(
+                    ChatRole.Assistant,
+                    [new FunctionCallContent(
+                        "call-1",
+                        "todos_add",
+                        new Dictionary<string, object?>())]),
+                jsonOptions));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
+            jsonOptions);
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+        var currentToolResult = new ChatMessage(
+            ChatRole.Tool,
+            [new FunctionResultContent("call-1", "todo added")]);
+
+        var messages = await InvokeProvideChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokingContext(
+                new FakeAgent(),
+                session,
+                [currentToolResult]),
+            cancellationToken);
+
+        var message = Assert.Single(messages);
+        Assert.Equal(
+            "call-1",
+            Assert.IsType<FunctionCallContent>(Assert.Single(message.Contents)).CallId);
     }
 
     [Fact]
@@ -510,6 +733,54 @@ public class EfCoreChatHistoryProviderTests
     }
 
     [Fact]
+    public async Task AppendAsync_EmptyToolBlockState_PersistsForConversationHistory()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
+
+        await writer.AppendAsync(
+            projectId,
+            "context-1",
+            [CreateToolBlockMessage(ToolMessageTypes.TodoSnapshot)],
+            cancellationToken);
+
+        await using var verifyContext = new AgwDbContext(options);
+        var record = await verifyContext.TaskRecords.SingleAsync(cancellationToken);
+        var persisted = JsonSerializer.Deserialize<ChatMessage>(
+            record.ConversationPayload!,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(persisted);
+        Assert.Equal(
+            ToolMessageTypes.TodoSnapshot,
+            persisted.AdditionalProperties!["type"]?.ToString());
+        Assert.Equal(string.Empty, Assert.IsType<TextContent>(Assert.Single(persisted.Contents)).Text);
+    }
+
+    [Fact]
     public async Task AppendAsync_ResultMessage_PersistsItForConversationHistory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -680,6 +951,80 @@ public class EfCoreChatHistoryProviderTests
     }
 
     [Fact]
+    public async Task StoreChatHistoryAsync_WithPreludeMessage_PersistsItBetweenRequestAndResponse()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectContexts.Add(CreateContext(projectContextId, projectId, "context-1"));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
+            jsonOptions);
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+        ConversationHistoryPrelude.Set(
+            session,
+            [
+                new ChatMessage(ChatRole.System, "fallback warning")
+                {
+                    MessageId = "warning-1",
+                    AuthorName = "tools",
+                    AdditionalProperties = new AdditionalPropertiesDictionary
+                    {
+                        ["type"] = ToolMessageTypes.Warning
+                    }
+                }
+            ]);
+
+        await InvokeStoreChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokedContext(
+                new FakeAgent(),
+                session,
+                [new ChatMessage(ChatRole.User, "question") { MessageId = "user-1" }],
+                [new ChatMessage(ChatRole.Assistant, "answer") { MessageId = "assistant-1" }]),
+            cancellationToken);
+
+        await using var verifyContext = new AgwDbContext(options);
+        var records = await verifyContext.TaskRecords
+            .Where(record => record.ProjectContextId == projectContextId)
+            .OrderBy(record => record.ConversationSequence)
+            .ToListAsync(cancellationToken);
+        var messages = records
+            .Select(record => JsonSerializer.Deserialize<ChatMessage>(
+                record.ConversationPayload!,
+                jsonOptions)!)
+            .ToList();
+
+        Assert.Equal(["user-1", "warning-1", "assistant-1"], messages.Select(message => message.MessageId));
+        Assert.Equal([0, 1, 2], records.Select(record => record.ConversationSequence));
+        Assert.Empty(ConversationHistoryPrelude.Take(session));
+    }
+
+    [Fact]
     public async Task StoreChatHistoryAsync_WhenExistingContextUsesFallbackTitle_UpdatesTitleFromFirstUserMessage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -810,6 +1155,60 @@ public class EfCoreChatHistoryProviderTests
         Assert.Equal("11111111-1111-1111-1111-111111111111", record.Metadata["targetId"].GetString());
     }
 
+    [Fact]
+    public async Task AppendAsync_ConcurrentCalls_AssignsUniqueOrderedSequences()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+            setupContext.Projects.Add(CreateProject(Guid.Parse("11111111-1111-1111-1111-111111111111")));
+            await setupContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var projectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            new InMemoryApplicationLock(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writes = Enumerable.Range(0, 12)
+            .Select(async index =>
+            {
+                await start.Task;
+                await writer.AppendAsync(
+                    projectId,
+                    "context-1",
+                    [new ChatMessage(ChatRole.User, $"message-{index}")],
+                    cancellationToken);
+            })
+            .ToArray();
+
+        start.SetResult();
+        await Task.WhenAll(writes);
+
+        await using var verificationContext = new AgwDbContext(options);
+        var context = await verificationContext.ProjectContexts.SingleAsync(cancellationToken);
+        var sequences = await verificationContext.TaskRecords
+            .Where(record => record.ProjectContextId == context.Id)
+            .OrderBy(record => record.ConversationSequence)
+            .Select(record => record.ConversationSequence)
+            .ToListAsync(cancellationToken);
+        Assert.Equal(
+            Enumerable.Range(0, 12).Select(static value => (long?)value),
+            sequences);
+    }
+
     private static Project CreateProject(Guid projectId) => new()
     {
         Id = projectId,
@@ -873,6 +1272,17 @@ public class EfCoreChatHistoryProviderTests
             AdditionalProperties = new AdditionalPropertiesDictionary
             {
                 ["type"] = "result"
+            }
+        };
+
+    private static ChatMessage CreateToolBlockMessage(string type) =>
+        new(ChatRole.System, [new TextContent(string.Empty)])
+        {
+            MessageId = Guid.CreateVersion7().ToString(),
+            AuthorName = "tools",
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["type"] = type
             }
         };
 

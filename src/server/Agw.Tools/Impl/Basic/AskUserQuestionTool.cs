@@ -1,8 +1,11 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
+using Agw.Tools.HumanInteraction;
 
 using Microsoft.Extensions.AI;
 
@@ -112,16 +115,16 @@ public class AskUserQuestionToolParams
 
     [Description(
         """
-        User answers collected by the permission component, keyed by question text.
-        Populated by the host before invocation; the tool echoes them back.
+        User answers collected by the human-interaction host, keyed by question text.
+        This is host-managed response data; values supplied by the model are ignored.
         """
     )]
     public Dictionary<string, string>? Answers { get; set; }
 
     [Description(
         """
-        Optional per-question annotations from the user (e.g., notes on preview selections),
-        keyed by question text.
+        Optional host-managed per-question annotations from the user (e.g., notes on preview
+        selections), keyed by question text. Values supplied by the model are ignored.
         """
     )]
     public Dictionary<string, AskUserQuestionAnnotation>? Annotations { get; set; }
@@ -139,6 +142,7 @@ public class AskUserQuestionToolResult
     public List<AskUserQuestionQuestion> Questions { get; set; } = [];
     public Dictionary<string, string> Answers { get; set; } = [];
     public Dictionary<string, AskUserQuestionAnnotation>? Annotations { get; set; }
+    public bool Cancelled { get; set; }
 
     /// <summary>
     /// Pre-formatted summary suitable to feed back to the model (mirrors TS
@@ -185,63 +189,12 @@ internal class AskUserQuestionTool : IAgwTool
     public AskUserQuestionToolResult Execute(AskUserQuestionToolParams toolParams)
     {
         ArgumentNullException.ThrowIfNull(toolParams);
-
-        if (toolParams.Questions is null || toolParams.Questions.Count == 0)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "At least one question is required.");
-        }
-
-        if (toolParams.Questions.Count > 4)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "At most 4 questions are allowed.");
-        }
-
-        // Uniqueness: question texts must be unique across the request,
-        // option labels must be unique within each question.
-        var seenQuestions = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var q in toolParams.Questions)
-        {
-            if (string.IsNullOrWhiteSpace(q.Question))
-            {
-                throw new AgwException(ErrorCodes.InvalidParam, "Question text is required.");
-            }
-            if (!seenQuestions.Add(q.Question))
-            {
-                throw new AgwException(ErrorCodes.InvalidParam,
-                    "Question texts must be unique across the request.");
-            }
-            if (q.Options is null || q.Options.Count < 2 || q.Options.Count > 4)
-            {
-                throw new AgwException(ErrorCodes.InvalidParam,
-                    $"Question '{q.Question}' must have 2-4 options.");
-            }
-
-            var seenLabels = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var opt in q.Options)
-            {
-                if (string.IsNullOrWhiteSpace(opt.Label))
-                {
-                    throw new AgwException(ErrorCodes.InvalidParam,
-                        $"Option label is required for question '{q.Question}'.");
-                }
-                if (!seenLabels.Add(opt.Label))
-                {
-                    throw new AgwException(ErrorCodes.InvalidParam,
-                        $"Option labels must be unique within question '{q.Question}'.");
-                }
-
-                // Lightweight HTML preview validation (fragment-only, no script/style).
-                var err = ValidateHtmlPreview(opt.Preview);
-                if (err is not null)
-                {
-                    throw new AgwException(ErrorCodes.InvalidParam,
-                        $"Option '{opt.Label}' in question '{q.Question}': {err}");
-                }
-            }
-        }
-
-        var answers = toolParams.Answers ?? new Dictionary<string, string>();
-        var summary = BuildSummary(answers, toolParams.Annotations);
+        ValidateQuestions(toolParams.Questions);
+        var answers = ValidateAnswers(
+            toolParams.Questions,
+            toolParams.Answers,
+            toolParams.Annotations);
+        var summary = BuildSummary(toolParams.Questions, answers, toolParams.Annotations);
 
         return new AskUserQuestionToolResult
         {
@@ -253,17 +206,15 @@ internal class AskUserQuestionTool : IAgwTool
     }
 
     private static string BuildSummary(
+        IReadOnlyList<AskUserQuestionQuestion> questions,
         Dictionary<string, string> answers,
         Dictionary<string, AskUserQuestionAnnotation>? annotations)
     {
-        if (answers.Count == 0)
-        {
-            return "User has not answered any questions yet.";
-        }
-
         var parts = new List<string>(answers.Count);
-        foreach (var (question, answer) in answers)
+        foreach (var item in questions)
         {
+            var question = item.Question;
+            var answer = answers[question];
             var sb = new StringBuilder();
             sb.Append('"').Append(question).Append("\"=\"").Append(answer).Append('"');
 
@@ -284,6 +235,123 @@ internal class AskUserQuestionTool : IAgwTool
 
         return "User has answered your questions: " + string.Join(", ", parts)
                + ". You can now continue with the user's answers in mind.";
+    }
+
+    private static void ValidateQuestions(IReadOnlyList<AskUserQuestionQuestion>? questions)
+    {
+        if (questions is null || questions.Count == 0)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "At least one question is required.");
+        }
+
+        if (questions.Count > 4)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "At most 4 questions are allowed.");
+        }
+
+        var seenQuestions = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var question in questions)
+        {
+            if (string.IsNullOrWhiteSpace(question.Question))
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, "Question text is required.");
+            }
+            question.Question = question.Question.Trim();
+            if (string.IsNullOrWhiteSpace(question.Header))
+            {
+                throw new AgwException(
+                    ErrorCodes.InvalidParam,
+                    $"Question header is required for '{question.Question}'.");
+            }
+            question.Header = question.Header.Trim();
+            if (!seenQuestions.Add(question.Question))
+            {
+                throw new AgwException(
+                    ErrorCodes.InvalidParam,
+                    "Question texts must be unique across the request.");
+            }
+            if (question.Options is null || question.Options.Count < 2 || question.Options.Count > 4)
+            {
+                throw new AgwException(
+                    ErrorCodes.InvalidParam,
+                    $"Question '{question.Question}' must have 2-4 options.");
+            }
+
+            var seenLabels = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var option in question.Options)
+            {
+                if (string.IsNullOrWhiteSpace(option.Label))
+                {
+                    throw new AgwException(
+                        ErrorCodes.InvalidParam,
+                        $"Option label is required for question '{question.Question}'.");
+                }
+                option.Label = option.Label.Trim();
+                if (string.IsNullOrWhiteSpace(option.Description))
+                {
+                    throw new AgwException(
+                        ErrorCodes.InvalidParam,
+                        $"Option description is required for '{option.Label}' in question '{question.Question}'.");
+                }
+                option.Description = option.Description.Trim();
+                if (!seenLabels.Add(option.Label))
+                {
+                    throw new AgwException(
+                        ErrorCodes.InvalidParam,
+                        $"Option labels must be unique within question '{question.Question}'.");
+                }
+
+                if (question.MultiSelect && !string.IsNullOrEmpty(option.Preview))
+                {
+                    throw new AgwException(
+                        ErrorCodes.InvalidParam,
+                        $"Option '{option.Label}' in question '{question.Question}' cannot use a preview when multiSelect is enabled.");
+                }
+
+                var error = ValidateHtmlPreview(option.Preview);
+                if (error is not null)
+                {
+                    throw new AgwException(
+                        ErrorCodes.InvalidParam,
+                        $"Option '{option.Label}' in question '{question.Question}': {error}");
+                }
+            }
+        }
+    }
+
+    private static Dictionary<string, string> ValidateAnswers(
+        IReadOnlyList<AskUserQuestionQuestion> questions,
+        Dictionary<string, string>? answers,
+        Dictionary<string, AskUserQuestionAnnotation>? annotations)
+    {
+        if (answers == null || answers.Count != questions.Count)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Every question requires a user-provided answer.");
+        }
+
+        var questionTexts = questions
+            .Select(static question => question.Question)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var (question, answer) in answers)
+        {
+            if (!questionTexts.Contains(question) || string.IsNullOrWhiteSpace(answer))
+            {
+                throw new AgwException(
+                    ErrorCodes.InvalidParam,
+                    "Answers must contain one non-empty value for every requested question.");
+            }
+        }
+
+        if (annotations != null && annotations.Keys.Any(question => !questionTexts.Contains(question)))
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Annotations may only reference requested questions.");
+        }
+
+        return new Dictionary<string, string>(answers, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -310,6 +378,86 @@ internal class AskUserQuestionTool : IAgwTool
     public AITool ToAITool()
     {
         Func<AskUserQuestionToolParams, AskUserQuestionToolResult> func = Execute;
-        return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
+        var innerFunction = (AIFunction)AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
+        return new HumanInteractionRequiredAIFunction(innerFunction, new AskUserQuestionInteractionProtocol());
+    }
+
+    private sealed class AskUserQuestionInteractionProtocol : IHumanInteractionProtocol
+    {
+        public HumanInteractionRequest CreateRequest(
+            string requestId,
+            AIFunctionArguments arguments)
+        {
+            var toolParams = DeserializeArguments(arguments);
+            ValidateQuestions(toolParams.Questions);
+            toolParams.Answers = null;
+            toolParams.Annotations = null;
+
+            using var payload = JsonDocument.Parse(JsonUtil.Serialize(new
+            {
+                toolParams.Questions,
+                toolParams.Metadata
+            }));
+            return new HumanInteractionRequest(
+                requestId,
+                "questions",
+                "The agent needs your input to continue.",
+                payload.RootElement.Clone());
+        }
+
+        public AIFunctionArguments BindResponse(
+            AIFunctionArguments arguments,
+            HumanInteractionResponse response)
+        {
+            if (!response.ResponseData.HasValue)
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, "Question response data is required.");
+            }
+
+            var responseData = JsonUtil.Deserialize<AskUserQuestionResponseData>(
+                response.ResponseData.Value.GetRawText())
+                ?? throw new AgwException(ErrorCodes.InvalidParam, "Question response data is invalid.");
+            var toolParams = DeserializeArguments(arguments);
+            ValidateQuestions(toolParams.Questions);
+            ValidateAnswers(toolParams.Questions, responseData.Answers, responseData.Annotations);
+
+            var values = new Dictionary<string, object?>(arguments, StringComparer.Ordinal)
+            {
+                ["answers"] = responseData.Answers,
+                ["annotations"] = responseData.Annotations
+            };
+            return new AIFunctionArguments(values) { Services = arguments.Services };
+        }
+
+        public object CreateCancelledResult(
+            AIFunctionArguments arguments,
+            HumanInteractionResponse response)
+        {
+            var toolParams = DeserializeArguments(arguments);
+            ValidateQuestions(toolParams.Questions);
+            return new AskUserQuestionToolResult
+            {
+                Questions = toolParams.Questions,
+                Cancelled = true,
+                Summary = "User cancelled the question request without answering."
+            };
+        }
+
+        private static AskUserQuestionToolParams DeserializeArguments(AIFunctionArguments arguments)
+        {
+            var values = arguments.ToDictionary(
+                static item => item.Key,
+                static item => item.Value,
+                StringComparer.Ordinal);
+            return JsonUtil.Deserialize<AskUserQuestionToolParams>(JsonUtil.Serialize(values))
+                ?? throw new AgwException(ErrorCodes.InvalidParam, "Question arguments are invalid.");
+        }
+    }
+
+    private sealed class AskUserQuestionResponseData
+    {
+        public Dictionary<string, string>? Answers { get; set; }
+
+        public Dictionary<string, AskUserQuestionAnnotation>? Annotations { get; set; }
     }
 }

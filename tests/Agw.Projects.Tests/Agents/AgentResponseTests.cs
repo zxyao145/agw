@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Tools;
 
 namespace Agw.Agents.Tests;
 
@@ -22,7 +23,10 @@ public class AgentResponseTests
             SystemPrompt = "Write clearly",
             ModelProviderId = Guid.CreateVersion7(),
             EnableSummary = true,
-            Tools = """["read_file"]""",
+            Tools =
+            [
+                new ToolValue { Definition = new WebFetchToolDefinition() }
+            ],
             Type = AgentType.System,
             Extra = """{"mode":"draft"}""",
             CreateBy = "tester",

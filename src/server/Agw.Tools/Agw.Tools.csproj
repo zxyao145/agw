@@ -1,7 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <NoWarn>$(NoWarn);MAAI001</NoWarn>
+    </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="DiffPlex" />
         <PackageReference Include="Microsoft.Agents.AI" />
+        <PackageReference Include="Microsoft.Agents.AI.Harness" />
+        <PackageReference Include="Microsoft.Agents.AI.Tools.Shell" />
     </ItemGroup>
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />

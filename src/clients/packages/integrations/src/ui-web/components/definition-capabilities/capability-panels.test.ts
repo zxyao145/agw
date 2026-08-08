@@ -17,24 +17,24 @@ async function readSource(url: URL, label: string) {
   }
 }
 
-test("shared capability panels use SearchableSelect multi-selects for every capability", async () => {
+test("shared non-Tool capability panels use SearchableSelect multi-selects", async () => {
   const source = await readSource(PANELS_URL, "shared capability panels");
 
   assert.match(source, /SearchableSelect,[\s\S]*type SearchableSelectOption/);
-  assert.equal(source.match(/<SearchableSelect\s/g)?.length, 4);
-  assert.equal(source.match(/multiple/g)?.length, 4);
+  assert.equal(source.match(/<SearchableSelect\s/g)?.length, 3);
+  assert.equal(source.match(/multiple/g)?.length, 3);
   assert.match(source, /searchPlaceholder="Search skills\.\.\."/);
-  assert.match(source, /searchPlaceholder="Search tools\.\.\."/);
   assert.match(source, /searchPlaceholder="Search MCP tool servers\.\.\."/);
   assert.match(source, /searchPlaceholder="Search connections\.\.\."/);
   assert.doesNotMatch(source, /<DropdownMenu/);
   assert.doesNotMatch(source, /<Popover/);
 });
 
-test("Agent form consumes all five shared panels while retaining Agent-only tabs and notices", async () => {
+test("Agent form consumes shared capability panels and the Tools module", async () => {
   const source = await readSource(AGENT_FORM_URL, "Agent form fields");
 
   assert.match(source, /from "@agw\/integrations"/);
+  assert.match(source, /from "@agw\/tools"/);
   assert.match(source, /<SkillsPanel/);
   assert.match(source, /<ToolsPanel/);
   assert.match(source, /<McpToolServersPanel/);

@@ -1,12 +1,15 @@
 import { spawn, spawnSync } from "node:child_process";
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { copyFile, mkdir, rm } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import electronPath from "electron";
 
 const appName = "Agw Desktop";
+const oauthProtocol = "agw-desktop";
+const launchServicesRegister =
+  "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const rendererUrl = process.env.AGW_RENDERER_URL ?? "http://localhost:3000";
 const children = new Set();
@@ -28,8 +31,10 @@ async function prepareElectronLaunch() {
   }
 
   const electronApp = dirname(dirname(dirname(electronPath)));
-  const temporaryRoot = await mkdtemp(join(tmpdir(), "agw-desktop-dev-"));
-  const brandedApp = join(temporaryRoot, `${appName}.app`);
+  const applicationsRoot = join(homedir(), "Applications");
+  const brandedApp = join(applicationsRoot, `${appName} Development.app`);
+  await mkdir(applicationsRoot, { recursive: true });
+  await rm(brandedApp, { recursive: true, force: true });
 
   try {
     runRequired("/bin/cp", ["-cR", electronApp, brandedApp]);
@@ -46,14 +51,28 @@ async function prepareElectronLaunch() {
     ]) {
       runRequired("/usr/bin/plutil", ["-replace", key, "-string", value, infoPlist]);
     }
+    runRequired("/usr/bin/plutil", [
+      "-insert",
+      "CFBundleURLTypes",
+      "-json",
+      JSON.stringify([
+        {
+          CFBundleURLName: `${appName} OAuth`,
+          CFBundleURLSchemes: [oauthProtocol],
+        },
+      ]),
+      infoPlist,
+    ]);
+    runRequired("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", brandedApp]);
+    runRequired(launchServicesRegister, ["-f", brandedApp]);
 
     return {
       command: join(brandedApp, "Contents", "MacOS", "Electron"),
       args: ["."],
-      temporaryRoot,
+      applicationPath: brandedApp,
     };
   } catch (error) {
-    await rm(temporaryRoot, { recursive: true, force: true });
+    await rm(brandedApp, { recursive: true, force: true });
     throw error;
   }
 }
@@ -107,7 +126,10 @@ try {
   await waitForExit(electron);
 } finally {
   stopChildren();
-  if (electronLaunch?.temporaryRoot) {
-    await rm(electronLaunch.temporaryRoot, { recursive: true, force: true });
+  if (electronLaunch?.applicationPath) {
+    spawnSync(launchServicesRegister, ["-u", electronLaunch.applicationPath], {
+      stdio: "ignore",
+    });
+    await rm(electronLaunch.applicationPath, { recursive: true, force: true });
   }
 }

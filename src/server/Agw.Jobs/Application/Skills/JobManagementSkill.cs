@@ -217,7 +217,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
     {
         var context = _turnContextAccessor.Current;
         if (context == null ||
-            ProjectDefaults.GetDefaultProjectIdentifier(context.Settings.ProjectId) != _projectId)
+            ProjectDefaults.GetDefaultProjectIdentifier(context.ProjectId) != _projectId)
         {
             throw new AgwException(ErrorCodes.InteractiveAdminRequired);
         }

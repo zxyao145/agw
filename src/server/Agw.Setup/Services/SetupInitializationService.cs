@@ -1,4 +1,3 @@
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
@@ -6,6 +5,7 @@ using Agw.Infrastructure.Data.Interceptors;
 using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
+using Agw.Skills.Contracts.Registration;
 
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;

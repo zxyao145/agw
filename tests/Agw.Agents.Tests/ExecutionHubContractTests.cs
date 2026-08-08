@@ -1,6 +1,6 @@
 using System.Reflection;
 
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Files.Exceptions;
 using Agw.Shared.AgwMsgVm;

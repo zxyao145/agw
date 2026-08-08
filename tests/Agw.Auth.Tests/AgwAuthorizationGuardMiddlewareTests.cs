@@ -18,6 +18,7 @@ public sealed class AgwAuthorizationGuardMiddlewareTests
     [InlineData("/api/auth/antiforgery")]
     [InlineData("/api/auth/login")]
     [InlineData("/api/integrations/oauth/callback")]
+    [InlineData("/api/integrations/oauth/desktop-complete")]
     public async Task InvokeAsync_AnonymousPath_CallsNext(string path)
     {
         var nextCalled = false;

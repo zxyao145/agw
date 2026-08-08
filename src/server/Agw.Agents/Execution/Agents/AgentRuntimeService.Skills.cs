@@ -1,8 +1,9 @@
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Integrations.Application.Capabilities;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Skills.Contracts.Registration;
+using Agw.Skills.Execution;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
@@ -30,7 +31,7 @@ public partial class AgentRuntimeService
         - If a skill or script is not found, report the error. Do not search the project workspace.
         """;
 
-    private async Task<AIContextProvider?> CreateSkillsProviderAsync(
+    private async Task<AgentSkillsProvider?> CreateSkillsProviderAsync(
         Agent agent,
         Project project,
         IReadOnlyList<PluginSkillReference> pluginSkills)

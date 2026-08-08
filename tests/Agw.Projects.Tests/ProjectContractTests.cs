@@ -1,6 +1,7 @@
 using Agw.Projects.Application;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Data.Entities.Tools;
 
 namespace Agw.Projects.Tests;
 
@@ -75,7 +76,10 @@ public class ProjectContractTests
             Description = "Description",
             Workspace = "~/project-a",
             ExtraSetting = "{}",
-            Tools = "[\"read_file\"]",
+            Tools =
+            [
+                new ToolValue { Definition = new WebFetchToolDefinition() }
+            ],
             EnvironmentVariables = new Dictionary<string, string> { ["API_KEY"] = "secret" },
             CreateBy = "tester",
             CreateTime = new DateTimeOffset(2026, 7, 13, 1, 0, 0, TimeSpan.Zero),

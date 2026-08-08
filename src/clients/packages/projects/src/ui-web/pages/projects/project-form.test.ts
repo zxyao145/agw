@@ -79,14 +79,14 @@ test("serializeProjectCapabilities always sends explicit empty capability values
 
   assert.deepEqual(
     serializeProjectCapabilities({
-      selectedTools: [],
+      tools: [],
       selectedSkillIds: [],
       selectedMcpToolServerIds: [],
       selectedConnectionIds: [],
       environmentVariables: {},
     }),
     {
-      tools: "[]",
+      tools: [],
       skillIds: [],
       mcpToolServerIds: [],
       connectionIds: [],
@@ -95,19 +95,28 @@ test("serializeProjectCapabilities always sends explicit empty capability values
   );
 });
 
-test("toProjectCapabilityFormState backfills all five capabilities", async () => {
+test("toProjectCapabilityFormState backfills all capabilities", async () => {
   const { toProjectCapabilityFormState } = await importProjectFormModule();
+  const tools = [
+    {
+      kind: "toolBlock" as const,
+      definition: {
+        name: "project-memory" as const,
+        options: { storage: "filesystem" as const },
+      },
+    },
+  ];
 
   assert.deepEqual(
     toProjectCapabilityFormState({
-      tools: '["tool-a"]',
+      tools,
       projectSkillRelations: [{ projectId: "project", skillId: "skill" }],
       projectMcpToolServers: [{ projectId: "project", mcpToolServerId: "mcp" }],
       projectConnectionRelations: [{ projectId: "project", connectionId: "app" }],
       environmentVariables: { API_TOKEN: "secret" },
     }),
     {
-      selectedTools: ["tool-a"],
+      tools,
       selectedSkillIds: ["skill"],
       selectedMcpToolServerIds: ["mcp"],
       selectedConnectionIds: ["app"],
@@ -116,16 +125,15 @@ test("toProjectCapabilityFormState backfills all five capabilities", async () =>
   );
 });
 
-test("toProjectCapabilityFormState treats malformed tools JSON as an empty selection", async () => {
+test("toProjectCapabilityFormState treats missing tools as an empty selection", async () => {
   const { toProjectCapabilityFormState } = await importProjectFormModule();
 
   const state = toProjectCapabilityFormState({
-    tools: "not-json",
     projectSkillRelations: [],
     projectMcpToolServers: [],
     projectConnectionRelations: [],
     environmentVariables: {},
   });
 
-  assert.deepEqual(state.selectedTools, []);
+  assert.deepEqual(state.tools, []);
 });

@@ -14,7 +14,9 @@ test("integrations page renders connections above plugin installations", async (
   assert.match(source, /<ConnectionDialog/);
   assert.match(source, /<PluginInstallationDialog/);
   assert.match(source, /callbackUrl=\{callbackUrl\}/);
+  assert.match(source, /\/api\/integrations\/oauth\/callback-info/);
   assert.match(source, /\/api\/integrations\/oauth\/authorize-start/);
+  assert.match(source, /completionTarget/);
   assert.match(source, /alias: createDefaultConnectionAlias\(selection\.plugin\.id\)/);
   assert.doesNotMatch(source, /app-instances|app-definitions/);
   assert.doesNotMatch(source, /_account/);

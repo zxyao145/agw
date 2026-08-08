@@ -1,10 +1,10 @@
+using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Contracts;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Execution.Commands;
 
-public sealed class ExecutionCommandDispatcher
+internal sealed class ExecutionCommandDispatcher
 {
     private readonly IReadOnlyDictionary<Type, IExecutionCommandHandler> _handlers;
 
@@ -26,7 +26,7 @@ public sealed class ExecutionCommandDispatcher
 
     public Task DispatchAsync(
         AgentRunCommand command,
-        ExecutionConnection connection,
+        ExecutionConnectionContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -35,6 +35,6 @@ public sealed class ExecutionCommandDispatcher
             throw new AgwException(ErrorCodes.InvalidParam, "Unsupported execution command.");
         }
 
-        return handler.HandleAsync(command, connection, cancellationToken);
+        return handler.HandleAsync(command, context, cancellationToken);
     }
 }

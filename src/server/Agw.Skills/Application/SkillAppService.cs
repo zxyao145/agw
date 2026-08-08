@@ -1,7 +1,6 @@
 using System.IO.Compression;
 using System.Text;
 
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
@@ -10,6 +9,8 @@ using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Pagination;
 using Agw.Shared.Runtime;
+using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts.Registration;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;

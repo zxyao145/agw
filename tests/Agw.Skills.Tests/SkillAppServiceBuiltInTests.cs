@@ -1,6 +1,5 @@
 using System.Linq.Expressions;
 
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
@@ -8,6 +7,8 @@ using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application;
+using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts.Registration;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging.Abstractions;

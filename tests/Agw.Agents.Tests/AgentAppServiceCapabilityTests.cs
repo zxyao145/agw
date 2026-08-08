@@ -3,26 +3,27 @@ using System.Reflection;
 
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.ExternalAgents;
 using Agw.Domain.Services;
 using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
+using Agw.Tools.ToolBlocks;
 
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
 
 using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -30,17 +31,6 @@ namespace Agw.Agents.Tests;
 
 public class AgentAppServiceCapabilityTests
 {
-    [Fact]
-    public async Task CollectNamedToolNamesAsync_AgentAndProjectSources_UnionsAndDeduplicatesNames()
-    {
-        var service = CreateService();
-
-        var names = await service.CollectNamedToolNamesAsync(
-            new string?[] { """["agent_direct","Shared"]""", """["project_direct","shared"]""" });
-
-        Assert.Equal(["agent_direct", "project_direct", "Shared"], names);
-    }
-
     [Fact]
     public async Task ListEnabledMcpToolServersAsync_AgentAndProjectIds_DeduplicatesAndFiltersDisabledServers()
     {
@@ -90,16 +80,6 @@ public class AgentAppServiceCapabilityTests
         Assert.Equal(
             new[] { agentSkillId, projectSkillId }.OrderBy(id => id).ToArray(),
             skills.Select(skill => skill.Id).OrderBy(id => id).ToArray());
-    }
-
-    [Fact]
-    public async Task CollectNamedToolNamesAsync_NullAndMalformedLayers_ContinuesWithLaterLayer()
-    {
-        var service = CreateService();
-        var names = await service.CollectNamedToolNamesAsync(
-            new string?[] { null, "{malformed", """["later_direct"]""" });
-
-        Assert.Equal(["later_direct"], names);
     }
 
     [Fact]
@@ -164,7 +144,10 @@ public class AgentAppServiceCapabilityTests
                 ["SHARED"] = "project",
                 ["PROJECT_ONLY"] = "project",
             },
-            Tools = """["project_direct"]""",
+            Tools =
+            [
+                new ToolValue { Definition = new WebSearchToolDefinition() }
+            ],
             ProjectConnectionRelations =
             [
                 new ProjectConnectionRelation { ConnectionId = Guid.CreateVersion7() },
@@ -178,9 +161,7 @@ public class AgentAppServiceCapabilityTests
                 new ProjectSkillRelation { SkillId = Guid.CreateVersion7() },
             ],
         };
-        var forbiddenTool = new ResolutionGuardTool("project_direct");
         var toolRegistry = CreateToolRegistry();
-        toolRegistry.RegisterTool(forbiddenTool);
         var service = CreateRuntimeService(
             appService,
             new TestProjectAppService(project),
@@ -241,7 +222,6 @@ public class AgentAppServiceCapabilityTests
         Assert.Equal(0, connectionRepository.ListCallCount);
         Assert.Equal(0, mcpServerRepository.ListCallCount);
         Assert.Equal(0, skillRepository.ListCallCount);
-        Assert.Equal(1, forbiddenTool.ToAIToolCallCount);
     }
 
     private static AgentAppService CreateService(
@@ -285,8 +265,9 @@ public class AgentAppServiceCapabilityTests
                 toolRegistry,
                 connectionCapabilityResolver: null!,
                 mcpToolMaterializer: null!,
-                NullLogger<AgentCapabilityComposer>.Instance),
-            instructionsSources: [],
+                new ToolBlockRegistry([]),
+                NullLogger<AgentCapabilityComposer>.Instance,
+                [new ProjectInstructionsSource()]),
             chatHistoryProvider: null!,
             providerSessionState: null!,
             taskSessionBindingService: null!,
@@ -302,17 +283,11 @@ public class AgentAppServiceCapabilityTests
             summaryService: null!);
     }
 
-    private static ToolRegistryService CreateToolRegistry(params string[] toolNames)
+    private static ToolRegistryService CreateToolRegistry()
     {
-        var registry = new ToolRegistryService(
+        return new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             new ServiceCollection().BuildServiceProvider());
-        foreach (var toolName in toolNames)
-        {
-            registry.RegisterTool(new TestTool(toolName));
-        }
-
-        return registry;
     }
 
     private static T FindInObjectGraph<T>(object root) where T : class
@@ -427,45 +402,6 @@ public class AgentAppServiceCapabilityTests
 
         public void Dispose()
         {
-        }
-    }
-
-    private sealed class TestTool : IAgwTool
-    {
-        public TestTool(string name)
-        {
-            Name = name;
-        }
-
-        public string Name { get; }
-
-        public AITool ToAITool() => AIFunctionFactory.Create(
-            (Func<string>)(() => Name),
-            new AIFunctionFactoryOptions { Name = Name });
-    }
-
-    private sealed class ResolutionGuardTool : IAgwTool
-    {
-        public ResolutionGuardTool(string name)
-        {
-            Name = name;
-        }
-
-        public string Name { get; }
-
-        public int ToAIToolCallCount { get; private set; }
-
-        public AITool ToAITool()
-        {
-            ToAIToolCallCount++;
-            if (ToAIToolCallCount > 1)
-            {
-                throw new Xunit.Sdk.XunitException($"External Agent unexpectedly resolved tool '{Name}'.");
-            }
-
-            return AIFunctionFactory.Create(
-                (Func<string>)(() => Name),
-                new AIFunctionFactoryOptions { Name = Name });
         }
     }
 

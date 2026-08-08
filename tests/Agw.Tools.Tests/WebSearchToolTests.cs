@@ -2,9 +2,9 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 
-using Agw.Domain.Services;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
+using Agw.Tools.Impl.Web;
 
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -125,8 +125,7 @@ public class WebSearchToolTests
             .BuildServiceProvider();
         _ = new IocUtil(services, NullLoggerFactory.Instance);
 
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services);
-        return Assert.IsAssignableFrom<AIFunction>(registry.CreateAIFunction("web_search"));
+        return Assert.IsAssignableFrom<AIFunction>(new WebSearchTool().ToAITool());
     }
 
     private static HttpResponseMessage CreateResponse(HttpStatusCode statusCode, string content)

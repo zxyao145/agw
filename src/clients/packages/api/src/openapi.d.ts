@@ -390,384 +390,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/auth/session": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/antiforgery": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/login": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["LoginRequest"];
-          "text/json": components["schemas"]["LoginRequest"];
-          "application/*+json": components["schemas"]["LoginRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Unauthorized */
-        401: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Too Many Requests */
-        429: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/logout": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/password": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["ChangePasswordRequest"];
-          "text/json": components["schemas"]["ChangePasswordRequest"];
-          "application/*+json": components["schemas"]["ChangePasswordRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Unauthorized */
-        401: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Forbidden */
-        403: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/tokens": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Forbidden */
-        403: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["CreateTokenRequest"];
-          "text/json": components["schemas"]["CreateTokenRequest"];
-          "application/*+json": components["schemas"]["CreateTokenRequest"];
-        };
-      };
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Bad Request */
-        400: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Forbidden */
-        403: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Conflict */
-        409: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/auth/tokens/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          id: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-        /** @description Forbidden */
-        403: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-        /** @description Not Found */
-        404: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ProblemDetails"];
-            "application/json": components["schemas"]["ProblemDetails"];
-            "text/json": components["schemas"]["ProblemDetails"];
-          };
-        };
-      };
-    };
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/api/dashboard/stats": {
     parameters: {
       query?: never;
@@ -1668,6 +1290,384 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/auth/session": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/antiforgery": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/login": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["LoginRequest"];
+          "text/json": components["schemas"]["LoginRequest"];
+          "application/*+json": components["schemas"]["LoginRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Unauthorized */
+        401: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ProblemDetails"];
+            "application/json": components["schemas"]["ProblemDetails"];
+            "text/json": components["schemas"]["ProblemDetails"];
+          };
+        };
+        /** @description Too Many Requests */
+        429: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ProblemDetails"];
+            "application/json": components["schemas"]["ProblemDetails"];
+            "text/json": components["schemas"]["ProblemDetails"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/logout": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/password": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ChangePasswordRequest"];
+          "text/json": components["schemas"]["ChangePasswordRequest"];
+          "application/*+json": components["schemas"]["ChangePasswordRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Unauthorized */
+        401: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ProblemDetails"];
+            "application/json": components["schemas"]["ProblemDetails"];
+            "text/json": components["schemas"]["ProblemDetails"];
+          };
+        };
+        /** @description Forbidden */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ProblemDetails"];
+            "application/json": components["schemas"]["ProblemDetails"];
+            "text/json": components["schemas"]["ProblemDetails"];
+          };
+        };
+      };
+    };
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/tokens": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Forbidden */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ProblemDetails"];
+            "application/json": components["schemas"]["ProblemDetails"];
+            "text/json": components["schemas"]["ProblemDetails"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateTokenRequest"];
+          "text/json": components["schemas"]["CreateTokenRequest"];
+          "application/*+json": components["schemas"]["CreateTokenRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ProblemDetails"];
+            "application/json": components["schemas"]["ProblemDetails"];
+            "text/json": components["schemas"]["ProblemDetails"];
+          };
+        };
+        /** @description Forbidden */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ProblemDetails"];
+            "application/json": components["schemas"]["ProblemDetails"];
+            "text/json": components["schemas"]["ProblemDetails"];
+          };
+        };
+        /** @description Conflict */
+        409: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ProblemDetails"];
+            "application/json": components["schemas"]["ProblemDetails"];
+            "text/json": components["schemas"]["ProblemDetails"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/tokens/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          id: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Forbidden */
+        403: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ProblemDetails"];
+            "application/json": components["schemas"]["ProblemDetails"];
+            "text/json": components["schemas"]["ProblemDetails"];
+          };
+        };
+        /** @description Not Found */
+        404: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ProblemDetails"];
+            "application/json": components["schemas"]["ProblemDetails"];
+            "text/json": components["schemas"]["ProblemDetails"];
+          };
+        };
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/files/list": {
     parameters: {
       query?: never;
@@ -2215,6 +2215,43 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/integrations/oauth/callback-info": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfOAuthCallbackInfoResponse"];
+            "application/json": components["schemas"]["ApiResultOfOAuthCallbackInfoResponse"];
+            "text/json": components["schemas"]["ApiResultOfOAuthCallbackInfoResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/integrations/oauth/authorize-start": {
     parameters: {
       query?: never;
@@ -2280,6 +2317,41 @@ export interface paths {
             [name: string]: unknown;
           };
           content?: never;
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/integrations/oauth/desktop-complete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/html": unknown;
+          };
         };
       };
     };
@@ -3633,7 +3705,7 @@ export interface components {
       type: components["schemas"]["AgentType"];
       /** @description JSON object for additional external agent settings. */
       extra: null | string;
-      tools: null | string;
+      tools?: components["schemas"]["ToolValueObject"][];
       environmentVariables?: {
         [key: string]: string;
       };
@@ -3667,7 +3739,7 @@ export interface components {
       systemPrompt: string;
       /** Format: uuid */
       modelProviderId: null | string;
-      tools: null | string;
+      tools?: null | components["schemas"]["ToolValueObject"][];
       mcpToolServerIds?: null | string[];
       skillIds?: null | string[];
       connectionIds?: null | string[];
@@ -3823,7 +3895,7 @@ export interface components {
       /** Format: uuid */
       summaryModelProviderId: null | string;
       enableSummary: boolean;
-      tools: null | string;
+      tools: components["schemas"]["ToolValueObject"][];
       type: components["schemas"]["AgentType"];
       extra: null | string;
       environmentVariables: {
@@ -3879,7 +3951,7 @@ export interface components {
       systemPrompt?: null | string;
       /** Format: uuid */
       modelProviderId?: null | string;
-      tools?: null | string;
+      tools?: null | components["schemas"]["ToolValueObject"][];
       mcpToolServerIds?: null | string[];
       skillIds?: null | string[];
       connectionIds?: null | string[];
@@ -4144,6 +4216,13 @@ export interface components {
       title: string;
       detail: null | string;
     };
+    ApiResultOfOAuthCallbackInfoResponse: {
+      data?: null | components["schemas"]["OAuthCallbackInfoResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
     ApiResultOfOAuthRefreshResponse: {
       data?: null | components["schemas"]["OAuthRefreshResponse"];
       /** Format: int32 */
@@ -4309,6 +4388,9 @@ export interface components {
     };
     /** @enum {unknown} */
     AuthSchemeTypeResponse: "OAuth2" | "ApiKey" | "AkSk";
+    BackgroundAgentsToolBlockOptions: {
+      allowedAgentIds?: string[];
+    };
     /** @enum {unknown} */
     CapabilitySourceKindResponse: "Native" | "Mcp";
     CapabilitySourceResponse: {
@@ -4431,6 +4513,7 @@ export interface components {
       /** Format: int64 */
       usageTotalTokenCount: number | string;
     };
+    EmptyToolOptions: Record<string, never>;
     FileItem: {
       name: string;
       path: string;
@@ -4752,10 +4835,16 @@ export interface components {
       /** Format: uuid */
       connectionId: string;
       returnPath: string;
+      completionTarget: components["schemas"]["OAuthCompletionTarget"];
     };
     OAuthAuthorizeStartResponse: {
       authorizationUrl: string;
     };
+    OAuthCallbackInfoResponse: {
+      callbackUrl: string;
+    };
+    /** @enum {unknown} */
+    OAuthCompletionTarget: "Web" | "Desktop";
     OAuthRefreshRequest: {
       /** Format: uuid */
       connectionId: string;
@@ -4937,7 +5026,7 @@ export interface components {
       description: null | string;
       workspace: null | string;
       extraSetting: null | string;
-      tools: null | string;
+      tools?: null | components["schemas"]["ToolValueObject"][];
       mcpToolServerIds?: null | string[];
       skillIds?: null | string[];
       connectionIds?: null | string[];
@@ -4951,6 +5040,11 @@ export interface components {
       /** Format: uuid */
       mcpToolServerId: string;
     };
+    /** @enum {unknown} */
+    ProjectMemoryStorage: "database" | "filesystem";
+    ProjectMemoryToolBlockOptions: {
+      storage: components["schemas"]["ProjectMemoryStorage"];
+    };
     ProjectResponse: {
       /** Format: uuid */
       id: string;
@@ -4959,7 +5053,7 @@ export interface components {
       description: null | string;
       workspace: null | string;
       extraSetting: null | string;
-      tools: null | string;
+      tools: components["schemas"]["ToolValueObject"][];
       environmentVariables: {
         [key: string]: string;
       };
@@ -4985,7 +5079,7 @@ export interface components {
       description: null | string;
       workspace: null | string;
       extraSetting: null | string;
-      tools: null | string;
+      tools?: null | components["schemas"]["ToolValueObject"][];
       mcpToolServerIds?: null | string[];
       skillIds?: null | string[];
       connectionIds?: null | string[];
@@ -5070,6 +5164,8 @@ export interface components {
     };
     /** @enum {unknown} */
     SecretUpdateAction: "Keep" | "Set" | "Clear";
+    /** @enum {unknown} */
+    SkillKind: "BuiltIn" | "Local" | "Remote";
     SkillResponse: {
       /** Format: uuid */
       id: string;
@@ -5088,16 +5184,109 @@ export interface components {
       updateBy: null | string;
     };
     TaskExecutionStatus: number;
-    /** @description Represents information about a tool that can be used by an agent. */
+    ToolBlockDefinition:
+      | components["schemas"]["ToolBlockDefinitionTodoToolBlockDefinition"]
+      | components["schemas"]["ToolBlockDefinitionModeToolBlockDefinition"]
+      | components["schemas"]["ToolBlockDefinitionProjectMemoryToolBlockDefinition"]
+      | components["schemas"]["ToolBlockDefinitionFileAccessToolBlockDefinition"]
+      | components["schemas"]["ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"];
+    ToolBlockDefinitionBackgroundAgentsToolBlockDefinition: {
+      /** @enum {string} */
+      name: "background-agents";
+      options: components["schemas"]["BackgroundAgentsToolBlockOptions"];
+    };
+    ToolBlockDefinitionFileAccessToolBlockDefinition: {
+      /** @enum {string} */
+      name: "file-access";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolBlockDefinitionModeToolBlockDefinition: {
+      /** @enum {string} */
+      name: "mode";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolBlockDefinitionProjectMemoryToolBlockDefinition: {
+      /** @enum {string} */
+      name: "project-memory";
+      options: components["schemas"]["ProjectMemoryToolBlockOptions"];
+    };
+    ToolBlockDefinitionTodoToolBlockDefinition: {
+      /** @enum {string} */
+      name: "todo";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    /** @enum {unknown} */
+    ToolCatalogItemKind: "tool" | "toolBlock";
+    ToolDefinition:
+      | components["schemas"]["ToolDefinitionAskUserQuestionToolDefinition"]
+      | components["schemas"]["ToolDefinitionBashToolDefinition"]
+      | components["schemas"]["ToolDefinitionDiffToolDefinition"]
+      | components["schemas"]["ToolDefinitionGenerateGuidToolDefinition"]
+      | components["schemas"]["ToolDefinitionGitCloneToolDefinition"]
+      | components["schemas"]["ToolDefinitionPowerShellToolDefinition"]
+      | components["schemas"]["ToolDefinitionRunShellToolDefinition"]
+      | components["schemas"]["ToolDefinitionWebFetchToolDefinition"]
+      | components["schemas"]["ToolDefinitionWebSearchToolDefinition"];
+    ToolDefinitionAskUserQuestionToolDefinition: {
+      /** @enum {string} */
+      name: "ask_user_question";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolDefinitionBashToolDefinition: {
+      /** @enum {string} */
+      name: "bash";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolDefinitionDiffToolDefinition: {
+      /** @enum {string} */
+      name: "diff";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolDefinitionGenerateGuidToolDefinition: {
+      /** @enum {string} */
+      name: "generate_guid";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolDefinitionGitCloneToolDefinition: {
+      /** @enum {string} */
+      name: "git_clone";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolDefinitionPowerShellToolDefinition: {
+      /** @enum {string} */
+      name: "powershell";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolDefinitionRunShellToolDefinition: {
+      /** @enum {string} */
+      name: "run_shell";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolDefinitionWebFetchToolDefinition: {
+      /** @enum {string} */
+      name: "web_fetch";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    ToolDefinitionWebSearchToolDefinition: {
+      /** @enum {string} */
+      name: "web_search";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    /** @description Represents a selectable Tool or Tool Block in the Tools catalog. */
     ToolInfo: {
+      kind: components["schemas"]["ToolCatalogItemKind"];
       /** @description Gets the name of the tool (method name or custom name). */
       name: string;
+      displayName: string;
       /** @description Gets the description of the tool. */
       description: string;
       /** @description Gets the category of the tool for grouping purposes. */
       category: string;
       /** @description Gets the full type name of the class containing the tool. */
       typeName: string;
+      memberToolNames?: string[];
+      scopes: components["schemas"]["ToolScope"];
+      requiresWorkspace: boolean;
       /** @description Gets the parameters of the tool. */
       parameters: components["schemas"]["ToolParameterInfo"][];
       /** @description Gets whether this is an asynchronous tool. */
@@ -5129,6 +5318,20 @@ export interface components {
       /** @description Gets allowed enum values if applicable. */
       enumValues?: null | string[];
     };
+    ToolScope: number;
+    ToolValueObject:
+      | components["schemas"]["ToolValueObjectToolValue"]
+      | components["schemas"]["ToolValueObjectToolBlockValue"];
+    ToolValueObjectToolBlockValue: {
+      /** @enum {string} */
+      kind: "toolBlock";
+      definition: components["schemas"]["ToolBlockDefinition"];
+    };
+    ToolValueObjectToolValue: {
+      /** @enum {string} */
+      kind: "tool";
+      definition: components["schemas"]["ToolDefinition"];
+    };
     TriggerType: number;
     UsageDetails: {
       /** Format: int64 */
@@ -5153,8 +5356,6 @@ export interface components {
         [key: string]: number | string;
       };
     };
-    /** @enum {unknown} */
-    SkillKind: "BuiltIn" | "Local" | "Remote";
   };
   responses: never;
   parameters: never;

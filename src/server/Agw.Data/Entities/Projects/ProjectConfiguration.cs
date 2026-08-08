@@ -1,4 +1,7 @@
+using Agw.Shared.Data.Entities.Tools;
+
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Agw.Shared.Data.Entities.Projects;
@@ -16,7 +19,17 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(e => e.Description).HasMaxLength(1000);
         builder.Property(e => e.Workspace).HasMaxLength(1000);
         builder.Property(e => e.ExtraSetting).HasMaxLength(16000);
-        builder.Property(e => e.Tools).HasMaxLength(4000);
+        var tools = builder.Property(e => e.Tools)
+            .HasConversion(
+                value => ToolValueObjectJson.Serialize(value),
+                value => ToolValueObjectJson.Deserialize(value))
+            .HasMaxLength(16000)
+            .IsRequired();
+        tools.Metadata.SetValueComparer(
+            new ValueComparer<List<ToolValueObject>>(
+                (left, right) => ToolValueObjectJson.SequenceEqual(left, right),
+                value => ToolValueObjectJson.GetSequenceHashCode(value),
+                value => ToolValueObjectJson.Clone(value)));
         builder.Property(e => e.EnvironmentVariables).HasConversion(
             v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
             v => string.IsNullOrWhiteSpace(v)

@@ -56,6 +56,59 @@ test("getTurnFinishedStatus reads terminal AgwMessage", async () => {
   );
 });
 
+test("getPendingHumanGate parses a structured question interaction", async () => {
+  const { getPendingHumanGate } = await import("./execution-hub" + ".ts");
+
+  const request = getPendingHumanGate({
+    messageId: "interaction-message-1",
+    role: "system",
+    author: "Agw",
+    contents: [{ type: "TextContent", content: "Input needed" }],
+    additionalProperties: {
+      type: "human-interaction-request",
+      requestId: "interaction-1",
+      interactionKind: "questions",
+      toolName: "ask_user_question",
+      callId: "call-1",
+      prompt: "Choose before continuing.",
+      payload: {
+        questions: [
+          {
+            question: "Which database?",
+            header: "Database",
+            multiSelect: false,
+            options: [
+              { label: "PostgreSQL", description: "Use the production database." },
+              { label: "SQLite", description: "Use a local database." },
+            ],
+          },
+        ],
+      },
+    },
+  });
+
+  assert.deepEqual(request, {
+    requestType: "human-interaction",
+    requestId: "interaction-1",
+    mode: "interaction",
+    interactionKind: "questions",
+    toolName: "ask_user_question",
+    callId: "call-1",
+    prompt: "Choose before continuing.",
+    questions: [
+      {
+        question: "Which database?",
+        header: "Database",
+        multiSelect: false,
+        options: [
+          { label: "PostgreSQL", description: "Use the production database." },
+          { label: "SQLite", description: "Use a local database." },
+        ],
+      },
+    ],
+  });
+});
+
 test("waitForExecutionTerminal times out when execution never emits a terminal message", async () => {
   const { waitForExecutionTerminal } = await import("./execution-hub" + ".ts");
 

@@ -29,6 +29,7 @@ import type {
   UninstallResult,
 } from "../shared/contracts";
 import { DaemonManager } from "./daemon/daemon-manager";
+import { DESKTOP_OAUTH_PROTOCOL, findOAuthDeepLink, parseOAuthDeepLink } from "./oauth-deep-link";
 import { resolveRendererFile } from "./renderer-path";
 import { createLocalDesktopToken } from "./runtime/local-token";
 import { readLocalServerRuntime } from "./runtime/local-server-runtime";
@@ -46,6 +47,9 @@ if (started) app.quit();
 
 app.setName("Agw Desktop");
 
+const hasSingleInstanceLock = !started && app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) app.quit();
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
@@ -53,6 +57,8 @@ let activeTaskCount = 0;
 let currentSettings: DesktopSettings;
 let settingsStore: DesktopSettingsStore;
 let daemonManager: DaemonManager;
+let pendingOAuthRoute: string | null = null;
+let rendererReady = false;
 
 function reportMainProcessError(title: string, error: unknown): void {
   console.error(title, error);
@@ -254,6 +260,27 @@ function showWindowSafely(pathname?: string): void {
   );
 }
 
+function handleOAuthDeepLink(value: string): boolean {
+  const route = parseOAuthDeepLink(value);
+  if (!route) return false;
+  if (!rendererReady) {
+    pendingOAuthRoute = route;
+    return true;
+  }
+  showWindowSafely(route);
+  return true;
+}
+
+function registerOAuthProtocolClient(): void {
+  const registered =
+    process.defaultApp && process.argv[1]
+      ? app.setAsDefaultProtocolClient(DESKTOP_OAUTH_PROTOCOL, process.execPath, [
+          resolve(process.argv[1]),
+        ])
+      : app.setAsDefaultProtocolClient(DESKTOP_OAUTH_PROTOCOL);
+  if (!registered) console.warn(`Unable to register ${DESKTOP_OAUTH_PROTOCOL} as a URL handler.`);
+}
+
 async function openSetup(baseUrl: string): Promise<void> {
   if (!mainWindow) return;
   const origin = new URL(baseUrl).origin;
@@ -364,6 +391,14 @@ function registerIpc(): void {
     await settingsStore.saveToken(localProfile.id, token);
     return token;
   });
+  ipcMain.handle("agw:open-external", async (event, value: string) => {
+    assertTrustedSender(senderUrl(event));
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      throw new Error("Agw Desktop can only open HTTP(S) authorization URLs.");
+    }
+    await shell.openExternal(url.toString());
+  });
   ipcMain.handle("agw:open-setup", async (event, baseUrl: string) => {
     assertTrustedSender(senderUrl(event));
     const activeProfile = currentSettings.profiles.find(
@@ -413,10 +448,26 @@ app.on("before-quit", () => {
 
 app.on("activate", () => showWindowSafely());
 
+if (hasSingleInstanceLock) {
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    handleOAuthDeepLink(url);
+  });
+  app.on("second-instance", (_event, argv) => {
+    const deepLink = findOAuthDeepLink(argv);
+    if (!deepLink || !handleOAuthDeepLink(deepLink)) showWindowSafely();
+  });
+
+  const initialDeepLink = findOAuthDeepLink(process.argv);
+  if (initialDeepLink) handleOAuthDeepLink(initialDeepLink);
+}
+
 void app
   .whenReady()
   .then(async () => {
+    if (!hasSingleInstanceLock) return;
     app.dock?.setIcon(appIconPath());
+    registerOAuthProtocolClient();
 
     const flavor = readPackageFlavor();
     settingsStore = new DesktopSettingsStore(app.getPath("userData"), flavor, createSecretCodec());
@@ -440,6 +491,14 @@ void app
       );
     }
 
-    await loadRenderer();
+    const initialRoute = pendingOAuthRoute ?? "/desktop/chat/";
+    pendingOAuthRoute = null;
+    await loadRenderer(initialRoute);
+    rendererReady = true;
+    if (pendingOAuthRoute) {
+      const nextRoute = pendingOAuthRoute;
+      pendingOAuthRoute = null;
+      await showWindow(nextRoute);
+    }
   })
   .catch((error) => reportMainProcessError("Unable to start Agw Desktop", error));

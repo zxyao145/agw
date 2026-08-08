@@ -1,16 +1,3 @@
-export type ToolInfo = {
-  name: string;
-  description: string;
-  category: string;
-  typeName: string;
-  parameters: Array<{
-    name: string;
-    type: string;
-    description?: string;
-    isOptional: boolean;
-  }>;
-};
-
 export type McpToolServerDto = {
   id: string;
   name: string;

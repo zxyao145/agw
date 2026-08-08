@@ -1,3 +1,5 @@
+import type { ToolValueObject } from "@agw/tools";
+
 export interface BaseDto {
   createBy?: string | null;
   createTime?: string | null;
@@ -15,7 +17,7 @@ export interface AgentDto extends BaseDto {
   enableSummary: boolean;
 
   description: string;
-  tools?: string | null;
+  tools: ToolValueObject[];
   type: number; // 0 = System, 1 = External
   extra?: string | null;
   environmentVariables: Record<string, string>;

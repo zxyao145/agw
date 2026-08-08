@@ -1,6 +1,7 @@
 using Agw.Agents.Execution.Commands;
+using Agw.Agents.Execution.Commands.Abstracts;
+using Agw.Agents.Execution.Commands.Interrupt;
 using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Contracts;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Tests;
@@ -16,7 +17,7 @@ public class ExecutionCommandDispatcherTests
 
         await dispatcher.DispatchAsync(
             command,
-            connection: null!,
+            context: null!,
             TestContext.Current.CancellationToken);
 
         Assert.Same(command, handler.Command);
@@ -29,7 +30,7 @@ public class ExecutionCommandDispatcherTests
 
         await Assert.ThrowsAsync<AgwException>(() => dispatcher.DispatchAsync(
             new InterruptCommand(),
-            connection: null!,
+            context: null!,
             TestContext.Current.CancellationToken));
     }
 
@@ -50,7 +51,7 @@ public class ExecutionCommandDispatcherTests
 
         public Task HandleAsync(
             AgentRunCommand command,
-            ExecutionConnection connection,
+            ExecutionConnectionContext context,
             CancellationToken cancellationToken)
         {
             Command = command;

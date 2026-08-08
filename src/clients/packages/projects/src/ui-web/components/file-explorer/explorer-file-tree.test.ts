@@ -13,3 +13,9 @@ test("file explorer uses a shadcn alert dialog for delete confirmation", async (
   assert.match(source, /<AlertDialogAction[\s\S]*?variant="destructive"[\s\S]*?>/);
   assert.match(source, /item\.type === FileItemType\.Directory[\s\S]*?all its contents/);
 });
+
+test("file delete confirmation does not retain the context menu pointer lock", async () => {
+  const source = await readFile(EXPLORER_FILE_TREE_URL, "utf8");
+
+  assert.match(source, /<ContextMenu modal=\{false\}>/);
+});

@@ -12,7 +12,8 @@ public sealed class AgwAuthorizationGuardMiddleware
         "/api/auth/session",
         "/api/auth/antiforgery",
         "/api/auth/login",
-        "/api/integrations/oauth/callback"
+        "/api/integrations/oauth/callback",
+        "/api/integrations/oauth/desktop-complete"
     ];
 
     private readonly RequestDelegate _next;

@@ -6,6 +6,8 @@ public sealed class CreateAiAgentRequest
 {
     public Guid? ProjectId { get; init; }
 
+    public Guid ConversationId { get; init; }
+
     /// <summary>
     /// external agent session id
     /// </summary>
@@ -18,4 +20,6 @@ public sealed class CreateAiAgentRequest
     public Func<string, CancellationToken, ValueTask>? OnExternalSessionStartedAsync { get; init; }
 
     public bool Resume { get; init; }
+
+    public string DefaultMode { get; init; } = "plan";
 }

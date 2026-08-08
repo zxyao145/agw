@@ -1,6 +1,7 @@
 using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 
@@ -43,6 +44,19 @@ public class ProjectsController : ControllerBase
     [ProducesApiResult(typeof(ProjectResponse))]
     public async Task<IActionResult> CreateAsync([FromBody] ProjectCreateRequest request)
     {
+        var toolsError = ToolValueObjectValidation.GetError(request.Tools);
+        if (toolsError != null)
+        {
+            return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
+        }
+
+        if (ContainsAgentOnlyToolBlock(request.Tools))
+        {
+            return ApiResult.BadRequest(
+                $"Tool Block '{ToolBlockDefinitionNames.BackgroundAgents}' can only be configured on an Agent.",
+                ErrorCodes.InvalidParam.Code);
+        }
+
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var project = new Project
         {
@@ -50,7 +64,7 @@ public class ProjectsController : ControllerBase
             Description = request.Description,
             Workspace = request.Workspace,
             ExtraSetting = request.ExtraSetting,
-            Tools = request.Tools,
+            Tools = request.Tools ?? [],
             EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>()
         };
 
@@ -74,6 +88,19 @@ public class ProjectsController : ControllerBase
     [ProducesApiResult(typeof(ProjectResponse))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ProjectUpdateRequest request)
     {
+        var toolsError = ToolValueObjectValidation.GetError(request.Tools);
+        if (toolsError != null)
+        {
+            return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
+        }
+
+        if (ContainsAgentOnlyToolBlock(request.Tools))
+        {
+            return ApiResult.BadRequest(
+                $"Tool Block '{ToolBlockDefinitionNames.BackgroundAgents}' can only be configured on an Agent.",
+                ErrorCodes.InvalidParam.Code);
+        }
+
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
 
         var updated = await _projectAppService.UpdateAsync(
@@ -110,4 +137,9 @@ public class ProjectsController : ControllerBase
         var deleted = await _projectAppService.DeleteAsync(id);
         return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
+
+    private static bool ContainsAgentOnlyToolBlock(
+        IReadOnlyList<ToolValueObject>? values) =>
+        values?.Any(static value =>
+            value is ToolBlockValue { Definition: BackgroundAgentsToolBlockDefinition }) == true;
 }

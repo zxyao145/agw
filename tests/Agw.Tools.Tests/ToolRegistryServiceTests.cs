@@ -1,10 +1,18 @@
 using System.Text.Json;
 
 using Agw.Domain.Services;
-using Agw.Files.Abstracts;
-using Agw.Files.Application.Storage.Local;
+using Agw.Shared.Contracts.Tools;
+using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Data.Entities.Tools;
+using Agw.Shared.Exceptions;
+using Agw.Tools.ContextualTools;
+using Agw.Tools.ContextualTools.Shell;
+using Agw.Tools.ContextualTools.WebSearch;
+using Agw.Tools.ToolBlocks.Blocks.Todo;
 
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -15,60 +23,180 @@ public class ToolRegistryServiceTests
     [Fact]
     public void CreateAIFunction_ForRegisteredParameterObjectTool_ExposesFlattenedParameterSchema()
     {
-        var tool = CreateReadFileFunction();
+        var tool = CreateDiffFunction();
         var schemaText = tool.JsonSchema.GetRawText();
 
-        Assert.Contains("filePath", schemaText);
+        Assert.Contains("before", schemaText);
+        Assert.Contains("after", schemaText);
         Assert.DoesNotContain("toolParams", schemaText);
     }
 
     [Fact]
     public async Task InvokeAsync_ForRegisteredParameterObjectTool_AcceptsFlattenedArguments()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"agw-test-{Guid.CreateVersion7():N}");
-        Directory.CreateDirectory(tempDir);
-        var filePath = Path.Combine(tempDir, "test.txt");
-        await File.WriteAllTextAsync(filePath, "line 1\nline 2", TestContext.Current.CancellationToken);
-
-        try
+        var tool = CreateDiffFunction();
+        var arguments = new AIFunctionArguments(new Dictionary<string, object?>
         {
-            var tool = CreateReadFileFunction(tempDir);
-            var arguments = new AIFunctionArguments(new Dictionary<string, object?>
-            {
-                ["filePath"] = "test.txt",
-                ["limit"] = 1
-            });
+            ["before"] = "line 1",
+            ["after"] = "line 2"
+        });
 
-            var result = await tool.InvokeAsync(arguments, TestContext.Current.CancellationToken);
-            var resultJson = Assert.IsType<JsonElement>(result);
+        var result = await tool.InvokeAsync(arguments, TestContext.Current.CancellationToken);
+        var resultJson = Assert.IsType<JsonElement>(result);
 
-            Assert.Equal("test.txt", resultJson.GetProperty("filePath").GetString());
-            Assert.Equal("line 1", resultJson.GetProperty("content").GetString());
-        }
-        finally
-        {
-            Directory.Delete(tempDir, recursive: true);
-        }
+        Assert.Contains("- line 1", resultJson.GetProperty("result").GetString());
+        Assert.Contains("+ line 2", resultJson.GetProperty("result").GetString());
     }
 
-    private static AIFunction CreateReadFileFunction(string? tempDir = null)
+    [Fact]
+    public void RemovedLocalTools_AreNotRegistered()
     {
-        var testDir = tempDir ?? Path.Combine(Path.GetTempPath(), $"agw-test-{Guid.CreateVersion7():N}");
-        Directory.CreateDirectory(testDir);
-
         var services = new ServiceCollection();
-        services.AddSingleton<IAgwFileSystemResolver>(_ => new TestFileSystemResolver(testDir));
+        using var sp = services.BuildServiceProvider();
+        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, sp);
+
+        var removedToolNames = new[]
+        {
+            "read_file",
+            "write_file",
+            "file_edit",
+            "ls",
+            "glob",
+            "grep",
+            "task_create",
+            "task_get",
+            "task_list",
+            "task_update",
+            "task_output",
+            "task_stop"
+        };
+
+        Assert.All(removedToolNames, name => Assert.False(registry.ToolExists(name)));
+        Assert.True(registry.ToolExists("bash"));
+        Assert.True(registry.ToolExists("powershell"));
+    }
+
+    [Fact]
+    public void GetAllTools_ReturnsToolsAndToolBlocksInOneCatalog()
+    {
+        var services = new ServiceCollection();
+        using var serviceProvider = services.BuildServiceProvider();
+        var toolBlockRegistry = new ToolBlockRegistry([new TodoToolBlock()]);
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            [new WebSearchContextualTool()],
+            toolBlockRegistry);
+
+        var webSearch = Assert.Single(
+            registry.GetAllTools(),
+            item => item.Name == "web_search");
+        var todo = Assert.Single(
+            registry.GetAllTools(),
+            item => item.Name == ToolBlockNames.Todo);
+
+        Assert.Equal(ToolCatalogItemKind.Tool, webSearch.Kind);
+        Assert.Equal(ToolCatalogItemKind.ToolBlock, todo.Kind);
+        Assert.Contains("todos_add", todo.MemberToolNames);
+    }
+
+    [Fact]
+    public async Task MaterializeAsync_ToolBlockMemberSelectedDirectly_ThrowsClearError()
+    {
+        var services = new ServiceCollection();
+        using var serviceProvider = services.BuildServiceProvider();
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            Array.Empty<IContextualTool>(),
+            new ToolBlockRegistry([new TodoToolBlock()]));
+
+        var exception = await Assert.ThrowsAsync<AgwException>(
+            async () => await registry.MaterializeAsync(
+                [new TestToolDefinition("todos_add")],
+                CreateMaterializationContext(),
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("belongs to Tool Block 'todo'", exception.Message);
+    }
+
+    [Fact]
+    public void ValidateDefinitionCoverage_AllDeclaredDefinitionsHaveExecutableImplementations()
+    {
+        var services = new ServiceCollection();
+        using var serviceProvider = services.BuildServiceProvider();
+        var contextualTools = new IContextualTool[]
+        {
+            new WebSearchContextualTool(),
+            new ShellContextualTool(new ConfigurationBuilder().Build())
+        };
+        var toolBlocks = ToolBlockDefinitionNames.All
+            .Select(static name => new DefinitionCoverageToolBlock(name))
+            .ToArray();
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            contextualTools,
+            new ToolBlockRegistry(toolBlocks));
+
+        registry.ValidateDefinitionCoverage();
+    }
+
+    private static AIFunction CreateDiffFunction()
+    {
+        var services = new ServiceCollection();
         using var sp = services.BuildServiceProvider();
 
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, sp);
-        return Assert.IsAssignableFrom<AIFunction>(registry.CreateAIFunction("read_file"));
+        return Assert.IsAssignableFrom<AIFunction>(registry.CreateAIFunction("diff"));
     }
 
-    private sealed class TestFileSystemResolver(string rootPath) : IAgwFileSystemResolver
+    private static ToolMaterializationContext CreateMaterializationContext()
     {
-        public Task<IAgwFileSystem> ResolveAsync(Guid projectId, CancellationToken ct)
+        var project = new Project
         {
-            return Task.FromResult<IAgwFileSystem>(new LocalFileSystem(rootPath));
+            Id = Guid.CreateVersion7(),
+            Workspace = "/workspace"
+        };
+        return new ToolMaterializationContext
+        {
+            Agent = new Agent { Id = Guid.CreateVersion7() },
+            Project = project,
+            Workspace = project.Workspace,
+            DefaultMode = "plan"
+        };
+    }
+
+    private sealed record TestToolDefinition : ToolDefinition<EmptyToolOptions>
+    {
+        private readonly string _name;
+
+        public TestToolDefinition(string name)
+        {
+            _name = name;
         }
+
+        public override string GetDefinitionName() => _name;
+    }
+
+    private sealed class DefinitionCoverageToolBlock : IToolBlock
+    {
+        public DefinitionCoverageToolBlock(string name)
+        {
+            Descriptor = new ToolBlockDescriptor(
+                name,
+                name,
+                name,
+                ToolBlockScope.Agent | ToolBlockScope.Project,
+                []);
+        }
+
+        public ToolBlockDescriptor Descriptor { get; }
+
+        public ValueTask<ToolContribution> MaterializeAsync(
+            ToolBlockDefinition definition,
+            ToolMaterializationContext context,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(new ToolContribution());
     }
 }

@@ -1,4 +1,4 @@
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Turns;
 
 namespace Agw.Agents.Execution.Runtimes;
@@ -25,7 +25,7 @@ public abstract class RuntimeBase : IAsyncDisposable
 
     public ActiveTurn? StartTurn(
         RuntimeTurnContext turnContext,
-        IRuntimeTurnContextAccessor turnContextAccessor,
+        RuntimeTurnContextAccessor turnContextAccessor,
         CancellationTokenSource executionCts,
         Action interruptAction,
         Func<CancellationToken, Task> executeAsync,
@@ -143,7 +143,7 @@ public abstract class RuntimeBase : IAsyncDisposable
     private static async Task RunAfterRegistrationAsync(
         Task registration,
         RuntimeTurnContext turnContext,
-        IRuntimeTurnContextAccessor turnContextAccessor,
+        RuntimeTurnContextAccessor turnContextAccessor,
         Func<CancellationToken, Task> executeAsync,
         CancellationToken cancellationToken)
     {

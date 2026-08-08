@@ -1,3 +1,5 @@
+using Agw.Shared.Data.Entities.Tools;
+
 namespace Agw.Agents.Definitions.Agents;
 
 public enum AgentUpdateField
@@ -25,7 +27,7 @@ public sealed class AgentUpdateCommand
         string? description,
         string? systemPrompt,
         Guid? modelProviderId,
-        string? tools,
+        List<ToolValueObject>? tools,
         List<Guid>? mcpToolServerIds,
         List<Guid>? skillIds,
         List<Guid>? connectionIds,
@@ -54,7 +56,7 @@ public sealed class AgentUpdateCommand
     public string? Description { get; }
     public string? SystemPrompt { get; }
     public Guid? ModelProviderId { get; }
-    public string? Tools { get; }
+    public List<ToolValueObject>? Tools { get; }
     public List<Guid>? McpToolServerIds { get; }
     public List<Guid>? SkillIds { get; }
     public List<Guid>? ConnectionIds { get; }

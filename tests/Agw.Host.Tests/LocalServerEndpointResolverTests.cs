@@ -10,18 +10,18 @@ public class LocalServerEndpointResolverTests
     public void ResolveDefaultUrl_PreferredPortIsAvailable_UsesPreferredPort()
     {
         var result = LocalServerEndpointResolver.ResolveDefaultUrl(
-            30815,
-            port => port == 30815,
+            30816,
+            port => port == 30816,
             () => 49152);
 
-        Assert.Equal("http://127.0.0.1:30815", result);
+        Assert.Equal("http://127.0.0.1:30816", result);
     }
 
     [Fact]
     public void ResolveDefaultUrl_PreferredPortIsOccupied_UsesAllocatedPort()
     {
         var result = LocalServerEndpointResolver.ResolveDefaultUrl(
-            30815,
+            30816,
             _ => false,
             () => 49152);
 

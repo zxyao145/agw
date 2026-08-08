@@ -19,7 +19,7 @@ public class ProjectPersistenceModelTests
         var project = dbContext.Model.FindEntityType(typeof(Agw.Shared.Data.Entities.Projects.Project));
         Assert.NotNull(project);
         Assert.Null(project.FindProperty("Enable"));
-        Assert.Equal(4000, project.FindProperty("Tools")!.GetMaxLength());
+        Assert.Equal(16000, project.FindProperty("Tools")!.GetMaxLength());
         Assert.NotNull(project.FindProperty("EnvironmentVariables")!.GetValueConverter());
 
         AssertRelation(dbContext.Model, "project_skill_relation", "SkillId");

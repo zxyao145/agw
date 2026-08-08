@@ -62,6 +62,52 @@ public partial class AgentRuntimeService
         }, cancellationToken);
     }
 
+    public async Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = await _agentAppService.GetAgentAsync(agentId);
+        if (agent == null)
+        {
+            return null;
+        }
+
+        return await CreateAiAgentAsync(new CreateAiAgentRequest
+        {
+            Agent = agent,
+            EnvironmentVariables = environmentVariables,
+            ProjectId = projectId,
+            Resume = false,
+            DefaultMode = "execute"
+        }, cancellationToken);
+    }
+
+    public async Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        Guid conversationId,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = await _agentAppService.GetAgentAsync(agentId);
+        if (agent == null)
+        {
+            return null;
+        }
+
+        return await CreateAiAgentAsync(new CreateAiAgentRequest
+        {
+            Agent = agent,
+            EnvironmentVariables = environmentVariables,
+            ProjectId = projectId,
+            ConversationId = conversationId,
+            Resume = false,
+            DefaultMode = "execute"
+        }, cancellationToken);
+    }
+
     private async Task<AIAgent?> CreateAiAgentAsync(
         CreateAiAgentRequest request,
         CancellationToken cancellationToken = default)
@@ -85,7 +131,9 @@ public partial class AgentRuntimeService
         return await CreateDefinitionAgentAsync(
                 request.Agent,
                 project,
+                request.ConversationId,
                 environmentVariables,
+                request.DefaultMode,
                 cancellationToken)
             .ConfigureAwait(false);
     }

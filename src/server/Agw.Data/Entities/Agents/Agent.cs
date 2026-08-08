@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Data.Entities.Tools;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -37,7 +38,7 @@ public class Agent : BaseEntity, IAggregateRoot
     /// </summary>
     public string? Extra { get; set; }
 
-    public string? Tools { get; set; } // JSON array of tool method names
+    public List<ToolValueObject> Tools { get; set; } = [];
 
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
 

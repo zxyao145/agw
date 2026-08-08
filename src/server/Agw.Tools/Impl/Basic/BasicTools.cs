@@ -8,6 +8,7 @@ public static class BasicTools
 {
     [AiTool("generate_guid", Category = "Utility")]
     [Description("Generates a new unique identifier (GUID)")]
+    [Obsolete("Test method")]
     public static string GenerateGuid()
     {
         return Guid.CreateVersion7().ToString();

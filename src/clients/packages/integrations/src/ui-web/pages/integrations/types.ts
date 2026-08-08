@@ -83,6 +83,7 @@ export type IntegrationSelection = {
 export const integrationQueryKeys = {
   plugins: ["integrations", "plugins"] as const,
   connections: ["integrations", "connections"] as const,
+  oauthCallback: ["integrations", "oauth-callback"] as const,
 };
 
 export function findIntegrationSelection(

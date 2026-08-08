@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
@@ -131,35 +129,6 @@ public class AgentAppService
         return model == null || provider == null
             ? null
             : new AgentModelRuntimeConfiguration(modelProvider, model, provider);
-    }
-
-    public Task<string[]> CollectNamedToolNamesAsync(
-        IEnumerable<string?>? rawToolSources)
-    {
-        var mergedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var rawTools in rawToolSources ?? [])
-        {
-            if (string.IsNullOrWhiteSpace(rawTools))
-            {
-                continue;
-            }
-
-            try
-            {
-                var directTools = JsonSerializer.Deserialize<string[]>(rawTools) ?? [];
-                foreach (var toolName in directTools.Where(static name => !string.IsNullOrWhiteSpace(name)))
-                {
-                    mergedNames.Add(toolName);
-                }
-            }
-            catch (JsonException)
-            {
-            }
-        }
-
-        return Task.FromResult(
-            mergedNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray());
     }
 
     public async Task<IReadOnlyList<McpServer>> ListEnabledMcpToolServersByAgentAsync(Guid agentId)
@@ -404,7 +373,7 @@ public class AgentAppService
         agent.ModelProviderId = command.ModelProviderId;
         agent.SummaryModelProviderId = command.SummaryModelProviderId;
         agent.EnableSummary = command.EnableSummary ?? false;
-        agent.Tools = command.Tools;
+        agent.Tools = command.Tools ?? [];
         agent.Extra = command.Extra;
         agent.EnvironmentVariables = command.EnvironmentVariables ?? new Dictionary<string, string>();
     }

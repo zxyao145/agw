@@ -29,6 +29,7 @@ import { EditAgentDialog } from "./components/edit-agent-dialog";
 import { DeleteAgentDialog } from "./components/delete-agent-dialog";
 import { ExecuteAgentDrawer } from "./components/execute-agent-drawer";
 import { AgentsTable } from "./components/agents-table";
+import { parseToolValues, type ToolValueObject } from "@agw/tools";
 
 export default function AgentsPage() {
   const queryClient = useQueryClient();
@@ -101,7 +102,7 @@ export default function AgentsPage() {
   const [enableSummary, setEnableSummary] = React.useState(false);
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedConnectionIds, setSelectedConnectionIds] = React.useState<string[]>([]);
-  const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
+  const [tools, setTools] = React.useState<ToolValueObject[]>([]);
   const [selectedMcpToolServerIds, setSelectedMcpToolServerIds] = React.useState<string[]>([]);
   const [environmentVariables, setEnvironmentVariables] = React.useState<
     AgentEnvironmentVariableEntry[]
@@ -119,7 +120,7 @@ export default function AgentsPage() {
   const [editEnableSummary, setEditEnableSummary] = React.useState(false);
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
   const [editSelectedConnectionIds, setEditSelectedConnectionIds] = React.useState<string[]>([]);
-  const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>([]);
+  const [editTools, setEditTools] = React.useState<ToolValueObject[]>([]);
   const [editSelectedMcpToolServerIds, setEditSelectedMcpToolServerIds] = React.useState<string[]>(
     [],
   );
@@ -153,7 +154,7 @@ export default function AgentsPage() {
       setEnableSummary(false);
       setSelectedSkillIds([]);
       setSelectedConnectionIds([]);
-      setSelectedTools([]);
+      setTools([]);
       setSelectedMcpToolServerIds([]);
       setEnvironmentVariables([]);
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
@@ -220,16 +221,11 @@ export default function AgentsPage() {
     setEditEnableSummary(agent.enableSummary);
     setEditExtra(agent.extra || "");
     setEditEnvironmentVariables(toAgentEnvironmentVariableEntries(agent.environmentVariables));
+    setEditTools(parseToolValues(agent.tools));
     setEditSelectedSkillIds(agent.agentSkillRelations?.map((relation) => relation.skillId) ?? []);
     setEditSelectedConnectionIds(
       agent.agentConnectionRelations?.map((relation) => relation.connectionId) ?? [],
     );
-    try {
-      const tools = agent.tools ? JSON.parse(agent.tools) : [];
-      setEditSelectedTools(Array.isArray(tools) ? tools : []);
-    } catch {
-      setEditSelectedTools([]);
-    }
     setEditSelectedMcpToolServerIds(agent.agentMcpToolServers?.map((x) => x.mcpToolServerId) ?? []);
     setEditOpen(true);
   };
@@ -242,18 +238,6 @@ export default function AgentsPage() {
   const handleExecute = (agent: AgentDto) => {
     setExecutingAgent(agent);
     setExecuteOpen(true);
-  };
-
-  const toggleTool = (toolName: string, isEdit: boolean = false) => {
-    if (isEdit) {
-      setEditSelectedTools((prev) =>
-        prev.includes(toolName) ? prev.filter((t) => t !== toolName) : [...prev, toolName],
-      );
-    } else {
-      setSelectedTools((prev) =>
-        prev.includes(toolName) ? prev.filter((t) => t !== toolName) : [...prev, toolName],
-      );
-    }
   };
 
   const toggleSkill = (skillId: string, isEdit: boolean = false) => {
@@ -344,7 +328,9 @@ export default function AgentsPage() {
             selectedSkillIds={selectedSkillIds}
             connectionOptions={connectionsQuery.data ?? []}
             selectedConnectionIds={selectedConnectionIds}
-            selectedTools={selectedTools}
+            tools={tools}
+            setTools={setTools}
+            agentOptions={agentsQuery.data?.items ?? []}
             modelProvidersQuery={modelProvidersQuery}
             skillsQuery={skillsQuery}
             toolsQuery={toolsQuery}
@@ -353,7 +339,6 @@ export default function AgentsPage() {
             createAgentMutation={createAgentMutation}
             toggleSkill={(skillId) => toggleSkill(skillId, false)}
             toggleConnection={(connectionId) => toggleConnection(connectionId, false)}
-            toggleTool={(toolName) => toggleTool(toolName, false)}
             toggleMcpToolServer={(mcpToolServerId) => toggleMcpToolServer(mcpToolServerId, false)}
           />
         </div>
@@ -404,7 +389,9 @@ export default function AgentsPage() {
         selectedSkillIds={editSelectedSkillIds}
         connectionOptions={connectionsQuery.data ?? []}
         selectedConnectionIds={editSelectedConnectionIds}
-        selectedTools={editSelectedTools}
+        tools={editTools}
+        setTools={setEditTools}
+        agentOptions={agentsQuery.data?.items ?? []}
         modelProvidersQuery={modelProvidersQuery}
         skillsQuery={skillsQuery}
         toolsQuery={toolsQuery}
@@ -413,7 +400,6 @@ export default function AgentsPage() {
         updateAgentMutation={updateAgentMutation}
         toggleSkill={(skillId) => toggleSkill(skillId, true)}
         toggleConnection={(connectionId) => toggleConnection(connectionId, true)}
-        toggleTool={(toolName) => toggleTool(toolName, true)}
         toggleMcpToolServer={(mcpToolServerId) => toggleMcpToolServer(mcpToolServerId, true)}
       />
 

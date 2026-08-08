@@ -101,7 +101,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Host
 ```
 
-开发环境后端默认监听 `http://localhost:30815`。首次运行时，打开 `http://localhost:30815/setup`，选择数据库 Provider、连接字符串和管理员密码。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
+开发环境后端默认监听 `http://localhost:30816`。首次运行时，打开 `http://localhost:30816/setup`，选择数据库 Provider、连接字符串和管理员密码。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
 
 在另一个终端启动前端：
 
@@ -111,7 +111,7 @@ pnpm install
 pnpm dev:web
 ```
 
-`src/clients` 是 Web、Desktop 和 `src/clients/packages/` 下共享包的 pnpm Workspace，由 Turborepo 统一编排任务；一次 `pnpm install` 即可安装整个 Workspace。Web 与 Desktop 各自拥有独立的 Next.js 应用，不会互相导入、构建或消费对方的产物，业务和基础设施模块通过根目录下的 `packages/*` 复用。Expo 移动端仍是单独的 npm Workspace。后端和 Web 都启动后，打开 `http://localhost:3001`。Web 会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:30815`。
+`src/clients` 是 Web、Desktop 和 `src/clients/packages/` 下共享包的 pnpm Workspace，由 Turborepo 统一编排任务；一次 `pnpm install` 即可安装整个 Workspace。Web 与 Desktop 各自拥有独立的 Next.js 应用，不会互相导入、构建或消费对方的产物，业务和基础设施模块通过根目录下的 `packages/*` 复用。Expo 移动端仍是单独的 npm Workspace。后端和 Web 都启动后，打开 `http://localhost:3001`。Web 会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:30816`。
 
 生产发布包会把静态 Web UI 嵌入 ASP.NET Core，由单一 Server 进程提供服务，详见下方部署指南。
 

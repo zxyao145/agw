@@ -6,7 +6,7 @@ export const DEFAULT_LOCAL_PROFILE: ServerProfile = {
   id: "local",
   kind: "local",
   name: "Local",
-  baseUrl: "http://127.0.0.1:30815",
+  baseUrl: "http://127.0.0.1:30816",
   apiMajorVersion: 1,
   allowInsecureHttp: true,
 };

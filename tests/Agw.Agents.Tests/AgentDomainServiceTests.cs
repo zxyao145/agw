@@ -1,4 +1,5 @@
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
 
@@ -178,13 +179,17 @@ public class AgentDomainServiceTests
             Id = originalId,
             Name = "original-name",
             SystemPrompt = "original-prompt",
-            Tools = "[\"tool-a\"]",
+            Tools =
+            [
+                new ToolValue { Definition = new WebSearchToolDefinition() }
+            ],
             EnableSummary = false,
             Type = AgentType.External,
             DisplayName = "Before",
             CreateBy = "creator",
             CreateTime = originalCreateTime,
         };
+        var originalTools = agent.Tools;
         var updatedModelProviderId = Guid.CreateVersion7();
         var updatedSummaryModelProviderId = Guid.CreateVersion7();
 
@@ -195,7 +200,10 @@ public class AgentDomainServiceTests
                 current.Id = Guid.CreateVersion7();
                 current.Name = "updated-name";
                 current.SystemPrompt = "updated-prompt";
-                current.Tools = "[\"tool-b\"]";
+                current.Tools =
+                [
+                    new ToolValue { Definition = new WebFetchToolDefinition() }
+                ];
                 current.EnableSummary = true;
                 current.Type = AgentType.System;
                 current.DisplayName = "After";
@@ -207,7 +215,7 @@ public class AgentDomainServiceTests
         Assert.Equal(originalId, agent.Id);
         Assert.Equal("original-name", agent.Name);
         Assert.Equal("original-prompt", agent.SystemPrompt);
-        Assert.Equal("[\"tool-a\"]", agent.Tools);
+        Assert.Same(originalTools, agent.Tools);
         Assert.True(agent.EnableSummary);
         Assert.Equal(AgentType.External, agent.Type);
         Assert.Equal("After", agent.DisplayName);

@@ -57,6 +57,7 @@ public class AgwDbContext : EFContext
 
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<AgentConnectionRelation> AgentConnectionRelations => Set<AgentConnectionRelation>();
+    public DbSet<AgentSessionStateEntry> AgentSessionStates => Set<AgentSessionStateEntry>();
 
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<RemoteSkillCache> RemoteSkillCaches => Set<RemoteSkillCache>();
@@ -71,6 +72,7 @@ public class AgwDbContext : EFContext
     public DbSet<AgentflowTrace> AgentflowNodeExecutionTraces => Set<AgentflowTrace>();
 
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectMemoryEntry> ProjectMemories => Set<ProjectMemoryEntry>();
     public DbSet<ProjectSkillRelation> ProjectSkillRelations => Set<ProjectSkillRelation>();
     public DbSet<ProjectMcpServerRelation> ProjectMcpToolServers => Set<ProjectMcpServerRelation>();
     public DbSet<ProjectConnectionRelation> ProjectConnectionRelations => Set<ProjectConnectionRelation>();

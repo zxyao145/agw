@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
 using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Data.Entities.Tools;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -18,7 +19,7 @@ public class Project : BaseEntity, IAggregateRoot
     public string? Workspace { get; set; }
 
     public string? ExtraSetting { get; set; }
-    public string? Tools { get; set; }
+    public List<ToolValueObject> Tools { get; set; } = [];
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();
 
     [JsonIgnore]

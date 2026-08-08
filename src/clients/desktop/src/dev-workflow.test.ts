@@ -22,3 +22,16 @@ test("Desktop owns and develops its React renderer independently", async () => {
   assert.match(packageManifest.scripts.build, /build:main[\s\S]*build:renderer/u);
   assert.equal(packageManifest.scripts["prepare:renderer"], undefined);
 });
+
+test("macOS development app registers the Desktop OAuth protocol", async () => {
+  const source = await readFile(resolve(process.cwd(), "scripts/dev.mjs"), "utf8");
+
+  assert.match(source, /CFBundleURLTypes/u);
+  assert.match(source, /CFBundleURLSchemes/u);
+  assert.match(source, /agw-desktop/u);
+  assert.match(source, /codesign/u);
+  assert.match(source, /lsregister/u);
+  assert.match(source, /join\(homedir\(\), "Applications"\)/u);
+  assert.match(source, /\$\{appName\} Development\.app/u);
+  assert.doesNotMatch(source, /mkdtemp|tmpdir/u);
+});

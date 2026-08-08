@@ -39,13 +39,19 @@ test("API mode is converted to the discriminated command source", () => {
     toCommandSource(
       {
         mode: "system",
-        suggestions: [{ text: "/deploy", description: "Skill", kind: "skill" }],
+        suggestions: [
+          { text: "/deploy", description: "Skill", kind: "skill" },
+          { text: "/todos_add", description: "Tool · Todo", kind: "tool" },
+        ],
       },
       ["custom"],
     ),
     {
       mode: "system",
-      suggestions: [{ text: "/deploy", description: "Skill", kind: "skill" }],
+      suggestions: [
+        { text: "/deploy", description: "Skill", kind: "skill" },
+        { text: "/todos_add", description: "Tool · Todo", kind: "tool" },
+      ],
     },
   );
   assert.deepEqual(toCommandSource({ mode: "claudeCode", suggestions: [] }, ["custom"]), {

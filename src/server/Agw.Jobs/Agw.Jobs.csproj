@@ -6,5 +6,6 @@
         <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
         <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
         <ProjectReference Include="..\Agw.Projects\Agw.Projects.csproj" />
+        <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
     </ItemGroup>
 </Project>

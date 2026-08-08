@@ -1,4 +1,5 @@
 export type { AgentDto } from "../../../../types/agentflow";
+import type { ToolValueObject } from "@agw/tools";
 
 export interface AgentCreateRequest {
   displayName: string;
@@ -8,7 +9,7 @@ export interface AgentCreateRequest {
   modelProviderId: string | null;
   summaryModelProviderId: string | null;
   enableSummary: boolean;
-  tools: string | null;
+  tools: ToolValueObject[];
   mcpToolServerIds?: string[] | null;
   skillIds?: string[] | null;
   connectionIds?: string[] | null;
@@ -22,7 +23,7 @@ export interface SystemAgentUpdateRequest {
   modelProviderId: string | null;
   summaryModelProviderId: string | null;
   enableSummary: boolean;
-  tools: string | null;
+  tools: ToolValueObject[];
   mcpToolServerIds?: string[] | null;
   skillIds?: string[] | null;
   connectionIds?: string[] | null;
@@ -40,5 +41,6 @@ export interface ExternalAgentUpdateRequest {
 
 export type AgentUpdateRequest = SystemAgentUpdateRequest | ExternalAgentUpdateRequest;
 
-export type { McpToolServerDto, SkillDto, ToolInfo } from "@agw/integrations";
+export type { McpToolServerDto, SkillDto } from "@agw/integrations";
+export type { ToolInfo, ToolValueObject } from "@agw/tools";
 export type { ModelProviderDto } from "../../../../types/agentflow";

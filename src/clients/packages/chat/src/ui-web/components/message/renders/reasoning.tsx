@@ -21,13 +21,13 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
 
   return (
     <div className="msg-content text-muted-foreground ">
-      <div className="flex justify-between items-start">
-        <div>
+      <div className="flex justify-between items-start gap-2">
+        <div className="h-5 flex items-center">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="w-[22] h-[22]"
+            className="w-fit bg-none hover:bg-transparent dark:hover:bg-transparent"
             aria-expanded={expanded}
             aria-label={expanded ? "Collapse reasoning" : "Expand reasoning"}
             onClick={() => setExpanded((current) => !current)}

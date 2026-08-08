@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 
 using Agw.Agents.Execution.Commands;
+using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Contracts;
 using Agw.Shared.Exceptions;
 
 using Microsoft.AspNetCore.SignalR;
@@ -42,13 +42,15 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
             _hubContext,
             () => connection?.IsAttached == true,
             logger);
+        var context = scope.ServiceProvider
+            .GetRequiredService<ExecutionConnectionContextFactory>()
+            .Create(userName, sink, _hostToken);
         connection = new ExecutionConnection(
             connectionId,
             userName,
             scope,
             scope.ServiceProvider.GetRequiredService<ExecutionCommandDispatcher>(),
-            sink,
-            _hostToken,
+            context,
             logger);
         if (!_connections.TryAdd(connectionId, connection))
         {

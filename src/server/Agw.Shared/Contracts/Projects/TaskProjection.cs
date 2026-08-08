@@ -9,6 +9,8 @@ public sealed class TaskProjection
 {
     public Guid TaskId { get; init; }
 
+    public Guid ProjectContextId { get; init; }
+
     public Guid ProjectId { get; init; }
 
     public string ContextId { get; init; } = string.Empty;

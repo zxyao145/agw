@@ -1,4 +1,7 @@
+using System.Runtime.ExceptionServices;
+
 using Agw.Agents.Execution.Agentflows.Observability;
+using Agw.Agents.Execution.Agents.Tools;
 
 using Microsoft.Agents.AI;
 
@@ -70,27 +73,51 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
         SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
         using var activity = StartExecutionActivity(input);
+        var turnPersistence = new ToolTurnPersistence(
+            InnerAgent,
+            scopedSession,
+            PersistToolBlockMessagesAsync);
+        Exception? executionFailure = null;
         try
         {
             var response = await InnerAgent
                 .RunAsync(input, scopedSession, options, cancellationToken)
                 .ConfigureAwait(false);
+            turnPersistence.RecordRange(response.Messages);
             UpdatePendingFunctionCallIds(
                 response.Messages.SelectMany(message => message.Contents),
                 pendingFunctionCallIds);
             SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
+            var snapshots = await turnPersistence
+                .CompleteAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            foreach (var snapshot in snapshots)
+            {
+                response.Messages.Add(snapshot);
+            }
             activity?.Complete();
             return response;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException exception)
         {
+            executionFailure = exception;
             activity?.Cancel();
             throw;
         }
         catch (Exception exception)
         {
+            executionFailure = exception;
             activity?.Fail(exception);
             throw;
+        }
+        finally
+        {
+            await FinalizeTurnAsync(
+                    turnPersistence,
+                    scopedSession,
+                    activity,
+                    executionFailure)
+                .ConfigureAwait(false);
         }
     }
 
@@ -112,38 +139,112 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
         SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
         using var activity = StartExecutionActivity(input);
-        await using var enumerator = InnerAgent
-            .RunStreamingAsync(input, scopedSession, options, cancellationToken)
-            .GetAsyncEnumerator(cancellationToken);
-        while (true)
+        var turnPersistence = new ToolTurnPersistence(
+            InnerAgent,
+            scopedSession,
+            PersistToolBlockMessagesAsync);
+        Exception? executionFailure = null;
+        try
         {
-            AgentResponseUpdate update;
-            try
+            await using var enumerator = InnerAgent
+                .RunStreamingAsync(input, scopedSession, options, cancellationToken)
+                .GetAsyncEnumerator(cancellationToken);
+            while (true)
             {
-                if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                AgentResponseUpdate update;
+                try
                 {
-                    break;
+                    if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                    {
+                        break;
+                    }
+
+                    update = enumerator.Current;
+                    var responseMessage = ToolStateSnapshots.ToMessage(update);
+                    turnPersistence.Record(responseMessage);
+
+                    UpdatePendingFunctionCallIds(update.Contents, pendingFunctionCallIds);
+                    SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
+                }
+                catch (OperationCanceledException exception)
+                {
+                    executionFailure = exception;
+                    activity?.Cancel();
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    executionFailure = exception;
+                    activity?.Fail(exception);
+                    throw;
                 }
 
-                update = enumerator.Current;
-                UpdatePendingFunctionCallIds(update.Contents, pendingFunctionCallIds);
-                SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
+                yield return update;
             }
-            catch (OperationCanceledException)
+
+            var stateSnapshots = await turnPersistence
+                .CompleteAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            foreach (var stateSnapshot in stateSnapshots)
             {
-                activity?.Cancel();
-                throw;
+                yield return ToolStateSnapshots.ToUpdate(stateSnapshot);
+            }
+
+            activity?.Complete();
+        }
+        finally
+        {
+            await FinalizeTurnAsync(
+                    turnPersistence,
+                    scopedSession,
+                    activity,
+                    executionFailure)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task FinalizeTurnAsync(
+        ToolTurnPersistence turnPersistence,
+        AgentSession session,
+        AgentflowNodeExecutionActivityScope? activity,
+        Exception? executionFailure)
+    {
+        Exception? cleanupFailure = null;
+        if (!turnPersistence.CompletionAttempted)
+        {
+            try
+            {
+                await turnPersistence
+                    .CompleteAsync(CancellationToken.None)
+                    .ConfigureAwait(false);
             }
             catch (Exception exception)
             {
-                activity?.Fail(exception);
-                throw;
+                cleanupFailure = exception;
             }
-
-            yield return update;
         }
 
-        activity?.Complete();
+        try
+        {
+            await SaveSessionAsync(session).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            cleanupFailure = cleanupFailure == null
+                ? exception
+                : new AggregateException(cleanupFailure, exception);
+        }
+
+        if (cleanupFailure == null)
+        {
+            return;
+        }
+
+        activity?.Fail(cleanupFailure);
+        if (executionFailure == null)
+        {
+            ExceptionDispatchInfo.Capture(cleanupFailure).Throw();
+        }
     }
 
     /// <summary>
@@ -173,10 +274,43 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         AgentSession? session,
         CancellationToken cancellationToken)
     {
+        if (_sessionScope != null && _agentId.HasValue)
+        {
+            return await _sessionScope.GetOrCreateAsync(
+                    InnerAgent,
+                    _agentId.Value,
+                    _agentflowId,
+                    _historyNodeId,
+                    session,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         AgentSession scopedSession =
             session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
         _sessionScope?.Initialize(scopedSession, _agentflowId, _historyNodeId);
         return scopedSession;
+    }
+
+    private Task SaveSessionAsync(AgentSession session)
+    {
+        return _sessionScope != null && _agentId.HasValue
+            ? _sessionScope.SaveAsync(
+                InnerAgent,
+                session,
+                _agentId.Value,
+                _agentflowId,
+                _historyNodeId,
+                CancellationToken.None)
+            : Task.CompletedTask;
+    }
+
+    private Task PersistToolBlockMessagesAsync(
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken)
+    {
+        return _sessionScope?.PersistToolBlockMessagesAsync(messages, cancellationToken) ??
+            Task.CompletedTask;
     }
 
     private static HashSet<string> GetPendingFunctionCallIds(AgentSession session)

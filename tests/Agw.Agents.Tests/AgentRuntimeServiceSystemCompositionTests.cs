@@ -4,11 +4,10 @@ using System.Reflection;
 
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.AIContextProviders;
-using Agw.Agents.Execution.Agents.AIContextProviders.InstructionsExtensions;
+using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Agents.Execution.Agents.Skills;
+using Agw.Agents.ExternalAgents;
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -21,8 +20,15 @@ using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Runtime;
+using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts.Registration;
+using Agw.Skills.Execution;
+using Agw.Tools.ToolBlocks;
+
+using ClaudeCodeSdk.MAF;
 
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
@@ -30,6 +36,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+
+using OpenAI.CodexSdk.MAF;
 
 namespace Agw.Agents.Tests;
 
@@ -139,7 +147,11 @@ public class AgentRuntimeServiceSystemCompositionTests
         {
             Id = Guid.CreateVersion7(),
             Workspace = Path.Combine(root, "workspace"),
-            Tools = """["project_direct","shared"]""",
+            Tools =
+            [
+                new ToolValue { Definition = new GenerateGuidToolDefinition() },
+                new ToolValue { Definition = new WebFetchToolDefinition() }
+            ],
             EnvironmentVariables = new Dictionary<string, string>
             {
                 ["SHARED"] = "project",
@@ -167,7 +179,11 @@ public class AgentRuntimeServiceSystemCompositionTests
             DisplayName = "System Agent",
             Type = AgentType.System,
             ModelProviderId = modelProviderId,
-            Tools = """["agent_direct","Shared"]""",
+            Tools =
+            [
+                new ToolValue { Definition = new BashToolDefinition() },
+                new ToolValue { Definition = new WebFetchToolDefinition() }
+            ],
             EnvironmentVariables = new Dictionary<string, string>
             {
                 ["SHARED"] = "agent",
@@ -187,10 +203,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 new AgentConnectionRelation { ConnectionId = connectionId },
             ],
         };
-        var toolRegistry = CreateToolRegistry(
-            "agent_direct",
-            "project_direct",
-            "Shared");
+        var toolRegistry = CreateToolRegistry();
         var mcpMaterializer = new TestMcpToolMaterializer();
         var connectionResource = new TrackingResource();
         var remoteSkillResolver = new TestRemoteSkillContentResolver();
@@ -254,11 +267,11 @@ public class AgentRuntimeServiceSystemCompositionTests
             Assert.Equal(
                 new[]
                 {
-                    "Shared",
-                    "agent_direct",
+                    "bash",
                     "agent_mcp",
-                    "project_direct",
+                    "generate_guid",
                     "project_mcp",
+                    "web_fetch"
                 }.OrderBy(name => name, StringComparer.Ordinal).ToArray(),
                 chatOptions.Tools
                     .Select(tool => tool.Name)
@@ -280,7 +293,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             Assert.NotNull(agentOptions.AIContextProviders);
             var contextProviders = agentOptions.AIContextProviders.ToArray();
             Assert.Equal(2, contextProviders.Length);
-            var instructionsProvider = Assert.IsType<AgwContextProvider>(contextProviders[0]);
+            var instructionsProvider = Assert.IsType<AgwWorkspaceProvider>(contextProviders[0]);
             var skillsProvider = Assert.IsType<AgentSkillsProvider>(contextProviders[1]);
             var instructionsContext = await instructionsProvider.InvokingAsync(
                 new AIContextProvider.InvokingContext(aiAgent, null, new AIContext()),
@@ -336,11 +349,107 @@ public class AgentRuntimeServiceSystemCompositionTests
             Assert.NotNull(rulesField);
             var approvalRules = Assert.IsAssignableFrom<
                 IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>>>(rulesField.GetValue(approvalAgent));
-            Assert.Same(AgentSkillsProvider.AllToolsAutoApprovalRule, Assert.Single(approvalRules));
+            Assert.Same(AgentSkillsProvider.ReadOnlyToolsAutoApprovalRule, Assert.Single(approvalRules));
             Assert.DoesNotContain(ToolApprovalAgent.AllToolsAutoApprovalRule, approvalRules);
 
             await Assert.IsAssignableFrom<IAsyncDisposable>(aiAgent).DisposeAsync();
             Assert.True(connectionResource.Disposed);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(AgentNames.ClaudeCode, typeof(ClaudeCodeAIAgent))]
+    [InlineData(AgentNames.Codex, typeof(CodexAIAgent))]
+    public async Task CreateBackgroundAgentsAsync_ExternalAgent_CreatesExternalAgent(
+        string agentName,
+        Type expectedAgentType)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            $"agw-background-external-{Guid.CreateVersion7():N}");
+        Directory.CreateDirectory(root);
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var dbOptions = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(dbOptions);
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+
+        var definition = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = agentName,
+            DisplayName = agentName,
+            Type = AgentType.External,
+        };
+        dbContext.Agents.Add(definition);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Workspace = root,
+        };
+        var runtimeService = CreateRuntimeService(
+            CreateAgentAppService(dbContext),
+            new TestProjectAppService(project),
+            CreateToolRegistry(),
+            AgwDataPaths.Resolve(root, root),
+            new TestConnectionCapabilityResolver(CreateResolution([], new TrackingResource())),
+            new TestMcpToolMaterializer());
+        var method = typeof(AgentRuntimeService).GetMethod(
+            "CreateBackgroundAgentsAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            [
+                typeof(IReadOnlyList<Guid>),
+                typeof(Guid),
+                typeof(Project),
+                typeof(Guid),
+                typeof(IReadOnlyDictionary<string, string>),
+                typeof(string),
+                typeof(CancellationToken)
+            ]);
+
+        try
+        {
+            Assert.NotNull(method);
+            var agentTask = Assert.IsType<ValueTask<IReadOnlyList<AIAgent>>>(method.Invoke(
+                runtimeService,
+                [
+                    new[] { definition.Id },
+                    Guid.CreateVersion7(),
+                    project,
+                    Guid.Empty,
+                    new Dictionary<string, string>(),
+                    "plan",
+                    cancellationToken
+                ]));
+            var backgroundAgent = Assert.Single(await agentTask);
+
+            Assert.Contains(
+                TraverseObjectGraph(backgroundAgent),
+                expectedAgentType.IsInstanceOfType);
+            Assert.Contains(
+                TraverseObjectGraph(backgroundAgent).OfType<Delegate>(),
+                callback => callback.Method.DeclaringType == typeof(BackgroundAgentApprovalMiddleware));
+
+            var externalAgent = TraverseObjectGraph(backgroundAgent)
+                .First(expectedAgentType.IsInstanceOfType);
+            if (externalAgent is IAsyncDisposable asyncDisposable)
+            {
+                await asyncDisposable.DisposeAsync();
+            }
+            else if (externalAgent is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
         finally
         {
@@ -416,7 +525,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         try
         {
             Assert.NotNull(method);
-            var providerTask = Assert.IsType<Task<AIContextProvider?>>(method.Invoke(
+            var providerTask = Assert.IsType<Task<AgentSkillsProvider?>>(method.Invoke(
                 runtimeService,
                 [agent, project, Array.Empty<PluginSkillReference>()]));
             var provider = await providerTask;
@@ -473,8 +582,9 @@ public class AgentRuntimeServiceSystemCompositionTests
                 toolRegistry,
                 connectionCapabilityResolver,
                 mcpToolMaterializer,
-                NullLogger<AgentCapabilityComposer>.Instance),
-            instructionsSources: [new ProjectInstructionsSource()],
+                new ToolBlockRegistry([]),
+                NullLogger<AgentCapabilityComposer>.Instance,
+                [new ProjectInstructionsSource()]),
             chatHistoryProvider: null!,
             providerSessionState: null!,
             taskSessionBindingService: null!,
@@ -492,17 +602,11 @@ public class AgentRuntimeServiceSystemCompositionTests
             remoteSkillContentResolver: remoteSkillContentResolver);
     }
 
-    private static ToolRegistryService CreateToolRegistry(params string[] toolNames)
+    private static ToolRegistryService CreateToolRegistry()
     {
-        var registry = new ToolRegistryService(
+        return new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             new ServiceCollection().BuildServiceProvider());
-        foreach (var toolName in toolNames)
-        {
-            registry.RegisterTool(new TestTool(toolName));
-        }
-
-        return registry;
     }
 
     private static T FindInObjectGraph<T>(object root) where T : class

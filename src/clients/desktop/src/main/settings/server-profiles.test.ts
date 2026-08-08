@@ -13,7 +13,7 @@ test("default local profile uses the locked loopback endpoint", () => {
     id: "local",
     kind: "local",
     name: "Local",
-    baseUrl: "http://127.0.0.1:30815",
+    baseUrl: "http://127.0.0.1:30816",
     apiMajorVersion: 1,
     allowInsecureHttp: true,
   });

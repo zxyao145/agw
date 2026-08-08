@@ -1,4 +1,4 @@
-using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Messaging;
 using Agw.Shared.AgwMsgVm;
 
 using Microsoft.AspNetCore.SignalR;

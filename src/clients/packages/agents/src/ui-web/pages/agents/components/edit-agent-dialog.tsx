@@ -26,6 +26,7 @@ import type {
   ModelProviderDto,
   SkillDto,
   ToolInfo,
+  ToolValueObject,
 } from "./types";
 
 interface EditAgentDialogProps {
@@ -53,7 +54,9 @@ interface EditAgentDialogProps {
   selectedSkillIds: string[];
   connectionOptions: ConnectionOption[];
   selectedConnectionIds: string[];
-  selectedTools: string[];
+  tools: ToolValueObject[];
+  setTools: (value: ToolValueObject[]) => void;
+  agentOptions: Array<{ id: string; name: string; displayName?: string }>;
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
@@ -67,7 +70,6 @@ interface EditAgentDialogProps {
   >;
   toggleSkill: (skillId: string) => void;
   toggleConnection: (connectionId: string) => void;
-  toggleTool: (toolName: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
 }
 
@@ -96,7 +98,9 @@ export function EditAgentDialog({
   selectedSkillIds,
   connectionOptions,
   selectedConnectionIds,
-  selectedTools,
+  tools,
+  setTools,
+  agentOptions,
   modelProvidersQuery,
   skillsQuery,
   toolsQuery,
@@ -105,7 +109,6 @@ export function EditAgentDialog({
   updateAgentMutation,
   toggleSkill,
   toggleConnection,
-  toggleTool,
   toggleMcpToolServer,
 }: EditAgentDialogProps) {
   const isExternalAgent = editingAgent?.type === 1;
@@ -135,7 +138,7 @@ export function EditAgentDialog({
           modelProviderId,
           summaryModelProviderId: summaryModelProviderId || null,
           enableSummary,
-          tools: selectedTools.length > 0 ? JSON.stringify(selectedTools) : null,
+          tools,
           skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
           mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
           connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
@@ -233,13 +236,14 @@ export function EditAgentDialog({
             connectionOptions={connectionOptions}
             selectedConnectionIds={selectedConnectionIds}
             toggleConnection={toggleConnection}
-            selectedTools={selectedTools}
+            tools={tools}
+            setTools={setTools}
+            agentOptions={agentOptions.filter((agent) => agent.id !== editingAgent?.id)}
             modelProvidersQuery={modelProvidersQuery}
             skillsQuery={skillsQuery}
             toolsQuery={toolsQuery}
             mcpToolServersQuery={mcpToolServersQuery}
             toggleSkill={toggleSkill}
-            toggleTool={toggleTool}
             selectedMcpToolServerIds={selectedMcpToolServerIds}
             toggleMcpToolServer={toggleMcpToolServer}
             idPrefix="edit-"

@@ -13,7 +13,6 @@ import {
   type EnvironmentVariableEntry,
   type McpToolServerDto,
   type SkillDto,
-  type ToolInfo,
 } from "@agw/integrations";
 import { Button } from "@agw/components";
 import { ButtonGroup } from "@agw/components";
@@ -38,6 +37,7 @@ import type {
   ProjectUpdateMutationVariables,
 } from "./components/types";
 import { syncDefaultProjectWorkspace, toProjectCapabilityFormState } from "./project-form";
+import { type ToolInfo, type ToolValueObject } from "@agw/tools";
 
 function toggleSelection(setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) {
   setter((current) =>
@@ -79,7 +79,7 @@ export default function ProjectsPage() {
   const [extraSetting, setExtraSetting] = React.useState("{\n  \n}");
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedConnectionIds, setSelectedConnectionIds] = React.useState<string[]>([]);
-  const [selectedTools, setSelectedTools] = React.useState<string[]>([]);
+  const [tools, setTools] = React.useState<ToolValueObject[]>([]);
   const [selectedMcpToolServerIds, setSelectedMcpToolServerIds] = React.useState<string[]>([]);
   const [environmentVariables, setEnvironmentVariables] = React.useState<
     EnvironmentVariableEntry[]
@@ -110,7 +110,7 @@ export default function ProjectsPage() {
       setDescription("");
       setWorkspace("");
       setExtraSetting("{\n  \n}");
-      setSelectedTools([]);
+      setTools([]);
       setSelectedSkillIds([]);
       setSelectedMcpToolServerIds([]);
       setSelectedConnectionIds([]);
@@ -130,7 +130,7 @@ export default function ProjectsPage() {
   const [editExtraSetting, setEditExtraSetting] = React.useState("");
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
   const [editSelectedConnectionIds, setEditSelectedConnectionIds] = React.useState<string[]>([]);
-  const [editSelectedTools, setEditSelectedTools] = React.useState<string[]>([]);
+  const [editTools, setEditTools] = React.useState<ToolValueObject[]>([]);
   const [editSelectedMcpToolServerIds, setEditSelectedMcpToolServerIds] = React.useState<string[]>(
     [],
   );
@@ -176,7 +176,7 @@ export default function ProjectsPage() {
       setEditDescription(project.description ?? "");
       setEditWorkspace(project.workspace ?? "");
       setEditExtraSetting(project.extraSetting ?? "");
-      setEditSelectedTools(capabilityState.selectedTools);
+      setEditTools(capabilityState.tools);
       setEditSelectedSkillIds(capabilityState.selectedSkillIds);
       setEditSelectedMcpToolServerIds(capabilityState.selectedMcpToolServerIds);
       setEditSelectedConnectionIds(capabilityState.selectedConnectionIds);
@@ -250,7 +250,8 @@ export default function ProjectsPage() {
             selectedSkillIds={selectedSkillIds}
             connectionOptions={connectionsQuery.data ?? []}
             selectedConnectionIds={selectedConnectionIds}
-            selectedTools={selectedTools}
+            tools={tools}
+            setTools={setTools}
             skillsQuery={skillsQuery}
             toolsQuery={toolsQuery}
             mcpToolServersQuery={mcpToolServersQuery}
@@ -260,7 +261,6 @@ export default function ProjectsPage() {
             toggleConnection={(connectionId) =>
               toggleSelection(setSelectedConnectionIds, connectionId)
             }
-            toggleTool={(toolName) => toggleSelection(setSelectedTools, toolName)}
             toggleMcpToolServer={(serverId) =>
               toggleSelection(setSelectedMcpToolServerIds, serverId)
             }
@@ -399,7 +399,8 @@ export default function ProjectsPage() {
         selectedSkillIds={editSelectedSkillIds}
         connectionOptions={connectionsQuery.data ?? []}
         selectedConnectionIds={editSelectedConnectionIds}
-        selectedTools={editSelectedTools}
+        tools={editTools}
+        setTools={setEditTools}
         skillsQuery={skillsQuery}
         toolsQuery={toolsQuery}
         mcpToolServersQuery={mcpToolServersQuery}
@@ -409,7 +410,6 @@ export default function ProjectsPage() {
         toggleConnection={(connectionId) =>
           toggleSelection(setEditSelectedConnectionIds, connectionId)
         }
-        toggleTool={(toolName) => toggleSelection(setEditSelectedTools, toolName)}
         toggleMcpToolServer={(serverId) =>
           toggleSelection(setEditSelectedMcpToolServerIds, serverId)
         }

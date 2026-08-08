@@ -3,7 +3,19 @@ import type { AiMessage } from "@agw/api";
 const ErrorContent = "ErrorContent";
 const TextContent = "TextContent";
 const ResultType = "result";
-const ControlMessageTypes = new Set(["turn-start", "turn-finished", "human-gate-request"]);
+const ControlMessageTypes = new Set([
+  "turn-start",
+  "turn-finished",
+  "human-gate-request",
+  "tool-approval-request",
+  "human-interaction-request",
+]);
+const ToolMessageTypes = new Set([
+  "tool-todo-snapshot",
+  "tool-mode-status",
+  "tool-background-task-status",
+  "tool-warning",
+]);
 
 export function isResultMessage(message: AiMessage): boolean {
   return (
@@ -14,7 +26,11 @@ export function isResultMessage(message: AiMessage): boolean {
 
 export function collapseConsecutiveSystemMessages(messages: AiMessage[]): AiMessage[] {
   return messages.filter(
-    (message, index) => message.role !== "system" || messages[index + 1]?.role !== "system",
+    (message, index) =>
+      message.role !== "system" ||
+      ToolMessageTypes.has(String(message.additionalProperties?.type)) ||
+      messages[index + 1]?.role !== "system" ||
+      ToolMessageTypes.has(String(messages[index + 1]?.additionalProperties?.type)),
   );
 }
 

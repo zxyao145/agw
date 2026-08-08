@@ -4,7 +4,10 @@ using System.Text.Json.Serialization.Metadata;
 
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
+using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Utils;
 
@@ -37,6 +40,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     private const string HistoryScopeMetadataKey = "historyScope";
 
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IApplicationLock _applicationLock;
     private readonly ILogger<EfCoreChatHistoryProvider> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly JsonSerializerOptions _jsonSerializerOptions;
@@ -50,8 +54,24 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         ILogger<EfCoreChatHistoryProvider> logger,
         TimeProvider timeProvider,
         JsonSerializerOptions? jsonSerializerOptions = null)
+        : this(
+            serviceScopeFactory,
+            InMemoryApplicationLock.Shared,
+            logger,
+            timeProvider,
+            jsonSerializerOptions)
+    {
+    }
+
+    public EfCoreChatHistoryProvider(
+        IServiceScopeFactory serviceScopeFactory,
+        IApplicationLock applicationLock,
+        ILogger<EfCoreChatHistoryProvider> logger,
+        TimeProvider timeProvider,
+        JsonSerializerOptions? jsonSerializerOptions = null)
     {
         _serviceScopeFactory = serviceScopeFactory;
+        _applicationLock = applicationLock;
         _logger = logger;
         _timeProvider = timeProvider;
         _jsonSerializerOptions = jsonSerializerOptions ?? DefaultJsonSerializerOptions;
@@ -161,7 +181,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 continue;
             }
 
-            if (IsResult(message))
+            if (IsExcludedFromModelHistory(message))
             {
                 continue;
             }
@@ -171,8 +191,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         // 旧会话可能残留没有对应响应的工具审批请求，FunctionInvokingChatClient 会在下一轮重放历史时直接抛错。
         // 响应也可能随本轮输入提交，因此合并检查后只过滤仍未答复的请求。
+        var requestMessages = context.RequestMessages.ToList();
         var approvalResponseCallIds = messages
-            .Concat(context.RequestMessages)
+            .Concat(requestMessages)
             .SelectMany(message => message.Contents)
             .OfType<ToolApprovalResponseContent>()
             .Select(content => content.ToolCall)
@@ -184,7 +205,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .Select(message => RemoveUnansweredToolApprovalRequests(message, approvalResponseCallIds))
             .OfType<ChatMessage>()
             .ToList();
-        return RemoveOrphanedFunctionResults(filteredMessages);
+        return RemoveIncompleteFunctionCallsAndOrphanedResults(
+            filteredMessages,
+            requestMessages);
     }
 
     /// <summary>
@@ -199,7 +222,11 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        var preludeMessages = context.Session == null
+            ? Array.Empty<ChatMessage>()
+            : ConversationHistoryPrelude.Take(context.Session);
         var newMessages = context.RequestMessages
+            .Concat(preludeMessages)
             .Concat(context.ResponseMessages ?? [])
             .ToList();
         if (newMessages.Count == 0)
@@ -249,6 +276,12 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         }
 
         contextId = ContextIdUtil.NormalizeContextId(contextId);
+
+        await using var mutationLease = await _applicationLock
+            .AcquireAsync(
+                $"conversation-history:{projectId:D}:{contextId}",
+                cancellationToken)
+            .ConfigureAwait(false);
 
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
@@ -336,7 +369,15 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
         string.Equals(type?.ToString(), "result", StringComparison.Ordinal);
 
+    private static bool IsExcludedFromModelHistory(ChatMessage message) =>
+        IsResult(message) || IsToolMessage(message);
+
+    private static bool IsToolMessage(ChatMessage message) =>
+        message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
+        ToolMessageTypes.IsToolMessage(type?.ToString());
+
     private static bool HasContent(ChatMessage message) =>
+        IsToolMessage(message) ||
         message.Contents.Any(content =>
             content is not TextContent textContent ||
             !string.IsNullOrWhiteSpace(textContent.Text));
@@ -368,51 +409,110 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         return metadata;
     }
 
-    private static List<ChatMessage> RemoveOrphanedFunctionResults(IReadOnlyList<ChatMessage> messages)
+    private static List<ChatMessage> RemoveIncompleteFunctionCallsAndOrphanedResults(
+        IReadOnlyList<ChatMessage> messages,
+        IReadOnlyList<ChatMessage> followingMessages)
     {
+        // Per-service-call persistence stores the assistant function call before invoking the tool.
+        // Its result arrives as the next service call's request, so pairing must cross that boundary.
+        var allMessages = followingMessages.Count == 0
+            ? messages
+            : messages.Concat(followingMessages).ToList();
         var result = new List<ChatMessage>(messages.Count);
-        var pendingCallIds = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var message in messages)
+        for (var index = 0; index < messages.Count;)
         {
-            if (message.Role == ChatRole.Assistant)
+            var message = allMessages[index];
+            var functionCalls = message.Role == ChatRole.Assistant
+                ? message.Contents.OfType<FunctionCallContent>().ToList()
+                : [];
+            if (functionCalls.Count > 0)
             {
-                pendingCallIds.Clear();
-                pendingCallIds.UnionWith(message.Contents
-                    .OfType<FunctionCallContent>()
-                    .Select(content => content.CallId));
+                var toolMessageEnd = index + 1;
+                while (toolMessageEnd < allMessages.Count && allMessages[toolMessageEnd].Role == ChatRole.Tool)
+                {
+                    toolMessageEnd++;
+                }
+
+                var resultCallIds = allMessages
+                    .Skip(index + 1)
+                    .Take(toolMessageEnd - index - 1)
+                    .SelectMany(toolMessage => toolMessage.Contents)
+                    .OfType<FunctionResultContent>()
+                    .Select(content => content.CallId)
+                    .ToHashSet(StringComparer.Ordinal);
+                var matchedCallIds = functionCalls
+                    .Select(content => content.CallId)
+                    .Where(resultCallIds.Contains)
+                    .ToHashSet(StringComparer.Ordinal);
+
+                AddFilteredMessage(
+                    result,
+                    message,
+                    message.Contents
+                        .Where(content =>
+                            content is not FunctionCallContent functionCall ||
+                            matchedCallIds.Contains(functionCall.CallId))
+                        .ToList());
+
+                var pendingCallIds = new HashSet<string>(matchedCallIds, StringComparer.Ordinal);
+                for (var toolMessageIndex = index + 1;
+                     toolMessageIndex < toolMessageEnd && toolMessageIndex < messages.Count;
+                     toolMessageIndex++)
+                {
+                    var toolMessage = allMessages[toolMessageIndex];
+                    AddFilteredMessage(
+                        result,
+                        toolMessage,
+                        toolMessage.Contents
+                            .Where(content =>
+                                content is not FunctionResultContent functionResult ||
+                                pendingCallIds.Remove(functionResult.CallId))
+                            .ToList());
+                }
+
+                index = toolMessageEnd;
+                continue;
+            }
+
+            if (message.Role == ChatRole.Tool)
+            {
+                AddFilteredMessage(
+                    result,
+                    message,
+                    message.Contents
+                        .Where(content => content is not FunctionResultContent)
+                        .ToList());
+            }
+            else
+            {
                 result.Add(message);
-                continue;
             }
 
-            if (message.Role != ChatRole.Tool)
-            {
-                pendingCallIds.Clear();
-                result.Add(message);
-                continue;
-            }
-
-            var contents = message.Contents
-                .Where(content =>
-                    content is not FunctionResultContent functionResult ||
-                    pendingCallIds.Remove(functionResult.CallId))
-                .ToList();
-            if (contents.Count == 0)
-            {
-                continue;
-            }
-
-            if (contents.Count == message.Contents.Count)
-            {
-                result.Add(message);
-                continue;
-            }
-
-            var filteredMessage = message.Clone();
-            filteredMessage.Contents = contents;
-            result.Add(filteredMessage);
+            index++;
         }
 
         return result;
+    }
+
+    private static void AddFilteredMessage(
+        ICollection<ChatMessage> destination,
+        ChatMessage source,
+        IList<AIContent> contents)
+    {
+        if (contents.Count == 0)
+        {
+            return;
+        }
+
+        if (contents.Count == source.Contents.Count)
+        {
+            destination.Add(source);
+            return;
+        }
+
+        var filteredMessage = source.Clone();
+        filteredMessage.Contents = contents;
+        destination.Add(filteredMessage);
     }
 
     private static ChatMessage? RemoveUnansweredToolApprovalRequests(

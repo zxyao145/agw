@@ -3,12 +3,14 @@ using System.Text.Json;
 
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 
@@ -48,6 +50,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private readonly IAgentRuntimeService _agentRuntimeService;
     private readonly IProviderSessionState _providerSessionState;
     private readonly IAgentTurnSummaryService _summaryService;
+    private readonly IConversationHistoryWriter? _conversationHistoryWriter;
+    private readonly AgentSessionStateStore? _sessionStateStore;
     private readonly AgentflowWorkflowCompiler _workflowCompiler = new();
 
     public AgentflowRuntimeService(
@@ -58,7 +62,9 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         AgentflowDomainService agentflowDomainService,
         IAgentRuntimeService agentRuntimeService,
         IProviderSessionState providerSessionState,
-        IAgentTurnSummaryService summaryService)
+        IAgentTurnSummaryService summaryService,
+        AgentSessionStateStore? sessionStateStore = null,
+        IConversationHistoryWriter? conversationHistoryWriter = null)
     {
         _logger = logger;
         _agentflowRepository = agentflowRepository;
@@ -68,6 +74,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         _agentRuntimeService = agentRuntimeService;
         _providerSessionState = providerSessionState;
         _summaryService = summaryService;
+        _sessionStateStore = sessionStateStore;
+        _conversationHistoryWriter = conversationHistoryWriter;
     }
 
     public async Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default)
@@ -103,7 +111,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         string? contextId = null,
         Guid? taskId = null,
         IHumanGateApprovalHandler? humanGateApprovalHandler = null,
-        IReadOnlyDictionary<string, string>? environmentVariables = null)
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
+        Guid? conversationId = null)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null)
@@ -118,7 +127,13 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             resolvedProjectId,
             resolvedContextId,
             resolvedTaskId);
-        var sessionScope = CreateSessionScope(resolvedProjectId, resolvedContextId, resolvedTaskId);
+        var sessionScope = await CreateSessionScopeAsync(
+                resolvedProjectId,
+                resolvedContextId,
+                resolvedTaskId,
+                conversationId,
+                cancellationToken)
+            .ConfigureAwait(false);
         var workflowLease = await CreateAiWorkflow(
             agentflow,
             cancellationToken,
@@ -169,6 +184,31 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                             "External request {RequestId} from port {PortId}",
                             externalRequest.RequestId,
                             externalRequest.PortInfo.PortId);
+
+                        if (externalRequest.TryGetDataAs(
+                                out Microsoft.Extensions.AI.ToolApprovalRequestContent? toolApprovalRequest))
+                        {
+                            if (humanGateApprovalHandler == null)
+                            {
+                                _logger.LogWarning(
+                                    "Tool approval {RequestId} has no active approval handler.",
+                                    externalRequest.RequestId);
+                                await run.CancelRunAsync();
+                                yield return CreateToolApprovalUnavailableMessage(toolApprovalRequest);
+                                yield return TurnMessageFactory.CreateFinished();
+                                yield break;
+                            }
+
+                            var toolApprovalGate = ToolApprovalSupport.CreateRequest(
+                                toolApprovalRequest,
+                                externalRequest.PortInfo.PortId);
+                            yield return ToolApprovalSupport.CreateMessage(toolApprovalGate);
+                            var toolDecision = await humanGateApprovalHandler
+                                .WaitForApprovalAsync(toolApprovalGate, cancellationToken);
+                            var response = ToolApprovalSupport.CreateResponse(toolApprovalRequest, toolDecision);
+                            await run.SendResponseAsync(externalRequest.CreateResponse(response));
+                            break;
+                        }
 
                         if (!humanGateNodes.TryGetValue(externalRequest.PortInfo.PortId, out var humanGateNode))
                         {
@@ -346,16 +386,41 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         return await CreateAiWorkflow(agentflow, cancellationToken);
     }
 
-    private AgentflowAgentSessionScope CreateSessionScope(
+    private async Task<AgentflowAgentSessionScope> CreateSessionScopeAsync(
         Guid projectId,
         string contextId,
-        Guid? taskId)
+        Guid? taskId,
+        Guid? conversationId,
+        CancellationToken cancellationToken)
     {
+        var resolvedConversationId =
+            conversationId.HasValue && conversationId.Value != Guid.Empty
+                ? conversationId.Value
+                : await ResolveProjectContextIdAsync(projectId, contextId, cancellationToken)
+                    .ConfigureAwait(false);
         return new AgentflowAgentSessionScope(
             _providerSessionState,
             projectId,
             contextId.Trim(),
-            taskId);
+            taskId,
+            _sessionStateStore,
+            _conversationHistoryWriter,
+            resolvedConversationId);
+    }
+
+    private async Task<Guid> ResolveProjectContextIdAsync(
+        Guid projectId,
+        string contextId,
+        CancellationToken cancellationToken)
+    {
+        if (_sessionStateStore == null)
+        {
+            return Guid.Empty;
+        }
+
+        return await _sessionStateStore
+            .ResolveProjectContextIdAsync(projectId, contextId, cancellationToken)
+            .ConfigureAwait(false) ?? Guid.Empty;
     }
 
     private async Task<AgentflowWorkflowLease?> CreateAiWorkflow(
@@ -406,7 +471,13 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             projectId,
             resolvedContextId,
             taskId.Value);
-        var sessionScope = CreateSessionScope(projectId, resolvedContextId, taskId);
+        var sessionScope = await CreateSessionScopeAsync(
+                projectId,
+                resolvedContextId,
+                taskId,
+                conversationId: null,
+                cancellationToken)
+            .ConfigureAwait(false);
         var workflowLease = await CreateAiWorkflow(
             agentflow,
             cancellationToken,
@@ -429,14 +500,28 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         var outputs = new List<AgwMessage>();
         await foreach (var evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
         {
-            if (evt is AgentResponseUpdateEvent updateEvt)
+            if (evt is RequestInfoEvent requestInfo)
+            {
+                await run.CancelRunAsync();
+                if (!requestInfo.Request.TryGetDataAs(
+                        out Microsoft.Extensions.AI.ToolApprovalRequestContent? toolApprovalRequest))
+                {
+                    throw new AgwException(
+                        ErrorCodes.AgentExecutionFailed,
+                        $"External request '{requestInfo.Request.RequestId}' cannot be handled during unattended Agentflow execution.");
+                }
+
+                throw new AgwException(
+                    ErrorCodes.AgentExecutionFailed,
+                    $"Tool approval '{toolApprovalRequest.RequestId}' cannot be requested during unattended Agentflow execution.");
+            }
+            else if (evt is AgentResponseUpdateEvent updateEvt)
             {
                 _logger.LogDebug("{ExecutorId}: {Data}", updateEvt.ExecutorId, updateEvt.Data);
             }
             else if (evt is WorkflowOutputEvent outputEvt)
             {
                 outputs.AddRange(CreateWorkflowOutputMessages(outputEvt.Data));
-                break;
             }
         }
 
@@ -506,10 +591,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                 AIAgent? aiAgent;
                 if (node.Kind == AgentflowNodeKind.Agent && node.RelateId.HasValue)
                 {
-                    aiAgent = await _agentRuntimeService.CreateAiAgentAsync(
+                    aiAgent = await _agentRuntimeService.CreateAgentflowNodeAgentAsync(
                         node.RelateId.Value,
                         sessionScope?.ProjectId,
-                        resume: false,
+                        sessionScope?.ConversationId ?? Guid.Empty,
                         environmentVariables,
                         cancellationToken: cancellationToken);
                     if (aiAgent != null)
@@ -698,6 +783,25 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             AiRole.System,
             [new AgwErrorContent { Content = "HumanGate requires an active approval channel." }],
             additionalProperties);
+    }
+
+    private static AgwMessage CreateToolApprovalUnavailableMessage(
+        Microsoft.Extensions.AI.ToolApprovalRequestContent request)
+    {
+        var properties = new AdditionalPropertiesDictionary
+        {
+            { "type", "tool-approval-unavailable" },
+            { "requestId", request.RequestId }
+        };
+        return new AgwMessage(
+            Guid.CreateVersion7().Normalize(),
+            Constants.DefaultAgentAuthor,
+            AiRole.System,
+            [new AgwErrorContent
+            {
+                Content = "Tool approval requires an active interactive approval channel."
+            }],
+            properties);
     }
 
     private static AgwMessage CreateWorkflowErrorMessage(Exception? exception)
