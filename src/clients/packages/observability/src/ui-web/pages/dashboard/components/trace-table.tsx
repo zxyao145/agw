@@ -78,7 +78,7 @@ export function TraceTable() {
         <div className="mb-4">
           <h2 className="text-base font-semibold text-light">Execution traces</h2>
           <p className="mt-1 text-sm text-dust">
-            Inspect agentflow node executions across projects and contexts.
+            Inspect agentflow node executions across projects and conversations.
           </p>
         </div>
 
@@ -96,14 +96,14 @@ export function TraceTable() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="trace-context-id">Context ID</Label>
+              <Label htmlFor="trace-context-id">Conversation ID</Label>
               <Input
                 id="trace-context-id"
                 value={draftFilters.contextId}
                 onChange={(event) =>
                   setDraftFilters((current) => ({ ...current, contextId: event.target.value }))
                 }
-                placeholder="Context identifier"
+                placeholder="Conversation identifier"
               />
             </div>
             <div className="space-y-1.5">
@@ -163,7 +163,7 @@ export function TraceTable() {
             <TableHead className="min-w-44">Node</TableHead>
             <TableHead className="text-right">Duration</TableHead>
             <TableHead className="min-w-66">Project</TableHead>
-            <TableHead className="min-w-66">Context</TableHead>
+            <TableHead className="min-w-66">Conversation</TableHead>
             <TableHead className="min-w-66">Agentflow</TableHead>
             <TableHead className="min-w-64">Input</TableHead>
             <TableHead className="min-w-64">Error</TableHead>

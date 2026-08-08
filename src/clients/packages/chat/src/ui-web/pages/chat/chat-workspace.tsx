@@ -801,7 +801,7 @@ export function ChatWorkspace({
         await loadContextHistory(selectedProjectId, context.contextId);
         setIsDrawerOpen(false);
       } catch (error) {
-        toast.error(`Failed to load context: ${getApiErrorMessage(error)}`);
+        toast.error(`Failed to load conversation: ${getApiErrorMessage(error)}`);
       }
     },
     [loadContextHistory, selectedProjectId],

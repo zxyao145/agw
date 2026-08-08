@@ -153,6 +153,13 @@ test("chat page does not expose the share current URL action", async () => {
   );
 });
 
+test("chat history load errors use conversation terminology", async () => {
+  const workspaceSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
+
+  assert.match(workspaceSource, /Failed to load conversation:/);
+  assert.doesNotMatch(workspaceSource, /Failed to load context:/);
+});
+
 test("chat routes do not read or generate execution id query parameters", async () => {
   const [pageSource, conversationDetailsSource, jobLogsSource] = await Promise.all([
     readFile(CHAT_WORKSPACE_URL, "utf8"),

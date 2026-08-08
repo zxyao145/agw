@@ -4,6 +4,12 @@ import test from "node:test";
 import * as ts from "typescript";
 
 const PROJECT_DETAILS_MODULE_URL = new URL("./project-details.ts", import.meta.url);
+const PROJECT_DETAILS_PAGE_URL = new URL("./page.tsx", import.meta.url);
+const CONVERSATION_DETAILS_PAGE_URL = new URL("../conversations/details/page.tsx", import.meta.url);
+const CONVERSATION_LIST_URL = new URL(
+  "../../../components/task/conversation-list.tsx",
+  import.meta.url,
+);
 
 async function importProjectDetailsModule() {
   try {
@@ -257,7 +263,7 @@ test("getProjectDetailItems keeps the existing project detail fields and placeho
 });
 
 test("project page wires details and create-task dialogs through shared helpers", async () => {
-  const pageSourceText = await readFile(new URL("./page.tsx", import.meta.url), "utf8");
+  const pageSourceText = await readFile(PROJECT_DETAILS_PAGE_URL, "utf8");
   const pageSource = parseSourceFile(pageSourceText);
   const { CREATE_TASK_BUTTON_LABEL, DETAILS_BUTTON_LABEL, PROJECT_DETAILS_DIALOG_TITLE } =
     await importProjectDetailsModule();
@@ -298,4 +304,25 @@ test("project page wires details and create-task dialogs through shared helpers"
     hasDialogTitleIdentifier(pageSource, "PROJECT_DETAILS_DIALOG_TITLE"),
     "details dialog title should use PROJECT_DETAILS_DIALOG_TITLE",
   );
+});
+
+test("project conversation UI uses conversation terminology", async () => {
+  const [projectDetailsSource, conversationDetailsSource, conversationListSource] =
+    await Promise.all([
+      readFile(PROJECT_DETAILS_PAGE_URL, "utf8"),
+      readFile(CONVERSATION_DETAILS_PAGE_URL, "utf8"),
+      readFile(CONVERSATION_LIST_URL, "utf8"),
+    ]);
+
+  assert.match(conversationListSource, />Conversations<\/h2>/);
+  assert.match(conversationListSource, /aria-label="Refresh conversations"/);
+  assert.match(conversationListSource, />Total conversations:<\/span>/);
+  assert.doesNotMatch(
+    conversationListSource,
+    /Chat Contexts|Refresh chat contexts|Total contexts:/,
+  );
+
+  assert.match(projectDetailsSource, /Conversation ID:/);
+  assert.match(conversationDetailsSource, /Conversation ID/);
+  assert.doesNotMatch(`${projectDetailsSource}\n${conversationDetailsSource}`, /Context ID/);
 });

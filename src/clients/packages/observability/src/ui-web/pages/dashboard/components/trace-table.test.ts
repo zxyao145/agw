@@ -13,6 +13,20 @@ test("Execution traces uses the shared card surface", async () => {
   assert.doesNotMatch(source, /bg-charcoal/);
 });
 
+test("Execution traces uses conversation terminology", async () => {
+  const source = await readFile(TRACE_TABLE_URL, "utf8");
+
+  assert.match(source, /across projects and conversations\./);
+  assert.match(source, /<Label htmlFor="trace-context-id">Conversation ID<\/Label>/);
+  assert.match(source, /placeholder="Conversation identifier"/);
+  assert.match(source, /<TableHead className="min-w-66">Conversation<\/TableHead>/);
+
+  assert.doesNotMatch(source, /across projects and contexts\./);
+  assert.doesNotMatch(source, />Context ID<\/Label>/);
+  assert.doesNotMatch(source, /placeholder="Context identifier"/);
+  assert.doesNotMatch(source, />Context<\/TableHead>/);
+});
+
 test("date range filters use the shared shadcn date-time picker", async () => {
   const source = await readFile(TRACE_TABLE_URL, "utf8");
 

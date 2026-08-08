@@ -259,7 +259,8 @@ export default function ProjectDetailsPage() {
 
                       <div className="grid gap-1 text-xs text-muted-foreground">
                         <div>
-                          Context ID: <span className="font-mono">{conversation.contextId}</span>
+                          Conversation ID:{" "}
+                          <span className="font-mono">{conversation.contextId}</span>
                         </div>
                         <div>
                           Executions: {conversation.executionCount} · Messages:{" "}

@@ -218,7 +218,7 @@ export function ConversationList({
   return (
     <div className="flex flex-col bg-muted/30 w-full h-full min-h-0">
       <div className="p-4 border-b flex items-center justify-between">
-        <h2 className="font-semibold text-sm">Chat Contexts</h2>
+        <h2 className="font-semibold text-sm">Conversations</h2>
         <div className="tools">
           <Button
             className="cursor-pointer"
@@ -226,7 +226,7 @@ export function ConversationList({
             variant="ghost"
             onClick={refreshContexts}
             disabled={isRefreshing}
-            aria-label="Refresh chat contexts"
+            aria-label="Refresh conversations"
           >
             <RotateCw
               className={cn("h-4 w-4", isRefreshing && "animate-spin text-muted-foreground")}
@@ -334,7 +334,7 @@ export function ConversationList({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total contexts:</span>
+                <span className="text-muted-foreground">Total conversations:</span>
                 <span className="font-mono font-medium">{contexts.length}</span>
               </div>
             </div>

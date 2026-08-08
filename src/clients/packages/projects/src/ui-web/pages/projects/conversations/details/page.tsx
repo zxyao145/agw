@@ -134,7 +134,7 @@ export default function ConversationDetailsPage() {
             <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
               <div className="space-y-1">
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Context ID
+                  Conversation ID
                 </div>
                 <div className="break-all font-mono text-xs">{conversation.contextId}</div>
               </div>
