@@ -14,6 +14,12 @@ module.exports = {
     buildVersion: releaseVersion,
     asar: true,
     icon: path.resolve(__dirname, "assets", "agw-logo"),
+    protocols: [
+      {
+        name: "Agw Desktop OAuth",
+        schemes: ["agw-desktop"],
+      },
+    ],
     extraResource: [
       path.resolve(__dirname, "resources", "renderer"),
       path.resolve(__dirname, "resources", "package-flavor.json"),
@@ -56,6 +62,7 @@ module.exports = {
           homepage: "https://github.com/zxyao145/agw",
           icon: path.resolve(__dirname, "assets", "agw-logo.png"),
           categories: ["Development", "Utility"],
+          mimeType: ["x-scheme-handler/agw-desktop"],
         },
       },
     },

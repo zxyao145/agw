@@ -3,8 +3,6 @@ namespace Agw.Agents.Execution.Turns;
 public interface IRuntimeTurnContextAccessor
 {
     RuntimeTurnContext? Current { get; }
-
-    IDisposable Push(RuntimeTurnContext context);
 }
 
 public sealed class RuntimeTurnContextAccessor : IRuntimeTurnContextAccessor
@@ -13,7 +11,7 @@ public sealed class RuntimeTurnContextAccessor : IRuntimeTurnContextAccessor
 
     public RuntimeTurnContext? Current => _current.Value;
 
-    public IDisposable Push(RuntimeTurnContext context)
+    internal IDisposable Push(RuntimeTurnContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         var previous = _current.Value;

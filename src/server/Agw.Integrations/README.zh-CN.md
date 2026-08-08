@@ -305,18 +305,18 @@ EF Model 声明了导航与级联关系，但当前 Integration Migration 有意
 
 ```mermaid
 sequenceDiagram
-    participant UI as Web Client
+    participant UI as Web/Desktop Client
     participant API as OAuthController
     participant App as OAuthAuthorizationAppService
     participant DB as Integration Storage
     participant DP as Data Protection
     participant Provider as OAuth Provider
 
-    UI->>API: POST authorize-start(connectionId, returnPath)
+    UI->>API: POST authorize-start(connectionId, returnPath, completionTarget)
     API->>App: StartAsync
     App->>DB: 解析 Connection 和启用的 Installation
     App->>DB: 必要时读取已解密的 Client Secret
-    App->>DP: 保护 state(ConnectionId, PKCE verifier, returnPath)，有效期 10 分钟
+    App->>DP: 保护 state(ConnectionId, PKCE verifier, callback URI, returnPath, completion target)，有效期 10 分钟
     App->>DB: status = PendingAuthorization
     App-->>UI: authorizationUrl
     UI->>Provider: 浏览器跳转
@@ -328,10 +328,10 @@ sequenceDiagram
     App->>DB: 设置 Access/Refresh/ID Token Credential Value
     DB->>DP: SaveChanges 时加密标记字段
     App->>DB: 保存 Subject，status = Ready
-    API-->>UI: 重定向到已校验的本地 Return Path
+    API-->>UI: Web 重定向或 Desktop Deep Link，最终进入 Integrations
 ```
 
-Callback URI 由服务端构造。Return Path 必须是安全的本地相对路径。OAuth State 的有效期是十分钟，内容包括 Connection ID、可选 PKCE Verifier、Return Path 和过期时间。
+第三方 Provider 始终回调服务端。`Integrations:OAuth:PublicBaseUrl` 可配置服务端对外可访问的 Base URL，`Integrations:OAuth:WebBaseUrl` 可配置 Web Client 的 Base URL。Return Path 必须是安全的本地相对路径。OAuth State 的有效期是十分钟，内容包括 Connection ID、可选 PKCE Verifier、精确的 Callback URI、Return Path、Completion Target 和过期时间。Web 流程跳转到 Web Integrations 页面；Desktop 流程打开 `agw-desktop://oauth/complete`，再由应用进入 Desktop Integrations 页面。
 
 ## Agent 运行时数据流
 
@@ -590,8 +590,10 @@ Content-Type: application/json
 | PUT | `/api/integrations/connections` | 更新可变 Connection 字段；Alias 和定义组合保持不变。 |
 | DELETE | `/api/integrations/connections?id={id}` | 删除 Connection 及其 Credential/绑定。 |
 | POST | `/api/integrations/connections/validate` | 重新计算本地定义、配置、解密和过期状态。 |
+| GET | `/api/integrations/oauth/callback-info` | 返回需要在第三方 Provider 注册的、由服务端确定的 Callback URL。 |
 | POST | `/api/integrations/oauth/authorize-start` | 生成 Authorization URL 和受保护 State。 |
-| GET | `/api/integrations/oauth/callback` | 处理第三方重定向，再跳回 Web Client。 |
+| GET | `/api/integrations/oauth/callback` | 处理第三方重定向，再把完成结果交给发起流程的 Web 或 Desktop Client。 |
+| GET | `/api/integrations/oauth/desktop-complete` | 在系统浏览器中把 Desktop 完成结果桥接到 Desktop Deep Link。 |
 | POST | `/api/integrations/oauth/refresh` | 刷新定义中声明支持 Refresh 的 OAuth Connection。 |
 
 所有 JSON API 都返回 Bens.Results Envelope；OAuth Callback 是协议要求的重定向响应。`AuthSchemeType`、Status、Secret Action、Transport Kind、Binding Target 等枚举都以字符串序列化。

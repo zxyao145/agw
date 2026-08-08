@@ -89,6 +89,7 @@ public sealed class OAuthAuthorizationAppService
         Guid connectionId,
         string callbackUri,
         string returnPath,
+        OAuthCompletionTarget completionTarget,
         string user,
         CancellationToken cancellationToken)
     {
@@ -96,7 +97,12 @@ public sealed class OAuthAuthorizationAppService
         ValidateCallbackUri(callbackUri);
         var context = await ResolveContextAsync(connectionId, cancellationToken);
         var verifier = context.Settings.UsePkce ? CreatePkceVerifier() : null;
-        var state = _stateProtector.Protect(connectionId, verifier, returnPath);
+        var state = _stateProtector.Protect(
+            connectionId,
+            verifier,
+            returnPath,
+            callbackUri,
+            completionTarget);
         var parameters = new Dictionary<string, string?>(
             context.Settings.AdditionalAuthorizeParameters.ToDictionary(
                 item => item.Key,
@@ -140,14 +146,15 @@ public sealed class OAuthAuthorizationAppService
         string? protectedState,
         string? authorizationCode,
         string? providerError,
-        string callbackUri,
         string user,
         CancellationToken cancellationToken)
     {
-        ValidateCallbackUri(callbackUri);
         if (!_stateProtector.TryUnprotect(protectedState, out var state) || state == null)
         {
-            return FailedRedirect("/integrations", InvalidStateRedirectCode);
+            return FailedRedirect(
+                "/integrations",
+                InvalidStateRedirectCode,
+                OAuthCompletionTarget.Web);
         }
 
         OAuthConnectionContext context;
@@ -157,7 +164,10 @@ public sealed class OAuthAuthorizationAppService
         }
         catch (AgwException)
         {
-            return FailedRedirect(state.ReturnPath, InvalidStateRedirectCode);
+            return FailedRedirect(
+                state.ReturnPath,
+                InvalidStateRedirectCode,
+                state.CompletionTarget);
         }
 
         if (!string.IsNullOrWhiteSpace(providerError) || string.IsNullOrWhiteSpace(authorizationCode))
@@ -167,12 +177,15 @@ public sealed class OAuthAuthorizationAppService
                 ConnectionStatus.PendingAuthorization,
                 AuthorizationDeniedCode,
                 user);
-            return FailedRedirect(state.ReturnPath, AuthorizationDeniedRedirectCode);
+            return FailedRedirect(
+                state.ReturnPath,
+                AuthorizationDeniedRedirectCode,
+                state.CompletionTarget);
         }
 
         try
         {
-            var form = BuildTokenForm(context, callbackUri);
+            var form = BuildTokenForm(context, state.CallbackUri);
             form["grant_type"] = "authorization_code";
             form["code"] = authorizationCode;
             if (!string.IsNullOrWhiteSpace(state.PkceVerifier))
@@ -186,7 +199,7 @@ public sealed class OAuthAuthorizationAppService
             context.Connection.Subject = subject;
             MarkReady(context.Connection, user);
             await _unitOfWork.SaveChangesAsync();
-            return SucceededRedirect(state.ReturnPath);
+            return SucceededRedirect(state.ReturnPath, state.CompletionTarget);
         }
         catch (Exception exception) when (IsProviderFailure(exception, cancellationToken))
         {
@@ -198,7 +211,10 @@ public sealed class OAuthAuthorizationAppService
                 ConnectionStatus.Invalid,
                 TokenExchangeFailedCode,
                 user);
-            return FailedRedirect(state.ReturnPath, TokenExchangeFailedRedirectCode);
+            return FailedRedirect(
+                state.ReturnPath,
+                TokenExchangeFailedRedirectCode,
+                state.CompletionTarget);
         }
     }
 
@@ -602,16 +618,22 @@ public sealed class OAuthAuthorizationAppService
         }
     }
 
-    private static OAuthCallbackResult SucceededRedirect(string returnPath)
+    private static OAuthCallbackResult SucceededRedirect(
+        string returnPath,
+        OAuthCompletionTarget completionTarget)
     {
         return new OAuthCallbackResult
         {
             Success = true,
-            RedirectPath = QueryHelpers.AddQueryString(returnPath, "oauth", SuccessRedirectCode)
+            RedirectPath = QueryHelpers.AddQueryString(returnPath, "oauth", SuccessRedirectCode),
+            CompletionTarget = completionTarget
         };
     }
 
-    private static OAuthCallbackResult FailedRedirect(string returnPath, string code)
+    private static OAuthCallbackResult FailedRedirect(
+        string returnPath,
+        string code,
+        OAuthCompletionTarget completionTarget)
     {
         return new OAuthCallbackResult
         {
@@ -622,7 +644,8 @@ public sealed class OAuthAuthorizationAppService
                 {
                     ["oauth"] = "error",
                     ["code"] = code
-                })
+                }),
+            CompletionTarget = completionTarget
         };
     }
 

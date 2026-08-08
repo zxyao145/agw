@@ -1,7 +1,9 @@
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Commands.Exec;
+using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
 using Agw.Shared.AgwMsgVm;
@@ -23,10 +25,6 @@ public sealed record RuntimeStartRequest(
 
 public interface IRuntimeFactory
 {
-    Task<ExecutionTaskResolutionResult> ResolveTaskAsync(
-        ExecutionTaskRequest request,
-        CancellationToken cancellationToken);
-
     Task<RuntimeStartResult> StartAsync(
         RuntimeStartRequest request,
         CancellationToken cancellationToken);
@@ -34,37 +32,32 @@ public interface IRuntimeFactory
 
 public sealed class RuntimeFactory : IRuntimeFactory
 {
-    private readonly ITaskAppService _taskAppService;
     private readonly IAgentRuntimeService _agentRuntimeService;
     private readonly AgentflowRuntimeService _agentflowRuntimeService;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
-    private readonly IRuntimeTurnContextAccessor _turnContextAccessor;
+    private readonly RuntimeTurnContextAccessor _turnContextAccessor;
+    private readonly HumanInteractionContextAccessor _humanInteractionContextAccessor;
 
     public RuntimeFactory(
-        ITaskAppService taskAppService,
         IAgentRuntimeService agentRuntimeService,
         AgentflowRuntimeService agentflowRuntimeService,
         IAgwFileSystemResolver fileSystemResolver,
-        IRuntimeTurnContextAccessor turnContextAccessor)
+        RuntimeTurnContextAccessor turnContextAccessor,
+        HumanInteractionContextAccessor humanInteractionContextAccessor)
     {
-        _taskAppService = taskAppService;
         _agentRuntimeService = agentRuntimeService;
         _agentflowRuntimeService = agentflowRuntimeService;
         _fileSystemResolver = fileSystemResolver;
         _turnContextAccessor = turnContextAccessor;
+        _humanInteractionContextAccessor = humanInteractionContextAccessor;
     }
-
-    public Task<ExecutionTaskResolutionResult> ResolveTaskAsync(
-        ExecutionTaskRequest request,
-        CancellationToken cancellationToken) =>
-        _taskAppService.ResolveTaskAsync(request, cancellationToken);
 
     public async Task<RuntimeStartResult> StartAsync(
         RuntimeStartRequest request,
         CancellationToken cancellationToken)
     {
         var executionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        await EnsureWorkspaceAsync(request.TurnContext.Settings.ProjectId, cancellationToken);
+        await EnsureWorkspaceAsync(request.TurnContext.ProjectId, cancellationToken);
 
         switch (request.Command.AgentType)
         {
@@ -77,7 +70,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
                         session = await _agentRuntimeService.CreateRuntimeAsync(
                             request.AgentId,
                             request.Task,
-                            request.TurnContext.Settings,
+                            request.TurnContext.Settings.ToCommand(),
                             cancellationToken);
                     }
 
@@ -87,16 +80,23 @@ public sealed class RuntimeFactory : IRuntimeFactory
                         return default;
                     }
 
+                    var coordinator = new HumanGateApprovalCoordinator(request.TurnContext.PendingHumanGateChanged);
                     return StartTurn(
                         session,
                         request.TurnContext,
                         executionCts,
-                        session.CancelActiveRequest,
+                        () =>
+                        {
+                            session.CancelActiveRequest();
+                            coordinator.CancelAll();
+                        },
                         ct => ExecuteAgentAsync(
                             session,
                             request.Command,
+                            coordinator,
                             request.TurnContext.MessageSink,
-                            ct));
+                            ct),
+                        coordinator.TrySubmitAsync);
                 }
             case AgentRuntimeType.Agentflow:
                 {
@@ -107,7 +107,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
                         session = new AgentflowRuntime(
                             request.AgentId,
                             request.Task,
-                            request.TurnContext.Settings,
+                            request.TurnContext.Settings.ToCommand(),
                             _agentflowRuntimeService);
                     }
 
@@ -141,18 +141,32 @@ public sealed class RuntimeFactory : IRuntimeFactory
     private async Task ExecuteAgentAsync(
         AgentRuntime session,
         ExecCommand command,
+        IHumanGateApprovalHandler approvalHandler,
         IExecutionMessageSink sink,
         CancellationToken cancellationToken)
     {
+        using var interactionScope = _humanInteractionContextAccessor.Push(
+            new ExecutionHumanInteractionChannel(approvalHandler, sink));
         session.ResetCancellationToken();
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             session.CancellationToken);
         var linkedToken = linkedCts.Token;
+        var effectiveApprovalHandler = command.Stream
+            ? approvalHandler
+            : new MessageSinkApprovalHandler(approvalHandler, sink);
         var messages = command.Stream
-            ? _agentRuntimeService.ExecuteStreamingAsync(session, command.Input, linkedToken)
+            ? _agentRuntimeService.ExecuteStreamingAsync(
+                session,
+                command.Input,
+                effectiveApprovalHandler,
+                linkedToken)
             : ToAsyncEnumerable(
-                () => _agentRuntimeService.ExecuteAsync(session, command.Input, linkedToken));
+                () => _agentRuntimeService.ExecuteAsync(
+                    session,
+                    command.Input,
+                    effectiveApprovalHandler,
+                    linkedToken));
         await TurnPipeline.RunAsync(
             messages,
             command.Stream,
@@ -167,6 +181,8 @@ public sealed class RuntimeFactory : IRuntimeFactory
         IExecutionMessageSink sink,
         CancellationToken cancellationToken)
     {
+        using var interactionScope = _humanInteractionContextAccessor.Push(
+            new ExecutionHumanInteractionChannel(humanGateApprovalHandler, sink));
         await TurnPipeline.RunAsync(
             runtime.ExecuteStreamingAsync(command, humanGateApprovalHandler, cancellationToken),
             command.Stream,
@@ -218,7 +234,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
     /// </summary>
     private static bool CanReuseAgentSession(
         AgentRuntime? session,
-        SettingCommand settings,
+        ExecutionSettings settings,
         string resolvedContextId)
     {
         if (session == null) return false;
@@ -226,5 +242,29 @@ public sealed class RuntimeFactory : IRuntimeFactory
             string.IsNullOrWhiteSpace(settings.ContextId) ? resolvedContextId : settings.ContextId);
         return string.Equals(session._contextId, contextId, StringComparison.Ordinal)
                && session._projectId == ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);
+    }
+
+    private sealed class MessageSinkApprovalHandler : IHumanGateApprovalHandler
+    {
+        private readonly IHumanGateApprovalHandler _inner;
+        private readonly IExecutionMessageSink _sink;
+
+        public MessageSinkApprovalHandler(
+            IHumanGateApprovalHandler inner,
+            IExecutionMessageSink sink)
+        {
+            _inner = inner;
+            _sink = sink;
+        }
+
+        public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
+            HumanGateApprovalRequest request,
+            CancellationToken cancellationToken)
+        {
+            await _sink.WriteAsync(
+                ToolApprovalSupport.CreateMessage(request),
+                cancellationToken);
+            return await _inner.WaitForApprovalAsync(request, cancellationToken);
+        }
     }
 }

@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Tools;
 
 namespace Agw.Agents.Definitions.Contracts;
 
@@ -9,7 +10,7 @@ public record AgentCreateRequest(
     string Description,
     string SystemPrompt,
     Guid? ModelProviderId,
-    string? Tools = null,  // JSON array of tool names
+    List<ToolValueObject>? Tools = null,
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
     List<Guid>? ConnectionIds = null,
@@ -29,7 +30,7 @@ public sealed class AgentUpdateRequest
     private string? _description;
     private string? _systemPrompt;
     private Guid? _modelProviderId;
-    private string? _tools;
+    private List<ToolValueObject>? _tools;
     private List<Guid>? _mcpToolServerIds;
     private List<Guid>? _skillIds;
     private List<Guid>? _connectionIds;
@@ -78,7 +79,7 @@ public sealed class AgentUpdateRequest
         }
     }
 
-    public string? Tools
+    public List<ToolValueObject>? Tools
     {
         get => _tools;
         init
@@ -207,7 +208,7 @@ public sealed record AgentResponse(
     Guid? ModelProviderId,
     Guid? SummaryModelProviderId,
     bool EnableSummary,
-    string? Tools,
+    IReadOnlyList<ToolValueObject> Tools,
     AgentType Type,
     string? Extra,
     IReadOnlyDictionary<string, string> EnvironmentVariables,

@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 
 using Agw.Agents.Execution.Agentflows.Builders;
 using Agw.Agents.Execution.Agentflows.Observability;
+using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
@@ -14,12 +15,40 @@ using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Execution.Agentflows;
 
-internal sealed record AgentflowAgentSessionScope(
-    IProviderSessionState ProviderSessionState,
-    Guid ProjectId,
-    string ContextId,
-    Guid? TaskId)
+internal sealed class AgentflowAgentSessionScope
 {
+    public AgentflowAgentSessionScope(
+        IProviderSessionState providerSessionState,
+        Guid projectId,
+        string contextId,
+        Guid? taskId,
+        AgentSessionStateStore? sessionStateStore = null,
+        IConversationHistoryWriter? conversationHistoryWriter = null,
+        Guid conversationId = default)
+    {
+        ProviderSessionState = providerSessionState;
+        ProjectId = projectId;
+        ConversationId = conversationId;
+        ContextId = contextId;
+        TaskId = taskId;
+        SessionStateStore = sessionStateStore;
+        ConversationHistoryWriter = conversationHistoryWriter;
+    }
+
+    public IProviderSessionState ProviderSessionState { get; }
+
+    public Guid ProjectId { get; }
+
+    public Guid ConversationId { get; }
+
+    public string ContextId { get; }
+
+    public Guid? TaskId { get; }
+
+    private AgentSessionStateStore? SessionStateStore { get; }
+
+    private IConversationHistoryWriter? ConversationHistoryWriter { get; }
+
     public void Initialize(AgentSession session, Guid? agentflowId, string nodeId)
     {
         if (agentflowId.HasValue)
@@ -38,6 +67,75 @@ internal sealed record AgentflowAgentSessionScope(
                 ProjectId);
         }
     }
+
+    public async Task<AgentSession> GetOrCreateAsync(
+        AIAgent aiAgent,
+        Guid agentId,
+        Guid? agentflowId,
+        string nodeId,
+        AgentSession? fallbackSession,
+        CancellationToken cancellationToken)
+    {
+        AgentSession session;
+        if (SessionStateStore == null)
+        {
+            session = fallbackSession ??
+                await aiAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            session = await SessionStateStore.GetOrCreateForNodeAsync(
+                    aiAgent,
+                    CreateStateScope(agentId, agentflowId, nodeId),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        Initialize(session, agentflowId, nodeId);
+        return session;
+    }
+
+    public Task SaveAsync(
+        AIAgent aiAgent,
+        AgentSession session,
+        Guid agentId,
+        Guid? agentflowId,
+        string nodeId,
+        CancellationToken cancellationToken)
+    {
+        return SessionStateStore?.SaveForNodeAsync(
+                CreateStateScope(agentId, agentflowId, nodeId),
+                aiAgent,
+                session,
+                cancellationToken) ??
+            Task.CompletedTask;
+    }
+
+    public Task PersistToolBlockMessagesAsync(
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken)
+    {
+        return ConversationHistoryWriter == null || messages.Count == 0
+            ? Task.CompletedTask
+            : ConversationHistoryWriter.AppendAsync(
+                ProjectId,
+                ContextId,
+                messages,
+                cancellationToken);
+    }
+
+    private AgentSessionStateScope CreateStateScope(
+        Guid agentId,
+        Guid? agentflowId,
+        string nodeId) =>
+        new(
+            ConversationId,
+            ProjectId,
+            ContextId,
+            agentId,
+            agentflowId.HasValue
+                ? $"{agentflowId.Value:N}:{nodeId}"
+                : nodeId);
 }
 
 internal sealed record AgentflowSummaryContext(
@@ -58,6 +156,7 @@ public sealed class AgentflowWorkflowCompiler
     {
         EmitAgentResponseEvents = true,
         EmitAgentUpdateEvents = true,
+        InterceptUserInputRequests = false,
         // 避免转发前面所有节点的输出
         ForwardIncomingMessages = false,
         ReassignOtherAgentsAsUsers = true,

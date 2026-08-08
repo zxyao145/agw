@@ -3,6 +3,7 @@ using System.Text.Json;
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Contracts.Management;
+using Agw.Integrations.Contracts.OAuth;
 using Agw.Integrations.Controllers;
 using Agw.Integrations.Infrastructure.Plugins;
 
@@ -36,6 +37,10 @@ public class IntegrationManagementControllerTests
 
         Assert.Equal("api/integrations/oauth", RouteOf<OAuthController>());
         AssertMethod<OAuthController>(
+            nameof(OAuthController.GetCallbackInfo),
+            typeof(HttpGetAttribute),
+            "callback-info");
+        AssertMethod<OAuthController>(
             nameof(OAuthController.AuthorizeStartAsync),
             typeof(HttpPostAttribute),
             "authorize-start");
@@ -43,6 +48,10 @@ public class IntegrationManagementControllerTests
             nameof(OAuthController.CallbackAsync),
             typeof(HttpGetAttribute),
             "callback");
+        AssertMethod<OAuthController>(
+            nameof(OAuthController.DesktopComplete),
+            typeof(HttpGetAttribute),
+            "desktop-complete");
         AssertMethod<OAuthController>(
             nameof(OAuthController.RefreshAsync),
             typeof(HttpPostAttribute),
@@ -77,6 +86,7 @@ public class IntegrationManagementControllerTests
         Assert.Equal("\"Mcp\"", JsonSerializer.Serialize(CapabilitySourceKindResponse.Mcp));
         Assert.Equal("\"OAuth2\"", JsonSerializer.Serialize(AuthSchemeTypeResponse.OAuth2));
         Assert.Equal("\"AkSk\"", JsonSerializer.Serialize(AuthSchemeTypeResponse.AkSk));
+        Assert.Equal("\"Desktop\"", JsonSerializer.Serialize(OAuthCompletionTarget.Desktop));
     }
 
     private static string RouteOf<TController>()

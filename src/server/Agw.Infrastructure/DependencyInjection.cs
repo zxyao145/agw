@@ -1,5 +1,5 @@
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Infrastructure.Configuration;
+using Agw.Infrastructure.Coordination;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Data.Interceptors;
@@ -9,10 +9,13 @@ using Agw.Infrastructure.Skills;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Configuration;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
+using Agw.Skills.Application.Remote;
 
 using Medallion.Threading;
 using Medallion.Threading.Postgres;
@@ -109,6 +112,8 @@ public static class DependencyInjection
             });
         services.AddSingleton<IProjectExecutionLock, ProjectExecutionLockRouter>();
         services.AddSingleton<IRemoteSkillRefreshLock, RemoteSkillRefreshLockRouter>();
+        services.AddSingleton<InMemoryApplicationLock>();
+        services.AddSingleton<IApplicationLock, ApplicationLockRouter>();
 
         return services;
     }

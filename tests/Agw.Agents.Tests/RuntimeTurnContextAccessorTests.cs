@@ -1,7 +1,10 @@
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
+using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data;
 
 namespace Agw.Agents.Tests;
 
@@ -52,12 +55,23 @@ public class RuntimeTurnContextAccessorTests
         Assert.Null(accessor.Current);
     }
 
-    private static RuntimeTurnContext CreateContext(string userName) =>
-        new(
-            new SettingCommand(Guid.CreateVersion7()),
+    private static RuntimeTurnContext CreateContext(string userName)
+    {
+        var projectId = Guid.CreateVersion7();
+        return new RuntimeTurnContext(
+            ExecutionSettings.FromCommand(new SettingCommand(projectId)),
+            new TaskProjection
+            {
+                TaskId = Guid.CreateVersion7(),
+                ProjectId = projectId,
+                ContextId = "context",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+            },
+            new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
             userName,
             "/workspace",
             new NullSink());
+    }
 
     private sealed class NullSink : IExecutionMessageSink
     {

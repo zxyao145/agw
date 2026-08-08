@@ -20,6 +20,22 @@ test("system mode searches only API suggestions and keeps skill/tool name collis
   assert.equal(searchCommand("compact", { mode: "system", suggestions: [] }).length, 0);
 });
 
+test("system mode searches concrete tools expanded from tool blocks", () => {
+  const suggestions = searchCommand("todos", {
+    mode: "system",
+    suggestions: [
+      { text: "/todos_add", description: "Tool · Todo", kind: "tool" },
+      { text: "/todos_complete", description: "Tool · Todo", kind: "tool" },
+      { text: "/git_clone", description: "Tool · Git", kind: "tool" },
+    ],
+  });
+
+  assert.deepEqual(
+    new Set(suggestions.map((suggestion) => suggestion.text)),
+    new Set(["/todos_add", "/todos_complete"]),
+  );
+});
+
 test("claudeCode mode merges defaults and normalized init commands while filtering ignored commands", () => {
   const suggestions = searchCommand("", {
     mode: "claudeCode",

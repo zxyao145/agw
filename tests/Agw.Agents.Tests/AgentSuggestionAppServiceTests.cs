@@ -6,15 +6,18 @@ using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.ExternalAgents;
 using Agw.Domain.Services;
-using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+using Agw.Tools.ContextualTools.WebSearch;
+using Agw.Tools.ToolBlocks;
+using Agw.Tools.ToolBlocks.Blocks.Mode;
+using Agw.Tools.ToolBlocks.Blocks.Todo;
 
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -41,7 +44,11 @@ public class AgentSuggestionAppServiceTests
             Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            Tools = """["Deploy","missing","broken"]""",
+            Tools =
+            [
+                new ToolValue { Definition = new BashToolDefinition() },
+                new ToolBlockValue { Definition = new TodoToolBlockDefinition() }
+            ],
             AgentSkillRelations =
             [
                 new AgentSkillRelation { SkillId = deploySkill.Id },
@@ -51,7 +58,11 @@ public class AgentSuggestionAppServiceTests
         var project = new Project
         {
             Id = Guid.CreateVersion7(),
-            Tools = """["deploy","search"]""",
+            Tools =
+            [
+                new ToolValue { Definition = new WebFetchToolDefinition() },
+                new ToolBlockValue { Definition = new ModeToolBlockDefinition() }
+            ],
             ProjectSkillRelations =
             [
                 new ProjectSkillRelation { SkillId = deploySkill.Id },
@@ -60,51 +71,115 @@ public class AgentSuggestionAppServiceTests
         var service = CreateService(
             agents: [agent],
             projects: [project],
-            skills: [deploySkill, reviewSkill],
-            tools:
-            [
-                new TestTool("deploy", "Operations", "Runs deployment"),
-                new TestTool("search", "Knowledge", string.Empty),
-            ]);
+            skills: [deploySkill, reviewSkill]);
 
         var response = await service.GetSuggestionsAsync(project.Id, agent.Id);
 
         Assert.Equal(AgentSuggestionMode.System, response.Mode);
         Assert.Equal(
-        [
-            new AgentSuggestionResponse("/deploy", "Skill · Deploy the application", AgentSuggestionKind.Skill),
-            new AgentSuggestionResponse("/deploy", "Tool · Operations · Runs deployment", AgentSuggestionKind.Tool),
-            new AgentSuggestionResponse("/review", "Skill", AgentSuggestionKind.Skill),
-            new AgentSuggestionResponse("/search", "Tool · Knowledge", AgentSuggestionKind.Tool),
-        ],
-            response.Suggestions);
+            [
+                "/bash",
+                "/deploy",
+                "/mode_get",
+                "/mode_set",
+                "/review",
+                "/todos_add",
+                "/todos_complete",
+                "/todos_get_all",
+                "/todos_get_remaining",
+                "/todos_remove",
+                "/web_fetch"
+            ],
+            response.Suggestions.Select(static suggestion => suggestion.Text));
+        Assert.Contains(
+            response.Suggestions,
+            static suggestion => suggestion.Text == "/bash" && suggestion.Kind == AgentSuggestionKind.Tool);
+        Assert.Contains(
+            response.Suggestions,
+            static suggestion => suggestion.Text == "/deploy" && suggestion.Kind == AgentSuggestionKind.Skill);
+        Assert.Contains(
+            response.Suggestions,
+            static suggestion =>
+                suggestion.Text == "/mode_get" &&
+                suggestion.Description == "Tool · Mode · Allows the agent to switch between plan and execute modes." &&
+                suggestion.Kind == AgentSuggestionKind.Tool);
+        Assert.Contains(
+            response.Suggestions,
+            static suggestion =>
+                suggestion.Text == "/todos_add" &&
+                suggestion.Description == "Tool · Todo · Tracks multi-step work with a persistent todo list." &&
+                suggestion.Kind == AgentSuggestionKind.Tool);
     }
 
     [Fact]
-    public async Task GetSuggestionsAsync_SystemAgent_IgnoresMalformedAndUnknownTools()
+    public async Task GetSuggestionsAsync_SystemAgent_DeduplicatesAgentAndProjectTools()
     {
         var agent = new Agent
         {
             Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            Tools = "{malformed",
+            Tools =
+            [
+                new ToolValue { Definition = new WebFetchToolDefinition() }
+            ],
         };
         var project = new Project
         {
             Id = Guid.CreateVersion7(),
-            Tools = """["known","unknown","KNOWN"]""",
+            Tools =
+            [
+                new ToolValue { Definition = new WebFetchToolDefinition() }
+            ],
         };
         var service = CreateService(
             agents: [agent],
-            projects: [project],
-            tools: [new TestTool("known", "Default", "Known tool")]);
+            projects: [project]);
 
         var response = await service.GetSuggestionsAsync(project.Id, agent.Id);
 
         var suggestion = Assert.Single(response.Suggestions);
-        Assert.Equal("/known", suggestion.Text);
+        Assert.Equal("/web_fetch", suggestion.Text);
         Assert.Equal(AgentSuggestionKind.Tool, suggestion.Kind);
+    }
+
+    [Fact]
+    public async Task GetSuggestionsAsync_SystemAgent_DeduplicatesAgentAndProjectToolBlockMembers()
+    {
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "system-agent",
+            Type = AgentType.System,
+            Tools =
+            [
+                new ToolBlockValue { Definition = new TodoToolBlockDefinition() }
+            ],
+        };
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Tools =
+            [
+                new ToolBlockValue { Definition = new TodoToolBlockDefinition() }
+            ],
+        };
+        var service = CreateService(
+            agents: [agent],
+            projects: [project]);
+
+        var response = await service.GetSuggestionsAsync(project.Id, agent.Id);
+
+        Assert.Equal(
+            ["/todos_add", "/todos_complete", "/todos_get_all", "/todos_get_remaining", "/todos_remove"],
+            response.Suggestions.Select(static suggestion => suggestion.Text));
+        Assert.All(
+            response.Suggestions,
+            static suggestion =>
+            {
+                Assert.Equal("Tool · Todo · Tracks multi-step work with a persistent todo list.", suggestion.Description);
+                Assert.Equal(AgentSuggestionKind.Tool, suggestion.Kind);
+            });
     }
 
     [Fact]
@@ -120,7 +195,10 @@ public class AgentSuggestionAppServiceTests
             Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            Tools = """["agent-tool"]""",
+            Tools =
+            [
+                new ToolValue { Definition = new WebSearchToolDefinition() }
+            ],
             AgentSkillRelations =
             [
                 new AgentSkillRelation { SkillId = agentSkill.Id },
@@ -128,14 +206,13 @@ public class AgentSuggestionAppServiceTests
         };
         var service = CreateService(
             agents: [agent],
-            skills: [agentSkill],
-            tools: [new TestTool("agent-tool", "Default", "Agent tool")]);
+            skills: [agentSkill]);
 
         var response = await service.GetSuggestionsAsync(default, agent.Id);
 
         Assert.Equal(AgentSuggestionMode.System, response.Mode);
         Assert.Equal(
-            ["/agent-skill", "/agent-tool"],
+            ["/agent-skill", "/web_search"],
             response.Suggestions.Select(item => item.Text).ToArray());
     }
 
@@ -204,12 +281,16 @@ public class AgentSuggestionAppServiceTests
         var json = JsonSerializer.Serialize(
             new AgentSuggestionsResponse(
                 AgentSuggestionMode.ClaudeCode,
-                [new AgentSuggestionResponse("/deploy", "Skill", AgentSuggestionKind.Skill)]),
+                [
+                    new AgentSuggestionResponse("/deploy", "Skill", AgentSuggestionKind.Skill),
+                    new AgentSuggestionResponse("/todos_add", "Tool · Todo", AgentSuggestionKind.Tool)
+                ]),
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         Assert.Contains("ApiResult", result.GetType().Name, StringComparison.Ordinal);
         Assert.Contains("\"mode\":\"claudeCode\"", json, StringComparison.Ordinal);
         Assert.Contains("\"kind\":\"skill\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"kind\":\"tool\"", json, StringComparison.Ordinal);
         Assert.Contains(
             typeof(AgentsController)
                 .GetMethod(nameof(AgentsController.SuggestionsAsync))!
@@ -220,17 +301,13 @@ public class AgentSuggestionAppServiceTests
     private static AgentSuggestionAppService CreateService(
         IEnumerable<Agent>? agents = null,
         IEnumerable<Project>? projects = null,
-        IEnumerable<Skill>? skills = null,
-        IEnumerable<IAgwTool>? tools = null)
+        IEnumerable<Skill>? skills = null)
     {
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
-            new ServiceCollection().BuildServiceProvider());
-        foreach (var tool in tools ?? [])
-        {
-            registry.RegisterTool(tool);
-        }
-
+            new ServiceCollection().BuildServiceProvider(),
+            [new WebSearchContextualTool()],
+            new ToolBlockRegistry([new TodoToolBlock(), new ModeToolBlock()]));
         return new AgentSuggestionAppService(
             new TestRepository<Agent>(agents),
             new TestRepository<Project>(projects),
@@ -293,23 +370,4 @@ public class AgentSuggestionAppServiceTests
         public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    private sealed class TestTool : IAgwTool
-    {
-        public TestTool(string name, string category, string description)
-        {
-            Name = name;
-            Category = category;
-            Description = description;
-        }
-
-        public string Name { get; }
-
-        public string Category { get; }
-
-        public string Description { get; }
-
-        public AITool ToAITool() => AIFunctionFactory.Create(
-            (Func<string>)(() => Name),
-            new AIFunctionFactoryOptions { Name = Name, Description = Description });
-    }
 }

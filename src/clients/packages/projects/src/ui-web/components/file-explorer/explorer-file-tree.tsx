@@ -198,7 +198,8 @@ function FileTreeNode({
 
   return (
     <div>
-      <ContextMenu>
+      {/* Avoid stacking Radix pointer locks with the delete dialog when this node unmounts. */}
+      <ContextMenu modal={false}>
         <ContextMenuTrigger asChild>
           <div
             className={cn(

@@ -17,6 +17,15 @@ public static class DependencyInjection
     public static IServiceCollection AddIntegrations(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDataProtection();
+        services.AddOptions<OAuthRedirectOptions>()
+            .Bind(configuration.GetSection(OAuthRedirectOptions.SectionName))
+            .Validate(
+                options => OAuthRedirectUriResolver.IsValidOptionalBaseUrl(options.PublicBaseUrl),
+                "Integrations:OAuth:PublicBaseUrl must be an absolute HTTP(S) base URL.")
+            .Validate(
+                options => OAuthRedirectUriResolver.IsValidOptionalBaseUrl(options.WebBaseUrl),
+                "Integrations:OAuth:WebBaseUrl must be an absolute HTTP(S) base URL.")
+            .ValidateOnStart();
         services.AddSingleton<IPluginCatalog, BuiltInPluginCatalog>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IConnectionCredentialReader, ConnectionCredentialReader>();
@@ -25,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<PluginInstallationAppService>();
         services.AddScoped<ConnectionAppService>();
         services.AddSingleton<OAuthStateProtector>();
+        services.AddSingleton<OAuthRedirectUriResolver>();
         services.AddScoped<OAuthAuthorizationAppService>();
         services.AddScoped<OAuthRefreshAppService>();
         services.AddSingleton<IMcpToolMaterializer, McpToolMaterializer>();

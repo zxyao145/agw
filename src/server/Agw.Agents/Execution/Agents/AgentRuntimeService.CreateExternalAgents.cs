@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 
 using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.ExternalAgents;
 using Agw.Files.Utils;
 using Agw.Shared.Data.Entities.Agents;
@@ -25,7 +26,8 @@ public partial class AgentRuntimeService
         CreateAiAgentRequest request,
         Project project,
         IReadOnlyDictionary<string, string> environmentVariables,
-        [NotNullWhen(true)] out AIAgent? aiAgent)
+        [NotNullWhen(true)] out AIAgent? aiAgent,
+        bool isBackground = false)
     {
         aiAgent = null;
         if (request.Agent.Type != AgentType.External)
@@ -51,14 +53,23 @@ public partial class AgentRuntimeService
 
         if (aiAgent != null)
         {
-            aiAgent = aiAgent.AsBuilder()
+            var agentBuilder = aiAgent.AsBuilder()
                 .Use(
                     runFunc: _observabilityMiddleware.LogRunMiddleware,
                     runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware)
                 .Use(
                     runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
-                    runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware)
-                .Build();
+                    runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware);
+            if (isBackground)
+            {
+                var approvalMiddleware = new BackgroundAgentApprovalMiddleware(
+                    _humanInteractionContextAccessor);
+                agentBuilder.Use(
+                    runFunc: approvalMiddleware.RejectNewApprovalAsync,
+                    runStreamingFunc: approvalMiddleware.RejectNewApprovalStreamingAsync);
+            }
+
+            aiAgent = agentBuilder.Build();
         }
 
         return aiAgent != null;

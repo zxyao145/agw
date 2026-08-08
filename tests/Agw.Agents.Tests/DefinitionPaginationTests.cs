@@ -1,6 +1,5 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Controllers;
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Domain.Services.Skills;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -10,6 +9,7 @@ using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application;
+using Agw.Skills.Application.Remote;
 using Agw.Skills.Controllers;
 
 using Microsoft.AspNetCore.Mvc;

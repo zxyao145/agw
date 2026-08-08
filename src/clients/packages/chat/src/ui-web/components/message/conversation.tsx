@@ -8,6 +8,11 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { collapseConsecutiveSystemMessages } from "../../../lib/chat/ai-message-handlers";
 import { cn } from "@agw/components";
 import { MessageTrigger } from "../message-trigger";
+import type { PendingHumanGate } from "../../../services/execution-hub";
+import { matchesHumanInteractionCall } from "../../../services/human-interaction-call";
+import { getHumanInteractionQuestionResult } from "../../../services/human-interaction";
+import { HumanInteractionPanel } from "./human-interaction-panel";
+import { HumanInteractionQuestionResultView } from "./human-interaction-question-result";
 
 export interface ChatSessionProps {
   messages: AiMessage[];
@@ -15,6 +20,9 @@ export interface ChatSessionProps {
   messagesEndRef: React.RefObject<HTMLDivElement>;
   processMessages?: (msgs: AiMessage[]) => ProcessedMessageItem[];
   scrollable?: boolean;
+  pendingHumanInteraction?: (PendingHumanGate & { requestType: "human-interaction" }) | null;
+  onHumanInteractionSubmit?: (responseData: unknown) => void;
+  onHumanInteractionCancel?: () => void;
 }
 
 type MessageMeta = {
@@ -60,6 +68,14 @@ function getMessageMeta(message: AiMessage): MessageMeta | null {
   };
 }
 
+function getFunctionToolName(message: AiMessage): string | null {
+  const functionCall = message.contents.find(
+    (content) => content.type === MessageContentType.FunctionCallContent,
+  );
+  const toolName = functionCall?.additionalProperties?.toolName;
+  return typeof toolName === "string" && toolName.trim() ? toolName.trim() : null;
+}
+
 const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
   const items: ProcessedMessageItem[] = [];
   type FragmentType = "normal" | "result" | "function-call" | "function-result";
@@ -82,7 +98,7 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
       continue;
     }
 
-    if ((!message.author && message.role !== "system") || message.contents.length === 0) {
+    if ((message.role === "user" && !message.author) || message.contents.length === 0) {
       continue;
     }
 
@@ -190,6 +206,9 @@ export function Conversation({
   messagesEndRef,
   processMessages = defaultProcessMessages,
   scrollable = true,
+  pendingHumanInteraction = null,
+  onHumanInteractionSubmit,
+  onHumanInteractionCancel,
 }: ChatSessionProps) {
   if (!messages || messages.length == 0) {
     return (
@@ -204,6 +223,19 @@ export function Conversation({
   }
 
   const visibleMessages = collapseConsecutiveSystemMessages(messages);
+  const processedMessages = processMessages(visibleMessages);
+  let humanInteractionItemIndex = -1;
+  if (pendingHumanInteraction && onHumanInteractionSubmit && onHumanInteractionCancel) {
+    for (let index = 0; index < processedMessages.length; index += 1) {
+      const item = processedMessages[index];
+      if (
+        item?.type === "normal" &&
+        matchesHumanInteractionCall(item.message, pendingHumanInteraction)
+      ) {
+        humanInteractionItemIndex = index;
+      }
+    }
+  }
 
   return (
     <div className={cn("min-h-full w-full flex-1", scrollable && "overflow-y-auto agw-scrollbar")}>
@@ -219,9 +251,52 @@ export function Conversation({
           </div>
         )}
 
-        {processMessages(visibleMessages).map((item, index) => {
+        {processedMessages.map((item, index) => {
+          if (
+            index === humanInteractionItemIndex &&
+            item.type === "normal" &&
+            pendingHumanInteraction &&
+            onHumanInteractionSubmit &&
+            onHumanInteractionCancel
+          ) {
+            const toolName = pendingHumanInteraction.toolName ?? getFunctionToolName(item.message);
+            return (
+              <div
+                className="mx-4 max-w-full"
+                key={index}
+                data-msg-id={item.message.messageId}
+                data-function-call-id={pendingHumanInteraction.callId}
+              >
+                <div className="mb-2 flex items-center gap-2 px-1">
+                  <Badge variant="secondary" className="text-xs">
+                    {toolName ?? "Function"}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">Waiting for your input</span>
+                </div>
+                <HumanInteractionPanel
+                  request={pendingHumanInteraction}
+                  embedded
+                  onSubmit={onHumanInteractionSubmit}
+                  onCancel={onHumanInteractionCancel}
+                />
+              </div>
+            );
+          }
+
           // function call / tool use
           if (item.type === "accordion") {
+            const questionResult =
+              item.toolName === "ask_user_question"
+                ? getHumanInteractionQuestionResult(item.messages)
+                : null;
+            if (questionResult) {
+              return (
+                <div className="mx-4 max-w-[90%]" key={index}>
+                  <HumanInteractionQuestionResultView result={questionResult} />
+                </div>
+              );
+            }
+
             return (
               <div className="mx-4 max-w-[80%]" key={index}>
                 <Accordion type="single" collapsible className="w-full">

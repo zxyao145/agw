@@ -1,61 +1,149 @@
 using System.Diagnostics;
 
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 using Agw.Domain.Services;
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Mcp;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Tools;
+using Agw.Tools.Runtime;
+using Agw.Tools.ToolBlocks;
 
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Agents;
 
+/// <summary>
+/// Composes the runtime capabilities required by a System Agent.
+/// 聚合 System Agent 运行时所需的各类 Capability。
+/// </summary>
+/// <remarks>
+/// Resolves tools, connections, MCP tool servers, and Agent/Project Tool Blocks,
+/// validates tool-name conflicts, and returns their tools, providers, evaluators,
+/// approval rules, warnings, and owned resources as one <see cref="AgentCapabilityComposition"/>.
+/// 负责解析 Tool、Connection、MCP Tool Server 以及 Agent/Project ToolBlock，
+/// 校验工具名称冲突，并将工具、Provider、Evaluator、审批规则、警告和所拥有的资源
+/// 汇总为一个 <see cref="AgentCapabilityComposition"/>。
+/// The returned composition owns all materialized resources and must be disposed with the Agent.
+/// 返回的组合对象拥有所有物化资源，必须随 Agent 一同释放。
+/// </remarks>
 public sealed class AgentCapabilityComposer
 {
     private readonly AgentAppService _agentAppService;
     private readonly ToolRegistryService _toolRegistry;
     private readonly IConnectionCapabilityResolver _connectionCapabilityResolver;
     private readonly IMcpToolMaterializer _mcpToolMaterializer;
+    private readonly ToolBlockRegistry _toolBlockRegistry;
     private readonly ILogger<AgentCapabilityComposer> _logger;
+    private readonly IReadOnlyList<IAgentInstructionsSource> _instructionSources;
 
     public AgentCapabilityComposer(
         AgentAppService agentAppService,
         ToolRegistryService toolRegistry,
         IConnectionCapabilityResolver connectionCapabilityResolver,
         IMcpToolMaterializer mcpToolMaterializer,
-        ILogger<AgentCapabilityComposer> logger)
+        ToolBlockRegistry toolBlockRegistry,
+        ILogger<AgentCapabilityComposer> logger,
+        IEnumerable<IAgentInstructionsSource>? instructionSources = null)
     {
         _agentAppService = agentAppService;
         _toolRegistry = toolRegistry;
         _connectionCapabilityResolver = connectionCapabilityResolver;
         _mcpToolMaterializer = mcpToolMaterializer;
+        _toolBlockRegistry = toolBlockRegistry;
         _logger = logger;
+        _instructionSources = instructionSources?.ToArray() ?? [];
     }
 
     internal async Task<AgentCapabilityComposition> ComposeAsync(
         Agent agent,
         Project project,
         IReadOnlyDictionary<string, string> environmentVariables,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool supportsHostedWebSearch = false,
+        string defaultMode = "plan",
+        Func<IReadOnlyList<Guid>, CancellationToken, ValueTask<IReadOnlyList<Microsoft.Agents.AI.AIAgent>>>?
+            backgroundAgentFactory = null,
+        Guid conversationId = default)
     {
         var lease = new AgentResourceLease();
         var tools = new List<AITool>();
         var registeredToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var pluginSkills = new List<PluginSkillReference>();
         var warnings = new List<ConnectionCapabilityWarning>();
+        var contextProviders = new List<Microsoft.Agents.AI.AIContextProvider>();
+        var loopEvaluators = new List<Microsoft.Agents.AI.LoopEvaluator>();
+        var autoApprovalRules =
+            new List<Func<Microsoft.Agents.AI.ToolAutoApprovalRuleContext, ValueTask<bool>>>();
+        var toolWarnings = new List<string>();
+        var toolInvocationWarnings = new Dictionary<string, string>(
+            StringComparer.OrdinalIgnoreCase);
 
         try
         {
             if (agent.Type == AgentType.External)
             {
-                return new AgentCapabilityComposition(tools, pluginSkills, warnings, lease);
+                return new AgentCapabilityComposition(
+                    tools,
+                    pluginSkills,
+                    warnings,
+                    contextProviders,
+                    loopEvaluators,
+                    autoApprovalRules,
+                    toolWarnings,
+                    toolInvocationWarnings,
+                    lease);
             }
 
-            await AddStatelessToolsAsync(agent, project, tools, registeredToolNames)
+            contextProviders.Add(new AgwWorkspaceProvider(
+                agent,
+                project,
+                _instructionSources,
+                _logger));
+
+            var resolvedToolValues = ToolValueResolution.Resolve(agent.Tools, project.Tools);
+            var toolBlockDefinitions = resolvedToolValues.ToolBlocks
+                .Where(definition =>
+                    backgroundAgentFactory != null ||
+                    !string.Equals(
+                        definition.GetDefinitionName(),
+                        ToolBlockNames.BackgroundAgents,
+                        StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            var materializationContext = new ToolMaterializationContext
+            {
+                Agent = agent,
+                Project = project,
+                ConversationId = conversationId,
+                Workspace = project.Workspace ?? string.Empty,
+                DefaultMode = defaultMode,
+                EnvironmentVariables = environmentVariables,
+                BackgroundAgentFactory = backgroundAgentFactory,
+                SupportsHostedWebSearch = supportsHostedWebSearch
+            };
+
+            var toolContribution = await _toolRegistry
+                .MaterializeAsync(
+                    resolvedToolValues.Tools,
+                    materializationContext,
+                    cancellationToken)
                 .ConfigureAwait(false);
+            AddContribution(
+                toolContribution,
+                "built-in",
+                tools,
+                registeredToolNames,
+                contextProviders,
+                loopEvaluators,
+                autoApprovalRules,
+                toolWarnings,
+                toolInvocationWarnings,
+                lease);
 
             var connectionIds = agent.AgentConnectionRelations
                 .Select(relation => relation.ConnectionId)
@@ -98,34 +186,47 @@ public sealed class AgentCapabilityComposer
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            return new AgentCapabilityComposition(tools, pluginSkills, warnings, lease);
+            var contribution = await _toolBlockRegistry.MaterializeAsync(
+                    toolBlockDefinitions,
+                    ToolBlockScope.Agent | ToolBlockScope.Project,
+                    materializationContext,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            AddContribution(
+                contribution,
+                "tool-block",
+                tools,
+                registeredToolNames,
+                contextProviders,
+                loopEvaluators,
+                autoApprovalRules,
+                toolWarnings,
+                toolInvocationWarnings,
+                lease);
+            foreach (var warning in contribution.Warnings)
+            {
+                _logger.LogWarning(
+                    "Tool Block warning for agent {AgentId}: {Warning}",
+                    agent.Id,
+                    warning);
+            }
+
+            return new AgentCapabilityComposition(
+                tools,
+                pluginSkills,
+                warnings,
+                contextProviders,
+                loopEvaluators,
+                autoApprovalRules,
+                toolWarnings,
+                toolInvocationWarnings,
+                lease);
         }
         catch
         {
             await DisposeWithoutThrowingAsync(lease).ConfigureAwait(false);
             throw;
         }
-    }
-
-    private async Task AddStatelessToolsAsync(
-        Agent agent,
-        Project project,
-        ICollection<AITool> tools,
-        ISet<string> registeredToolNames)
-    {
-        var toolNames = await _agentAppService
-            .CollectNamedToolNamesAsync([agent.Tools, project.Tools])
-            .ConfigureAwait(false);
-        if (toolNames.Length == 0)
-        {
-            return;
-        }
-
-        AddTools(
-            tools,
-            registeredToolNames,
-            _toolRegistry.CreateAIFunctions(toolNames, project.Id),
-            "built-in");
     }
 
     private async Task AddIndependentMcpToolsAsync(
@@ -225,6 +326,47 @@ public sealed class AgentCapabilityComposer
             }
 
             destination.Add(tool);
+        }
+    }
+
+    private static void AddContribution(
+        ToolContribution contribution,
+        string source,
+        ICollection<AITool> tools,
+        ISet<string> registeredToolNames,
+        ICollection<Microsoft.Agents.AI.AIContextProvider> contextProviders,
+        ICollection<Microsoft.Agents.AI.LoopEvaluator> loopEvaluators,
+        ICollection<Func<Microsoft.Agents.AI.ToolAutoApprovalRuleContext, ValueTask<bool>>>
+            autoApprovalRules,
+        ICollection<string> warnings,
+        IDictionary<string, string> invocationWarnings,
+        AgentResourceLease lease)
+    {
+        lease.Add(contribution);
+        AddTools(tools, registeredToolNames, contribution.Tools, source);
+        foreach (var provider in contribution.ContextProviders)
+        {
+            contextProviders.Add(provider);
+        }
+
+        foreach (var evaluator in contribution.LoopEvaluators)
+        {
+            loopEvaluators.Add(evaluator);
+        }
+
+        foreach (var rule in contribution.AutoApprovalRules)
+        {
+            autoApprovalRules.Add(rule);
+        }
+
+        foreach (var warning in contribution.Warnings)
+        {
+            warnings.Add(warning);
+        }
+
+        foreach (var warning in contribution.InvocationWarnings)
+        {
+            invocationWarnings[warning.Key] = warning.Value;
         }
     }
 

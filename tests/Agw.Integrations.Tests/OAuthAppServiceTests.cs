@@ -8,6 +8,7 @@ using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Application.Plugins;
+using Agw.Integrations.Contracts.OAuth;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
@@ -42,6 +43,7 @@ public sealed class OAuthAppServiceTests
             scope.ConnectionId,
             CallbackUri,
             "/integrations?source=settings",
+            OAuthCompletionTarget.Web,
             "tester",
             cancellationToken);
 
@@ -81,6 +83,7 @@ public sealed class OAuthAppServiceTests
             scope.ConnectionId,
             CallbackUri,
             returnPath,
+            OAuthCompletionTarget.Web,
             "tester",
             cancellationToken));
 
@@ -107,6 +110,7 @@ public sealed class OAuthAppServiceTests
             scope.ConnectionId,
             CallbackUri,
             "/integrations",
+            OAuthCompletionTarget.Desktop,
             "tester",
             cancellationToken);
         var state = QueryHelpers.ParseQuery(new Uri(started.AuthorizationUrl).Query)["state"].ToString();
@@ -116,11 +120,11 @@ public sealed class OAuthAppServiceTests
             state,
             "authorization-code-sensitive",
             null,
-            CallbackUri,
             "tester",
             cancellationToken);
 
         Assert.True(result.Success);
+        Assert.Equal(OAuthCompletionTarget.Desktop, result.CompletionTarget);
         Assert.DoesNotContain("authorization-code-sensitive", result.RedirectPath, StringComparison.Ordinal);
         Assert.DoesNotContain(accessToken, result.RedirectPath, StringComparison.Ordinal);
         var request = Assert.Single(scope.Handler.Requests);
@@ -167,7 +171,6 @@ public sealed class OAuthAppServiceTests
             state,
             "code",
             null,
-            CallbackUri,
             "tester",
             cancellationToken);
 
@@ -200,7 +203,6 @@ public sealed class OAuthAppServiceTests
             state,
             "code",
             null,
-            CallbackUri,
             "tester",
             cancellationToken);
 
@@ -231,7 +233,6 @@ public sealed class OAuthAppServiceTests
             state,
             "code",
             null,
-            CallbackUri,
             "tester",
             cancellationToken);
 
@@ -256,7 +257,6 @@ public sealed class OAuthAppServiceTests
             state,
             "code",
             null,
-            CallbackUri,
             "tester",
             cancellationToken);
 
@@ -326,7 +326,6 @@ public sealed class OAuthAppServiceTests
             state,
             "callback-code-secret",
             null,
-            CallbackUri,
             "tester",
             cancellationToken);
 
@@ -353,7 +352,6 @@ public sealed class OAuthAppServiceTests
             state,
             null,
             "access_denied:secret-provider-description",
-            CallbackUri,
             "tester",
             cancellationToken);
 
@@ -373,6 +371,7 @@ public sealed class OAuthAppServiceTests
             scope.ConnectionId,
             CallbackUri,
             "/integrations",
+            OAuthCompletionTarget.Web,
             "tester",
             cancellationToken);
         return QueryHelpers.ParseQuery(new Uri(started.AuthorizationUrl).Query)["state"].ToString();

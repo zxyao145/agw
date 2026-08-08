@@ -52,16 +52,33 @@ public static class AgentRunResponseUpdateExtensions
 
     private static AgwContent? ConvertContent(AIContent content)
     {
-        var additionalProps = content.AdditionalProperties ?? [];
+        var additionalProps = content.AdditionalProperties == null
+            ? new AdditionalPropertiesDictionary()
+            : new AdditionalPropertiesDictionary(content.AdditionalProperties);
+        var citations = content.Annotations?
+            .OfType<CitationAnnotation>()
+            .Where(static citation => citation.Url != null)
+            .Select(static citation => new
+            {
+                title = citation.Title,
+                url = citation.Url!.ToString(),
+                snippet = citation.Snippet,
+                toolName = citation.ToolName
+            })
+            .ToArray();
+        if (citations?.Length > 0)
+        {
+            additionalProps["citations"] = citations;
+        }
 
         return content switch
         {
-            TextContent text => new AgwTextContent { Content = text.Text, AdditionalProperties = content.AdditionalProperties },
-            TextReasoningContent thinking => new AgwTextReasoningContent { Content = thinking.Text, AdditionalProperties = content.AdditionalProperties },
+            TextContent text => new AgwTextContent { Content = text.Text, AdditionalProperties = additionalProps },
+            TextReasoningContent thinking => new AgwTextReasoningContent { Content = thinking.Text, AdditionalProperties = additionalProps },
             FunctionCallContent call => CreateFunctionCallContent(call, additionalProps),
             FunctionResultContent result => CreateFunctionResultContent(result, additionalProps),
-            ErrorContent error => new AgwErrorContent { Content = error.Message, AdditionalProperties = content.AdditionalProperties },
-            UsageContent usage => new AgwUsageContent { Content = usage.Details, AdditionalProperties = content.AdditionalProperties },
+            ErrorContent error => new AgwErrorContent { Content = error.Message, AdditionalProperties = additionalProps },
+            UsageContent usage => new AgwUsageContent { Content = usage.Details, AdditionalProperties = additionalProps },
 
             UriContent uriContent => new AgwUriContent(uriContent.Uri, uriContent.MediaType),
             DataContent dataContent => new AgwDataContent(dataContent.Uri, dataContent.MediaType),

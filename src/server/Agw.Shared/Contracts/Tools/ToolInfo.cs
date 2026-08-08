@@ -1,14 +1,38 @@
+using System.Text.Json.Serialization;
+
 namespace Agw.Shared.Contracts.Tools;
 
+[JsonConverter(typeof(JsonStringEnumConverter<ToolCatalogItemKind>))]
+public enum ToolCatalogItemKind
+{
+    [JsonStringEnumMemberName("tool")]
+    Tool,
+
+    [JsonStringEnumMemberName("toolBlock")]
+    ToolBlock
+}
+
+[Flags]
+public enum ToolScope
+{
+    None = 0,
+    Agent = 1,
+    Project = 2
+}
+
 /// <summary>
-/// Represents information about a tool that can be used by an agent.
+/// Represents a selectable Tool or Tool Block in the Tools catalog.
 /// </summary>
 public record ToolInfo
 {
+    public ToolCatalogItemKind Kind { get; init; } = ToolCatalogItemKind.Tool;
+
     /// <summary>
     /// Gets the name of the tool (method name or custom name).
     /// </summary>
     public required string Name { get; init; }
+
+    public required string DisplayName { get; init; }
 
     /// <summary>
     /// Gets the description of the tool.
@@ -24,6 +48,12 @@ public record ToolInfo
     /// Gets the full type name of the class containing the tool.
     /// </summary>
     public required string TypeName { get; init; }
+
+    public IReadOnlyList<string> MemberToolNames { get; init; } = [];
+
+    public ToolScope Scopes { get; init; } = ToolScope.Agent | ToolScope.Project;
+
+    public bool RequiresWorkspace { get; init; }
 
     /// <summary>
     /// Gets the parameters of the tool.

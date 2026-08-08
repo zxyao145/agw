@@ -1,5 +1,5 @@
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Agents.Execution.Turns;
+using Agw.Skills.Contracts.Registration;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;

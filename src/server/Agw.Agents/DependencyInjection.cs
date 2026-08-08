@@ -2,15 +2,16 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.AIContextProviders.InstructionsExtensions;
+using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands;
+using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Agents.Execution.Turns;
+using Agw.Shared.Contracts.Agents;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +22,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddAgents(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
         services.AddScoped<AgentflowDomainService>();
         services.AddScoped<AgentflowAppService>();
         services.AddScoped<AgentflowTraceAppService>();
@@ -33,24 +35,19 @@ public static class DependencyInjection
         services.AddScoped<McpToolServerAppService>();
         services.AddScoped<AgentSessionStateStore>();
         services.AddScoped<AgentCapabilityComposer>();
-        services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
         services.AddScoped<IAgentRuntimeService, AgentRuntimeService>();
-        services.AddSingleton<IRemoteSkillClient, RemoteSkillHttpClient>();
-        services.AddSingleton<IRemoteSkillContentResolver, RemoteSkillContentResolver>();
-        services.AddHttpClient(
-            RemoteSkillHttpClient.HttpClientName,
-            client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();
         services.AddScoped<IAgentTurnSummaryService, AgentTurnSummaryService>();
         services.AddScoped<IRuntimeFactory, RuntimeFactory>();
-        services.AddScoped<IExecutionCommandHandler, SettingCommandHandler>();
-        services.AddScoped<IExecutionCommandHandler, ExecCommandHandler>();
-        services.AddScoped<IExecutionCommandHandler, InterruptCommandHandler>();
-        services.AddScoped<IExecutionCommandHandler, HumanResponseCommandHandler>();
+        services.AddExecutionCommands();
         services.AddScoped<ExecutionCommandDispatcher>();
+        services.AddScoped<ExecutionConnectionContextFactory>();
         services.AddSingleton<ExecutionConnectionRegistry>();
         services.AddSingleton<RuntimeTurnContextAccessor>();
         services.AddSingleton<IRuntimeTurnContextAccessor, RuntimeTurnContextAccessor>();
+        services.AddSingleton<HumanInteractionContextAccessor>();
+        services.AddSingleton<IHumanInteractionContextAccessor>(serviceProvider =>
+            serviceProvider.GetRequiredService<HumanInteractionContextAccessor>());
         services.AddSingleton<ObservabilityMiddleware>();
         services.AddSingleton<UsageTrackingMiddleware>();
         services.AddSingleton<IAgentflowNodeExecutionTraceStore, AgentflowNodeExecutionTraceStore>();

@@ -1,3 +1,7 @@
+using System.Text.Json;
+
+using Microsoft.Extensions.AI;
+
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Execution.Agentflows;
@@ -8,12 +12,15 @@ public sealed record HumanGateApprovalRequest(
     string? NodeName,
     string Mode,
     string Prompt,
-    IReadOnlyList<ChatMessage> Messages);
+    IReadOnlyList<ChatMessage> Messages,
+    ToolApprovalRequestContent? ToolApprovalRequest = null);
 
 public sealed record HumanGateApprovalDecision(
     string RequestId,
     bool Approved,
-    string? ResponseText);
+    string? ResponseText,
+    string ApprovalScope = "once",
+    JsonElement? ResponseData = null);
 
 public interface IHumanGateApprovalHandler
 {

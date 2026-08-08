@@ -7,6 +7,7 @@ const globalsCss = readFileSync(
   "utf8",
 );
 const mdCardSource = readFileSync(new URL("./md-card.tsx", import.meta.url), "utf8");
+const mathCss = readFileSync(new URL("../../../../math.css", import.meta.url), "utf8");
 
 function getRuleBody(selector: string): string {
   const match = globalsCss.match(new RegExp(`${selector.replaceAll(".", "\\.")}\\s*\\{([^}]*)\\}`));
@@ -69,4 +70,39 @@ test("markdown lists collapse parser whitespace between list items and paragraph
   assert.match(orderedBody, /whitespace-normal/);
   assert.match(unorderedBody, /whitespace-normal/);
   assert.match(listItemBody, /whitespace-normal/);
+});
+
+test("markdown tables use a bordered responsive data-table surface", () => {
+  const wrapperBody = getRuleBody(".msg-content-md-table-wrap");
+  const tableBody = getRuleBody(".msg-content-md-table");
+  const headerBody = getRuleBody(".msg-content-md-table th");
+  const cellBody = getRuleBody(".msg-content-md-table td");
+
+  assert.match(mdCardSource, /msg-content-md-table-wrap agw-scrollbar/);
+  assert.match(mdCardSource, /<table className="msg-content-md-table">/);
+  assert.match(mdCardSource, /aria-label="Scrollable table"/);
+  assert.match(wrapperBody, /overflow-x-auto/);
+  assert.match(wrapperBody, /rounded-lg/);
+  assert.match(wrapperBody, /border-border/);
+  assert.match(tableBody, /min-w-\[36rem\]/);
+  assert.match(tableBody, /whitespace-normal/);
+  assert.match(headerBody, /px-3/);
+  assert.match(headerBody, /py-2\.5/);
+  assert.match(cellBody, /leading-relaxed/);
+  assert.match(cellBody, /wrap-break-word/);
+});
+
+test("markdown math uses remark-math and KaTeX", () => {
+  assert.match(mdCardSource, /remarkPlugins=\{\[remarkGfm, remarkMath\]\}/);
+  assert.match(mdCardSource, /rehypePlugins=\{\[rehypeKatex\]\}/);
+  assert.match(mdCardSource, /normalizeMathDelimiters\(mdText\)/);
+  assert.match(mathCss, /@import "katex\/dist\/katex\.min\.css"/);
+});
+
+test("display math scrolls instead of overflowing the message", () => {
+  const displayBody = getRuleBody(".msg-content .katex-display");
+  const formulaBody = getRuleBody(".msg-content .katex-display > .katex");
+
+  assert.match(displayBody, /overflow-x-auto/);
+  assert.match(formulaBody, /min-w-max/);
 });

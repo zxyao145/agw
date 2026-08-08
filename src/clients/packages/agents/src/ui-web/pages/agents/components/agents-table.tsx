@@ -61,12 +61,7 @@ export function AgentsTable({
       </TableHeader>
       <TableBody>
         {agents.map((agent) => {
-          let toolNames: string[] = [];
-          try {
-            toolNames = agent.tools ? JSON.parse(agent.tools) : [];
-          } catch {
-            toolNames = [];
-          }
+          const toolNames = agent.tools.map((value) => value.definition.name);
 
           return (
             <TableRow key={agent.id}>

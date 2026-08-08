@@ -4,6 +4,7 @@ using Agw.Projects.Application;
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Projects;
@@ -169,6 +170,54 @@ public class ProjectContextAppServiceTests
         Assert.Equal(2, context.ExecutionCount);
         Assert.Equal(expectedUsage, context.Usage);
         Assert.Equal(["Tokyo trip", "Hotels"], context.Messages!.Select(GetMessageText));
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_WhenContextContainsToolBlockState_ReturnsStateMessage()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7();
+        var taskId = Guid.CreateVersion7();
+        var stateMessage = new ChatMessage(ChatRole.System, [new TextContent(string.Empty)])
+        {
+            MessageId = Guid.CreateVersion7().ToString(),
+            AuthorName = "tools",
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["type"] = ToolMessageTypes.TodoSnapshot,
+                ["items"] = Array.Empty<object>()
+            }
+        };
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Todo"));
+            seedContext.TaskRecords.Add(CreateRecord(
+                contextId,
+                taskId,
+                0,
+                stateMessage,
+                TaskExecutionStatus.Succeeded));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var context = await service.GetResponseAsync(projectId, "context-1");
+
+        var message = Assert.Single(context!.Messages!);
+        Assert.Equal("tools", message.Author);
+        Assert.Equal(
+            ToolMessageTypes.TodoSnapshot,
+            message.AdditionalProperties!["type"]?.ToString());
     }
 
     [Fact]
@@ -514,6 +563,23 @@ public class ProjectContextAppServiceTests
             }),
             CreateTime = createTime,
             UpdateTime = createTime
+        };
+
+    private static TaskRecord CreateRecord(
+        Guid contextId,
+        Guid taskId,
+        long sequence,
+        ChatMessage message,
+        TaskExecutionStatus status) => new()
+        {
+            Id = Guid.CreateVersion7(),
+            ProjectContextId = contextId,
+            TaskId = taskId,
+            Status = status,
+            ConversationSequence = sequence,
+            ConversationPayload = JsonUtil.Serialize(message),
+            CreateTime = TimeProvider.System.GetUtcNow(),
+            UpdateTime = TimeProvider.System.GetUtcNow()
         };
 
     private static string? GetMessageText(AgwMessage message) =>

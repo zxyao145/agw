@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@agw/components/ui-tokens.css";
+@import "@agw/chat/math.css";
 
 @source "../../../../packages";
 @source "../runtime";

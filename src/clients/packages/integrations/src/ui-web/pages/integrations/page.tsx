@@ -10,7 +10,6 @@ import { getApiErrorMessage } from "@agw/api";
 import { Button } from "@agw/components";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@agw/components";
 
-import { buildOAuthServerCallbackUrl } from "./callback-url";
 import { ConnectionCard } from "./components/connection-card";
 import { ConnectionDialog, type ConnectionEditorState } from "./components/connection-dialog";
 import { PluginCard } from "./components/plugin-card";
@@ -33,11 +32,19 @@ const emptyConnectionEditor = (): ConnectionEditorState => ({
   fields: emptySchemaForm(),
 });
 
-function redirectToAuthorization(authorizationUrl: string) {
+export type IntegrationsPageProps = {
+  completionTarget?: "Web" | "Desktop";
+  openAuthorization?: (authorizationUrl: string) => void | Promise<void>;
+};
+
+function redirectToAuthorization(authorizationUrl: string): void {
   window.location.assign(authorizationUrl);
 }
 
-export default function IntegrationsPage() {
+export default function IntegrationsPage({
+  completionTarget = "Web",
+  openAuthorization = redirectToAuthorization,
+}: IntegrationsPageProps = {}) {
   const queryClient = useQueryClient();
   const [installationSelection, setInstallationSelection] =
     React.useState<IntegrationSelection | null>(null);
@@ -58,6 +65,13 @@ export default function IntegrationsPage() {
   const connectionsQuery = useQuery({
     queryKey: integrationQueryKeys.connections,
     queryFn: async () => (await apiGet("/api/integrations/connections")) as unknown as Connection[],
+  });
+  const oauthCallbackQuery = useQuery({
+    queryKey: integrationQueryKeys.oauthCallback,
+    queryFn: async () =>
+      (await apiGet("/api/integrations/oauth/callback-info")) as unknown as {
+        callbackUrl: string;
+      },
   });
 
   const refreshIntegrations = React.useCallback(async () => {
@@ -93,11 +107,17 @@ export default function IntegrationsPage() {
   });
 
   const authorizeMutation = useMutation({
-    mutationFn: async (connection: Connection) =>
-      (await apiPost("/api/integrations/oauth/authorize-start", {
-        body: { connectionId: connection.id, returnPath: "/integrations" },
-      })) as unknown as { authorizationUrl: string },
-    onSuccess: ({ authorizationUrl }) => redirectToAuthorization(authorizationUrl),
+    mutationFn: async (connection: Connection) => {
+      const response = (await apiPost("/api/integrations/oauth/authorize-start", {
+        body: {
+          connectionId: connection.id,
+          returnPath: "/integrations",
+          completionTarget,
+        },
+      })) as unknown as { authorizationUrl: string };
+      await openAuthorization(response.authorizationUrl);
+      return response;
+    },
     onError: (error) => toast.error(`Authorization failed: ${getApiErrorMessage(error)}`),
   });
 
@@ -169,14 +189,7 @@ export default function IntegrationsPage() {
 
   const plugins = pluginsQuery.data ?? [];
   const connections = connectionsQuery.data ?? [];
-  const callbackUrl = React.useMemo(
-    () =>
-      buildOAuthServerCallbackUrl({
-        apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
-        currentOrigin: typeof window === "undefined" ? undefined : window.location.origin,
-      }),
-    [],
-  );
+  const callbackUrl = oauthCallbackQuery.data?.callbackUrl ?? "Loading callback URL…";
 
   const openInstallation = (selection: IntegrationSelection) => {
     const installation = selection.authScheme.installation;

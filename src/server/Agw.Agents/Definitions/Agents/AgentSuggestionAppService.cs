@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.ExternalAgents;
 using Agw.Domain.Services;
@@ -8,6 +6,7 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Tools;
 
 namespace Agw.Agents.Definitions.Agents;
 
@@ -84,8 +83,10 @@ public class AgentSuggestionAppService
                     AgentSuggestionKind.Skill)));
         }
 
-        foreach (var toolName in ParseToolNames(agent.Tools, project?.Tools))
+        var resolvedToolValues = ToolValueResolution.Resolve(agent.Tools, project?.Tools);
+        foreach (var definition in resolvedToolValues.Tools)
         {
+            var toolName = definition.GetDefinitionName();
             var tool = _toolRegistryService.GetTool(toolName);
             if (tool == null)
             {
@@ -98,38 +99,27 @@ public class AgentSuggestionAppService
                 AgentSuggestionKind.Tool));
         }
 
+        foreach (var definition in resolvedToolValues.ToolBlocks)
+        {
+            var toolBlock = _toolRegistryService.GetTool(definition.GetDefinitionName());
+            if (toolBlock == null)
+            {
+                continue;
+            }
+
+            suggestions.AddRange(toolBlock.MemberToolNames.Select(memberToolName =>
+                new AgentSuggestionResponse(
+                    ToCommandText(memberToolName),
+                    JoinDescription("Tool", toolBlock.DisplayName, toolBlock.Description),
+                    AgentSuggestionKind.Tool)));
+        }
+
         return new AgentSuggestionsResponse(
             AgentSuggestionMode.System,
             suggestions
                 .OrderBy(suggestion => suggestion.Text, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(suggestion => suggestion.Kind)
                 .ToArray());
-    }
-
-    private static IEnumerable<string> ParseToolNames(params string?[] rawToolSources)
-    {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var rawTools in rawToolSources)
-        {
-            if (string.IsNullOrWhiteSpace(rawTools))
-            {
-                continue;
-            }
-
-            try
-            {
-                var toolNames = JsonSerializer.Deserialize<string[]>(rawTools) ?? [];
-                foreach (var toolName in toolNames.Where(name => !string.IsNullOrWhiteSpace(name)))
-                {
-                    names.Add(toolName);
-                }
-            }
-            catch (JsonException)
-            {
-            }
-        }
-
-        return names;
     }
 
     private static string ToCommandText(string name)

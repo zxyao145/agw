@@ -4,6 +4,7 @@ import UriContent from "./uri-content";
 import Reasoning from "./reasoning";
 import TextContent from "./text-content";
 import SystemMessage from "./system-message";
+import { isResultMessage } from "../../../../lib/chat/ai-message-handlers";
 
 const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
   const isTextNode = (
@@ -19,7 +20,11 @@ const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
 
   const isSystem = msg.role === "system";
   if (isSystem) {
-    return <SystemMessage node={node} />;
+    const isResult = isResultMessage(msg);
+    if (!isResult) {
+      return <SystemMessage node={node} />;
+    }
+    return <TextContent node={node} />;
   }
 
   if (isTextNode) {

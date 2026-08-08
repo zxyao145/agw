@@ -305,18 +305,18 @@ Deleting a Connection also removes its credentials and Agent/Project bindings th
 
 ```mermaid
 sequenceDiagram
-    participant UI as Web client
+    participant UI as Web/Desktop client
     participant API as OAuthController
     participant App as OAuthAuthorizationAppService
     participant DB as Integration storage
     participant DP as Data Protection
     participant Provider as OAuth provider
 
-    UI->>API: POST authorize-start(connectionId, returnPath)
+    UI->>API: POST authorize-start(connectionId, returnPath, completionTarget)
     API->>App: StartAsync
     App->>DB: Resolve Connection + enabled Installation
     App->>DB: Read decrypted Client Secret when required
-    App->>DP: Protect state(ConnectionId, PKCE verifier, returnPath), 10 min
+    App->>DP: Protect state(ConnectionId, PKCE verifier, callback URI, returnPath, completion target), 10 min
     App->>DB: status = PendingAuthorization
     App-->>UI: authorizationUrl
     UI->>Provider: Browser redirect
@@ -328,10 +328,10 @@ sequenceDiagram
     App->>DB: Set access/refresh/ID token credential values
     DB->>DP: Encrypt marked fields during SaveChanges
     App->>DB: Store subject, status = Ready
-    API-->>UI: Redirect to validated local return path
+    API-->>UI: Web redirect or Desktop deep link to Integrations
 ```
 
-The callback URI is built by the server. The return path must be a safe local relative path. OAuth state is time-limited to ten minutes and contains the Connection ID, optional PKCE verifier, return path, and expiration.
+The provider always returns to the server callback URI. `Integrations:OAuth:PublicBaseUrl` optionally sets its externally reachable base URL, while `Integrations:OAuth:WebBaseUrl` optionally sets the Web client base URL. The return path must be a safe local relative path. OAuth state is time-limited to ten minutes and contains the Connection ID, optional PKCE verifier, exact callback URI, return path, completion target, and expiration. Web flows redirect to the Web Integrations page; Desktop flows open `agw-desktop://oauth/complete`, which routes the application to its Integrations page.
 
 ## Agent runtime data flow
 
@@ -590,8 +590,10 @@ Only fields declared by the selected Auth Scheme are accepted.
 | PUT | `/api/integrations/connections` | Update mutable Connection fields; alias and definition tuple remain immutable. |
 | DELETE | `/api/integrations/connections?id={id}` | Delete a Connection and its dependent bindings/credentials. |
 | POST | `/api/integrations/connections/validate` | Re-evaluate local definition, configuration, decryption, and expiry state. |
+| GET | `/api/integrations/oauth/callback-info` | Return the server-authoritative callback URL to register with the provider. |
 | POST | `/api/integrations/oauth/authorize-start` | Build an authorization URL and protected state. |
-| GET | `/api/integrations/oauth/callback` | Handle the provider redirect and redirect back to the Web client. |
+| GET | `/api/integrations/oauth/callback` | Handle the provider redirect and route completion to the initiating Web or Desktop client. |
+| GET | `/api/integrations/oauth/desktop-complete` | Bridge a Desktop completion from the system browser to the Desktop deep link. |
 | POST | `/api/integrations/oauth/refresh` | Refresh a Connection whose OAuth definition supports refresh. |
 
 All JSON endpoints return Bens.Results envelopes. The OAuth callback is a protocol redirect response. Enums such as `AuthSchemeType`, status, secret action, transport kind, and binding target are serialized as strings.

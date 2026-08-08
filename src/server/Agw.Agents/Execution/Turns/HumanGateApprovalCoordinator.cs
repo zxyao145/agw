@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 
 using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Commands.Hitl;
 
 namespace Agw.Agents.Execution.Turns;
 
@@ -59,7 +59,9 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
         var decision = new HumanGateApprovalDecision(
             command.RequestId,
             command.Approved,
-            command.ResponseText);
+            command.ResponseText,
+            command.ApprovalScope,
+            command.ResponseData);
         var submitted = pending.Source.TrySetResult(decision);
         if (submitted)
         {

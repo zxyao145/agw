@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Net;
 using System.Text.RegularExpressions;
 
-using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 
 using Microsoft.Extensions.AI;
@@ -56,7 +55,7 @@ public class WebSearchResult
     public double DurationSeconds { get; set; }
 }
 
-internal class WebSearchTool : IAgwTool
+internal sealed class WebSearchTool
 {
     private const int DefaultMaxResults = 5;
     private const int MaximumMaxResults = 10;

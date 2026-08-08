@@ -7,6 +7,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 
@@ -65,7 +66,8 @@ public class AgentAppServiceUpdateTests
         Assert.Equal("{\"sandbox\":false}", agent.Extra);
         Assert.Equal("value", agent.EnvironmentVariables["TOKEN"]);
         Assert.Equal("original-prompt", agent.SystemPrompt);
-        Assert.Equal("[\"original-tool\"]", agent.Tools);
+        Assert.IsType<WebFetchToolDefinition>(
+            Assert.IsType<ToolValue>(Assert.Single(agent.Tools)).Definition);
         Assert.True(agent.EnableSummary);
         Assert.Equal(summaryModelProviderId, agent.SummaryModelProviderId);
         Assert.Equal(0, mcpRelations.ListCallCount);
@@ -222,7 +224,10 @@ public class AgentAppServiceUpdateTests
             SystemPrompt = "Before",
             ModelProviderId = oldModelProviderId,
             EnableSummary = true,
-            Tools = "[\"before\"]",
+            Tools =
+            [
+                new ToolValue { Definition = new WebSearchToolDefinition() }
+            ],
             EnvironmentVariables = new Dictionary<string, string> { ["BEFORE"] = "value" }
         };
         var service = CreateService(agent, modelProviderIds: [oldModelProviderId, newModelProviderId]);
@@ -244,7 +249,7 @@ public class AgentAppServiceUpdateTests
         Assert.Equal("After", agent.SystemPrompt);
         Assert.Equal(newModelProviderId, agent.ModelProviderId);
         Assert.False(agent.EnableSummary);
-        Assert.Null(agent.Tools);
+        Assert.Empty(agent.Tools);
         Assert.Empty(agent.EnvironmentVariables);
     }
 
@@ -314,7 +319,10 @@ public class AgentAppServiceUpdateTests
         DisplayName = "External Agent",
         Description = "Original description",
         SystemPrompt = "original-prompt",
-        Tools = "[\"original-tool\"]",
+        Tools =
+        [
+            new ToolValue { Definition = new WebFetchToolDefinition() }
+        ],
         Extra = "{\"original\":true}",
         EnvironmentVariables = new Dictionary<string, string> { ["TOKEN"] = "original" }
     };

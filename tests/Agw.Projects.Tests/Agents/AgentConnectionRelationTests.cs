@@ -75,18 +75,6 @@ public class AgentConnectionRelationTests
         Assert.Equal(scope.FirstConnectionId, Assert.Single(fetched.AgentConnectionRelations).ConnectionId);
     }
 
-    [Fact]
-    public async Task CollectNamedToolNamesAsync_OnlyReturnsExplicitStatelessTools()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var scope = await TestScope.CreateAsync(cancellationToken);
-
-        var toolNames = await scope.Service.CollectNamedToolNamesAsync(
-            ["[\"git_status\",\"git_status\"]", "invalid-json"]);
-
-        Assert.Equal(["git_status"], toolNames);
-    }
-
     private static Agent CreateAgent(Guid id, AgentType type = AgentType.External, Guid? modelProviderId = null) => new()
     {
         Id = id,

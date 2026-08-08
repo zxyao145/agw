@@ -1,10 +1,10 @@
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Application.Skills;
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Skills.Contracts.Registration;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

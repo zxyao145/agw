@@ -41,6 +41,21 @@ public class ResourceOwningAIAgentTests
     }
 
     [Fact]
+    public async Task DisposeAsync_InnerAgentAndResourceFail_ReportsBothFailures()
+    {
+        var order = new List<string>();
+        var inner = new DisposableAIAgent(order, throwOnDispose: true);
+        var resource = new TrackingResource(order, throwOnDispose: true);
+        var agent = new ResourceOwningAIAgent(inner, resource);
+
+        var exception = await Assert.ThrowsAsync<AggregateException>(
+            async () => await agent.DisposeAsync());
+
+        Assert.Equal(2, exception.InnerExceptions.Count);
+        Assert.Equal(["agent", "resource"], order);
+    }
+
+    [Fact]
     public async Task AgentRuntime_DisposeAsync_ReleasesAgentOwnedResources()
     {
         var order = new List<string>();
@@ -52,7 +67,7 @@ public class ResourceOwningAIAgentTests
             new TestAgentSession(),
             Guid.CreateVersion7(),
             "context",
-            "session");
+            sessionStateScope: null);
 
         await runtime.DisposeAsync();
 
@@ -62,16 +77,20 @@ public class ResourceOwningAIAgentTests
     private sealed class TrackingResource : IAsyncDisposable
     {
         private readonly List<string> _order;
+        private readonly bool _throwOnDispose;
 
-        public TrackingResource(List<string> order)
+        public TrackingResource(List<string> order, bool throwOnDispose = false)
         {
             _order = order;
+            _throwOnDispose = throwOnDispose;
         }
 
         public ValueTask DisposeAsync()
         {
             _order.Add("resource");
-            return ValueTask.CompletedTask;
+            return _throwOnDispose
+                ? ValueTask.FromException(new InvalidOperationException("resource disposal failed"))
+                : ValueTask.CompletedTask;
         }
     }
 

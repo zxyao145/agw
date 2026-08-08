@@ -82,13 +82,67 @@ test("conversation can delegate scrolling while keeping messages centered", asyn
   assert.match(source, /<div className="mx-auto w-full max-w-225 space-y-4 pb-36">/);
 });
 
-test("conversation renders authorless system messages after collapsing consecutive entries", async () => {
+test("conversation embeds a pending human interaction in its matching function call", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+
+  assert.match(source, /matchesHumanInteractionCall\(item\.message, pendingHumanInteraction\)/);
+  assert.match(source, /data-function-call-id=\{pendingHumanInteraction\.callId\}/);
+  assert.match(source, /<HumanInteractionPanel[\s\S]*?embedded/);
+});
+
+test("conversation renders completed ask_user_question calls as question and answer text", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+
+  assert.match(source, /item\.toolName === "ask_user_question"/);
+  assert.match(source, /getHumanInteractionQuestionResult\(item\.messages\)/);
+  assert.match(source, /<HumanInteractionQuestionResultView result=\{questionResult\}/);
+});
+
+test("conversation renders authorless system messages while hiding injected user messages", async () => {
   const source = await readFile(CONVERSATION_URL, "utf8");
 
   assert.match(source, /collapseConsecutiveSystemMessages\(messages\)/);
-  assert.match(source, /!message\.author && message\.role !== "system"/);
+  assert.match(source, /message\.role === "user" && !message\.author/);
   assert.doesNotMatch(source, /if \(message\.role === "system"\) \{\s*continue;/);
   assert.match(source, /if \(isResultMessage\(message\)\)[\s\S]*?continue;/);
+});
+
+test("conversation restores persisted authorless assistant and tool messages", async () => {
+  const { defaultProcessMessages } = await loadMessageProcessor();
+  const items = defaultProcessMessages([
+    {
+      messageId: "assistant-1",
+      author: null,
+      role: "assistant",
+      streamingScopeId: "user-1",
+      contents: [
+        { type: "TextReasoningContent", content: "Planning the task" },
+        {
+          type: "FunctionCallContent",
+          content: "{}",
+          additionalProperties: { callId: "call-1", toolName: "todos_add" },
+        },
+      ],
+    },
+    {
+      messageId: "",
+      author: null,
+      role: "tool",
+      streamingScopeId: "user-1",
+      contents: [
+        {
+          type: "FunctionResultContent",
+          content: "[]",
+          additionalProperties: { callId: "call-1" },
+        },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(
+    items.map((item: { type: string }) => item.type),
+    ["normal", "accordion"],
+  );
 });
 
 test("duplicate call ids produce one tool group per turn", async () => {

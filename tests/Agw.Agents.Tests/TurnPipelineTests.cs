@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
@@ -40,6 +40,24 @@ public class TurnPipelineTests
 
         Assert.Equal(
             ["turn-start", "human-gate-request", null, "turn-finished"],
+            sink.Messages.Select(GetType));
+    }
+
+    [Fact]
+    public async Task RunAsync_NonStreaming_ForwardsToolApprovalBeforeBufferedContent()
+    {
+        var sink = new CapturingSink();
+        var content = CreateMessage("content");
+        var approval = CreateMessage("approval", "tool-approval-request");
+
+        await TurnPipeline.RunAsync(
+            ToStream(content, approval, TestContext.Current.CancellationToken),
+            false,
+            sink,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ["turn-start", "tool-approval-request", null, "turn-finished"],
             sink.Messages.Select(GetType));
     }
 

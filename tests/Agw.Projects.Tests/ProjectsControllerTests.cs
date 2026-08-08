@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using Agw.Projects.Controllers;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Data.Entities.Tools;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -40,7 +41,7 @@ public class ProjectsControllerTests
             "Description",
             "~/project-a",
             "{}",
-            "[\"read_file\"]",
+            [new ToolValue { Definition = new WebSearchToolDefinition() }],
             [mcpToolServerId],
             [skillId],
             [appInstanceId],
@@ -50,7 +51,8 @@ public class ProjectsControllerTests
 
         var response = Assert.IsType<ProjectResponse>(ReadApiResultData(result));
         Assert.Equal(project.Id, response.Id);
-        Assert.Equal("[\"read_file\"]", service.CreatedProject!.Tools);
+        Assert.IsType<WebSearchToolDefinition>(
+            Assert.IsType<ToolValue>(Assert.Single(service.CreatedProject!.Tools)).Definition);
         Assert.Equal("secret", service.CreatedProject.EnvironmentVariables["API_KEY"]);
         Assert.Equal([mcpToolServerId], service.McpToolServerIds);
         Assert.Equal([skillId], service.SkillIds);
@@ -71,7 +73,7 @@ public class ProjectsControllerTests
             "Updated",
             "~/project-a",
             "{}",
-            "[\"write_file\"]",
+            [new ToolValue { Definition = new WebFetchToolDefinition() }],
             [mcpToolServerId],
             [skillId],
             [appInstanceId],
@@ -81,7 +83,8 @@ public class ProjectsControllerTests
 
         var response = Assert.IsType<ProjectResponse>(ReadApiResultData(result));
         Assert.Equal(project.Id, response.Id);
-        Assert.Equal("[\"write_file\"]", project.Tools);
+        Assert.IsType<WebFetchToolDefinition>(
+            Assert.IsType<ToolValue>(Assert.Single(project.Tools)).Definition);
         Assert.Equal("safe", project.EnvironmentVariables["MODE"]);
         Assert.Equal([mcpToolServerId], service.McpToolServerIds);
         Assert.Equal([skillId], service.SkillIds);
@@ -92,7 +95,7 @@ public class ProjectsControllerTests
     public async Task UpdateAsync_WhenCapabilitiesAreOmitted_PreservesExistingScalarCapabilities()
     {
         var project = CreateProject();
-        project.Tools = "[\"read_file\"]";
+        project.Tools = [new ToolValue { Definition = new WebSearchToolDefinition() }];
         project.EnvironmentVariables = new Dictionary<string, string> { ["API_KEY"] = "secret" };
         var service = new CapturingProjectAppService(project);
         var controller = new ProjectsController(service);
@@ -101,7 +104,8 @@ public class ProjectsControllerTests
         var result = await controller.UpdateAsync(project.Id, request);
 
         Assert.IsType<ProjectResponse>(ReadApiResultData(result));
-        Assert.Equal("[\"read_file\"]", project.Tools);
+        Assert.IsType<WebSearchToolDefinition>(
+            Assert.IsType<ToolValue>(Assert.Single(project.Tools)).Definition);
         Assert.Equal("secret", project.EnvironmentVariables["API_KEY"]);
         Assert.Null(service.McpToolServerIds);
         Assert.Null(service.SkillIds);
@@ -112,7 +116,7 @@ public class ProjectsControllerTests
     public async Task UpdateAsync_WhenCapabilitiesAreExplicitlyEmpty_ClearsScalarCapabilitiesAndForwardsEmptyRelations()
     {
         var project = CreateProject();
-        project.Tools = "[\"read_file\"]";
+        project.Tools = [new ToolValue { Definition = new WebSearchToolDefinition() }];
         project.EnvironmentVariables = new Dictionary<string, string> { ["API_KEY"] = "secret" };
         var service = new CapturingProjectAppService(project);
         var controller = new ProjectsController(service);
@@ -121,7 +125,7 @@ public class ProjectsControllerTests
             "Updated",
             "~/project-a",
             "{}",
-            "[]",
+            [],
             [],
             [],
             [],
@@ -130,7 +134,7 @@ public class ProjectsControllerTests
         var result = await controller.UpdateAsync(project.Id, request);
 
         Assert.IsType<ProjectResponse>(ReadApiResultData(result));
-        Assert.Equal("[]", project.Tools);
+        Assert.Empty(project.Tools);
         Assert.Empty(project.EnvironmentVariables);
         Assert.Empty(service.McpToolServerIds!);
         Assert.Empty(service.SkillIds!);

@@ -11,6 +11,7 @@
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Infrastructure\Agw.Infrastructure.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
+    <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
   </ItemGroup>
 
 </Project>

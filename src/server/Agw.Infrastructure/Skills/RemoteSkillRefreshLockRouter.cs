@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Infrastructure.Configuration;
 using Agw.Shared.Runtime;
+using Agw.Skills.Application.Remote;
 
 using Medallion.Threading;
 

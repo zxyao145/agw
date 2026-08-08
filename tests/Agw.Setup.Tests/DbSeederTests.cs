@@ -1,9 +1,11 @@
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Runtime;
+using Agw.Skills.Contracts.Registration;
 
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
@@ -72,6 +74,19 @@ public class DbSeederTests
             Assert.Equal(LocationExtractorAgentId, agents.Single(x => x.Name == "location-extractor").Id);
             Assert.Equal(AmapPoiSearchAgentId, agents.Single(x => x.Name == "amap-poi-search").Id);
             Assert.All(agents, agent => Assert.Equal(ModelProviderId, agent.ModelProviderId));
+            Assert.Collection(
+                agents.Single(x => x.Name == "general-agent").Tools,
+                value => Assert.IsType<DiffToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<GitCloneToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<BashToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<FileAccessToolBlockDefinition>(
+                    Assert.IsType<ToolBlockValue>(value).Definition));
+            Assert.Collection(
+                agents.Single(x => x.Name == "location-extractor").Tools,
+                value => Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<WebSearchToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<TodoToolBlockDefinition>(
+                    Assert.IsType<ToolBlockValue>(value).Definition));
 
             var skill = await context.Skills
                 .SingleAsync(x => x.Name == "xhs-explore", TestContext.Current.CancellationToken);
@@ -206,6 +221,73 @@ public class DbSeederTests
             Assert.False(await context.Skills.AnyAsync(
                 x => x.Id == JobManagementSkillId,
                 TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SeedAsync_DefaultToolRegression_BackfillsExactSignatureAndPreservesCustomization()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "agent-tools.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            context.Agents.AddRange(
+                new Agent
+                {
+                    Id = GeneralAgentId,
+                    Name = "general-agent",
+                    DisplayName = "General Agent",
+                    Type = AgentType.System,
+                    Tools =
+                    [
+                        new ToolValue { Definition = new DiffToolDefinition() },
+                        new ToolValue { Definition = new GitCloneToolDefinition() },
+                        new ToolValue { Definition = new BashToolDefinition() }
+                    ]
+                },
+                new Agent
+                {
+                    Id = LocationExtractorAgentId,
+                    Name = "location-extractor",
+                    DisplayName = "Location Extractor",
+                    Type = AgentType.System,
+                    Tools =
+                    [
+                        new ToolValue { Definition = new WebFetchToolDefinition() },
+                        new ToolValue { Definition = new BashToolDefinition() }
+                    ]
+                });
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                [new TestSkillRegistration()]);
+
+            await seeder.SeedAsync();
+
+            var general = await context.Agents.SingleAsync(
+                agent => agent.Id == GeneralAgentId,
+                TestContext.Current.CancellationToken);
+            Assert.IsType<FileAccessToolBlockDefinition>(
+                Assert.IsType<ToolBlockValue>(general.Tools[3]).Definition);
+            var location = await context.Agents.SingleAsync(
+                agent => agent.Id == LocationExtractorAgentId,
+                TestContext.Current.CancellationToken);
+            Assert.Collection(
+                location.Tools,
+                value => Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<BashToolDefinition>(Assert.IsType<ToolValue>(value).Definition));
         }
         finally
         {

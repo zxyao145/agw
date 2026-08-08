@@ -1,4 +1,5 @@
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Data.Entities.Tools;
 
 namespace Agw.Shared.Contracts.Projects;
 
@@ -7,7 +8,7 @@ public record ProjectCreateRequest(
     string? Description,
     string? Workspace,
     string? ExtraSetting,
-    string? Tools = null,
+    List<ToolValueObject>? Tools = null,
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
     List<Guid>? ConnectionIds = null,
@@ -18,7 +19,7 @@ public record ProjectUpdateRequest(
     string? Description,
     string? Workspace,
     string? ExtraSetting,
-    string? Tools = null,
+    List<ToolValueObject>? Tools = null,
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
     List<Guid>? ConnectionIds = null,
@@ -55,7 +56,7 @@ public sealed record ProjectResponse(
     string? Description,
     string? Workspace,
     string? ExtraSetting,
-    string? Tools,
+    IReadOnlyList<ToolValueObject> Tools,
     IReadOnlyDictionary<string, string> EnvironmentVariables,
     IReadOnlyList<ProjectMcpToolServerRelationResponse> ProjectMcpToolServers,
     IReadOnlyList<ProjectSkillRelationResponse> ProjectSkillRelations,

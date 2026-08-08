@@ -22,7 +22,8 @@ test("Desktop clears stale development redirects before loading Chat", async () 
     /!app\.isPackaged && process\.env\.AGW_RENDERER_URL[\s\S]*?session\.defaultSession\.clearCache\(\)/,
   );
   assert.ok(
-    readyHandler.indexOf("prepareRendererSession()") < readyHandler.indexOf("loadRenderer()"),
+    readyHandler.indexOf("prepareRendererSession()") <
+      readyHandler.indexOf("loadRenderer(initialRoute)"),
     "the development cache should be cleared before the initial renderer navigation",
   );
   assert.match(readyHandler, /\.catch\(\(error\) => reportMainProcessError\(/);

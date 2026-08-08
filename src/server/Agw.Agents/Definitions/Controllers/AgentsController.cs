@@ -2,6 +2,7 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 
@@ -73,6 +74,12 @@ public class AgentsController : ControllerBase
     [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> CreateAsync([FromBody] AgentCreateRequest request)
     {
+        var toolsError = ToolValueObjectValidation.GetError(request.Tools);
+        if (toolsError != null)
+        {
+            return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
+        }
+
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var agent = new Agent
         {
@@ -83,7 +90,7 @@ public class AgentsController : ControllerBase
             ModelProviderId = request.ModelProviderId,
             SummaryModelProviderId = request.SummaryModelProviderId,
             EnableSummary = request.EnableSummary,
-            Tools = request.Tools,
+            Tools = request.Tools ?? [],
             EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>()
         };
 
@@ -102,6 +109,12 @@ public class AgentsController : ControllerBase
     [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentUpdateRequest request)
     {
+        var toolsError = ToolValueObjectValidation.GetError(request.Tools);
+        if (toolsError != null)
+        {
+            return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
+        }
+
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var updated = await _agentAppService.UpdateAgentAsync(
             id,

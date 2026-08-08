@@ -37,6 +37,8 @@ export type ManagedExecutionHandle = {
     requestId: string;
     approved: boolean;
     responseText?: string | null;
+    approvalScope?: "once" | "always-tool" | "always-arguments";
+    responseData?: unknown;
   }): Promise<void>;
   getStatus(): ExecutionStatus;
   detach(): void;

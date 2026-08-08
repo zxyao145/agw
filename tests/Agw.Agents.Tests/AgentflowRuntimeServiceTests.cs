@@ -2,15 +2,18 @@ using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Commands.Exec;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
+using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -23,6 +26,123 @@ namespace Agw.Agents.Tests;
 [Collection(AgentflowExecutionTraceTestCollection.Name)]
 public class AgentflowRuntimeServiceTests
 {
+    [Fact]
+    public async Task ExecuteAsync_ToolApprovalRequest_FailsUnattendedExecution()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "approval-flow" };
+        var agentId = Guid.CreateVersion7();
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Worker",
+                RelateId = agentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "agent-output",
+                SourceNodeId = "agent",
+                TargetNodeId = "output",
+            },
+        };
+        var service = new AgentflowRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new AgentflowDomainService(TimeProvider.System),
+            new StubAgentRuntimeService(_ => new ApprovalRequestAgent()),
+            new StubProviderSessionState(),
+            new RecordingSummaryService());
+
+        var exception = await Assert.ThrowsAsync<AgwException>(
+            async () => await service.ExecuteAsync(
+                agentflow.Id,
+                Guid.CreateVersion7(),
+                "run",
+                TestContext.Current.CancellationToken,
+                Guid.CreateVersion7(),
+                "unattended-context"));
+
+        Assert.Contains("unattended Agentflow execution", exception.Message);
+    }
+
+    [Fact]
+    public async Task ExecuteStreamingAsync_ToolApprovalRequest_ResumesThroughWorkflowResponse()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "approval-flow" };
+        var agentId = Guid.CreateVersion7();
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Worker",
+                RelateId = agentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "agent-output",
+                SourceNodeId = "agent",
+                TargetNodeId = "output",
+            },
+        };
+        var service = new AgentflowRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new AgentflowDomainService(TimeProvider.System),
+            new StubAgentRuntimeService(_ => new ApprovalRequestAgent()),
+            new StubProviderSessionState(),
+            new RecordingSummaryService());
+        var messages = new List<AgwMessage>();
+
+        await foreach (var message in service.ExecuteStreamingAsync(
+            agentflow.Id,
+            "run",
+            TestContext.Current.CancellationToken,
+            Guid.CreateVersion7(),
+            "interactive-context",
+            Guid.CreateVersion7(),
+            new DelayedApprovalHandler()))
+        {
+            messages.Add(message);
+        }
+
+        Assert.Single(messages, message =>
+            message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
+            string.Equals(type?.ToString(), "tool-approval-request", StringComparison.Ordinal));
+        Assert.Contains(
+            messages.SelectMany(message => message.Contents).OfType<AgwTextContent>(),
+            content => content.Content == "approved");
+    }
+
     [Fact]
     public async Task GetMermaidAsync_AgentCreationFails_DisposesAlreadyCreatedAgents()
     {
@@ -131,9 +251,11 @@ public class AgentflowRuntimeServiceTests
             new StubProviderSessionState(),
             new RecordingSummaryService());
         var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
         var task = new TaskProjection
         {
             ProjectId = projectId,
+            ProjectContextId = conversationId,
             ContextId = "environment-context",
             TaskId = Guid.CreateVersion7(),
         };
@@ -159,6 +281,7 @@ public class AgentflowRuntimeServiceTests
 
         Assert.NotNull(agentRuntimeService.LastEnvironmentVariables);
         Assert.Equal("session", agentRuntimeService.LastEnvironmentVariables["SESSION_ONLY"]);
+        Assert.Equal(conversationId, agentRuntimeService.LastConversationId);
         Assert.All(agentRuntimeService.CreatedAgents, agent => Assert.True(agent.Disposed));
     }
 
@@ -466,6 +589,68 @@ public class AgentflowRuntimeServiceTests
     }
 
     [Fact]
+    public async Task ExecuteStreamingAsync_TodoToolBlock_WithoutToolInvocation_DoesNotPersistStateSnapshot()
+    {
+        var agentId = Guid.CreateVersion7();
+        var projectId = Guid.CreateVersion7();
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "todo-flow" };
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                RelateId = agentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "agent-output",
+                SourceNodeId = "agent",
+                TargetNodeId = "output",
+            },
+        };
+        var historyWriter = new RecordingConversationHistoryWriter();
+        var service = new AgentflowRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new AgentflowDomainService(TimeProvider.System),
+            new StubAgentRuntimeService(_ => new TrackingAIAgent(enableTodo: true)),
+            new StubProviderSessionState(),
+            new RecordingSummaryService(),
+            conversationHistoryWriter: historyWriter);
+        var messages = new List<AgwMessage>();
+
+        await foreach (var message in service.ExecuteStreamingAsync(
+            agentflow.Id,
+            "workflow input",
+            TestContext.Current.CancellationToken,
+            projectId,
+            "context-1",
+            Guid.CreateVersion7()))
+        {
+            messages.Add(message);
+        }
+
+        Assert.DoesNotContain(
+            messages,
+            message => IsMessageType(message.AdditionalProperties, ToolMessageTypes.TodoSnapshot));
+        Assert.Empty(historyWriter.Calls);
+    }
+
+    [Fact]
     public void CreateWorkflowOutputMessages_ListOfChatMessages_ReturnsAgwMessages()
     {
         var output = new List<ChatMessage>
@@ -625,6 +810,8 @@ public class AgentflowRuntimeServiceTests
 
         public IReadOnlyDictionary<string, string>? LastEnvironmentVariables { get; private set; }
 
+        public Guid LastConversationId { get; private set; }
+
         public List<TrackingAIAgent> CreatedAgents { get; } = [];
 
         public StubAgentRuntimeService(Guid agentId)
@@ -672,6 +859,22 @@ public class AgentflowRuntimeServiceTests
             return Task.FromResult(agent);
         }
 
+        public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+            Guid agentId,
+            Guid? projectId,
+            Guid conversationId,
+            IReadOnlyDictionary<string, string>? environmentVariables,
+            CancellationToken cancellationToken = default)
+        {
+            LastConversationId = conversationId;
+            return CreateAiAgentAsync(
+                agentId,
+                projectId,
+                resume: false,
+                environmentVariables,
+                cancellationToken);
+        }
+
         public Task<AgentRuntime?> CreateRuntimeAsync(
             Guid agentId,
             TaskProjection task,
@@ -699,14 +902,21 @@ public class AgentflowRuntimeServiceTests
 
     private sealed class TrackingAIAgent : DelegatingAIAgent, IAsyncDisposable
     {
-        public TrackingAIAgent()
+        private readonly TodoProvider? _todoProvider;
+
+        public TrackingAIAgent(bool enableTodo = false)
             : base(new ChatClientAgent(
                 new StubChatClient(),
                 new ChatClientAgentOptions { Id = "tracking", Name = "tracking" }))
         {
+            _todoProvider = enableTodo ? new TodoProvider() : null;
         }
 
         public bool Disposed { get; private set; }
+
+        public override object? GetService(Type serviceType, object? serviceKey = null) =>
+            base.GetService(serviceType, serviceKey) ??
+            _todoProvider?.GetService(serviceType, serviceKey);
 
         public ValueTask DisposeAsync()
         {
@@ -741,6 +951,66 @@ public class AgentflowRuntimeServiceTests
         }
     }
 
+    private sealed class ApprovalRequestAgent : AIAgent
+    {
+        protected override string? IdCore => "approval-agent";
+
+        public override string? Name => "Approval Agent";
+
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new ApprovalRequestSession());
+
+        protected override ValueTask<System.Text.Json.JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            System.Text.Json.JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(System.Text.Json.JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            System.Text.Json.JsonElement sessionState,
+            System.Text.Json.JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new ApprovalRequestSession());
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            if (messages.SelectMany(message => message.Contents).OfType<ToolApprovalResponseContent>().Any())
+            {
+                yield return new AgentResponseUpdate(ChatRole.Assistant, "approved");
+                yield break;
+            }
+
+            yield return new AgentResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents =
+                [
+                    new ToolApprovalRequestContent(
+                        "approval-1",
+                        new FunctionCallContent(
+                            "call-1",
+                            "run_shell",
+                            new Dictionary<string, object?>())),
+                ],
+            };
+        }
+
+        private sealed class ApprovalRequestSession : AgentSession;
+    }
+
     private sealed class StubProviderSessionState : IProviderSessionState
     {
         public void InitializeSessionState(AgentSession session, string contextId, Guid projectId)
@@ -762,6 +1032,32 @@ public class AgentflowRuntimeServiceTests
             return false;
         }
     }
+
+    private sealed class RecordingConversationHistoryWriter : IConversationHistoryWriter
+    {
+        public List<HistoryCall> Calls { get; } = [];
+
+        public Task AppendAsync(
+            Guid projectId,
+            string contextId,
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(new HistoryCall(projectId, contextId, messages.ToList()));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed record HistoryCall(
+        Guid ProjectId,
+        string ContextId,
+        IReadOnlyList<ChatMessage> Messages);
+
+    private static bool IsMessageType(
+        AdditionalPropertiesDictionary? properties,
+        string expectedType) =>
+        properties?.TryGetValue("type", out var type) == true &&
+        string.Equals(type?.ToString(), expectedType, StringComparison.Ordinal);
 
     private sealed class RecordingSummaryService : IAgentTurnSummaryService
     {

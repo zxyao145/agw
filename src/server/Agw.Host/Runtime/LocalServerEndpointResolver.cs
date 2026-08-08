@@ -5,7 +5,7 @@ namespace Agw.Host.Runtime;
 
 public static class LocalServerEndpointResolver
 {
-    public const int DefaultPort = 30815;
+    public const int DefaultPort = 30816;
 
     public static string ResolveDefaultUrl()
     {

@@ -54,6 +54,29 @@ test("consecutive system messages keep only the latest message in each sequence"
   );
 });
 
+test("Tool state messages are not collapsed with adjacent system messages", () => {
+  const todo = {
+    messageId: "todo",
+    role: "system",
+    contents: [{ type: "TextContent", content: "" }],
+    additionalProperties: { type: "tool-todo-snapshot", items: [] },
+  };
+  const mode = {
+    messageId: "mode",
+    role: "system",
+    contents: [{ type: "TextContent", content: "" }],
+    additionalProperties: { type: "tool-mode-status", mode: "execute" },
+  };
+  const warning = {
+    messageId: "warning",
+    role: "system",
+    contents: [{ type: "TextContent", content: "Fallback" }],
+    additionalProperties: { type: "tool-warning" },
+  };
+
+  assert.deepEqual(collapseConsecutiveSystemMessages([todo, mode, warning]), [todo, mode, warning]);
+});
+
 test("system result with top-level marker stops executing and appends the message", () => {
   const message = {
     messageId: "result-1",
@@ -178,6 +201,13 @@ test("history removes init and control messages and restores the latest valid co
       author: "Agw",
       contents: [{ type: "TextContent", content: "finished" }],
       additionalProperties: { type: "turn-finished", status: "completed" },
+    },
+    {
+      messageId: "human-interaction",
+      role: "system",
+      author: "Agw",
+      contents: [{ type: "TextContent", content: "Input needed" }],
+      additionalProperties: { type: "human-interaction-request" },
     },
   ];
 

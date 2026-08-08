@@ -40,17 +40,30 @@ internal sealed class ResourceOwningAIAgent : DelegatingAIAgent, IAsyncDisposabl
             failure = exception;
         }
 
+        Exception? resourceFailure = null;
         try
         {
             await _ownedResources.DisposeAsync().ConfigureAwait(false);
         }
-        catch when (failure != null)
+        catch (Exception exception)
         {
+            resourceFailure = exception;
+        }
+
+        if (failure != null && resourceFailure != null)
+        {
+            ExceptionDispatchInfo.Capture(
+                new AggregateException(failure, resourceFailure)).Throw();
         }
 
         if (failure != null)
         {
             ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+
+        if (resourceFailure != null)
+        {
+            ExceptionDispatchInfo.Capture(resourceFailure).Throw();
         }
     }
 }

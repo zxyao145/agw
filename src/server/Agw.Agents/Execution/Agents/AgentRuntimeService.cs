@@ -1,15 +1,18 @@
 using Agw.Agents.Definitions.Agents;
-using Agw.Agents.Execution.Agents.AIContextProviders.InstructionsExtensions;
 using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
+using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Runtime;
+using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts.Registration;
 
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Execution.Agents;
 
@@ -19,7 +22,6 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly AgentAppService _agentAppService;
     private readonly IProjectAppService _projectAppService;
     private readonly AgentCapabilityComposer _capabilityComposer;
-    private readonly IReadOnlyList<IAgentInstructionsSource> _instructionsSources;
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
     private readonly ITaskSessionBindingService _taskSessionBindingService;
@@ -29,14 +31,17 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly ObservabilityMiddleware _observabilityMiddleware;
     private readonly UsageTrackingMiddleware _usageTrackingMiddleware;
     private readonly IAgentTurnSummaryService _summaryService;
+    private readonly IConversationHistoryWriter? _conversationHistoryWriter;
     private readonly IReadOnlyDictionary<Guid, IAgentSkillRegistration> _skillRegistrations;
     private readonly IRemoteSkillContentResolver? _remoteSkillContentResolver;
+    private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
 
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly IServiceProvider _services;
     public AgentRuntimeService(
         AgentAppService agentAppService,
         IProjectAppService projectAppService,
         AgentCapabilityComposer capabilityComposer,
-        IEnumerable<IAgentInstructionsSource> instructionsSources,
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
         ITaskSessionBindingService taskSessionBindingService,
@@ -48,12 +53,15 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         UsageTrackingMiddleware usageTrackingMiddleware,
         IAgentTurnSummaryService summaryService,
         IEnumerable<IAgentSkillRegistration>? skillRegistrations = null,
-        IRemoteSkillContentResolver? remoteSkillContentResolver = null)
+        IRemoteSkillContentResolver? remoteSkillContentResolver = null,
+        ILoggerFactory? loggerFactory = null,
+        IServiceProvider? services = null,
+        IConversationHistoryWriter? conversationHistoryWriter = null,
+        HumanInteractionContextAccessor? humanInteractionContextAccessor = null)
     {
         _agentAppService = agentAppService;
         _projectAppService = projectAppService;
         _capabilityComposer = capabilityComposer;
-        _instructionsSources = instructionsSources.ToArray();
         _chatHistoryProvider = chatHistoryProvider;
         _providerSessionState = providerSessionState;
         _taskSessionBindingService = taskSessionBindingService;
@@ -64,9 +72,14 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _observabilityMiddleware = observabilityMiddleware;
         _usageTrackingMiddleware = usageTrackingMiddleware;
         _summaryService = summaryService;
+        _conversationHistoryWriter =
+            conversationHistoryWriter ?? chatHistoryProvider as IConversationHistoryWriter;
         _skillRegistrations = (skillRegistrations ?? [])
             .GroupBy(registration => registration.Id)
             .ToDictionary(group => group.Key, group => group.First());
         _remoteSkillContentResolver = remoteSkillContentResolver;
+        _humanInteractionContextAccessor = humanInteractionContextAccessor;
+        _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+        _services = services ?? new ServiceCollection().BuildServiceProvider();
     }
 }

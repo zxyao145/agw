@@ -3,6 +3,7 @@ import { AiMessage, AiMessageContent, MessageContentType } from "@agw/api";
 import { cn } from "@agw/components";
 import { MessageNode } from "./types";
 import { renderContent } from "./renders";
+import { ToolState, isToolStateMessage, MessageCitations } from "./tool-state";
 
 export const isResultMessage = (message: AiMessage): boolean =>
   message.additionalProperties?.type === "result";
@@ -94,6 +95,10 @@ const groupContentsByType = (message: AiMessage): MessageNode[] => {
 };
 
 export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
+  if (isToolStateMessage(message)) {
+    return <ToolState message={message} />;
+  }
+
   const isResult = isResultMessage(message);
 
   // group contents by type
@@ -172,6 +177,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
             <React.Fragment key={i}>{renderContent(n, message)}</React.Fragment>
           ))}
         </div>
+        <MessageCitations message={message} />
       </div>
     </div>
   );

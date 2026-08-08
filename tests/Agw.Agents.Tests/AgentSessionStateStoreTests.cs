@@ -2,11 +2,16 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 using Agw.Agents.Execution.Agents.Store;
+using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Projects;
 
 using Microsoft.Agents.AI;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
@@ -24,7 +29,7 @@ public class AgentSessionStateStoreTests
         var session = await store.GetOrCreateAsync(
             agent,
             aiAgent,
-            "task-1",
+            CreateScope(),
             TestContext.Current.CancellationToken);
 
         Assert.Same(aiAgent.CreatedSession, session);
@@ -42,7 +47,7 @@ public class AgentSessionStateStoreTests
         var session = await store.GetOrCreateAsync(
             agent,
             aiAgent,
-            "task-1",
+            CreateScope(),
             TestContext.Current.CancellationToken);
 
         Assert.Same(aiAgent.CreatedSession, session);
@@ -54,7 +59,11 @@ public class AgentSessionStateStoreTests
     public async Task GetOrCreateAsync_WhenCacheContainsSerializedSession_DeserializesSession()
     {
         var cache = new InMemoryHybridCache();
-        await cache.SetAsync("task-1", "{\"id\":\"cached\"}", cancellationToken: TestContext.Current.CancellationToken);
+        var sessionScope = CreateScope();
+        await cache.SetAsync(
+            sessionScope.CacheKey,
+            "{\"id\":\"cached\"}",
+            cancellationToken: TestContext.Current.CancellationToken);
         var store = new AgentSessionStateStore(cache, NullLogger<AgentSessionStateStore>.Instance);
         var agent = new Agent { Type = AgentType.System };
         var aiAgent = new TestAIAgent();
@@ -62,7 +71,7 @@ public class AgentSessionStateStoreTests
         var session = await store.GetOrCreateAsync(
             agent,
             aiAgent,
-            "task-1",
+            sessionScope,
             TestContext.Current.CancellationToken);
 
         Assert.Same(aiAgent.DeserializedSession, session);
@@ -74,7 +83,11 @@ public class AgentSessionStateStoreTests
     public async Task GetOrCreateAsync_WhenCacheContainsInvalidJson_CreatesNewSession()
     {
         var cache = new InMemoryHybridCache();
-        await cache.SetAsync("task-1", "not-json", cancellationToken: TestContext.Current.CancellationToken);
+        var sessionScope = CreateScope();
+        await cache.SetAsync(
+            sessionScope.CacheKey,
+            "not-json",
+            cancellationToken: TestContext.Current.CancellationToken);
         var store = new AgentSessionStateStore(cache, NullLogger<AgentSessionStateStore>.Instance);
         var agent = new Agent { Type = AgentType.System };
         var aiAgent = new TestAIAgent();
@@ -82,12 +95,39 @@ public class AgentSessionStateStoreTests
         var session = await store.GetOrCreateAsync(
             agent,
             aiAgent,
-            "task-1",
+            sessionScope,
             TestContext.Current.CancellationToken);
 
         Assert.Same(aiAgent.CreatedSession, session);
         Assert.Equal(1, aiAgent.CreateSessionCallCount);
         Assert.Equal(0, aiAgent.DeserializeSessionCallCount);
+    }
+
+    [Fact]
+    public async Task GetOrCreateAsync_WhenProviderRejectsSerializedSession_CreatesNewSession()
+    {
+        var cache = new InMemoryHybridCache();
+        var sessionScope = CreateScope();
+        await cache.SetAsync(
+            sessionScope.CacheKey,
+            "{\"id\":\"obsolete\"}",
+            cancellationToken: TestContext.Current.CancellationToken);
+        var store = new AgentSessionStateStore(cache, NullLogger<AgentSessionStateStore>.Instance);
+        var agent = new Agent { Type = AgentType.System };
+        var aiAgent = new TestAIAgent
+        {
+            DeserializeException = new InvalidOperationException("unsupported session schema")
+        };
+
+        var session = await store.GetOrCreateAsync(
+            agent,
+            aiAgent,
+            sessionScope,
+            TestContext.Current.CancellationToken);
+
+        Assert.Same(aiAgent.CreatedSession, session);
+        Assert.Equal(1, aiAgent.CreateSessionCallCount);
+        Assert.Equal(1, aiAgent.DeserializeSessionCallCount);
     }
 
     [Fact]
@@ -97,15 +137,196 @@ public class AgentSessionStateStoreTests
         var store = new AgentSessionStateStore(cache, NullLogger<AgentSessionStateStore>.Instance);
         var aiAgent = new TestAIAgent();
         var session = await aiAgent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var sessionScope = CreateScope();
 
-        await store.SaveAsync("task-1", aiAgent, session, TestContext.Current.CancellationToken);
+        await store.SaveAsync(
+            AgentType.System,
+            sessionScope,
+            aiAgent,
+            session,
+            TestContext.Current.CancellationToken);
 
         var serialized = await cache.GetOrCreateAsync<string>(
-            "task-1",
+            sessionScope.CacheKey,
             _ => ValueTask.FromResult(string.Empty),
             cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("{\"id\":\"created\"}", serialized);
     }
+
+    [Fact]
+    public async Task NodeState_SaveAndLoad_UsesStructuredScope()
+    {
+        var cache = new InMemoryHybridCache();
+        var store = new AgentSessionStateStore(cache, NullLogger<AgentSessionStateStore>.Instance);
+        var sessionScope = new AgentSessionStateScope(
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            "context-1",
+            Guid.CreateVersion7(),
+            "flow-a:node-a");
+        var writer = new TestAIAgent();
+        var session = await writer.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        await store.SaveForNodeAsync(
+            sessionScope,
+            writer,
+            session,
+            TestContext.Current.CancellationToken);
+
+        var reader = new TestAIAgent();
+        var restored = await store.GetOrCreateForNodeAsync(
+            reader,
+            sessionScope,
+            TestContext.Current.CancellationToken);
+
+        Assert.Same(reader.DeserializedSession, restored);
+        Assert.Equal(1, reader.DeserializeSessionCallCount);
+    }
+
+    [Fact]
+    public void Scope_DifferentAgentsAndNodes_UseDifferentCacheKeys()
+    {
+        var projectContextId = Guid.CreateVersion7();
+        var projectId = Guid.CreateVersion7();
+        var firstAgentId = Guid.CreateVersion7();
+        var secondAgentId = Guid.CreateVersion7();
+
+        var standalone = new AgentSessionStateScope(
+            projectContextId,
+            projectId,
+            "context-1",
+            firstAgentId);
+        var firstNode = new AgentSessionStateScope(
+            projectContextId,
+            projectId,
+            "context-1",
+            firstAgentId,
+            "flow-a:node-a");
+        var secondNode = new AgentSessionStateScope(
+            projectContextId,
+            projectId,
+            "context-1",
+            firstAgentId,
+            "flow-a:node-b");
+        var secondAgent = new AgentSessionStateScope(
+            projectContextId,
+            projectId,
+            "context-1",
+            secondAgentId);
+
+        Assert.Equal(4, new[]
+        {
+            standalone.CacheKey,
+            firstNode.CacheKey,
+            secondNode.CacheKey,
+            secondAgent.CacheKey
+        }.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public async Task SaveAsync_PersistsSeparateScopesAndSerializesConcurrentInsert()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        var services = new ServiceCollection();
+        services.AddDbContext<AgwDbContext>(options => options.UseSqlite(connection));
+        services.AddScoped<DbContext>(
+            serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        await using var serviceProvider = services.BuildServiceProvider();
+
+        var projectId = Guid.CreateVersion7();
+        var projectContextId = Guid.CreateVersion7();
+        var agentId = Guid.CreateVersion7();
+        await using (var serviceScope = serviceProvider.CreateAsyncScope())
+        {
+            var dbContext = serviceScope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            await dbContext.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            dbContext.Projects.Add(new Project
+            {
+                Id = projectId,
+                Name = "session-state-project"
+            });
+            dbContext.Agents.Add(new Agent
+            {
+                Id = agentId,
+                Name = "session-state-agent",
+                DisplayName = "Session State Agent"
+            });
+            dbContext.ProjectContexts.Add(new ProjectContext
+            {
+                Id = projectContextId,
+                ProjectId = projectId,
+                ContextId = "context-1",
+                Title = "Context"
+            });
+            await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var store = new AgentSessionStateStore(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            TimeProvider.System,
+            NullLogger<AgentSessionStateStore>.Instance);
+        var aiAgent = new TestAIAgent();
+        var session = await aiAgent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var standaloneScope = new AgentSessionStateScope(
+            projectContextId,
+            projectId,
+            "context-1",
+            agentId);
+        var nodeScope = new AgentSessionStateScope(
+            projectContextId,
+            projectId,
+            "context-1",
+            agentId,
+            "flow-a:node-a");
+        var concurrentScope = new AgentSessionStateScope(
+            projectContextId,
+            projectId,
+            "context-1",
+            agentId,
+            "flow-a:concurrent");
+
+        await store.SaveAsync(
+            AgentType.System,
+            standaloneScope,
+            aiAgent,
+            session,
+            TestContext.Current.CancellationToken);
+        await store.SaveAsync(
+            AgentType.System,
+            nodeScope,
+            aiAgent,
+            session,
+            TestContext.Current.CancellationToken);
+        await Task.WhenAll(
+            Enumerable.Range(0, 12).Select(_ => store.SaveAsync(
+                AgentType.System,
+                concurrentScope,
+                aiAgent,
+                session,
+                TestContext.Current.CancellationToken)));
+
+        await using var verificationScope = serviceProvider.CreateAsyncScope();
+        var verificationContext = verificationScope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        var entries = await verificationContext.AgentSessionStates
+            .AsNoTracking()
+            .OrderBy(entry => entry.AgentflowNodeId)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, entries.Count);
+        Assert.All(entries, entry => Assert.Equal(projectContextId, entry.ProjectContextId));
+        Assert.All(entries, entry => Assert.Equal(agentId, entry.AgentId));
+        Assert.Equal(
+            [string.Empty, "flow-a:concurrent", "flow-a:node-a"],
+            entries.Select(entry => entry.AgentflowNodeId));
+    }
+
+    private static AgentSessionStateScope CreateScope() =>
+        new(
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            "context-1",
+            Guid.CreateVersion7());
 
     private sealed class TestAIAgent : AIAgent
     {
@@ -113,6 +334,7 @@ public class AgentSessionStateStoreTests
         public AgentSession DeserializedSession { get; } = new TestAgentSession("cached");
         public int CreateSessionCallCount { get; private set; }
         public int DeserializeSessionCallCount { get; private set; }
+        public Exception? DeserializeException { get; init; }
 
         protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken)
         {
@@ -135,6 +357,11 @@ public class AgentSessionStateStoreTests
             CancellationToken cancellationToken)
         {
             DeserializeSessionCallCount++;
+            if (DeserializeException != null)
+            {
+                throw DeserializeException;
+            }
+
             return ValueTask.FromResult(DeserializedSession);
         }
 

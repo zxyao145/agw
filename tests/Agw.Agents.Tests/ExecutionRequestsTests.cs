@@ -1,7 +1,17 @@
-using Agw.Agents.Execution.Contracts;
+using System.Text.Json;
+
+using Agw.Agents.Execution.Commands;
+using Agw.Agents.Execution.Commands.Abstracts;
+using Agw.Agents.Execution.Commands.Exec;
+using Agw.Agents.Execution.Commands.Hitl;
+using Agw.Agents.Execution.Commands.Interrupt;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data;
-using Agw.Shared.Utils;
+
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Tests;
 
@@ -24,7 +34,7 @@ public class ExecutionRequestsTests
             .Replace("__PROJECT_ID__", projectId.ToString())
             .Replace("__CONTEXT_ID__", contextId);
 
-        var request = JsonUtil.Deserialize<AgentRunCommand>(payload);
+        var request = Deserialize(payload);
 
         var settingRequest = Assert.IsType<SettingCommand>(request);
         Assert.Equal(projectId, settingRequest.ProjectId);
@@ -52,7 +62,7 @@ public class ExecutionRequestsTests
             .Replace("__PROJECT_ID__", projectId.ToString())
             .Replace("__CONTEXT_ID__", contextId);
 
-        var request = JsonUtil.Deserialize<AgentRunCommand>(payload);
+        var request = Deserialize(payload);
 
         var settingRequest = Assert.IsType<SettingCommand>(request);
         Assert.Equal("secret", settingRequest.EnvironmentVariables["AGW_TOKEN"]);
@@ -71,7 +81,7 @@ public class ExecutionRequestsTests
                         }
                         """;
 
-        var request = JsonUtil.Deserialize<AgentRunCommand>(payload);
+        var request = Deserialize(payload);
 
         var settingRequest = Assert.IsType<SettingCommand>(request);
         Assert.False(settingRequest.Resume);
@@ -129,7 +139,7 @@ public class ExecutionRequestsTests
                             }
                             """;
 
-        var request = JsonUtil.Deserialize<AgentRunCommand>(
+        var request = Deserialize(
             json.Replace("__AGENT_ID__", agentId.ToString("D")));
 
         var executionRequest = Assert.IsType<ExecCommand>(request);
@@ -160,7 +170,7 @@ public class ExecutionRequestsTests
                             }
                             """;
 
-        var request = JsonUtil.Deserialize<AgentRunCommand>(json);
+        var request = Deserialize(json);
 
         var executionRequest = Assert.IsType<ExecCommand>(request);
         Assert.Null(executionRequest.AgentId);
@@ -176,7 +186,7 @@ public class ExecutionRequestsTests
                             }
                             """;
 
-        var request = JsonUtil.Deserialize<AgentRunCommand>(json);
+        var request = Deserialize(json);
 
         var interruptRequest = Assert.IsType<InterruptCommand>(request);
         Assert.Null(interruptRequest.Reason);
@@ -190,16 +200,45 @@ public class ExecutionRequestsTests
                               "type": "HumanResponseCommand",
                               "requestId": "human-approval-1",
                               "approved": true,
-                              "responseText": "Approved for translation."
+                              "responseText": "Approved for translation.",
+                              "responseData": {
+                                "answers": {
+                                  "Language?": "Chinese"
+                                }
+                              }
                             }
                             """;
 
-        var request = JsonUtil.Deserialize<AgentRunCommand>(json);
+        var request = Deserialize(json);
 
         var humanResponse = Assert.IsType<HumanResponseCommand>(request);
         Assert.Equal("human-approval-1", humanResponse.RequestId);
         Assert.True(humanResponse.Approved);
         Assert.Equal("Approved for translation.", humanResponse.ResponseText);
+        Assert.Equal(
+            "Chinese",
+            humanResponse.ResponseData!.Value
+                .GetProperty("answers")
+                .GetProperty("Language?")
+                .GetString());
+    }
+
+    [Fact]
+    public void Deserialize_HumanResponseCommand_WithNullApprovalScope_DefaultsToOnce()
+    {
+        const string json = """
+                            {
+                              "type": "HumanResponseCommand",
+                              "requestId": "human-approval-1",
+                              "approved": true,
+                              "approvalScope": null
+                            }
+                            """;
+
+        var request = Deserialize(json);
+
+        var humanResponse = Assert.IsType<HumanResponseCommand>(request);
+        Assert.Equal("once", humanResponse.ApprovalScope);
     }
 
     private static SettingCommand CreateSettingCommand(
@@ -211,5 +250,17 @@ public class ExecutionRequestsTests
             projectId,
             environmentVariables: new Dictionary<string, string>(environmentVariables),
             contextId: contextId);
+    }
+
+    private static AgentRunCommand? Deserialize(string json)
+    {
+        var services = new ServiceCollection();
+        services.AddExecutionCommands();
+        using var serviceProvider = services.BuildServiceProvider();
+        var options = serviceProvider
+            .GetRequiredService<IOptions<JsonHubProtocolOptions>>()
+            .Value
+            .PayloadSerializerOptions;
+        return JsonSerializer.Deserialize<AgentRunCommand>(json, options);
     }
 }

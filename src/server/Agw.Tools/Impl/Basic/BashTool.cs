@@ -49,6 +49,7 @@ public class BashToolResult
     public long DurationMs { get; set; }
 }
 
+[Obsolete("Use BuiltIn ShellTool instead")]
 internal class BashTool : IAgwTool
 {
     public string Name => "bash";

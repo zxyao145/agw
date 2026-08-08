@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:30915/"
+      "url": "http://127.0.0.1:31815/"
     }
   ],
   "paths": {
@@ -284,371 +284,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultOfJob"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/session": {
-      "get": {
-        "tags": [
-          "Auth"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/auth/antiforgery": {
-      "get": {
-        "tags": [
-          "Auth"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/auth/login": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too Many Requests",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/logout": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/auth/password": {
-      "put": {
-        "tags": [
-          "Auth"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChangePasswordRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChangePasswordRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChangePasswordRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/tokens": {
-      "get": {
-        "tags": [
-          "Auth"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateTokenRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateTokenRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateTokenRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/tokens/{id}": {
-      "delete": {
-        "tags": [
-          "Auth"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -1784,6 +1419,371 @@
         }
       }
     },
+    "/api/auth/session": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/auth/antiforgery": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/auth/password": {
+      "put": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/tokens": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTokenRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTokenRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/tokens/{id}": {
+      "delete": {
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/list": {
       "get": {
         "tags": [
@@ -2587,6 +2587,35 @@
         }
       }
     },
+    "/api/integrations/oauth/callback-info": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOAuthCallbackInfoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOAuthCallbackInfoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOAuthCallbackInfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/integrations/oauth/authorize-start": {
       "post": {
         "tags": [
@@ -2644,6 +2673,21 @@
         "responses": {
           "302": {
             "description": "Found"
+          }
+        }
+      }
+    },
+    "/api/integrations/oauth/desktop-complete": {
+      "get": {
+        "tags": [
+          "OAuth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/html": { }
+            }
           }
         }
       }
@@ -4363,7 +4407,6 @@
           "enableSummary",
           "type",
           "extra",
-          "tools",
           "createTime",
           "createBy",
           "updateBy"
@@ -4416,10 +4459,10 @@
             "description": "JSON object for additional external agent settings."
           },
           "tools": {
-            "type": [
-              "null",
-              "string"
-            ]
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolValueObject"
+            }
           },
           "environmentVariables": {
             "type": "object",
@@ -4521,7 +4564,6 @@
           "description",
           "systemPrompt",
           "modelProviderId",
-          "tools",
           "enableSummary"
         ],
         "type": "object",
@@ -4548,8 +4590,11 @@
           "tools": {
             "type": [
               "null",
-              "string"
-            ]
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ToolValueObject"
+            }
           },
           "mcpToolServerIds": {
             "type": [
@@ -5218,10 +5263,10 @@
             "type": "boolean"
           },
           "tools": {
-            "type": [
-              "null",
-              "string"
-            ]
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolValueObject"
+            }
           },
           "type": {
             "$ref": "#/components/schemas/AgentType"
@@ -5413,8 +5458,11 @@
           "tools": {
             "type": [
               "null",
-              "string"
-            ]
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ToolValueObject"
+            }
           },
           "mcpToolServerIds": {
             "type": [
@@ -6633,6 +6681,40 @@
           }
         }
       },
+      "ApiResultOfOAuthCallbackInfoResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OAuthCallbackInfoResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfOAuthRefreshResponse": {
         "required": [
           "code",
@@ -7417,6 +7499,18 @@
           "AkSk"
         ]
       },
+      "BackgroundAgentsToolBlockOptions": {
+        "type": "object",
+        "properties": {
+          "allowedAgentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
       "CapabilitySourceKindResponse": {
         "enum": [
           "Native",
@@ -7832,6 +7926,9 @@
             "format": "int64"
           }
         }
+      },
+      "EmptyToolOptions": {
+        "type": "object"
       },
       "FileItem": {
         "required": [
@@ -9027,7 +9124,8 @@
       "OAuthAuthorizeStartRequest": {
         "required": [
           "connectionId",
-          "returnPath"
+          "returnPath",
+          "completionTarget"
         ],
         "type": "object",
         "properties": {
@@ -9037,6 +9135,9 @@
           },
           "returnPath": {
             "type": "string"
+          },
+          "completionTarget": {
+            "$ref": "#/components/schemas/OAuthCompletionTarget"
           }
         }
       },
@@ -9050,6 +9151,23 @@
             "type": "string"
           }
         }
+      },
+      "OAuthCallbackInfoResponse": {
+        "required": [
+          "callbackUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "callbackUrl": {
+            "type": "string"
+          }
+        }
+      },
+      "OAuthCompletionTarget": {
+        "enum": [
+          "Web",
+          "Desktop"
+        ]
       },
       "OAuthRefreshRequest": {
         "required": [
@@ -9705,8 +9823,7 @@
           "name",
           "description",
           "workspace",
-          "extraSetting",
-          "tools"
+          "extraSetting"
         ],
         "type": "object",
         "properties": {
@@ -9734,8 +9851,11 @@
           "tools": {
             "type": [
               "null",
-              "string"
-            ]
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ToolValueObject"
+            }
           },
           "mcpToolServerIds": {
             "type": [
@@ -9795,6 +9915,23 @@
           }
         }
       },
+      "ProjectMemoryStorage": {
+        "enum": [
+          "database",
+          "filesystem"
+        ]
+      },
+      "ProjectMemoryToolBlockOptions": {
+        "required": [
+          "storage"
+        ],
+        "type": "object",
+        "properties": {
+          "storage": {
+            "$ref": "#/components/schemas/ProjectMemoryStorage"
+          }
+        }
+      },
       "ProjectResponse": {
         "required": [
           "id",
@@ -9844,10 +9981,10 @@
             ]
           },
           "tools": {
-            "type": [
-              "null",
-              "string"
-            ]
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolValueObject"
+            }
           },
           "environmentVariables": {
             "type": "object",
@@ -9923,8 +10060,7 @@
           "name",
           "description",
           "workspace",
-          "extraSetting",
-          "tools"
+          "extraSetting"
         ],
         "type": "object",
         "properties": {
@@ -9952,8 +10088,11 @@
           "tools": {
             "type": [
               "null",
-              "string"
-            ]
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ToolValueObject"
+            }
           },
           "mcpToolServerIds": {
             "type": [
@@ -10341,6 +10480,13 @@
           "Clear"
         ]
       },
+      "SkillKind": {
+        "enum": [
+          "BuiltIn",
+          "Local",
+          "Remote"
+        ]
+      },
       "SkillResponse": {
         "required": [
           "id",
@@ -10418,22 +10564,358 @@
       "TaskExecutionStatus": {
         "type": "integer"
       },
+      "ToolBlockDefinition": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ToolBlockDefinitionTodoToolBlockDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolBlockDefinitionModeToolBlockDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolBlockDefinitionProjectMemoryToolBlockDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolBlockDefinitionFileAccessToolBlockDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "name",
+          "mapping": {
+            "todo": "#/components/schemas/ToolBlockDefinitionTodoToolBlockDefinition",
+            "mode": "#/components/schemas/ToolBlockDefinitionModeToolBlockDefinition",
+            "project-memory": "#/components/schemas/ToolBlockDefinitionProjectMemoryToolBlockDefinition",
+            "file-access": "#/components/schemas/ToolBlockDefinitionFileAccessToolBlockDefinition",
+            "background-agents": "#/components/schemas/ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"
+          }
+        }
+      },
+      "ToolBlockDefinitionBackgroundAgentsToolBlockDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "background-agents"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/BackgroundAgentsToolBlockOptions"
+          }
+        }
+      },
+      "ToolBlockDefinitionFileAccessToolBlockDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "file-access"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolBlockDefinitionModeToolBlockDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "mode"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolBlockDefinitionProjectMemoryToolBlockDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "project-memory"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/ProjectMemoryToolBlockOptions"
+          }
+        }
+      },
+      "ToolBlockDefinitionTodoToolBlockDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "todo"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolCatalogItemKind": {
+        "enum": [
+          "tool",
+          "toolBlock"
+        ]
+      },
+      "ToolDefinition": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ToolDefinitionAskUserQuestionToolDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolDefinitionBashToolDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolDefinitionDiffToolDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolDefinitionGenerateGuidToolDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolDefinitionGitCloneToolDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolDefinitionPowerShellToolDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolDefinitionRunShellToolDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolDefinitionWebFetchToolDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/ToolDefinitionWebSearchToolDefinition"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "name",
+          "mapping": {
+            "ask_user_question": "#/components/schemas/ToolDefinitionAskUserQuestionToolDefinition",
+            "bash": "#/components/schemas/ToolDefinitionBashToolDefinition",
+            "diff": "#/components/schemas/ToolDefinitionDiffToolDefinition",
+            "generate_guid": "#/components/schemas/ToolDefinitionGenerateGuidToolDefinition",
+            "git_clone": "#/components/schemas/ToolDefinitionGitCloneToolDefinition",
+            "powershell": "#/components/schemas/ToolDefinitionPowerShellToolDefinition",
+            "run_shell": "#/components/schemas/ToolDefinitionRunShellToolDefinition",
+            "web_fetch": "#/components/schemas/ToolDefinitionWebFetchToolDefinition",
+            "web_search": "#/components/schemas/ToolDefinitionWebSearchToolDefinition"
+          }
+        }
+      },
+      "ToolDefinitionAskUserQuestionToolDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "ask_user_question"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolDefinitionBashToolDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "bash"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolDefinitionDiffToolDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "diff"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolDefinitionGenerateGuidToolDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "generate_guid"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolDefinitionGitCloneToolDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "git_clone"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolDefinitionPowerShellToolDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "powershell"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolDefinitionRunShellToolDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "run_shell"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolDefinitionWebFetchToolDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "web_fetch"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
+      "ToolDefinitionWebSearchToolDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "web_search"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
       "ToolInfo": {
         "required": [
           "name",
+          "displayName",
           "description",
           "category",
           "typeName",
           "parameters",
+          "kind",
+          "scopes",
+          "requiresWorkspace",
           "isAsync",
           "requiresConfirmation",
           "timeoutMs"
         ],
         "type": "object",
         "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ToolCatalogItemKind"
+          },
           "name": {
             "type": "string",
             "description": "Gets the name of the tool (method name or custom name)."
+          },
+          "displayName": {
+            "type": "string"
           },
           "description": {
             "type": "string",
@@ -10446,6 +10928,18 @@
           "typeName": {
             "type": "string",
             "description": "Gets the full type name of the class containing the tool."
+          },
+          "memberToolNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scopes": {
+            "$ref": "#/components/schemas/ToolScope"
+          },
+          "requiresWorkspace": {
+            "type": "boolean"
           },
           "parameters": {
             "type": "array",
@@ -10468,7 +10962,7 @@
             "format": "int32"
           }
         },
-        "description": "Represents information about a tool that can be used by an agent."
+        "description": "Represents a selectable Tool or Tool Block in the Tools catalog."
       },
       "ToolParameterInfo": {
         "required": [
@@ -10529,6 +11023,64 @@
           }
         },
         "description": "Represents information about a parameter of a tool."
+      },
+      "ToolScope": {
+        "type": "integer"
+      },
+      "ToolValueObject": {
+        "required": [
+          "kind"
+        ],
+        "type": "object",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ToolValueObjectToolValue"
+          },
+          {
+            "$ref": "#/components/schemas/ToolValueObjectToolBlockValue"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "tool": "#/components/schemas/ToolValueObjectToolValue",
+            "toolBlock": "#/components/schemas/ToolValueObjectToolBlockValue"
+          }
+        }
+      },
+      "ToolValueObjectToolBlockValue": {
+        "required": [
+          "definition",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "toolBlock"
+            ],
+            "type": "string"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/ToolBlockDefinition"
+          }
+        }
+      },
+      "ToolValueObjectToolValue": {
+        "required": [
+          "definition",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "tool"
+            ],
+            "type": "string"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/ToolDefinition"
+          }
+        }
       },
       "TriggerType": {
         "type": "integer"
@@ -10632,13 +11184,6 @@
             }
           }
         }
-      },
-      "SkillKind": {
-        "enum": [
-          "BuiltIn",
-          "Local",
-          "Remote"
-        ]
       }
     }
   },
@@ -10651,9 +11196,6 @@
     },
     {
       "name": "Jobs"
-    },
-    {
-      "name": "Auth"
     },
     {
       "name": "Dashboard"
@@ -10669,6 +11211,9 @@
     },
     {
       "name": "Traces"
+    },
+    {
+      "name": "Auth"
     },
     {
       "name": "Files"

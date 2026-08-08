@@ -44,7 +44,7 @@ export function CreateProjectDialog({
   workspace,
   extraSetting,
   environmentVariables,
-  selectedTools,
+  tools,
   selectedSkillIds,
   selectedMcpToolServerIds,
   selectedConnectionIds,
@@ -60,7 +60,7 @@ export function CreateProjectDialog({
     }
 
     const capabilities = serializeProjectCapabilities({
-      selectedTools,
+      tools,
       selectedSkillIds,
       selectedMcpToolServerIds,
       selectedConnectionIds,
@@ -145,7 +145,7 @@ export function CreateProjectDialog({
             extraSetting={extraSetting}
             extraSettingError={extraSettingError}
             environmentVariables={environmentVariables}
-            selectedTools={selectedTools}
+            tools={tools}
             selectedSkillIds={selectedSkillIds}
             selectedMcpToolServerIds={selectedMcpToolServerIds}
             selectedConnectionIds={selectedConnectionIds}

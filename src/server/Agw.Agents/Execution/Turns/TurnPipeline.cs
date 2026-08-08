@@ -1,4 +1,4 @@
-using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Messaging;
 using Agw.Shared.AgwMsgVm;
 
 using Microsoft.Extensions.AI;
@@ -81,7 +81,8 @@ public static class TurnPipeline
     }
 
     private static bool IsControlMessage(string? messageType) =>
-        messageType?.StartsWith("human-gate-", StringComparison.Ordinal) == true;
+        messageType?.StartsWith("human-gate-", StringComparison.Ordinal) == true ||
+        messageType?.StartsWith("tool-approval-", StringComparison.Ordinal) == true;
 
     private static bool IsFatalError(AgwMessage message) =>
         message.Contents

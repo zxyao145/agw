@@ -11,6 +11,7 @@ public class ExecutionStructureTests
         {
             ["ExecutionCommandDispatcher"] = "Agw.Agents.Execution.Commands",
             ["ExecutionConnection"] = "Agw.Agents.Execution.Connections",
+            ["ExecutionConnectionContext"] = "Agw.Agents.Execution.Connections",
             ["RuntimeFactory"] = "Agw.Agents.Execution.Runtimes",
             ["RuntimeBase"] = "Agw.Agents.Execution.Runtimes",
             ["AgentRuntime"] = "Agw.Agents.Execution.Runtimes",

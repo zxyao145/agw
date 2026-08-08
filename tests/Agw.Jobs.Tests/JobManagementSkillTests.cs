@@ -1,7 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Commands.Setting;
+using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -9,6 +10,7 @@ using Agw.Jobs.Application.Services;
 using Agw.Jobs.Application.Skills;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
@@ -364,7 +366,7 @@ public class JobManagementSkillTests
         private JobManagementSkillFixture(
             SqliteConnection connection,
             ServiceProvider serviceProvider,
-            RuntimeTurnContextAccessor turnContextAccessor,
+            TestRuntimeTurnContextAccessor turnContextAccessor,
             JobManagementSkillRegistration registration)
         {
             _connection = connection;
@@ -373,18 +375,30 @@ public class JobManagementSkillTests
             Registration = registration;
         }
 
-        private RuntimeTurnContextAccessor TurnContextAccessor { get; }
+        private TestRuntimeTurnContextAccessor TurnContextAccessor { get; }
 
         private JobManagementSkillRegistration Registration { get; }
 
         public AgentSkill CreateSkill(Guid projectId) => Registration.Create(projectId);
 
-        public IDisposable PushInteractiveContext(Guid projectId, string userName) =>
-            TurnContextAccessor.Push(new RuntimeTurnContext(
-                new SettingCommand(projectId),
+        public IDisposable PushInteractiveContext(Guid projectId, string userName)
+        {
+            var contextId = Guid.CreateVersion7().ToString("D");
+            return TurnContextAccessor.Push(new RuntimeTurnContext(
+                ExecutionSettings.FromCommand(new SettingCommand(projectId)),
+                new TaskProjection
+                {
+                    TaskId = Guid.CreateVersion7(),
+                    ProjectContextId = Guid.CreateVersion7(),
+                    ProjectId = projectId,
+                    ContextId = contextId,
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                },
+                new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
                 userName,
                 workspace: string.Empty,
                 messageSink: null!));
+        }
 
         public static async Task<JobManagementSkillFixture> CreateAsync()
         {
@@ -396,7 +410,7 @@ public class JobManagementSkillTests
                 .UseSnakeCaseNamingConvention()
                 .Options;
             var timeProvider = new TestTimeProvider(UtcNow);
-            var turnContextAccessor = new RuntimeTurnContextAccessor();
+            var turnContextAccessor = new TestRuntimeTurnContextAccessor();
             var services = new ServiceCollection();
             services.AddSingleton<TimeProvider>(timeProvider);
             services.AddSingleton<IRuntimeTurnContextAccessor>(turnContextAccessor);
@@ -483,6 +497,34 @@ public class JobManagementSkillTests
         {
             await _serviceProvider.DisposeAsync();
             await _connection.DisposeAsync();
+        }
+
+        private sealed class TestRuntimeTurnContextAccessor : IRuntimeTurnContextAccessor
+        {
+            public RuntimeTurnContext? Current { get; private set; }
+
+            public IDisposable Push(RuntimeTurnContext context)
+            {
+                var previous = Current;
+                Current = context;
+                return new PopScope(this, previous);
+            }
+
+            private sealed class PopScope : IDisposable
+            {
+                private readonly TestRuntimeTurnContextAccessor _accessor;
+                private readonly RuntimeTurnContext? _previous;
+
+                public PopScope(
+                    TestRuntimeTurnContextAccessor accessor,
+                    RuntimeTurnContext? previous)
+                {
+                    _accessor = accessor;
+                    _previous = previous;
+                }
+
+                public void Dispose() => _accessor.Current = _previous;
+            }
         }
     }
 }

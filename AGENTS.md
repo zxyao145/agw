@@ -25,7 +25,7 @@ Agw.Integrations/    # Plugin catalog, installations, connections, credentials, 
 Agw.Jobs/            # Scheduled jobs, project leases, execution logs, and hosted scheduling
 Agw.Providers/       # LLM models, providers, model-provider links, and auth configuration
 Agw.Setup/           # First-run setup, initialization state, and the combined server-state persistence adapter
-Agw.Skills/          # Skill archive validation, storage, and agent-skill relations
+Agw.Skills/          # Skill definitions, local/remote content, execution adapters, and agent-skill relations
 Agw.Projects/         # Projects, project tasks, task records, contexts, and task APIs
 Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registry
 ```
@@ -84,7 +84,7 @@ dotnet test Agw.slnx
 dotnet format Agw.slnx
 ```
 
-The development backend listens on `http://localhost:30815` by default through `src/server/Agw.Host/Properties/launchSettings.json`.
+The development backend listens on `http://localhost:30816` by default through `src/server/Agw.Host/Properties/launchSettings.json`.
 
 Run a focused project with `dotnet test tests/Agw.Files.Tests` (or the matching `Agw.*.Tests` project), and use `--filter "FullyQualifiedName~MethodName"` for a specific test.
 
@@ -125,7 +125,7 @@ AGW_PACKAGE_FLAVOR=full pnpm make:desktop
 pnpm make:desktop -- --arch=x64
 ```
 
-The frontend proxy target is resolved in this order: `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:30815`.
+The frontend proxy target is resolved in this order: `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:30816`.
 
 Regenerate `src/clients/packages/api/src/openapi.d.ts` with `pnpm gen:api` after backend contract changes.
 
@@ -133,7 +133,7 @@ After the first clone, configure hooks with `git config core.hooksPath .githooks
 
 ## Local Setup and Configuration
 
-On the first backend run, open `http://localhost:30815/setup` to choose the database provider, connection string, and administrator password. Setup seeds the database and writes `server-state.json` below the Agw data directory.
+On the first backend run, open `http://localhost:30816/setup` to choose the database provider, connection string, and administrator password. Setup seeds the database and writes `server-state.json` below the Agw data directory.
 
 Remote web access uses the administrator session cookie. Desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API tokens. The legacy `X-API-Key` setting is not supported.
 

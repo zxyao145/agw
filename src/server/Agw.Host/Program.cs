@@ -30,6 +30,7 @@ using Agw.Setup.Controllers;
 using Agw.Setup.Middleware;
 using Agw.Setup.Services;
 using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 using Agw.Shared.Runtime;
@@ -166,6 +167,7 @@ try
         .AddJsonOptions(options =>
         {
             options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+            options.JsonSerializerOptions.AllowOutOfOrderMetadataProperties = true;
         })
         .AddApplicationPart(typeof(AgentsController).Assembly)
         .AddApplicationPart(typeof(ProjectsController).Assembly)
@@ -197,6 +199,22 @@ try
             }
 
             var type = context.JsonTypeInfo.Type;
+            if (type != typeof(ToolValueObject) &&
+                typeof(ToolValueObject).IsAssignableFrom(type))
+            {
+                schema.Required ??= new HashSet<string>();
+                schema.Required.Add("kind");
+            }
+
+            if ((type != typeof(ToolDefinition) &&
+                 typeof(ToolDefinition).IsAssignableFrom(type)) ||
+                (type != typeof(ToolBlockDefinition) &&
+                 typeof(ToolBlockDefinition).IsAssignableFrom(type)))
+            {
+                schema.Required ??= new HashSet<string>();
+                schema.Required.Add("name");
+            }
+
             if (type == typeof(AgentUpdateRequest))
             {
                 schema.Required?.Clear();
@@ -262,6 +280,7 @@ try
     // add module
     builder.Services
         .AddA2A(builder.Configuration)
+        .AddTools(builder.Configuration)
         .AddAgents(builder.Configuration)
         .AddFiles(builder.Configuration)
         .AddInfrastructure(builder.Configuration)
@@ -269,7 +288,6 @@ try
         .AddProviders(builder.Configuration)
         .AddSkills(builder.Configuration)
         .AddProjects(builder.Configuration)
-        .AddTools(builder.Configuration)
         .AddAuth()
         .AddSetup(builder.Configuration)
         .AddIntegrations(builder.Configuration)

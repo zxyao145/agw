@@ -46,6 +46,7 @@ import {
 } from "../../../services/execution-session-manager";
 import type { AiMessage } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
+import { hasMatchingHumanInteractionCall } from "../../../services/human-interaction-call";
 
 export interface ChatSessionSeed {
   revision: string | number;
@@ -261,7 +262,15 @@ export function Chat({
 
       const humanGate = getPendingHumanGate(message);
       if (humanGate) {
-        setPendingHumanGate(humanGate);
+        setPendingHumanGate(
+          humanGate.requestType === "human-interaction"
+            ? {
+                ...humanGate,
+                streamingScopeId:
+                  message.streamingScopeId ?? activeStreamingScopeRef.current ?? undefined,
+              }
+            : humanGate,
+        );
         return;
       }
 
@@ -485,7 +494,12 @@ export function Chat({
   }, [notifyExecutionError]);
 
   const submitHumanGateResponse = React.useCallback(
-    (approved: boolean, responseText?: string) => {
+    (
+      approved: boolean,
+      responseText?: string,
+      approvalScope: "once" | "always-tool" | "always-arguments" = "once",
+      responseData?: unknown,
+    ) => {
       const client = executionClientRef.current;
       if (!pendingHumanGate || !client) {
         toast.error("No active HumanGate request");
@@ -499,6 +513,8 @@ export function Chat({
           requestId,
           approved,
           responseText,
+          approvalScope,
+          responseData,
         })
         .then(() => {
           if (
@@ -567,6 +583,17 @@ export function Chat({
     );
   }, []);
 
+  const pendingHumanInteraction =
+    pendingHumanGate?.requestType === "human-interaction"
+      ? { ...pendingHumanGate, requestType: "human-interaction" as const }
+      : null;
+  const floatingHumanGate =
+    pendingHumanGate &&
+    (!pendingHumanInteraction ||
+      !hasMatchingHumanInteractionCall(visibleMessages, pendingHumanInteraction))
+      ? pendingHumanGate
+      : null;
+
   return (
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
       <div
@@ -582,6 +609,11 @@ export function Chat({
               messagesStartRef={messagesStartRef}
               messagesEndRef={messagesEndRef}
               scrollable={false}
+              pendingHumanInteraction={pendingHumanInteraction}
+              onHumanInteractionSubmit={(responseData) =>
+                submitHumanGateResponse(true, undefined, "once", responseData)
+              }
+              onHumanInteractionCancel={() => submitHumanGateResponse(false)}
             />
           </div>
 
@@ -592,11 +624,13 @@ export function Chat({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center">
         <div className="relative min-h-30 min-w-0 max-w-5xl flex-1 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-6">
           {/* 用户确认 */}
-          {pendingHumanGate ? (
+          {floatingHumanGate ? (
             <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
               <HumanGateApproval
-                request={pendingHumanGate}
-                onApprove={(responseText) => submitHumanGateResponse(true, responseText)}
+                request={floatingHumanGate}
+                onApprove={(approvalScope, responseText, responseData) =>
+                  submitHumanGateResponse(true, responseText, approvalScope, responseData)
+                }
                 onReject={(responseText) => submitHumanGateResponse(false, responseText)}
               />
             </div>

@@ -1,6 +1,5 @@
 using System.IO.Compression;
 
-using Agw.Agents.Execution.Agents.Skills;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
@@ -9,9 +8,10 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-using Agw.Shared.Utils;
+using Agw.Skills.Contracts.Registration;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -327,6 +327,10 @@ public class DbSeeder
                 agent = definition;
                 _context.Agents.Add(agent);
             }
+            else
+            {
+                BackfillDefaultAgentTools(agent, definition, now);
+            }
 
             agents[definition.Name] = agent;
         }
@@ -348,10 +352,13 @@ public class DbSeeder
                 ModelProviderId = modelProviderId,
                 EnableSummary = true,
                 Type = AgentType.System,
-                Tools = JsonUtil.Serialize(new[]
-                {
-                    "diff", "file_edit", "glob", "grep", "ls", "read_file", "write_file", "git_clone", "bash"
-                }),
+                Tools =
+                [
+                    new ToolValue { Definition = new DiffToolDefinition() },
+                    new ToolValue { Definition = new GitCloneToolDefinition() },
+                    new ToolValue { Definition = new BashToolDefinition() },
+                    new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() }
+                ],
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
@@ -473,11 +480,12 @@ public class DbSeeder
                     """,
                 ModelProviderId = modelProviderId,
                 Type = AgentType.System,
-                Tools = JsonUtil.Serialize(new[]
-                {
-                    "task_create", "task_get", "task_list", "task_output", "task_stop", "task_update",
-                    "web_fetch", "web_search"
-                }),
+                Tools =
+                [
+                    new ToolValue { Definition = new WebFetchToolDefinition() },
+                    new ToolValue { Definition = new WebSearchToolDefinition() },
+                    new ToolBlockValue { Definition = new TodoToolBlockDefinition() }
+                ],
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
@@ -516,6 +524,40 @@ public class DbSeeder
                 UpdateTime = now
             }
         ];
+    }
+
+    private static void BackfillDefaultAgentTools(
+        Agent agent,
+        Agent definition,
+        DateTimeOffset now)
+    {
+        if (agent.Id != definition.Id)
+        {
+            return;
+        }
+
+        IReadOnlyList<ToolValueObject>? obsoleteTools = agent.Id switch
+        {
+            var id when id == GeneralAgentId =>
+            [
+                new ToolValue { Definition = new DiffToolDefinition() },
+                new ToolValue { Definition = new GitCloneToolDefinition() },
+                new ToolValue { Definition = new BashToolDefinition() }
+            ],
+            var id when id == LocationExtractorAgentId =>
+            [
+                new ToolValue { Definition = new WebFetchToolDefinition() }
+            ],
+            _ => null
+        };
+        if (obsoleteTools == null || !agent.Tools.SequenceEqual(obsoleteTools))
+        {
+            return;
+        }
+
+        agent.Tools = definition.Tools;
+        agent.UpdateBy = Constants.AdminUserName;
+        agent.UpdateTime = now;
     }
 
     private async Task<Skill> SeedDefaultSkillAsync()

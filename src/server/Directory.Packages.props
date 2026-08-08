@@ -3,12 +3,14 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="ClaudeCodeSdk.MAF" Version="10.3.1-preview.1" />
-    <PackageVersion Include="CodexSdk.MAF" Version="0.1.1-preview.1" />
+    <PackageVersion Include="ClaudeCodeSdk.MAF" Version="10.3.2-preview.1" />
+    <PackageVersion Include="CodexSdk.MAF" Version="0.1.2-preview.1" />
     <PackageVersion Include="DiffPlex" Version="1.9.0" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.15.0" />
+    <PackageVersion Include="Microsoft.Agents.AI.Harness" Version="1.15.0" />
     <PackageVersion Include="Microsoft.Agents.AI.OpenAI" Version="1.15.0" />
     <PackageVersion Include="Microsoft.Agents.AI.Anthropic" Version="1.15.0-preview.260722.1" />
+    <PackageVersion Include="Microsoft.Agents.AI.Tools.Shell" Version="1.15.0-preview.260722.1" />
     <PackageVersion Include="Microsoft.Agents.AI.Workflows" Version="1.15.0" />
     <PackageVersion Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.15.0-preview.260722.1" />
   </ItemGroup>

@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 const backendBaseUrl =
   process.env.BACKEND_API_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
-  "http://localhost:30815";
+  "http://localhost:30816";
 
 const outputMode = process.env.NEXT_OUTPUT_MODE;
 const isStaticExport = outputMode === "export";

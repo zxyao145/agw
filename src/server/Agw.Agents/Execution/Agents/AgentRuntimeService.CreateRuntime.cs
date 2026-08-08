@@ -1,9 +1,9 @@
 using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Contracts;
+using Agw.Agents.Execution.Agents.Store;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 
 using Microsoft.Extensions.Logging;
@@ -29,7 +29,16 @@ public partial class AgentRuntimeService
 
         Guid projectId = task.ProjectId;
         var resolvedContextId = ContextIdUtil.ResolveContextId(task.ContextId);
-        var sessionKey = CreateSessionKey(projectId, resolvedContextId);
+        var conversationId = task.ProjectContextId != Guid.Empty
+            ? task.ProjectContextId
+            : await _sessionStateStore
+                .ResolveProjectContextIdAsync(projectId, resolvedContextId, cancellationToken)
+                .ConfigureAwait(false) ?? Guid.Empty;
+        var sessionScope = new AgentSessionStateScope(
+            conversationId,
+            projectId,
+            resolvedContextId,
+            agent.Id);
         var providerSessionId =
             await GetCodexProviderSessionIdAsync(agent, projectId, resolvedContextId, cancellationToken);
         var resume = IsCodexExternalAgent(agent)
@@ -49,6 +58,7 @@ public partial class AgentRuntimeService
             EnvironmentVariables = settings.EnvironmentVariables,
             ProviderSessionId = providerSessionId,
             ProjectId = projectId,
+            ConversationId = conversationId,
             Resume = resume,
             OnExternalSessionStartedAsync = CreateExternalSessionStartedCallback(agent, task, resolvedContextId),
         }, cancellationToken);
@@ -60,7 +70,7 @@ public partial class AgentRuntimeService
         try
         {
             var agentSession = await _sessionStateStore
-                .GetOrCreateAsync(agent, aiAgent, sessionKey, cancellationToken)
+                .GetOrCreateAsync(agent, aiAgent, sessionScope, cancellationToken)
                 .ConfigureAwait(false);
             _providerSessionState.InitializeSessionState(
                 agentSession,
@@ -73,10 +83,12 @@ public partial class AgentRuntimeService
                 agentSession,
                 projectId: projectId,
                 contextId: resolvedContextId,
-                sessionKey: sessionKey,
+                sessionStateScope: sessionScope,
+                agentType: agent.Type,
                 enableSummary: agent.EnableSummary && summaryModelProviderId.HasValue,
                 summaryModelProviderId: summaryModelProviderId,
-                summaryService: _summaryService);
+                summaryService: _summaryService,
+                conversationHistoryWriter: _conversationHistoryWriter);
         }
         catch
         {
@@ -146,6 +158,4 @@ public partial class AgentRuntimeService
         };
     }
 
-    private static string CreateSessionKey(Guid projectId, string contextId) =>
-        $"{ProjectDefaults.GetDefaultProjectIdentifier(projectId).Normalize()}:{contextId.Trim()}";
 }

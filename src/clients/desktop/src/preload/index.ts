@@ -18,6 +18,7 @@ const bridge: AgwDesktopBridge = {
   deleteToken: (profileId: string) =>
     ipcRenderer.invoke("agw:delete-token", profileId) as Promise<void>,
   provisionLocalToken: () => ipcRenderer.invoke("agw:provision-local-token") as Promise<string>,
+  openExternal: (url: string) => ipcRenderer.invoke("agw:open-external", url) as Promise<void>,
   openSetup: (baseUrl: string) => ipcRenderer.invoke("agw:open-setup", baseUrl) as Promise<void>,
   setActiveTaskCount: (count: number) =>
     ipcRenderer.invoke("agw:set-active-task-count", count) as Promise<void>,

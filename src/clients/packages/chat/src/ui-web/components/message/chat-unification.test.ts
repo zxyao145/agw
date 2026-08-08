@@ -82,6 +82,17 @@ test("shared Chat owns canonical message filtering, grouping, usage, and managed
   assert.match(managerSource, /private readonly entries = new Map/);
 });
 
+test("shared Chat keeps unmatched human interactions in the fallback approval overlay", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+
+  assert.match(
+    source,
+    /hasMatchingHumanInteractionCall\(visibleMessages, pendingHumanInteraction\)/,
+  );
+  assert.match(source, /pendingHumanInteraction=\{pendingHumanInteraction\}/);
+  assert.match(source, /request=\{floatingHumanGate\}/);
+});
+
 test("shared Chat scopes history and merges only the incoming streaming message", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 

@@ -6,12 +6,10 @@ import {
   EnvironmentVariablesPanel,
   McpToolServersPanel,
   SkillsPanel,
-  ToolsPanel,
   type ConnectionOption,
   type EnvironmentVariableEntry,
   type McpToolServerDto,
   type SkillDto,
-  type ToolInfo,
 } from "@agw/integrations";
 import { SearchableSelect, type SearchableSelectOption } from "@agw/components";
 import { Input } from "@agw/components";
@@ -19,6 +17,7 @@ import { Label } from "@agw/components";
 import { Switch } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { Textarea } from "@agw/components";
+import { ToolsPanel, type ToolInfo, type ToolValueObject } from "@agw/tools";
 
 import { getAgentExtraSettingsError } from "./agent-extra-settings";
 import type { ModelProviderDto } from "./types";
@@ -50,13 +49,14 @@ interface AgentFormFieldsProps {
   connectionOptions: ConnectionOption[];
   selectedConnectionIds: string[];
   toggleConnection: (connectionId: string) => void;
-  selectedTools: string[];
+  tools: ToolValueObject[];
+  setTools: (value: ToolValueObject[]) => void;
+  agentOptions: Array<{ id: string; name: string; displayName?: string }>;
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   toggleSkill: (skillId: string) => void;
-  toggleTool: (toolName: string) => void;
   selectedMcpToolServerIds: string[];
   toggleMcpToolServer: (mcpToolServerId: string) => void;
   idPrefix?: string;
@@ -95,13 +95,14 @@ export function AgentFormFields({
   connectionOptions,
   selectedConnectionIds,
   toggleConnection,
-  selectedTools,
+  tools,
+  setTools,
+  agentOptions,
   modelProvidersQuery,
   skillsQuery,
   toolsQuery,
   mcpToolServersQuery,
   toggleSkill,
-  toggleTool,
   selectedMcpToolServerIds,
   toggleMcpToolServer,
   idPrefix = "",
@@ -286,8 +287,8 @@ export function AgentFormFields({
           <div className="shrink-0 overflow-x-auto agw-scrollbar border-b px-6 py-3">
             <TabsList className="h-auto w-max">
               <TabsTrigger value="system-prompt">Instructions</TabsTrigger>
-              <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="tools">Tools</TabsTrigger>
+              <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
               <TabsTrigger value="connections">Connections</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
@@ -348,10 +349,12 @@ export function AgentFormFields({
             className="m-0 min-h-0 flex-1 overflow-y-auto agw-scrollbar p-6"
           >
             <ToolsPanel
+              scope="agent"
               idPrefix={idPrefix}
               toolsQuery={toolsQuery}
-              selectedTools={selectedTools}
-              toggleTool={toggleTool}
+              values={tools}
+              setValues={setTools}
+              agentOptions={agentOptions}
               disabled={isExternalAgent}
               notice={
                 isExternalAgent ? (

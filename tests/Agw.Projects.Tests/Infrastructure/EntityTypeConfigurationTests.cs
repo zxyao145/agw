@@ -69,9 +69,51 @@ public class EntityTypeConfigurationTests
         AssertConfigured(
             typeof(Agent),
             typeof(AgentConnectionRelation),
+            typeof(AgentSessionStateEntry),
             typeof(AgentSkillRelation),
             typeof(McpServer),
             typeof(AgentMcpServerRelation));
+    }
+
+    [Fact]
+    public void AgentSessionState_UsesProjectContextAgentAndNodeCompositeKey()
+    {
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite("Data Source=:memory:")
+            .Options;
+        using var context = new AgwDbContext(options);
+
+        var primaryKey = context.Model
+            .FindEntityType(typeof(AgentSessionStateEntry))!
+            .FindPrimaryKey()!;
+
+        Assert.Equal(
+            [
+                nameof(AgentSessionStateEntry.ProjectContextId),
+                nameof(AgentSessionStateEntry.AgentId),
+                nameof(AgentSessionStateEntry.AgentflowNodeId)
+            ],
+            primaryKey.Properties.Select(property => property.Name));
+    }
+
+    [Fact]
+    public void ProjectMemory_UsesProjectAndPathAsUniqueScope()
+    {
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite("Data Source=:memory:")
+            .Options;
+        using var context = new AgwDbContext(options);
+        var entityType = context.Model.FindEntityType(typeof(ProjectMemoryEntry))!;
+        var uniqueIndex = Assert.Single(
+            entityType.GetIndexes(),
+            index => index.IsUnique);
+
+        Assert.Equal(
+            [
+                nameof(ProjectMemoryEntry.ProjectId),
+                nameof(ProjectMemoryEntry.Path)
+            ],
+            uniqueIndex.Properties.Select(property => property.Name));
     }
 
     [Fact]
@@ -90,6 +132,7 @@ public class EntityTypeConfigurationTests
     {
         AssertConfigured(
             typeof(Project),
+            typeof(ProjectMemoryEntry),
             typeof(ProjectSkillRelation),
             typeof(ProjectMcpServerRelation),
             typeof(ProjectConnectionRelation),
@@ -119,7 +162,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(29, entityTypes.Length);
+        Assert.Equal(31, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 
