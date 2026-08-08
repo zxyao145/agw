@@ -44,7 +44,10 @@ public sealed class ModeToolBlockTests
         Assert.Contains("prepare a decision-complete plan", materialized.Context.Instructions);
         Assert.Contains("Do not execute shell commands", materialized.Context.Instructions);
         Assert.Contains("Todo tools may be used", materialized.Context.Instructions);
-        Assert.Contains("Present the proposed plan in chat", materialized.Context.Instructions);
+        Assert.Contains("<proposed_plan>", materialized.Context.Instructions);
+        Assert.Contains("</proposed_plan>", materialized.Context.Instructions);
+        Assert.Contains("Do not use them for clarifying questions", materialized.Context.Instructions);
+        Assert.Contains("do not write any preamble or closing text", materialized.Context.Instructions);
         Assert.DoesNotContain("Create a todo list", materialized.Context.Instructions);
         Assert.DoesNotContain("write the plan", materialized.Context.Instructions);
     }

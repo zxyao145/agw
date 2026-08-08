@@ -9,7 +9,12 @@ public sealed class ModeToolBlock : IToolBlock
         Use Plan mode only to understand the request and prepare a decision-complete plan.
         Explore existing project data with the available read-only tools, research as needed, and ask clarifying questions when requirements or tradeoffs are unresolved.
         Do not execute shell commands or mutate files, project memory, background tasks, Connections, MCP resources, or any other business data. Todo tools may be used to organize the proposed plan.
-        Present the proposed plan in chat and wait for explicit human approval before requesting a switch to Execute mode with mode_set.
+        When the plan is decision-complete and ready for approval, the final response must consist of exactly one block in this form:
+        <proposed_plan>
+        Markdown plan content
+        </proposed_plan>
+        Do not put these tags in a code fence. Do not use them for clarifying questions, interim updates, or ordinary answers, and do not write any preamble or closing text outside the block.
+        After presenting the proposed plan, wait for explicit human approval before requesting a switch to Execute mode with mode_set.
         """;
 
     internal const string ExecuteModeInstructions =

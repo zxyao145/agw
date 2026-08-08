@@ -4,6 +4,7 @@ import { cn } from "@agw/components";
 import { MessageNode } from "./types";
 import { renderContent } from "./renders";
 import { ToolState, isToolStateMessage, MessageCitations } from "./tool-state";
+import { parseMessageProposedPlan } from "./proposed-plan";
 
 export const isResultMessage = (message: AiMessage): boolean =>
   message.additionalProperties?.type === "result";
@@ -78,7 +79,7 @@ const groupContentsByType = (message: AiMessage): MessageNode[] => {
     const { type } = content;
 
     if (lastType && type !== lastType) {
-      nodes.push({ type: lastType, content: currentContent });
+      nodes.push(createMessageNode(lastType, currentContent, message));
       currentContent = "";
     }
 
@@ -88,10 +89,17 @@ const groupContentsByType = (message: AiMessage): MessageNode[] => {
   }
 
   if (lastType) {
-    nodes.push({ type: lastType, content: currentContent });
+    nodes.push(createMessageNode(lastType, currentContent, message));
   }
 
   return nodes;
+};
+
+// 识别是否为 plan
+const createMessageNode = (type: string, content: string, message: AiMessage): MessageNode => {
+  const proposedPlan = parseMessageProposedPlan(message, type, content);
+
+  return proposedPlan ? { type, content, proposedPlan } : { type, content };
 };
 
 export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
@@ -105,6 +113,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
   // To solve the problem of multiple returns of the same type in streaming mode
   // A more appropriate approach is to group by messageId. Why wasn't that done? already forgotten
   const groupContents = React.useMemo(() => groupContentsByType(message), [message]);
+  const isProposedPlan = groupContents.some((node) => node.proposedPlan != null);
 
   // const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
   const isUser = message.role === "user";
@@ -117,6 +126,11 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
   );
 
   const IsSideRight = isUser && !isToolResult;
+  const messagePositionClass = IsSideRight
+    ? "rounded-lg px-2 py-1 bg-[#f3f3f4] text-[#17191d] ml-12"
+    : isProposedPlan
+      ? "w-full"
+      : "mr-12";
   let title = "";
   if (isResult) {
     title = "Result";
@@ -148,7 +162,7 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
       className={cn(
         "flex",
         IsSideRight ? "justify-end" : "justify-start",
-        isUserBlock || isResult ? "w-full mb-8" : "max-w-[80%]",
+        isUserBlock || isResult ? "w-full mb-8" : isProposedPlan ? "w-full" : "max-w-[80%]",
       )}
     >
       <div
@@ -156,12 +170,13 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
           "min-w-0 ",
           IsSideRight ? "msg-pos-right" : "msg-pos-left",
           isResult ? "w-full rounded-md p-3 border border-[#e4e4e5] bg-[##fffeff] " : "max-w-full",
-          IsSideRight
-            ? "rounded-lg px-2 py-1 bg-[#f3f3f4] text-[#17191d] ml-12"
-            : // ? "rounded-lg px-2 py-1 bg-[#f3f3f4] ml-24"
-              // debug
-              // : "bg-secondary mr-12"}`}
-              "mr-12",
+          // IsSideRight
+          //     ? "rounded-lg px-2 py-1 bg-[#f3f3f4] text-[#17191d] ml-12"
+          //     : // ? "rounded-lg px-2 py-1 bg-[#f3f3f4] ml-24"
+          //       // debug
+          //       // : "bg-secondary mr-12"}`}
+          //     "mr-12",
+          messagePositionClass,
         )}
       >
         <div className={`flex items-center gap-2 ${IsSideRight ? "justify-end" : ""}`}>
