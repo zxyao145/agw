@@ -21,7 +21,7 @@ public class TaskProjectionModelTests
     }
 
     [Fact]
-    public void ProjectConversation_HasExpectedTableAndUniqueProjectContextIdIndex()
+    public void ProjectConversation_HasExpectedTableAndUniqueProjectAndContextIdIndex()
     {
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite("DataSource=:memory:")

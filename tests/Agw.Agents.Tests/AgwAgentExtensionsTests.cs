@@ -190,7 +190,7 @@ public sealed class AgwAgentExtensionsTests
         }
 
         var projectId = Guid.CreateVersion7();
-        var projectContextId = Guid.CreateVersion7();
+        var projectConversationId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
@@ -201,9 +201,9 @@ public sealed class AgwAgentExtensionsTests
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
-            seedContext.ProjectContexts.Add(new ProjectContext
+            seedContext.ProjectConversations.Add(new ProjectConversation
             {
-                Id = projectContextId,
+                Id = projectConversationId,
                 ProjectId = projectId,
                 ContextId = "context-1",
                 Title = "Chat",
@@ -268,8 +268,8 @@ public sealed class AgwAgentExtensionsTests
         Assert.Equal(functionCall.CallId, functionResult.CallId);
 
         await using var verifyContext = new AgwDbContext(options);
-        var records = await verifyContext.TaskRecords
-            .Where(record => record.ProjectContextId == projectContextId)
+        var records = await verifyContext.ProjectConversationChatHistories
+            .Where(record => record.ConversationId == projectConversationId)
             .OrderBy(record => record.ConversationSequence)
             .ToListAsync(cancellationToken);
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
@@ -311,6 +311,48 @@ public sealed class AgwAgentExtensionsTests
     }
 
     [Fact]
+    public async Task FunctionResultOrdering_HistoricalResultBeforeCurrentResult_MovesCurrentResultNextToCall()
+    {
+        var innerClient = new FunctionCallingStubChatClient();
+        using var client = new FunctionResultOrderingChatClient(innerClient);
+        var contextMessage = new ChatMessage(ChatRole.User, "current todo context")
+            .WithAgentRequestMessageSource(
+                AgentRequestMessageSourceType.AIContextProvider,
+                "TodoProvider");
+
+        await foreach (var _ in client.GetStreamingResponseAsync(
+                           [
+                               CreateFunctionCallMessage("historical-call"),
+                               CreateFunctionResultMessage("historical-call"),
+                               CreateFunctionCallMessage("current-call"),
+                               contextMessage,
+                               CreateFunctionResultMessage("current-call")
+                           ],
+                           cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        var request = Assert.Single(innerClient.Requests);
+        Assert.Collection(
+            request,
+            message => Assert.Equal(
+                "historical-call",
+                Assert.IsType<FunctionCallContent>(Assert.Single(message.Contents)).CallId),
+            message => Assert.Equal(
+                "historical-call",
+                Assert.IsType<FunctionResultContent>(Assert.Single(message.Contents)).CallId),
+            message => Assert.Equal(
+                "current-call",
+                Assert.IsType<FunctionCallContent>(Assert.Single(message.Contents)).CallId),
+            message => Assert.Equal(
+                "current-call",
+                Assert.IsType<FunctionResultContent>(Assert.Single(message.Contents)).CallId),
+            message => Assert.Equal(
+                AgentRequestMessageSourceType.AIContextProvider,
+                message.GetAgentRequestMessageSourceType()));
+    }
+
+    [Fact]
     public async Task AsAgwAgent_WithWarning_PersistsWarningBetweenUserAndAssistant()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -326,7 +368,7 @@ public sealed class AgwAgentExtensionsTests
         }
 
         var projectId = Guid.CreateVersion7();
-        var projectContextId = Guid.CreateVersion7();
+        var projectConversationId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(new Project
@@ -337,9 +379,9 @@ public sealed class AgwAgentExtensionsTests
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
-            seedContext.ProjectContexts.Add(new ProjectContext
+            seedContext.ProjectConversations.Add(new ProjectConversation
             {
-                Id = projectContextId,
+                Id = projectConversationId,
                 ProjectId = projectId,
                 ContextId = "context-1",
                 Title = "Chat",
@@ -389,8 +431,8 @@ public sealed class AgwAgentExtensionsTests
         }
 
         await using var verifyContext = new AgwDbContext(options);
-        var records = await verifyContext.TaskRecords
-            .Where(record => record.ProjectContextId == projectContextId)
+        var records = await verifyContext.ProjectConversationChatHistories
+            .Where(record => record.ConversationId == projectConversationId)
             .OrderBy(record => record.ConversationSequence)
             .ToListAsync(cancellationToken);
         var messages = records
@@ -466,6 +508,14 @@ public sealed class AgwAgentExtensionsTests
 
     private static JsonElement GetTodoSnapshotItems(AgentResponseUpdate update) =>
         JsonSerializer.SerializeToElement(update.AdditionalProperties!["items"]);
+
+    private static ChatMessage CreateFunctionCallMessage(string callId) =>
+        new(
+            ChatRole.Assistant,
+            [new FunctionCallContent(callId, "web_search", new Dictionary<string, object?>())]);
+
+    private static ChatMessage CreateFunctionResultMessage(string callId) =>
+        new(ChatRole.Tool, [new FunctionResultContent(callId, "result")]);
 
     private static bool IsMessageType(
         AdditionalPropertiesDictionary? properties,

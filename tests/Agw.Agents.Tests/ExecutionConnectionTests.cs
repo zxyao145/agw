@@ -80,7 +80,7 @@ public class ExecutionConnectionTests
         var task = new TaskProjection
         {
             TaskId = Guid.CreateVersion7(),
-            ProjectContextId = Guid.CreateVersion7(),
+            ProjectConversationId = Guid.CreateVersion7(),
             ProjectId = Guid.CreateVersion7(),
             ContextId = "context",
             CreateTime = TimeProvider.System.GetUtcNow(),

@@ -9,8 +9,9 @@ namespace Agw.Infrastructure.Tests;
 
 public sealed class ProjectConversationMigrationTests
 {
-    private const string PreviousMigration = "20260726135918_AddSkillKindAndRemoteCache";
-    private const string RenameMigration = "20260728122531_RenameProjectConversationEntities";
+    private const string PreviousMigration =
+        "20260807151950_ReplaceFileMemoryWithProjectMemory";
+    private const string RenameMigration = "20260808035535_RenameProjectConversationEntities";
 
     [Fact]
     public async Task MigrateAsync_Sqlite_RenamesTablesAndPreservesConversationData()
@@ -67,6 +68,14 @@ public sealed class ProjectConversationMigrationTests
                 ({bindingId}, {conversationId}, {agentId}, {"codex"}, {"session-1"}, {createdAt});
             """,
             cancellationToken);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO agent_session_state
+                (project_context_id, agent_id, agentflow_node_id, serialized_session, updated_at)
+            VALUES
+                ({conversationId}, {agentId}, {"flow-a:node-a"}, {"{\"id\":\"session-1\"}"}, {createdAt});
+            """,
+            cancellationToken);
 
         await migrator.MigrateAsync(RenameMigration, cancellationToken);
 
@@ -80,11 +89,16 @@ public sealed class ProjectConversationMigrationTests
         var binding = await dbContext.TaskSessionBindings.SingleAsync(
             item => item.Id == bindingId,
             cancellationToken);
+        var sessionState = await dbContext.AgentSessionStates.SingleAsync(
+            item => item.AgentId == agentId && item.AgentflowNodeId == "flow-a:node-a",
+            cancellationToken);
 
         Assert.Equal("context-1", conversation.ContextId);
         Assert.Equal(conversationId, history.ConversationId);
         Assert.Equal("{\"role\":\"user\"}", history.ConversationPayload);
         Assert.Equal(conversationId, binding.ProjectConversationId);
+        Assert.Equal(conversationId, sessionState.ProjectConversationId);
+        Assert.Equal("{\"id\":\"session-1\"}", sessionState.SerializedSession);
         Assert.False(await TableExistsAsync(connection, "project_context", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_task_record", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_conversation", cancellationToken));
@@ -110,6 +124,20 @@ public sealed class ProjectConversationMigrationTests
                 "SELECT project_context_id FROM task_session_binding WHERE id = $id;",
                 bindingId,
                 cancellationToken))!));
+        Assert.Equal(
+            conversationId,
+            Guid.Parse((await ReadScalarAsync(
+                connection,
+                "SELECT project_context_id FROM agent_session_state WHERE agent_id = $id;",
+                agentId,
+                cancellationToken))!));
+        Assert.Equal(
+            "{\"id\":\"session-1\"}",
+            await ReadScalarAsync(
+                connection,
+                "SELECT serialized_session FROM agent_session_state WHERE agent_id = $id;",
+                agentId,
+                cancellationToken));
     }
 
     [Theory]
@@ -139,16 +167,37 @@ public sealed class ProjectConversationMigrationTests
         Assert.Contains("project_conversation", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("project_task_record", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("project_conversation_chat_history", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("agent_session_state", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("project_conversation_id", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "ix_project_conversation_project_id_context_id",
+            script,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "ix_project_conversation_chat_history_project_conversation_id_conversation_sequence",
+            script,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "ix_task_session_binding_project_conversation_id_agent_id_external_agent_name",
+            script,
+            StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DROP TABLE", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CREATE TABLE", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DELETE FROM", script, StringComparison.OrdinalIgnoreCase);
 
         if (usePostgres)
         {
-            Assert.Contains("RENAME CONSTRAINT pk_project_context", script, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(
-                "RENAME CONSTRAINT fk_task_session_binding_project_context_project_context_id",
+                "RENAME CONSTRAINT pk_project_context TO pk_project_conversation",
+                script,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                "RENAME CONSTRAINT pk_project_task_record TO pk_project_conversation_chat_history",
+                script,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                "RENAME CONSTRAINT fk_task_session_binding_project_context_project_context_id " +
+                "TO fk_task_session_binding_project_conversation_project_conversation_id",
                 script,
                 StringComparison.OrdinalIgnoreCase);
         }

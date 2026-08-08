@@ -30,6 +30,11 @@ namespace Agw.Infrastructure.Migrations
                 table: "task_session_binding",
                 newName: "project_conversation_id");
 
+            migrationBuilder.RenameColumn(
+                name: "project_context_id",
+                table: "agent_session_state",
+                newName: "project_conversation_id");
+
             migrationBuilder.RenameIndex(
                 name: "ix_project_context_job_id",
                 table: "project_conversation",
@@ -111,6 +116,11 @@ namespace Agw.Infrastructure.Migrations
             migrationBuilder.RenameColumn(
                 name: "project_conversation_id",
                 table: "task_session_binding",
+                newName: "project_context_id");
+
+            migrationBuilder.RenameColumn(
+                name: "project_conversation_id",
+                table: "agent_session_state",
                 newName: "project_context_id");
 
             migrationBuilder.RenameIndex(

@@ -27,7 +27,7 @@ public static class TaskExecutionMapper
         return new TaskProjection
         {
             TaskId = firstRecord.TaskId,
-            ProjectContextId = context.Id,
+            ProjectConversationId = context.Id,
             ProjectId = context.ProjectId,
             ContextId = context.ContextId,
             JobId = latestRecord.JobId,

@@ -28,24 +28,80 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
     private static IEnumerable<ChatMessage> OrderMessages(IEnumerable<ChatMessage> messages)
     {
         var messageList = messages as IList<ChatMessage> ?? messages.ToList();
-        var firstFunctionResultIndex = -1;
-        for (var index = 0; index < messageList.Count; index++)
+        var lastFunctionResultIndex = -1;
+        for (var index = messageList.Count - 1; index >= 0; index--)
         {
             if (IsFunctionResultMessage(messageList[index]))
             {
-                firstFunctionResultIndex = index;
+                lastFunctionResultIndex = index;
                 break;
             }
         }
 
-        if (firstFunctionResultIndex <= 0)
+        if (lastFunctionResultIndex <= 0)
         {
             return messageList;
         }
 
-        // Approval continuations retain context-provider messages and append the tool result after them.
-        // Per-service persistence loads the matching function call later, so the result must lead this request.
-        for (var index = 0; index < firstFunctionResultIndex; index++)
+        var functionResultStart = lastFunctionResultIndex;
+        while (functionResultStart > 0 &&
+               IsFunctionResultMessage(messageList[functionResultStart - 1]))
+        {
+            functionResultStart--;
+        }
+
+        var functionResultEnd = lastFunctionResultIndex + 1;
+        while (functionResultEnd < messageList.Count &&
+               IsFunctionResultMessage(messageList[functionResultEnd]))
+        {
+            functionResultEnd++;
+        }
+
+        var resultCallIds = messageList
+            .Skip(functionResultStart)
+            .Take(functionResultEnd - functionResultStart)
+            .SelectMany(message => message.Contents)
+            .OfType<FunctionResultContent>()
+            .Select(content => content.CallId)
+            .ToHashSet(StringComparer.Ordinal);
+        var functionCallIndex = -1;
+        HashSet<string>? functionCallIds = null;
+        for (var index = functionResultStart - 1; index >= 0; index--)
+        {
+            if (messageList[index].Role != ChatRole.Assistant)
+            {
+                continue;
+            }
+
+            var candidateCallIds = messageList[index].Contents
+                .OfType<FunctionCallContent>()
+                .Select(content => content.CallId)
+                .ToHashSet(StringComparer.Ordinal);
+            if (resultCallIds.IsSubsetOf(candidateCallIds))
+            {
+                functionCallIndex = index;
+                functionCallIds = candidateCallIds;
+                break;
+            }
+        }
+
+        var insertionIndex = 0;
+        if (functionCallIndex >= 0 && functionCallIds != null)
+        {
+            insertionIndex = functionCallIndex + 1;
+            while (insertionIndex < functionResultStart &&
+                   IsFunctionResultMessageForCalls(messageList[insertionIndex], functionCallIds))
+            {
+                insertionIndex++;
+            }
+
+            if (insertionIndex == functionResultStart)
+            {
+                return messageList;
+            }
+        }
+
+        for (var index = insertionIndex; index < functionResultStart; index++)
         {
             if (messageList[index].GetAgentRequestMessageSourceType() !=
                 AgentRequestMessageSourceType.AIContextProvider)
@@ -54,33 +110,32 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
             }
         }
 
-        var functionResultEnd = firstFunctionResultIndex + 1;
-        while (functionResultEnd < messageList.Count &&
-               IsFunctionResultMessage(messageList[functionResultEnd]))
-        {
-            functionResultEnd++;
-        }
-
-        var reordered = new List<ChatMessage>(messageList.Count);
-        for (var index = firstFunctionResultIndex; index < functionResultEnd; index++)
-        {
-            reordered.Add(messageList[index]);
-        }
-
-        for (var index = 0; index < firstFunctionResultIndex; index++)
-        {
-            reordered.Add(messageList[index]);
-        }
-
-        for (var index = functionResultEnd; index < messageList.Count; index++)
-        {
-            reordered.Add(messageList[index]);
-        }
-
+        // Per-service persistence prepends the matching function call, while context providers can
+        // leave their messages before the in-flight result. Move only that final result group.
+        var reordered = messageList.ToList();
+        var functionResults = reordered.GetRange(
+            functionResultStart,
+            functionResultEnd - functionResultStart);
+        reordered.RemoveRange(functionResultStart, functionResults.Count);
+        reordered.InsertRange(insertionIndex, functionResults);
         return reordered;
     }
 
     private static bool IsFunctionResultMessage(ChatMessage message) =>
         message.Role == ChatRole.Tool &&
         message.Contents.OfType<FunctionResultContent>().Any();
+
+    private static bool IsFunctionResultMessageForCalls(
+        ChatMessage message,
+        IReadOnlySet<string> functionCallIds)
+    {
+        if (message.Role != ChatRole.Tool)
+        {
+            return false;
+        }
+
+        var functionResults = message.Contents.OfType<FunctionResultContent>().ToList();
+        return functionResults.Count > 0 &&
+               functionResults.All(result => functionCallIds.Contains(result.CallId));
+    }
 }

@@ -255,7 +255,7 @@ public class AgentflowRuntimeServiceTests
         var task = new TaskProjection
         {
             ProjectId = projectId,
-            ProjectContextId = conversationId,
+            ProjectConversationId = conversationId,
             ContextId = "environment-context",
             TaskId = Guid.CreateVersion7(),
         };

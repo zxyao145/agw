@@ -50,7 +50,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public Guid? ProjectId => _resolvedTask?.ProjectId ?? Settings?.ProjectId;
 
-    public Guid? ProjectContextId => _resolvedTask?.ProjectContextId;
+    public Guid? ProjectConversationId => _resolvedTask?.ProjectConversationId;
 
     public string? ContextId => _resolvedTask?.ContextId ?? Settings?.ContextId;
 

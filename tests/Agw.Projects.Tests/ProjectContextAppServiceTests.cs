@@ -198,8 +198,8 @@ public class ProjectContextAppServiceTests
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectContexts.Add(CreateContext(contextId, projectId, "context-1", "Todo"));
-            seedContext.TaskRecords.Add(CreateRecord(
+            seedContext.ProjectConversations.Add(CreateContext(contextId, projectId, "context-1", "Todo"));
+            seedContext.ProjectConversationChatHistories.Add(CreateRecord(
                 contextId,
                 taskId,
                 0,
@@ -565,7 +565,7 @@ public class ProjectContextAppServiceTests
             UpdateTime = createTime
         };
 
-    private static TaskRecord CreateRecord(
+    private static ProjectConversationChatHistory CreateRecord(
         Guid contextId,
         Guid taskId,
         long sequence,
@@ -573,7 +573,7 @@ public class ProjectContextAppServiceTests
         TaskExecutionStatus status) => new()
         {
             Id = Guid.CreateVersion7(),
-            ProjectContextId = contextId,
+            ConversationId = contextId,
             TaskId = taskId,
             Status = status,
             ConversationSequence = sequence,

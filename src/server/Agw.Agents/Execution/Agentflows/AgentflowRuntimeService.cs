@@ -396,7 +396,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         var resolvedConversationId =
             conversationId.HasValue && conversationId.Value != Guid.Empty
                 ? conversationId.Value
-                : await ResolveProjectContextIdAsync(projectId, contextId, cancellationToken)
+                : await ResolveProjectConversationIdAsync(projectId, contextId, cancellationToken)
                     .ConfigureAwait(false);
         return new AgentflowAgentSessionScope(
             _providerSessionState,
@@ -408,7 +408,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             resolvedConversationId);
     }
 
-    private async Task<Guid> ResolveProjectContextIdAsync(
+    private async Task<Guid> ResolveProjectConversationIdAsync(
         Guid projectId,
         string contextId,
         CancellationToken cancellationToken)
@@ -419,7 +419,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         }
 
         return await _sessionStateStore
-            .ResolveProjectContextIdAsync(projectId, contextId, cancellationToken)
+            .ResolveProjectConversationIdAsync(projectId, contextId, cancellationToken)
             .ConfigureAwait(false) ?? Guid.Empty;
     }
 

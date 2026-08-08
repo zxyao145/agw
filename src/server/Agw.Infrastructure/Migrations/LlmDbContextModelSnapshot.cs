@@ -415,9 +415,9 @@ namespace Agw.Infrastructure.Migrations
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSessionStateEntry", b =>
                 {
-                    b.Property<Guid>("ProjectContextId")
+                    b.Property<Guid>("ProjectConversationId")
                         .HasColumnType("TEXT")
-                        .HasColumnName("project_context_id");
+                        .HasColumnName("project_conversation_id");
 
                     b.Property<Guid>("AgentId")
                         .HasColumnType("TEXT")
@@ -437,7 +437,7 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
-                    b.HasKey("ProjectContextId", "AgentId", "AgentflowNodeId")
+                    b.HasKey("ProjectConversationId", "AgentId", "AgentflowNodeId")
                         .HasName("pk_agent_session_state");
 
                     b.HasIndex("AgentId")
@@ -1220,6 +1220,10 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("agent_name");
 
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_conversation_id");
+
                     b.Property<string>("ConversationPayload")
                         .HasColumnType("text")
                         .HasColumnName("conversation_payload");
@@ -1247,10 +1251,6 @@ namespace Agw.Infrastructure.Migrations
                     b.Property<string>("Metadata")
                         .HasColumnType("jsonb")
                         .HasColumnName("metadata");
-
-                    b.Property<Guid>("ConversationId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_conversation_id");
 
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER")
@@ -1825,16 +1825,16 @@ namespace Agw.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_agent_session_state_agent_agent_id");
 
-                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectContext", "ProjectContext")
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectConversation", "ProjectConversation")
                         .WithMany()
-                        .HasForeignKey("ProjectContextId")
+                        .HasForeignKey("ProjectConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_session_state_project_context_project_context_id");
+                        .HasConstraintName("fk_agent_session_state_project_conversation_project_conversation_id");
 
                     b.Navigation("Agent");
 
-                    b.Navigation("ProjectContext");
+                    b.Navigation("ProjectConversation");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSkillRelation", b =>

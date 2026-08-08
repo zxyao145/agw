@@ -428,7 +428,11 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             if (functionCalls.Count > 0)
             {
                 var toolMessageEnd = index + 1;
-                while (toolMessageEnd < allMessages.Count && allMessages[toolMessageEnd].Role == ChatRole.Tool)
+                while (toolMessageEnd < allMessages.Count &&
+                       (allMessages[toolMessageEnd].Role == ChatRole.Tool ||
+                        toolMessageEnd >= messages.Count &&
+                        allMessages[toolMessageEnd].GetAgentRequestMessageSourceType() ==
+                        AgentRequestMessageSourceType.AIContextProvider))
                 {
                     toolMessageEnd++;
                 }

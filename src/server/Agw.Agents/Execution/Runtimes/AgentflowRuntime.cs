@@ -38,5 +38,5 @@ public sealed class AgentflowRuntime : RuntimeBase
             _task.TaskId,
             humanGateApprovalHandler,
             _settings.EnvironmentVariables,
-            _task.ProjectContextId);
+            _task.ProjectConversationId);
 }

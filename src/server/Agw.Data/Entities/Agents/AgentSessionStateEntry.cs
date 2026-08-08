@@ -11,7 +11,7 @@ namespace Agw.Shared.Data.Entities.Agents;
 [EntityTypeConfiguration(typeof(AgentSessionStateEntryConfiguration))]
 public sealed class AgentSessionStateEntry
 {
-    public Guid ProjectContextId { get; set; }
+    public Guid ProjectConversationId { get; set; }
 
     public Guid AgentId { get; set; }
 
@@ -22,7 +22,7 @@ public sealed class AgentSessionStateEntry
     public DateTimeOffset UpdatedAt { get; set; }
 
     [JsonIgnore]
-    public ProjectContext? ProjectContext { get; set; }
+    public ProjectConversation? ProjectConversation { get; set; }
 
     [JsonIgnore]
     public Agent? Agent { get; set; }

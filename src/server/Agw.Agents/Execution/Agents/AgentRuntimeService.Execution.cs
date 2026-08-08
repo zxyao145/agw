@@ -147,7 +147,7 @@ public partial class AgentRuntimeService
         projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);
         var conversationId = await _sessionStateStore
-            .ResolveProjectContextIdAsync(projectId.Value, resolvedContextId, cancellationToken)
+            .ResolveProjectConversationIdAsync(projectId.Value, resolvedContextId, cancellationToken)
             .ConfigureAwait(false);
         var aiAgent = await CreateAiAgentAsync(new CreateAiAgentRequest
         {

@@ -389,7 +389,7 @@ public class JobManagementSkillTests
                 new TaskProjection
                 {
                     TaskId = Guid.CreateVersion7(),
-                    ProjectContextId = Guid.CreateVersion7(),
+                    ProjectConversationId = Guid.CreateVersion7(),
                     ProjectId = projectId,
                     ContextId = contextId,
                     CreateTime = TimeProvider.System.GetUtcNow(),

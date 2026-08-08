@@ -156,7 +156,7 @@ public partial class AgentRuntimeService
             throw;
         }
     }
-    
+
     private IChatClient CreateOpenAiChatClient(
         AgwAiModel model,
         Provider provider,
@@ -172,7 +172,7 @@ public partial class AgentRuntimeService
         var chatCompletionClient = client.GetChatClient(model.Name);
         return chatCompletionClient.AsIChatClient();
     }
-    
+
     private IChatClient CreateAnthropicChatClient(
         AgwAiModel model,
         Provider provider,

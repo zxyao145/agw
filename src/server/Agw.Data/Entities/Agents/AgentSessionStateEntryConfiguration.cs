@@ -10,7 +10,7 @@ public sealed class AgentSessionStateEntryConfiguration :
     {
         builder.HasKey(entry => new
         {
-            entry.ProjectContextId,
+            entry.ProjectConversationId,
             entry.AgentId,
             entry.AgentflowNodeId
         });
@@ -18,9 +18,9 @@ public sealed class AgentSessionStateEntryConfiguration :
         builder.Property(entry => entry.SerializedSession).IsRequired();
         builder.HasIndex(entry => entry.UpdatedAt);
 
-        builder.HasOne(entry => entry.ProjectContext)
+        builder.HasOne(entry => entry.ProjectConversation)
             .WithMany()
-            .HasForeignKey(entry => entry.ProjectContextId)
+            .HasForeignKey(entry => entry.ProjectConversationId)
             .OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(entry => entry.Agent)
             .WithMany()
